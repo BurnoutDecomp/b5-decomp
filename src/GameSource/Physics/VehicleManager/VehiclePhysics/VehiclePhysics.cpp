@@ -38,6 +38,54 @@ namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
 
+    namespace
+    {
+        // Scalar lowering of the takeoff ramp's VMX operations. Keep each
+        // binary32 boundary and VMX subnormal flush, including exceptional
+        // inputs from the editable thresholds.
+        f32 TakeoffFlush(f32 lfValue)
+        {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        }
+
+        f32 TakeoffMultiply(f32 lfA, f32 lfB)
+        {
+            return TakeoffFlush(TakeoffFlush(lfA) * TakeoffFlush(lfB));
+        }
+
+        f32 TakeoffSubtract(f32 lfA, f32 lfB)
+        {
+            return TakeoffFlush(TakeoffFlush(lfA) - TakeoffFlush(lfB));
+        }
+
+        f32 TakeoffMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+        {
+            return TakeoffFlush(std::fmaf(TakeoffFlush(lfA), TakeoffFlush(lfC), TakeoffFlush(lfB)));
+        }
+
+        f32 TakeoffNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+        {
+            const f32 lfDifference = TakeoffMultiplyAdd(lfA, lfC, -TakeoffFlush(lfB));
+            return lfDifference != lfDifference ? lfDifference : -lfDifference;
+        }
+
+        f32 TakeoffReciprocal(f32 lfValue)
+        {
+            lfValue = TakeoffFlush(lfValue);
+            // FLAG (estimate model): use the tree's rounded 1/x model for
+            // vrefp. The two ARTIST refinements below are unconditional;
+            // zero/infinite/NaN inputs must not fall back to the estimate.
+            f32 lfEstimate = TakeoffFlush(static_cast<f32>(1.0 / static_cast<f64>(lfValue)));
+            for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
+            {
+                const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
+                lfEstimate = TakeoffMultiplyAdd(lfEstimate, lfResidual, lfEstimate);
+            }
+            return lfEstimate;
+        }
+    }
+
     // DecFIGS VehiclePhysics.cpp:103; Breaker unk_82FB9EC0, initialised by the
     // unmarked thunk at 0x82C5C3C0 from flt_8200473C (0.4f).
     VecFloat KF_SHOWTIME_GRIP_SCALE{0.4f, 0.4f, 0.4f, 0.4f};
@@ -2288,22 +2336,28 @@ namespace Vehicle
 
             // The two-segment ramp (0x825D0CD4 / 0x825D0D1C / 0x825D0D98). Level -> ramp 0 .. 0.3
             // over [0, 0.125]; then 0.3 .. 1.0 over [0.125, 0.25]; then flat 1.0.
-            // The asm re-tests `rollAmount > FULL` before the second segment; that test is the
-            // exact complement of the first branch (its only effect is to route NaN to the 1.0
-            // leg), so it is folded into the else-if chain here.
+            // ARTIST 825D0CD4..0D90 keeps both reciprocal refinements, each
+            // multiply/FMA boundary, and the ordered roll > FULL retest. The
+            // latter is not the complement of FULL >= roll for NaN inputs.
+            const f32 lfRollAmount = TakeoffFlush(lvfAbsXAxisY.x);
+            const f32 lfFullThreshold = TakeoffFlush(lvfXAxisYFullDampThreshold.x);
+            const f32 lfNoDampThreshold = TakeoffFlush(lvfXAxisYNoDampThreshold.x);
             VecFloat lvfRollFactor;
-            if (lvfXAxisYFullDampThreshold.x >= lvfAbsXAxisY.x)
+            if (lfFullThreshold >= lfRollAmount)
             {
-                const VecFloat lvfInterpParam = vpu::Splat(
-                    lvfAbsXAxisY.x / lvfXAxisYFullDampThreshold.x);
-                lvfRollFactor = lvfMinRollFactor * lvfInterpParam;
+                const f32 lfRange = TakeoffSubtract(lvfMinRollFactor.x, 0.0f);
+                const f32 lfReciprocal = TakeoffReciprocal(lfFullThreshold);
+                const f32 lfReciprocalScale = TakeoffMultiply(lfReciprocal, 1.0f);
+                const f32 lfInterpParam = TakeoffMultiply(lfRollAmount, lfReciprocalScale);
+                lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, 0.0f));
             }
-            else if (lvfXAxisYNoDampThreshold.x >= lvfAbsXAxisY.x)
+            else if (lfRollAmount > lfFullThreshold && lfNoDampThreshold >= lfRollAmount)
             {
-                const VecFloat lvfInterpParam = vpu::Splat(
-                    (lvfAbsXAxisY.x - lvfXAxisYFullDampThreshold.x)
-                    / (lvfXAxisYNoDampThreshold.x - lvfXAxisYFullDampThreshold.x));
-                lvfRollFactor = lvfMinRollFactor + (lvfOne - lvfMinRollFactor) * lvfInterpParam;
+                const f32 lfThresholdRange = TakeoffSubtract(lfNoDampThreshold, lfFullThreshold);
+                const f32 lfRollOffset = TakeoffSubtract(lfRollAmount, lfFullThreshold);
+                const f32 lfRange = TakeoffSubtract(1.0f, lvfMinRollFactor.x);
+                const f32 lfInterpParam = TakeoffMultiply(TakeoffReciprocal(lfThresholdRange), lfRollOffset);
+                lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, lvfMinRollFactor.x));
             }
             else
             {
@@ -2314,17 +2368,18 @@ namespace Vehicle
             // jump (it is parked in the member and re-read every later frame):
             // lerp Target -> Min by the roll factor, pre-multiplied by the blend rate and dt.
             // Only lane .x is written (`vrlimi128 v12, v13, 8, 0` -- the other three timers survive).
-            const VecFloat lBaseDampRollVel = vpu::Splat(KF_YAW_DAMP_TARGET)
-                + (vpu::Splat(KF_YAW_DAMP_MIN) - vpu::Splat(KF_YAW_DAMP_TARGET)) * lvfRollFactor;
+            const f32 lfBaseDampRollVel = TakeoffMultiplyAdd(
+                TakeoffSubtract(KF_YAW_DAMP_MIN, KF_YAW_DAMP_TARGET), lvfRollFactor.x, KF_YAW_DAMP_TARGET);
+            const f32 lfBlendStep = TakeoffMultiply(KF_DAMP_BLEND_RATE, lvfTimeStep.x);
             mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.x =
-                (lBaseDampRollVel * vpu::Splat(KF_DAMP_BLEND_RATE) * lvfTimeStep).x;
+                TakeoffMultiply(lfBaseDampRollVel, lfBlendStep);
 
             // The three damping values handed to the body are genuine VecFloats in DecFIGS. The
             // YAW value is the literal zero splatted in v126. DampPitchYawRoll subtracts
             // axis*dot*pow(damping, 60*dt), so a zero base yields a zero subtraction for positive
             // dt: it PRESERVES yaw on take-off; it does not annihilate it.
             const VecFloat lvfYawDamping  = vpu::Splat(0.0f); // v126 -- literal, not the yaw attrib
-            const VecFloat lvfRollDamping = lvfOne - lvfRollFactor;
+            const VecFloat lvfRollDamping = vpu::Splat(TakeoffMultiplyAdd(lvfRollFactor.x, -1.0f, 1.0f));
 
             gfRollDampingUsed = lvfRollDamping.x; // dev watch "Roll damping used" (@0x82FB7E20)
 
