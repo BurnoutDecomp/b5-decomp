@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"            // Splat / lane-wise * and +
 
@@ -36,6 +37,32 @@ extern "C" void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* lpDevice,
 
 namespace CgsGraphics
 {
+    // X360 0x827E91A8. When conditional rendering is enabled, the render mode
+    // brackets the subsequent mesh walk; both indices restart for each bracket.
+    void OcclusionCullManager::BeginConditionalRender()
+    {
+        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_NONE,
+                   "meOcclusionMode == OCCLUSIONMODE_NONE");
+        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+
+        if (mbConditionalRendering)
+            meOcclusionMode = OCCLUSIONMODE_RENDER;
+        miNextQueryIndex = 0;
+        miOccludeeIndex = 0;
+    }
+
+    // X360 0x827E9250. The console always resets the shadow cache after ending
+    // the bracket, including when conditional rendering was disabled.
+    void OcclusionCullManager::EndConditionalRender()
+    {
+        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering,
+                   "meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering");
+        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+
+        meOcclusionMode = OCCLUSIONMODE_NONE;
+        shadow::Device::ResetShadowing();
+    }
+
     void OcclusionCullManager::BeginMeshConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER, "meOcclusionMode == OCCLUSIONMODE_RENDER");

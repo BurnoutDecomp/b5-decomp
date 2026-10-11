@@ -803,6 +803,7 @@ private:
     BrnSunCorona                        mSunCorona;
     EFrameStallStage                    meFrameStallStage;
     s32                                 miFrameStallCountdown;
+    // The menu-visible flag defaults are attested; full query GPU-resource construction remains pending.
     CgsGraphics::OcclusionCullManager   mOcclusionCullManager;
     BrnGame::LoadingScreenRenderer      mLoadingScreenRenderer;
     CgsResource::ResourceHandle         mCalibrationTextureHandle;   // +0xC920
