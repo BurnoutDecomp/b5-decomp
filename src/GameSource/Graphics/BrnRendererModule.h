@@ -21,6 +21,7 @@ namespace BrnEffects { class EffectsModule; }
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
 #include "GameSource/Graphics/BrnSunCorona.h"                        // BrnSunCorona (mSunCorona, embedded by value)
 #include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList (Prepare input)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
 
 // EA::Jobs::Job is the real type (SDKs/EATech/eajobs/job.h): this module embeds thirty-two of
@@ -359,6 +360,9 @@ public:
 
     // One-time construction of the renderer's subsystems.
     void Construct();
+
+    // Prepare the renderer-owned buffers from GameData bank 31 and register its debug page.
+    bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
     // Render one frame from the dispatch-thread input buffer the game side
     // published (the console's own lpDispatchThreadInputBuffer). The loading-screen overlay path
