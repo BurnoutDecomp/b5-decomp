@@ -1,5 +1,10 @@
 # Debug menu repair report
 
+The entry-by-entry behavior campaign is tracked in
+[DEBUG_MENU_PARITY.md](DEBUG_MENU_PARITY.md). Its first repair connects the five
+tailgate tunables to detection and boost credit; the earlier presentation checks
+below do not certify all menu behavior.
+
 This pass fixes menu presentation, hierarchy, native UI behavior and controls with
 existing engine consumers. It does not replace unreconstructed diagnostic renderers
 or console-only platform services.

@@ -13,9 +13,9 @@
 //                                                  stores 0.44704f * 90.0f into it (90 mph in m/s)
 //   KF_MIN_TAILGATEE_SPEED                         30.0f  (initialised data)
 //
-// UpdateTailgateTimer / UpdateCarsInTailgateCone in this tree still carry the same values as
-// file-local constants of their own TUs, so editing these from the debug menu moves the cones
-// the debug component draws but not the module's own tailgate test.
+// IsPlayerCarTailgatingOtherRaceCars, UpdateBoost and RenderTailgateCones all read this
+// same storage, as ARTIST does. Menu edits therefore change detection and boost credit
+// together with the drawn cone.
 
 #include "types.hpp"
 
