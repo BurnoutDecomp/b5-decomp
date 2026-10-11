@@ -5,6 +5,7 @@
 #include "pc/gcm/renderengine/reflections/SceneRender.h"
 #include "pc/gcm/renderengine/shadows/SceneRender.h"
 #include "pc/gcm/renderengine/reflections/CubeHistory.h"
+#include "pc/gcm/renderengine/reflections/Resolution.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
@@ -1028,6 +1029,7 @@ namespace
         }
 
         gpEnvMapTarget = lpTarget;
+        CgsPC::Reflections::SetActiveResolution(luWidth);
         // ARTIST 8240BE80..9C registers EnvMap slot3's colour texture0.
         // PC allocation occurs here on the D3D owner after the device exists.
         CgsGraphics::gTextureScopeTable.SetTexture(

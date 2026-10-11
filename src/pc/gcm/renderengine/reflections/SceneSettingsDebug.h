@@ -2,6 +2,7 @@
 
 #include "pc/gcm/renderengine/reflections/SceneSettings.h"
 #include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
+#include "pc/gcm/renderengine/reflections/ResolutionDebug.h"
 
 namespace CgsPC::Reflections
 {
@@ -31,6 +32,7 @@ namespace CgsPC::Reflections
 
     inline void RegisterSceneSettings(CgsDev::DebugInterface& lrDebug)
     {
+        RegisterResolution(lrDebug);
         RegisterObjectSettings(lrDebug, Backdrops(), "World/Reflections/Backdrops", true);
         RegisterObjectSettings(lrDebug, Traffic(), "World/Reflections/Traffic", true);
         RegisterObjectSettings(lrDebug, Rivals(), "World/Reflections/Rivals", true);

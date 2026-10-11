@@ -1,10 +1,12 @@
 #pragma once
 // FLAG PC-platform leaf: match engine cube-face projection to D3D9 cube lookup.
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
+#include "pc/gcm/renderengine/reflections/Resolution.h"
 
 namespace renderengine
 {
-    inline void SetEnvironmentMapProjectionPC(CgsGraphics::Camera& lrCamera, u32 luFaceSize = 128u)
+    inline void SetEnvironmentMapProjectionPC(CgsGraphics::Camera& lrCamera,
+        u32 luFaceSize = CgsPC::Reflections::CaptureResolution())
     {
         lrCamera.UpdatePerspectiveProjectionMatrix();
         // ARTIST Camera::LookAt @0x827F95B4..EC retains cross(dir,up) as
@@ -15,7 +17,7 @@ namespace renderengine
         // D3D9 raster pixel centres are integers; cube sampling addresses texel
         // centres at (n + 0.5) / size. Shift clip x/y by half a viewport pixel
         // so every face captures the directions the cube sampler will request.
-        // The shipped cube is 128 square (BrnRendererMemory::CreateEnvmapBuffer).
+        // Use the allocated size, even if the requested setting changes later.
         const f32 lfInvFaceSize = 1.0f / static_cast<f32>(luFaceSize);
         lrCamera.mProjection.zAxis.x -= lrCamera.mProjection.zAxis.w * lfInvFaceSize;
         lrCamera.mProjection.zAxis.y += lrCamera.mProjection.zAxis.w * lfInvFaceSize;

@@ -83,3 +83,22 @@ birth/death, and reflection-only visibility. Dispatch and inherited-velocity
 regressions remain 796/796 and 37/37. The 2,948-TU shipping build links with zero
 warnings/errors; independent review and faithfulness gate pass. No gameplay
 reproduction was attempted. Evidence: `scratch/LION_MULTIVIEW_1011/`.
+
+## Reflection resolution
+
+The original shared reflection cube is 128 pixels per face, with one mip and
+linear filtering for both chrome and ordinary paint. Vehicle definitions do not
+allocate different-resolution cubes. Flat panels can magnify a small patch of
+this texture more than the chrome sphere; material constants affect appearance,
+so exact attribution of the supplied screenshot remains an inference.
+
+`World/Reflections/Resolution (restart)` now offers 128, 256, 512, 1024 and 2048.
+The example and local INIs select 512. Native colour, depth and feedback resources
+use matching dimensions; projection uses the allocated extent after pending
+menu changes. Hardware texture limits cap creation. Targets are created once,
+so resolution edits apply after restart. Other reflection controls are unchanged.
+
+The new production-allocation, menu/INI and GPU regression passes 116 checks;
+orientation remains 1,956/1,956. The 2,949-TU shipping build links with no warnings
+or errors, and independent review passes. No gameplay reproduction was used.
+Evidence: `scratch/REFLECTION_RESOLUTION_1011/`.

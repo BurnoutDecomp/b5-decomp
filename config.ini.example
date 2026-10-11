@@ -26,6 +26,8 @@ ShadowDistance=120
 ShadowSlopeBias=0
 
 [Debug]
+; Pixels per cube face: 128 (original), 256, 512, 1024 or 2048. Restart after changing.
+World/Reflections/Resolution (restart)=512
 ; Any registered writable scalar: full debug menu path/name=value.
 ; Paths are case-insensitive; / and backslash separators are equivalent.
 ; Initial values apply once after registration. Menu edits remain live.
