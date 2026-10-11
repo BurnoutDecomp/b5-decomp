@@ -31,6 +31,15 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
+#include "GameSource/Resource/BrnResourceAllocator.h" // Allocators and the debug/global graphics allocators
+#include "rw/rwcore_general_alloc.h"              // rw::core::GeneralResourceAllocator base conversion
+
+// BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
+extern u32 suOcclusionCullIndexCountThreshold;
+// PC immediate-mode equivalents of X360 dword_83010F20 and dword_83010F3C.
+extern void* gpImStandardAlphaBlendState;
+extern void* gpSkyDomeRasterizerState;
+void ImDeviceSetRasterizerState(void* lpState);
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -411,6 +420,50 @@ void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1
     mIm2dRenderer.EndRendering();
 }
 
+// @0x82406208. ARTIST calls this with a normalized upper-right position (0.7, 0.0),
+// a normalized size (0.3, 0.3), and opaque white to show a render-target texture.
+void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
+                                                  Vector2 lrPosition, Vector2 lrSize,
+                                                  CgsDev::RGBA luColour)
+{
+    const f32 KF_LOGICAL_WIDTH = 1280.0f;
+    const f32 KF_LOGICAL_HEIGHT = 720.0f;
+    const f32 lfLeft = lrPosition.x * KF_LOGICAL_WIDTH;
+    const f32 lfTop = lrPosition.y * KF_LOGICAL_HEIGHT;
+    const f32 lfRight = (lrPosition.x + lrSize.x) * KF_LOGICAL_WIDTH;
+    const f32 lfBottom = (lrPosition.y + lrSize.y) * KF_LOGICAL_HEIGHT;
+
+    const CgsGraphics::RGBA8 lColour = {
+        static_cast<u8>((luColour >> 24) & 0xFFu),
+        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>((luColour >> 8) & 0xFFu),
+        static_cast<u8>(luColour & 0xFFu)
+    };
+    CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
+    laVertices[0].mv2Pos = { lfLeft, lfTop };
+    laVertices[1].mv2Pos = { lfLeft, lfBottom };
+    laVertices[2].mv2Pos = { lfRight, lfTop };
+    laVertices[3].mv2Pos = { lfRight, lfBottom };
+    laVertices[0].mv2Tex0UV = { 0.0f, 0.0f };
+    laVertices[1].mv2Tex0UV = { 0.0f, 1.0f };
+    laVertices[2].mv2Tex0UV = { 1.0f, 0.0f };
+    laVertices[3].mv2Tex0UV = { 1.0f, 1.0f };
+    for (u32 luVertex = 0; luVertex < 4; ++luVertex)
+        laVertices[luVertex].mv4Colour = lColour;
+
+    // Im2d::BeginRendering publishes the canonical 1280x720 screen transform; this
+    // is the PC-side state carried by ARTIST's SetTransform(flt_830112D0).
+    mIm2dRenderer.BeginRendering();
+    mIm2dRenderer.SetTexture(lpTexture);
+    mIm2dRenderer.SetState(
+        reinterpret_cast<const CgsGraphics::BlendState*>(gpImStandardAlphaBlendState));
+    // The original bind is sub_82276E48(dword_83010F3C). On this PC path the
+    // immediate-mode state is the D3D9 cull-none equivalent owned by ImmediateMode.cpp.
+    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
+    mIm2dRenderer.Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
+    mIm2dRenderer.EndRendering();
+}
+
 // @ 0x82406410 - BrnRendererModule::RenderLetterBoxBars. Draw the two solid-black bars that frame a
 // widescreen (letterboxed) view - one across the top, one across the bottom. lfDestAspectRatio is the
 // visible/kept vertical fraction of the screen; the cropped-away remainder (1 - lfDestAspectRatio) is
@@ -677,8 +730,8 @@ namespace
             // BrnSunCorona::Construct sets mbRenderSunCorona true, which IS the console's value
             // (`stb r27(=1), 0x51(r31)` @0x824009EC). The knob only SEEDS that member, once, right
             // where Construct wrote it -- NO SECOND SWITCH IS MINTED (AGENTS.md rule 3); the
-            // console's other writer is BrnGraphics::DebugComponent, which is an empty placeholder
-            // in this tree. DELETE-WHEN the debug component owns the switch.
+            // The recovered Renderer debug page owns the module's corona-pass switch; it does not
+            // register BrnSunCorona::mbRenderSunCorona, so this host-only knob remains distinct.
             lrSunCorona.PCBringUpSetRenderSunCorona(renderengine::gSunCorona != 0);
             if (renderengine::gSunCorona == 0)
             {
@@ -1354,6 +1407,9 @@ void BrnRendererModule::Construct()
         }
     }
 
+    // ARTIST @8240BC94 constructs the renderer's debug-menu owner before the remaining managers.
+    mDebugComponent.Construct(this);
+
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
     mShadowMapRenderManager.Construct(2);
 
@@ -1382,6 +1438,92 @@ void BrnRendererModule::Construct()
                                     "(effects apply, tint blend and composite skipped)\n");
         }
     }
+}
+
+// @0x82409C20. ARTIST's stage helper increments before checking the terminal state;
+// it returns the previous value, which each call site discards.
+bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    const auto AdvancePrepareStage = [this]()
+    {
+        ++mePrepareStage;
+        CGS_ASSERT(mePrepareStage <= eRendererPrepareDone,
+                   "leEnumIndex <= BrnRendererModule::eRendererPrepareDone");
+    };
+
+    switch (mePrepareStage)
+    {
+    case eRendererPrepareStart:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareManager:
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            return false;
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareBlobbyShadows:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareCoronas:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareDone:
+        meReleaseStage = eRendererReleaseStart;
+        break;
+    default:
+        CGS_ASSERT(false, "Invalid Render Module Prepare State");
+        return false;
+    }
+
+    rw::core::GeneralResourceAllocator* const lpAllocator =
+        lpAllocatorList->GetRWGeneralResourceAllocator(31);
+
+    const bool lbIm2dPrepared = mIm2dRenderBuffer.Prepare(110592, 393216, lpAllocator, false);
+    CGS_ASSERT(lbIm2dPrepared,
+               "mIm2dRenderBuffer.Prepare( KI_IM2D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM2D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
+    const bool lbIm3dPrepared = mIm3dRenderBuffer.Prepare(1024, 0x8000, lpAllocator, false);
+    CGS_ASSERT(lbIm3dPrepared,
+               "mIm3dRenderBuffer.Prepare( KI_IM3D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
+    const bool lbIm3dUntexPrepared =
+        mIm3dRenderBufferUntex.Prepare(0x4000, 0x80000, lpAllocator, false);
+    CGS_ASSERT(lbIm3dUntexPrepared,
+               "mIm3dRenderBufferUntex.Prepare( KI_IM3D_RENDER_BUFFER_UNTEX_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_UNTEX_VERTEX_BUFFER_SIZE, lpAllocator )");
+
+    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+               "Allocators::mpInternalDebugAllocator");
+    const bool lbIm3dDebugPrepared = mIm3dDebugRenderBuffer.Prepare(
+        0x100000, 0x100000, BrnResource::GetDebugAllocator(), true);
+    CGS_ASSERT(lbIm3dDebugPrepared,
+               "mIm3dDebugRenderBuffer.Prepare( KI_IM3D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
+
+    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+               "Allocators::mpInternalDebugAllocator");
+    const bool lbIm2dDebugPrepared = mIm2dDebugRenderBuffer.Prepare(
+        81920, 0x200000, BrnResource::GetDebugAllocator(), true);
+    CGS_ASSERT(lbIm2dDebugPrepared,
+               "mIm2dDebugRenderBuffer.Prepare( KI_IM2D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM2D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
+
+    const bool lbRacePositionPrepared =
+        mIm3dBufferRacePosition.Prepare(0x20000, 0x20000, lpAllocator, false);
+    CGS_ASSERT(lbRacePositionPrepared,
+               "mIm3dBufferRacePosition.Prepare( KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_COMMANDBUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_VERTEXBUFFER_SIZE, lpAllocator )");
+    const bool lbMenusHudPrepared =
+        mIm3dBufferMenusAndHud.Prepare(512, 4, lpAllocator, false);
+    CGS_ASSERT(lbMenusHudPrepared,
+               "mIm3dBufferMenusAndHud.Prepare( KI_IM3D_RENDER_BUFFER_MENUSANDHUD_COMMANDBUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_MENUSANDHUD_VERTEXBUFFER_SIZE, lpAllocator )");
+
+    mSkyDome.Prepare(&mIm3dRendererSkyDome,
+                     BrnResource::Allocators::GetGlobalGraphicsAllocator());
+    mDebugComponent.Register();
+    MemoryUsage();
+    return true;
 }
 
 // @ 0x82405E28 (BrnRendererModule::Update, the SetDispatchFrame expression)
@@ -4558,6 +4700,25 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     mu32NumWorldTransparentObjectTotals += luWorldTransparent;
     mu32NumCarTransparentObjectTotals   += luCarTransparent;
 
+    // X360 Render @0x8240C5FC..0x8240C688 publishes five 60-frame averages.
+    // RenderShadowMapPasses has already added this frame's shadow total before this pass.
+    ++mu32DispatchFrameCounter;
+    if (mu32DispatchFrameCounter == 60u)
+    {
+        mu32NumWorldOpaqueObjects      = mu32NumWorldOpaqueObjectTotals / 60u;
+        mu32NumCarOpaqueObjects        = mu32NumCarOpaqueObjectTotals / 60u;
+        mu32NumWorldTransparentObjects = mu32NumWorldTransparentObjectTotals / 60u;
+        mu32NumCarTransparentObjects   = mu32NumCarTransparentObjectTotals / 60u;
+        mu32NumShadowObjects           = mu32NumShadowObjectTotals / 60u;
+
+        mu32NumWorldOpaqueObjectTotals      = 0u;
+        mu32NumCarOpaqueObjectTotals        = 0u;
+        mu32NumWorldTransparentObjectTotals = 0u;
+        mu32NumCarTransparentObjectTotals   = 0u;
+        mu32NumShadowObjectTotals           = 0u;
+        mu32DispatchFrameCounter            = 0u;
+    }
+
     // [FLAG PC bring-up] One-shot map of where the world producer's records actually
     // landed. The world feed's AddToBin list bytes were flagged provisional by the
     // renderer wave (BrnWorldEntityModule's camera call site), so name every non-empty
@@ -5814,6 +5975,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         }
 
         lRenderStage.Next(RENDER_WORLD);
+        // ARTIST Render @0x8240C0F8 publishes renderer+0xC430 immediately before the draw passes;
+        // DrawRenderableMesh::InterpretOcclusionQuery reads the corresponding global threshold.
+        suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
         lRenderStage.Next(RENDER_PARTICLES);
 
@@ -6042,20 +6206,15 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
                 // mfWhiteLevel, and BrnShaderConstantsFrame::GetKeyLightColour on the same frame).
                 //
                 // The last two arguments are the console's NO-OVERRIDE values: it reads them from
-                // BrnGraphics::DebugComponent (this+0xCA50 mfSunFlareOverrideBrightness and
-                // this+0xCA54 mbSunFlareOverrideBrightness -- DWARF
-                // BrnRendererModuleDebugComponent.h:86/87, exposed as GetOverriddenSunBrightness() /
-                // GetOverrideSunBrightness()), which is a DEBUG-MENU toggle and is an EMPTY
-                // PLACEHOLDER struct in this tree (BrnRendererModule.h:200). Passing (0.0f, false)
-                // is the console's own default, not an invention: with the flag false the float is
-                // never read and BrnSunCorona::RenderOccludedFlare uses mfSunBrightness.
-                // DELETE-WHEN BrnGraphics::DebugComponent is reconstructed.
+                // BrnGraphics::DebugComponent (renderer+0xCA50/0xCA54) owns the console's
+                // debug-menu override values; pass the same values the ARTIST call reads.
                 const BrnShaderConstantsFrame& lrSunFrame =
                     maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
                 mSunCorona.RenderOccludedFlare(mAllocatedRenderTargets.GetSunCoronaBuffer(),
                                                lrSunFrame.GetKeyLightColour(),
                                                lrSunFrame.GetWhiteLevel(),
-                                               0.0f, false);
+                                               mDebugComponent.GetOverriddenSunBrightness(),
+                                               mDebugComponent.GetOverrideSunBrightness());
             }
         }
 
@@ -6427,6 +6586,25 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         lRenderStage.Next(RENDER_PRESENT);
         renderengine::Device::ShowPixelBuffer();
         return;
+    }
+
+    // ARTIST Render @0x8240DEB4..DFF0 displays the selected shadow depth texture
+    // at the upper right: position (0.7, 0.0), size (0.3, 0.3), opaque white.
+    if (mbShowShadowMap)
+    {
+        miShowShadowMapIndex %= 4;
+        CGS_ASSERT(miShowShadowMapIndex >= 0 && miShowShadowMapIndex < 4,
+                   "liIndex >=0 && liIndex<4");
+
+        Vector2 lPosition = {};
+        lPosition.x = 0.7f;
+        lPosition.y = 0.0f;
+        Vector2 lSize = {};
+        lSize.x = 0.3f;
+        lSize.y = 0.3f;
+        DebugDisplayRenderTarget(
+            mAllocatedRenderTargets.GetShadowMapBuffer(miShowShadowMapIndex)->GetDepthTexture(),
+            lPosition, lSize, 0xFFFFFFFFu);
     }
 
     // ARTIST 8240E000..E054: one HUD gate and the original command order.

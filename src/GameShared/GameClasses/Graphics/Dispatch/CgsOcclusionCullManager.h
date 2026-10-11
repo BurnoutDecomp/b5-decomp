@@ -40,6 +40,8 @@
 
 namespace CgsGraphics
 {
+    struct OcclusionQueryList;
+
     // KI_MAX_NUM_QUERIES: maQueryIds capacity (the asm bounds-checks miOccludeeIndex
     // against 64 before every query-table access).
     const s32 KI_MAX_NUM_QUERIES = 64;
@@ -76,6 +78,11 @@ namespace CgsGraphics
         // (query id = 0xFFFF, i.e. always-draw) and advance to the next slot.
         void TrivialAcceptOccludeeBoundingBox();
 
+        // X360 0x827E91A8 / 0x827E9250: select the conditional-render mode and
+        // reset the shadow cache when leaving it.
+        void BeginConditionalRender();
+        void EndConditionalRender();
+
         // Transform the occludee's box into clip space; unless it reaches the near-clip offset,
         // issue a GPU survey that draws the box with the position-only renderer and record
         // the survey id for the occludee. A box crossing the near plane is accepted as visible.
@@ -100,7 +107,17 @@ namespace CgsGraphics
         void*                 mpIndexBuffer;             // +0x29C
         DrawIndexedParameters mDrawParameters;           // +0x2A0
         u16 maQueryIds[KI_MAX_NUM_QUERIES];     // +0x2B0 (128 bytes -> ends 0x330)
-        u8  mbRenderingMesh;                    // +0x330
-        u8  mbOcclusionEnabled;                 // +0x331
+        // ARTIST Construct initializes these bytes to the values below. The PC source does not yet
+        // mount that constructor's query-list / vertex / index resource setup.
+        bool mbRenderingMesh = false;            // +0x330 (Construct @0x827F1E00)
+        bool mbOcclusionEnabled = false;         // +0x331
+        bool mbShowOccludeeBBs = false;           // +0x332
+        bool mbOccludeesDoubleSided = false;      // +0x333
+        bool mbOcclusionCheapShader = true;       // +0x334
+        bool mbDisplayStats = false;              // +0x335
+        bool mbDetectNearClipIntersections = true;// +0x336
+        bool mbImmediateMode = true;              // +0x337
+        bool mbConditionalRendering = false;      // +0x338
+        OcclusionQueryList* mpQueryList;           // +0x33C (Construct @0x827F1E00)
     };
 }

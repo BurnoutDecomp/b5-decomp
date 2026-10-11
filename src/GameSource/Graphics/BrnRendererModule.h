@@ -2,6 +2,8 @@
 #include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                             // Vector2 parameter of DebugDisplayRenderTarget
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
 extern f32 gfBloomLuminanceScale;
 extern f32 gfBloomThresholdScale;
@@ -20,6 +22,7 @@ namespace BrnEffects { class EffectsModule; }
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
 #include "GameSource/Graphics/BrnSunCorona.h"                        // BrnSunCorona (mSunCorona, embedded by value)
 #include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList (Prepare input)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
 
 // EA::Jobs::Job is the real type (SDKs/EATech/eajobs/job.h): this module embeds thirty-two of
@@ -35,6 +38,7 @@ namespace BrnEffects { class EffectsModule; }
 // world render pass drives them, so the former local placeholders are gone.
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 
 namespace CgsGraphics
 {
@@ -59,9 +63,6 @@ class Im3dZOnly
 {
 };
 
-class OcclusionCullManager
-{
-};
 }
 
 // EffectsArbitrator is the real type (BrnEffectsArbitrator.h); Im3dSkyDome is the real
@@ -186,15 +187,37 @@ struct Resource
 // indices and mbForceFrontFaceCull) did not exist at all.
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"
 
-struct DebugComponent
+class BrnRendererModule;
+
+namespace BrnGraphics
 {
-};
+    // Recovered from the ARTIST Construct, GetName, GetPath, and OnActivate exports.
+    class DebugComponent : public CgsDev::DebugComponent
+    {
+    public:
+        void Construct(::BrnRendererModule* lpRendererModule);
+        const bool GetOverrideSunBrightness();
+        const f32 GetOverriddenSunBrightness();
+
+    protected:
+        const char* GetName() const override;
+        const char* GetPath() const override;
+        void OnActivate() override;
+
+    private:
+        ::BrnRendererModule* mpRendererModule = nullptr;
+        f32 mfSunFlareOverrideBrightness = 0.3f;
+        bool mbSunFlareOverrideBrightness = false;
+    };
+}
 
 // Vector3 / Vector4 are the real rw::math types (BrnCommonTypes.h, pulled in above).
 
 class BrnRendererModule : public CgsModule::ModuleSingleBuffered
 {
 public:
+    friend class BrnGraphics::DebugComponent;
+
     enum ERendererPrepareStage
     {
         eRendererPrepareStart,
@@ -339,6 +362,9 @@ public:
     // One-time construction of the renderer's subsystems.
     void Construct();
 
+    // Prepare the renderer-owned buffers from GameData bank 31 and register its debug page.
+    bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+
     // Render one frame from the dispatch-thread input buffer the game side
     // published (the console's own lpDispatchThreadInputBuffer). The loading-screen overlay path
     // is reconstructed; the gameplay-render path (shadows/world/cars/particles/post-fx) is
@@ -474,6 +500,10 @@ private:
     // them via the untextured Basic2dColouredVertex renderer at normalised coords; reconstructed
     // through mIm2dRenderer (untextured -> solid colour) at the same screen positions.
     void RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2);
+
+    // X360 DebugDisplayRenderTarget @0x82406208; draws one texture in the renderer's 2D tail.
+    void DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
+                                  Vector2 lrPosition, Vector2 lrSize, CgsDev::RGBA luColour);
 
     // Draw the two solid-black bars that frame a widescreen (letterboxed) view: one
     // across the top, one across the bottom. lfDestAspectRatio is the visible/kept vertical fraction
@@ -778,6 +808,7 @@ private:
     BrnSunCorona                        mSunCorona;
     EFrameStallStage                    meFrameStallStage;
     s32                                 miFrameStallCountdown;
+    // The menu-visible flag defaults are attested; full query GPU-resource construction remains pending.
     CgsGraphics::OcclusionCullManager   mOcclusionCullManager;
     BrnGame::LoadingScreenRenderer      mLoadingScreenRenderer;
     CgsResource::ResourceHandle         mCalibrationTextureHandle;   // +0xC920
@@ -788,7 +819,7 @@ private:
     BrnGraphics::ShadowMapRenderManager mShadowMapRenderManager;
     bool                                mbDiskErrorLastFrame;
     s32                                 miFramesSinceDiskErrorReported;
-    DebugComponent                      mDebugComponent;
+    BrnGraphics::DebugComponent         mDebugComponent;
 
     // FLAG PC-platform leaf: physical bins never move; swapping their owners
     // keeps DispatchList/DispatchBin back-pointers and GDL constant lifetimes
