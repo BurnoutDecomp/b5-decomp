@@ -9,6 +9,7 @@
 // names/types follow the X360-attested DecFIGS declaration; behavior is recovered from ARTIST.
 namespace CgsDev { struct Debug3DImmediateRender; }
 namespace rw { namespace collision { class Volume; } }
+namespace rw { struct RGBA; }
 
 namespace CgsSceneManager
 {
@@ -45,6 +46,9 @@ namespace CgsSceneManager
         // per-address JSON export is absent.
         void DrawCachedObjectTriangles(CgsDev::Debug3DImmediateRender* lpRender);
         void DrawCachedObjectSpheres(CgsDev::Debug3DImmediateRender* lpRender);
+        void DrawCachedTriangle(CgsDev::Debug3DImmediateRender* lpRender,
+                                Vector3 lVertex0, Vector3 lVertex1, Vector3 lVertex2,
+                                rw::RGBA lColour);
         void DrawTriangleTest(CgsDev::Debug3DImmediateRender* lpRender);
 
         const SceneManagerModule* mpSceneManagerModule;
