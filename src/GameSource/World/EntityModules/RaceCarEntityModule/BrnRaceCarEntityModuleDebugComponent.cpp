@@ -49,14 +49,6 @@ namespace BrnWorld
     extern bool sbUseAggressiveLods;
     extern s32  siFixedVehicleLod;
 
-    // The module's tailgating tunables (defined in BrnRaceCarEntityModule_wBT_01.cpp).
-    extern f32 KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX;
-    extern f32 KF_TAILGATING_CONE_HALF_ANGLE_RADS;
-    extern f32 KF_TAILGATING_CONE_DEPTH;
-    extern f32 KF_MIN_TAILGATE_DURATION;
-    extern f32 KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE;
-    extern f32 KF_MIN_TAILGATEE_SPEED;
-
 namespace
 {
     namespace vpu = rw::math::vpu;

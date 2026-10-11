@@ -64,6 +64,17 @@ namespace CgsGraphics { class DispatchFrame; }
 namespace BrnWorld { struct ShadowMap; }
 namespace CgsPC::Reflections { struct LightCapture; }
 
+// Writable ARTIST tailgate data, shared by detection, boost credit and debug cones.
+namespace BrnWorld
+{
+    extern f32 KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX;
+    extern f32 KF_TAILGATING_CONE_HALF_ANGLE_RADS;
+    extern f32 KF_TAILGATING_CONE_DEPTH;
+    extern f32 KF_MIN_TAILGATE_DURATION;
+    extern f32 KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE;
+    extern f32 KF_MIN_TAILGATEE_SPEED;
+}
+
 
 namespace CgsResource { struct ResourceHandle; }
 namespace BrnResource { struct VehicleList; class WheelList; enum ECarType : int; }

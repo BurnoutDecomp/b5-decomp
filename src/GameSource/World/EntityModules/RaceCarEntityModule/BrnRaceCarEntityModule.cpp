@@ -8369,7 +8369,6 @@ void RaceCarEntityModule::UpdateBoost(
     const f32 KF_MPH_TO_MPS                 = 0.447039992f; // bits 0x3EE4E26D
     const f32 KF_MIN_SPEED_FOR_BOOST_MPH    = 25.0f;
     const f32 KF_MIN_IN_AIR_SPEED_MPH       = 2.0f;
-    const f32 KF_MIN_TAILGATE_DURATION      = 1.0f;
     const f32 KF_DEFAULT_BOOST_MODIFIER     = 1.0f;
     const f32 KF_FIRST_PLACE_BOOST_MODIFIER = 0.5f;
 
@@ -8418,6 +8417,33 @@ void RaceCarEntityModule::UpdateBoost(
     mBoostManager.SetTailgating(
             mfCurrentTailgateDuration > KF_MIN_TAILGATE_DURATION,
             meIndexOfCarPlayerIsTailgating );
+
+    // FLAG PC-platform leaf: opt-in, bounded observation of the real menu values
+    // and the boost strategy's resulting state. This never changes vehicle state.
+    static const bool sbTailgateDebugTrace = (getenv("BRN_TAILGATE_DEBUG_TRACE") != nullptr);
+    if (sbTailgateDebugTrace && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suTraceFrames = 0, suTraceLines = 0;
+        static f32 safPrevious[5] = {};
+        const f32 lafValues[5] = { KF_TAILGATING_CONE_HALF_ANGLE_RADS,
+            KF_TAILGATING_CONE_DEPTH, KF_MIN_TAILGATEE_SPEED,
+            KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE, BrnWorld::KF_MIN_TAILGATE_DURATION };
+        bool lbChanged = (suTraceFrames++ == 0);
+        for (s32 liValue = 0; liValue < 5; ++liValue)
+        {
+            lbChanged = lbChanged || safPrevious[liValue] != lafValues[liValue];
+            safPrevious[liValue] = lafValues[liValue];
+        }
+        if (suTraceLines < 160 && (lbChanged || suTraceFrames % 120 == 0))
+        {
+            ++suTraceLines;
+            CgsDev::Log::gpDebugPrint->AppendFormat(
+                "[tailgate-debug] cone=%g depth=%g minSpeed=%g maxRelative=%g minDuration=%g duration=%g car=%d active=%d\n",
+                lafValues[0], lafValues[1], lafValues[2], lafValues[3], lafValues[4],
+                mfCurrentTailgateDuration, static_cast<s32>(meIndexOfCarPlayerIsTailgating),
+                mBoostManager.GetBoostStrategy()->IsTailgating() ? 1 : 0);
+        }
+    }
 
     const RaceCarEntityModuleIO::TakedownEventQueue* lpTakedownQueue =
             lpInput->GetTakedownEventQueue();

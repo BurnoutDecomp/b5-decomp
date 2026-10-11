@@ -40,31 +40,6 @@ namespace BrnWorld
 
 namespace
 {
-    // ---- the tailgate cone. Every value is read out of the decrypted image at the symbol the
-    // console loads; nothing here is inferred and nothing is a flagged zero.
-
-    // The reference point is pushed this far along the OTHER car's heading before the
-    // separation is taken.
-    const f32 KF_TAILGATE_REFERENCE_OFFSET = 2.0f;
-
-    // In RADIANS (19.8 degrees). The console splats the angle and cosines it inside the loop,
-    // then demands the separation-versus-heading cosine be at least that, so it is kept as the
-    // angle and cosined per candidate rather than folded to a constant.
-    const f32 KF_TAILGATE_CONE_HALF_ANGLE_RADIANS = 0.346f;
-
-    // Bound on the separation resolved ALONG the other car's reversed heading; both sides are
-    // squared, so the sign of the resolved distance does not matter.
-    const f32 KF_TAILGATE_ALONG_HEADING_RANGE = 20.0f;
-
-    // Compared against RaceCarState::mfSpeedMPH, so it is miles per hour.
-    const f32 KF_TAILGATE_MIN_SPEED_MPH = 30.0f;
-
-    // This constant reads 0x00000000 straight out of the image -- it is a CRT-initialised slot,
-    // not a zero. Its initialiser thunk computes 0.44704 (the mph -> m/s factor) * 90.0, so it
-    // is 90 mph in m/s: the bound on the magnitude of the velocity DIFFERENCE between the two
-    // cars, with both sides squared.
-    const f32 KF_TAILGATE_RELATIVE_SPEED = 40.2336f;
-
     // The miles-per-hour to metres-per-second factor. The near-miss manager is fed the player's
     // speed in m/s, not mph.
     const f32 KF_MPH_TO_METRES_PER_SECOND = 0.44704f;
@@ -189,14 +164,14 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
 
         const Vector3 lReversedHeading = -lOtherDirection;
         const Vector3 lReferencePoint  =
-                lOtherDirection * KF_TAILGATE_REFERENCE_OFFSET + lOtherPosition;
+                lOtherDirection * KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX + lOtherPosition;
         const Vector3 lSeparation      = lPlayerPosition - lReferencePoint;
 
         // Written as the same `>` the console's skip branch is, so an unordered compare falls
         // through instead of skipping. Do not rewrite this as a negated `<=`.
         const f32 lfAlongHeading = rw::math::vpu::Dot( lReversedHeading, lSeparation );
         if( lfAlongHeading * lfAlongHeading
-                > KF_TAILGATE_ALONG_HEADING_RANGE * KF_TAILGATE_ALONG_HEADING_RANGE )
+                > KF_TAILGATING_CONE_DEPTH * KF_TAILGATING_CONE_DEPTH )
         {
             continue;
         }
@@ -204,7 +179,7 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const f32 lfConeCosine = rw::math::vpu::Dot(
                 rw::math::vpu::Normalize( lSeparation ), lReversedHeading );
 
-        if( std::cos( KF_TAILGATE_CONE_HALF_ANGLE_RADIANS ) > lfConeCosine )
+        if( std::cos( KF_TAILGATING_CONE_HALF_ANGLE_RADS ) > lfConeCosine )
         {
             continue;
         }
@@ -212,7 +187,7 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const BrnPhysics::Vehicle::RaceCarState* lpOtherPhysicsState =
                 lpOtherCar->GetPhysicsState();
 
-        if( lpOtherPhysicsState->mfSpeedMPH < KF_TAILGATE_MIN_SPEED_MPH )
+        if( lpOtherPhysicsState->mfSpeedMPH < KF_MIN_TAILGATEE_SPEED )
         {
             continue;
         }
@@ -222,8 +197,10 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const f32 lfVelocityDifferenceSquared =
                 rw::math::vpu::Dot( lVelocityDifference, lVelocityDifference );
 
-        if( lfVelocityDifferenceSquared
-                <= KF_TAILGATE_RELATIVE_SPEED * KF_TAILGATE_RELATIVE_SPEED )
+        // ARTIST 822CE48C: ble also takes the unordered arm of fcmpu.
+        if( !( lfVelocityDifferenceSquared
+                > KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE
+                  * KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE ) )
         {
             meIndexOfCarPlayerIsTailgating = leIndex;
             return true;
