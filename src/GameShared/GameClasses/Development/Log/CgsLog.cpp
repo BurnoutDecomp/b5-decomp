@@ -347,7 +347,7 @@ namespace Log
     }
 
     static DebugPrint sDebugPrint;
-    DebugPrint* gpDebugPrint = &sDebugPrint;
+    StrStreamBase* gpDebugPrint = &sDebugPrint;
 }
 
 namespace Message

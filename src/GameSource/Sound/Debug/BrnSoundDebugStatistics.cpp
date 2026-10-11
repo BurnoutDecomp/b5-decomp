@@ -1,55 +1,26 @@
-#include "BrnSoundDebugStatistics.h"
-
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnSound::Debug::Statistics::Statistics
-//
-// Zero-initialises every counter block. The compiler unrolled the leading
-// scalar clears and strength-reduced the per-block clears into pointer loops;
-// the loops are re-rolled here.
+#include "GameSource/Sound/Debug/BrnSoundDebugStatistics.h"
 
 namespace BrnSound
 {
 namespace Debug
 {
+// ARTIST 0x827DF720. The typed counter/history constructors perform exactly
+// the original clears; module pointers, positions and labels await use/init.
 Statistics::Statistics()
 {
-    for (int i = 0; i < 14; ++i)
-    {
-        mHead[i] = 0;
-    }
+}
 
-    for (int i = 0; i < 128; ++i)
-    {
-        mBigArray[i] = 0;
-    }
-    for (int i = 0; i < 4; ++i)
-    {
-        mF584[i] = 0.0f;
-    }
-
-    for (int b = 0; b < 4; ++b)
-    {
-        for (int i = 0; i < 16; ++i)
-        {
-            mBlocks[b].mData[i] = 0;
-        }
-        for (int i = 0; i < 4; ++i)
-        {
-            mBlocks[b].mF[i] = 0.0f;
-        }
-    }
-
-    for (int b = 0; b < 5; ++b)
-    {
-        for (int i = 0; i < 16; ++i)
-        {
-            mBlocks2[b].mData[i] = 0.0f;
-        }
-        for (int i = 0; i < 4; ++i)
-        {
-            mBlocks2[b].mF[i] = 0.0f;
-        }
-    }
+// Inlined by DebugComponent::Construct, ARTIST 0x826A1250..0x826A1290.
+void Statistics::Construct(CgsSound::Playback::Module::Module* lpPlaybackModule,
+                           BrnSound::Module::SoundLogicModule* lpLogicModule)
+{
+    mpPlaybackModule = lpPlaybackModule;
+    mpLogicModule = lpLogicModule;
+    mVoiceProfiles[0].mpcName = "AEMS Voices";    // 0x820AD404
+    mVoiceProfiles[1].mpcName = "Splicer Voices"; // 0x820AD3F4
+    mVoiceProfiles[2].mpcName = "Master Voices";  // 0x820AD3E4
+    mVoiceProfiles[3].mpcName = "Submix Voices";  // 0x820AD3D4
+    mVoiceProfiles[4].mpcName = "Player Voices";  // 0x820AD3C4
 }
 }
 }

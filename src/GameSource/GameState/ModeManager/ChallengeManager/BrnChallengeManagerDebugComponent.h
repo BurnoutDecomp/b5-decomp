@@ -10,7 +10,8 @@
 // challenge manager. Derives from the real CgsDev::DebugComponent and is embedded by value
 // inside (and is a friend of) BrnGameState::ChallengeManager. It registers a couple of
 // "make all challenges N-player" toggles, a challenge-index selector + a couple of actions
-// (start the selected challenge, complete every challenge) with the debug UI.
+// (the original "Start Challenge" callback only sets an unconsumed latch; complete every challenge)
+// with the debug UI.
 //
 // SHAPE + member order are DWARF-authoritative (DecFIGS dwarfdump
 // GameState/ModeManager/ChallengeManager/BrnChallengeManagerDebugComponent.h:52/89/91/92) and
@@ -21,8 +22,8 @@
 //   mbDebugBeginChallengePending = +0x14
 //
 // SCOPE: only the three functions this TU's X360 ledger attests are bodied here
-// (CompleteAllChallenges, GetName, OnActivate), plus StartChallenge as a NAMED TRAP STUB (see its
-// declaration). The other DWARF-listed methods (Construct/Destruct/RenderHUD/GetPath/
+// (CompleteAllChallenges, GetName, OnActivate), plus the ICF-folded StartChallenge latch write.
+// The other DWARF-listed methods (Construct/Destruct/RenderHUD/GetPath/
 // DebugStartChallenge) are owned by their own passes and are intentionally NOT declared here
 // (gate every DWARF declaration on X360 attestation -- declaring them now would force
 // unimplemented vtable slots / link refs).
@@ -48,19 +49,11 @@ namespace BrnGameState
         // Registers this component's tweakables + actions with the debug menu (X360 0x8233EA18).
         void OnActivate() override;                  // @ BrnChallengeManagerDebugComponent.cpp:93
 
-        // The "Start Challenge" debug action callback (registered with `this` as user-data, so STATIC).
-        //
-        // ICF NOTE: in the X360 ARTIST build OnActivate's "Start Challenge" callback address resolves to
-        // CgsDev::DebugComponentPerfMonCpu::DebugCallbackResetCounters (0x82817350) -- i.e. this static
-        // wrapper was identical-code-folded onto that symbol. The DWARF (cpp:114) names the real callback
-        // StartChallenge, which is what the original C++ registered; we register StartChallenge here and
-        // treat the folded-symbol resolution as the ICF artifact it is.
-        //
-        // ⚠️ [challenge-manager mount 2026-09-07] It is a NAMED TRAP STUB in this TU's .cpp, NOT a
-        // reconstruction: the folding means the image gives the wrong function's code and there is no
-        // second reference to disambiguate it, so the body is unrecoverable and is not guessed. It logs
-        // once and asserts. See the banner over the definition.
-        static void StartChallenge(void* lpContext); // @ BrnChallengeManagerDebugComponent.cpp:114 (TRAP STUB)
+        // The original callback at X360 0x82817350 is ICF-folded with the perf-monitor reset
+        // callback, but its body is only `li 1; stb 0x14(r3); blr`. DecFIGS names this component
+        // byte at +0x14 mbDebugBeginChallengePending. Preserve that store only: no X360 export
+        // reads this flag, so the menu action does not start a challenge.
+        static void StartChallenge(void* lpContext); // @ BrnChallengeManagerDebugComponent.cpp:114
 
         // The "Complete all challenges" debug action callback (X360 0x82335010). Registered with the
         // debug menu as a plain DebugCallbackFunction with `this` handed back as the user-data, so it

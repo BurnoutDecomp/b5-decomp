@@ -1,68 +1,67 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"            // CgsDev::DebugComponent base
-#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"      // CgsDev::DebugUI::LogWindow
-#include "GameSource/Sound/Debug/BrnSoundDebugStatistics.h"                                   // BrnSound::Debug::Statistics
-#include "GameShared/GameClasses/Development/Log/CgsLogCombined.h"                            // CgsDev::Log::LogCombined (mLogCombined)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
+#include "GameShared/GameClasses/Development/Log/CgsLogCombined.h"
+#include "GameShared/GameClasses/Development/Log/CgsLogNull.h"
+#include "GameShared/GameClasses/Development/Log/CgsLogOutput.h"
+#include "GameSource/Sound/Debug/BrnSoundDebugStatistics.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnSound::Debug::DebugComponent::DebugComponent @ 0x827E0720  (EXECUTED in the boot trace)
-//   BrnSound::Debug::DebugComponent::GetName        @ 0x827E0798  -> "Sound"
-//   BrnSound::Debug::DebugComponent::GetPath        @ 0x827E07A8  -> "Sound Module"
-//
-// The debug component for the sound module: it shows up in the in-game debug UI under
-// "Sound Module" and owns a scrolling LogWindow plus a block of playback Statistics. The
-// constructor (0x827E0720) installs the component vtable, constructs two small embedded
-// queue-like accumulators (each: vtable + a count word the base Clear zeroes), constructs
-// the LogWindow and the Statistics block.
-//
-// Constructed by BrnSound::Module::RootSoundModule::RootSoundModule.
+namespace CgsSound { namespace Playback { namespace Module { class Module; } } }
+namespace BrnSound { namespace Module { struct SoundLogicModule; } }
+struct Splice;
 
 namespace BrnSound
 {
-    namespace Debug
+namespace Debug
+{
+    void ConsoleChangeCallback(void* lpValue, void* lpUserData);
+
+    // DecFIGS BrnDebugComponent.h:69; ARTIST constructor 0x827E0720 and
+    // Construct 0x826A1230. The +0x0C/+0x14 members are StrStreamBase-derived
+    // LogNull/LogOutput, not queues: vtable sinks are blr and LogOutput::Append.
+    class DebugComponent : public CgsDev::DebugComponent
     {
-        // One of the two small embedded accumulators the ctor builds at guest +0x0C and +0x14.
-        // Each is an 8-byte polymorphic object: a vtable pointer (the X360 stores a shared
-        // empty vtable, then the object's own vtable -- off_820CDEF0 at +0x0C, off_820CDEF8 at
-        // +0x14) followed by an entry-count word that the queue base's Clear zeroes.
-        //
-        // FLAG: the X360 ctor calls CgsContainers::BasePriorityQueue::Clear on each member, but
-        // the members are only 8 bytes (vtable + count) -- the full BasePriorityQueue is 20 bytes,
-        // so the Hex-Rays attribution is the compiler folding the count=0 store into a Clear call.
-        // The exact element type of these queues is uncommitted (out of scope); the observable
-        // ctor effect (install vtable, zero the count) is reproduced by name here.
-        struct SoundDebugEventQueue
+    public:
+        enum EConsole
         {
-            void* mpVtable;       // guest +0x00  (object vtable; ctor installs the real one last)
-            u32   muNumEntries;   // guest +0x04  (zeroed by the queue base's Clear)
+            E_AUDIO = 0,
+            E_GAME = 1,
+            E_AUDIO_AND_GAME = 2,
+            E_MAX_CONSOLES = 3
         };
 
-        class DebugComponent : public CgsDev::DebugComponent
-        {
-        public:
-            // 0x827E0720 -- install the component vtable (handled by the C++ vtable of this derived
-            // type), zero the two embedded event-queue counts, and construct the LogWindow and the
-            // Statistics block.
-            DebugComponent();
+        DebugComponent();
+        void Construct(CgsSound::Playback::Module::Module* lpPlaybackModule,
+                       BrnSound::Module::SoundLogicModule* lpLogicModule);
+        void InstallConsole(EConsole leConsole);
 
-            // The sound code's shared log stream (one static object; sound code streams its debug
-            // output straight into it). InstallConsole picks which child streams it fans out to.
-            static CgsDev::Log::LogCombined mLogCombined;
+        static CgsDev::Log::LogCombined mLogCombined;
 
-        protected:
-            // The debug-UI identity hooks (override the CgsDev::DebugComponent virtuals).
-            const char* GetName() const override { return "Sound"; }   // 0x827E0798
-            const char* GetPath() const override { return "Sound Module"; } // 0x827E07A8
+    protected:
+        const char* GetName() const override { return "Sound"; }
+        const char* GetPath() const override { return "Sound Module"; }
+        void OnActivate() override;
 
-        private:
-            // Two small embedded queue-like accumulators (guest +0x0C and +0x14).
-            SoundDebugEventQueue mEventQueueA;   // guest +0x0C (vtable off_820CDEF0)
-            SoundDebugEventQueue mEventQueueB;   // guest +0x14 (vtable off_820CDEF8)
-
-            CgsDev::DebugUI::LogWindow mLogWindow;   // guest +0x1C  scrolling log window
-            BrnSound::Debug::Statistics mStatistics; // guest +0x358 playback statistics block
-        };
-    }
+    private:
+        CgsDev::Log::LogNull mLogNull;       // ARTIST +0x0C
+        CgsDev::Log::LogOutput mLogTty;      // +0x14
+        CgsDev::DebugUI::LogWindow mLogWindow; // +0x1C
+        CgsSound::Playback::Module::Module* mpPlaybackModule; // +0x78
+        BrnSound::Module::SoundLogicModule* mpLogicModule;    // +0x7C
+        CgsDev::DebugUI::StringList maCollisionMaterialNames[26]; // +0x80
+        CgsDev::DebugUI::StringList maCollisionActionNames[8];    // +0x150
+        CgsDev::DebugUI::StringList maConsoleNames[4];            // +0x190
+        CgsDev::DebugUI::StringList maSpliceBankNames[50];        // +0x1B0
+        s32 meOutput;                      // +0x340, registered as an s32 enum
+        bool mbSpliceAudition;              // +0x344
+        bool mbSpliceAuditionAutoCycle;     // +0x345
+        s32 miSpliceBankIndex;              // +0x348
+        s32 miSpliceIndexTens;              // +0x34C
+        s32 miSpliceIndexUnits;             // +0x350
+        Splice* mpSpliceAuditionVoice;      // +0x354
+        Statistics mStatistics;            // +0x358
+    };
+}
 }

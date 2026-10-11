@@ -290,7 +290,7 @@ namespace Assert
             mpMapFileReader->Prepare(mpcMapFileName, &lrStack);
         }
 
-        Log::DebugPrint* lpLog = Log::gpDebugPrint;
+        StrStreamBase* lpLog = Log::gpDebugPrint;
         *lpLog << "  Callstack:\n";
         for (s32 liIndex = 0; liIndex < lrStack.GetNumStackAddresses(); ++liIndex)
         {

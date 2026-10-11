@@ -50,7 +50,7 @@ namespace
     // [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT. The same BRN_TRAFFIC_DIAG switch the
     // traffic module's [T5-*] rungs use, so one variable turns the whole decision-to-pixels
     // trail on at once. DELETE-WHEN-STABLE.
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
+    CgsDev::StrStreamBase* TrafficDiagStream()
     {
         static const bool skbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
         if (!skbOn || CgsDev::Log::gpDebugPrint == 0)

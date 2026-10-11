@@ -501,7 +501,7 @@ namespace Vehicle
                 const s32 liWAg = static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex);
                 const RaceCarPhysics& lrWV  = maRaceCarVehicles[liWV];
                 const RaceCarPhysics& lrWAg = maRaceCarVehicles[liWAg];
-                CgsDev::Log::DebugPrint& lrWOut = *CgsDev::Log::gpDebugPrint;
+                CgsDev::StrStreamBase& lrWOut = *CgsDev::Log::gpDebugPrint;
                 auto lWV3 = [&](const char* lpcName, const Vector3& lrV)
                 {
                     lrWOut << lpcName << "=(" << lrV.x << "," << lrV.y << "," << lrV.z << ")";
@@ -663,7 +663,7 @@ namespace Vehicle
         if (lbWitness && TakedownReplayEnabled()
             && (lpInfo->mbRaceCarAIsPlayer || lpInfo->mbRaceCarBIsPlayer))
         {
-            CgsDev::Log::DebugPrint& lrWOut = *CgsDev::Log::gpDebugPrint;
+            CgsDev::StrStreamBase& lrWOut = *CgsDev::Log::gpDebugPrint;
             auto lWWord = [&](u32 luValue) { lrWOut.AppendFormat(" %08X", luValue); };
             auto lWBits = [&](f32 lfValue)
             {

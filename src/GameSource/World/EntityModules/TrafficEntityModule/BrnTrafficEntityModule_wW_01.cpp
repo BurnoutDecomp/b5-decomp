@@ -49,7 +49,7 @@ namespace
 
     // [FLAG PC witness] NOT console code. BRN_STARTGRID_DIAG, default off, read once. The wholesale
     // grid kill prints its first firing and then every firing that removed a car, capped.
-    CgsDev::Log::DebugPrint* StartGridDiagStream_PC()
+    CgsDev::StrStreamBase* StartGridDiagStream_PC()
     {
         static const bool sbEnabled = (getenv("BRN_STARTGRID_DIAG") != 0);
         if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
@@ -80,7 +80,7 @@ void TrafficEntityModule::KillTrafficOnStartGridWholeSale(Vector3 lPlayerPositio
         // is about to hand to RemoveVehicle (its own predicate, read only). The count is taken first
         // because an offline standard car is only flagged should-be-removed there and stays alive
         // until the pool sweep, so an alive count after the call would miss it.
-        CgsDev::Log::DebugPrint* const lpDiag_PC = StartGridDiagStream_PC();
+        CgsDev::StrStreamBase* const lpDiag_PC = StartGridDiagStream_PC();
         u32 luVictims_PC = 0;
         if (lpDiag_PC != 0 && giStartGridDiagLinesLeft_PC > 0)
         {

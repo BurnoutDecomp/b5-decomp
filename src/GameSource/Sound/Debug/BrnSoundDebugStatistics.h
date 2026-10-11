@@ -1,41 +1,65 @@
-#ifndef BRN_SOUND_DEBUG_STATISTICS_H
-#define BRN_SOUND_DEBUG_STATISTICS_H
+#pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoiceProfilingData.h"
+
+namespace CgsSound { namespace Playback { namespace Module { class Module; } } }
+namespace BrnSound { namespace Module { struct SoundLogicModule; } }
 
 namespace BrnSound
 {
 namespace Debug
 {
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82665xxx.
-// A block of sound debug counters/histograms; the constructor clears them all.
-class Statistics
-{
-public:
-    Statistics();
-
-private:
-    struct Histogram     // 20 words
+    // DecFIGS BrnSoundStatistics.h:55. The target counters are u32, including
+    // their maxima. They count bytes/objects, independently of host size_t width.
+    template<class T> struct Stat
     {
-        u32   mData[16];
-        float mF[4];
+        Stat() : mMax(0), mCurrent(0) {}
+        void Set(T luValue)
+        {
+            mCurrent = luValue;
+            if (mMax < luValue)
+                mMax = luValue;
+        }
+        T GetCurrent() const { return mCurrent; }
+        T GetMax() const { return mMax; }
+    private:
+        T mMax;
+        T mCurrent;
     };
 
-    struct HistogramP    // 21 words (one padding word per the guest stride)
+    // ARTIST 0x827DF720 clears seven counters, a 128-entry history, four
+    // 16-entry histories and five named voice histories. Construct's stores at
+    // 0x826A1250..1290 identify the first two words as module pointers and each
+    // final voice-history word as a label pointer, not padding.
+    class Statistics
     {
-        float mData[16];
-        float mF[4];
-        u32   mPad;
+    public:
+        Statistics();
+        void Construct(CgsSound::Playback::Module::Module* lpPlaybackModule,
+                       BrnSound::Module::SoundLogicModule* lpLogicModule);
+
+    private:
+        struct NamedVoiceProfilingData
+        {
+            CgsSound::Playback::VoiceProfilingData<16> mData;
+            const char* mpcName;
+        };
+
+        CgsSound::Playback::Module::Module* mpPlaybackModule; // target +0x00
+        BrnSound::Module::SoundLogicModule* mpLogicModule;    // +0x04
+        f32 mfX; // +0x08
+        f32 mfY; // +0x0C
+        Stat<u32> mRwacAlloc;       // +0x10
+        Stat<u32> mCsisAlloc;       // +0x18
+        Stat<u32> mPlaybackAlloc;   // +0x20
+        Stat<u32> mLogicAlloc;      // +0x28
+        Stat<u32> mVoiceCount;      // +0x30
+        Stat<u32> mContentCount;    // +0x38
+        Stat<u32> mCommandFillLevel;// +0x40
+        CgsSound::Playback::VoiceProfilingData<128> mMixerProfile; // +0x48
+        CgsSound::Playback::VoiceProfilingData<16> mPpuProfile[4]; // +0x258
+        NamedVoiceProfilingData mVoiceProfiles[5];               // +0x398
     };
-
-    u8         mPad0[16];      // guest 0..15
-    u32        mHead[14];      // guest 16..68
-    u32        mBigArray[128]; // guest 72..584
-    float      mF584[4];       // guest 584..600
-    Histogram  mBlocks[4];     // guest 600..920
-    HistogramP mBlocks2[5];    // guest 920..
-};
 }
 }
-
-#endif

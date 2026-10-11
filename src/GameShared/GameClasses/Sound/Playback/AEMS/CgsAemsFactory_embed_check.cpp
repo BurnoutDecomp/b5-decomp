@@ -18,7 +18,7 @@ namespace Log
 {
     StrStreamBase& DebugPrint::operator<<(const char*) { return *this; }
     static DebugPrint sStubPrint;
-    DebugPrint* gpDebugPrint = &sStubPrint;
+    StrStreamBase* gpDebugPrint = &sStubPrint;
     void WriteToLog(const char*) {}
 }
 namespace Message

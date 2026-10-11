@@ -56,7 +56,7 @@ reference images alone do not establish a different screen-coordinate origin.
 | Section | Concrete reconstruction dependency |
 |---|---|
 | Force Quit to Start Menu | ARTIST's flag at `82FAE28C` is consumed by `BridgeGuiToGame`, which uses Xbox launch data and `XLaunchNewImage`. A native soft-reboot lifecycle is absent. A no-op checkbox is not added. |
-| Sound Module | The sound debug component has constructor/identity support, but its activation and diagnostic HUD are incomplete. Normal audio is a separate path. |
+| Sound Module | Owner construction/registration, Console, nine Global mixer controls and two diagnostic flags are recovered in source. Game/audio validation is pending. The other 125 activation registrations, statistics HUD and audition chains remain incomplete. |
 | AI | Main AI debug construction/activation and some draw helpers remain absent; the existing world/HUD slices do not supply a complete component lifecycle. Ordinary AI driving is a separate path. |
 | Renderer | The original renderer debug component remains a skeletal `GetPath` implementation. Native graphics and reflection controls are available through their existing groups. |
 | GameDataModule / DLC | Original debug activation, callbacks and owner wiring are incomplete. |

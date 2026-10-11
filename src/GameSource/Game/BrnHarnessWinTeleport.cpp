@@ -162,7 +162,7 @@ namespace
     // ------------------------------------------------------------------------
     // Small helpers.
     // ------------------------------------------------------------------------
-    CgsDev::Log::DebugPrint* DebugLog()
+    CgsDev::StrStreamBase* DebugLog()
     {
         return CgsDev::Log::gpDebugPrint;
     }

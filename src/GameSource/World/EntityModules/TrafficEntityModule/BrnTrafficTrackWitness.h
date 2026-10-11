@@ -28,7 +28,7 @@ inline bool TrafficTrackEnabled()
     return sbEnabled;
 }
 
-inline CgsDev::Log::DebugPrint* TrafficTrackStream()
+inline CgsDev::StrStreamBase* TrafficTrackStream()
 {
     if (!TrafficTrackEnabled() || CgsDev::Log::gpDebugPrint == 0)
     {

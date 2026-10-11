@@ -2524,7 +2524,7 @@ namespace Deformation
                     laCarCarDv[1].mVAfter = lContact.mpOtherVehicle->GetVehicleBody().GetLinearVelocity();
                     laCarCarDv[1].mWAfter = lContact.mpOtherVehicle->GetVehicleBody().GetAngularVelocity();
 
-                    CgsDev::Log::DebugPrint& lrDvOut = *CgsDev::Log::gpDebugPrint;
+                    CgsDev::StrStreamBase& lrDvOut = *CgsDev::Log::gpDebugPrint;
                     auto lDvWord = [&]( u32 luValue ) { lrDvOut.AppendFormat( " %08X", luValue ); };
                     auto lDvBits = [&]( f32 lfValue )
                     {
