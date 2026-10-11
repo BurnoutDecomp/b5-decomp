@@ -31,6 +31,65 @@ namespace Vehicle
             return lColour;
         }
 
+        f32 HandlingFlush(f32 lfValue)
+        {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        }
+
+        f32 HandlingMultiply(f32 lfA, f32 lfB)
+        {
+            return HandlingFlush(HandlingFlush(lfA) * HandlingFlush(lfB));
+        }
+
+        f32 HandlingAdd(f32 lfA, f32 lfB)
+        {
+            return HandlingFlush(HandlingFlush(lfA) + HandlingFlush(lfB));
+        }
+
+        f32 HandlingMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+        {
+            return HandlingFlush(std::fmaf(HandlingFlush(lfA), HandlingFlush(lfC), HandlingFlush(lfB)));
+        }
+
+        f32 HandlingNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+        {
+            const f32 lfDifference = HandlingMultiplyAdd(lfA, lfC, -HandlingFlush(lfB));
+            return lfDifference != lfDifference ? lfDifference : -lfDifference;
+        }
+
+        f32 HandlingReciprocal(f32 lfValue)
+        {
+            lfValue = HandlingFlush(lfValue);
+            // FLAG (estimate model): rounded 1/x models the vrefp seed. Both
+            // original Newton refinements remain unconditional.
+            f32 lfEstimate = HandlingFlush(static_cast<f32>(1.0 / static_cast<f64>(lfValue)));
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfResidual = HandlingNegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
+                lfEstimate = HandlingMultiplyAdd(lfEstimate, lfResidual, lfEstimate);
+            }
+            return lfEstimate;
+        }
+
+        Vector3 HandlingScale(Vector3 lValue, f32 lfScale)
+        {
+            return Vector3{HandlingMultiply(lValue.x, lfScale), HandlingMultiply(lValue.y, lfScale),
+                           HandlingMultiply(lValue.z, lfScale), HandlingMultiply(lValue.w, lfScale)};
+        }
+
+        Vector3 HandlingAdd(Vector3 lA, Vector3 lB)
+        {
+            return Vector3{HandlingAdd(lA.x, lB.x), HandlingAdd(lA.y, lB.y),
+                           HandlingAdd(lA.z, lB.z), HandlingAdd(lA.w, lB.w)};
+        }
+
+        Vector3 HandlingMultiplyAdd(Vector3 lA, f32 lfC, Vector3 lB)
+        {
+            return Vector3{HandlingMultiplyAdd(lA.x, lfC, lB.x), HandlingMultiplyAdd(lA.y, lfC, lB.y),
+                           HandlingMultiplyAdd(lA.z, lfC, lB.z), HandlingMultiplyAdd(lA.w, lfC, lB.w)};
+        }
+
         // Scalar fsel lowering used by the original label/current-value clamps.
         // An unordered range subtraction chooses the range, as ARTIST does.
         f32 ClampGripLabel(f32 lfValue, f32 lfRange)
@@ -111,6 +170,55 @@ namespace Vehicle
             lpDisplay->DrawPoint(lrResult.mIntersectionPosition, HandlingColour(0xFF0000FFu));
             lpDisplay->DrawArrow(lrResult.mIntersectionPosition,
                 lrResult.mIntersectionPosition + lrResult.mIntersectionNormal, HandlingColour(0xFF0000FFu));
+        }
+    }
+
+    // ARTIST 825B9170 reads the actual showtime deformation accumulators.
+    void DebugComponent::RenderDeformationStats(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        char lacText[128];
+        CgsCore::SPrintf(lacText, 128, "Average deformation: %f (limit: %f)",
+                        static_cast<double>(msPlayerParams.mfDeformationScale),
+                        static_cast<double>(msPlayerParams.mfDamageBudget));
+        lpDisplay->DrawText(lacText, 100.0f, 100.0f, 20.0f, 0xFFFFFFFFu);
+    }
+
+    // ARTIST 825B92A8: the stored triangle is offset along its normal even
+    // when it has not received a collision yet; there is no validity gate.
+    void DebugComponent::DrawLastWallTriangle(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL");
+        static const f32 K_OFFSET = 0.04f; // splat at 82FB9FA0
+        const Vector3 lOffset = HandlingScale(mLastWallTriangle.mNormal, K_OFFSET);
+        const Vector3 lVertex0 = HandlingAdd(mLastWallTriangle.mVertex0, lOffset);
+        const Vector3 lVertex1 = HandlingAdd(mLastWallTriangle.mVertex1, lOffset);
+        const Vector3 lVertex2 = HandlingAdd(mLastWallTriangle.mVertex2, lOffset);
+        // 825B9370 loads one byte (0x40), then rotates it into alpha.
+        lpDisplay->DrawSolidTriangle(lVertex0, lVertex1, lVertex2, HandlingColour(0x400000FFu));
+        lpDisplay->DrawHollowTriangle(lVertex0, lVertex1, lVertex2, HandlingColour(0xFFFFFFFFu));
+        const f32 lfRadius = 0.07f; // flt_82F2A4E8
+        lpDisplay->DrawHollowSphere(lVertex0, lfRadius, HandlingColour(0xFFFFFFFFu));
+        lpDisplay->DrawHollowSphere(lVertex1, lfRadius, HandlingColour(0xFFFFFFFFu));
+        lpDisplay->DrawHollowSphere(lVertex2, lfRadius, HandlingColour(0xFFFFFFFFu));
+    }
+
+    // ARTIST 825DA6A8: only the producer's applied flag gates each wheel;
+    // retain the two reciprocal refinements and the fused endpoint offset.
+    void DebugComponent::DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay)
+    {
+        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL");
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            if (mabSuspensionForceApplied[liWheel])
+            {
+                const Vector3 lStart = mpRaceCarPhysics->GetWheelsWorldTransfrom(
+                    static_cast<EVehicleDrivenWheel>(liWheel), false).wAxis;
+                const f32 lfScale = HandlingReciprocal(2000.0f); // flt_82F2A504
+                const Vector3 lEnd = HandlingMultiplyAdd(maSuspensionForces[liWheel], lfScale, lStart);
+                lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
+                lpDisplay->DrawHollowSphere(lStart, mpRaceCarPhysics->maWheels[liWheel].mSlipVariables.w,
+                                            HandlingColour(0xFFFFFFFFu));
+            }
         }
     }
 

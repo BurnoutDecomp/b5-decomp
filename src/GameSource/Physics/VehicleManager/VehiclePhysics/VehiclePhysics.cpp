@@ -5,6 +5,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"  // DebugComponent::RecordDownForce (UpdateDownForce's tail)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([tyre] bring-up probe only)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::Start/StopMonitor (Update's stage brackets)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"        // the car-asset wrapper (SetAttributes' key chase)
@@ -83,6 +84,47 @@ namespace Vehicle
                 lfEstimate = TakeoffMultiplyAdd(lfEstimate, lfResidual, lfEstimate);
             }
             return lfEstimate;
+        }
+
+        // The suspension path uses the same VMX binary32/flush boundaries,
+        // but has its own rsqrt refinement sequence (825D1FD4..825D2024).
+        Vector3 SuspensionForce(Vector3 lUp, f32 lfMagnitude)
+        {
+            const f32 lfLengthSquared = TakeoffFlush(vpu::MagnitudeSquared(lUp));
+            // FLAG (estimate model): rounded 1/sqrt models vrsqrtefp. Retain
+            // both unconditional refinements, including zero/NaN outcomes.
+            f32 lfEstimate = TakeoffFlush(static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared))));
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfSquare = TakeoffMultiply(lfEstimate, lfEstimate);
+                const f32 lfHalf = TakeoffMultiply(lfEstimate, 0.5f);
+                const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
+                lfEstimate = TakeoffMultiplyAdd(lfHalf, lfResidual, lfEstimate);
+            }
+            return Vector3{
+                TakeoffMultiply(TakeoffMultiply(lUp.x, lfEstimate), lfMagnitude),
+                TakeoffMultiply(TakeoffMultiply(lUp.y, lfEstimate), lfMagnitude),
+                TakeoffMultiply(TakeoffMultiply(lUp.z, lfEstimate), lfMagnitude),
+                TakeoffMultiply(TakeoffMultiply(lUp.w, lfEstimate), lfMagnitude)};
+        }
+
+        void AssertSuspensionWheelPosition(Vector3 lPosition)
+        {
+            // Wheel.h:412 compares each XYZ lane with itself: infinity passes,
+            // NaN fails. The original performs this twice for a recorded push.
+            if (!(lPosition.x == lPosition.x && lPosition.y == lPosition.y && lPosition.z == lPosition.z))
+            {
+                CgsDev::Assert::BeginAssert();
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                lMessage << "Invalid wheel position: ";
+                lMessage.AppendFormat("(%f, %f, %f)", static_cast<double>(lPosition.x),
+                                      static_cast<double>(lPosition.y), static_cast<double>(lPosition.z));
+                lMessage << ", please tell Graham D.";
+                CgsDev::Assert::FireAssert(lacMessage,
+                    "..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412);
+                CgsDev::Assert::EndAssert();
+            }
         }
     }
 
@@ -4925,61 +4967,56 @@ namespace Vehicle
     // acceleration -- so it IS the net spring force), gated > 0 by `fcmpu cr6,f0,f31 ; ble`.
     // The trailing ExternalPhysicsBody::CalculateNewVelocity(this+0x10) checkpoint stays a
     // faithful comment (base-owned, not declared on this slice), as before.
-    // The two per-wheel "Invalid wheel position" (Wheel.h:412) asserts are elided -- debug.
     //
     // ⭐ RE-VERIFIED 2026-09-03 (drive-spine 1:1 audit), instruction by instruction against the
     // 225-instruction body. Everything above holds: the two gate bytes, the mass x acceleration
     // magnitude and its `ble` on > 0, the vrsqrtefp + two-Newton normalise of the body up axis, the
     // WORLD force / BODY position argument pair, the wheel-position lever arm, the four-iteration
     // loop (r18 0x3B0..0x3E0 step 0x10, r27 += 0xE0, r16 += 0x30) and the tail CalculateNewVelocity.
-    // ONE FURTHER ELISION, named here so the list is complete: the console also records the frame's
-    // result into a debug/telemetry block behind a null-checked pointer at this+0x13E4 --
-    // `stvx128 v127, r18, r11` writes the force at block+0x3B0+i*0x10 (0x825D220C) and
-    // `stb 1, 0x3F0(r11+i)` / `stb 0, 0x3F0(r11+i)` sets or clears that wheel's applied flag
-    // (0x825D2210 / 0x825D2228). Nothing in the sim reads it; it is the debug component's buffer,
-    // elided on the same footing as the two asserts. NOT a silent drop -- recorded, not forgotten.
+    // The original debug records and both Wheel.h:412 position assertions are recovered below.
     // =============================================================================================
     void VehiclePhysics::ApplySuspensionForces(VecFloat lvfTimeStep)
     {
-        // The push direction: the body up axis, normalized (0x825D1FB4..0x825D2020). Hoisted --
-        // the console re-derives it per wheel, but it cannot change inside the loop.
-        const Vector3& lvUp = mTransform.Up();
-        const f32 lfUpMagSq = lvUp.x * lvUp.x + lvUp.y * lvUp.y + lvUp.z * lvUp.z;
-        const f32 lfRecipUpMag = 1.0f / std::sqrt(lfUpMagSq);
-        const Vector3 lvUpUnit{ lvUp.x * lfRecipUpMag, lvUp.y * lfRecipUpMag, lvUp.z * lfRecipUpMag, 0.0f };
-
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             Wheel& lrWheel = maWheels[liWheel];
 
             // 0x825D1F68 / 0x825D1F74: wheel+0xD6 (mbHasTraction) and wheel+0xD7 (mu8State).
-            if (!lrWheel.mbHasTraction)
+            if (!lrWheel.mbHasTraction || lrWheel.mu8State == 2)
+            {
+                if (mpDebugComponent)
+                    mpDebugComponent->mabSuspensionForceApplied[liWheel] = false;
                 continue;
-            if (lrWheel.mu8State == 2)
-                continue;
+            }
 
             // Push magnitude = maSprings[i].reg0.z (mass lane) * maSprings[i].reg1.y (acceleration
             // lane) -- i.e. the net spring force. (0x825D1F80..0x825D1F94, then `ble` on > 0.)
             const f32 lfMagnitude =
-                maSprings[liWheel].mvStiffness_Damping_Mass_Position.z *
-                maSprings[liWheel].mvVelocity_Acceleration_DampingForce_SpringForce.y;
+                TakeoffMultiply(maSprings[liWheel].mvStiffness_Damping_Mass_Position.z,
+                    maSprings[liWheel].mvVelocity_Acceleration_DampingForce_SpringForce.y);
 
             if (lfMagnitude <= 0.0f)
+            {
+                if (mpDebugComponent)
+                    mpDebugComponent->mabSuspensionForceApplied[liWheel] = false;
                 continue;   // no push this wheel
+            }
 
-            // (debug-only 'Invalid wheel position' assert on mPosition -- elided.)
-
-            const Vector3 lvForce{ lvUpUnit.x * lfMagnitude,
-                                   lvUpUnit.y * lfMagnitude,
-                                   lvUpUnit.z * lfMagnitude,
-                                   0.0f };
+            const Vector3 lvForce = SuspensionForce(mTransform.Up(), lfMagnitude);
+            AssertSuspensionWheelPosition(lrWheel.mPosition);
             // asm @0x825D2100/0x825D20FC: r4 = 0 (WORLD force), r5 = 1 (BODY position), and
             // 0x825D2104 loads the position from r27 == &maWheels[i].mPosition.
             AddLocalForce(lvForce, rw::physics::WORLD_SPACE,
                           lrWheel.mPosition, rw::physics::BODY_SPACE);
+            if (mpDebugComponent)
+            {
+                AssertSuspensionWheelPosition(lrWheel.mPosition);
+                mpDebugComponent->maSuspensionForces[liWheel] = lvForce;
+                mpDebugComponent->mabSuspensionForceApplied[liWheel] = true;
+            }
         }
 
-        // 0x825D211C-0x825D2124 restores the incoming v1 and tail-integrates after all wheel forces.
+        // 0x825D2248..0x825D224C restores the incoming v1 and tail-integrates after all wheel forces.
         CalculateNewVelocity(lvfTimeStep);
     }
 
