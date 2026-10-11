@@ -60,6 +60,25 @@ namespace CgsSceneManager
         SceneManagerModule::ResetDebugPageCounters();
     }
 
+    // @ X360 0x828D04E8. Preserve the target dispatch order and trailing camera-position store.
+    // The three named callees below are still in the pending consumer recovery set; their
+    // declarations are kept so the calls are not silently omitted from the source path.
+    void SceneManagerDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        CGS_ASSERT(lpRender != NULL, "lpDisplay != NULL");
+
+        if (mbDrawCachedTriangles)
+            DrawCachedObjectTriangles(lpRender);
+        if (mbDrawCacheSpheres)
+            DrawCachedObjectSpheres(lpRender);
+        if (mbDrawCollisionVolumes)
+            DrawPrimitives(lpRender);
+        if (mbDrawTriangleTest)
+            DrawTriangleTest(lpRender);
+
+        mInitialCameraPosition = lpRender->GetCameraPosition();
+    }
+
     // @ X360 0x828AB568. Captions, registration order, ranges, increments and read-only state
     // are taken from the original ARTIST calls. The dirty flag and statistics remain their
     // original owner storage in SceneManagerModule/TriangleCacheManager.
