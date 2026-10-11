@@ -97,6 +97,11 @@ namespace BrnGame
     BrnGameModule::BrnGameModule()
         : mpUpdateInputBufferStack(0)
         , mpUpdateOutputBufferStack(0)
+        , mpResourceInputBufferStack(0)
+        , mpResourceOutputBufferStack(0)
+        , mpGameDataModuleInputBuffer(0)
+        , mpGameDataModuleOutputBuffer(0)
+        , mbHasGameTerminated(false)
         , mbSimPaused(false)
         , mbDiskError(false)
         , mbSkipVideos(false)
@@ -116,6 +121,7 @@ namespace BrnGame
         // meaning -- a Release() from there walks straight into releasing unprepared modules.
         // Same seed BrnBaseFlow::Construct already applies to its own release stage, and the
         // precondition the teardown loop (F-P0-8) needs before it can ever be wired.
+        , mePrepareStage(E_PREPARESTAGE_START)
         , meReleaseStage(E_RELEASESTAGE_DONE)
         , meGamePrepareStage(E_GAMEPREPARESTAGE_START)
         , meGameUpdateStage(E_GAMEUPDATESTAGE_PREPARE)
@@ -196,6 +202,11 @@ namespace BrnGame
         // X360 step 1: the module base (resets the prepare/release stages + constructs the two
         // DataBuffers -- flag/pointer init only).
         CgsModule::ModuleSingleBuffered::Construct();
+
+        // ARTIST Construct @0x823CB1F0 and Prepare's START stage reset the
+        // termination latch; Construct @0x823C9EF0 seeds the prepare ladder.
+        mbHasGameTerminated = false;
+        mePrepareStage = E_PREPARESTAGE_START;
 
         // [gated] X360 steps 2-3: CheckClassSizes, then the game-state field seeds at
         // +10094156..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
