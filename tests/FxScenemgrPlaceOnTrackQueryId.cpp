@@ -21,11 +21,18 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "RaceCarResetHistoryFixture.h"
 
 namespace CgsModule { struct Event {}; }
 
 namespace CgsDev {
 static std::string gText;
+static int giAssertions = 0;
+namespace Assert {
+int BeginAssert() { return 0; }
+int FireAssert(const char*, const char*, int) { ++giAssertions; return 0; }
+void* EndAssert() { return nullptr; }
+}
 namespace Log {
 struct DebugPrint
 {
@@ -91,12 +98,19 @@ class RaceCarEntityModule
 {
 public:
     ActiveRaceCar maCars[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+    RaceCarResetHistoryFixture mRCEntityModuleDebugComponent;
     bool mbInCarSelectScreen = false;
     ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leIndex) { return &maCars[leIndex]; }
     bool IsInCarSelectScreen() const { return mbInCarSelectScreen; }
 };
 
-struct Placed { s32 miSlot; const PlaceOnTrackCandidate* mpBest; };
+struct Placed
+{
+    s32 miSlot;
+    const PlaceOnTrackCandidate* mpBest;
+    u32 muHistoryCount;
+    Vector3 mFirstHistory;
+};
 struct Ranked { const PlaceOnTrackCandidateList* mpList; Vector4 mQuery; bool mbIgnoreFatal; };
 
 class PlaceOnTrackManager
@@ -114,10 +128,14 @@ public:
     void PlaceCarOnTrack(EActiveRaceCarIndex leIndex, const PlaceOnTrackCandidate* lpBest,
                          RaceCarEntityModuleIO::OutputBuffer_PrePhysics*)
     {
-        maPlaced.push_back(Placed{ static_cast<s32>(leIndex), lpBest });
+        const auto& lrHistory = mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestIntersections;
+        const u32 luCount = lrHistory.GetLength();
+        const Vector3 lFirst = luCount ? lrHistory.GetItem(0) : Vector3{};
+        maPlaced.push_back(Placed{ static_cast<s32>(leIndex), lpBest, luCount, lFirst });
     }
     void ApplyPendingRequestsWithoutSceneQueryBringUp(RaceCarEntityModuleIO::OutputBuffer_PrePhysics*) { ++miBringUps; }
     void ArmCarTeleportBringUp() {}
+    void ArmWinTeleportBringUp() {}
     void ArmCrashSweepBringUp() {}
 
     RaceCarEntityModule* mpRaceCarEntityModule = nullptr;
@@ -175,6 +193,7 @@ int main()
 
     static ResultStorage sSlot3, sDecoyBits8, sWrongType, sOtherOwner, sSlot6;
     MakeResult(sSlot3,      0x00050003u, 2);   // Set(5, 3): slot 3's answer
+    sSlot3.mList.maCandidates[0].mPosition = Vector4{11.0f,22.0f,33.0f,44.0f};
     MakeResult(sDecoyBits8, 0x00000503u, 1);   // 5 in bits [8..15], owner 0: not a place-on-track answer
     MakeResult(sWrongType,  0x00050001u, 1);   // owner 5 but type 2
     MakeResult(sOtherOwner, 0x00030006u, 1);   // owner 3
@@ -205,6 +224,11 @@ int main()
     Check(lManager.maPlaced.size() == 2 && lManager.maPlaced[0].mpBest == &sSlot3.mList.maCandidates[0]
           && lManager.maPlaced[1].mpBest == nullptr,
           "the ranked pick reaches PlaceCarOnTrack (NULL for the empty answer)");
+    Check(lManager.maPlaced.size() == 2 && lManager.maPlaced[0].muHistoryCount == 2
+          && lManager.maPlaced[0].mFirstHistory.x == 11.0f && lManager.maPlaced[0].mFirstHistory.w == 44.0f,
+          "accepted result records all intersections before placement, preserving w");
+    Check(lManager.maPlaced.size() == 2 && lManager.maPlaced[1].muHistoryCount == 0,
+          "an empty accepted result clears the previous diagnostic intersections");
     bool lbNoDecoy = true;
     for (const Ranked& r : lManager.maRanked)
         lbNoDecoy = lbNoDecoy && r.mpList != &sDecoyBits8.mList && r.mpList != &sOtherOwner.mList && r.mpList != &sWrongType.mList;
@@ -226,6 +250,7 @@ int main()
     Check(CgsDev::gText == lExpect,
           "the walk's console prints per answer (gxMessageFilterFlags & 1): result, count, selected index");
 
+    Check(CgsDev::giAssertions == 0, "history stays within the real Array capacity");
     std::printf("FxScenemgrPlaceOnTrackQueryId: %d checks, %d failures\n", giChecks, giFailures);
     return giFailures ? 1 : 0;
 }

@@ -99,6 +99,27 @@ const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOnPC()
 {
     return &Im3dStatesPC().mZOn;
 }
+const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOffPC()
+{
+    return &Im3dStatesPC().mZOff;
+}
+const renderengine::TextureState* GetIm3dTextureStateUntexturedPC()
+{
+    // FLAG PC-platform leaf: native storage for ARTIST's shared untextured
+    // texture state (83010F5C), using ConstructDefaultTextureState 827ED608's
+    // exact parameters and the existing native white texture.
+    static const renderengine::TextureState* spState = [] {
+        renderengine::TextureState::Parameters lParameters = {};
+        lParameters.muAddressU = lParameters.muAddressV = lParameters.muAddressW = 2;
+        lParameters.muMagFilter = lParameters.muMinFilter = 1;
+        lParameters.muMaxAnisotropy = 13;
+        lParameters.muField10 = 1;
+        lParameters.mu8Field43 = lParameters.mu8Field44 = 1;
+        lParameters.mpTexture = GetImWhiteTexturePC();
+        return renderengine::TextureState::Initialize(nullptr, &lParameters);
+    }();
+    return spState;
+}
 // The original Dispatch823FEFE0 walks the frozen command bank through the
 // subclass's virtual handler; it never treats world vertices as screen pixels.
 template<class V>

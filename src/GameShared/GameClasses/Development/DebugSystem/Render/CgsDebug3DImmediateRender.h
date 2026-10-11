@@ -8,14 +8,12 @@
 #include "rw/math/vpu/types.h"                       // rw::math::vpu::Vector3 / Matrix44Affine
 #include "rw/rwcore_structs.h"                       // rw::RGBA
 
-// CgsDev::Debug3DImmediateRender - the world-space (3D) debug immediate renderer (the 3D counterpart
-// of Debug2DImmediateRender). INCREMENTAL: only the debug-font handoff is modelled here, so
-// DebugManager::SetDebugFont can set the font on BOTH the 2D and 3D renderers exactly as the X360
-// does; the 3D drawing path (world-space DrawLine/DrawBox/DrawText) is the render follow-on. X360
-// SetDebugFont (0x823B1448) stores the 2-word handle at this+0x2C/+0x30.
+// World-space debug renderer. Geometry records into the frame's Im3d command
+// buffer for dispatch in BrnRendererModule's debug pass. Individual primitive
+// algorithms still require their own console-parity checks.
 
 namespace rw { struct IResourceAllocator; }   // struct -- must match rwcore_structs.h's class-key (MSVC mangling)
-namespace CgsGraphics { class Im3dRenderBuffer; }   // the 3D debug render buffer (opaque on PC)
+namespace CgsGraphics { class Im3dRenderBuffer; }
 
 namespace CgsDev
 {
@@ -48,13 +46,10 @@ namespace CgsDev
 
         static const s32 KI_VERTEX_BUFFER_SIZE = 1000;
 
-        // X360 Construct @0x8281A488, called by DebugManager::ConstructRenderer @0x8281ADD0 with
-        // (this, the manager's allocator, UI-metrics width, UI-metrics height). The X360 body also
-        // constructs the renderer's vector font + text renderer, creates the debug render states
-        // (CreateDebugRenderStates) and builds the sphere index table (BuildSphereIndices); those
-        // members/paths are the Debug3D render follow-on -- the slice modelled here initialises the
-        // members this type carries (the font handle + the virtual screen size).
+        // X360 Construct @0x8281A488, called by ConstructRenderer @0x8281ADD0.
+        // Text-renderer construction remains separate parity work.
         void Construct(rw::IResourceAllocator* lpAllocator, f32 lfVirtualScreenWidth, f32 lfVirtualScreenHeight);
+        void CreateDebugRenderStates(rw::IResourceAllocator* lpAllocator);
 
         // The debug-font handoff (X360 0x823B1448): store the loaded bitmap Font's handle. Mirrors
         // Debug2DImmediateRender::SetDebugFont; DebugManager::SetDebugFont drives both.
@@ -65,10 +60,8 @@ namespace CgsDev
         // render buffer here after asserting it non-null, CgsDebug3DImmediateRender.h:282).
         void SetRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpRenderBuffer) { mpRenderBuffer = lpRenderBuffer; }
 
-        // X360 Begin/End - open/close the frame's 3D batch (DebugManager::RenderWorld @0x8282E030
-        // brackets the buffered-prim replay + the component RenderWorld pass with these). BOUNDED:
-        // the render-state/matrix-latch bodies land with the Debug3D render follow-on (nothing on
-        // this build emits 3D debug geometry yet).
+        // X360 Begin/End open/close the frame's 3D command block. RenderWorld
+        // @0x8282E030 brackets buffered primitives and active components with these.
         void Begin(const rw::math::vpu::Matrix44& lrViewProjection,
                    rw::math::vpu::Vector3 lCameraPosition);
         void End();
@@ -77,7 +70,7 @@ namespace CgsDev
         rw::math::vpu::Vector3 GetCameraPosition() const;
         const rw::math::vpu::Matrix44 GetViewProjectionMatrix() const;
 
-        // World-space primitive draws (declared-only; bodies are the 3D render follow-on). Recovered
+        // World-space primitive draws. Recovered
         // from callers such as TriggerEntityModuleDebugComponent::RenderWorld: an oriented box given
         // local-space min/max corners + a world transform, and a sphere given a world centre +
         // radius, each tinted by an RGBA.
@@ -88,7 +81,7 @@ namespace CgsDev
         void DrawBox(rw::math::vpu::Vector3 lMin, rw::math::vpu::Vector3 lMax, rw::RGBA lColour);
         void DrawSphere(rw::math::vpu::Vector3 lCentre, f32 lfRadius, rw::RGBA lColour);
 
-        // Additional world-space primitive draws (declared-only; bodies are the 3D render follow-on).
+        // Additional world-space primitive draws.
         // Recovered from BrnDeformationDebugComponent::RenderWorld / DrawDetachedWheels (the deformation
         // rig visualiser): a hollow (wireframe) sphere, a hollow triangle / a line / an arrow between two
         // world points, and a coordinate-axis gizmo given a world transform, each tinted by an RGBA.
@@ -161,6 +154,9 @@ namespace CgsDev
         void SetProjectionMode(ProjectionMode leMode);
         void SetZTestEnable(ZTestEnable leEnable);
         void SetDrawingMode(DrawingMode leMode);
+        void BuildSphereIndices();
+        void GetSphereVertices(rw::math::vpu::Vector3* lpVertexArray,
+                               rw::math::vpu::Vector3 lPosition, f32 lfRadius);
         void DispatchVertices();
         void AddVertex(rw::math::vpu::Vector3 lPosition, rw::RGBA lColour);
         void AddLine(rw::math::vpu::Vector3 lA, rw::math::vpu::Vector3 lB, rw::RGBA lColour);

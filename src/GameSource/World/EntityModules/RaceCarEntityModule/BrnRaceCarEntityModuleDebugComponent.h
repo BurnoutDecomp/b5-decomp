@@ -10,14 +10,14 @@
 //
 // SHAPE: the recovered type information for BrnRaceCarEntityModuleDebugComponent.h (a struct
 // derived from CgsDev::DebugComponent), gated on the ledger: its Destruct, OnRegister, GetPlayerCar,
-// ResetAverageSpeed and the three Push* recorders have no out-of-line console body (inlined), so
-// they are not declared. AirRamAddNew and ResetAverageSpeedCallback are registered as debug-menu
+// ResetAverageSpeed and the three Push* recorders have no out-of-line console body (inlined).
+// Their stores are recovered at their callers. AirRamAddNew and ResetAverageSpeedCallback are registered as debug-menu
 // callbacks with the component as the user data, so they are static and take that pointer.
 //
 // LAYOUT (console offsets from the asm; the host widens the base and the module pointer):
 //   +0x0C mpRaceCarEntityModule        (Construct stores the argument there)
 //   +0x10..+0x15 the six recovered bools (OnActivate registers +0x10..+0x14; AirRamAddNew sets +0x15)
-//   +0x16 mbForceOnlineFreeburnSpawnPosition -- console-only, absent from the recovered type: OnActivate
+//   +0x16 mbForceOnlineFreeburnSpawnPosition -- ARTIST-only: OnActivate
 //         registers it as "Force Online Freeburn Spawn Position"; Construct zeroes it.
 //   +0x18 / +0x1C / +0x20 the three last-distance ints, +0x24 mMag ("Magnitude")
 //   +0x30 mLastResetTransform, +0x70 / +0x80 the line-test pair,
@@ -47,6 +47,7 @@ namespace BrnWorld
     {
     public:
         void Construct(RaceCarEntityModule* lpRaceCarEntityModule);
+        void Destruct(); // inlined into ARTIST RaceCarEntityModule::Destruct
 
         void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
         void RenderTailgateCones(CgsDev::Debug3DImmediateRender* lpRender);
@@ -63,6 +64,9 @@ namespace BrnWorld
         void OnActivate() override;
 
     private:
+        friend class RaceCarEntityModule;
+        friend class PlaceOnTrackManager;
+
         static void AirRamAddNew(void* lpData);
         static void ResetAverageSpeedCallback(void* lpData);
         void RenderTrafficRelated(CgsDev::Debug2DImmediateRender* lpRender);

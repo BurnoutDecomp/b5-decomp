@@ -22,6 +22,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "RaceCarResetHistoryFixture.h"
 
 static std::vector<std::string> gaAsserts;
 namespace CgsDev {
@@ -65,6 +66,7 @@ class RaceCarEntityModule
 {
 public:
     ActiveRaceCar maCars[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+    RaceCarResetHistoryFixture mRCEntityModuleDebugComponent;
     std::vector<int> maAsked;
     ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leIndex) { maAsked.push_back(static_cast<int>(leIndex)); return &maCars[leIndex]; }
 };
@@ -136,6 +138,13 @@ int main()
     Check(e.size() == 2 && e[1].mLineEnd.x == 104.0f && e[1].mLineEnd.y == 8.0f - 50.0f && e[1].mLineEnd.z == -54.0f
           && e[1].mLineEnd.w == 2.0f,
           "P2 mLineEnd = position - (0, 50, 0, 0) (vsubfp128): a 100 m vertical line");
+    const auto& lrHistory = lModule.mRCEntityModuleDebugComponent;
+    Check(lrHistory.mLastResetLineTestStart.x == 104.0f && lrHistory.mLastResetLineTestStart.y == 58.0f
+          && lrHistory.mLastResetLineTestStart.w == 2.0f,
+          "debug history records the latest queued line start, including w");
+    Check(lrHistory.mLastResetLineTestEnd.x == 104.0f && lrHistory.mLastResetLineTestEnd.y == -42.0f
+          && lrHistory.mLastResetLineTestEnd.w == 2.0f,
+          "debug history records the latest queued line end, including w");
     Check(e.size() == 2 && e[0].mx32EntityTypeFlags == 2u && Word(e[0].mExcludeEntityId) == 0xFFFFFFFFu
           && e[0].meExclusionMode == CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY && e[0].mxVolumeTypeFlags == 0xFF,
           "P2 world-only (2), no exclude entity (-1), E_EXCLUDE_ENTITY_ONLY, every volume type (0xFF)");

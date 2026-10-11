@@ -1,14 +1,3 @@
-#include "pc/gcm/renderengine/ShaderBindings.h"
-#include "pc/gcm/renderengine/GeometryBindings.h"
-#if !defined(D_PLATFORM_X360)
-// The RenderWare headers define NOUSER before including Windows headers.  D3D9 still
-// requires winuser's LPMSG, so establish the complete Win32/D3D declarations first.
-#include <Windows.h>
-#include <d3d9.h>
-#undef GetNextWindow
-#undef DrawText
-#endif
-
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -16,25 +5,32 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 
 #include <cmath>
 #include <cstring>
 
-#if !defined(D_PLATFORM_X360)
-#include "pc/gcm/renderengine/device.h"
-#endif
 
-// CgsDev::Debug3DImmediateRender. Primitive construction follows the ARTIST functions in
-// CgsDebug3DImmediateRender.cpp. The shipping renderer submits those vertices through
-// CgsGraphics::Im3dRenderBuffer; on PC that console buffer is not a host renderer, so
-// DispatchVertices performs the equivalent fixed-function D3D9 submission after applying the
-// frame's view-projection matrix.
+// CgsDev::Debug3DImmediateRender records world-space debug primitives into the
+// original Im3d command bank. BrnRendererModule dispatches that bank after world
+// immediate mode, before scene resolve; the producer never calls the GPU directly.
 
 namespace
 {
     using rw::math::vpu::Matrix44;
     using rw::math::vpu::Matrix44Affine;
     using rw::math::vpu::Vector3;
+
+    // FLAG PC-platform leaf: native homes for the four once-only debug state
+    // resources. Parameter construction follows ARTIST CreateDebugRenderStates.
+    struct Debug3DRenderStates
+    {
+        renderengine::BlendMaterialState mBlend;
+        renderengine::DepthStencilState mDepth3D, mDepth2D;
+        renderengine::RasterizerState mRasterizer;
+    };
+    Debug3DRenderStates sgDebug3DRenderStates;
 
     const f32 KF_PI = 3.14159265358979323846f;
     const f32 KF_TWO_PI = KF_PI * 2.0f;
@@ -120,7 +116,7 @@ namespace
 
 namespace CgsDev
 {
-    void Debug3DImmediateRender::Construct(rw::IResourceAllocator* /*lpAllocator*/,
+    void Debug3DImmediateRender::Construct(rw::IResourceAllocator* lpAllocator,
                                            f32 lfVirtualScreenWidth, f32 lfVirtualScreenHeight)
     {
         meProjectionMode = E_PROJECTION_3D;
@@ -130,13 +126,54 @@ namespace CgsDev
         mfVirtualScreenWidth = lfVirtualScreenWidth;
         mfVirtualScreenHeight = lfVirtualScreenHeight;
         mpRenderBuffer = nullptr;
+        CreateDebugRenderStates(lpAllocator);
         mpFont.Clear();
         mVectorFont.Construct();
         miIm3dVertsHead = 0;
         mViewProjectionMatrix.SetIdentity();
         mCameraPosition.SetZero();
         mePrimitiveType = 0;
-        std::memset(maSphereIndices, 0, sizeof(maSphereIndices));
+        BuildSphereIndices();
+    }
+
+    // ARTIST 82818B68: construct the same blend, depth-on/write-off,
+    // depth-off and rasterizer states once. Native storage replaces arena handles.
+    void Debug3DImmediateRender::CreateDebugRenderStates(rw::IResourceAllocator* lpAllocator)
+    {
+        (void)lpAllocator;
+        static bool sbCreated = false;
+        if (sbCreated) return;
+        auto& lrStates = sgDebug3DRenderStates;
+        renderengine::BlendStateParameters lBlend = {};
+        for (u32& luFactor : lBlend.maBlendFactor) luFactor = 0x07060706u;
+        lBlend.muState15 = 7;
+        lBlend.muState4 = lBlend.muState5 = lBlend.muState6 = lBlend.muState7 = 15;
+        lBlend.muState8 = 135;
+        lBlend.muState9 = 0xFFFFFFFFu;
+        lBlend.mbHasCustomBlendFactors = 1;
+        auto* lpBlend = &lrStates.mBlend;
+        renderengine::BlendState::Initialize(&lpBlend, &lBlend);
+
+        renderengine::DepthStencilState::Parameters lDepth = {};
+        lDepth.muFunction = 3;
+        lDepth.muState4 = lDepth.muState8 = 7;
+        lDepth.muStencilReadMask = lDepth.muStencilWriteMask = 0xFFFFFFFFu;
+        lDepth.muState14 = lDepth.muState15 = 0xFFFFFFFFu;
+        auto* lpDepth2D = &lrStates.mDepth2D;
+        renderengine::DepthStencilState::Initialize(&lpDepth2D, &lDepth);
+        lDepth.mbDepthTestEnable = 1;
+        auto* lpDepth3D = &lrStates.mDepth3D;
+        renderengine::DepthStencilState::Initialize(&lpDepth3D, &lDepth);
+
+        renderengine::RasterizerState::Parameters lRasterizer = {};
+        lRasterizer.muCullMode = 2;
+        lRasterizer.muMultisampleEnable = 0xFFFFFFFFu;
+        lRasterizer.muAntialiasedLineEnable = 0xFFFFu;
+        lRasterizer.mu8DepthClipEnable = lRasterizer.mu8FrontCounterClockwise = 1;
+        lRasterizer.mu8PaddingMode = 1;
+        auto* lpRasterizer = &lrStates.mRasterizer;
+        renderengine::RasterizerState::Initialize(&lpRasterizer, &lRasterizer);
+        sbCreated = true;
     }
 
     void Debug3DImmediateRender::SetDebugFont(
@@ -148,19 +185,26 @@ namespace CgsDev
     void Debug3DImmediateRender::Begin(const rw::math::vpu::Matrix44& lrViewProjection,
                                        rw::math::vpu::Vector3 lCameraPosition)
     {
-        CGS_ASSERT(mpRenderBuffer != nullptr, "mpRenderBuffer");
         mViewProjectionMatrix = lrViewProjection;
         mCameraPosition = lCameraPosition;
         miIm3dVertsHead = 0;
-        meDrawingMode = E_DRAWING_COUNT;
-        meProjectionMode = E_PROJECTION_3D;
+        CGS_ASSERT(mpRenderBuffer != nullptr, "mpRenderBuffer");
+        CGS_ASSERT(!mpRenderBuffer->IsInARenderingBlock(), "!mpRenderBuffer->IsInARenderingBlock()");
+        mpRenderBuffer->BeginRendering();
+        mpRenderBuffer->SetState(reinterpret_cast<const renderengine::BlendState*>(&sgDebug3DRenderStates.mBlend));
+        mpRenderBuffer->SetState(&sgDebug3DRenderStates.mRasterizer);
         meZTestEnable = E_ZTEST_ON;
+        meProjectionMode = E_PROJECTION_COUNT;
+        meDrawingMode = E_DRAWING_COUNT;
     }
 
     void Debug3DImmediateRender::End()
     {
-        DispatchVertices();
+        if (miIm3dVertsHead > 0) DispatchVertices();
         miIm3dVertsHead = 0;
+        CGS_ASSERT(mpRenderBuffer != nullptr, "mpRenderBuffer");
+        CGS_ASSERT(mpRenderBuffer->IsInARenderingBlock(), "mpRenderBuffer->IsInARenderingBlock()");
+        mpRenderBuffer->EndRendering();
     }
 
     rw::math::vpu::Vector2 Debug3DImmediateRender::GetVirtualScreenSize() const
@@ -182,8 +226,24 @@ namespace CgsDev
     {
         if (meProjectionMode != leMode)
         {
-            DispatchVertices();
             meProjectionMode = leMode;
+            DispatchVertices();
+            if (mpRenderBuffer)
+            {
+                if (leMode == E_PROJECTION_3D)
+                {
+                    mpRenderBuffer->SetState(&sgDebug3DRenderStates.mDepth3D);
+                    mpRenderBuffer->SetTransform(mViewProjectionMatrix);
+                }
+                else
+                {
+                    Matrix44 lProjection;
+                    lProjection.SetIdentity();
+                    lProjection.yAxis = {0.0f, -1.0f, 0.0f, 0.0f};
+                    mpRenderBuffer->SetState(&sgDebug3DRenderStates.mDepth2D);
+                    mpRenderBuffer->SetTransform(lProjection);
+                }
+            }
         }
     }
 
@@ -192,6 +252,11 @@ namespace CgsDev
         if (meZTestEnable != leEnable)
         {
             DispatchVertices();
+            if (leEnable != E_ZTEST_OFF)
+                CGS_ASSERT(leEnable == E_ZTEST_ON, "leZTestEnable == E_ZTEST_ON");
+            mpRenderBuffer->SetState(leEnable == E_ZTEST_OFF
+                ? CgsGraphics::GetIm3dDepthStencilZBufferOffPC()
+                : CgsGraphics::GetIm3dDepthStencilZBufferOnPC());
             meZTestEnable = leEnable;
         }
     }
@@ -202,6 +267,10 @@ namespace CgsDev
         {
             DispatchVertices();
             meDrawingMode = leMode;
+            // ARTIST DrawLine stores 2, DrawSphere stores 3 (a line strip),
+            // and DrawSolidSphere stores 4. Native AddQuad expands to triangles.
+            mePrimitiveType = leMode == E_DRAWING_LINES ? 2
+                : leMode == E_DRAWING_TRISTRIP_LINES ? 3 : 4;
         }
     }
 
@@ -211,7 +280,7 @@ namespace CgsDev
             DispatchVertices();
 
         CgsGraphics::BasicColouredTexturedVertex& lrVertex = maIm3dVertsArray[miIm3dVertsHead++];
-        lrVertex.mv3Pos = { lPosition.x, lPosition.y, lPosition.z };
+        lrVertex.mv3Pos = lPosition;
         lrVertex.mv4Colour.r = static_cast<u8>(lColour.m_rgba);
         lrVertex.mv4Colour.g = static_cast<u8>(lColour.m_rgba >> 8);
         lrVertex.mv4Colour.b = static_cast<u8>(lColour.m_rgba >> 16);
@@ -252,57 +321,17 @@ namespace CgsDev
 
     void Debug3DImmediateRender::DispatchVertices()
     {
-        if (miIm3dVertsHead <= 0)
-            return;
-
-#if !defined(D_PLATFORM_X360)
-        // FLAG PC-platform leaf: ARTIST submits the same world vertices through the X360
-        // Im3dRenderBuffer. The host uses pre-transformed D3D9 vertices because RendererModule
-        // currently publishes an opaque console buffer object.
-        IDirect3DDevice9* lpDevice = renderengine::gDevice;
-        if (lpDevice)
+        if (miIm3dVertsHead == 0) return;
+        if (mpRenderBuffer)
         {
-            struct ScreenVertex { f32 x, y, z, rhw; DWORD colour; };
-            static ScreenVertex saVertices[KI_VERTEX_BUFFER_SIZE];
-
-            for (s32 liIndex = 0; liIndex < miIm3dVertsHead; ++liIndex)
-            {
-                const CgsGraphics::BasicColouredTexturedVertex& lrSource = maIm3dVertsArray[liIndex];
-                const ClipPoint lClip = TransformToClip(mViewProjectionMatrix, lrSource);
-                const f32 lfInvW = std::fabs(lClip.w) > 0.000001f ? 1.0f / lClip.w : 0.0f;
-                ScreenVertex& lrDest = saVertices[liIndex];
-                lrDest.x = (lClip.x * lfInvW * 0.5f + 0.5f) * static_cast<f32>(renderengine::gDisplayWidth);
-                lrDest.y = (0.5f - lClip.y * lfInvW * 0.5f) * static_cast<f32>(renderengine::gDisplayHeight);
-                lrDest.z = lClip.z * lfInvW;
-                lrDest.rhw = 1.0f;
-                lrDest.colour = D3DCOLOR_ARGB(lrSource.mv4Colour.a, lrSource.mv4Colour.r,
-                                               lrSource.mv4Colour.g, lrSource.mv4Colour.b);
-            }
-
-            renderengine::PCSetVertexShader(lpDevice, nullptr);
-            renderengine::PCSetPixelShader(lpDevice, nullptr);
-            lpDevice->SetTexture(0, nullptr);
-            renderengine::PCSetFVF(lpDevice, D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-            lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
-            lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-            lpDevice->SetRenderState(D3DRS_ZENABLE, meZTestEnable == E_ZTEST_ON ? TRUE : FALSE);
-            lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-            lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-            lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-            lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-            lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG2);
-            lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-            lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG2);
-            lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
-
-            if (meDrawingMode == E_DRAWING_LINES || meDrawingMode == E_DRAWING_TRISTRIP_LINES)
-                renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_LINELIST, static_cast<UINT>(miIm3dVertsHead / 2),
-                                          saVertices, sizeof(ScreenVertex));
-            else
-                renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLELIST, static_cast<UINT>(miIm3dVertsHead / 3),
-                                          saVertices, sizeof(ScreenVertex));
+            // ARTIST 8281B92C..8281B950 writes the default texture state, then
+            // both global depth states in this order, before the vertex-copy command.
+            mpRenderBuffer->SetState(CgsGraphics::GetIm3dTextureStateUntexturedPC());
+            mpRenderBuffer->SetState(CgsGraphics::GetIm3dDepthStencilZBufferOffPC());
+            mpRenderBuffer->SetState(CgsGraphics::GetIm3dDepthStencilZBufferOnPC());
+            mpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(mePrimitiveType),
+                maIm3dVertsArray, static_cast<u32>(miIm3dVertsHead));
         }
-#endif
         miIm3dVertsHead = 0;
     }
 
@@ -483,9 +512,72 @@ namespace CgsDev
     void Debug3DImmediateRender::DrawSphere(rw::math::vpu::Vector3 lCentre,
                                             f32 lfRadius, rw::RGBA lColour)
     {
-        DrawCircle(lCentre, { 1.0f, 0.0f, 0.0f, 0.0f }, lfRadius, lColour);
-        DrawCircle(lCentre, { 0.0f, 1.0f, 0.0f, 0.0f }, lfRadius, lColour);
-        DrawCircle(lCentre, { 0.0f, 0.0f, 1.0f, 0.0f }, lfRadius, lColour);
+        // ARTIST 8281D930: one 192-vertex line strip through the original mesh.
+        SetProjectionMode(E_PROJECTION_3D);
+        SetDrawingMode(E_DRAWING_TRISTRIP_LINES);
+        Vector3 laVertices[34];
+        GetSphereVertices(laVertices, lCentre, lfRadius);
+        for (s32 liIndex = 0; liIndex < 192; ++liIndex)
+            AddVertex(laVertices[maSphereIndices[liIndex]], lColour);
+        DispatchVertices();
+    }
+
+    // ARTIST 82816EC0: two pole fans and three bands, with each seam wrapped
+    // to its first vertex. DecFIGS declares 34 vertices and 192 byte indices.
+    void Debug3DImmediateRender::BuildSphereIndices()
+    {
+        for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+        {
+            const s32 liBase = 3 * liIndex;
+            maSphereIndices[liBase] = 0;
+            maSphereIndices[liBase + 1] = static_cast<u8>(liIndex + 2);
+            maSphereIndices[liBase + 2] = static_cast<u8>(liIndex == 7 ? 2 : liIndex + 3);
+        }
+        for (s32 liBand = 0; liBand < 3; ++liBand)
+        {
+            const s32 liVertexOffset = 2 + 8 * liBand;
+            for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+            {
+                const s32 liBase = 24 + 48 * liBand + 6 * liIndex;
+                const s32 liNext = liIndex == 7 ? 0 : liIndex + 1;
+                maSphereIndices[liBase] = static_cast<u8>(liVertexOffset + liIndex);
+                maSphereIndices[liBase + 1] = static_cast<u8>(liVertexOffset + 8 + liIndex);
+                maSphereIndices[liBase + 2] = static_cast<u8>(liVertexOffset + liNext);
+                maSphereIndices[liBase + 3] = static_cast<u8>(liVertexOffset + 8 + liIndex);
+                maSphereIndices[liBase + 4] = static_cast<u8>(liVertexOffset + 8 + liNext);
+                maSphereIndices[liBase + 5] = static_cast<u8>(liVertexOffset + liNext);
+            }
+        }
+        for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+        {
+            const s32 liBase = 168 + 3 * liIndex;
+            maSphereIndices[liBase] = 1;
+            maSphereIndices[liBase + 1] = static_cast<u8>(liIndex == 7 ? 26 : liIndex + 27);
+            maSphereIndices[liBase + 2] = static_cast<u8>(liIndex + 26);
+        }
+    }
+
+    // ARTIST 82817018: four eight-vertex rings, poles first. The latitude
+    // and longitude steps are the binary's single-precision constants.
+    void Debug3DImmediateRender::GetSphereVertices(Vector3* lpVertexArray,
+                                                   Vector3 lPosition, f32 lfRadius)
+    {
+        lpVertexArray[0] = {lPosition.x, lPosition.y + lfRadius, lPosition.z, lPosition.w};
+        lpVertexArray[1] = {lPosition.x, lPosition.y - lfRadius, lPosition.z, lPosition.w};
+        for (s32 liRing = 0; liRing < 4; ++liRing)
+        {
+            const f32 lfLatitude = static_cast<f32>(liRing + 1) * 0.62831855f;
+            const f32 lfSinLatitude = std::sin(lfLatitude);
+            for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+            {
+                const f32 lfLongitude = static_cast<f32>(liIndex) * 0.78539819f;
+                const f32 lfX = (std::sin(lfLongitude) * lfSinLatitude) * lfRadius;
+                const f32 lfY = std::cos(lfLatitude) * lfRadius;
+                const f32 lfZ = (lfSinLatitude * std::cos(lfLongitude)) * lfRadius;
+                lpVertexArray[2 + 8 * liRing + liIndex] = {
+                    lPosition.x + lfX, lPosition.y + lfY, lPosition.z + lfZ, lPosition.w};
+            }
+        }
     }
 
     void Debug3DImmediateRender::DrawHollowSphere(rw::math::vpu::Vector3 lCentre,
