@@ -23,6 +23,9 @@ namespace CgsSceneManager
         // @ X360 0x828AB500. Clears the query counters exposed by this page each frame.
         void Update() override;
 
+        // @ X360 0x828D04E8. Dispatches the enabled world-space debug draws.
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
+
     protected:
         const char* GetName() const override;
         void OnActivate() override;
@@ -36,6 +39,13 @@ namespace CgsSceneManager
         void DebugRenderCollisionVolume(const rw::collision::Volume* lpVolume,
                                         CgsDev::Debug3DImmediateRender* lpRender,
                                         const Matrix44Affine& lTransform) const;
+
+        // ARTIST callees of RenderWorld. Their named host implementations are being recovered;
+        // DrawTriangleTest's original raw assembly is in the separate recovery packet because its
+        // per-address JSON export is absent.
+        void DrawCachedObjectTriangles(CgsDev::Debug3DImmediateRender* lpRender);
+        void DrawCachedObjectSpheres(CgsDev::Debug3DImmediateRender* lpRender);
+        void DrawTriangleTest(CgsDev::Debug3DImmediateRender* lpRender);
 
         const SceneManagerModule* mpSceneManagerModule;
         bool    mbDrawCollisionVolumes;
