@@ -14,9 +14,8 @@
 #include <cmath>
 #include <cstring>
 
-// BrnPhysics::Vehicle::DebugComponent -- the component's data side: the per-car two-phase
-// Construct, the gear-stat reset, the two debug-menu name getters, the last-wall-triangle setter
-// and the per-frame sampling tick. The render/HUD side is owned by its own dev-UI pass.
+// BrnPhysics::Vehicle::DebugComponent -- original per-car construction, active/simulation ticks,
+// menu and grip-window lifecycle, and complete world/HUD display consumers.
 //
 // Every body here reaches its state through NAMED MEMBERS. The 1024-byte opaque slot the
 // component used to be addressed through -- and the SlotField<T> offset seam that went with it --
@@ -423,6 +422,91 @@ namespace Vehicle
                                       0xFF0000FFu);
             }
         }
+    }
+
+    // ARTIST 82603268: only an upward gear transition closes the previous
+    // row and records outgoing speed/RPM. Downward transitions change the
+    // current row and may reset its time, without filling the downshift fields.
+    void DebugComponent::UpdateAndRenderGearStats(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        const s32 liGear = static_cast<s32>(mpRaceCarPhysics->mEngine.GetCurrentGear());
+        if (liGear != miCurrentGear)
+        {
+            if (liGear > miCurrentGear)
+            {
+                GearStats& lrPrevious = mGearStats[miCurrentGear];
+                if (!lrPrevious.mbDoneUpdating)
+                {
+                    lrPrevious.mfSpeedOutOfGearGoingUp = mpRaceCarPhysics->GetSpeedMPH().x;
+                    lrPrevious.mbDoneUpdating = true;
+                    lrPrevious.mfRpmWhenChangedOutGoingUp = mfLastFrameRpm;
+                }
+                GearStats& lrCurrent = mGearStats[liGear];
+                if (!lrCurrent.mbDoneUpdating)
+                    lrCurrent.mfRpmWhenChangedInGoingUp =
+                        mpRaceCarPhysics->mEngine.mvClutchFactor_RPM_CurrentGearChangeTime.y;
+            }
+            miCurrentGear = liGear;
+            if (!mGearStats[liGear].mbDoneUpdating)
+                mGearStats[liGear].mfTimeInGear = 0.0f;
+        }
+        mfLastFrameRpm = mpRaceCarPhysics->mEngine.mvClutchFactor_RPM_CurrentGearChangeTime.y;
+
+        const s32 KU_STRING_BUFFER_SIZE = 2000;
+        char lacText[KU_STRING_BUFFER_SIZE];
+        CgsDev::StrStream lOutputStream(lacText, KU_STRING_BUFFER_SIZE);
+        f32 lfY = 50.0f;
+        const auto lDrawLine = [&](s32 liOriginalLine)
+        {
+            if (!(std::strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "strlen( lOutputStream.GetBuffer() ) < KU_STRING_BUFFER_SIZE",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.cpp",
+                    liOriginalLine);
+                CgsDev::Assert::EndAssert();
+            }
+            // Original vaddfp followed by a Y-lane-only insert, before draw.
+            lfY = HandlingAdd(lfY, 18.0f);
+            lpDisplay->DrawText(lOutputStream.GetBuffer(), 50.0f, lfY, 15.0f, 0xFFFFFFFFu);
+            lOutputStream.Reset();
+        };
+        for (s32 liRow = 0; liRow < 6; ++liRow)
+        {
+            if (liRow == 0)
+            {
+                lOutputStream << "Reverse: \t";
+                lDrawLine(1002);
+            }
+            else
+            {
+                lOutputStream << "Gear " << static_cast<u32>(liRow) << ": \t";
+                lDrawLine(1010);
+            }
+            const GearStats& lrRow = mGearStats[liRow];
+            lOutputStream << "Time in gear: " << lrRow.mfTimeInGear;
+            lDrawLine(1018);
+            lOutputStream << "\t\t\tSpeed when changing up: " << lrRow.mfSpeedOutOfGearGoingUp;
+            lDrawLine(1024);
+            lOutputStream << "\t\t\tRpm when changed in: " << lrRow.mfRpmWhenChangedInGoingUp;
+            lDrawLine(1030);
+            lOutputStream << "\t\t\tRpm when changed out: " << lrRow.mfRpmWhenChangedOutGoingUp;
+            lDrawLine(1036);
+        }
+        lOutputStream << "Rpm: " << mfLastFrameRpm;
+        lDrawLine(1042);
+    }
+
+    // ARTIST 82621190, vtable slot 820CF990: all three HUD toggle readers.
+    void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        if (mbOutputGearStats)
+            UpdateAndRenderGearStats(lpDisplay);
+        if (mbOutputDeformationStats)
+            RenderDeformationStats(lpDisplay);
+        if (mbShowTireFrictions)
+            RenderTireFrictions(lpDisplay);
     }
 
     // ARTIST 82621208: a piecewise-linear curve through zero, peak and floor,
