@@ -47,6 +47,7 @@ namespace Vehicles
 {
 namespace Deformation
 {
+extern s32 KI_DEBUG_SPEW_DEFORM_INFO;
 
 struct DeformationEffect : public BrnSound::Logic::BrnEffectObject
 {

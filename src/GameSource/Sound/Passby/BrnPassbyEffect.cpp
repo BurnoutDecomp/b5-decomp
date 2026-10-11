@@ -1,5 +1,7 @@
 #include "GameSource/Sound/Passby/BrnPassbyEffect.h"
 #include "GameSource/Sound/Passby/BrnPassbyState.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [DIAG] sink
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"             // CgsSound::Utils::Slope (UpdateParams)
@@ -36,15 +38,9 @@
 //   Passby3DControl GetTypeInfo / GetTypeName  @ 0x82689008 / 0x82689018
 //   ~Passby3DControl                @ 0x826E8ED0
 //
-// NOT REPRODUCED: the four dev-menu switches the console registers with its debug-variable
-// registry (sub_8282D640 at 0x826D6D40..0x826D6DF0, all zero in the image and written by
-// nothing else) -- KI_SPEW_PASSBY_INFO (dword_82FFB938, the "Culled with a velocity of" and
-// "Detach." TTY lines), KI_SPEW_PASSBY_INFO_VERBOSE (dword_82FFB934, the first-update
-// SampleID / Boost / Vol / Pitch line), KB_DRAW_PASSBY_INFO (byte_82FFB93C, the
-// Message<Brn3DEffectControl::DrawSphere> debug sphere) and the manager's
-// KI_SPEW_PASSBY_STATE_INFO. Their only side effect besides the text is ProcessUpdate's
-// `mbFirstUpdate = false` inside the verbose-spew arm (0x826F9BF4), so on the console
-// mbFirstUpdate is written by Attach and read by nothing that runs.
+// The developer switches retain the original cull/detach text, first-update
+// sample details and queued DrawSphere message. The first-update flag is cleared
+// only inside the enabled, unpaused KI_SPEW_PASSBY_INFO arm.
 // =============================================================================
 
 namespace BrnSound
@@ -53,6 +49,10 @@ namespace Logic
 {
 namespace Passby
 {
+
+s32 KI_SPEW_PASSBY_INFO = 0; // ARTIST dword_82FFB934
+s32 KI_SPEW_PASSBY_INFO_VERBOSE = 0; // ARTIST dword_82FFB938
+bool KB_DRAW_PASSBY_INFO = false; // ARTIST byte_82FFB93C
 
 namespace
 {
@@ -530,6 +530,14 @@ void PassbyEffect::UpdateParams(f32 /*afDeltaTime*/)
         const u32 luSend01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
         mVoice.SetGain(0, 0.0f, &luSend01);
         meLifetime = E_CULLED;
+        if (KI_SPEW_PASSBY_INFO_VERBOSE
+            && !static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetFrameInformation().IsPaused())
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "[Passby][" << ((GetId() >> 11) & 0x1F) << "]\tT["
+                << static_cast<PassbyState*>(GetStateBase())->GetTimeOutTimer()
+                << "]\tCulled with a velocity of " << lfRelativeVelocity << "\n";
+        }
     }
 
     const Attrib::Gen::passbybin::RwVector2& lrPitchCurve =
@@ -603,6 +611,33 @@ void PassbyEffect::ProcessUpdate()
         mVoice.SetParameter(0, lfPitch, &luPitch);
         mVoice.SetParameter(1, lfAzimuth, &luAzimuth);
 
+        if (KI_SPEW_PASSBY_INFO && mbFirstUpdate
+            && !static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetFrameInformation().IsPaused())
+        {
+            mbFirstUpdate = false;
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "[" << mfRunningTime << "][Passby][" << ((GetId() >> 11) & 0x1F) << "] \tT["
+                << static_cast<PassbyState*>(GetStateBase())->GetTimeOutTimer() << "]\tType: "
+                << AttribSys::Enums::ePassbyTypes::gaNames[lrPassby.meType]
+                << "\tVol: " << lfGain << "\tPitch: " << mfPitchScale
+                << "\tRelVelMag: " << GetRelativeVelocityMag() << "\tBoost: " << mbPlayerIsBoosting
+                << "\tSampleID: " << muSampleId << "\n";
+        }
+
+        if (KB_DRAW_PASSBY_INFO)
+        {
+            Brn3DEffectControl::DrawSphere lSphere;
+            lSphere.mfHeightOffset = 0.0f;
+            lSphere.mfRadius = 2.0f;
+            lSphere.mfDurationVisible = 0.5f;
+            lSphere.mpDebugString = nullptr;
+            CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage(lSphere);
+            lMessage.Construct(1, static_cast<u16>((GetId() >> 16) & 0xFF),
+                static_cast<u16>((GetId() >> 11) & 0x1F), 0,
+                CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+            GetLogicModule()->PostMessage(lMessage);
+        }
+
         // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): what a playing pass-by sends.
         if (PassbyEffectDiag())
         {
@@ -625,6 +660,13 @@ void PassbyEffect::ProcessUpdate()
 
     if (meLifetime == E_HAS_PLAYED || meLifetime == E_CULLED)
     {
+        if (KI_SPEW_PASSBY_INFO_VERBOSE)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "[Passby][" << ((GetId() >> 11) & 0x1F) << "] \tT["
+                << static_cast<PassbyState*>(GetStateBase())->GetTimeOutTimer() << "]\tType["
+                << AttribSys::Enums::ePassbyTypes::gaNames[lrPassby.meType] << "]\tDetach. \n";
+        }
         // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): the voice ended; the state lets go.
         if (PassbyEffectDiag())
         {

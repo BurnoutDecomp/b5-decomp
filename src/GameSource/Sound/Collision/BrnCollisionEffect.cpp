@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Collision/BrnCollisionEffect.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
@@ -12,6 +13,7 @@
 #include "GameSource/World/BrnEntityTypes.h"   // BrnWorld::E_ENTITYTYPE_* (CalculateIntensity)
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -27,6 +29,10 @@ namespace Logic
 {
 namespace Collision
 {
+
+volatile s32 KI_SPEW_COLLISION_INFO = 0;      // ARTIST 0x82FFB8D8
+volatile s32 KI_SPEW_COLLISION_BIN_LOGIC = 0; // 0x82FFB8DC
+s32 KI_DEBUG_DUCKING = 0;                   // 0x82FFB8E0
 
 // ---------------------------------------------------------------------------
 // CollisionEffect  @ 0x826AFD20  (field-init ctor)
@@ -261,8 +267,7 @@ void CollisionEffect::InitWork(CollisionState* apState, const OutputCollision& a
 //     A traffic  -> flt_82F2CED4 (100.0)
 //     A world, A >= 3 -> 0.0
 //     result = (K - flt_82F2CEC4 (25.0)) * x + 25.0      ; fsubs / fmadds 0x82688418..0x8268841C
-//   The "ducking: ..." TTY lines are gated on dword_82FFB8E0, a debug switch with no writer in the
-//   image -- not reproduced.
+//   The "ducking: ..." lines use the original Sound combined log and live menu flag.
 // ---------------------------------------------------------------------------
 f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
 {
@@ -276,8 +281,14 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
     if (arCollision.meAction != AttribSys::Enums::eAction::Collision)
         return 0.0f;
 
+    CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
     if (arCollision.mePipeline == InputCollision::E_PROP)
-        return KF_PROP_INTENSITY_SCALE * lfImpulse;
+    {
+        const f32 lfIntensity = KF_PROP_INTENSITY_SCALE * lfImpulse;
+        if (KI_DEBUG_DUCKING)
+            lrLog << "ducking: InputCollision::E_PROP" << " " << lfIntensity << "\n";
+        return lfIntensity;
+    }
     CGS_ASSERT(arCollision.mePipeline == InputCollision::E_REGULAR, "Bad pipeline");
 
     const u32 luTypeA = arCollision.maEntityID[0].muValue >> 24;   // lbz +0x18: the owner byte
@@ -286,24 +297,52 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
     if (luTypeA == BrnWorld::E_ENTITYTYPE_RACECAR)
     {
         if (luTypeB == BrnWorld::E_ENTITYTYPE_WORLD)
+        {
+            if (KI_DEBUG_DUCKING)
+                lrLog << "ducking: E_ENTITYTYPE_RACECAR vs  E_ENTITYTYPE_WORLD";
             lfFullIntensity = KF_RACECAR_VS_WORLD;
+        }
         else if (luTypeB == BrnWorld::E_ENTITYTYPE_RACECAR)
+        {
+            if (KI_DEBUG_DUCKING)
+                lrLog << "ducking: E_ENTITYTYPE_RACECAR vs  E_ENTITYTYPE_RACECAR";
             lfFullIntensity = KF_RACECAR_VS_RACECAR;
+        }
         else if (luTypeB == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)
+        {
+            if (KI_DEBUG_DUCKING)
+                lrLog << "ducking: E_ENTITYTYPE_RACECAR vs  E_ENTITYTYPE_TRAFFIC_VEHICLE";
             lfFullIntensity = KF_VERSUS_TRAFFIC;
+        }
         else
+        {
+            if (KI_DEBUG_DUCKING)
+                lrLog << "ducking: unknown. E_ENTITYTYPE_RACECAR\n";
             return 0.0f;
+        }
     }
     else if (luTypeA == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)
     {
+        if (KI_DEBUG_DUCKING)
+            lrLog << "ducking: E_ENTITYTYPE_TRAFFIC_VEHICLE";
         lfFullIntensity = KF_VERSUS_TRAFFIC;
     }
     else
     {
+        if (KI_DEBUG_DUCKING)
+        {
+            if (luTypeA == BrnWorld::E_ENTITYTYPE_WORLD)
+                lrLog << "ducking: unknown. E_ENTITYTYPE_WORLD\n";
+            else
+                lrLog << "ducking: unknown. default entity id type" << static_cast<s32>(luTypeA) << "\n";
+        }
         return 0.0f;   // the world, or any other owner
     }
 
-    return (lfFullIntensity - KF_MIN_INTENSITY) * lfImpulse + KF_MIN_INTENSITY;
+    const f32 lfIntensity = (lfFullIntensity - KF_MIN_INTENSITY) * lfImpulse + KF_MIN_INTENSITY;
+    if (KI_DEBUG_DUCKING)
+        lrLog << " " << lfIntensity << "\n";
+    return lfIntensity;
 }
 
 // ---------------------------------------------------------------------------
@@ -415,7 +454,33 @@ void CollisionEffect::ProcessUpdate()
             GetDMixIOPtr()->GetDMixOutput(0, 3)) *
             0.0054932479f;
     }
-    mbFirstUpdate = false;
+    if (mbFirstUpdate)
+    {
+        mbFirstUpdate = false;
+        if (KI_SPEW_COLLISION_INFO)
+        {
+            const CollisionState* lpState = mpCollisionControl->GetCollisionState();
+            const OutputCollision& lrCollision = lpState->GetOutputCollision();
+            const CollisionStateManager* lpManager =
+                static_cast<const CollisionStateManager*>(lpState->GetStateManager());
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "[Collision:" << lpState->GetCurrentTime() << "]\t"
+                  << " Material A: " << lpManager->Debug_GetMaterialName(lrCollision.maMaterial[0], lrCollision.mePipeline) << "\t"
+                  << " Material B: " << lpManager->Debug_GetMaterialName(lrCollision.maMaterial[1], InputCollision::E_REGULAR) << "\t"
+                  << " EntityA: " << CgsDev::E_PRINTMODE_HEXONCE << lrCollision.maEntityID[0].muValue << "\t"
+                  << " EntityB: " << CgsDev::E_PRINTMODE_HEXONCE << lrCollision.maEntityID[1].muValue << "\t"
+                  << " From bin: " << static_cast<s32>(lrCollision.miBinIndex) << "\t"
+                  << " SampleID:" << lrCollision.miSampleID << "\t"
+                  << " Impulse:" << lrCollision.maParameter[0].x
+                  << " Normalized: " << lrCollision.mNormalizedImpulse.x << "\t"
+                  << " Volume: " << lfGain << "\t Pitch: " << lfPitch << "\t Azimuth: " << lfAzimuth << "\t"
+                  << " Orientation:" << KAPC_ORIENTATION_NAMES[DebugFlagIndex(lrCollision.meOrientation)] << "\t"
+                  << " Action: " << KAPC_ACTION_NAMES[DebugFlagIndex(lrCollision.meAction)] << "\t"
+                  << " Distance: " << std::sqrt(lrCollision.maParameter[1].x) << "\t"
+                  << " Fatal:" << KAPC_FATALITY_NAMES[lrCollision.meFatality]
+                  << " ImpT:" << KAPC_IMPACT_TIME_NAMES[DebugFlagIndex(lrCollision.meImpactTime)] << "\t\n";
+        }
+    }
 
     if (!mCrashVoice.IsPlaying())
     {

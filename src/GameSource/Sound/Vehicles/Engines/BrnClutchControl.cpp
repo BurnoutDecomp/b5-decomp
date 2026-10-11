@@ -7,9 +7,12 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 
 #include <algorithm>
 #include <cmath>
+
+extern s32 KI_DEBUG_PRINT_ENGINE_INFO; // X360 dword_82FFB854
 
 namespace BrnSound
 {
@@ -174,10 +177,20 @@ void ClutchControl::UpdateParams(f32 afTimeStep)
         {
             meClutchState = E_CLUTCH_STATE_ATTACK_BEGIN;
             SetMixerInputValue(1, 0x7FFF);
+            if (KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1)
+            {
+                BrnSound::Debug::DebugComponent::mLogCombined
+                    << "<----- meClutchState: E_CLUTCH_STATE_ATTACK_BEGIN   ----->\n";
+            }
         }
         else if (ShouldBeginIdleClutch())
         {
             meClutchState = E_CLUTCH_STATE_IDLE_BEGIN;
+            if (KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1)
+            {
+                BrnSound::Debug::DebugComponent::mLogCombined
+                    << "<----- meClutchState: E_CLUTCH_STATE_IDLE_BEGIN   ----->\n";
+            }
         }
     }
 
@@ -186,6 +199,11 @@ void ClutchControl::UpdateParams(f32 afTimeStep)
         meClutchState = E_CLUTCH_STATE_BOOST;
         mpShiftControl->BeginDownShift(this);
         SetMixerInputValue(0, 0x7FFF);
+        if (KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "<----- meClutchState: E_CLUTCH_STATE_BOOST   ----->\n";
+        }
     }
 
     const bool lbInfinite = ShouldBeginInfiniteGearRise();
@@ -202,6 +220,11 @@ void ClutchControl::UpdateParams(f32 afTimeStep)
         const f32 lfRpm = lrPhysics.mNormalizedRpm.GetCurrent();
         mInterpRPM.Initialize(lfRpm, lfRpm, 10.0f, CgsSound::Utils::Curve::E_LINEAR);
         mfElapsedTimeOfInfiniteGears = 0.0f;
+        if (KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "<----- meClutchState: E_CLUTCH_STATE_INIFINITE_GEAR ----->\n";
+        }
     }
     else if (!lbInfinite && IsInfiniteGears())
     {

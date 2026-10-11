@@ -9,11 +9,16 @@
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "SDKs/XboxMath/XMVectorACos.h"                     // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
+
+// The console's global Engine Info flag is registered as a bool-tagged alias by
+// ARTIST OnActivate but consumers test the same word as an int.
+s32 KI_DEBUG_PRINT_ENGINE_INFO = 0; // X360 dword_82FFB854
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::PhysicsControl -- out-of-line bodies.
@@ -34,6 +39,13 @@ namespace Vehicles
 {
 namespace Engines
 {
+
+// ARTIST/DecFIGS debug storage shared with Sound DebugComponent::OnActivate.
+s32 KI_MONITOR_MAX_RPM = 0;       // dword_82FFB864, registered through bool tag
+f32 gfMaxRpmMonitor = 0.0f;       // flt_82FFB868, no X360 writer
+s32 KI_DEBUG_ROLL_INFO = 0;       // dword_82FFB858
+s32 KI_DEBUG_ROLL_INFO_VERBOSE = 0; // dword_82FFB85C
+s32 KI_DEBUG_CRASH_STREAMS = 0;   // dword_82FFB860
 
 // =============================================================================
 // THE START-LINE REV SEQUENCE (ARTIST 0x826CC0C0 / 0x82684510 / 0x826C8708)
@@ -938,6 +950,16 @@ void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
         mfAngularVelocityAccumulator.GetCurrent() + lfAngularSpeed * afTimeStep);
     mfOscillator.Update(
         std::sin(mfAngularVelocityAccumulator.GetCurrent() * 2.0f));
+
+    // ARTIST @0x826B2628, gated by dword_82FFB85C: magnitude, integrated angular
+    // acceleration and the current roll oscillator, in that order.
+    if (KI_DEBUG_ROLL_INFO_VERBOSE != 0)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined
+            << "Mag: " << lfAngularSpeed
+            << "\tAngularAcc: " << mfAngularVelocityAccumulator.GetCurrent()
+            << "\tOsc: " << mfOscillator.GetCurrent() << "\t\n";
+    }
 
     if (!(lfAngularSpeed > 0.25f))
         return;

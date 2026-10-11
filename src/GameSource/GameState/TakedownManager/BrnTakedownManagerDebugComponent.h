@@ -7,9 +7,7 @@
 // BrnGameState::TakedownManagerDebugComponent - the in-game debug menu for the takedown manager.
 // Derives from the real CgsDev::DebugComponent; registers three display toggles + a "force
 // takedown" action with the debug UI. Recovered from the DecFIGS DWARF (GameState/TakedownManager/
-// BrnTakedownManagerDebugComponent.h). Incremental: the activation slice this TU implements
-// (OnActivate / GetName / the ForceTakedown action) is reconstructed; the render + record methods
-// are reconstructed by their own pass.
+// BrnTakedownManagerDebugComponent.h), with behavior attested against the X360 ARTIST image.
 
 namespace BrnGameState
 {
@@ -31,6 +29,8 @@ namespace BrnGameState
 
         // "Show last takedown info": one line naming the last recorded aggressor/victim pair.
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        // ARTIST @0x8236F200: draw vulnerability and player-revenge markers for active cars.
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
 
     protected:
         const char* GetName() const override;   // @ 0x823596C8

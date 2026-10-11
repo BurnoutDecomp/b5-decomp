@@ -34,6 +34,8 @@ namespace Logic
 {
 namespace Traffic
 {
+    extern s32 KI_SPEW_TRAFFIC_MANAGEMENT;
+
     enum ETrafficSize
     {
         E_SMALL     = 0,

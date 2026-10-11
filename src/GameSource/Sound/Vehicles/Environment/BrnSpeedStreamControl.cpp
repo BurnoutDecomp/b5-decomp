@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <algorithm>
+#include <cmath>
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::SpeedStreamControl — out-of-line deleting-
@@ -89,7 +90,10 @@ void SpeedStreamControl::UpdateParams(f32 afTimeStep)
     }
 
     bool lbSpeedStream = false;
-    if (lrPhysics.mSpeedMPH.GetCurrent() <= 75.0f || lbCrashing)
+    // ARTIST826BA310..314: fnmsubs(width,0.75,threshold), rounded once.
+    const f32 lfOnset = -std::fma(KF_SPEED_STREAM_CROSSFADE_WIDTH, 0.75f,
+                                 -KF_SPEED_STREAM_THRESHOLD_MPH);
+    if (!(lrPhysics.mSpeedMPH.GetCurrent() > lfOnset) || lbCrashing)
         mfSpeedHighTime = 0.0f;
     else
     {
@@ -112,18 +116,27 @@ void SpeedStreamControl::UpdateDuckers()
         mpPhysicsControl->GetPhysicsData();
     const bool lbCrashing = lrPhysics.IsCrashing.GetCurrent();
     const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
+    // Original fmuls/fadds/fsubs at8269BA78..98; preserve the separate half-width
+    // rounding and fsel clamps, including the zero-width/unordered path.
+    const f32 lfHalfWidth = KF_SPEED_STREAM_CROSSFADE_WIDTH * 0.5f;
+    const f32 lfUpper = lfHalfWidth + KF_SPEED_STREAM_THRESHOLD_MPH;
+    const f32 lfLower = KF_SPEED_STREAM_THRESHOLD_MPH - lfHalfWidth;
+    const auto ClampMixerInput = [](f32 lfValue) {
+        lfValue = (-lfValue >= 0.0f) ? 0.0f : lfValue;
+        return (1.0f - lfValue >= 0.0f) ? lfValue : 1.0f;
+    };
 
     f32 lfHighSpeed = 0.0f;
     if (!lbCrashing)
-        lfHighSpeed = std::min(1.0f, std::max(0.0f, (lfSpeed - 85.0f) / 40.0f));
+        lfHighSpeed = ClampMixerInput((lfSpeed - lfLower) / KF_SPEED_STREAM_CROSSFADE_WIDTH);
     SetMixerInputValue(0, static_cast<s32>(lfHighSpeed * 32767.0f));
 
     f32 lfLowSpeed = 1.0f;
     if (!lbCrashing)
     {
         lfLowSpeed = 0.0f;
-        if (lfSpeed < 125.0f)
-            lfLowSpeed = std::min(1.0f, std::max(0.0f, (125.0f - lfSpeed) / 40.0f));
+        if (lfSpeed < lfUpper)
+            lfLowSpeed = ClampMixerInput((lfUpper - lfSpeed) / KF_SPEED_STREAM_CROSSFADE_WIDTH);
     }
     SetMixerInputValue(1, static_cast<s32>(lfLowSpeed * 32767.0f));
     SetMixerInputValue(2, lbCrashing ? 0x7FFF : 0);

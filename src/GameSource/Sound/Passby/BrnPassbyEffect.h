@@ -48,6 +48,10 @@ namespace Logic
 namespace Passby
 {
 
+extern s32 KI_SPEW_PASSBY_INFO;
+extern s32 KI_SPEW_PASSBY_INFO_VERBOSE;
+extern bool KB_DRAW_PASSBY_INFO;
+
 // BrnPassbyEffect.h:33 (DWARF). Reuses the Brn3DEffectControl base by name; the
 // virtual (scalar/vector deleting) destructor @ 0x826E8ED0 runs the inherited
 // teardown (incl. the Attrib::Instance member via Attrib::Instance::~Instance).

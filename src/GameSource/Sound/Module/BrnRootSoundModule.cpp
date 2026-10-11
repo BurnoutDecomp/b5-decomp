@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint (bring-up trace)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueueImpl.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
 #include <cstring>
 
@@ -32,12 +33,12 @@ namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 //   KB_TESTBED_ALLOCATORS_VERBOSE / _SANITY  X360 0x82FFB810/0x82FFB811 (debug toggles, off)
 //   KI_DEBUG_PRINT_AUDIO_ALLOCATIONS         (debug toggle, off)
 // ---------------------------------------------------------------------------------------------
+bool KB_TESTBED_ALLOCATORS_VERBOSE = false;
+bool KB_TESTBED_ALLOCATORS_SANITY  = false;
+s32 KI_DEBUG_PRINT_AUDIO_ALLOCATIONS = 0;
+
 namespace
 {
-    bool KB_TESTBED_ALLOCATORS_VERBOSE = false;
-    bool KB_TESTBED_ALLOCATORS_SANITY  = false;
-    s32  KI_DEBUG_PRINT_AUDIO_ALLOCATIONS = 0;
-
     struct RegistryBootInfo
     {
         u32         mu32RegistryId;
@@ -92,14 +93,35 @@ namespace
         {1, "sound\\streams\\StreamsRegistry_JP.bundle", "StreamsRegistry"},
     };
 
-    // Static-init names from the X360 dynamic initializers (0x82C61A88/AC8/B08: Allocator(&g,
-    // "<name>", 0); the gRwac one (0x82C61A48) was not exported -- name matched to the sibling
-    // pattern, FLAG: unverified against the binary string).
-    CgsSound::TestBed::Allocator gRwacTestBedAlloc("Rwac", 0);
-    CgsSound::TestBed::Allocator gCsisTestBedAlloc("Csis", 0);
-    CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
-    CgsSound::TestBed::Allocator gLogicTestBedAlloc("Logic", 0);
+}
 
+// DecFIGS BrnRootSoundModule.cpp:57..60 places these shared objects at :: scope.
+// Statistics and the original memory-dump action read the same live allocators.
+// Static-init names from X360 82C61A88/AC8/B08; gRwac's missing exporter row is
+// still FLAG: name spelling unverified against the binary string at82C61A48.
+CgsSound::TestBed::Allocator gRwacTestBedAlloc("Rwac", 0);
+CgsSound::TestBed::Allocator gCsisTestBedAlloc("Csis", 0);
+CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
+CgsSound::TestBed::Allocator gLogicTestBedAlloc("Logic", 0);
+
+// ARTIST826AF288. The apparent int return is the final unused log/guard return;
+// DecFIGS declares void. Keep original dump, sorted dump and sanity-check order.
+void DebugAudioMemoryDump()
+{
+    gRwacTestBedAlloc.SafeDump();
+    gPlaybackTestBedAlloc.SafeDump();
+    gLogicTestBedAlloc.SafeDump();
+    gCsisTestBedAlloc.SafeDump();
+    gRwacTestBedAlloc.SortedDump();
+    gPlaybackTestBedAlloc.SortedDump();
+    gLogicTestBedAlloc.SortedDump();
+    gCsisTestBedAlloc.SortedDump();
+    gRwacTestBedAlloc.SanityCheck();
+    gPlaybackTestBedAlloc.SanityCheck();
+    gLogicTestBedAlloc.SanityCheck();
+    gCsisTestBedAlloc.SanityCheck();
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "--------------------------------------------------------------------------------\nEnd of DebugAudioMemoryDump()\n";
 }
 
 // The Csis mutex thunks the hooks below forward to (rw::audio::core, System.cpp).
@@ -660,11 +682,9 @@ namespace Module
     //       the 0x30000 ring).
     //   [7] the debug tail -- Debug::Statistics::Update, the three TestBed
     //       SanityChecks (logic/playback banks + the RWAC bank under the system
-    //       lock), and the one-shot registry/memory dump flag. [gated] the
-    //       TestBed SanityCheck body and the Statistics::Update surface are their
-    //       own recon slices (the interim TestBed pass-through tracks nothing to
-    //       check), and the dump one-shot (X360 dword_82FFB814 +
-    //       DebugAudioMemoryDump) is debug-page surface; documented, not run.
+    //       lock), and the one-shot registry/memory dump flag. These use the same
+    //       live allocator objects as Prepare and Statistics. The dump clears
+    //       X360 dword_82FFB814 after DumpRegistries and DebugAudioMemoryDump.
     //   [8] destroy the scratches (playback in, playback out, logic out).
     // The root itself does not inspect BrnUpdateSet, but forwards it in r8 to
     // SoundLogicModule::Update exactly as the console does.
@@ -718,7 +738,21 @@ namespace Module
         CGS_ASSERT(mpSystem == 0 || mpSystem->muDeferredRingHighWater < 157286u,
                    "Command buffer high water mark. Possibly SPU crashed.");
 
-        // [7] the debug tail -- see the banner (gated recon slices; not run).
+        // ARTIST826FB52C..826FB5B4: statistics, allocator checks, then one-shot dump.
+        mDebugComponent.mStatistics.Update();
+        gLogicTestBedAlloc.SanityCheck();
+        gPlaybackTestBedAlloc.SanityCheck();
+        rw::audio::core::System* lpRwacSystem = CgsSound::Playback::GetDefaultRwacSystem();
+        CGS_ASSERT(lpRwacSystem, "mpSystem");
+        rw::audio::core::System::Lock(lpRwacSystem);
+        gRwacTestBedAlloc.SanityCheck();
+        rw::audio::core::System::Unlock(lpRwacSystem);
+        if (KI_DEBUG_PRINT_AUDIO_ALLOCATIONS != 0)
+        {
+            mLogicModule.GetPlaybackModule().DumpRegistries();
+            DebugAudioMemoryDump();
+            KI_DEBUG_PRINT_AUDIO_ALLOCATIONS = 0;
+        }
 
         lpInputBufferStack->DestroyIOBuffer<CgsSound::Playback::Module::Io::InputBuffer>(
             &lpPlaybackInputBuffer);

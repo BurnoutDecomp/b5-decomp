@@ -123,7 +123,7 @@ struct LoopModelData
     int FixDown(int liBase);
 
     // Print every graph point as "[partial][graph][point] \t( x, \t y )" on the sound log stream.
-    void DebugDumpContentsToTty();
+    void DebugDumpContentsToTty() const; // DecFIGS BrnSoundLoopModelData.h:48
 };
 
 } // namespace Engines

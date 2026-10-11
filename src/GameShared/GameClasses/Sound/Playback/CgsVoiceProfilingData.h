@@ -2,6 +2,7 @@
 #define CGS_SOUND_PLAYBACK_VOICE_PROFILING_DATA_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/CgsVoiceProfilingData.h  (DWARF home)
@@ -109,7 +110,11 @@ namespace Playback
         f32 GetMinimumTime() const            { return mfMinimumTime; }
         f32 GetAverageTime() const            { return mfAverageTime; }
         f32 GetMostRecentTime() const         { return mfMostRecentTime; }
-        f32 GetTimeByIndex(u32 au32Index) const { return mafAveragingHistory[au32Index]; }
+        f32 GetTimeByIndex(u32 au32Index) const
+        {
+            CGS_ASSERT(au32Index < N, "luIndex < KU_AVERAGING_HISTORY_ENTRY");
+            return mafAveragingHistory[au32Index];
+        }
 
     private:
         f32 mafAveragingHistory[N]; // :100  +0x000

@@ -110,6 +110,7 @@ struct RoadnoiseEffect : public BrnSound::Logic::BrnEffectObject
     Attrib::Gen::surfacelist         mSurfaceList;                         // :171
 
 private:
+    void DrawDebug() const;
     void PlayTransitionSound(EWheelSide aeSide, u8 auOntoSurface, u8 auOffOfSurface);
 };
 

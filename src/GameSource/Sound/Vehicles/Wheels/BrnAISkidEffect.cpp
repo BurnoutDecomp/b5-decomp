@@ -11,6 +11,10 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 // =============================================================================
@@ -43,6 +47,9 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+extern bool KI_DEBUG_PRINT_CLOSEST_AI_SKIDS; // byte_82FFB813
+extern s32 giClosestAIStateInstance; // dword_82F2CBD8, owned by AIVehicleStateManager
+
 namespace Wheels
 {
 
@@ -184,7 +191,7 @@ bool AISkidEffect::Attach()
 //   mDriftInterp.Update(dt)
 //   mfDriftFactor = max(mDriftInterp.current, drift)                     ; fsel @0x826B9184
 //   SetMixerInputValue(0, clamp(mfDriftFactor * 32.0, 0, 32767))         ; 0x826B9190..0x826B91B4
-//   <byte_82FFB813 dev text / DebugRender::DrawText -- not carried>
+//   <byte_82FFB813: nearest-state TTY detail plus world-space drift-factor text>
 // ---------------------------------------------------------------------------
 void AISkidEffect::UpdateParams( f32 afTimeStep )
 {
@@ -192,7 +199,9 @@ void AISkidEffect::UpdateParams( f32 afTimeStep )
     CGS_ASSERT( lpRaw != 0, "mpVehiclePhysicsData" );
     const f32 lfDrift = lpRaw->mfAbsDriftScale * 1024.0f;
 
-    const CgsSound::Utils::DataPoint<bool>& lrCrashing = mpPhysicsControl->GetPhysicsData().IsCrashing;
+    const BrnSound::Vehicles::Engines::PhysicsControl::PhysicsData& lrPhysics =
+        mpPhysicsControl->GetPhysicsData();
+    const CgsSound::Utils::DataPoint<bool>& lrCrashing = lrPhysics.IsCrashing;
     if ( lrCrashing.GetCurrent() && lrCrashing.GetPrevious() != lrCrashing.GetCurrent() )
     {
         mDriftInterp.Initialize( mDriftInterp.mfCurrentValue, KF_SMALL_SKID_INTENSITY, 100.0f,
@@ -208,6 +217,34 @@ void AISkidEffect::UpdateParams( f32 afTimeStep )
     lfMixer = ( -lfMixer >= 0.0f ) ? 0.0f : lfMixer;                             // max(v, 0)
     lfMixer = ( ( 32767.0f - lfMixer ) >= 0.0f ) ? lfMixer : 32767.0f;           // min(v, 32767)
     SetMixerInputValue( 0, static_cast<s32>( lfMixer ) );
+
+    if ( KI_DEBUG_PRINT_CLOSEST_AI_SKIDS )
+    {
+        if ( GetInstanceId() == giClosestAIStateInstance )
+        {
+            if ( lrCrashing.GetCurrent() &&
+                 lrCrashing.GetPrevious() != lrCrashing.GetCurrent() )
+                BrnSound::Debug::DebugComponent::mLogCombined
+                    << "<<< AI IS CRASHING >>>\n";
+
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "lf32Drift: " << lfDrift
+                << "\tYAW: " << lrPhysics.mYaw.GetCurrent()
+                << "\tmDriftInterp: " << mDriftInterp.mfCurrentValue
+                << "\tSpeed: " << lrPhysics.mSpeedMPH.GetCurrent() << "\n";
+        }
+
+        char lacText[32];
+        CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%0.1f",
+                         mfDriftFactor);
+        rw::math::vpu::Vector3 lDrawPosition = lrPhysics.mPosition3d.GetCurrent();
+        lDrawPosition.y += 2.0f;
+        const bool lbNoDrift = !(mfDriftFactor > 1.1920929e-7f ||
+                                 mfDriftFactor < -1.1920929e-7f);
+        const CgsDev::RGBA lColour = lbNoDrift ? 0xFFFFFFFFu : 0xFF0000FFu;
+        CgsDev::DebugInterface lDebugInterface;
+        lDebugInterface.GetRender().DrawText(lDrawPosition, lacText, 16.0f, lColour);
+    }
 }
 
 // ---------------------------------------------------------------------------

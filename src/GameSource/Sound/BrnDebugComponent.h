@@ -9,6 +9,11 @@
 #include "GameSource/Sound/Debug/BrnSoundDebugStatistics.h"
 
 namespace CgsSound { namespace Playback { namespace Module { class Module; } } }
+namespace CgsSound { namespace Logic { struct Cgs3dEffectControl; } }
+namespace BrnSound { namespace Vehicles { namespace Engines {
+    extern s32 KI_MONITOR_MAX_RPM;
+    extern f32 gfMaxRpmMonitor;
+} } }
 namespace BrnSound { namespace Module { struct SoundLogicModule; } }
 struct Splice;
 
@@ -16,6 +21,14 @@ namespace BrnSound
 {
 namespace Debug
 {
+    // ARTIST debug globals shared with their original consumers. DecFIGS calls the
+    // max-RPM menu cell KI_MONITOR_MAX_RPM (s32), and names its adjacent read-only
+    // value gfMaxRpmMonitor (f32); ARTIST image data is 0.0 and has no writer.
+    extern bool gbShowStatistics;
+    extern bool gbResetStatistics;
+    extern bool gbStatisticsDrawDacGraph;
+    extern s32 KI_SPEW_SPLICE_USAGES;
+
     void ConsoleChangeCallback(void* lpValue, void* lpUserData);
 
     // DecFIGS BrnDebugComponent.h:69; ARTIST constructor 0x827E0720 and
@@ -36,6 +49,15 @@ namespace Debug
         void Construct(CgsSound::Playback::Module::Module* lpPlaybackModule,
                        BrnSound::Module::SoundLogicModule* lpLogicModule);
         void InstallConsole(EConsole leConsole);
+        void Update() override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        static void Render3dControl(
+            const CgsSound::Logic::Cgs3dEffectControl* lp3dControl);
+        void UpdateMaxRpmDisplay();
+        void BuildMaterialNames();
+        void BuildActionNames();
+        void BuildSplicerBankNames();
+        void UpdateSpliceAudition();
 
         static CgsDev::Log::LogCombined mLogCombined;
 
@@ -61,6 +83,9 @@ namespace Debug
         s32 miSpliceIndexTens;              // +0x34C
         s32 miSpliceIndexUnits;             // +0x350
         Splice* mpSpliceAuditionVoice;      // +0x354
+    public:
+        // The original component is a `struct` in DecFIGS, and RootSoundModule::Update
+        // reads its actual Statistics subobject directly after the debug update.
         Statistics mStatistics;            // +0x358
     };
 }

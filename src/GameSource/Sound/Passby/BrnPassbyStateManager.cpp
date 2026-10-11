@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Passby ctor range tripwire)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name::MakeHash
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] sink
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // the "Passbys" CPU monitor
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // EventQueue<PropUpdateNotification, 200>
@@ -12,6 +13,17 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+
+// ARTIST off_82F2D0C8; DecFIGS names this ePassbyTypes::gaNames.
+namespace AttribSys { namespace Enums { namespace ePassbyTypes {
+const char* const gaNames[KI_NUM_ENUMS] =
+{
+    "PassbyAzimuth", "PassbyPitch", "PassbyCutoff", "TrafficSmall", "TrafficMedium",
+    "TrafficLarge", "LampPost", "Tree", "Bridge", "Tunnel", "Camera", "Misc",
+    "Collision", "Overpass", "Warehouse", "Alley", "StaticMetal", "LargeOverheadObject",
+    "PassbyBoostOffset", "MaxPassbyTypes"
+};
+} } }
 
 // =============================================================================
 // BrnSound::Logic::Passby::PassbyStateManager::DynamicPropByCache -- out-of-line
@@ -45,6 +57,8 @@ namespace Logic
 {
 namespace Passby
 {
+
+s32 KI_SPEW_PASSBY_STATE_INFO = 0; // ARTIST dword_82FFB930
 
 // =============================================================================
 // [DIAG] NOT IN THE X360 BINARY
@@ -434,7 +448,7 @@ bool PassbyStateManager::Release()
 //                    KI_SPEW_PASSBY_STATE_INFO dev switch] ; break
 //           lpState->Attach(&posted[i])                      ; vt +0xC
 //   muPostedPassbyCount = 0                                  ; every frame, dispatched or not
-//   [the KI_SPEW_PASSBY_STATE_INFO state dump -- dev switch, not reproduced]
+//   KI_SPEW_PASSBY_STATE_INFO dumps each state's attachment and update phase
 //   PerfMonCpu::StopMonitor(miCpuMonitor)
 // ---------------------------------------------------------------------------
 void PassbyStateManager::UpdateParams( f32 lfTimeStep )
@@ -454,7 +468,12 @@ void PassbyStateManager::UpdateParams( f32 lfTimeStep )
         {
             CgsSound::Logic::State* lpState = GetFreeState( &maPostedPassbys[luPassby] );
             if( !lpState )
+            {
+                if( KI_SPEW_PASSBY_STATE_INFO )
+                    BrnSound::Debug::DebugComponent::mLogCombined
+                        << "[AWWWOOGA AWWWOOGA] No more free pass-bys.\n";
                 break;
+            }
             lpState->Attach( &maPostedPassbys[luPassby] );
             ++luAttached;
         }
@@ -478,6 +497,19 @@ void PassbyStateManager::UpdateParams( f32 lfTimeStep )
     }
 
     muPostedPassbyCount = 0;
+    if( KI_SPEW_PASSBY_STATE_INFO )
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined << "[PassbyStateMgr]\t";
+        for( CgsSound::Logic::State* lpState = GetHeadState(); lpState; lpState = lpState->GetNextState() )
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "[" << lpState->GetInstanceID() << ","
+                << ( lpState->IsAttached() ? "Attached" : "NOT-Attached" ) << ","
+                << ( lpState->mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
+                    ? "Loaded" : "NOT-LOADED" ) << "]\t";
+        }
+        BrnSound::Debug::DebugComponent::mLogCombined << "\n";
+    }
     CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
 }
 

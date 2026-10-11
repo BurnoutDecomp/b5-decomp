@@ -31,6 +31,9 @@ namespace Logic
 namespace Traffic
 {
 
+extern u32 KI_SPEW_TRAFFIC;
+extern u32 KI_DRAW_ATTACHED;
+
 struct TrafficControl;
 
 struct Traffic3DControl : public BrnSound::Logic::Brn3DEffectControl

@@ -29,6 +29,9 @@ namespace Environment
 
 // Where a trigger query was made relative to the car.
 extern bool KB_SHOW_STATIC_ENVIRONMENT; // ARTIST 82FFB8C8, shared with static passbys
+extern bool KB_SPEW_WHOOSH_INFO; // ARTIST 82FFB8BE
+extern f32 KF_WHOOSH_MIN_VELOCITY_THRESHOLD; // ARTIST 82F2CDF0
+extern f32 KF_MIN_TIME_BETWEEN_TRIGGERS; // ARTIST 82F2CDF4
 
 enum eTriggerPosition
 {

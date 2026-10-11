@@ -3,6 +3,7 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnBoostEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
@@ -21,6 +22,8 @@ namespace Vehicles
 {
 namespace Engines
 {
+
+s32 KI_DEBUG_SPEW_BOOST_INFO = 0; // dword_82FFB8A4; ARTIST bool-tag alias
 
 namespace
 {
@@ -202,6 +205,20 @@ void BoostEffect::UpdateParams(f32 afTimeStep)
     mfParam_AEMS_time_boosting = ClampTimer(mTimeInBoost.GetCurrent());
     mfParam_AEMS_time_since_last_boostin = ClampTimer(lfNow - mTimeOfLastBoostIn.GetPrevious());
     mfParam_AEMS_time_since_last_boostout = ClampTimer(lfNow - mTimeOfLastBoostOut.GetCurrent());
+
+    if (KI_DEBUG_SPEW_BOOST_INFO != 0)
+    {
+        CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+        lrLog << "vel[" << mfParam_AEMS_velocity << "]\t"
+              << "ss2[" << mfParam_AEMS_start_stage_2 << "]\t"
+              << "rem[" << mfParam_AEMS_boost_remaining << "]\t"
+              << "spd[" << mfParam_AEMS_car_speed << "]\t"
+              << "vol[" << mfParam_AEMS_volume << "]\t"
+              << "ctrl[" << mfParam_AEMS_control << "]\t"
+              << "tin[" << mfParam_AEMS_time_since_last_boostin << "]\t"
+              << "tout[" << mfParam_AEMS_time_since_last_boostout << "]\t"
+              << "tbst[" << mfParam_AEMS_time_boosting << "]\n";
+    }
 
     UpdateBoostStream();
 }

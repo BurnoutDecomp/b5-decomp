@@ -5,6 +5,7 @@
 
 namespace CgsSound { namespace Playback { namespace Module { class Module; } } }
 namespace BrnSound { namespace Module { struct SoundLogicModule; } }
+namespace CgsDev { struct Debug2DImmediateRender; }
 
 namespace BrnSound
 {
@@ -38,8 +39,16 @@ namespace Debug
         Statistics();
         void Construct(CgsSound::Playback::Module::Module* lpPlaybackModule,
                        BrnSound::Module::SoundLogicModule* lpLogicModule);
+        void Update();
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender, bool lbDrawDacGraph);
 
     private:
+        void RenderLine(CgsDev::Debug2DImmediateRender* lpRender, bool lbRedAlert,
+                        const char* lpFormat, ...);
+        void DrawGraph(CgsDev::Debug2DImmediateRender* lpRender,
+                       CgsSound::Playback::VoiceProfilingData<128>* lpVoiceProfilingData,
+                       u32 lColour);
+
         struct NamedVoiceProfilingData
         {
             CgsSound::Playback::VoiceProfilingData<16> mData;

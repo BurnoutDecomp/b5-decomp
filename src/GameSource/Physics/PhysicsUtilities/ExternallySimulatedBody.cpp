@@ -8,27 +8,25 @@
 // is the de-SIMD'd equivalent written against the members BY NAME (cf. ExternalPhysicsBody.cpp
 // / BrnTagPoint.cpp -- no __asm).
 //
-// RECOVERED DATA FLOW (the `dword_82FB7518==0 && dword_82FB7514==0` branch of the asm -- the
-// normal, ship path):
-//   if (mbFrozen)            -> do nothing (asm: `lbz r11,0x60(r3)` / `bne` skips the whole body)
-//   else:
-//     mTransform        = lpRigidBody->GetTransform()         (asm copies the body's mRi/mUp/mAt
-//                                                              orientation rows + mCom position
-//                                                              into this->mTransform's rows)
-//     mLinearVelocity   = lpRigidBody->GetLinearVelocity()    (asm: lvx r4+0x20 -> this+0x40)
-//     mAngularVelocity  = lpRigidBody->GetAngularVelocity()   (asm: lvx r4+0x30 -> this+0x50)
-//
-// FLAG (debug-toggle paths NOT reconstructed -- honest placeholder): the asm has two extra
-// branches gated on the file-static debug globals `dword_82FB7518` and `dword_82FB7514`, which
-// substitute a forced spin (using the un-homed spin-speed constants KF_SPINNING_SPEED_X/Y/Z and
-// the rodata floats flt_82FB751C/7520/7524 scaled by 2*pi) and a forced hold-in-place. Those
-// globals + constants are debug-only rodata with NO project home and NO recoverable runtime
-// value (they default OFF in a ship build), so they are NOT fabricated here. The reconstructed
-// body is the both-flags-OFF path, which is the live behaviour; if a future TU homes the debug
-// toggles it must GROW this body additively (re-introduce the two branches), not retype it.
+// RECOVERED DATA FLOW (ARTIST 0x825A2E88):
+//   if mbFrozen: return without touching the mirror.
+//   if KI_HOLD_CAR_SPINING_IN_AIR: takes priority over hold-in-place; copy the RenderWare
+//       orientation, retain the prior mirror position X/Z/W, force Y=10, clear linear velocity,
+//       and set angular velocity to the three menu speeds times 2*pi.
+//   else: copy the RenderWare transform; if KI_HOLD_CAR_IN_PLACE, retain prior X/Z/W while
+//       keeping the current physics Y; then copy both velocities normally.
+// The five controls are the original mutable Sound debug cells at dword_82FB7514/18 and
+// flt_82FB751C/20/24 (all image-initialized to zero).
 
 namespace BrnPhysics
 {
+    // The Sound page's original shared debug controls. Each has one definition here.
+    s32 KI_HOLD_CAR_IN_PLACE       = 0;     // dword_82FB7514
+    s32 KI_HOLD_CAR_SPINING_IN_AIR = 0;     // dword_82FB7518
+    f32 KF_SPINNING_SPEED_X        = 0.0f;  // flt_82FB751C
+    f32 KF_SPINNING_SPEED_Y        = 0.0f;  // flt_82FB7520
+    f32 KF_SPINNING_SPEED_Z        = 0.0f;  // flt_82FB7524
+
     // -------------------------------------------------------------------------------------
     // Construct @0x8259CF28 / Destruct @0x8259CFF8 / Prepare @0x8259D0C0 / Release @0x8259D190
     //
@@ -99,8 +97,36 @@ namespace BrnPhysics
         if (mbFrozen)
             return;
 
-        // Normal path: snapshot the simulated body's pose and velocities into this mirror.
-        mTransform       = lpRigidBody->GetTransform();
+        if (KI_HOLD_CAR_SPINING_IN_AIR)
+        {
+            const Vector3 lPreviousPosition = mTransform.wAxis;
+            mTransform = lpRigidBody->GetTransform();
+            mTransform.wAxis = { lPreviousPosition.x, 10.0f,
+                                 lPreviousPosition.z, lPreviousPosition.w };
+            mLinearVelocity.SetZero();
+            const f32 lfTwoPi = 6.2831855f; // flt_8208C240
+            mAngularVelocity = { KF_SPINNING_SPEED_X * lfTwoPi,
+                                 KF_SPINNING_SPEED_Y * lfTwoPi,
+                                 KF_SPINNING_SPEED_Z * lfTwoPi,
+                                 0.0f };
+            return;
+        }
+
+        if (KI_HOLD_CAR_IN_PLACE)
+        {
+            const Vector3 lPreviousPosition = mTransform.wAxis;
+            mTransform = lpRigidBody->GetTransform();
+            // The original VMX insert mask replaces only position Y from physics; X/Z/W
+            // remain the previous externally simulated position.
+            mTransform.wAxis.x = lPreviousPosition.x;
+            mTransform.wAxis.z = lPreviousPosition.z;
+            mTransform.wAxis.w = lPreviousPosition.w;
+        }
+        else
+        {
+            mTransform = lpRigidBody->GetTransform();
+        }
+
         mLinearVelocity  = lpRigidBody->GetLinearVelocity();
         mAngularVelocity = lpRigidBody->GetAngularVelocity();
     }

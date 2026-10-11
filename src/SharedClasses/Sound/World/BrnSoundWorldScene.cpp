@@ -1,9 +1,12 @@
 #include "SharedClasses/Sound/World/BrnSoundWorldScene.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint, gxMessageFilterFlags ("[Static map]" spew)
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "rw/rwcore_structs.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -329,8 +332,6 @@ void SoundWorldScene::QuerySoundMap(QueryInfo& lrQuery,
             const s32 liCount = static_cast<s16>(lpRegion->GetNumEntities());
             for (s32 liEntity = 0; liEntity < liCount; ++liEntity)
             {
-                if (lrQuery.miEntitiesWritten >= lrQuery.miMaxEntities)
-                    return;
                 const BrnSound::World::StaticSoundEntity& lrEntity =
                     lpMap->GetEntity(liFirst + liEntity);
                 const Vector3 lPos = lrEntity.GetPos();
@@ -338,6 +339,26 @@ void SoundWorldScene::QuerySoundMap(QueryInfo& lrQuery,
                 const f32 lfDy = lPos.y - lrQuery.mQueryPos.y;
                 const f32 lfDz = lPos.z - lrQuery.mQueryPos.z;
                 const f32 lfRadius = lrEntity.GetRadius();
+
+                // ARTIST 0x826D1A10-0x826D1AD0: mbDrawDebug gates a sphere for each
+                // entity within the query radius, independently of the entity-radius test
+                // below. The automatic DebugInterface brackets GetRender with the existing
+                // manager critical-section acquire/release path.
+                if (lrQuery.mbDrawDebug &&
+                    lfDx * lfDx + lfDy * lfDy + lfDz * lfDz <=
+                        lrQuery.mfRadius * lrQuery.mfRadius)
+                {
+                    CgsDev::DebugInterface lDebugInterface;
+                    // dword_82F2F818 = 0xFF00FFA0. rw::RGBA packs red into the low byte.
+                    const rw::RGBA lColour(0xA0, 0xFF, 0x00, 0xFF);
+                    lDebugInterface.GetRender().DrawSphere(
+                        lPos, lfRadius, lColour.m_rgba);
+                }
+
+                // ARTIST checks output capacity after the optional debug draw, so a full
+                // result buffer still emits nearby entity spheres for this map query.
+                if (lrQuery.miEntitiesWritten >= lrQuery.miMaxEntities)
+                    return;
                 if (lfDx * lfDx + lfDy * lfDy + lfDz * lfDz <=
                     lfRadius * lfRadius)
                 {

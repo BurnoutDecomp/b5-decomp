@@ -60,6 +60,8 @@ namespace Vehicles
 namespace Engines { struct PhysicsControl; }
 namespace Environment
 {
+extern f32 KF_SPEED_STREAM_THRESHOLD_MPH;
+extern f32 KF_SPEED_STREAM_CROSSFADE_WIDTH;
 
 // Reuses the BrnEffectObject dual base by name; the virtual `vector deleting
 // destructor' @ 0x826BA0A0 runs the inherited BrnEffectObject teardown (both vptr

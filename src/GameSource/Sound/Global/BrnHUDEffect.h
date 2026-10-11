@@ -75,6 +75,7 @@ namespace BrnSound
 {
 namespace Logic
 {
+extern bool KB_HUD_SPEW_MESSAGES;
 
 // BrnHUDEffect.h:47 (DWARF). One HUD voice with its client-side volume/pitch and
 // the dynamic-mixer output slot it reads its gain from. 92 bytes on the console

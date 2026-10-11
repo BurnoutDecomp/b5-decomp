@@ -11,6 +11,14 @@ namespace BrnSound
 namespace Module { struct SoundLogicModule; }
 namespace Logic
 {
+extern bool KB_MUSIC_MUTE;
+extern f32 KF_MUSIC_HIGH_PASS_ORDER;
+extern f32 KF_MUSIC_LOW_PASS_ORDER;
+extern f32 KF_MUSIC_HIGH_PASS_Q;
+extern f32 KF_MUSIC_LOW_PASS_Q;
+extern f32 KF_JUMP_HPF_OPEN_FREQUENCY;
+extern f32 KF_JUMP_HPF_OPEN_TIME;
+extern f32 KF_JUMP_HPF_CLOSE_TIME;
 namespace Streaming { class StreamingStateManager; }
 struct MixerControl;   // BrnMixerControl.h -- the +0x230 controller (effect id 0)
 

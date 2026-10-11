@@ -50,6 +50,7 @@ namespace BrnSound
 {
 namespace Logic
 {
+extern bool KB_SPEW_PRESENTATION_MESSAGES;
 
 // PresentationEffect : BrnEffectObject (dual base @ +0/+4) + Streaming::IStreamUser (@ +0x38).
 struct PresentationEffect : public BrnEffectObject,

@@ -27,6 +27,8 @@ namespace Logic
 namespace Traffic
 {
 
+extern s32 KI_SPEW_TRAFFIC_PASS_CULLS;
+
 struct Traffic3DControl;
 
 struct TrafficControl : public BrnSound::Logic::BrnEffectControl

@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/BrnPlayerVehicleStateManager.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -316,6 +317,9 @@ void PlayerVehicleStateManager::UpdateParams(f32 af32DeltaTime)
                     const_cast<BrnResource::VehicleListEntry*>(GetLoadedVehicleEntry(luPlayer)),
                     luPlayer);
                 lpState->Attach(&lInfo);
+                if (KI_PRINT_CAR_LOADING_STATES)
+                    BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
+                        << "] AUDIO LOAD: Attaching Player Car idx: " << static_cast<s32>(luPlayer) << "\n";
             }
         }
     }
