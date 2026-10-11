@@ -22,6 +22,17 @@ namespace Vehicles
 namespace Engines
 {
 
+// ARTIST menu backing cells (X360 dword/float addresses in OnActivate).
+f32 KF_CLUTCH_MODEL_RPM_DELTA = 256.0f;          // flt_82F2CC28
+f32 KF_CLUTCH_MODEL_RPM_THRESHOLD = 2500.0f;     // flt_82F2CC2C; read by ShouldTurnOnClutch
+f32 KF_REDLINING_RPM = 11000.0f;                // flt_82F2CC3C
+f32 KF_REDLINING_RPM_OFFSET = 200.0f;           // flt_82F2CC40
+f32 KF_REDLINING_DUCK_DURATION_HIGH = 0.05f;    // flt_82F2CC44
+f32 KF_REDLINING_DUCK_DURATION_LOW = 0.001f;    // flt_82F2CC48
+f32 KF_REDLINING_VOLUME_BOOST = 1.2f;           // flt_82F2CC4C
+f32 KF_REDLINING_VOLUME_DUCK = 0.9f;             // flt_82F2CC50
+bool KB_TURN_ON_RPM_RAMPING = false;             // byte_82FFB84B
+
 EngineControl::EngineControl()
     : mpPhysicsControl(nullptr)
     , mpShiftControl(nullptr)
@@ -175,7 +186,7 @@ bool EngineControl::ShouldTurnOnClutch(f32 /*afTargetRpm*/) const
         return false;
     return (!mpShiftControl->IsActive() ||
             mpShiftControl->GetShiftingState() == ShiftControl::E_SHFT_DOWN_ENGAGING_REATTACH) &&
-           mfAudioRpm.GetCurrent() <= 2500.0f &&
+           mfAudioRpm.GetCurrent() <= KF_CLUTCH_MODEL_RPM_THRESHOLD &&
            mpPhysicsControl->GetPhysicsData().mGear.GetCurrent() == 1;
 }
 
@@ -209,8 +220,8 @@ void EngineControl::UpdateRPM(f32 afTimeStep)
         const f32 lfCurrent = mfAudioRpm.GetCurrent();
         if (lfTargetRpm - lfCurrent > 999.0f)
             lfTargetRpm = lfCurrent + 999.0f;
-        else if (lfCurrent - lfTargetRpm > 256.0f * afTimeStep)
-            lfTargetRpm = lfCurrent - 256.0f * afTimeStep;
+        else if (lfCurrent - lfTargetRpm > KF_CLUTCH_MODEL_RPM_DELTA * afTimeStep)
+            lfTargetRpm = lfCurrent - KF_CLUTCH_MODEL_RPM_DELTA * afTimeStep;
     }
     else
     {
@@ -219,6 +230,23 @@ void EngineControl::UpdateRPM(f32 afTimeStep)
 
     lfTargetRpm = (std::max)(1000.0f, (std::min)(10000.0f,
         lfTargetRpm + mfRPM_LFO));
+
+    // ARTIST byte_82FFB84B selects a six-second triangular RPM sweep, with a
+    // three-second rising and falling half-cycle (flt_82F2CC54 == 3.0f).
+    if (KB_TURN_ON_RPM_RAMPING)
+    {
+        mfRPMRamping += afTimeStep;
+        const f32 lfHalfCycle = 3.0f;
+        const f32 lfCycleDuration = lfHalfCycle * 2.0f;
+        const s32 liCycle = static_cast<s32>(mfRPMRamping / lfCycleDuration);
+        const f32 lfPhase = mfRPMRamping -
+            (static_cast<f32>(liCycle) * lfCycleDuration);
+        if (lfPhase >= lfHalfCycle)
+            lfTargetRpm = 10000.0f -
+                (((lfPhase - lfHalfCycle) / lfHalfCycle) * 9000.0f);
+        else
+            lfTargetRpm = ((lfPhase / lfHalfCycle) * 9000.0f) + 1000.0f;
+    }
     mfAudioRpm.Update(lfTargetRpm);
 }
 
@@ -238,7 +266,22 @@ void EngineControl::UpdateThrottle(f32 /*afTimeStep*/)
         lfThrottle = 0.0f;
     if (mpClutchControl)
         lfThrottle -= mpClutchControl->GetDamageThrottle();
-    mfAudioThrottle.Update((std::max)(0.0f, lfThrottle));
+    f32 lfFinalThrottle = (std::max)(0.0f, lfThrottle);
+    if (KB_TURN_ON_RPM_RAMPING)
+    {
+        const f32 lfHalfCycle = 3.0f;
+        const f32 lfCycleDuration = lfHalfCycle * 2.0f;
+        const s32 liCycle = static_cast<s32>(mfRPMRamping / lfCycleDuration);
+        const f32 lfPhase = mfRPMRamping -
+            (static_cast<f32>(liCycle) * lfCycleDuration);
+        if (lfPhase < lfHalfCycle)
+        {
+            mfAudioThrottle.Update(1.0f);
+            return;
+        }
+        lfFinalThrottle = 0.0f;
+    }
+    mfAudioThrottle.Update(lfFinalThrottle);
 }
 
 void EngineControl::UpdateVolume(f32 /*afTimeStep*/)
@@ -288,16 +331,15 @@ void EngineControl::UpdateDistortion(f32 afTimeStep)
 
 void EngineControl::UpdateRedLiningRPM(f32 afTimeStep)
 {
-    const f32 KF_REDLINE_RPM = 11000.0f;
     mfRedlingRPMOffset = 0.0f;
     mfRedlingVolumeScale = 1.0f;
 
     if (meRedLiningState != E_REDLINING_STATE_OFF)
     {
         if ((meRedLiningState == E_REDLINING_STATE_LOW &&
-             mfAudioRpm.GetCurrent() + 200.0f < KF_REDLINE_RPM) ||
+             mfAudioRpm.GetCurrent() + KF_REDLINING_RPM_OFFSET < KF_REDLINING_RPM) ||
             (meRedLiningState == E_REDLINING_STATE_HIGH &&
-             mfAudioRpm.GetCurrent() < KF_REDLINE_RPM))
+             mfAudioRpm.GetCurrent() < KF_REDLINING_RPM))
         {
             meRedLiningState = E_REDLINING_STATE_OFF;
             return;
@@ -305,8 +347,8 @@ void EngineControl::UpdateRedLiningRPM(f32 afTimeStep)
     }
     else
     {
-        if ((mfAudioRpm.GetCurrent() < KF_REDLINE_RPM &&
-             mfAudioRpm.GetPrevious() < KF_REDLINE_RPM) ||
+        if ((mfAudioRpm.GetCurrent() < KF_REDLINING_RPM &&
+             mfAudioRpm.GetPrevious() < KF_REDLINING_RPM) ||
             mpPhysicsControl->GetPhysicsData().mGear.GetCurrent() != 1 ||
             (mpShiftControl && mpShiftControl->IsActive()))
             return;
@@ -316,29 +358,29 @@ void EngineControl::UpdateRedLiningRPM(f32 afTimeStep)
     if (meRedLiningState == E_REDLINING_STATE_OFF)
     {
         meRedLiningState = E_REDLINING_STATE_HIGH;
-        mfRedliningTime = 0.05f;
+        mfRedliningTime = KF_REDLINING_DUCK_DURATION_HIGH;
     }
     if (meRedLiningState == E_REDLINING_STATE_HIGH)
     {
         if (mfRedliningTime >= 0.0f)
         {
-            mfRedlingVolumeScale = 1.2f;
+            mfRedlingVolumeScale = KF_REDLINING_VOLUME_BOOST;
             return;
         }
         meRedLiningState = E_REDLINING_STATE_LOW;
-        mfRedliningTime = 0.001f;
+        mfRedliningTime = KF_REDLINING_DUCK_DURATION_LOW;
     }
     if (meRedLiningState == E_REDLINING_STATE_LOW)
     {
         if (mfRedliningTime >= 0.0f)
         {
-            mfRedlingRPMOffset = -200.0f;
-            mfRedlingVolumeScale = 0.9f;
+            mfRedlingRPMOffset = -KF_REDLINING_RPM_OFFSET;
+            mfRedlingVolumeScale = KF_REDLINING_VOLUME_DUCK;
         }
         else
         {
             meRedLiningState = E_REDLINING_STATE_HIGH;
-            mfRedliningTime = 0.05f;
+            mfRedliningTime = KF_REDLINING_DUCK_DURATION_HIGH;
         }
     }
 }

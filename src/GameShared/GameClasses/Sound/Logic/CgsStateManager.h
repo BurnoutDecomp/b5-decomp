@@ -230,6 +230,7 @@ public:
     void SetTimeStepGame(f32 af32TimeStep)       { mfTimeStepGame = af32TimeStep; }
     void SetTimeStepSimulation(f32 af32TimeStep) { mfTimeStepSimulation = af32TimeStep; }
     void SetCurrentTime(f32 af32Time)            { mfCurrentTime = af32Time; }
+    f32 GetCurTime() const                      { return mfCurrentTime; } // DWARF h:229
 
     // CgsStateManager.h (PrepareStates @ 0x826EAD30). The shared helper every leaf
     // Prepare() calls to advance its owned States. NOT in this view's reconstructed

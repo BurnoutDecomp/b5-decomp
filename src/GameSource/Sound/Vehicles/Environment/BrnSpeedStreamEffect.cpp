@@ -23,6 +23,9 @@ namespace Vehicles
 {
 namespace Environment
 {
+// DecFIGS BrnSpeedStreamEffect.cpp:34..35 / ARTIST82F2CE14/18.
+f32 KF_SPEED_STREAM_THRESHOLD_MPH = 105.0f;
+f32 KF_SPEED_STREAM_CROSSFADE_WIDTH = 40.0f;
 
 // ---------------------------------------------------------------------------
 // SpeedStreamEffect::Create  @ 0x826D13D8   (static allocate+construct factory)

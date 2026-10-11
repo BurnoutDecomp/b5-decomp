@@ -1,4 +1,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarComponentStreamers.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+
+extern s32 KI_PRINT_CAR_LOADING_STATES; // shared ARTIST82FFB830, owned by BrnVehicleState.cpp
 
 #include <cstring>                                                            // strstr
 #include <cstdlib>                                                            // std::getenv ([car-audio] witness)
@@ -37,19 +40,14 @@
 // mLoadedEntries @ +0x1360, mAudioCarLoadedDataQueue @ +0x1428, mpStreamer @ +0x15B8) are
 // 32-bit-build facts and are NOT load-bearing for the host build's by-name access.
 //
-// The X360 inlines the per-slot debug prints (gated on the TU-local
-// KI_PRINT_CAR_LOADING_STATES toggle, default off) through a dedicated StrStream; here
-// they are routed through the engine's unified CgsDev::Log::gpDebugPrint sink, preserving
-// the gate and the message text. The assert tripwires that streamed an index into the
+// The X360 inlines the per-slot debug prints through the Sound combined sink,
+// gated on the same global KI_PRINT_CAR_LOADING_STATES that the Sound menu edits.
+// The assert tripwires that streamed an index into the
 // message buffer are reproduced with the house CGS_ASSERT carrying the static expression.
 // ============================================================================
 
 namespace BrnWorld
 {
-
-// BrnRaceCarComponentStreamers.cpp:25 (DWARF). Per-build debug toggle: when non-zero the
-// streamer logs each load/unload request it emits. Default OFF (the X360 ships it 0).
-int32_t KI_PRINT_CAR_LOADING_STATES = 0;
 
 // ---------------------------------------------------------------------------
 // @ 0x822ECA68. Default-construct the audio streamer: stash the owner, construct the
@@ -248,7 +246,7 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
 
     if( KI_PRINT_CAR_LOADING_STATES )
     {
-        *CgsDev::Log::gpDebugPrint << "RaceCarAudioStreamer::SendLoadRequest: "
+        BrnSound::Debug::DebugComponent::mLogCombined << "RaceCarAudioStreamer::SendLoadRequest: "
                                    << static_cast<s32>( lpEntry->miUserID )
                                    << " Asset:" << lpEntry->mDesiredId << "\n";
     }
@@ -289,7 +287,7 @@ bool RaceCarAudioStreamer::SendUnLoadRequest( RaceCarStreamingSound* lpEntry )
 
     if( KI_PRINT_CAR_LOADING_STATES )
     {
-        *CgsDev::Log::gpDebugPrint << "RaceCarAudioStreamer::SendUnLoadRequest: "
+        BrnSound::Debug::DebugComponent::mLogCombined << "RaceCarAudioStreamer::SendUnLoadRequest: "
                                    << static_cast<s32>( lpEntry->miUserID )
                                    << " Asset:" << lpEntry->mLoadedBundleId << "\n";
     }
@@ -489,6 +487,9 @@ void RaceCarAudioStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreS
 // ---------------------------------------------------------------------------
 void RaceCarAudioStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
 {
+    if (KI_PRINT_CAR_LOADING_STATES)
+        BrnSound::Debug::DebugComponent::mLogCombined << "  receive  RaceCarAudioStreamer::OnAssetLoaded"
+            << liActiveRaceCar << "\n";
     (void)lpEvent;
     mpStreamer->OnAudioLoaded( liActiveRaceCar );
 
@@ -533,9 +534,9 @@ bool RaceCarAudioStreamer::RemoveEntry( CgsID lAssetId, u64 luUserId )
     CGS_ASSERT( lEntry.mDesiredId == lAssetId,
                 "Removing a different asset from a racecar from the one that was added, racecar=" );
 
-    if( KI_PRINT_CAR_LOADING_STATES != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    if( KI_PRINT_CAR_LOADING_STATES != 0 )
     {
-        *CgsDev::Log::gpDebugPrint << "RaceCarAudioStreamer::RemoveEntry: " << luUserId
+        BrnSound::Debug::DebugComponent::mLogCombined << "RaceCarAudioStreamer::RemoveEntry: " << luUserId
                                    << " Asset:" << lAssetId << "\n";
     }
 

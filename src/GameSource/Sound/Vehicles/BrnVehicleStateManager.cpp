@@ -1,4 +1,7 @@
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+#include "GameSource/Sound/Vehicles/BrnVehicleState.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (index-range tripwire)
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
@@ -211,6 +214,10 @@ bool VehicleStateManager::RemoveEntry(CgsID lAssetId, u64 luUserId)
     const u32 luIndex = static_cast<u32>(luUserId);
     CGS_ASSERT(gaDesiredAssetIds[luIndex] == lAssetId,
                "Removing a different asset from a racecar from the one that was added");
+    // ARTIST82698690..6E0 prints the static method's r4 (the user id).
+    if (KI_PRINT_CAR_LOADING_STATES)
+        BrnSound::Debug::DebugComponent::mLogCombined << "VehicleStateManager::RemoveEntry: "
+            << luUserId << "\n";
     gapLoadedVehicleEntries[luIndex] = 0;
     gaDesiredAssetIds[luIndex] = 0;
     guAddedMask &= static_cast<u8>(~(1u << luIndex));
@@ -294,11 +301,45 @@ void VehicleStateManager::OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsP
         lEvent.mbIsPlayer = (guAttachedPlayerMask & luBit) != 0;
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
             ->GetPreUpdateOutput().GetCarDataLoadedQueue().AddEvent(lEvent);
+        if (KI_PRINT_CAR_LOADING_STATES)
+        {
+            // ARTIST826B1ABC prints r6 (the player flag), despite its u64 formatter.
+            BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
+                << "] AUDIO LOAD: OnAssetLoaded  Car idx:" << static_cast<s32>(luUserId)
+                << " " << static_cast<u64>(lbIsPlayer) << "\n";
+            const auto* lpVehicles = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+                ->GetBrnInputStructure()->GetVehicleInterface();
+            BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
+                << "] AUDIO LOAD: Player Car index is :"
+                << static_cast<s32>(lpVehicles->GetPlayerActiveRaceCarIndex()) << "\n";
+        }
+    }
+    else if (KI_PRINT_CAR_LOADING_STATES)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined
+            << "(RaceCarAudioStreamer) Completed load of asset for racecar: "
+            << static_cast<s32>(luUserId)
+            << ((guAddedMask & luBit) == 0 ? ", but racecar is no longer added\n"
+                                          : ", but desired resource has changed\n");
     }
 }
 
 void VehicleStateManager::OnAssetUnloaded(CgsID lAssetId, u32 luUserId)
 {
+    // ARTIST826B1250..1388 runs these messages before clearing the attached entry.
+    if (KI_PRINT_CAR_LOADING_STATES)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
+            << "] AUDIO LOAD: OnAssetUnloaded Car idx" << static_cast<s32>(luUserId) << "\n";
+        const auto* lpVehicles = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+            ->GetBrnInputStructure()->GetVehicleInterface();
+        BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime();
+        if (lpVehicles->IsPlayerCarActive())
+            BrnSound::Debug::DebugComponent::mLogCombined << "] AUDIO LOAD: Player Car index is :"
+                << static_cast<s32>(lpVehicles->GetPlayerActiveRaceCarIndex()) << "\n";
+        else
+            BrnSound::Debug::DebugComponent::mLogCombined << "] AUDIO LOAD: Player is Inactive \n";
+    }
     CGS_ASSERT(luUserId < KI_ACTIVE_RACE_CAR_COUNT, "invalid index");
     const u8 luBit = static_cast<u8>(1u << luUserId);
     BrnWorld::RaceCarEntityModuleIO::AudioCarDataLoadedEvent lEvent;

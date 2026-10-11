@@ -154,14 +154,14 @@ void MusicStream::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
     arVoice.SetParameter(1, (mbInternalPause || mbStreamPaused) ? 1.0f : 0.0f,
                          &luPauseControl);
     arVoice.SetParameter(2, mfHighPassFrequency, &luHighPassFrequency);
-    arVoice.SetParameter(3, 4.0f, &luHighPassOrder);
-    arVoice.SetParameter(4, 0.95f, &luHighPassQ);
+    arVoice.SetParameter(3, KF_MUSIC_HIGH_PASS_ORDER, &luHighPassOrder);
+    arVoice.SetParameter(4, KF_MUSIC_HIGH_PASS_Q, &luHighPassQ);
 
     if (mfLowPassFrequency < 300.0f)
         mfLowPassFrequency = 300.0f;
     arVoice.SetParameter(5, mfLowPassFrequency, &luLowPassFrequency);
-    arVoice.SetParameter(6, 4.0f, &luLowPassOrder);
-    arVoice.SetParameter(7, 0.99f, &luLowPassQ);
+    arVoice.SetParameter(6, KF_MUSIC_LOW_PASS_ORDER, &luLowPassOrder);
+    arVoice.SetParameter(7, KF_MUSIC_LOW_PASS_Q, &luLowPassQ);
 
     f32 lfVolume = mfVolume;
     if ((meState == E_FADING_OUT || meState == E_PAUSING) &&

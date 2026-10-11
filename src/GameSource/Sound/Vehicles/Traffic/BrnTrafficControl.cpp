@@ -4,6 +4,7 @@
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"               // PassbyStateManager::Passby / PostPassby
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -12,10 +13,7 @@
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficControl -- out-of-line bodies.
 //
-// Not carried: the KI_SPEW_TRAFFIC_PASS_CULLS developer TTY lines ("[Passby]
-// VelocityThreshold [PASS]", "Distance [PASS]", "Distance [FAIL!]") in UpdateParams,
-// gated on a switch that is zero in the image and only registered with the
-// debug-variable registry.
+// The passby threshold and distance decisions retain the original developer log.
 // =============================================================================
 
 namespace BrnSound
@@ -24,6 +22,8 @@ namespace Logic
 {
 namespace Traffic
 {
+
+s32 KI_SPEW_TRAFFIC_PASS_CULLS = 0; // ARTIST dword_82FFB850
 
 namespace
 {
@@ -125,8 +125,18 @@ void TrafficControl::UpdateParams( f32 /*lfTimeStep*/ )
 
     const f32 lfDistance = rw::math::vpu::Magnitude(
         mpTrafficEntity->mLocalTransform.Pos() - lpMicrophone->GetMicrophoneMatrix().Pos() );
+    s32 liSpewPassCulls = KI_SPEW_TRAFFIC_PASS_CULLS;
+    if ( KI_SPEW_TRAFFIC_PASS_CULLS )
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined << "[Passby] VelocityThreshold [PASS]\t";
+        liSpewPassCulls = KI_SPEW_TRAFFIC_PASS_CULLS;
+    }
     if ( !( lfRelativeVelocity * KF_TRAFFIC_PASSBY_TIME_TO_APEX > lfDistance ) )
+    {
+        if ( liSpewPassCulls )
+            BrnSound::Debug::DebugComponent::mLogCombined << "Distance [FAIL!]\n";
         return;
+    }
 
     CgsSound::Logic::Module* lpLogicModule = GetLogicModule();
     CGS_ASSERT( lpLogicModule != 0, "lpLogicModule" );
@@ -141,6 +151,8 @@ void TrafficControl::UpdateParams( f32 /*lfTimeStep*/ )
             AttribSys::Enums::ePassbyTypes::TrafficSmall + leSize ),
         false,
         1.0f );
+    if ( KI_SPEW_TRAFFIC_PASS_CULLS )
+        BrnSound::Debug::DebugComponent::mLogCombined << "Distance [PASS] \tGROOVEY! \n";
     mbPassbyTriggered = lpPassbyStateManager->PostPassby( lPassby );
 }
 

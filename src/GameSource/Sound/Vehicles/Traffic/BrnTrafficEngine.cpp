@@ -3,6 +3,9 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -16,10 +19,8 @@
 // AEMS_car_Type, AEMS_pitch, AEMS_volume_Engine, AEMS_volume_RoadNoise) and
 // SendIndexes::AEMS_TrafficEngineClass (Send01, ReverbSend).
 //
-// Not carried from ProcessUpdate: the KI_DRAW_ATTACHED debug sphere
-// (Message<Brn3DEffectControl::DrawSphere>) and the KI_SPEW_TRAFFIC TTY line, both
-// gated on developer switches that are zero in the image and only registered with the
-// debug-variable registry.
+// ProcessUpdate also posts the original DrawSphere message and writes the engine
+// mixer values to the Sound debug log when their developer switches are enabled.
 // =============================================================================
 
 namespace BrnSound
@@ -28,6 +29,9 @@ namespace Logic
 {
 namespace Traffic
 {
+
+u32 KI_SPEW_TRAFFIC = 0; // ARTIST dword_82FFB840
+u32 KI_DRAW_ATTACHED = 0; // ARTIST dword_82FFB844
 
 namespace
 {
@@ -271,6 +275,33 @@ void TrafficEngine::ProcessUpdate()
     mTrafficEngineVoice.SetParameter( 6, lfRoadNoiseVolume, &KAU_TRAFFIC_ENGINE_PARAMETERS[6] );
     mTrafficEngineVoice.SetGain( 1, lfReverbSend, &KAU_TRAFFIC_ENGINE_SENDS[1] );
     mTrafficEngineVoice.SetGain( 0, 1.0f,         &KAU_TRAFFIC_ENGINE_SENDS[0] );
+
+    if ( KI_DRAW_ATTACHED )
+    {
+        Brn3DEffectControl::DrawSphere lSphere;
+        lSphere.mfHeightOffset = 1.0f;
+        lSphere.mfRadius = 1.0f;
+        lSphere.mfDurationVisible = 0.1f;
+        lSphere.mpDebugString = nullptr;
+        CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage( lSphere );
+        lMessage.Construct( 1, 3, static_cast<u16>( ( GetId() >> 11 ) & 0x1F ), 1,
+                            CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL );
+        GetLogicModule()->PostMessage( lMessage );
+    }
+
+    if ( KI_SPEW_TRAFFIC && ( GetId() & 0xF800 ) == 0 )
+    {
+        const s32 liDCa = mpTraffic3DControl->GetDMixIOPtr()
+            ? mpTraffic3DControl->GetDMixIOPtr()->GetDMixInput( 14 ) : 0;
+        const s32 liDCr = mpTraffic3DControl->GetDMixIOPtr()
+            ? mpTraffic3DControl->GetDMixIOPtr()->GetDMixInput( 13 ) : 0;
+        BrnSound::Debug::DebugComponent::mLogCombined
+            << "Idx[ " << static_cast<s32>( mpTrafficControl->GetTrafficEntity()->mu16EntityIndex ) << "]\t"
+            << "Azi[ " << lfAzimuth << "]\tVel[ " << lfVelocity << "]\tSrf[ " << lfSurfaceType << "]\t"
+            << "Car[ " << lfCarType << "]\tPit[ " << lfPitch << "]\t"
+            << "VRn[ " << lfRoadNoiseVolume << "]\tVEn[ " << lfEngineVolume << "]\t"
+            << "DCr[ " << liDCr << "]\tDCa[ " << liDCa << "]\n";
+    }
 }
 
 bool TrafficEngine::Detach()

@@ -18,6 +18,13 @@ namespace BrnGameState { class ModeManager; }
 
 namespace BrnGameState
 {
+    // ARTIST globals at 0x82CDB7BC..0x82CDB7C8. The debug menu and SurvivorMode::Start
+    // share these same backing values; ARTIST's image defaults are 2, 4, 5.0f, and 5.0f.
+    extern s32 giMarkedManMinOpponentCount;
+    extern s32 giMarkedManMaxOpponentCount;
+    extern f32 gfMarkedManMinRampTime;
+    extern f32 gfMarkedManMaxRampTime;
+
     class ModeManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:

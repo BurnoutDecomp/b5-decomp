@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 // =============================================================================
@@ -15,8 +17,8 @@
 // AEMS_alarm_volume, AEMS_beep_on_off, AEMS_mode) and SendIndexes::AEMS_class_horns
 // (Send01, ReverbSend).
 //
-// Not carried from ProcessUpdate: the KB_HORN_DRAW_CAR_SIZES / KB_HORN_DRAW_CAR_HOOTING
-// DebugRender::DrawText labels, gated on developer switches that are zero in the image.
+// ARTIST 0x826F07AC..0x826F08C0: the two Horn-page switches enqueue the traffic size
+// and alarm-kind labels in the buffered world-space DebugRender queue.
 // =============================================================================
 
 namespace BrnSound
@@ -25,6 +27,10 @@ namespace Logic
 {
 namespace Traffic
 {
+
+// ARTIST OnActivate: byte_82FFB848 / byte_82FFB849. The UI stores these exact bytes.
+bool KB_HORN_DRAW_CAR_SIZES = false;
+bool KB_HORN_DRAW_CAR_HOOTING = false;
 
 namespace
 {
@@ -180,6 +186,44 @@ void TrafficHorn::ProcessUpdate()
     mHornVoice.SetParameter( 5, lfBeepOnOff,   &KAU_TRAFFIC_HORN_PARAMETERS[5] );
     mHornVoice.SetGain( 1, lfReverbSend, &KAU_TRAFFIC_HORN_SENDS[1] );
     mHornVoice.SetGain( 0, 1.0f,         &KAU_TRAFFIC_HORN_SENDS[0] );
+
+    // ARTIST 0x826F07AC: Draw Sizes reads byte_82FFB848, then uses the traffic-size
+    // string table Small/Medium/Large/Unknown at the entity position (scale 25, color
+    // 0xFFFFA000). The adjacent Hooting flag is read separately at 0x826F0828; only a
+    // playing voice draws that alarm-kind label, three units along the entity's Up axis.
+    const CgsDev::RGBA lDebugColour = 0xFFFFA000u; // ARTIST literal at 0x82F2E8CC
+    if ( KB_HORN_DRAW_CAR_SIZES )
+    {
+        static const char* const KAC_TRAFFIC_SIZE_NAMES[] =
+        {
+            "Small", "Medium", "Large", "Unknown"
+        };
+        const s32 liSize = static_cast<s32>( meTrafficSize );
+        const char* lpcSize = KAC_TRAFFIC_SIZE_NAMES[
+            liSize < 3 ? liSize : 3];
+        CgsDev::DebugInterface lDebugInterface;
+        lDebugInterface.GetRender().DrawText(
+            lpEntity->mLocalTransform.Pos(), lpcSize, 25.0f, lDebugColour );
+    }
+
+    if ( KB_HORN_DRAW_CAR_HOOTING &&
+         mHornVoice.GetUpdateStage() == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING )
+    {
+        const char* lpcAlarmKind = "Horn";
+        if ( lpEntity->muAlarmType == BrnTraffic::BrnTrafficIO::TrafficSoundEntity::E_ALARM_CLASSIC )
+            lpcAlarmKind = "Classic";
+        else if ( lpEntity->muAlarmType == BrnTraffic::BrnTrafficIO::TrafficSoundEntity::E_ALARM_HORN )
+            lpcAlarmKind = "Beeper";
+
+        rw::math::vpu::Vector3 lPosition = lpEntity->mLocalTransform.Pos();
+        const rw::math::vpu::Vector3& lrUp = lpEntity->mLocalTransform.Up();
+        lPosition.x += lrUp.x * 3.0f;
+        lPosition.y += lrUp.y * 3.0f;
+        lPosition.z += lrUp.z * 3.0f;
+        CgsDev::DebugInterface lDebugInterface;
+        lDebugInterface.GetRender().DrawText(
+            lPosition, lpcAlarmKind, 25.0f, lDebugColour );
+    }
 }
 
 // The EffectBase attach, then the horn voice created (not played) on the manager's horn

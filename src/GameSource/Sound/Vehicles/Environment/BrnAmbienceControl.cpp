@@ -6,6 +6,9 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
 #include "SharedClasses/Trigger/BrnGenericRegion.h"
@@ -20,6 +23,8 @@ namespace Vehicles
 {
 namespace Environment
 {
+
+bool KB_AMBIENCE_DRAW_REGION = false; // ARTIST byte_82FFB8BF
 
 // The streamed 2D ambience map.
 static const char* const KPC_AMBIENCE_MAP_FILE  = "sound\\regions\\ambiences.dat";
@@ -72,8 +77,8 @@ void AmbienceControl::AttachController(CgsSound::Logic::EffectBase* apController
 // current microphone matrix directly; the accessor adds only a validity assert). Until the update timer
 // passes KF_AMBIENCE_UPDATE_TIME the region is re-pushed unchanged; then the timer
 // restarts and a special ambience (tunnel / traffic) wins over the map byte. An
-// off-map sample leaves the region alone. The debug region overlay behind
-// KB_AMBIENCE_DRAW_REGION (off in the shipped image) is not reproduced.
+// off-map sample leaves the region alone. byte_82FFB8BF queues the original 2D map
+// coordinate and traffic-count overlay after the region state update.
 // ---------------------------------------------------------------------------
 void AmbienceControl::UpdateParams(f32 afTimeStep)
 {
@@ -108,6 +113,47 @@ void AmbienceControl::UpdateParams(f32 afTimeStep)
                                        << static_cast<s32>(mRegion.GetCurrent())
                                        << " [FLAG PC witness]\n";
     }
+
+    if (KB_AMBIENCE_DRAW_REGION)
+        DrawDebug(lrListener);
+}
+
+// ARTIST 0x8269B318 / DecFIGS BrnAmbienceEffect.h:190. The map point is converted
+// to the 256-cell grid without clamping, then the current region and traffic count
+// are queued through the 2D DebugRender path.
+void AmbienceControl::DrawDebug(Vector3 lrPosition) const
+{
+    BrnSound::Module::SoundLogicModule* lpLogicModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    const BrnSound::Module::Io::RootInputBuffer* lpInputBuffer =
+        lpLogicModule->GetBrnInputStructure();
+    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+    if (!lpInputBuffer)
+        return;
+
+    const BrnSound::Module::Io::RootInputBuffer::TrafficSoundOutputInterface& lrTraffic =
+        lpInputBuffer->GetTrafficOutputInterface();
+
+    CgsDev::DebugInterface lDebugInterface;
+    CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
+    const CgsDev::RGBA KU_DEBUG_COLOUR = 0xFF00FFA0u; // ARTIST dword_82F2F794
+    char lacText[16];
+
+    CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%d",
+                     static_cast<s32>(mRegion.GetCurrent()));
+    lrRender.Draw2DText(lacText, 900.0f, 50.0f, 40.0f, KU_DEBUG_COLOUR);
+
+    const f32 lfMapX = ((lrPosition.x - KV_AMBIENCE_MAP_WORLD_ORIGIN.x) /
+                        KV_AMBIENCE_MAP_WORLD_SIZE.x) * 256.0f;
+    const f32 lfMapY = ((lrPosition.z - KV_AMBIENCE_MAP_WORLD_ORIGIN.y) /
+                        KV_AMBIENCE_MAP_WORLD_SIZE.y) * 256.0f;
+    CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%.0f, %.0f",
+                     lfMapX, lfMapY);
+    lrRender.Draw2DText(lacText, 850.0f, 100.0f, 25.0f, KU_DEBUG_COLOUR);
+
+    CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "n %d",
+                     static_cast<s32>(lrTraffic.GetTrafficEntityCount()));
+    lrRender.Draw2DText(lacText, 850.0f, 125.0f, 40.0f, KU_DEBUG_COLOUR);
 }
 
 // ---------------------------------------------------------------------------

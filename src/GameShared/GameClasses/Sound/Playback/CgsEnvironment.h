@@ -137,6 +137,17 @@ namespace Playback
         // there); the host keeps the member private and exposes it by name.
         CpuMonitors& GetCpuMonitors() { return mCpuMonitors; }
 
+        // CgsEnvironment.h:749/:764/:771. ARTIST Statistics::Update
+        // 0x826A16CC/1710/17E0 reads these original counters by name.
+        u32 GetNumberOfActiveVoices() { return muActiveVoices; }
+        u32 GetNumberOfActiveContent() { return muActiveContent; }
+        f32 GetVoiceTypeTickTotal(Voice::EProfileVoiceType leProfileVoiceType)
+        {
+            CGS_ASSERT(leProfileVoiceType < Voice::E_VOICETYPE_COUNT,
+                       "leProfileVoiceType < CgsSound::Playback::Voice::E_VOICETYPE_COUNT");
+            return mafVoiceTypeTickTotals[leProfileVoiceType];
+        }
+
         // @0x82689BD0. The X360 queries its render driver's speaker config. The
         // PC engine output is deliberately opened as stereo, so the native
         // render-driver equivalent is the stereo mode.

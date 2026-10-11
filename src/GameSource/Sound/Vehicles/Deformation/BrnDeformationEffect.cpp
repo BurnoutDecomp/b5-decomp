@@ -10,6 +10,7 @@
 // ============================================================================
 
 #include "GameSource/Sound/Vehicles/Deformation/BrnDeformationEffect.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h" // complete PhysicsControl for the AttachController downcast (BY NAME)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
@@ -25,6 +26,8 @@ namespace Vehicles
 {
 namespace Deformation
 {
+// DecFIGS BrnDeformationEffect.cpp:31 / ARTIST82FFB8AC.
+s32 KI_DEBUG_SPEW_DEFORM_INFO = 0;
 
 // ---------------------------------------------------------------------------
 // DeformationEffect::DeformationEffect()  @ 0x826CF6C0
@@ -289,6 +292,18 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
         CgsSound::Playback::Name::MakeHash("Send01"));
     static const u32 luReverbSend = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("ReverbSend"));
+
+    // ARTIST826B5894..5B88: original live-simulation debug output. Keep its
+    // historical label spelling and send the same current/previous samples.
+    if (KI_DEBUG_SPEW_DEFORM_INFO)
+        BrnSound::Debug::DebugComponent::mLogCombined << "[Deform] [" << mfRunningTime
+            << "]DeformAmmount: " << mDeformAmount.GetCurrent() << "\tDeformDelta: "
+            << (mDeformAmount.GetCurrent() - mDeformAmount.GetPrevious())
+            << "\tDeformDeltaAverage: " << mDeformDeltaAverage.GetAverage()
+            << "\tIntensityLagged: " << mDeformIntensityLagged.GetCurrent()
+            << "\tAEMS-Intensity: " << lfTarget << "\tVolume: " << lfVolume
+            << "\tPitch: " << lfPitch << "\tTime: " << mfTimeDeforming
+            << "\tTime-Step: " << afTimeStep << "\t\n";
 
     // FLAG PC-platform witness: observe live controls without changing them.
     if (CgsSound::PcmTrace::File())

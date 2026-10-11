@@ -66,6 +66,49 @@ namespace Logic
 {
 namespace Collision
 {
+// Original Sound/Collision debug storage. Some menu bool variants point at
+// word-sized flags; keep the engine's actual s32/u32 declaration widths.
+extern volatile s32 KI_SPEW_COLLISION_INFO;
+extern volatile s32 KI_SPEW_COLLISION_BIN_LOGIC;
+extern s32 KI_DEBUG_DUCKING;
+extern s32 KI_DEBUG_RENDER_COLLISIONS;
+extern u32 KI_SPEW_SCRAPE_INFO;
+extern u32 KI_DRAW_SCRAPES;
+extern s32 KI_DEBUG_DETACHING;
+extern s32 KI_DEBUG_SAMPLE_ID_TO_PLAY_LARGE;
+extern s32 KI_DEBUG_SAMPLE_ID_TO_PLAY_SMALL;
+extern s32 KI_DEBUG_PIPELINE_TOPLAY;
+extern s32 KI_DEBUG_FILTER_MATERIAL;
+extern s32 KI_DEBUG_FILTER_ACTION;
+extern s32 KI_DEBUG_PRINT_COLLISION_BINS;
+extern s32 KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE;
+extern s32 KI_DEBUG_SPAWN_LOTS_OF_SAMPLES;
+extern s32 KI_DEBUG_SPEW_ORIENTATION;
+extern s32 KI_DEBUG_DRAW_ORIENATION_BOX;
+extern s32 KI_DEBUG_SPEW_PROP_LOOKUP_FAULTS;
+extern s32 KI_DEBUG_SPEW_ALL_INPUT_COLLISIONS;
+extern s32 KI_DEBUG_CULL_AGAINST_PLAYING;
+extern s32 KI_DEBUG_FILTER_NO_COLLISION;
+extern s32 KI_DEBUG_FILTER_NO_PROPS;
+extern s32 KI_DEBUG_FILTER_NO_BODY_PARTS;
+extern s32 KI_DEBUG_FILTER_NO_GLASS;
+extern f32 KF_HINGING_VELOCITY_MIN_TOLERANCE;
+extern f32 KF_HINGING_VELOCITY_DELTA_TOLERANCE;
+extern f32 KF_FASTEST_COLLISION;
+extern f32 KF_BIGGEST_THING_MASS;
+
+// Stripped original name tables, at 0x82F2CF0C/CF6C/CF84/D020/D030.
+extern const char* const KAPC_ORIENTATION_NAMES[5];
+extern const char* const KAPC_ACTION_NAMES[7];
+extern const char* const KAPC_IMPACT_TIME_NAMES[2];
+extern const char* const KAPC_FATALITY_NAMES[3];
+extern const char* const KAPC_MATERIAL_NAMES[25];
+inline u32 DebugFlagIndex(u64 lxFlags)
+{
+    u32 luIndex = static_cast<u32>(-1);
+    while (lxFlags) { ++luIndex; lxFlags >>= 1; }
+    return luIndex; // 63-cntlzd(flags), including -1 for zero
+}
 
 enum ECollisionSpliceTags : int
 {
@@ -256,6 +299,10 @@ public:
     // DWARF cpp:3210 (public). The prop InputCollision maps its prop type through it
     // (sub_826E8B20 0x826E8D0C).
     bool MapPropTypeToMaterial(u16 luPropType, u64& lruMaterial) const;
+
+    const char* Debug_GetMaterialName(u64 lxMaterial, InputCollision::EPipeline lePipeline) const;
+    void Debug_GetMaterialBitfieldNames(u64 lxMaterial, InputCollision::EPipeline lePipeline,
+                                       char* lpBuffer, u32 luBufferLength) const;
 
     // PlayCollision @ 0x82704028. Non-virtual; called by UpdateParams.
     int PlayCollision( OutputCollision* lpCollision );

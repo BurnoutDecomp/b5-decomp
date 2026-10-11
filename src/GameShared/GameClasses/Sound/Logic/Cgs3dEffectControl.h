@@ -90,6 +90,14 @@ struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
     // PassbyEffect::UpdatePosition @0x826BF7F0 and GetRelativeVelocityMag @0x826BF84C.
     CgsSound::Utils::DataPoint<rw::math::vpu::Vector3> GetEmitterPosition() const { return mEmitterPosition; }
 
+    // Sound DebugComponent::Render3dControl reads these original per-control draw settings
+    // (+0xA0/+0xA4/+0xA8 on X360) through this typed view; no consumer needs a layout cast.
+    const DebugRendererMessage& GetDebugRenderingMessage() const { return mDebugRenderingMessageData; }
+
+    // Static callback installed by BrnSound::Debug::DebugComponent::OnActivate (ARTIST
+    // dword_82FFBC10; DecFIGS spells this Cgs3dEffectControl::spDebugRenderingFunction).
+    static void (*spDebugRenderingFunction)(const Cgs3dEffectControl*);
+
 protected:
     // Cgs3dEffectControl.h:221 @ 0x82682570. Push a raw value into one of the
     // dynamic-mixer input slots (via mpDynamicMixIo->GetDMixInputPtr()).

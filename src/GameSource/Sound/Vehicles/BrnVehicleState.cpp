@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -11,6 +12,8 @@
 
 #include <algorithm>
 #include <cstring>
+
+s32 KI_PRINT_CAR_LOADING_STATES = 0; // X360 dword_82FFB830; menu bool tag aliases this word
 
 // =============================================================================
 // BrnSound::Vehicles::VehicleState out-of-line bodies.
@@ -176,6 +179,10 @@ void VehicleState::UpdateParams(f32 af32DeltaTime)
         && VehicleStateManager::GetLoadedAssetId(mAttachInfo.muVehicleIndex)
             != mAttachInfo.mAttachToken)
     {
+        if (KI_PRINT_CAR_LOADING_STATES)
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "VehicleState::UpdateParams Detach because  mDesiredAssetIDs[mAttachInfo.miVehicleIndex]  != mAttachInfo.mAssetID . Car idx"
+                << static_cast<s32>(mAttachInfo.muVehicleIndex) << "\n";
         if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
             *CgsDev::Log::gpDebugPrint << "[car-audio] sound VehicleState DETACH car=" << mAttachInfo.muVehicleIndex
                                        << " token=" << mAttachInfo.mAttachToken

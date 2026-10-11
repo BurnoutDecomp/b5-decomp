@@ -40,12 +40,9 @@
 // 0x822BF37C) hands back the car's LIVE transform. So the pump recovers the car with the AI
 // placement still parked; what the AI would add is a BETTER pose, not the only pose.
 //
-// ⛔ NOT LANDED HERE, and named so the next wave does not re-derive it:
-//   * RCEM::CheckForResetOnTrackConditions @0x822CE9E0 -- the OTHER producer of
-//     mbToBeResetOnTrack (the "you have been stuck/off-road too long" watchdog). Absent; it
-//     reaches the module's un-homed timer interior. Its absence costs nothing on the crash path.
-//   * the console's `if (!(lUpdateSet & 1))` guard around the PostScene call site -- see
-//     PostSceneUpdate's own slice banner.
+// CheckForResetOnTrackConditions @0x822CE9E0 is also recovered below as the other
+// mbToBeResetOnTrack producer. The console's `if (!(lUpdateSet & 1))` guard around the PostScene
+// call site remains documented in PostSceneUpdate's own slice banner.
 // =================================================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
@@ -61,6 +58,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // gbReadSurfaceProperties, KAB_SURFACE_IS_WATER, KI_MAX_NUM_SURFACES
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // AboveGroundTestResult
+#include "GameSource/Physics/PhysicsUtilities/ExternallySimulatedBody.h" // shared Sound hold-spinning debug cell
 #include "GameSource/AttribSys/Generated/classes/surface.h"                        // Attrib::Gen::surface (the surface-list tripwire)
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"              // Attrib::FindCollectionWithDefault
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"    // Attrib::StringToKey (the surface-list collection key)
@@ -627,12 +625,6 @@ namespace
     const f32 KF_MAX_TIME_IN_WATER          = 1.0f;                        // flt_82001C98
     const f32 KF_ZERO                       = 0.0f;                        // flt_82001CC0
 
-    // dword_82FB7518 -- a DEBUG TOGGLE with no writer anywhere in this tree and no project home;
-    // ExternallySimulatedBody.cpp records the same global for the same reason. It is 0 in a ship
-    // build. The branch it gates is transcribed rather than folded away, so a future TU that
-    // homes the toggle grows this body additively instead of retyping it.
-    const s32 gsiDebugSuppressInAirReset = 0;   // dword_82FB7518
-
     inline f32 AbsF( f32 lfValue ) { return ( lfValue < 0.0f ) ? -lfValue : lfValue; }
 }
 
@@ -805,7 +797,8 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
         // mCrashPlayManager (+0x180F0) . mbIsInShowtime (+0x14D).
         if( lpState->mfTimeInAir > KF_MAX_TIME_IN_AIR && !mPlayerVehicleControls.mbReset )
         {
-            lbNeedsReset = ( !mCrashPlayManager.IsInShowtime() && gsiDebugSuppressInAirReset == 0 );
+            lbNeedsReset = ( !mCrashPlayManager.IsInShowtime()
+                          && BrnPhysics::KI_HOLD_CAR_SPINING_IN_AIR == 0 );
         }
 
         if( lbNeedsReset )

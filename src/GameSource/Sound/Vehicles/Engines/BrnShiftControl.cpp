@@ -6,14 +6,18 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 
 #include <algorithm>
 #include <cstdio>
+
+extern s32 KI_DEBUG_PRINT_ENGINE_INFO; // X360 dword_82FFB854
 
 namespace BrnSound
 {
 namespace Vehicles
 {
+extern s32 giClosestAIStateInstance; // X360 dword_82F2CBD8
 namespace Engines
 {
 
@@ -354,6 +358,33 @@ void ShiftControl::UpdateParams(f32 afTimeStep)
 {
     if (!mpPhysicsControl)
         return;
+
+    // ARTIST @0x826F1040 prints the previous gear-shift stage before clearing it.
+    // Player Engine Info is the first arm; the closest AI manager instance is the
+    // independent second arm.
+    if ((KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1) ||
+        (GetStateId() == 2 && GetInstanceId() == giClosestAIStateInstance))
+    {
+        static const char* const kpcShiftStageText[] =
+        {
+            "E_SHFT_UP_DISENGAGE\t\t\t\t",
+            "E_SHFT_UP_ENGAGING\t\t\t\t",
+            "E_SHFT_UP_LFO\t\t\t\t\t",
+            "E_SHFT_DOWN_DISENGAGE\t\t\t",
+            "E_SHFT_DOWN_ENGAGING_RISE\t\t",
+            "E_SHFT_DOWN_ENGAGING_FALL\t\t",
+            "E_SHFT_DOWN_ENGAGING_REATTACH\t",
+        };
+        const s32 liStage = static_cast<s32>(meShiftState);
+        if (liStage >= E_SHFT_UP_DISENGAGE &&
+            liStage <= E_SHFT_DOWN_ENGAGING_REATTACH)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "<------------------ " << kpcShiftStageText[liStage - 1]
+                << "-------------------->\n";
+        }
+    }
+
     meShiftStageChanged = E_SHFT_NONE;
     mbNeed_ShiftGearSnd = mbNeed_DisengageSnd = mbNeed_EngageSnd = false;
 

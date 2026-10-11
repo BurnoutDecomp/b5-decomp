@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Global/BrnPresentationEffect.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -32,6 +33,7 @@ namespace BrnSound
 {
 namespace Logic
 {
+bool KB_SPEW_PRESENTATION_MESSAGES = false; // ARTIST82FFB8D3, DecFIGS :23
 
 // ---------------------------------------------------------------------------
 // PresentationEffect::PresentationEffect()  @ 0x826E7628  (MINIMAL -- see FLAGs)
@@ -267,6 +269,22 @@ void PresentationEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>* lpMessage =
         static_cast<const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>*>(apMessage);
     const BrnGui::GuiAudioTriggerEvent& lrEvent = lpMessage->mData;
+    if (KB_SPEW_PRESENTATION_MESSAGES)
+    {
+        // ARTIST pointer table82F2CFC0:27 action labels, indexed as in the original.
+        static const char* const laActionNames[27] = {
+            "OnEnter", "OnExit", "OnFocus", "OnLoseFocus", "OnAccept", "OnCancel",
+            "OnTick", "OnChange", "OnUp", "OnDown", "OnLeft", "OnLeftSweep",
+            "OnRight", "OnRightSweep", "Pitch", "Azimuth", "Cutoff", "VolumeMenu",
+            "VolumeMenu2", "VolumeMenu3", "VolumeInGame", "VolumeInGame2",
+            "VolumeInGame3", "VolumeStream", "Off", "On", "SwitchedOn"
+        };
+        const char* lpcAction = laActionNames[lrEvent.meAction];
+        BrnSound::Debug::DebugComponent::mLogCombined << "[" << mfRunningTime << "] "
+            << "PresentationEffect : Received audio trigger: Component " << lrEvent.macComponent
+            << " Action " << (lpcAction ? lpcAction : "<NULLSTRING>")
+            << " Movie " << lrEvent.macMovie << " Label " << lrEvent.macLabel << "\n";
+    }
     const char* lpString = std::strcmp(lrEvent.macLabel, "uninitialised") == 0
         ? lrEvent.macComponent : lrEvent.macLabel;
     const u64 luStringId = static_cast<u32>(CgsResource::ID::HashString(

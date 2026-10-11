@@ -28,6 +28,12 @@ namespace Vehicles
 {
 namespace Wheels
 {
+// Original menu storage (82FFB8BC,82F2CD88,82F2F720..72C). ARTIST's CRT
+// 82C62790 copies the four authored slope values into a distinct Slope object;
+// editing this parameter block must not silently rebuild that copied object.
+bool KB_DEBUG_SPEW_RAMP_LAUNCH = false;
+f32 gfFORCE_RAMP_LUNCH = -1.0f;
+CgsSound::Utils::SlopeParams K_RAMP_LAUNCH_PARAMS(30.0f, 180.0f, 500.0f, 150.0f);
 
 namespace
 {

@@ -5,8 +5,11 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+#include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +33,22 @@ namespace Vehicles
 {
 namespace Engines
 {
+
+// ARTIST menu backing cells shared with DebugComponent::OnActivate.
+s32 KI_DEBUG_PITCH_BELOW_IDLE_DECEL_GINSU = 0; // dword_82FFB884
+s32 KI_DEBUG_PRINT_RPM_OUTPUT = 0;             // dword_82FFB888
+s32 KI_DEBUG_PRINT_LOOP_OUTPUT = 0;            // dword_82FFB88C
+s32 KI_DEBUG_DUMP_LOOP_DATA = 0;               // dword_82FFB890
+bool KF_PANNING_ON = true;                      // byte_82F2CCD4
+f32 KF_PANNING_DISTANCE = 0.75f;               // flt_82F2CCD8
+f32 KF_PANNING_SIZE = 1.0f;                     // flt_82F2CCDC
+f32 KF_PANNING_TWIST = 0.0f;                   // flt_82FFB898
+f32 KF_PANNING_CENTRELEVEL = 1.0f;             // flt_82F2CCE0
+f32 KF_PANNING_MAINLEVEL = 1.0f;               // flt_82F2CCE4
+f32 KF_PANNING_LFELEVEL = 1.0f;                // flt_82F2CCE8
+s32 KI_DEBUG_SPEW_AI_ENGINE_INFO = -1;          // dword_82F2CCFC
+f32 KF_DEBUG_SHUFFLE_PITCH = 1.0f;              // flt_82F2CD00
+f32 KF_HARDCODE_RPM = 0.0f;                     // flt_82FFB8A0
 
 // X360 dword_830080A8 is initialized by sub_82C65270 from this literal.
 static const s32 guLoopModelSlotName = static_cast<s32>(
@@ -641,17 +660,17 @@ void DualGinsuEffect::UpdateParams(f32 /*afTimeStep*/)
     mfMinRpm = lrAttribs.MinRpm();
     mfDecelMinRpm = lrAttribs.DecelMinRpm();
 
-    mCarSubmix.SetParameter(miCarSubmixPanningDistanceIndex, 0.75f,
+    mCarSubmix.SetParameter(miCarSubmixPanningDistanceIndex, KF_PANNING_DISTANCE,
                             &guPanningDistanceName);
-    mCarSubmix.SetParameter(miCarSubmixPanningSizeIndex, 1.0f,
+    mCarSubmix.SetParameter(miCarSubmixPanningSizeIndex, KF_PANNING_SIZE,
                             &guPanningSizeName);
-    mCarSubmix.SetParameter(miCarSubmixPanningTwistIndex, 0.0f,
+    mCarSubmix.SetParameter(miCarSubmixPanningTwistIndex, KF_PANNING_TWIST,
                             &guPanningTwistName);
-    mCarSubmix.SetParameter(miCarSubmixPanningCentreLevelIndex, 1.0f,
+    mCarSubmix.SetParameter(miCarSubmixPanningCentreLevelIndex, KF_PANNING_CENTRELEVEL,
                             &guPanningCentreLevelName);
-    mCarSubmix.SetParameter(miCarSubmixPanningMainLevelIndex, 1.0f,
+    mCarSubmix.SetParameter(miCarSubmixPanningMainLevelIndex, KF_PANNING_MAINLEVEL,
                             &guPanningMainLevelName);
-    mCarSubmix.SetParameter(miCarSubmixPanningLfeLevelIndex, 1.0f,
+    mCarSubmix.SetParameter(miCarSubmixPanningLfeLevelIndex, KF_PANNING_LFELEVEL,
                             &guPanningLfeLevelName);
 }
 
@@ -662,8 +681,10 @@ void DualGinsuEffect::ProcessUpdate()
         return;
 
     const f32 lfCutoff = GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_FREQ);
-    const f32 lfPanningAngle =
+    f32 lfPanningAngle =
         GetRWACMixerOutputValue(0, Nicotine::DMixIO::DMX_AZIM);
+    if (!KF_PANNING_ON)
+        lfPanningAngle = 0.0f;
     const f32 lfSubmixGain =
         GetRWACMixerOutputValue(5, Nicotine::DMixIO::DMX_VOL);
 
@@ -687,6 +708,47 @@ void DualGinsuEffect::ProcessUpdate()
                        &guReverbSendName);
     mCarSubmix.SetParameter(miCarSubmixCutoffFreq, lfCutoff,
                             &guCutoffFreqName);
+
+    // ARTIST @0x826FC7C8: the engine index comes from EntityId bits 10..23.
+    // KI_DEBUG_PRINT_RPM_OUTPUT enables the detailed line for the player; otherwise
+    // KI_DEBUG_SPEW_AI_ENGINE_INFO selects the matching AI engine slot. The selected
+    // slot also posts the queued green DrawSphere control message.
+    const u32 luEntityId = mpPhysicsControl->GetRawPhysicsData()->mEntityId.muValue;
+    const s32 liEngineIndex = static_cast<s32>((luEntityId >> 10) & 0x3FFFu);
+    if (liEngineIndex == KI_DEBUG_SPEW_AI_ENGINE_INFO)
+    {
+        BrnSound::Logic::Brn3DEffectControl::DrawSphere lSphere;
+        lSphere.mfHeightOffset = 2.0f;
+        lSphere.mfRadius = 2.0f;
+        lSphere.mfDurationVisible = 1.0f;
+        lSphere.mpDebugString = nullptr;
+
+        CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>
+            lMessage(lSphere);
+        lMessage.Construct(1,
+            static_cast<u16>((GetId() >> 16) & 0xFF),
+            static_cast<u16>((GetId() >> 11) & 0x1F),
+            7, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+        GetLogicModule()->PostMessage(lMessage);
+    }
+
+    if ((KI_DEBUG_PRINT_RPM_OUTPUT != 0 && GetStateId() == 1) ||
+        liEngineIndex == KI_DEBUG_SPEW_AI_ENGINE_INFO)
+    {
+        CgsDev::Log::LogCombined& lrLog =
+            BrnSound::Debug::DebugComponent::mLogCombined;
+        lrLog << ((GetId() & 0x7F0) == 0 ? "[Eng " : "[Exh ")
+              << mfRunningTime << "]"
+              << " [HybGinsuRPM] " << mpHybridControl->GetGinsuRPM()
+              << " [CBGinsuRPMA] " << mfAccelGinsuRPM.GetCurrent()
+              << " [CBGinsuRPMD] " << mfDecelGinsuRPM.GetCurrent()
+              << " [LoopModelRPM]" << mfLoopModelRPM.GetCurrent()
+              << " [DeltaRPM]" << mpHybridControl->GetDeltaRPM()
+              << " [Accel Vol ] " << mpHybridControl->GetFinalEngineVolume().AccelGinsu
+              << " [Decel  Vol ] " << mpHybridControl->GetFinalEngineVolume().DecelGinsu
+              << " [Loop Vol ] " << mpHybridControl->GetFinalEngineVolume().Loop
+              << " [pch] " << mpEngineControl->GetAudioPitch() << "\n";
+    }
 
     UpdateAccelGinsu();
     UpdateDecelGinsu();
@@ -723,14 +785,31 @@ void DualGinsuEffect::UpdateLoopModelParams()
         return;
     const LoopModelData* lpLoopModel = lLoopModel.GetMemoryResource();
 
-    const f32 lfRpm = mpHybridControl->GetGinsuRPM();
+    if (KI_DEBUG_DUMP_LOOP_DATA != 0)
+    {
+        CgsDev::Log::LogCombined& lrLog =
+            BrnSound::Debug::DebugComponent::mLogCombined;
+        lrLog << "---------- ["
+              << ((GetId() & 0x7F0) == 0 ? "Eng]" : "Exh]")
+              << "----------\n";
+        lpLoopModel->DebugDumpContentsToTty();
+    }
+
+    const bool lbPrintLoopOutput = KI_DEBUG_PRINT_LOOP_OUTPUT != 0;
+    CgsDev::Log::LogCombined* lpLog = lbPrintLoopOutput
+        ? &BrnSound::Debug::DebugComponent::mLogCombined : nullptr;
+    if (lpLog != nullptr)
+        *lpLog << "[" << ((GetId() & 0x7F0) == 0 ? "Eng]" : "Exh]");
+
+    f32 lfRpm = mpHybridControl->GetGinsuRPM();
+    mfLoopModelRPM.Update(lfRpm); // ARTIST stores raw history before the local override.
+    if (KF_HARDCODE_RPM != 0.0f)
+        lfRpm = KF_HARDCODE_RPM;
     CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
     if (!mpEngineControl)
         return;
     const f32 lfAccelerator =
         mpEngineControl->GetAudioThrottle().GetCurrent();
-    mfLoopModelRPM.Update(lfRpm);
-
     const f32 lfPitchScale =
         GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
         mpEngineControl->GetAudioPitch();
@@ -772,7 +851,16 @@ void DualGinsuEffect::UpdateLoopModelParams()
         {
             DetachPartialFromVoice(maiPartialToVoice[liPartial]);
         }
+
+        if (lpLog != nullptr)
+        {
+            *lpLog << "(" << lrOutput.mafOutputs[LoopOutputs::E_PITCH]
+                   << "),(" << lrOutput.mafOutputs[LoopOutputs::E_GAIN]
+                   << ")\t";
+        }
     }
+    if (lpLog != nullptr)
+        *lpLog << "]\n";
 }
 
 void DualGinsuEffect::UpdateAccelGinsu()
@@ -781,6 +869,8 @@ void DualGinsuEffect::UpdateAccelGinsu()
         return;
 
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
+    if (KF_HARDCODE_RPM != 0.0f)
+        lfRpm = KF_HARDCODE_RPM;
     CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
     if (!mpEngineControl)
         return;
@@ -824,7 +914,8 @@ void DualGinsuEffect::UpdateAccelGinsu()
     mAccelGinsuVoice.SetGain(0, lfGain, &guSend01Name);
     mAccelGinsuVoice.SetParameter(0, lfRpm, &guGinsuFrequencyName);
     mAccelGinsuVoice.SetParameter(1, lfPitch, &guGinsuSetPitchName);
-    mAccelGinsuVoice.SetParameter(2, 1.0f, &guGinsuSetShuffleWidthName);
+    mAccelGinsuVoice.SetParameter(2, KF_DEBUG_SHUFFLE_PITCH,
+                                  &guGinsuSetShuffleWidthName);
 }
 
 void DualGinsuEffect::UpdateDecelGinsu()
@@ -833,6 +924,8 @@ void DualGinsuEffect::UpdateDecelGinsu()
         return;
 
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
+    if (KF_HARDCODE_RPM != 0.0f)
+        lfRpm = KF_HARDCODE_RPM;
     CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
     if (!mpEngineControl)
         return;
@@ -841,14 +934,21 @@ void DualGinsuEffect::UpdateDecelGinsu()
         mpEngineControl->GetAudioPitch();
     mfDecelGinsuRPM.Update(lfRpm);
 
-    const f32 lfGain =
+    f32 lfGain =
         GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL) *
         mpHybridControl->GetFinalEngineVolume().DecelGinsu;
+    if (KI_DEBUG_PITCH_BELOW_IDLE_DECEL_GINSU != 0 &&
+        lfRpm < mfDecelMinRpm)
+    {
+        lfGain = (lfGain / mfDecelMinRpm) * lfRpm;
+        lfRpm = 0.0f;
+    }
     mDecelGinsuVoice.SetParameter(3, 0.0f, &guGinsuPauseName);
     mDecelGinsuVoice.SetGain(0, lfGain, &guSend01Name);
     mDecelGinsuVoice.SetParameter(0, lfRpm, &guGinsuFrequencyName);
     mDecelGinsuVoice.SetParameter(1, lfPitch, &guGinsuSetPitchName);
-    mDecelGinsuVoice.SetParameter(2, 1.0f, &guGinsuSetShuffleWidthName);
+    mDecelGinsuVoice.SetParameter(2, KF_DEBUG_SHUFFLE_PITCH,
+                                  &guGinsuSetShuffleWidthName);
 }
 
 bool DualGinsuEffect::Detach()

@@ -129,7 +129,7 @@ namespace TestBed
         // CgsTestBedAllocator.h:406
         void ResetThreadId();
         // CgsTestBedAllocator.h:413
-        size_t GetBytesAllocated() const;
+        size_t GetBytesAllocated() const { return muBytesAllocated; }
 
     private:
         // CgsTestBedAllocator.h:422 / :562 - the rw::IResourceAllocator overrides (carve/return a block).

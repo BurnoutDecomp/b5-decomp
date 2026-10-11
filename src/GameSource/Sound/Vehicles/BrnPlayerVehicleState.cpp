@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/BrnPlayerVehicleState.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -130,6 +131,10 @@ void PlayerVehicleState::UpdateParams(f32 af32DeltaTime)
     if (mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
         && mauUpdateState[1] != mauUpdateState[0])
     {
+        if (KI_PRINT_CAR_LOADING_STATES)
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "PlayerVehicleState::UpdateParams OnAssetLoaded because  HasChangedTo(E_UPDATE_ATTACHED . Car idx"
+                << static_cast<s32>(mAttachInfo.muVehicleIndex) << "\n";
         VehicleStateManager* lpManager =
             static_cast<VehicleStateManager*>(GetStateManager());
         lpManager->OnAssetLoaded(mAttachInfo.mAttachToken,
@@ -140,6 +145,10 @@ void PlayerVehicleState::UpdateParams(f32 af32DeltaTime)
         && mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
         && !VehicleStateManager::IsDesiredEntryPlayer(mAttachInfo.muVehicleIndex))
     {
+        if (KI_PRINT_CAR_LOADING_STATES)
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "PlayerVehicleState::UpdateParams Detach because  !mDesiredIsPlayer.IsBitSet . Car idx"
+                << static_cast<s32>(mAttachInfo.muVehicleIndex) << "\n";
         Detach();
     }
 }
@@ -149,6 +158,10 @@ bool PlayerVehicleState::Detach()
     const AttachInfo lInfo = mAttachInfo;
     if (!VehicleState::Detach())
         return false;
+    if (KI_PRINT_CAR_LOADING_STATES)
+        BrnSound::Debug::DebugComponent::mLogCombined
+            << "PlayerVehicleState::Detach OnAssetUnloaded because. Car idx"
+            << static_cast<s32>(lInfo.muVehicleIndex) << "\n";
     VehicleStateManager* lpManager =
         static_cast<VehicleStateManager*>(GetStateManager());
     lpManager->OnAssetUnloaded(lInfo.mAttachToken, lInfo.muVehicleIndex);

@@ -1,5 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnSurvivor.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameSource/GameState/ModeManager/Debug/BrnModeManagerDebugComponent.h"
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -12,8 +13,8 @@ namespace BrnGameState
 {
 const f32 SurvivorMode::KF_OUTRO_TIME_SECONDS = 0.0f;
 
-// ARTIST 0x823322B8. The mutable tuning constants at 0x82CDB7BC..C8 are
-// 2, 4, 5.0f, 5.0f respectively in the original image.
+// ARTIST 0x823322B8. The live tuning globals at 0x82CDB7BC..C8 have image defaults
+// 2, 4, 5.0f, 5.0f and are also registered by ModeManagerDebugComponent::OnActivate.
 void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
                          GameModeParams* lpGameModeParams, ScoringSystem*)
 {
@@ -22,9 +23,13 @@ void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
     CGS_ASSERT(lpRank, "lpProgressionRankData");
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
 
-    miMaxOpponentCount = static_cast<s32>(std::fma(3.0f, lpStartGameModeParams->GetProgressionRankAsRatio(), 2.0f));
-    if (miMaxOpponentCount >= 4)
-        miMaxOpponentCount = 4;
+    const f32 lfMinOpponentCount = static_cast<f32>(giMarkedManMinOpponentCount);
+    const f32 lfMaxOpponentCount = static_cast<f32>(giMarkedManMaxOpponentCount);
+    const f32 lfOpponentCountSpan = (lfMaxOpponentCount + 1.0f) - lfMinOpponentCount;
+    miMaxOpponentCount = static_cast<s32>(std::fma(lfOpponentCountSpan,
+        lpStartGameModeParams->GetProgressionRankAsRatio(), lfMinOpponentCount));
+    if (miMaxOpponentCount >= giMarkedManMaxOpponentCount)
+        miMaxOpponentCount = giMarkedManMaxOpponentCount;
     lpGameModeParams->muJunctionID = lpStartGameModeParams->GetJunctionID();
     lpGameModeParams->miNumNetworkPlayers = 0;
     lpGameModeParams->muEventJunctionID = lpStartGameModeParams->GetEventJunctionId();
@@ -69,14 +74,16 @@ void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
     mfTimeInReverse = 0.0f;
     miBroadcastOpponentCount = 0;
     mbInShortcut = false;
-    // VMX vmaddfp encodes A*C+B: (max-min)*rank + min.
-    mfMaxRampTimer = std::fma(5.0f - 5.0f, lpGameModeParams->mfProgressionRankAsRatio, 5.0f);
+    // ARTIST 0x82332668..70: vmaddfp encodes A*C+B, using (min-max)*rank + max.
+    mfMaxRampTimer = std::fma(gfMarkedManMinRampTime - gfMarkedManMaxRampTime,
+                              lpGameModeParams->mfProgressionRankAsRatio,
+                              gfMarkedManMaxRampTime);
 
     // ---- [DIAG] NOT IN THE X360 BINARY -- issue #24, BRN_MM_DIAG=1 ---------------------------
     // The rival COUNT is arithmetic on the profile's rank ratio (ARTIST 0x823323A0:
     // (dword_82CDB7C0 + 1 - dword_82CDB7BC) * ratio + dword_82CDB7BC, capped at dword_82CDB7C0;
-    // the image holds 2 and 4 there, so this is fma(3, ratio, 2) capped at 4). Printing the ratio
-    // AND the result is the only way to say whether "barely any enemies" is the console's own
+    // the image holds 2 and 4 there, so the default is fma(3, ratio, 2) capped at 4). Printing the
+    // ratio AND the result is the only way to say whether "barely any enemies" is the console's own
     // number or a lost rival. DELETE-WHEN issue #24 is closed.
     if (std::getenv("BRN_MM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
     {

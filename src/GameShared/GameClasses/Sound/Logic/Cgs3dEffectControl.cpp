@@ -33,6 +33,8 @@ namespace CgsSound
 namespace Logic
 {
 
+void (*Cgs3dEffectControl::spDebugRenderingFunction)(const Cgs3dEffectControl*) = nullptr;
+
 Cgs3dEffectControl::Cgs3dEffectControl()
     : EffectControl()
     , mfDistanceToMic()
@@ -119,6 +121,11 @@ void Cgs3dEffectControl::UpdateParams(f32 afDeltaTime)
         SetMixerInputValueUnbound(15, GetDMixIOPtr()->GetDMixInput(15) | 1);
     Generate3DParams(0);
     UpdateDoppler(afDeltaTime, 0);
+
+    // ARTIST 0x826FA9D4..0x826FA9FC: draw only after the emitter/Doppler update, and only
+    // when the original DebugRendererMessage enable byte (+0xA8) and callback slot are set.
+    if (mDebugRenderingMessageData.mbEnable && Cgs3dEffectControl::spDebugRenderingFunction)
+        Cgs3dEffectControl::spDebugRenderingFunction(this);
 }
 
 s32 Cgs3dEffectControl::GetPanningAngle(

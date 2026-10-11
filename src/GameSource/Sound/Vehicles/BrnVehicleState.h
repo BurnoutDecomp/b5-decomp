@@ -2,6 +2,9 @@
 #define BRN_SOUND_VEHICLES_VEHICLE_STATE_H
 
 #include "types.hpp"
+
+// ARTIST82FFB830: the Sound menu and both world/sound loading chains share this cell.
+extern s32 KI_PRINT_CAR_LOADING_STATES;
 #include "GameSource/Sound/Module/LogicModule/BrnState.h"                 // BrnState (the DWARF base)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"                   // CgsSound::Utils::DataPoint<bool>

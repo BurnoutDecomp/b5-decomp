@@ -53,6 +53,13 @@
 
 namespace BrnPhysics
 {
+    // Sound debug controls shared with ReadFromRenderware and the reset-on-track watchdog.
+    extern s32 KI_HOLD_CAR_IN_PLACE;              // dword_82FB7514
+    extern s32 KI_HOLD_CAR_SPINING_IN_AIR;        // dword_82FB7518
+    extern f32 KF_SPINNING_SPEED_X;               // flt_82FB751C
+    extern f32 KF_SPINNING_SPEED_Y;               // flt_82FB7520
+    extern f32 KF_SPINNING_SPEED_Z;               // flt_82FB7524
+
     // The base body. Reconstructed only as far as the body funcs in this group need; the full
     // set of Construct/Release/RenderWare-IO/accessor methods is a separate future TU and is
     // declared-only here (no bodies) so this header can serve as the shared owning home.

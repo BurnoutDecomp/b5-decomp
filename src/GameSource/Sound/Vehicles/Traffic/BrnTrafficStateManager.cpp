@@ -1,5 +1,6 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
@@ -23,9 +24,7 @@
 // tree's SoundLogicModule holds no SoundSerialiser and nothing drives its mode, so only
 // the live traffic interface is read -- the console's own path whenever no replay runs.
 //
-// Not carried: the KI_SPEW_TRAFFIC_MANAGEMENT developer TTY lines ("[Traffic]
-// Successfully Culled." / "Failed to Cull for item @ distance of"), gated on a switch
-// that is zero in the image and only registered with the debug-variable registry.
+// Traffic cull success/failure retains the original Sound debug log.
 // =============================================================================
 
 namespace BrnSound
@@ -34,6 +33,8 @@ namespace Logic
 {
 namespace Traffic
 {
+
+s32 KI_SPEW_TRAFFIC_MANAGEMENT = 0; // ARTIST dword_82FFB84C
 
 namespace
 {
@@ -260,7 +261,15 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
             continue;
 
         if ( !CullIfFurtherThan( laSortedEntities[luEntry].mfDistance, lListenerPosition ) )
+        {
+            if ( KI_SPEW_TRAFFIC_MANAGEMENT )
+            {
+                BrnSound::Debug::DebugComponent::mLogCombined
+                    << "[Traffic] Failed to Cull for item @ distance of "
+                    << std::sqrt( laSortedEntities[luEntry].mfDistance.x ) << "\n";
+            }
             break;
+        }
 
         // [FLAG PC witness] BRN_TRAFFICSND_DIAG
         if ( TrafficSoundDiagTake( guCullWitnesses, 16 ) )
@@ -270,7 +279,10 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
                 << " d2=" << laSortedEntities[luEntry].mfDistance.x << "\n";
         }
 
-        if ( AttachEntity( lrEntity ) )
+        const bool lbAttached = AttachEntity( lrEntity );
+        if ( KI_SPEW_TRAFFIC_MANAGEMENT )
+            BrnSound::Debug::DebugComponent::mLogCombined << "[Traffic] Successfully Culled. \n";
+        if ( lbAttached )
             break;
     }
 

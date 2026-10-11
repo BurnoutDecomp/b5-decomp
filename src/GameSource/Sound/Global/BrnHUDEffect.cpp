@@ -1,4 +1,6 @@
 #include "GameSource/Sound/Global/BrnHUDEffect.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+#include "GameShared/GameClasses/Core/CgsID.h"
 // ---- the game-mode HUD audio lane's callees (2026-09-16) -------------------
 #include "GameSource/AttribSys/Generated/classes/sampletags.h"   // FirstIndices/LastIndices/Volumes
 #include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h"   // CgsSound::Utils::IntClamp
@@ -33,6 +35,7 @@ namespace BrnSound
 {
 namespace Logic
 {
+bool KB_HUD_SPEW_MESSAGES = false; // ARTIST82FFB8D0, DecFIGS BrnHUDEffect.cpp:27
 
 CgsSound::Logic::EffectObject* HUDEffect::CreateObject(u32)
 {
@@ -1207,10 +1210,8 @@ s32 HUDEffect::GetFreeVoice(u8 au8ChokeGroup)
 // `*(mpState + 0x24) + 0xBC` == StateManager::mPresentationSpliceBank, the same
 // Content the committed PresentationEffect::Play uses.
 //
-// The X360 also prints "[HUD] Received <id> at [t]." / "[HUD] Ignoring ... due to
-// re-trigger." behind the console's own byte_82FFB8D0 debug flag; that flag's
-// writer is not in this slice, so the equivalent information is carried by the
-// opt-in [hud-sound-msg] witness instead (BRN_HUD_SOUND_DIAG=1).
+// The original byte_82FFB8D0 gates the received/re-trigger lines through the
+// Sound component's combined sink, independently of the optional PC witness.
 // ---------------------------------------------------------------------------
 void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 {
@@ -1225,6 +1226,11 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     const CgsSound::Io::Message<GuiAudioEventRecord>* lpMessage =
         static_cast<const CgsSound::Io::Message<GuiAudioEventRecord>*>(apMessageHeader);
     const GuiAudioEventRecord& lrEvent = lpMessage->mData;
+    char lacMessageId[24];
+    CgsIDUnCompress(lrEvent.mHudMessageId, lacMessageId);
+    if (KB_HUD_SPEW_MESSAGES)
+        BrnSound::Debug::DebugComponent::mLogCombined << "[HUD] Received "
+            << lacMessageId << "\tat [" << mfRunningTime << "].\n";
 
     bool lbFound        = false;
     s32  liSpliceIndex  = 0;
@@ -1274,6 +1280,9 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 
     if (IsReTrigger(&lrEvent))
     {
+        if (KB_HUD_SPEW_MESSAGES)
+            BrnSound::Debug::DebugComponent::mLogCombined << "[HUD] Ignoring "
+                << lacMessageId << "\tat [" << mfRunningTime << "] due to re-trigger.\n";
         if (lbDiag)
         {
             HudSoundDiagPrintf(

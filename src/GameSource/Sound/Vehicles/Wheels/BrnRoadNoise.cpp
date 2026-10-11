@@ -1,6 +1,9 @@
 #include "GameSource/Sound/Vehicles/Wheels/BrnRoadNoise.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
@@ -30,6 +33,8 @@ namespace Vehicles
 {
 namespace Wheels
 {
+
+bool KB_SURFACE_TYPE_DRAW = false; // byte_82FFB8BD
 
 namespace
 {
@@ -293,6 +298,28 @@ void RoadnoiseEffect::UpdateParams(f32 afTimeStep)
 
     for (s32 liVoice = 0; liVoice < KI_NUMBER_OF_TRANSITION_VOICES; ++liVoice)
         mTransitionsSounds[liVoice].mTransitionVoice.Update();
+
+    if (KB_SURFACE_TYPE_DRAW)
+        DrawDebug();
+}
+
+// X360 RoadnoiseEffect::DrawDebug @ 0x8269ADB8. The debug switch reaches this
+// typed DebugRender path from UpdateParams @ 0x826E5BB0: print the two current
+// road-noise loop IDs at (900,50) and (900,80), size 25, color dword_82F2F770.
+void RoadnoiseEffect::DrawDebug() const
+{
+    CgsDev::DebugInterface lDebugInterface;
+    CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
+    char lacText[16];
+    f32 lfY = 50.0f; // flt_820AA504
+
+    for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
+    {
+        CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%d",
+                         muRoadnoiseLoop[liSide].GetCurrent());
+        lrRender.Draw2DText(lacText, 900.0f, lfY, 25.0f, 0xFF00FFA0u);
+        lfY += 30.0f; // flt_82004F5C
+    }
 }
 
 void RoadnoiseEffect::ProcessUpdate()

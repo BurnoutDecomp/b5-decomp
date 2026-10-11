@@ -57,6 +57,7 @@ struct AmbienceControl : public BrnSound::Logic::BrnEffectControl
 
 private:
     bool SelectSpecialAmbience(u8& aru8Ambience) const;
+    void DrawDebug(Vector3 lrPosition) const;
 
 public:
     // Members in declaration order.

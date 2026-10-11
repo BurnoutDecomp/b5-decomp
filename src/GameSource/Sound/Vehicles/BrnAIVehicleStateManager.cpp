@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysCollectionKey.h"
@@ -44,6 +46,12 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+
+// ARTIST OnActivate/UpdateParams cells. The selected attached-state instance is
+// shared with HybridExhaustControl's Closest AI TTY predicate.
+bool KI_DEBUG_PRINT_CLOSEST_AI_STATES = false; // byte_82FFB812
+bool KI_DEBUG_PRINT_CLOSEST_AI_SKIDS = false;  // byte_82FFB813
+s32 giClosestAIStateInstance = -1;             // X360 dword_82F2CBD8
 
 namespace
 {
@@ -438,8 +446,10 @@ void AIVehicleStateManager::ResourcesAreReady()
 //         else if (state = GetFreeState(rc)) {
 //           AttachInfo::Construct(gaDesiredAssetIds[i], gapLoadedVehicleEntries[i], i);
 //           state->Attach(&info); StopMonitor; return; }              ; ONE attach per frame
-//     dword_82F2CBD8 = -1; <dev-only nearest-state DebugRender::DrawSphere, gated on
-//     byte_82FFB812 || byte_82FFB813 -- not carried, it draws nothing the PC build has>
+//     dword_82F2CBD8 = -1;
+//     if (byte_82FFB812 || byte_82FFB813) choose the closest attached state,
+//       store its instance id in dword_82F2CBD8 and draw a green radius-2 sphere
+//       three units above that car through the original DebugInterface scope.
 //   }
 //   PerfMonCpu::StopMonitor(miCpuMonitor);
 // ---------------------------------------------------------------------------
@@ -564,6 +574,46 @@ void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
                     CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
                     return;
                 }
+            }
+        }
+
+        // ARTIST 0x826CA578: this shared instance id feeds the Sound Engine Info
+        // filter in HybridExhaustControl::UpdateMix. The debug sphere is emitted
+        // only when either original nearest-AI flag is set.
+        giClosestAIStateInstance = -1;
+        if (KI_DEBUG_PRINT_CLOSEST_AI_STATES || KI_DEBUG_PRINT_CLOSEST_AI_SKIDS)
+        {
+            CgsSound::Logic::State* lpClosestState = nullptr;
+            f32 lfClosestDistanceSquared = 0.0f;
+            for (CgsSound::Logic::State* lpState = GetHeadState(); lpState;
+                 lpState = lpState->GetNextState())
+            {
+                if (!lpState->IsAttached())
+                    continue;
+
+                VehicleState* lpVehicleState = static_cast<VehicleState*>(lpState);
+                const rw::math::vpu::Vector3& lrPosition =
+                    lpVehicleState->GetVehicleData()->mTransform.Pos();
+                const f32 lfDistanceSquared = DistanceSquared3(lrPosition, lrListener);
+                if (!lpClosestState || lfDistanceSquared < lfClosestDistanceSquared)
+                {
+                    lpClosestState = lpState;
+                    lfClosestDistanceSquared = lfDistanceSquared;
+                }
+            }
+
+            if (lpClosestState)
+            {
+                giClosestAIStateInstance = lpClosestState->GetInstanceID();
+                const VehicleState* lpVehicleState =
+                    static_cast<const VehicleState*>(lpClosestState);
+                rw::math::vpu::Vector3 lDrawPosition =
+                    lpVehicleState->GetVehicleData()->mTransform.Pos();
+                lDrawPosition.y += 3.0f;
+                const rw::RGBA lColour(0x00, 0xFF, 0x00, 0xFF); // ARTIST -16711776
+                CgsDev::DebugInterface lDebugInterface;
+                lDebugInterface.GetRender().DrawSphere(
+                    lDrawPosition, 2.0f, lColour.m_rgba);
             }
         }
     }

@@ -20,6 +20,9 @@ namespace Engines { struct PhysicsControl; }
 namespace Environment { struct EnclosureControl; }
 namespace Wheels
 {
+extern bool KB_DEBUG_SPEW_RAMP_LAUNCH;
+extern f32 gfFORCE_RAMP_LUNCH;
+extern CgsSound::Utils::SlopeParams K_RAMP_LAUNCH_PARAMS;
 
 struct WheelControl;
 

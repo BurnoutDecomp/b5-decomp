@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/BrnDebugComponent.h" // mLogCombined == ARTIST off_82F2F9BC
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
 #include "GameSource/Sound/Vehicles/Brn3dCarPosition.h"
@@ -8,15 +9,27 @@
 #include <algorithm>
 #include <cmath>
 
+extern s32 KI_DEBUG_PRINT_ENGINE_INFO; // global ARTIST82FFB854; BrnPhysicsControl.cpp
+
 namespace BrnSound
 {
 namespace Vehicles
 {
+extern s32 giClosestAIStateInstance; // dword_82F2CBD8; owned by AIVehicleStateManager
 namespace Wheels
 {
 
+u32 KI_WHEEL_SPEW = 0;       // dword_82FFB8C0; ARTIST bool-tag alias
+u32 KI_WHEELSIDE_SPEW = 0;   // dword_82FFB8C4; ARTIST bool-tag alias for side totals
+
 namespace
 {
+const char* const KA_WHEEL_NAME[4] =
+{
+    "FrontLeft", "FrontRight", "RearLeft", "RearRight",
+}; // ARTIST off_82F2CDC8; confirmed with tools/re/x360rd.py
+const char* const KA_WHEEL_SIDE_NAME[2] = { "LeftSide", "RightSide" }; // off_82F2CDD8
+
 const f32 KF_DRIFT_DRIFT_RPM_SCALE_FACTOR = 0.7f;
 const f32 KF_DRIFT_RPM_SHIFT_FACTOR = 0.8f;
 const f32 KF_DRIFT_RPM_UP_SHIFT_FACTOR = 1.2f;
@@ -182,6 +195,10 @@ void WheelControl::UpdateSkidValues(f32)
     if (lfSpeedMPS >= -0.1f && lfSpeedMPS <= 0.1f)
         lfSpeedMPS = 0.0f;
     const f32 lfAbsSpeed = std::fabs(lfSpeedMPS);
+    if (KI_WHEEL_SPEW != 0)
+        BrnSound::Debug::DebugComponent::mLogCombined
+            << "[Sp-MPS: " << lfAbsSpeed << "]\t";
+
     mWheelData.mbReverse = lfAbsSpeed > 0.0f && lrPhysics.mGear.GetCurrent() == 0;
     const f32 lfSpeedFraction =
         Clamp(lfAbsSpeed, 0.0f, mWheelAttribs.mfSlowFastThreshold) /
@@ -197,31 +214,50 @@ void WheelControl::UpdateSkidValues(f32)
         {
             const BrnPhysics::Vehicle::WheelLite& lrWheel =
                 lpRaw->maWheels[KAE_FLIPPED_WHEELS_LOOKUP[liWheelSlot]];
-            if (!lrWheel.mRoadContact.mbIsOnGround)
-                continue;
-
-            const f32 lfRoadLong = lrWheel.mfRoadLongSpeed;
-            const f32 lfWheelLong = lrWheel.mfWheelLongSpeed;
-            const f32 lfLongDenominator = (std::max)(std::fabs(lfRoadLong), 1.0f);
-            const f32 lfLongSlip = std::fabs((lfWheelLong - lfRoadLong) / lfLongDenominator);
+            f32 lfLongSlip = 0.0f;
             f32 lfLateral = 0.0f;
-            if (!lrPhysics.IsCrashing.GetCurrent())
+            f32 lfWheelBrake = 0.0f;
+            f32 lfWheelPeel = 0.0f;
+            if (lrWheel.mRoadContact.mbIsOnGround)
             {
-                const f32* lpMultiplier = lrWheel.mfRoadLatSpeed >= 0.0f
-                    ? mWheelAttribs.mafSideRightLateralMultipler
-                    : mWheelAttribs.mafSideLeftLateralMultipler;
-                lfLateral = lpMultiplier[liSide] * std::fabs(lrWheel.mfRoadLatSpeed);
+                const f32 lfRoadLong = lrWheel.mfRoadLongSpeed;
+                const f32 lfWheelLong = lrWheel.mfWheelLongSpeed;
+                const f32 lfLongDenominator = (std::max)(std::fabs(lfRoadLong), 1.0f);
+                lfLongSlip = std::fabs((lfWheelLong - lfRoadLong) / lfLongDenominator);
+                if (!lrPhysics.IsCrashing.GetCurrent())
+                {
+                    const f32* lpMultiplier = lrWheel.mfRoadLatSpeed >= 0.0f
+                        ? mWheelAttribs.mafSideRightLateralMultipler
+                        : mWheelAttribs.mafSideLeftLateralMultipler;
+                    lfLateral = lpMultiplier[liSide] * std::fabs(lrWheel.mfRoadLatSpeed);
+                }
+
+                ++liGrounded;
+                const f32 lfWheelSign = lfWheelLong == 0.0f ? 0.0f : (lfWheelLong > 0.0f ? 1.0f : -1.0f);
+                const f32 lfRoadSign = lfRoadLong == 0.0f ? 0.0f : (lfRoadLong > 0.0f ? 1.0f : -1.0f);
+                if (std::fabs(lfWheelSign - lfRoadSign) <= 0.00000011920929f &&
+                    lfWheelLong < lfRoadLong)
+                {
+                    lfWheelBrake = lfLongSlip;
+                    lfSideBrake = (std::max)(lfSideBrake, lfLongSlip);
+                }
+                else
+                {
+                    lfWheelPeel = lfLongSlip;
+                    lfSidePeel = (std::max)(lfSidePeel, lfLongSlip);
+                }
+                lfSideLateral = (std::max)(lfSideLateral, lfLateral);
             }
 
-            ++liGrounded;
-            const f32 lfWheelSign = lfWheelLong == 0.0f ? 0.0f : (lfWheelLong > 0.0f ? 1.0f : -1.0f);
-            const f32 lfRoadSign = lfRoadLong == 0.0f ? 0.0f : (lfRoadLong > 0.0f ? 1.0f : -1.0f);
-            if (std::fabs(lfWheelSign - lfRoadSign) <= 0.00000011920929f &&
-                lfWheelLong < lfRoadLong)
-                lfSideBrake = (std::max)(lfSideBrake, lfLongSlip);
-            else
-                lfSidePeel = (std::max)(lfSidePeel, lfLongSlip);
-            lfSideLateral = (std::max)(lfSideLateral, lfLateral);
+            // ARTIST 0x826B78A0 writes one TTY row for every wheel slot, including
+            // airborne wheels (whose three measurements are zero).
+            if (KI_WHEEL_SPEW != 0)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "Lat(" << KA_WHEEL_NAME[liWheelSlot] << "):" << lfLateral << "\t";
+                lrLog << "Brake(" << KA_WHEEL_NAME[liWheelSlot] << "):" << lfWheelBrake << "\t";
+                lrLog << "Peel(" << KA_WHEEL_NAME[liWheelSlot] << "):" << lfWheelPeel << "\t";
+            }
         }
 
         WheelSide& lrSide = mWheelData.maSide[liSide];
@@ -236,8 +272,27 @@ void WheelControl::UpdateSkidValues(f32)
             mWheelAttribs.mPeelSlow, mWheelAttribs.mPeelFast, lrSide.mfPeel, lfSpeedFraction);
         lrSide.mfLateralNormalized = LerpedNormalise(
             mWheelAttribs.mLateralSlow, mWheelAttribs.mLateralFast, lrSide.mfLateral, lfSpeedFraction);
+
+        if (KI_WHEELSIDE_SPEW != 0)
+        {
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "SideLat(" << KA_WHEEL_SIDE_NAME[liSide] << "):" << lfSideLateral << "\t";
+            lrLog << "SideBrake(" << KA_WHEEL_SIDE_NAME[liSide] << "):" << lfSideBrake << "\t";
+            lrLog << "SidePeel(" << KA_WHEEL_SIDE_NAME[liSide] << "):" << lfSidePeel << "\t";
+            lrLog << "SideLatNorm(" << KA_WHEEL_SIDE_NAME[liSide] << "):"
+                  << lrSide.mfLateralNormalized << "\t";
+            lrLog << "SideBrakeNorm(" << KA_WHEEL_SIDE_NAME[liSide] << "):"
+                  << lrSide.mfBrakeNormalized << "\t";
+            lrLog << "SidePeelNorm(" << KA_WHEEL_SIDE_NAME[liSide] << "):"
+                  << lrSide.mfPeelNormalized << "\t";
+        }
         SetMixerInputValue(liSide, liGrounded == 0 ? 0x7FFF : 0);
     }
+
+    if (KI_WHEELSIDE_SPEW != 0)
+        BrnSound::Debug::DebugComponent::mLogCombined << "\n";
+    if (KI_WHEEL_SPEW != 0)
+        BrnSound::Debug::DebugComponent::mLogCombined << "\n";
 }
 
 void WheelControl::UpdateDriftingRPM()
@@ -262,10 +317,22 @@ void WheelControl::UpdateDriftingRPM()
                 mpShiftControl->BeginDownShift(this);
                 mbPerformedDriftShift = true;
                 mfDriftingShiftOccured = KF_DRIFT_TIME_BETWEEN_SHIFTS;
+                if ((::KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1) ||
+                    (GetStateId() == 2 && GetInstanceId() == giClosestAIStateInstance))
+                {
+                    BrnSound::Debug::DebugComponent::mLogCombined
+                        << "<-------------Drift Shift Down----------------->\n";
+                }
             }
         }
         else if (mfDriftingRPMFactor > KF_DRIFT_RPM_UP_SHIFT_FACTOR && mbPerformedDriftShift)
         {
+            if ((::KI_DEBUG_PRINT_ENGINE_INFO != 0 && GetStateId() == 1) ||
+                (GetStateId() == 2 && GetInstanceId() == giClosestAIStateInstance))
+            {
+                BrnSound::Debug::DebugComponent::mLogCombined
+                    << "<-------------Drift Shift UP----------------->\n";
+            }
             mbIsDriftUpShift = true;
             mbPerformedDriftShift = false;
             mpShiftControl->BeginUpShift(this);

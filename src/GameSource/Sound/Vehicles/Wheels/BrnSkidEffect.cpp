@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
@@ -18,6 +19,8 @@ namespace Vehicles
 {
 namespace Wheels
 {
+
+u32 KI_SKID_PRINT = 0; // dword_82FFB8B0; ARTIST reads in SkidEffect::UpdateParams
 
 namespace
 {
@@ -187,6 +190,16 @@ void SkidEffect::UpdateParams(f32)
         const f32 lfLateral = lrSide.mfLateralNormalized * 1024.0f;
         const f32 lfSurface = static_cast<f32>(lrSide.muRoadnoiseLoop);
 
+        // ARTIST 0x826B5EFC / 0x826B5F54..0x826B60E8: this is the original
+        // per-side TTY diagnostic, using the same 1024-scaled values sent to AEMS.
+        if (KI_SKID_PRINT != 0)
+        {
+            CgsDev::Log::LogCombined& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "[Brk: " << lfBrake
+                  << "[Pel: " << lfPeel
+                  << "[Lat: " << lfLateral << "]\t";
+        }
+
         lfBrakeMax = std::max(lfBrakeMax, lfBrake);
         lfPeelMax = std::max(lfPeelMax, lfPeel);
         lfLateralMax = std::max(lfLateralMax, lfLateral);
@@ -198,6 +211,10 @@ void SkidEffect::UpdateParams(f32)
         mSkidsVoice.SetParameter(liBase + 3, lfLateral, &KAU_SKID_PARAMETERS[liBase + 3]);
         mSkidsVoice.SetParameter(liBase, lfSurface, &KAU_SKID_PARAMETERS[liBase]);
     }
+
+    // The console emits one line terminator after both side records.
+    if (KI_SKID_PRINT != 0)
+        BrnSound::Debug::DebugComponent::mLogCombined << "\n";
 
     mbSkidsLatched.Update(std::fabs(lfLateralMax) > 1.1920929e-7f);
     if (mbSkidsLatched.GetCurrent() && !mbSkidsLatched.GetPrevious())

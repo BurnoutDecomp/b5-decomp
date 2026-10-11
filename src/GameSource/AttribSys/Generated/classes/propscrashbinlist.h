@@ -20,6 +20,28 @@ namespace Gen
     class propscrashbinlist : private Instance
     {
     public:
+        // The vault's serialized layout retains 32-bit text pointer slots.
+        // DecFIGS propscrashbinlist.h:99..104; ARTIST 0x826887D0..E4 reads
+        // names at +0x3D0 with four-byte stride. RefSpec remains 24 bytes.
+        struct SerializedLayout
+        {
+            Private mArrayCrashBins;
+            RefSpec mCrashBins[40];
+            Private mArrayMaterialNames;
+            u32 mMaterialNamePointers[64];
+            s32 mNumCrashBins;
+        };
+        static_assert(sizeof(SerializedLayout) == 0x4D8, "propscrashbinlist serialized layout");
+
+        // FLAG PC-platform leaf: decode the existing vault's 32-bit resolved
+        // pointer slot through its low-4GB address convention, without widening
+        // the serialized array or moving the following count field.
+        const char* mMaterialNames(u32 luIndex) const
+        {
+            const SerializedLayout& lrData = *static_cast<const SerializedLayout*>(mpAttributeData);
+            return reinterpret_cast<const char*>(static_cast<uintptr_t>(lrData.mMaterialNamePointers[luIndex]));
+        }
+
         static const u64 KU_CLASS_KEY = 0x963577B14F10D01Full;
         explicit propscrashbinlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
 

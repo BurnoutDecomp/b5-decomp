@@ -84,18 +84,9 @@ class  CollisionStateManager;    // BrnCollisionStateManager.h:563
 // BrnCollisionStateManager.h:280. Per-scrape descriptor.
 struct ScrapeInfo
 {
-    ScrapeInfo()
-        : mEntityIdA{0}
-        , mEntityIdB{0}
-        , mfTimeStamp(0.0f)
-        , mCollisionTagB{0}
-        , meOrientation(AttribSys::Enums::eOrientation::Front)
-        , mfIntensity(0.0f)
-        , mbCrashing(false)
-        , mbValid(false)
-    {
-        mRelativeVelocity.SetZero();
-    }
+    // ARTIST 0x826FFB90..BAC and 0x826FFBBC: the real default ctor clears
+    // only validity. Unused values remain indeterminate until a producer sets them.
+    ScrapeInfo() : mbValid(false) {}
 
     // DWARF BrnCollisionStateManager.h:299: the scrape a contact describes -- its entity pair and
     // B's collision tag, the orientation it struck at, when, and how hard; no relative velocity
@@ -137,19 +128,10 @@ struct InputCollision
         E_MAX_PIPELINES = 2,
     };
 
-    InputCollision()
-        : maMaterial{0, 0}
-        , maEntityID{{0}, {0}}
-        , mfPriorityAddition(0.0f)
-        , meAction(AttribSys::Enums::eAction::Collision)
-        , meOrientation(AttribSys::Enums::eOrientation::Front)
-        , mePipeline(E_REGULAR)
-        , mbCull(false)
-    {
-        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
-            maParameter[luIndex] = VecFloat();
-        mPosition.SetZero();
-    }
+    // ARTIST 0x826FFBBC..BFF8: only the ScrapeInfo validity byte is cleared;
+    // the vector/entity constructors are genuine no-ops. The old audition path
+    // intentionally retains its original partially initialized input records.
+    InputCollision() {}
 
     // DWARF BrnCollisionStateManager.h:405 -- a race-car or traffic contact (the regular
     // pipeline): ARTIST sub_826D3850, reached from ImportContactSpies<RaceCarContact>
@@ -205,6 +187,7 @@ struct InputCollision
     // DWARF BrnCollisionStateManager.h:474: exchange a contact's two entities and its two
     // contact points (the regular builder's race-car ordering, 0x826D391C..0x826D3944).
     void SwapEntityIds(InputContactSpy& lSpy);
+    void DebugPrint(const CollisionStateManager& lCollisionManager) const;
 
     ScrapeInfo mScrapeInfo;
     VecFloat maParameter[3];
@@ -221,6 +204,7 @@ struct InputCollision
 // BrnCollisionStateManager.h:486. Fully-resolved collision copied into a state.
 struct OutputCollision
 {
+    void DebugPrint(const CollisionStateManager& lCollisionManager) const;
     OutputCollision()
         : meBankType(0)
         , mePipeline(InputCollision::E_REGULAR)

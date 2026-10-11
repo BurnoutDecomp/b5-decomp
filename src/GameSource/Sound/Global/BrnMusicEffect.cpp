@@ -29,6 +29,18 @@ namespace BrnSound
 namespace Logic
 {
 
+// ARTIST82FFB8D2 / 82F2CE60..78, DecFIGS BrnMusicEffect.cpp:21..39.
+// These are mutable shared menu cells, read when sending parameters or starting
+// a jump-filter transition. The rest frequency remains an original constant.
+bool KB_MUSIC_MUTE = false;
+f32 KF_MUSIC_HIGH_PASS_ORDER = 4.0f;
+f32 KF_MUSIC_LOW_PASS_ORDER = 4.0f;
+f32 KF_MUSIC_HIGH_PASS_Q = 0.95f;
+f32 KF_MUSIC_LOW_PASS_Q = 0.99f;
+f32 KF_JUMP_HPF_OPEN_FREQUENCY = 2000.0f;
+f32 KF_JUMP_HPF_OPEN_TIME = 3.0f;
+f32 KF_JUMP_HPF_CLOSE_TIME = 1.0f;
+
 namespace
 {
     // K_NULL_NAME is 0 (CgsCommon.h: "not a recon'd standalone ctor TU -- K_NULL_NAME
@@ -39,9 +51,6 @@ namespace
     // the ARTIST image (tools/re/x360rd.py): flt_82F2CE70 / flt_82F2CE74 / flt_82F2CE78.
     // Notify(14) opens towards 2 kHz over 3 s; Notify(14, closed) / a crash closes
     // back to the 230 Hz rest (flt_820AA558) over 1 s.
-    const f32 KF_JUMP_HPF_OPEN_FREQUENCY = 2000.0f;
-    const f32 KF_JUMP_HPF_OPEN_TIME      = 3.0f;
-    const f32 KF_JUMP_HPF_CLOSE_TIME     = 1.0f;
     const f32 KF_JUMP_HPF_REST_FREQUENCY = 230.0f;   // flt_820AA558
 
     // RwMathFPU::IsZero as the console inlines it in JumpHpf::Prepare @0x82687530 /
@@ -1119,8 +1128,10 @@ void MusicEffect::ProcessUpdate()
     if (mbHoldVolumes)
         return;
 
-    mEATraxStream.SetVolume(
-        GetRWACMixerOutputValue(mEATraxStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    f32 lfEATraxVolume = GetRWACMixerOutputValue(mEATraxStream.GetOutputSlot(), DMixIO::DMX_VOL);
+    if (KB_MUSIC_MUTE)
+        lfEATraxVolume = 0.0f;
+    mEATraxStream.SetVolume(lfEATraxVolume);
     // X360 0x826F6E18: `lfs f13, 0x40(r31)` -> `*(a1+248) = *(a1+64)` -- the EA Trax
     // high-pass follows the JumpHpf sub-object's current frequency (this+0x34+0xC).
     mEATraxStream.SetHighPassFreq(mJumpHpf.GetFrequency());
@@ -1146,18 +1157,24 @@ void MusicEffect::ProcessUpdate()
     }
     SetMixerInputValue(0, liMusicInput);
 
-    mSecondaryStream.SetVolume(
-        GetRWACMixerOutputValue(mSecondaryStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    f32 lfSecondaryVolume = GetRWACMixerOutputValue(mSecondaryStream.GetOutputSlot(), DMixIO::DMX_VOL);
+    if (KB_MUSIC_MUTE)
+        lfSecondaryVolume = 0.0f;
+    mSecondaryStream.SetVolume(lfSecondaryVolume);
     mSecondaryStream.SetHighPassFreq(0.0f);
     mSecondaryStream.SetLowPassFreq(96000.0f);
 
-    mMusicStreamMenu.SetVolume(
-        GetRWACMixerOutputValue(mMusicStreamMenu.GetOutputSlot(), DMixIO::DMX_VOL));
+    f32 lfMenuVolume = GetRWACMixerOutputValue(mMusicStreamMenu.GetOutputSlot(), DMixIO::DMX_VOL);
+    if (KB_MUSIC_MUTE)
+        lfMenuVolume = 0.0f;
+    mMusicStreamMenu.SetVolume(lfMenuVolume);
     mMusicStreamMenu.SetHighPassFreq(0.0f);
     mMusicStreamMenu.SetLowPassFreq(96000.0f);
 
-    mJunkyardStream.SetVolume(
-        GetRWACMixerOutputValue(mJunkyardStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    f32 lfJunkyardVolume = GetRWACMixerOutputValue(mJunkyardStream.GetOutputSlot(), DMixIO::DMX_VOL);
+    if (KB_MUSIC_MUTE)
+        lfJunkyardVolume = 0.0f;
+    mJunkyardStream.SetVolume(lfJunkyardVolume);
     mJunkyardStream.SetHighPassFreq(0.0f);
     mJunkyardStream.SetLowPassFreq(96000.0f);
 

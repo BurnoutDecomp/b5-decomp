@@ -77,6 +77,7 @@ namespace ePassbyTypes
 
     const int KI_NUM_ENUMS = 20; // ePassbyTypes.h:35
     const int KI_MAX_VALUE = 19; // ePassbyTypes.h:36
+    extern const char* const gaNames[KI_NUM_ENUMS];
 }
 }
 }
@@ -87,6 +88,8 @@ namespace Logic
 {
 namespace Passby
 {
+
+extern s32 KI_SPEW_PASSBY_STATE_INFO;
 
 // BrnPassbyStateManager.h:45 (DWARF). Derives the committed BrnStateManager.
 class PassbyStateManager : public BrnSound::Logic::BrnStateManager

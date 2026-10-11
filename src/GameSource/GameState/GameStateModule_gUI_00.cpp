@@ -27,6 +27,7 @@
 
 #include <stdlib.h>                                                     // getenv ([UI-gate] diag)
 #include <string.h>                                                     // memcpy / memset (the case-20 payload view)
+#include <stdio.h>                                                      // optional harness ready-file gate
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint
@@ -835,6 +836,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
 //      true, the junction detection is the thing that is broken, not this hook.
 //   3. no game mode already running (the same !mpCurrentGameMode gate the console's own start
 //      arms carry).
+// An optional BRN_START_EVENT_READY_FILE delays this existing injection until the
+// named file is readable, allowing a test to finish its real menu edits first.
 //
 // [!] IT IS NOT THE CASE-20 PATH, DELIBERATELY. The dispatcher's case-20 arm
 // (GameStateModule_ProcessGameEvents_wBT_02.cpp) hard-codes E_MODE_OFFLINE_RACE / mechanism
@@ -852,6 +855,17 @@ void GameStateModule::HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBu
     if (!sbHarnessStart || sbFired || lpOutputBuffer == 0 || mpPreWorldInputBuffer == 0)
     {
         return;
+    }
+
+    // FLAG PC-platform leaf: optional synchronization for the existing event-start
+    // test harness. Normal runs and harness runs without a path keep the same timing.
+    static const char* spcReadyFile = getenv("BRN_START_EVENT_READY_FILE");
+    if (spcReadyFile != 0 && spcReadyFile[0] != '\0')
+    {
+        FILE* lpReady = fopen(spcReadyFile, "rb");
+        if (lpReady == 0)
+            return;
+        fclose(lpReady);
     }
 
     // A benchmark car swap can finish while the junkyard UI is still open.

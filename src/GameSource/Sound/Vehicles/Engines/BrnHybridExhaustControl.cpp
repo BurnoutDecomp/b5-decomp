@@ -5,11 +5,14 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnClutchControl.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([engvol] witness)
 
 #include <algorithm>
 #include <cmath>
+
+extern s32 KI_DEBUG_PRINT_ENGINE_INFO; // X360 dword_82FFB854
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::HybridExhaustControl -- out-of-line bodies.
@@ -24,12 +27,25 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+extern bool KI_DEBUG_PRINT_CLOSEST_AI_STATES; // X360 byte_82FFB812
+extern s32 giClosestAIStateInstance;          // X360 dword_82F2CBD8
 namespace Engines
 {
 
+// ARTIST menu storage shared with DebugComponent::OnActivate. These are live
+// backing cells; the three zero-valued hard-code controls intentionally remain
+// disabled until a developer sets one non-zero.
+f32 KF_DEBUG_ACCEL_GINSU_VOL = 0.0f;   // X360 flt_82FFB870
+f32 KF_DEBUG_DECEL_GINSU_VOL = 0.0f;   // X360 flt_82FFB874
+f32 KF_DEBUG_LOOP_VOL = 0.0f;         // X360 flt_82FFB878
+f32 KF_DEBUG_ENGINE_VOLUME = 1.0f;    // X360 flt_82F2CC7C
+f32 KF_DEBUG_EXHAUST_VOLUME = 1.0f;   // X360 flt_82F2CC80
+f32 KF_DECEL_GINSU_FADE_OUT = 0.05f;  // X360 unk_82F2CC60; no ARTIST consumer xref
+f32 KF_DEBUG_IDLE_RPM_INTERPOLATION = 2000.0f; // X360 flt_82F2CC84; player idle-volume blend ceiling
+f32 KF_DECEL_GINSU_FADE_IN = 0.05f;   // X360 flt_82F2CC64
+
 namespace
 {
-const f32 KF_DECEL_GINSU_FADE_IN = 0.05f; // flt_82F2CC64
 const f32 KF_THROTTLE_THRESHOLD = 1.0f;    // flt_82F2CC68
 const f32 KF_DELTA_RPM_OFFSET = 6.0f;      // flt_82F2CC6C
 const f32 KF_AI_DELTA_RPM_OFFSET = 15.0f;  // flt_82F2CC70
@@ -310,11 +326,13 @@ void HybridExhaustControl::UpdateGinsuRPM()
 
 void HybridExhaustControl::UpdateIdleVolume(f32& arfVolume)
 {
-    if (mpPhysicsControl->GetPhysicsData().mGear.GetCurrent() != 1)
+    // ARTIST 0x82699AF0 only applies the idle-gain blend to state 1 (the player).
+    if (mpEngineControl->GetStateId() != 1)
         return;
 
     const f32 lfRpm = mpEngineControl->GetAudioRPM().GetCurrent();
-    const f32 lfIdleBlend = Clamp01((lfRpm - 1000.0f) / 1000.0f);
+    const f32 lfIdleBlend = Clamp01(
+        (lfRpm - 1000.0f) / (KF_DEBUG_IDLE_RPM_INTERPOLATION - 1000.0f));
     arfVolume *= Lerp(mVehicleEngineAttributes.IdleGain(), 1.0f, lfIdleBlend);
 }
 
@@ -464,6 +482,29 @@ void HybridExhaustControl::UpdateMix(f32 /*afTimeStep*/)
     lNewVolume.AccelGinsu *= lfMasterGain;
     lNewVolume.DecelGinsu *= lfMasterGain;
 
+    // ARTIST 0x826CC878: any non-zero hard-code Ginsu/loop value replaces all
+    // three computed component gains before the per-engine/per-exhaust scalar.
+    if (KF_DEBUG_ACCEL_GINSU_VOL != 0.0f ||
+        KF_DEBUG_DECEL_GINSU_VOL != 0.0f ||
+        KF_DEBUG_LOOP_VOL != 0.0f)
+    {
+        lNewVolume.AccelGinsu = KF_DEBUG_ACCEL_GINSU_VOL;
+        lNewVolume.DecelGinsu = KF_DEBUG_DECEL_GINSU_VOL;
+        lNewVolume.Loop = KF_DEBUG_LOOP_VOL;
+    }
+    if (GetEffectID() == 6)
+    {
+        lNewVolume.AccelGinsu *= KF_DEBUG_ENGINE_VOLUME;
+        lNewVolume.DecelGinsu *= KF_DEBUG_ENGINE_VOLUME;
+        lNewVolume.Loop *= KF_DEBUG_ENGINE_VOLUME;
+    }
+    else if (GetEffectID() == 5)
+    {
+        lNewVolume.AccelGinsu *= KF_DEBUG_EXHAUST_VOLUME;
+        lNewVolume.DecelGinsu *= KF_DEBUG_EXHAUST_VOLUME;
+        lNewVolume.Loop *= KF_DEBUG_EXHAUST_VOLUME;
+    }
+
     if (lbUseSmoothing)
     {
         mFinalEngineVolume.Loop = SmoothTowards(
@@ -481,6 +522,44 @@ void HybridExhaustControl::UpdateMix(f32 /*afTimeStep*/)
     else
     {
         mFinalEngineVolume = lNewVolume;
+    }
+
+    // ARTIST @0x826CC878 writes the engine-info line after setting mixer input 0.
+    // Player Engine Info and the closest-AI diagnostic are independent gates.
+    const bool lbPlayerEngineInfo = KI_DEBUG_PRINT_ENGINE_INFO != 0 &&
+        (GetId() & 0xFF0000) == 0x10000;
+    const bool lbClosestAIEngineInfo = KI_DEBUG_PRINT_CLOSEST_AI_STATES &&
+        (GetId() & 0xFF0000) == 0x20000 &&
+        GetInstanceId() == giClosestAIStateInstance;
+    if (lbPlayerEngineInfo || lbClosestAIEngineInfo)
+    {
+        const PhysicsControl::PhysicsData& lrPhysics =
+            mpPhysicsControl->GetPhysicsData();
+        const BrnSound::Vehicles::VehicleData& lrRawPhysics =
+            *mpPhysicsControl->GetRawPhysicsData();
+        CgsDev::Log::LogCombined& lrLog =
+            BrnSound::Debug::DebugComponent::mLogCombined;
+
+        lrLog << ((GetId() & 0x7F0) == 0x60 ? "[Eng]" : "[Exh]");
+        if (GetStateId() == 2 && GetInstanceId() == giClosestAIStateInstance)
+            lrLog << "[AI Inst] " << GetInstanceId() << " ";
+        lrLog << "[raw_rpm] " << lrRawPhysics.mfRPM
+              << "[phys_rpm] " << lrPhysics.mNormalizedRpm.GetCurrent()
+              << "[aud_rpm]" << mpEngineControl->GetAudioRPM().GetCurrent()
+              << "[gear]" << lrPhysics.mGear.GetCurrent()
+              << "[vel]" << lrPhysics.mSpeedMPH.GetCurrent()
+              << "[throttle]" << mpEngineControl->GetAudioThrottle().GetCurrent()
+              << "[delta_rpm]" << GetDeltaRPM()
+              << "[ginA]" << mFinalEngineVolume.AccelGinsu
+              << "[ginD]" << mFinalEngineVolume.DecelGinsu
+              << "[Loop]" << mFinalEngineVolume.Loop
+              << "[eng_vol]" << mpEngineControl->GetAudioEngVolume().GetCurrent()
+              << "[drift]" << lrPhysics.mDrifting.GetCurrent()
+              << "[drift_t]" << lrRawPhysics.mfTimeDrifting
+              << "[boost]" << (lrPhysics.IsBoosting.GetCurrent() ? "true" : "false")
+              << "[pch]" << mpEngineControl->GetAudioPitch()
+              << "[Dist]" << mpEngineControl->mAudioDistortion.GetValueFloat()
+              << "\n";
     }
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_ENGINE_GAIN_DIAG=1, the same variable [enggain]

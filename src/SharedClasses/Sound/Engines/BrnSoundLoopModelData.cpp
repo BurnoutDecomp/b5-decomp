@@ -128,7 +128,7 @@ int LoopModelData::FixDown(int liBase)
 
 // One line per graph point, partial by partial, graph by graph, on the sound code's shared
 // log stream (unfiltered -- the stream's installed children decide where it goes).
-void LoopModelData::DebugDumpContentsToTty()
+void LoopModelData::DebugDumpContentsToTty() const
 {
     CgsDev::StrStreamBase& lrTty = BrnSound::Debug::DebugComponent::mLogCombined;
 

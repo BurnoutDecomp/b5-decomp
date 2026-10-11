@@ -22,6 +22,10 @@ namespace Vehicles
 namespace Engines
 {
 
+f32 KF_MAX_REVERSE_SPEED = 200.0f; // ARTIST flt_82F2CD04
+f32 KF_MIN_REVERSE_PITCH = 0.8f;   // ARTIST flt_82F2CD08
+f32 KF_MAX_REVERSE_PITCH = 1.2f;   // ARTIST flt_82F2CD0C
+
 // ---------------------------------------------------------------------------
 // DualGinsuExhaustEffect::Creat  @ 0x826E4178   (the factory hook)
 //
@@ -221,10 +225,6 @@ void DualGinsuExhaustEffect::ProcessUpdate()
     static const u32 KU_PITCH_NAME = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash(
             "~GenericRwacPlayerVoice::SK_PLAYER_PARAMETER_PITCH~"));
-    static const f32 KF_MAX_REVERSE_SPEED = 200.0f;
-    static const f32 KF_MIN_REVERSE_PITCH = 0.8f;
-    static const f32 KF_MAX_REVERSE_PITCH = 1.2f;
-
     const f32 lfGain = GetRWACMixerOutputValue(6, Nicotine::DMixIO::DMX_VOL);
     mReverseWhineVoice.SetGain(0, lfGain, &KU_SEND_NAME);
 

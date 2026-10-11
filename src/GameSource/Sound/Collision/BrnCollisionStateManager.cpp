@@ -3,6 +3,9 @@
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // CgsSceneManager::EntityId::SetPartIndex (glass / hinge part ids)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // Prepare: the "Collisions" CPU monitor
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
@@ -53,6 +56,117 @@ namespace Logic
 {
 namespace Collision
 {
+
+// DecFIGS BrnCollisionStateManager.cpp:79..122; ARTIST 0x82FFB8F0..B92C.
+s32 KI_DEBUG_DETACHING = 0;
+s32 KI_DEBUG_SAMPLE_ID_TO_PLAY_LARGE = 0;
+s32 KI_DEBUG_SAMPLE_ID_TO_PLAY_SMALL = -1; // 0x82F2CF00
+s32 KI_DEBUG_PIPELINE_TOPLAY = 1;         // 0x82F2CF04
+s32 KI_DEBUG_FILTER_MATERIAL = 0;
+s32 KI_DEBUG_FILTER_ACTION = 0;
+s32 KI_DEBUG_PRINT_COLLISION_BINS = 0; // registered, no original exported reader
+s32 KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE = 0;
+s32 KI_DEBUG_SPAWN_LOTS_OF_SAMPLES = 0;
+s32 KI_DEBUG_SPEW_ORIENTATION = 0;
+s32 KI_DEBUG_DRAW_ORIENATION_BOX = 0; // original spelling
+s32 KI_DEBUG_SPEW_PROP_LOOKUP_FAULTS = 0;
+s32 KI_DEBUG_SPEW_ALL_INPUT_COLLISIONS = 0;
+s32 KI_DEBUG_CULL_AGAINST_PLAYING = 0;
+s32 KI_DEBUG_FILTER_NO_COLLISION = 0;
+s32 KI_DEBUG_FILTER_NO_PROPS = 0;
+s32 KI_DEBUG_FILTER_NO_BODY_PARTS = 0;
+s32 KI_DEBUG_FILTER_NO_GLASS = 0;
+f32 KF_FASTEST_COLLISION = 200.0f;   // 0x82F2CEF8
+f32 KF_BIGGEST_THING_MASS = 1600.0f; // 0x82F2CEFC
+// ARTIST CRT 0x82C63230..48 computes this ONCE; editing either menu operand
+// later does not recompute the derived value read by every contact builder.
+f32 KF_BIGGEST_COLLISION_IN_SECOND = KF_BIGGEST_THING_MASS * KF_FASTEST_COLLISION; // 0x830083E0
+
+const char* const KAPC_ORIENTATION_NAMES[5] = {"Front", "Side", "Rear", "Roof", "Bottom"};
+// The original action lookup runs into the shared "False" slot for bit six.
+const char* const KAPC_ACTION_NAMES[7] = {"Collision", "Detach", "Hinging", "HingeOpen", "HingeClose", "Cracking", "False"};
+const char* const KAPC_IMPACT_TIME_NAMES[2] = {"False", "True"};
+const char* const KAPC_FATALITY_NAMES[3] = {"Off", "On", "SwitchedOn"};
+const char* const KAPC_MATERIAL_NAMES[25] = {
+    "Nothing", "PlayerCar", "AiCar", "TrafficCar", "World", "BodyPartSmall", "BodyPartLarge",
+    "Mirrors", "GlassSmall", "GlassLarge", "Wheels", "Lights", "Crane", "Mixer", "Tipper",
+    "NumberPlate", "Seats", "RoofRacks", "Extinguisher", "Ladder", "Body", "Suspension",
+    "Exhaust", "TrafficCarMedium", "TrafficCarLarge"
+};
+
+// ARTIST 0x82688798; r3=this, r4=the full u64 mask, r5=pipeline.
+const char* CollisionStateManager::Debug_GetMaterialName(
+    u64 lxMaterial, InputCollision::EPipeline lePipeline) const
+{
+    const u32 luIndex = DebugFlagIndex(lxMaterial);
+    if (lePipeline == InputCollision::E_PROP)
+        return mPropsCrashBinList.mMaterialNames(luIndex);
+    return luIndex < 25 ? KAPC_MATERIAL_NAMES[luIndex] : "[Bad]";
+}
+
+// ARTIST 0x826887F0. Preserve its 32-bit slw/sign-extension inside the u64
+// mask walk; high material bits do not acquire invented valid display names.
+void CollisionStateManager::Debug_GetMaterialBitfieldNames(
+    u64 lxMaterial, InputCollision::EPipeline lePipeline, char* lpBuffer, u32 luBufferLength) const
+{
+    *lpBuffer = '\0';
+    for (u32 luBit = 0; lxMaterial; ++luBit, lxMaterial >>= 1)
+    {
+        if ((lxMaterial & 1) == 0)
+            continue;
+        const u32 luWord = luBit < 32 ? (1u << luBit) : 0;
+        const u64 lxWord = static_cast<u64>(static_cast<s64>(static_cast<s32>(luWord)));
+        const char* lpcName = Debug_GetMaterialName(lxWord, lePipeline);
+        CGS_ASSERT(std::strlen(lpcName) + std::strlen(lpBuffer) < luBufferLength - 1,
+                   "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
+        std::strcat(lpBuffer, lpcName);
+        CGS_ASSERT(std::strlen(lpBuffer) + 1 < luBufferLength - 1,
+                   "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
+        std::strcat(lpBuffer, "|");
+    }
+}
+
+// ARTIST 0x8269F518 (export hole, decoded with ppcdis) and 0x8269FA08.
+void InputCollision::DebugPrint(const CollisionStateManager& lCollisionManager) const
+{
+    CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+    const char* lpcA = lCollisionManager.Debug_GetMaterialName(maMaterial[0], mePipeline);
+    const char* lpcB = lCollisionManager.Debug_GetMaterialName(maMaterial[1], E_REGULAR);
+    lrLog << "[" << lCollisionManager.GetCurTime() << "]"
+          << " Material A(" << CgsDev::E_PRINTMODE_HEXONCE << maMaterial[0] << "): "
+          << (lpcA ? lpcA : "<NULLSTRING>") << "\t"
+          << " Material B(" << CgsDev::E_PRINTMODE_HEXONCE << maMaterial[1] << "): "
+          << (lpcB ? lpcB : "<NULLSTRING>") << "\t"
+          << " EntityA: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[0].muValue << "\t"
+          << " EntityB: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[1].muValue << "\t"
+          << " Impulse: " << maParameter[0].x << "\t"
+          << " CamDist: " << std::sqrt(maParameter[1].x) << "\t"
+          << " Orientation: " << KAPC_ORIENTATION_NAMES[DebugFlagIndex(meOrientation)] << "\t"
+          << " Action: " << KAPC_ACTION_NAMES[DebugFlagIndex(meAction)] << "\t"
+          << " Cull: " << (mbCull ? "true" : "false") << "\n";
+}
+
+void OutputCollision::DebugPrint(const CollisionStateManager& lCollisionManager) const
+{
+    CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+    const char* lpcA = lCollisionManager.Debug_GetMaterialName(maMaterial[0], mePipeline);
+    const char* lpcB = lCollisionManager.Debug_GetMaterialName(maMaterial[1], InputCollision::E_REGULAR);
+    lrLog << "[" << lCollisionManager.GetCurTime() << "]"
+          << " Material A(" << CgsDev::E_PRINTMODE_HEXONCE << maMaterial[0] << "): "
+          << (lpcA ? lpcA : "<NULLSTRING>") << "\t"
+          << " Material B(" << CgsDev::E_PRINTMODE_HEXONCE << maMaterial[1] << "): "
+          << (lpcB ? lpcB : "<NULLSTRING>") << "\t"
+          << " EntityA: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[0].muValue << "\t"
+          << " EntityB: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[1].muValue << "\t"
+          << " Impulse: " << maParameter[0].x << "\t"
+          << " BinIndex: " << static_cast<s32>(miBinIndex) << "\t"
+          << " Priority: " << mfPriority << "\t"
+          << " Orientation: " << KAPC_ORIENTATION_NAMES[DebugFlagIndex(meOrientation)] << "\t"
+          << " Action: " << KAPC_ACTION_NAMES[DebugFlagIndex(meAction)] << "\t"
+          << " Fatal:" << KAPC_FATALITY_NAMES[meFatality]
+          << " ImpT:" << KAPC_IMPACT_TIME_NAMES[DebugFlagIndex(meImpactTime)] << "\t"
+          << " CamDist: " << std::sqrt(maParameter[1].x) << "\t\n";
+}
 
 namespace
 {
@@ -502,7 +616,14 @@ int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
 
     CollisionState* lpState = static_cast<CollisionState*>(GetFreeState(lpCollision));
     if (!lpState)
+    {
+        if (KI_DEBUG_CULL_AGAINST_PLAYING >= 1)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined << "Not High enough priority!";
+            lpCollision->DebugPrint(*this);
+        }
         return 0;
+    }
 
     switch (lpCollision->mePipeline)
     {
@@ -559,6 +680,11 @@ int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
         }
     }
 
+    if (KI_DEBUG_CULL_AGAINST_PLAYING)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined << "Playing This : ";
+        lpCollision->DebugPrint(*this);
+    }
     lpState->Attach(lpCollision);
     lpState->SetLifetime(CollisionState::E_COLLISION);
     return 1;
@@ -640,7 +766,23 @@ void CollisionStateManager::BuildPropToMaterialTable()
 bool CollisionStateManager::MapPropTypeToMaterial(
     u16 luPropType, u64& lruMaterial) const
 {
-    if (luPropType >= 500u || !maPropToMaterialMappings[luPropType].mbValid)
+    if (luPropType >= 500u)
+        return false;
+
+    if (KI_DEBUG_SPEW_PROP_LOOKUP_FAULTS)
+    {
+        const BrnPhysics::Props::PropPhysicsDataHeader* lpPhysics =
+            *static_cast<BrnPhysics::Props::PropPhysicsDataHeader* const*>(mPropDataResourceHandle.mpResourceMemory);
+        CGS_ASSERT(luPropType < lpPhysics->GetNumberOfPropTypes(),
+                   "luPropTypeFromSpy < lpPhysics->GetNumberOfPropTypes()");
+        const BrnPhysics::Props::PropTypeData* lpType = lpPhysics->GetType(luPropType);
+        if (lpType && KI_DEBUG_SPEW_PROP_LOOKUP_FAULTS)
+        {
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "[PropSpew] PropID: " << lpType->GetResourceId() << "\n";
+        }
+    }
+    if (!maPropToMaterialMappings[luPropType].mbValid)
         return false;
 
     const u16 luMaterialIndex =
@@ -749,11 +891,10 @@ namespace
 // and the nearest face wins through a fixed chain of all-lanes `vcmpgtfp.` tests (a NaN compares
 // false): Front, then Rear if nearer, then Side if nearer than EITHER side (the side distance is
 // the smaller of the two, vminfp 0x8269EF10), then Roof, then Bottom (0x8269EE90..0x8269EF4C).
-// The normal is read only by the debug print ("Normal:"), and the fourth vector not at all; the
-// debug draw (dword_82FFB910) and print (dword_82FFB90C) have no writer.
+// The normal is read only by the debug print ("Normal:"), and the fourth vector not at all.
 // ---------------------------------------------------------------------------
 AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
-    Vector3 lPosition, Vector3 /*lNormal*/, Matrix44Affine lTransform, Vector3 /*lUnused*/,
+    Vector3 lPosition, Vector3 lNormal, Matrix44Affine lTransform, Vector3 /*lUnused*/,
     Vector3 lComOffset, Vector3 lMin, Vector3 lMax)
 {
     using namespace AttribSys::Enums::eOrientation;
@@ -804,6 +945,57 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
     }
     if (lfNearest > lfBottomDist)
         leOrientation = Bottom;
+
+    if (KI_DEBUG_DRAW_ORIENATION_BOX)
+    {
+        CgsDev::DebugInterface lDebug;
+        const Vector3 lBoxMin = {lMin.x+lComOffset.x, lMin.y+lComOffset.y,
+                                lMin.z+lComOffset.z, lMin.w+lComOffset.w};
+        const Vector3 lBoxMax = {lMax.x+lComOffset.x, lMax.y+lComOffset.y,
+                                lMax.z+lComOffset.z, lMax.w+lComOffset.w};
+        lDebug.GetRender().DrawBox(lBoxMin, lBoxMax, lTransform, 0xFF00FFA0u);
+        const auto TransformLane = [&](f32 lfRight, f32 lfUp, f32 lfAt, f32 lfPos)
+        {
+            f32 lfValue = std::fma(lfRight, lfLocalX, lfPos);
+            lfValue = std::fma(lfUp, lfLocalY, lfValue);
+            return std::fma(lfAt, lfLocalZ, lfValue);
+        };
+        const Vector3 lDrawPosition = {
+            TransformLane(lTransform.Right().x,lTransform.Up().x,lTransform.At().x,lTransform.Pos().x),
+            TransformLane(lTransform.Right().y,lTransform.Up().y,lTransform.At().y,lTransform.Pos().y),
+            TransformLane(lTransform.Right().z,lTransform.Up().z,lTransform.At().z,lTransform.Pos().z),
+            TransformLane(lTransform.Right().w,lTransform.Up().w,lTransform.At().w,lTransform.Pos().w)
+        };
+        const Vector3 lArrowEnd = {lDrawPosition.x+lNormal.x, lDrawPosition.y+lNormal.y,
+                                  lDrawPosition.z+lNormal.z, lDrawPosition.w+lNormal.w};
+        lDebug.GetRender().DrawSphere(lDrawPosition, 0.33f, 0xFFFFFFFFu);
+        lDebug.GetRender().DrawArrow(lDrawPosition, lArrowEnd, 0xFFFFFFFFu);
+    }
+    if (KI_DEBUG_SPEW_ORIENTATION)
+    {
+        CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+        lrLog << "Orienation: " << "Orientation: " << KAPC_ORIENTATION_NAMES[DebugFlagIndex(leOrientation)] << "\tPosition: ";
+        lrLog.AppendFormat("(%f, %f, %f)", lfLocalX, lfLocalY, lfLocalZ);
+        lrLog << "\tNormal: ";
+        const auto NormalLane = [&](const Vector3& lrRow)
+        {
+            const f32 lfValue = lrRow.x*lNormal.x;
+            return std::fma(lrRow.z,lNormal.z,std::fma(lrRow.y,lNormal.y,lfValue));
+        };
+        lrLog.AppendFormat("(%f, %f, %f)", NormalLane(lTransform.Right()),
+                           NormalLane(lTransform.Up()), NormalLane(lTransform.At()));
+        lrLog << "\tFrontDist: " << lfFrontDist << "\tBackDist: " << lfBackDist
+              << "\tLeftDist: " << lfLeftDist << "\tRightDist: " << lfRightDist
+              << "\tTopDist: " << lfTopDist << "\tBottomDist: " << lfBottomDist << "\tAt: ";
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.At().x, lTransform.At().y, lTransform.At().z);
+        lrLog << "\tUp: ";
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Up().x, lTransform.Up().y, lTransform.Up().z);
+        lrLog << "\tRight: ";
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Right().x, lTransform.Right().y, lTransform.Right().z);
+        lrLog << "\tPos: ";
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Pos().x, lTransform.Pos().y, lTransform.Pos().z);
+        lrLog << "\t\n";
+    }
     return leOrientation;
 }
 
@@ -888,7 +1080,6 @@ namespace
 // ARTIST flt_830083E0 = KF_BIGGEST_THING_MASS (1600, 0x82F2CEFC) * KF_FASTEST_COLLISION (200,
 // 0x82F2CEF8), computed by the CRT thunk 0x82C63230..0x82C63248: KF_BIGGEST_COLLISION_IN_SECOND
 // (DWARF cpp:74), the stress-to-per-second normalisation of every contact builder.
-const f32 KF_BIGGEST_COLLISION_IN_SECOND = 1600.0f * 200.0f;
 
 f32 Dot3(const Vector3& lrA, const Vector3& lrB)
 {
@@ -1001,7 +1192,14 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
         {
             const f32 lfAge = lfTimeStamp - lpScrape->mfTimeStamp;
             if (lfAge < 5.0f)
+            {
                 mbCull = true;
+                if (KI_DEBUG_CULL_AGAINST_PLAYING)
+                {
+                    BrnSound::Debug::DebugComponent::mLogCombined << "SloMoCrash Culling";
+                    DebugPrint(lMgr);
+                }
+            }
         }
     }
 }
@@ -1064,6 +1262,12 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
     mbCull = !lMgr.MapPropTypeToMaterial(lSpy.muType, luMaterial);
     if (lSpy.muBeganMoving == 1u)
         mfPriorityAddition = 1.0f;
+    // The target prints before copying the mapped material into this record.
+    if (mbCull && KI_DEBUG_CULL_AGAINST_PLAYING >= 2)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined << "Prop Material invalid.";
+        DebugPrint(lMgr);
+    }
     maMaterial[0] = luMaterial;
 
     if (GetEntityOwner(lSpy.mEntityIdB) == KU_ENTITY_OWNER_PROP)
@@ -1356,8 +1560,7 @@ void CollisionStateManager::UpdateScrapeHistory(const BrnSound::Logic::FrameInfo
 // (0x826D3F90..0x826D3FC8) and mirrors every tracked scrape into it while it holds fewer than 4
 // (AddScrape @0x826959B8, 0x826D4160..0x826D4194). This tree's SoundLogicModule holds no
 // SoundSerialiser and nothing drives a serialiser's mode (BrnSoundLogicModule.cpp case 218).
-// The eaten-collision spew (dword_82FFB91C >= 3 -> InputCollision::DebugPrint) is a developer
-// print on a zero .bss level; left out.
+// The eaten-collision spew uses the live menu level (>=3) and original DebugPrint.
 // ---------------------------------------------------------------------------
 void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformation& lrFrame)
 {
@@ -1396,6 +1599,11 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
             if (mFrameInformation.meFatality.GetCurrent() == E_FATAL_OFF)
             {
                 lrInput.mbCull = true;
+                if (KI_DEBUG_CULL_AGAINST_PLAYING >= 3)
+                {
+                    BrnSound::Debug::DebugComponent::mLogCombined << "Scraping culling. Collision is eaten.";
+                    lrInput.DebugPrint(*this);
+                }
                 // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a repeated impact eaten.
                 if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
                 {
@@ -1909,9 +2117,23 @@ InputCollision::InputCollision(CollisionStateManager& lMgr,
     maParameter[1] = CameraDistanceSquared(lEntity.mPosition, lMgr.mCameraInfo);
     maParameter[2] = CameraFacingRaw(lEntity.mPosition, lMgr.mCameraInfo);
     if (lEvent.meNewState != BrnPhysics::Deformation::E_GLASS_STATE_SMASHED || lEvent.mbDontPlaySmashEffect)
+    {
         mbCull = true;
+        if (KI_DEBUG_CULL_AGAINST_PLAYING >= 4)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined << "Glass: Don't play anything but smash.";
+            DebugPrint(lMgr);
+        }
+    }
     if (maMaterial[0] == static_cast<u64>(AttribSys::Enums::eMaterialType::AiCar))
+    {
+        if (KI_DEBUG_CULL_AGAINST_PLAYING >= 4)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined << "Glass: AI cars don't play.";
+            DebugPrint(lMgr);
+        }
         mbCull = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2033,21 +2255,55 @@ void CollisionStateManager::UpdateHingingBodyParts(
 
 void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
 {
-    // ARTIST 0x826D3CF0: default (unfiltered) developer settings. The distance
-    // splat at 0x830085A0 is 4900, initialized at 0x82C632B8 from 0x820B94B4.
+    // ARTIST 0x826D3CF0: prop inputs filter only material B; regular inputs
+    // accept either material. The action selection is exact equality.
+    if (KI_DEBUG_FILTER_MATERIAL)
+    {
+        const u64 lxMaterial = u64(1) << KI_DEBUG_FILTER_MATERIAL;
+        if ((lrCollision.maMaterial[1] & lxMaterial) == 0 &&
+            (lrCollision.mePipeline != InputCollision::E_REGULAR ||
+             (lrCollision.maMaterial[0] & lxMaterial) == 0))
+            return;
+    }
+    if (KI_DEBUG_FILTER_ACTION > 0 &&
+        static_cast<u32>(lrCollision.meAction) != (1u << (KI_DEBUG_FILTER_ACTION - 1)))
+        return;
+
+    // The distance splat at 0x830085A0 is 4900 (CRT 0x82C632B8).
     const Vector3& lrCamera = mCameraInfo.mTransform.Pos();
     const f32 lfX = lrCollision.mPosition.x - lrCamera.x;
     const f32 lfY = lrCollision.mPosition.y - lrCamera.y;
     const f32 lfZ = lrCollision.mPosition.z - lrCamera.z;
     if (lfX * lfX + lfY * lfY + lfZ * lfZ > 4900.0f)
+    {
+        if (KI_DEBUG_CULL_AGAINST_PLAYING >= 4)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined << "Distance Culling.";
+            lrCollision.DebugPrint(*this);
+        }
         return;
+    }
 
     // The console makes room by culling, then drops the new collision if still
     // full. It does not assert on a busy collision frame.
     if (mu32InputCollisionCount >= 64u)
+    {
+        if (KI_DEBUG_CULL_AGAINST_PLAYING)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined
+                << "Culling: Warning, input collision buffer full. Performing emergency culling... \n";
+            lrCollision.DebugPrint(*this);
+        }
         CullInputCollisions();
+    }
     if (mu32InputCollisionCount < 64u)
         maInputCollision[mu32InputCollisionCount++] = lrCollision;
+    else if (KI_DEBUG_CULL_AGAINST_PLAYING)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined
+            << "Culling: Warning!!! Collision input buffer full even after culling!\n";
+        lrCollision.DebugPrint(*this);
+    }
 }
 
 // ARTIST 0x826A00C8. Keep the strongest contact for an entity pair and orientation.
@@ -2082,10 +2338,22 @@ void CollisionStateManager::CullInputCollisions_RemoveDuplicates()
                 if (b.x > a.x || b.y > a.y || b.z > a.z || b.w > a.w)
                 {
                     lpWinner->mbCull = true;
+                    if (KI_DEBUG_CULL_AGAINST_PLAYING >= 2)
+                    {
+                        BrnSound::Debug::DebugComponent::mLogCombined << "Found Something Bigger";
+                        lpWinner->DebugPrint(*this);
+                    }
                     lpWinner = lpOther;
                 }
                 else
+                {
                     lpOther->mbCull = true;
+                    if (KI_DEBUG_CULL_AGAINST_PLAYING >= 2)
+                    {
+                        BrnSound::Debug::DebugComponent::mLogCombined << "Found Something Bigger Ver 2";
+                        lpOther->DebugPrint(*this);
+                    }
+                }
                 lapCollisions[luJ] = lapCollisions[--luCount];
             }
             else
@@ -2111,6 +2379,12 @@ void CollisionStateManager::CullAgainstPlaying()
             if (lrPlaying.meFatality == E_FATAL_START && lbRecent)
             {
                 lrInput.mbCull = true;
+                if (KI_DEBUG_CULL_AGAINST_PLAYING >= 1)
+                {
+                    BrnSound::Debug::DebugComponent::mLogCombined
+                        << "Fatal Start exclisivity. No other collisions play ";
+                    lrInput.DebugPrint(*this);
+                }
                 break;
             }
             const bool lbRegular = lrInput.mePipeline == InputCollision::E_REGULAR;
@@ -2135,6 +2409,11 @@ void CollisionStateManager::CullAgainstPlaying()
             if (lrInput.meOrientation == lrPlaying.meOrientation && lbRecent)
             {
                 lrInput.mbCull = true;
+                if (KI_DEBUG_CULL_AGAINST_PLAYING >= 2)
+                {
+                    BrnSound::Debug::DebugComponent::mLogCombined << "Cull: Already Playing ";
+                    lrInput.DebugPrint(*this);
+                }
                 break;
             }
         }
@@ -2295,6 +2574,19 @@ void CollisionStateManager::UpdateResolver(
     // after the race-car cache update below; the two touch disjoint state, so it stays here at the
     // head. The director camera is a member of the input (GetDirectorCamera @0x82694B38 returns its
     // address) -- there is no null test on the console.
+    if (KI_SPEW_COLLISION_INFO || KI_DEBUG_CULL_AGAINST_PLAYING)
+    {
+        CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+        if (mFrameInformation.meImpactTime.GetCurrent() != lrFrame.meImpactTime.GetCurrent())
+            lrLog << "[" << mfCurrentTime << "]>>>> IMPACT TIME STATE CHANGE, NOW: "
+                  << KAPC_IMPACT_TIME_NAMES[DebugFlagIndex(lrFrame.meImpactTime.GetCurrent())] << "\n";
+        if (mFrameInformation.meFatality.GetCurrent() != lrFrame.meFatality.GetCurrent())
+        {
+            const char* const lapFatalNames[3] = {"OFF", "ON", "START"};
+            lrLog << "[" << mfCurrentTime << "]>>>> FATALITY STATE CHANGE, NOW "
+                  << lapFatalNames[lrFrame.meFatality.GetCurrent()] << "\n";
+        }
+    }
     mFrameInformation = lrFrame;
     const BrnDirector::Camera::Camera& lrCamera = *lrInput.GetDirectorCamera();
 
@@ -2350,60 +2642,62 @@ void CollisionStateManager::UpdateResolver(
     // stamped with the manager's current time (`lfs f1, 4(r31)`) and the frame step. Console order:
     // race cars (data+0), traffic (+0x70A0), the discarded contacts (+0x193C0) -- then the glass,
     // hinging body-part, broken-joint, detached-part and car-part legs -- then the props (+0x167E0).
-    // (Each group sits behind a developer filter -- dword_82FFB920 / B92C / B928 / B924, zero .bss
-    // with no writer.)
+    // Each group retains its original live menu filter (0x82FFB920/B92C/B928/B924).
     const BrnPhysics::ContactSpy::ContactSpyInterface& lrContacts =
         lrInput.GetContactSpyQueueInterface();
     s32 liPropCount = 0;
     if (lrContacts.IsValid())
     {
-        ImportContactSpies(*lrContacts.GetRaceCarContacts(), lrInput, mfCurrentTime, afDeltaTime);
-        ImportContactSpies(*lrContacts.GetTrafficContacts(), lrInput, mfCurrentTime, afDeltaTime);
-
-        // 0x826F93C4..0x826F9408: the discarded contacts, through the inlined
-        // ContactSpyInterface::GetDiscardedContacts ("mpData != NULL", h:219, then mpData + 0x193C0),
-        // one builder each (sub_826BDAE8). CONSOLE FACT: the queue is empty on every frame. Its only
-        // producer is PhysicsModule::BridgeSimulationToOutput draining VehicleManager::mDiscardedContacts
-        // (0x825B055C..0x825B05EC), and nothing in the image appends to that one -- every instruction on
-        // its seats is Construct's bind (0x8263BFA0..0x8263C060), a Clear (PrepareData 0x82633710,
-        // DoCrashPrediction 0x82646198) or that drain. The leg runs as the console runs it, over nothing.
-        const u32 lu32DiscardedFrom = mu32InputCollisionCount;
-        ImportContactSpies(*lrContacts.GetDiscardedContacts(), lrInput, mfCurrentTime, afDeltaTime);
-        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): proves the leg is dispatched and
-        // counts what it carried -- the first three frames, every 1800th after that (8 lines), and any
-        // frame whose queue is not empty (16 lines).
-        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+        if (!KI_DEBUG_FILTER_NO_COLLISION)
         {
-            static u32 su32DiscardedFrames = 0;
-            static u32 su32DiscardedRecords = 0;
-            static u32 su32DiscardedPeriodicLines = 0;
-            static u32 su32DiscardedFilledLines = 0;
-            const s32 liDiscarded = lrContacts.GetDiscardedContacts()->GetLength();
-            ++su32DiscardedFrames;
-            su32DiscardedRecords += static_cast<u32>(liDiscarded);
-            bool lbPrint = false;
-            if (liDiscarded != 0 && su32DiscardedFilledLines < 16u)
-            {
-                ++su32DiscardedFilledLines;
-                lbPrint = true;
-            }
-            else if ((su32DiscardedFrames <= 3u || su32DiscardedFrames % 1800u == 0u) &&
-                     su32DiscardedPeriodicLines < 8u)
-            {
-                ++su32DiscardedPeriodicLines;
-                lbPrint = true;
-            }
-            if (lbPrint)
-            {
-                char lacLine[192];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] discarded leg dispatched frame=%u n=%d added=%u total_records=%u\n",
-                              su32DiscardedFrames, liDiscarded, mu32InputCollisionCount - lu32DiscardedFrom,
-                              su32DiscardedRecords);
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
+            ImportContactSpies(*lrContacts.GetRaceCarContacts(), lrInput, mfCurrentTime, afDeltaTime);
+            ImportContactSpies(*lrContacts.GetTrafficContacts(), lrInput, mfCurrentTime, afDeltaTime);
 
+            // 0x826F93C4..0x826F9408: the discarded contacts, through the inlined
+            // ContactSpyInterface::GetDiscardedContacts ("mpData != NULL", h:219, then mpData + 0x193C0),
+            // one builder each (sub_826BDAE8). CONSOLE FACT: the queue is empty on every frame. Its only
+            // producer is PhysicsModule::BridgeSimulationToOutput draining VehicleManager::mDiscardedContacts
+            // (0x825B055C..0x825B05EC), and nothing in the image appends to that one -- every instruction on
+            // its seats is Construct's bind (0x8263BFA0..0x8263C060), a Clear (PrepareData 0x82633710,
+            // DoCrashPrediction 0x82646198) or that drain. The leg runs as the console runs it, over nothing.
+            const u32 lu32DiscardedFrom = mu32InputCollisionCount;
+            ImportContactSpies(*lrContacts.GetDiscardedContacts(), lrInput, mfCurrentTime, afDeltaTime);
+            // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): proves the leg is dispatched and
+            // counts what it carried -- the first three frames, every 1800th after that (8 lines), and any
+            // frame whose queue is not empty (16 lines).
+            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+            {
+                static u32 su32DiscardedFrames = 0;
+                static u32 su32DiscardedRecords = 0;
+                static u32 su32DiscardedPeriodicLines = 0;
+                static u32 su32DiscardedFilledLines = 0;
+                const s32 liDiscarded = lrContacts.GetDiscardedContacts()->GetLength();
+                ++su32DiscardedFrames;
+                su32DiscardedRecords += static_cast<u32>(liDiscarded);
+                bool lbPrint = false;
+                if (liDiscarded != 0 && su32DiscardedFilledLines < 16u)
+                {
+                    ++su32DiscardedFilledLines;
+                    lbPrint = true;
+                }
+                else if ((su32DiscardedFrames <= 3u || su32DiscardedFrames % 1800u == 0u) &&
+                         su32DiscardedPeriodicLines < 8u)
+                {
+                    ++su32DiscardedPeriodicLines;
+                    lbPrint = true;
+                }
+                if (lbPrint)
+                {
+                    char lacLine[192];
+                    std::snprintf(lacLine, sizeof(lacLine),
+                                  "[collision-audio] discarded leg dispatched frame=%u n=%d added=%u total_records=%u\n",
+                                  su32DiscardedFrames, liDiscarded, mu32InputCollisionCount - lu32DiscardedFrom,
+                                  su32DiscardedRecords);
+                    *CgsDev::Log::gpDebugPrint << lacLine;
+                }
+            }
+
+        }
         // The deformation legs (item 3), on the deformation output the sound input carries (the
         // third input getter, r16): glass 0x826F9420, hinged parts (+0x74) 0x826F9438, broken joints
         // (+0x9F0) 0x826F9450, detached parts (+0x3A0) 0x826F9468, then ContactSpyData's physical
@@ -2481,23 +2775,76 @@ void CollisionStateManager::UpdateResolver(
         static LegBudget sGlassBudget = {0, 0}, sHingeBudget = {0, 0}, sJointBudget = {0, 0};
         static LegBudget sDetachedBudget = {0, 0}, sCarPartBudget = {0, 0};
         u32 lu32LegStart = mu32InputCollisionCount;
-        UpdateGlass(lrDeformation);
+        if (!KI_DEBUG_FILTER_NO_GLASS)
+            UpdateGlass(lrDeformation);
         DiagLeg("glass", lu32LegStart, sGlassBudget);
         lu32LegStart = mu32InputCollisionCount;
-        UpdateHingingBodyParts(&lrDeformation.mJointedPartStateQueue);
-        DiagLeg("hinge", lu32LegStart, sHingeBudget);
-        lu32LegStart = mu32InputCollisionCount;
-        ImportContactSpies(lrDeformation.mBrokenJointNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
-        DiagLeg("joint", lu32LegStart, sJointBudget);
-        lu32LegStart = mu32InputCollisionCount;
-        ImportContactSpies(lrDeformation.mDetachedPartNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
-        DiagLeg("detached", lu32LegStart, sDetachedBudget);
-        lu32LegStart = mu32InputCollisionCount;
-        ImportContactSpies(*lrContacts.GetPhysicalCarPartContacts(), lrInput, mfCurrentTime, afDeltaTime);
-        DiagLeg("carpart", lu32LegStart, sCarPartBudget);
+        if (!KI_DEBUG_FILTER_NO_BODY_PARTS)
+        {
+            UpdateHingingBodyParts(&lrDeformation.mJointedPartStateQueue);
+            DiagLeg("hinge", lu32LegStart, sHingeBudget);
+            lu32LegStart = mu32InputCollisionCount;
+            ImportContactSpies(lrDeformation.mBrokenJointNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
+            DiagLeg("joint", lu32LegStart, sJointBudget);
+            lu32LegStart = mu32InputCollisionCount;
+            ImportContactSpies(lrDeformation.mDetachedPartNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
+            DiagLeg("detached", lu32LegStart, sDetachedBudget);
+            lu32LegStart = mu32InputCollisionCount;
+            ImportContactSpies(*lrContacts.GetPhysicalCarPartContacts(), lrInput, mfCurrentTime, afDeltaTime);
+            DiagLeg("carpart", lu32LegStart, sCarPartBudget);
+        }
 
-        liPropCount = lrContacts.GetPropContacts()->GetLength();
-        ImportContactSpies(*lrContacts.GetPropContacts(), lrInput, mfCurrentTime, afDeltaTime);
+        if (!KI_DEBUG_FILTER_NO_PROPS)
+        {
+            liPropCount = lrContacts.GetPropContacts()->GetLength();
+            ImportContactSpies(*lrContacts.GetPropContacts(), lrInput, mfCurrentTime, afDeltaTime);
+        }
+    }
+
+    if (KI_DEBUG_SPEW_ALL_INPUT_COLLISIONS)
+    {
+        for (u32 luIndex = 0; luIndex < mu32InputCollisionCount; ++luIndex)
+        {
+            BrnSound::Debug::DebugComponent::mLogCombined << "Input Collision";
+            maInputCollision[luIndex].DebugPrint(*this);
+        }
+    }
+
+    // ARTIST 0x826F9590..9650. The original Force-ID audition really leaves
+    // position, entity IDs and priority uninitialized. Preserve that broken
+    // leftover rather than supply a newly invented camera/player position.
+    static s32 siForcedSampleFrames = 0; // dword_8300C7A8
+    if (KI_DEBUG_SAMPLE_ID_TO_PLAY_SMALL != -1 && siForcedSampleFrames++ == 120)
+    {
+        siForcedSampleFrames = 0;
+        InputCollision lCollision;
+        lCollision.maMaterial[0] = 2;
+        lCollision.maMaterial[1] = 0x10;
+        lCollision.meAction = AttribSys::Enums::eAction::Collision;
+        lCollision.meOrientation = AttribSys::Enums::eOrientation::Front;
+        lCollision.mePipeline = static_cast<InputCollision::EPipeline>(KI_DEBUG_PIPELINE_TOPLAY);
+        lCollision.mbCull = false;
+        lCollision.maParameter[0] = Splat(3.0f);
+        lCollision.maParameter[1] = Splat(1.0f);
+        lCollision.maParameter[2] = Splat(1.0f);
+        AddInputCollision(lCollision);
+    }
+    // 0x826F9654..9714: Play Tons does set a position, but retains the same
+    // indeterminate entity IDs/priority. Its sample override is in GetRandomSampleID.
+    if (KI_DEBUG_SPAWN_LOTS_OF_SAMPLES)
+    {
+        InputCollision lCollision;
+        lCollision.mPosition = mCameraInfo.mTransform.Pos();
+        lCollision.maMaterial[0] = 2;
+        lCollision.maMaterial[1] = 0x10;
+        lCollision.meAction = AttribSys::Enums::eAction::Collision;
+        lCollision.meOrientation = AttribSys::Enums::eOrientation::Front;
+        lCollision.mePipeline = static_cast<InputCollision::EPipeline>(KI_DEBUG_PIPELINE_TOPLAY);
+        lCollision.mbCull = false;
+        lCollision.maParameter[0] = Splat(3.0f);
+        lCollision.maParameter[1] = Splat(1.0f);
+        lCollision.maParameter[2] = Splat(1.0f);
+        AddInputCollision(lCollision);
     }
 
     UpdateScrapes(lrFrame);                                                           // 0x826F9720
@@ -2607,7 +2954,20 @@ CgsSound::Logic::State* CollisionStateManager::GetFreeState(void* apvAttachment)
     if (lpLowestPriority &&
         lrIncoming.mfPriority > lpLowestPriority->GetOutputCollision().mfPriority &&
         lpLowestPriority->Detach())
+    {
+        if (KI_DEBUG_DETACHING)
+        {
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "[" << mfCurrentTime << "]Detaching playing Collision:";
+            if (static_cast<u32>(lpLowestPriority->GetOutputCollision().mBinKey) != 0)
+                lpLowestPriority->GetOutputCollision().DebugPrint(*this);
+            else
+                lrLog << " type scrape\n";
+            lrLog << "[" << mfCurrentTime << "]to attach this:";
+            lrIncoming.DebugPrint(*this);
+        }
         return lpLowestPriority;
+    }
     return nullptr;
 }
 
@@ -2827,6 +3187,8 @@ void CollisionStateManager::SelectCollisionBin(
     }
     if (lrOutput.maMaterial[1] == 1)
         return;
+    if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 1)
+        lrOutput.DebugPrint(*this);
     const f32 lfDistanceSquared = lrOutput.maParameter[1].x;
     const f32 lfImpulse = lrOutput.maParameter[0].x;
 
@@ -2872,38 +3234,95 @@ void CollisionStateManager::SelectCollisionBin(
         if (!lBin.IsValid())
             continue;
         ++luValidBins;
+        if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 3)
+        {
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "BinLogic: Trying Bin " << luIndex << "\t"
+                  << "BinLogic: Bin is like... MAt A: " << CgsDev::E_PRINTMODE_HEXONCE << lrEntry.mx64MaterialA
+                  << " MAt B: " << CgsDev::E_PRINTMODE_HEXONCE << lrEntry.mx64MaterialB
+                  << " Orient: " << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(lBin.mOrientation())
+                  << " Action: " << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(lBin.mAction()) << "\t";
+        }
         if ((lBin.mCameras() & mx32CameraBinFlags) == 0)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "BinLogic: Camera Mismatch, bin flags [" << static_cast<u32>(lBin.mCameras())
+                      << "], game-flags [" << mx32CameraBinFlags << "], next...\n";
+            }
             continue;
+        }
         ++luCameraBins;
         if ((lBin.mGameModes() & mx32GameModeBinFlags) == 0)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "BinLogic: Game mode mismatch, bin flags [" << static_cast<u32>(lBin.mGameModes())
+                      << "], game flags [" << mx32GameModeBinFlags << "], next...\n";
+            }
             continue;
+        }
         ++luGameModeBins;
         if ((lBin.mImpactTime() & static_cast<u32>(lrOutput.meImpactTime)) == 0)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+                BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Impact time Mismatch, next\n";
             continue;
+        }
         ++luImpactTimeBins;
         if ((lBin.mFatalityFlag() &
              (1u << static_cast<u32>(lrOutput.meFatality))) == 0)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+                BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Fatality Mismatch, next\n";
             continue;
+        }
         ++luFatalityBins;
         if ((lBin.mOrientation() &
              static_cast<u32>(lrOutput.meOrientation)) == 0)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+                BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Orientaion Mismatch, next\n";
             continue;
+        }
         ++luOrientationBins;
         if ((lBin.mAction() & static_cast<u32>(lrOutput.meAction)) == 0)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+                BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Detach Mismatch, next\n";
             continue;
+        }
         ++luActionBins;
         const f32 lfDistanceMin = lBin.DistanceFactor_Min();
         const f32 lfDistanceMax = lBin.DistanceFactor_Max();
         if (lfDistanceSquared < lfDistanceMin * lfDistanceMin ||
             lfDistanceSquared > lfDistanceMax * lfDistanceMax)
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "BinLogic: Distance mismatch...Distance: " << std::sqrt(lfDistanceSquared)
+                      << "BinMax: " << lfDistanceMax << "BinMin: " << lfDistanceMin << "\n";
+            }
             continue;
+        }
         ++luDistanceBins;
 
         // 0x826AA2B4 `stb r22, 0xD4(r29)`: the bin index is stored as soon as the distance test
         // passes -- before the impulse test can still reject this bin.
         lrOutput.miBinIndex = static_cast<s8>(luIndex);
         if (lfImpulse < lBin.PhysicsImpulseNormalization_MIN())
+        {
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "BinLogic: Impulse too small...Impulse " << lfImpulse
+                      << "BinMin = " << lBin.PhysicsImpulseNormalization_MIN() << "\n";
+            }
             continue;
+        }
         ++luImpulseBins;
 
         // 0x826AA320 `std r25, 0x90(r29)`: the bin's collection key, stored before the size test.
@@ -2919,6 +3338,11 @@ void CollisionStateManager::SelectCollisionBin(
             (lBin.PhysicsImpulseNormalization_MAX() - lBin.PhysicsImpulseNormalization_MIN());
         lfNormalized = (-lfNormalized >= 0.0f) ? 0.0f : lfNormalized;
         lfNormalized = (1.0f - lfNormalized >= 0.0f) ? lfNormalized : 1.0f;
+        if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+        {
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "BinLogic: Impulse = " << lfImpulse << "normalized to " << lfNormalized << "\n";
+        }
 
         // 0x826AA38C..0x826AA4F0: the normalised impulse picks ONE size against the bin's
         // IntensityThreshold (lane 1 for large, lane 0 for medium). A bin with no sample of that
@@ -2945,6 +3369,13 @@ void CollisionStateManager::SelectCollisionBin(
         if (liNumSamples <= 0)
         {
             lrOutput.miSampleID = -1;
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
+            {
+                BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: "
+                    << (leSize == E_SIZE_LARGE ? "No large samples in this bin, next\n" :
+                        leSize == E_SIZE_MEDIUM ? "No medium samples in this bin, next\n" :
+                                                "No small samples in this bin, next\n");
+            }
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG); the console's own
             // BinLogic debug text here is "No large / medium / small samples in this bin, next".
             if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
@@ -2975,6 +3406,21 @@ void CollisionStateManager::SelectCollisionBin(
                    lrOutput.meBankType < E_COLLISION_SPLICE_BANK_MAX,
                    "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
         lrOutput.mfPriority += lBin.Priority();
+        if (KI_SPEW_COLLISION_BIN_LOGIC)
+        {
+            char lacMaterialA[256];
+            char lacMaterialB[256];
+            Debug_GetMaterialBitfieldNames(lrEntry.mx64MaterialA, lrOutput.mePipeline,
+                                           lacMaterialA, sizeof(lacMaterialA));
+            Debug_GetMaterialBitfieldNames(lrEntry.mx64MaterialB, InputCollision::E_REGULAR,
+                                           lacMaterialB, sizeof(lacMaterialB));
+            if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 1)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "BinLogic: I'm happy with bin " << luIndex << "\tA = [" << lacMaterialA
+                      << "], B = [" << lacMaterialB << "]\n";
+            }
+        }
 
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the selection resolved
         // through the pipeline's lookup cache -- which entry, and the pair it matched on. A
@@ -3004,6 +3450,14 @@ void CollisionStateManager::SelectCollisionBin(
             }
         }
         return;
+    }
+
+    if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 1)
+        BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Totally failed... \n";
+    if (KI_DEBUG_CULL_AGAINST_PLAYING >= 2)
+    {
+        BrnSound::Debug::DebugComponent::mLogCombined << "Failed Bin Logic: ";
+        lrOutput.DebugPrint(*this);
     }
 
     if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
@@ -3084,6 +3538,14 @@ void CollisionStateManager::GetRandomSampleID(OutputCollision& lrOutput)
         lrHistory.FindRandomOldest<u16, 32>(lauSampleIds, luNumSamples);
     lrHistory.Update(luSampleId);
     lrOutput.miSampleID = static_cast<s32>(luSampleId);
+    if (KI_DEBUG_SAMPLE_ID_TO_PLAY_SMALL != -1)
+        lrOutput.miSampleID = KI_DEBUG_SAMPLE_ID_TO_PLAY_LARGE + KI_DEBUG_SAMPLE_ID_TO_PLAY_SMALL;
+    if (KI_DEBUG_SPAWN_LOTS_OF_SAMPLES)
+    {
+        lrOutput.miSampleID = static_cast<s32>(
+            static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+                ->GetRandomGenerator().RandomUInt(0, 100));
+    }
 }
 
 // Explicit instantiations (the two crash-bin specialisations the X360 build emits).

@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -59,9 +60,10 @@ CgsSound::Logic::EffectControl* EnclosureControl::Create( bool /*lbFlavour*/ )
     return new EnclosureControl();
 }
 
-// The shortest gap between two whoosh triggers, in seconds; Attach starts the timer here
-// so the first trigger is never suppressed.
-static const f32 KF_MIN_TIME_BETWEEN_TRIGGERS = 0.5f;
+// ARTIST debug-menu backing cells. These exact globals are registered by the Sound page.
+bool KB_SPEW_WHOOSH_INFO = false; // byte_82FFB8BE
+f32 KF_WHOOSH_MIN_VELOCITY_THRESHOLD = 60.0f; // flt_82F2CDF0
+f32 KF_MIN_TIME_BETWEEN_TRIGGERS = 0.5f; // flt_82F2CDF4
 
 // Controller slot 0 is the physics control.
 s32 EnclosureControl::GetController(s32 aiIndex)
@@ -100,9 +102,8 @@ BrnTrigger::GenericRegion::Type EntityTriggerInfo::GetChangeType() const
     return static_cast<BrnTrigger::GenericRegion::Type>(liFound);
 }
 
-// Original debug bytes 82FFB8C8 and 82FFB8BE (both initially false).
+// Original debug byte 82FFB8C8 (initially false), shared with StaticPassbyControl.
 bool KB_SHOW_STATIC_ENVIRONMENT = false;
-static bool sbDebugWhoosh = false;
 
 // ARTIST 826F4F40, adjusted EffectBase this. DWARF BrnEnclosureControl.cpp:190.
 void EnclosureControl::UpdateParams(f32 afTimeStep)
@@ -156,8 +157,8 @@ void EnclosureControl::ProcessTriggerAction(
     // 8269B058 blt ->B138 rejects; otherwise ->B05C continues, including NaN.
     if (mfTimeSinceTrigger < KF_MIN_TIME_BETWEEN_TRIGGERS)
     {
-        if (sbDebugWhoosh)
-            *CgsDev::Log::gpDebugPrint << "[Whoosh][FAIL] Too little time between triggers.\n";
+        if (KB_SPEW_WHOOSH_INFO)
+            BrnSound::Debug::DebugComponent::mLogCombined << "[Whoosh][FAIL] Too little time between triggers.\n";
         return;
     }
     const f32 lfSpeed = mpPhysicsControl->GetPhysicsData().mSpeedMPH.GetCurrent();
@@ -165,10 +166,10 @@ void EnclosureControl::ProcessTriggerAction(
     if (liType >= 19)
         return;
     // 8269B088 blt ->B11C rejects; otherwise ->B08C posts, including NaN.
-    if (lfSpeed < 60.0f) // 82F2CDF0
+    if (lfSpeed < KF_WHOOSH_MIN_VELOCITY_THRESHOLD)
     {
-        if (sbDebugWhoosh)
-            *CgsDev::Log::gpDebugPrint << "[Whoosh][FAIL] Car below velocity threshold.\n";
+        if (KB_SPEW_WHOOSH_INFO)
+            BrnSound::Debug::DebugComponent::mLogCombined << "[Whoosh][FAIL] Car below velocity threshold.\n";
         return;
     }
     auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
@@ -179,8 +180,8 @@ void EnclosureControl::ProcessTriggerAction(
         arAction.mQueryPos, 0.0f,
         static_cast<AttribSys::Enums::ePassbyTypes::ePassbyTypes>(liType), false, 1.0f);
     lpPassbys->PostPassby(lPassby);
-    if (sbDebugWhoosh)
-        *CgsDev::Log::gpDebugPrint << "[Whoosh][PASS][Type " << liType << "] Car above velocity threshold.\n";
+    if (KB_SPEW_WHOOSH_INFO)
+        BrnSound::Debug::DebugComponent::mLogCombined << "[Whoosh][PASS][Type " << liType << "] Car above velocity threshold.\n";
     static s32 siDiag = 0;
     if (SndEnvDiagBudget(siDiag))
         *CgsDev::Log::gpDebugPrint << "[sndenv] enclosure passby type=" << liType

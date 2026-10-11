@@ -184,6 +184,8 @@ private:
 // =============================================================================
 struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
 {
+    // The original ScrapeEffect writes this real config sub-object directly.
+    using CgsSound::Logic::Cgs3dEffectControl::mDebugRenderingMessageData;
     Collision3DControl();          // @ 0x826E88D0
     virtual ~Collision3DControl(); // @ 0x826F8168
 

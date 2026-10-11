@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameSource/Sound/Collision/BrnCollisionEffect.h"
 #include "GameSource/Sound/Collision/BrnCollisionState.h"
+#include "GameSource/Sound/Collision/BrnCollisionStateManager.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -25,6 +27,8 @@ namespace Logic
 {
 namespace Collision
 {
+
+s32 KI_DEBUG_RENDER_COLLISIONS = 0; // ARTIST 0x82FFB8E4
 
 CollisionControl::CollisionControl()
     : BrnSound::Logic::BrnEffectControl()
@@ -178,6 +182,20 @@ void CollisionControl::UpdateParams(f32 /*afDeltaTime*/)
             }
         }
         mpCollisionState->Detach();
+    }
+
+    if (KI_DEBUG_RENDER_COLLISIONS)
+    {
+        BrnSound::Logic::Brn3DEffectControl::DrawSphere lSphere;
+        lSphere.mfHeightOffset = 0.0f;
+        lSphere.mfRadius = 0.25f;
+        lSphere.mfDurationVisible = 1.0f;
+        lSphere.mpDebugString = nullptr;
+        CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> lMessage(lSphere);
+        lMessage.Construct(1, 5,
+            static_cast<u16>((mpCollision3DControl->GetId() >> 11) & 0x1F), 1,
+            CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+        GetLogicModule()->PostMessage(lMessage);
     }
 }
 

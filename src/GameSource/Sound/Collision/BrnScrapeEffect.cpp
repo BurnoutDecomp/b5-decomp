@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Collision/BrnScrapeEffect.h"
+#include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
@@ -44,6 +45,9 @@ namespace Logic
 {
 namespace Collision
 {
+
+u32 KI_SPEW_SCRAPE_INFO = 0; // ARTIST 0x82FFB8E8
+u32 KI_DRAW_SCRAPES = 0;    // 0x82FFB8EC
 
 namespace
 {
@@ -263,9 +267,8 @@ u8 ScrapeEffect::MapScrapeToMaterial(const ScrapeInfo& arScrapeInfo) const
 //   lifetime just left SCRAPE: stop the voice, friction / normal / time 0
 // The PC started the voice as soon as the clock passed the attach time, and while playing wrote
 // friction = 32767 - intensity (inverted), normal = intensity and material_a = the orientation.
-// The tail (0x826F8A3C..0x826F8A6C) only configures the 3D control's debug renderer
-// (mDebugRenderingMessageData: mbEnable = KI_DRAW_SCRAPES != 0, a zero .bss tweak; mfYOffset = 2.0)
-// -- a protected member of Cgs3dEffectControl with no audio reader; left out.
+// The tail (0x826F8A3C..0x826F8A6C) configures the 3D control's original debug
+// renderer (mbEnable = KI_DRAW_SCRAPES != 0; mfYOffset = 2.0).
 // ---------------------------------------------------------------------------
 void ScrapeEffect::UpdateParams(f32 /*afDeltaTime*/)
 {
@@ -314,6 +317,11 @@ void ScrapeEffect::UpdateParams(f32 /*afDeltaTime*/)
             mfParam_AEMS_pitch = 4095.0f;
             mfParam_AEMS_material_a = 0.0f;
             miParam_AEMS_material_b = MapScrapeToMaterial(lrScrape);
+            if (KI_SPEW_SCRAPE_INFO)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "[SCRAPE][" << ((GetId() >> 11) & 0x1F) << "]:Start \n";
+            }
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the scrape voice starts.
             if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
             {
@@ -342,14 +350,36 @@ void ScrapeEffect::UpdateParams(f32 /*afDeltaTime*/)
             mfParam_AEMS_friction_stress = (32767.0f - lfFloored >= 0.0f) ? lfFloored : 32767.0f;
             mfParam_AEMS_time_scraping =
                 lpState->GetCurrentTime() - mfScrapeStartTimeStamp;
+            if (KI_SPEW_SCRAPE_INFO)
+            {
+                CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+                lrLog << "[SCRAPE][" << ((GetId() >> 11) & 0x1F) << "]:pitch: " << mfParam_AEMS_pitch
+                      << "\tvolume: " << mfParam_AEMS_volume
+                      << "\tfriction_stress: " << mfParam_AEMS_friction_stress
+                      << "\tnormal_stress: " << mfParam_AEMS_normal_stress
+                      << "\ttime_scraping: " << mfParam_AEMS_time_scraping
+                      << "\tmaterial_a: " << mfParam_AEMS_material_a
+                      << "\tmatrial_b: " << static_cast<s32>(miParam_AEMS_material_b)
+                      << "\tis_Crashing: " << mfParam_AEMS_is_Crashing << "\t\n";
+            }
         }
     }
     else if (lePrevious == CollisionState::E_SCRAPE && lePrevious != leCurrent)
     {
+        if (KI_SPEW_SCRAPE_INFO)
+        {
+            CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
+            lrLog << "[SCRAPE][" << ((GetId() >> 11) & 0x1F) << "]:Stop.\n";
+        }
         mScrapeVoice.Stop();
         mfParam_AEMS_friction_stress = 0.0f;
         mfParam_AEMS_normal_stress = 0.0f;
         mfParam_AEMS_time_scraping = 0.0f;
+    }
+    if (mpCollision3DControl)
+    {
+        mpCollision3DControl->mDebugRenderingMessageData.mbEnable = KI_DRAW_SCRAPES != 0;
+        mpCollision3DControl->mDebugRenderingMessageData.mfYOffset = 2.0f;
     }
 }
 
