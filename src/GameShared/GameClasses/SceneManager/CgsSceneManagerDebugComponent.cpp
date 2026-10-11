@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // the 3D draws
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                     // triangle-test monitor
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"                       // entity + volume managers
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstance.h"                           // VolumeInstance
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"                                     // rw::collision::Volume
@@ -13,9 +14,91 @@
 
 namespace CgsSceneManager
 {
+    namespace
+    {
+        // ARTIST dword_82F33F60: Construct stores the Triangle-Sphere test monitor handle here.
+        s32 siTriangleTestPerfMon = -1;
+    }
+
     const char* SceneManagerDebugComponent::GetName() const
     {
         return "Scene manager";
+    }
+
+    // @ X360 0x828B6658. BaseCollisionGenerator::Destruct @0x8284CB38 is called here by the
+    // console, but that target is an empty `blr`; its call has no state effect and the source
+    // type is not a base of this component. The following named stores match its component fields.
+    void SceneManagerDebugComponent::Construct(const SceneManagerModule* lpSceneManagerModule)
+    {
+        mpSceneManagerModule = lpSceneManagerModule;
+        mfPadding = 0.3f;
+        mbDrawTriangleTest = false;
+        mbDrawPadding = false;
+        mfTriangleScale = 1.0f;
+        mTriangleOffset.x = 0.0f;
+        mTriangleOffset.y = 0.0f;
+        mTriangleOffset.z = 0.0f;
+
+        siTriangleTestPerfMon = CgsDev::PerfMonCpu::AddMonitor(
+            "Triangle-Sphere test", CgsDev::E_PMP_17, false, 80.0f, true);
+
+        mbDrawCachedTriangles = false;
+        mbDrawCacheSpheres = false;
+        mbDrawNonCachedTriangles = false;
+        mbDrawNonCachedSpheres = false;
+        mbDrawCollisionVolumes = false;
+        miTestsToExecute = 1000;
+        miTotalCycles = 1;
+        miCyclesPerCall = 1;
+        miCyclesPerTriangle = 1;
+    }
+
+    // @ X360 0x828AB500. The component resets the same statistics cells that scene-query
+    // producers update and the OnActivate page exposes as read-only variables.
+    void SceneManagerDebugComponent::Update()
+    {
+        SceneManagerModule::ResetDebugPageCounters();
+    }
+
+    // @ X360 0x828AB568. Captions, registration order, ranges, increments and read-only state
+    // are taken from the original ARTIST calls. The dirty flag and statistics remain their
+    // original owner storage in SceneManagerModule/TriangleCacheManager.
+    void SceneManagerDebugComponent::OnActivate()
+    {
+        RegisterVariable(&mbDrawCollisionVolumes, "Draw Collision Volumes");
+        RegisterVariable(&mbDrawTriangleTest, "Draw Triangle Test");
+        RegisterVariable(&mbDrawPadding, "Draw Padding");
+
+        RegisterVariable(&mTriangleOffset.x, "TriX");
+        RegisterVariable(&mTriangleOffset.y, "TriY");
+        RegisterVariable(&mTriangleOffset.z, "TriZ");
+        RegisterVariable(&mfTriangleScale, "TriScale");
+        RegisterVariable(&mfPadding, "Padding");
+        SetStep(&mTriangleOffset.x, 0.025f);
+        SetStep(&mTriangleOffset.y, 0.025f);
+        SetStep(&mTriangleOffset.z, 0.025f);
+        SetStep(&mfTriangleScale, 0.25f);
+        SetStep(&mfPadding, 0.25f);
+
+        RegisterVariable(&mbDrawCachedTriangles, "Draw cached triangles");
+        RegisterVariable(&mbDrawCacheSpheres, "Draw cache spheres");
+        RegisterVariable(&mbDrawNonCachedTriangles, "Draw non-cached triangles");
+        RegisterVariable(&mbDrawNonCachedSpheres, "Draw non-cached spheres");
+
+        RegisterVariable(&miTestsToExecute, "Tests To Execute");
+        SetRange(&miTestsToExecute, 1, 1000000);
+        SetStep(&miTestsToExecute, 1000);
+        RegisterVariable(&miTotalCycles, "Total Cycles");
+        SetReadOnly(&miTotalCycles, true);
+        RegisterVariable(&miCyclesPerCall, "Cycles Per Call");
+        SetReadOnly(&miCyclesPerCall, true);
+        RegisterVariable(&miCyclesPerTriangle, "Cycles Per Triangle");
+        SetReadOnly(&miCyclesPerTriangle, true);
+
+        bool* lpbForceCachesDirty =
+            &const_cast<SceneManagerModule*>(mpSceneManagerModule)->mTriangleCacheManager.mbDEBUGForceAllDirty;
+        RegisterVariable(lpbForceCachesDirty, "Force caches to be dirty");
+        SceneManagerModule::RegisterDebugPageCounters(*this);
     }
 
     // Every slot of the volume-instance pool; empty slots are skipped. Each instance's volume is

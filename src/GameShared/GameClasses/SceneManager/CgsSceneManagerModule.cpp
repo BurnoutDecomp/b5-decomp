@@ -283,6 +283,10 @@ void SceneManagerModule::Construct()
     mOverlapCuller.Construct();             // X360 (**[+0xDC9A0])([+0xDC9A0])
     mFineIntersectionTestModule.Construct();
 
+    // X360 Construct stores zero at SceneManagerModule +0x3A82B0; this is the existing
+    // TriangleCacheManager::mbDEBUGForceAllDirty member at +0x50, later bound by the page.
+    mTriangleCacheManager.mbDEBUGForceAllDirty = false;
+
     mpTriangleCacheCollisionGenerator = nullptr;   // X360 [+0x3A84D0] <- 0
 
     // The two "total CG setup" timers are registered unconditionally each Construct
@@ -290,12 +294,10 @@ void SceneManagerModule::Construct()
     miTimeInCachedContactGen    = CgsDev::PerfMonCpu::AddMonitor("Total cached CG setup", CgsDev::E_PMP_4, false, 10.0f, true);
     miTimeInNonCachedContactGen = CgsDev::PerfMonCpu::AddMonitor("Total non cached  CG setup", CgsDev::E_PMP_4, false, 10.0f, true);
 
-    // X360: mSceneManagerDebugComponent.Construct(this); DebugComponent::Register(&it).
-    // The debug component is modelled as an opaque tail member here (its home header does
-    // not yet compile against the vendor rw headers -- see the module header). Its
-    // construct + debug-overlay registration are owned by that component's own TU; they
-    // are non-load-bearing for the module's scene behaviour and are routed there once the
-    // home compiles.
+    // X360 0x828D0B64..0x828D0B68: construct the typed embedded component, then register
+    // it before the query/contact perfmon entries.
+    mSceneManagerDebugComponent.Construct(this);
+    mSceneManagerDebugComponent.Register();
 
     // Lazily register every contact-generation / triangle-cache / query CPU monitor.
     // Colour 16 = the contact-generation page; colour 17 = the query page.
@@ -2669,9 +2671,9 @@ namespace CgsSceneManager
         // Per-pass query counters. X360 .bss dword_83084860 .. dword_8308488C: each fine pass
         // adds its queue length (`lwz r10 ; add r10, r10, count ; stw r10`), and
         // ProcessTriangleCollisionLineTestNearests keeps a high-water mark. They are the scene
-        // manager's per-frame statistics (the debug component's readers are not mounted). The
-        // DWARF's static list for CgsSceneManagerModule.cpp does not name them, so they carry
-        // descriptive names here; nothing keys on the console addresses.
+        // manager's per-frame statistics. The debug page binds these exact producer cells and
+        // the component Update clears them each frame. Names here document their ARTIST roles;
+        // nothing keys on the console addresses.
         s32 siStat_NumLineTestFine          = 0;   // dword_83084860
         s32 siStat_NumLineTestNearest       = 0;   // dword_83084864
         s32 siStat_NumLineTestFastDS        = 0;   // dword_83084868
@@ -2824,6 +2826,54 @@ namespace CgsSceneManager
     //   0x828CE87C  UnlockBuffersForIO(lpSceneOutput, lpSceneInput)                  (sub_823B7060)
     //   0x828CE888  DestroyIOBuffer<SpatialPartitionIO::OutputBuffer>(lpOutputBufferStack, ...)
     // =========================================================================================
+    // Keep the page attached to the producer-owned cells above. Registration order and captions
+    // follow SceneManagerDebugComponent::OnActivate @ 0x828AB568; these are live pointers, not copies.
+    void SceneManagerModule::RegisterDebugPageCounters(SceneManagerDebugComponent& lrComponent)
+    {
+        lrComponent.RegisterVariable(&siStat_NumLineTestFine,          "Num fine LTs");
+        lrComponent.RegisterVariable(&siStat_NumLineTestNearest,       "Num fine LTNs");
+        lrComponent.RegisterVariable(&siStat_NumLineTestFastDS,        "Num fine LTFDSs");
+        lrComponent.RegisterVariable(&siStat_NumSphereTestFast,        "Num fine STFs");
+        lrComponent.RegisterVariable(&siStat_NumFineVolumeTest,        "Num fine VTs");
+        lrComponent.RegisterVariable(&siStat_NumVolumeTestDeepest,     "Num fine VTNs");
+        lrComponent.RegisterVariable(&siStat_NumTriColLineTestsIn,     "Num generated Triangle LTs");
+        lrComponent.RegisterVariable(&siStat_NumTriColLineTestNearIn,  "Num generated Triangle LTNs");
+        lrComponent.RegisterVariable(&siStat_NumTriColLineTests,       "Total triangle LTs");
+        lrComponent.RegisterVariable(&siStat_NumTriColLineTestNear,    "Total triangle LTNs");
+        lrComponent.RegisterVariable(&siStat_MaxTriColLineTest,        "Max triangle LTs");
+        lrComponent.RegisterVariable(&siStat_MaxTriColLineTestNear,    "Max triangle LTNs");
+
+        lrComponent.SetReadOnly(&siStat_NumLineTestFine, true);
+        lrComponent.SetReadOnly(&siStat_NumLineTestNearest, true);
+        lrComponent.SetReadOnly(&siStat_NumLineTestFastDS, true);
+        lrComponent.SetReadOnly(&siStat_NumSphereTestFast, true);
+        lrComponent.SetReadOnly(&siStat_NumFineVolumeTest, true);
+        lrComponent.SetReadOnly(&siStat_NumVolumeTestDeepest, true);
+        lrComponent.SetReadOnly(&siStat_NumTriColLineTestsIn, true);
+        lrComponent.SetReadOnly(&siStat_NumTriColLineTestNearIn, true);
+        lrComponent.SetReadOnly(&siStat_NumTriColLineTests, true);
+        lrComponent.SetReadOnly(&siStat_NumTriColLineTestNear, true);
+        lrComponent.SetReadOnly(&siStat_MaxTriColLineTest, true);
+        lrComponent.SetReadOnly(&siStat_MaxTriColLineTestNear, true);
+    }
+
+    // X360 0x828AB500 stores zero to dword_83084860..dword_8308488C on each component update.
+    void SceneManagerModule::ResetDebugPageCounters()
+    {
+        siStat_NumLineTestFine = 0;
+        siStat_NumLineTestNearest = 0;
+        siStat_NumLineTestFastDS = 0;
+        siStat_NumSphereTestFast = 0;
+        siStat_NumFineVolumeTest = 0;
+        siStat_NumVolumeTestDeepest = 0;
+        siStat_NumTriColLineTestsIn = 0;
+        siStat_NumTriColLineTestNearIn = 0;
+        siStat_NumTriColLineTests = 0;
+        siStat_NumTriColLineTestNear = 0;
+        siStat_MaxTriColLineTest = 0;
+        siStat_MaxTriColLineTestNear = 0;
+    }
+
     void SceneManagerModule::ProcessCoarseQueries(CgsModule::IOBufferStack* lpInputBufferStack,
                                                   CgsModule::IOBufferStack* lpOutputBufferStack,
                                                   SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
