@@ -31,6 +31,8 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
+#include "GameSource/Resource/BrnResourceAllocator.h" // Allocators and the debug/global graphics allocators
+#include "rw/rwcore_general_alloc.h"              // rw::core::GeneralResourceAllocator base conversion
 
 // BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
 extern u32 suOcclusionCullIndexCountThreshold;
@@ -1388,6 +1390,92 @@ void BrnRendererModule::Construct()
                                     "(effects apply, tint blend and composite skipped)\n");
         }
     }
+}
+
+// @0x82409C20. ARTIST's stage helper increments before checking the terminal state;
+// it returns the previous value, which each call site discards.
+bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    const auto AdvancePrepareStage = [this]()
+    {
+        ++mePrepareStage;
+        CGS_ASSERT(mePrepareStage <= eRendererPrepareDone,
+                   "leEnumIndex <= BrnRendererModule::eRendererPrepareDone");
+    };
+
+    switch (mePrepareStage)
+    {
+    case eRendererPrepareStart:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareManager:
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            return false;
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareBlobbyShadows:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareCoronas:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareDone:
+        meReleaseStage = eRendererReleaseStart;
+        break;
+    default:
+        CGS_ASSERT(false, "Invalid Render Module Prepare State");
+        return false;
+    }
+
+    rw::core::GeneralResourceAllocator* const lpAllocator =
+        lpAllocatorList->GetRWGeneralResourceAllocator(31);
+
+    const bool lbIm2dPrepared = mIm2dRenderBuffer.Prepare(110592, 393216, lpAllocator, false);
+    CGS_ASSERT(lbIm2dPrepared,
+               "mIm2dRenderBuffer.Prepare( KI_IM2D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM2D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
+    const bool lbIm3dPrepared = mIm3dRenderBuffer.Prepare(1024, 0x8000, lpAllocator, false);
+    CGS_ASSERT(lbIm3dPrepared,
+               "mIm3dRenderBuffer.Prepare( KI_IM3D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
+    const bool lbIm3dUntexPrepared =
+        mIm3dRenderBufferUntex.Prepare(0x4000, 0x80000, lpAllocator, false);
+    CGS_ASSERT(lbIm3dUntexPrepared,
+               "mIm3dRenderBufferUntex.Prepare( KI_IM3D_RENDER_BUFFER_UNTEX_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_UNTEX_VERTEX_BUFFER_SIZE, lpAllocator )");
+
+    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+               "Allocators::mpInternalDebugAllocator");
+    const bool lbIm3dDebugPrepared = mIm3dDebugRenderBuffer.Prepare(
+        0x100000, 0x100000, BrnResource::GetDebugAllocator(), true);
+    CGS_ASSERT(lbIm3dDebugPrepared,
+               "mIm3dDebugRenderBuffer.Prepare( KI_IM3D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
+
+    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+               "Allocators::mpInternalDebugAllocator");
+    const bool lbIm2dDebugPrepared = mIm2dDebugRenderBuffer.Prepare(
+        81920, 0x200000, BrnResource::GetDebugAllocator(), true);
+    CGS_ASSERT(lbIm2dDebugPrepared,
+               "mIm2dDebugRenderBuffer.Prepare( KI_IM2D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM2D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
+
+    const bool lbRacePositionPrepared =
+        mIm3dBufferRacePosition.Prepare(0x20000, 0x20000, lpAllocator, false);
+    CGS_ASSERT(lbRacePositionPrepared,
+               "mIm3dBufferRacePosition.Prepare( KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_COMMANDBUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_VERTEXBUFFER_SIZE, lpAllocator )");
+    const bool lbMenusHudPrepared =
+        mIm3dBufferMenusAndHud.Prepare(512, 4, lpAllocator, false);
+    CGS_ASSERT(lbMenusHudPrepared,
+               "mIm3dBufferMenusAndHud.Prepare( KI_IM3D_RENDER_BUFFER_MENUSANDHUD_COMMANDBUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_MENUSANDHUD_VERTEXBUFFER_SIZE, lpAllocator )");
+
+    mSkyDome.Prepare(&mIm3dRendererSkyDome,
+                     BrnResource::Allocators::GetGlobalGraphicsAllocator());
+    mDebugComponent.Register();
+    MemoryUsage();
+    return true;
 }
 
 // @ 0x82405E28 (BrnRendererModule::Update, the SetDispatchFrame expression)
