@@ -2198,6 +2198,25 @@ namespace Vehicle
         return vpu::Splat(lfSign);
     }
 
+    // X360 debug-menu storage shared with VehicleManagerDebugComponent::OnActivate. ARTIST's
+    // OnActivate export is the only reference to the three menu-only values; leave them as storage
+    // and do not invent simulation consumers for them.
+    bool gbEnableInAirRotation = true;                // 0x82F2A1A7; initial byte 1
+    f32 gfRollCorrectionFactor = 2.6f;                // 0x82F2A254; 0x40266666
+    f32 gfIncreaseRollFactor = 1.4f;                  // 0x82F2A25C; 0x3FB33333
+    f32 gfFullDampThreshold = 0.125f;                 // 0x82F2A26C; UpdateInAirBehaviour reads
+    f32 gfNoDampThreshold = 0.25f;                    // 0x82F2A270; UpdateInAirBehaviour reads
+    f32 gfMinRollFactor = 0.30000001f;                // 0x82F2A274; UpdateInAirBehaviour reads
+    f32 gfLandingAssistDamping = 0.14f;                // 0x82F2A258; UpdateInAirBehaviour reads
+    f32 gfMinRollToAllowCorrection = 0.30000001f;     // 0x82F2A260; UpdateInAirBehaviour reads
+    f32 gfMaxWheelieAngle = 11.0f;                    // 0x82F2A264; ApplyBoostKickForce reads
+    f32 gfWheelieLimitDamping = 0.15f;                 // 0x82F2A268; ApplyBoostKickForce reads
+    f32 gfForcedAcceleration = 0.0f;                  // 0x82FB7E24; UpdateEngine reads
+
+    // The static-init thunk @0x82C5C5E0 stores {6.5, 6.5, 6.5, 0} here. UpdateCrashing loads the
+    // full vector, and the Vehicle Manager menu registers its first three named float lanes.
+    Vector3 gvMaxCrashAngularVelocity{6.5f, 6.5f, 6.5f, 0.0f}; // 0x82FB9DA0
+
     // @0x82FB7E20, written at 0x825D0E34 (`stfs f29, kfRollDampingUsed@l`). A DEV WATCH ONLY:
     // VehicleManagerDebugComponent::OnActivate @0x825B5D90 registers this exact address with
     // CgsDev::DebugComponent::RegisterVariable under the label "Roll damping used". Nothing in the
@@ -2213,14 +2232,8 @@ namespace Vehicle
                                               VecFloat lvfTimeStep)
     {
         // ----- every constant image-read; NONE guessed, NONE flagged --------------------------
-        // .data tunables (a contiguous run at 0x82F2A258..0x82F2A274, image-read as
-        // 0.14/1.4/0.3/11.0/0.15/0.125/0.25/0.3; the PS3 DWARF names each as
-        // a file-scope `static float32_t` debug tunable, cited per line):
-        static const f32 KF_X_AXIS_Y_FULL_DAMP_THRESHOLD = 0.125f;      // kfFullDampThreshold @0x82F2A26C (0x3E000000); DWARF msfXAxisYFullDampThreshold (:166)
-        static const f32 KF_X_AXIS_Y_NO_DAMP_THRESHOLD   = 0.25f;       // kfNoDampThreshold   @0x82F2A270 (0x3E800000); DWARF msfXAxisYNoDampThreshold  (:167)
-        static const f32 KF_MIN_ROLL_FACTOR              = 0.30000001f; // kfMinRollFactor     @0x82F2A274 (0x3E99999A); DWARF msfMinRollFactor          (:168)
-        static const f32 KF_MIN_ROLL_TO_ALLOW_CORRECTION = 0.30000001f; // kfMinRollToAllowCorrection @0x82F2A260 (0x3E99999A); DWARF msfInAirMinRollToAllowCorrection (:154)
-        static const f32 KF_LANDING_ASSIST_DAMPING       = 0.14f;       // kfLandingAssistDamping     @0x82F2A258 (0x3E0F5C29); DWARF msfInAirLandingAssistDamping    (:148)
+        // These five .data variables are registered by VehicleManagerDebugComponent::OnActivate
+        // and read from the same global storage here, so menu edits affect the simulation.
         // .bss splats, each seeded once by the init-thunk bank (thunk address cited):
         static const f32 KF_YAW_DAMP_TARGET   = 0.050000001f;  // kYawDamp_Target @0x82FB8FF0 <- flt_820047C8 0.05 (thunk 0x82C5C938)
         static const f32 KF_YAW_DAMP_MIN      = 0.0099999998f; // kYawDamp_Min    @0x82FB91B0 <- flt_82002138 0.01 (thunk 0x82C5C910)
@@ -2267,9 +2280,9 @@ namespace Vehicle
             // How rolled the car is at the instant it leaves the ground: |right.y| is 0 when the
             // car is level and 1 when it is on its side.
             const VecFloat lvfAbsXAxisY = vpu::Splat(std::fabs(lvRight.y)); // `vandc` with sign-mask splat
-            const VecFloat lvfXAxisYFullDampThreshold = vpu::Splat(KF_X_AXIS_Y_FULL_DAMP_THRESHOLD);
-            const VecFloat lvfXAxisYNoDampThreshold   = vpu::Splat(KF_X_AXIS_Y_NO_DAMP_THRESHOLD);
-            const VecFloat lvfMinRollFactor           = vpu::Splat(KF_MIN_ROLL_FACTOR);
+            const VecFloat lvfXAxisYFullDampThreshold = vpu::Splat(gfFullDampThreshold);
+            const VecFloat lvfXAxisYNoDampThreshold   = vpu::Splat(gfNoDampThreshold);
+            const VecFloat lvfMinRollFactor           = vpu::Splat(gfMinRollFactor);
             const VecFloat lvfOne                     = vpu::GetVector4_One();
 
             // The two-segment ramp (0x825D0CD4 / 0x825D0D1C / 0x825D0D98). Level -> ramp 0 .. 0.3
@@ -2361,7 +2374,7 @@ namespace Vehicle
             // =============================================================================
             const VecFloat lvfXAxisY = vpu::Splat(std::fabs(lvRight.y));
             const VecFloat lvfMinRollToAllowCorrection =
-                vpu::Splat(KF_MIN_ROLL_TO_ALLOW_CORRECTION);
+                vpu::Splat(gfMinRollToAllowCorrection);
 
             // Latch "the player has rolled this jump" once |right.y| passes the threshold...
             if (lvfXAxisY.x > lvfMinRollToAllowCorrection.x)
@@ -2385,7 +2398,7 @@ namespace Vehicle
                 if (InAirSelectSign(lvfRollVelocity).x != lfSteerSign)
                 {
                     const VecFloat lvfAssist = vpu::Splat(
-                        std::fabs(lfSteering) * KF_LANDING_ASSIST_DAMPING)
+                        std::fabs(lfSteering) * gfLandingAssistDamping)
                         * lvfTimeStep * vpu::Splat(KF_DAMP_RATE_SCALE);
                     mAngularVelocity = mAngularVelocity - lvAt * (lvfRollVelocity * lvfAssist);
                 }
