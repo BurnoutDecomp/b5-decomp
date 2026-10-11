@@ -213,6 +213,82 @@ namespace Vehicle
         return "Physics";
     }
 
+    // BrnPhysics::Vehicle::DebugComponent::OnActivate @0x82620730.
+    // The member addresses and menu order follow the ARTIST body. The raw gap operands in that
+    // export resolve to the named VehiclePhysics lanes and component members below.
+    void DebugComponent::OnActivate()
+    {
+        RegisterVariable(&mbDrawSuspensionForces, "Suspension..", "Draw suspension forces");
+        RegisterVariable(&mpRaceCarPhysics->mbHasAir, "Suspension..", "Has air");
+        RegisterVariable(&mfDownForceY, "Suspension..", "DownForce");
+        SetReadOnly(&mpRaceCarPhysics->mbHasAir, true);
+        SetReadOnly(&mfDownForceY, true);
+
+        RegisterVariable(&mbRenderCOMPosition, "Rendering..", "Render COM");
+        RegisterVariable(&mbRenderHandlingBody, "Rendering..", "Render Handling Body");
+        RegisterVariable(&mbDrawTractionLines, "Rendering..", "Render traction lines");
+        RegisterVariable(&mbDrawTractionLineNormals, "Rendering..", "Render traction line normals");
+        RegisterVariable(&mbDrawAboveGroundLineTest, "Rendering..", "Render above ground test");
+        RegisterVariable(&mbDrawLastWallTriangle, "Rendering..", "Render last wall triangle");
+        RegisterVariable(&mbDrawAngularVelocity, "Rendering..", "Draw angular velocity");
+
+        RegisterVariable(&mbShowTireFrictions, "", "Show & Hide Tire Frictions");
+        RegisterVariable(&mbOutputGearStats, "", "Output gear stats");
+        RegisterFunction(&ResetGearStats, this, "Reset gear stats");
+        RegisterVariable(&mbOutputDeformationStats, "", "Output deformation stats");
+
+        RegisterVariable(&mafInertia[0], "", "Inertia X");
+        RegisterVariable(&mafInertia[1], "", "Inertia Y");
+        RegisterVariable(&mafInertia[2], "", "Inertia Z");
+        RegisterVariable(&mfSpeedMPH, "", "Speed MPH");
+
+        RegisterVariable(&mpRaceCarPhysics->mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w,
+                         "", "Drift Scale");
+        RegisterVariable(
+            &mpRaceCarPhysics->mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w,
+            "", "Drift Angle");
+        RegisterVariable(
+            &mpRaceCarPhysics->mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.x,
+            "", "Side Force Mag");
+        RegisterVariable(&mpRaceCarPhysics->mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x,
+                         "", "Steering Angle");
+        RegisterVariable(
+            &mpRaceCarPhysics->mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w,
+            "", "Brake Scale");
+        RegisterVariable(&mpRaceCarPhysics->mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y,
+                         "", "Maintained Speed");
+        RegisterVariable(
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x,
+            "", "Maintain Z");
+        RegisterVariable(
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y,
+            "", "Maintain Vel");
+        SetStep(
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x,
+            0.0099999998f);
+        SetStep(
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y,
+            0.0099999998f);
+
+        InitWindows();
+    }
+
+    // BrnPhysics::Vehicle::DebugComponent::InitWindows @0x82603128.
+    // The default overload files the two toggles under this component's "Physics" path. The
+    // windows bind to the same four maWheels slots the original uses at +0x130/+0x210/+0x2F0/+0x3D0.
+    void DebugComponent::InitWindows()
+    {
+        RegisterVariable(&mbRenderFrontWheelsGripCurves, "Front wheel grip curves");
+        RegisterVariable(&mbRenderRearWheelsGripCurves, "Rear wheel grip curves");
+
+        mFrontWheelsGripCurveWindow.Prepare(&mpRaceCarPhysics->maWheels[0],
+                                            &mpRaceCarPhysics->maWheels[1],
+                                            "Front wheel grip curves");
+        mRearWheelsGripCurveWindow.Prepare(&mpRaceCarPhysics->maWheels[2],
+                                           &mpRaceCarPhysics->maWheels[3],
+                                           "Rear wheel grip curves");
+    }
+
     // BrnPhysics::Vehicle::DebugComponent::SetLastWallTriangle
     //   Record the collision triangle of the last wall the car scraped (for the
     //   DrawLastWallTriangle debug overlay). The console asserts lpTriangle != NULL then copies the

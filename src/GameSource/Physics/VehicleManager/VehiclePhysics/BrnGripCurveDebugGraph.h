@@ -33,6 +33,14 @@ namespace Vehicle
         // load-modify-stores only the two lanes it sets.
         void Construct();
 
+        // B5PhysicsHandlingDebugComponent.h:173, inlined in GripCurveDebugWindow::Prepare on X360.
+        // The caller stores this exact TireGripCurve pointer into the graph's first word.
+        void Prepare(const Wheel::TireGripCurve* lpGripCurve) { mpGripCurve = lpGripCurve; }
+
+        // B5PhysicsHandlingDebugComponent.h:200. GripCurveDebugWindow::Prepare writes the full
+        // four-lane range vector into each graph; keep that typed storage update in its named owner.
+        void SetRange(rw::math::vpu::Vector2 lRange) { mAxisRanges = lRange; }
+
         // Screen-space point of the graph origin (bottom-left of the axis box): the top-left
         // corner translated down by the axis box height. X360 GetOrigin @0x825E8D00 reads the
         // top-left at +0x10 and the box dimensions' height lane (Dy) at +0x30, returning

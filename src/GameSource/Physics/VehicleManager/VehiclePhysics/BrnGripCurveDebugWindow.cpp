@@ -1,5 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnGripCurveDebugWindow.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"   // GetUI().AddWindow/RemoveWindow/IsWindowAdded
+#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 
 #include <algorithm>   // std::max
 #include <cmath>       // std::ceil
@@ -24,6 +25,43 @@ namespace Vehicle
         mpRightWheel = 0;
 
         mbVisible = false;
+    }
+
+    // Prepare @0x825DAF20. The assembly stores the two wheel pointers, then the long and lateral
+    // TireGripCurve pointers from the left wheel's TireAttribs at graph offsets +0x00. It computes
+    // coefficient range before slip range, writes {slip, coefficient, 0, 0} to both graph range
+    // vectors, and finally prepares the Window base at 340 x 550 with no flags.
+    void GripCurveDebugWindow::Prepare(Wheel* lpLeftWheel, Wheel* lpRightWheel,
+                                       const char* lpacWindowCaption)
+    {
+        CGS_ASSERT(lpLeftWheel != nullptr, "lpLeftWheel != NULL");
+        CGS_ASSERT(lpRightWheel != nullptr, "lpRightWheel != NULL");
+
+        mpLeftWheel = lpLeftWheel;
+        mpRightWheel = lpRightWheel;
+
+        CGS_ASSERT(lpLeftWheel->mpTireAttribs != nullptr, "mpLeftWheel->mpTireAttribs != NULL");
+        CGS_ASSERT(mpLeftWheel->mpTireAttribs != nullptr, "mpLeftWheel->mpTireAttribs != NULL");
+
+        const Wheel::TireAttribs* lpTireAttribs = mpLeftWheel->mpTireAttribs;
+        CGS_ASSERT(lpTireAttribs != nullptr, "lpGripCurve != NULL");
+        const Wheel::TireGripCurve* lpLongGripCurve = &lpTireAttribs->mLongGripCurve;
+        mLongGripCurveGraph.Prepare(lpLongGripCurve);
+
+        const Wheel::TireGripCurve* lpLatGripCurve = &lpTireAttribs->mLatGripCurve;
+        CGS_ASSERT(lpLatGripCurve != nullptr, "lpGripCurve != NULL");
+        mLatGripCurveGraph.Prepare(lpLatGripCurve);
+
+        const f32 lfCoefficientRange = GetCoefficientRange();
+        const f32 lfSlipRatioRange = GetSlipRatioRange();
+        rw::math::vpu::Vector2 lvGraphRange;
+        lvGraphRange.SetZero();
+        lvGraphRange.x = lfSlipRatioRange;
+        lvGraphRange.y = lfCoefficientRange;
+        mLongGripCurveGraph.SetRange(lvGraphRange);
+        mLatGripCurveGraph.SetRange(lvGraphRange);
+
+        CgsDev::DebugUI::Window::Prepare(340.0f, 550.0f, lpacWindowCaption, 0);
     }
 
     // Show @0x825B4B00: if currently hidden, add the window to the debug-UI stack (only if it is not
