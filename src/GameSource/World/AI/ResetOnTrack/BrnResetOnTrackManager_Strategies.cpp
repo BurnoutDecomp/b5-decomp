@@ -163,19 +163,19 @@ namespace
     }
 
     // The console writes the two scratch nodes field-for-field; the portal index goes in the
-    // RouteNode byte at +14 (see the [FLAG header_request] on mHelperNode* in the header).
+    // original named RouteNode byte at +14.
     void WriteHelperNode(RouteNode& lrNode, f32 lfX, f32 lfY, u16 luSectionIndex, u8 lu8PortalIndex)
     {
-        lrNode.mfX                    = lfX;
-        lrNode.mfY                    = lfY;
-        lrNode.mfDistanceToCheckpoint = KF_ZERO;     // stfs f30 (0.0), 8(node)
+        lrNode.mfPositionX            = lfX;
+        lrNode.mfPositionZ            = lfY;
+        lrNode.mfDistanceLeft         = KF_ZERO;     // stfs f30 (0.0), 8(node)
         lrNode.muSectionIndex         = luSectionIndex;
-        lrNode.muPad0x0E              = lu8PortalIndex;   // [FLAG header_request] the +14 byte
+        lrNode.muPortalIndex          = lu8PortalIndex;   // stb +0x0E
     }
 
     u8 GetHelperNodePortalIndex(const RouteNode& lrNode)
     {
-        return static_cast<u8>(lrNode.muPad0x0E);        // [FLAG header_request]
+        return lrNode.muPortalIndex;
     }
 
     // ---- reset type 5: ResetAheadFromSideTurnings @0x827909F0 + ScanForwardsAndAlongJunction
@@ -397,8 +397,8 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
             continue;
         }
 
-        const Vector2 lNextNodePosition = { lrpNextNode->mfX, lrpNextNode->mfY, 0.0f, 0.0f };
-        const Vector2 lPrevNodePosition = { lrpPrevNode->mfX, lrpPrevNode->mfY, 0.0f, 0.0f };
+        const Vector2 lNextNodePosition = { lrpNextNode->mfPositionX, lrpNextNode->mfPositionZ, 0.0f, 0.0f };
+        const Vector2 lPrevNodePosition = { lrpPrevNode->mfPositionX, lrpPrevNode->mfPositionZ, 0.0f, 0.0f };
         if (!IsSimilar2D(lNextNodePosition, lPrevNodePosition))
         {
             return true;
@@ -515,8 +515,8 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
             continue;
         }
 
-        const Vector2 lNextNodePosition = { lrpNextNode->mfX, lrpNextNode->mfY, 0.0f, 0.0f };
-        const Vector2 lPrevNodePosition = { lrpPrevNode->mfX, lrpPrevNode->mfY, 0.0f, 0.0f };
+        const Vector2 lNextNodePosition = { lrpNextNode->mfPositionX, lrpNextNode->mfPositionZ, 0.0f, 0.0f };
+        const Vector2 lPrevNodePosition = { lrpPrevNode->mfPositionX, lrpPrevNode->mfPositionZ, 0.0f, 0.0f };
         if (!IsSimilar2D(lNextNodePosition, lPrevNodePosition))
         {
             return true;

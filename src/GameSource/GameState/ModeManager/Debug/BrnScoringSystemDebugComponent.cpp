@@ -228,9 +228,9 @@ namespace BrnGameState
 
         // Backing box: from the table origin, 600 wide x (columns * row pitch) tall.
         const Vector2 lv2BoxMin = MakeVector2(KF_TABLE_ORIGIN_X, KF_TABLE_ORIGIN_Y);
-        const Vector2 lv2BoxMax = MakeVector2(KF_TABLE_ORIGIN_X + KF_TABLE_WIDTH,
-                                              KF_TABLE_ORIGIN_Y + static_cast<f32>(liNumColumns) * KF_ROW_PITCH);
-        lRender.Draw2DBox(lv2BoxMin, lv2BoxMax, KU_BOX_COLOUR);
+        const Vector2 lv2BoxSize = MakeVector2(KF_TABLE_WIDTH,
+                                               static_cast<f32>(liNumColumns) * KF_ROW_PITCH);
+        lRender.Draw2DBox(lv2BoxMin, lv2BoxSize, KU_BOX_COLOUR);
 
         char lacCell[280];
 

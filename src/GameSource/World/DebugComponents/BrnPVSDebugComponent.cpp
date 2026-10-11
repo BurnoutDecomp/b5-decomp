@@ -367,6 +367,7 @@ namespace BrnWorld
             0.0f,
             0.0f
         };
-        lpRender->DrawBox(lMinimum, lMaximum, 0xFFFFFFFFu);
+        // ARTIST 827BFC68 uses the scalar two-corner wrapper.
+        lpRender->DrawBox(lMinimum.x, lMinimum.y, lMaximum.x, lMaximum.y, 0xFFFFFFFFu);
     }
 }

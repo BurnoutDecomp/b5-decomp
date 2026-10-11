@@ -207,7 +207,7 @@ def checks_destruct(tree):
     yield ("G04-D7 AIModule::Destruct is bodied in BrnAIModule.cpp (0x8276E380)", destruct != "")
     yield ("G04-D7 ...base Destruct, receiver-queue Clear, route-map Destruct, contact-spy Construct, in order",
            all(p >= 0 for p in positions) and positions == sorted(positions))
-    stubs = code_only(tree.read(STUBS))
+    stubs = code_only(tree.read(STUBS)) if tree.rev or (REPO / STUBS).exists() else ""
     yield ("G04-D7 the one-shot logging stub is gone from WorldLinkStubs.cpp",
            "BrnAI::AIModule::Destruct()" not in stubs)
 

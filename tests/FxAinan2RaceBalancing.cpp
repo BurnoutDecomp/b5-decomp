@@ -32,7 +32,7 @@
 
 static unsigned gAssertions = 0, gChecks = 0, gFailures = 0;
 namespace CgsDev {
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char*, const char*, int) { ++gAssertions; return 0; }
@@ -71,7 +71,7 @@ static AISectionsData gSections;
 static RaceBalancingManager gManager;
 
 // Three nodes along world Z at x == 0, 100 m apart, section 1; node[0] carries the whole-route
-// distance (Route::GetDistance == node[0].mfDistanceToCheckpoint).
+// distance (Route::GetDistance == node[0].mfDistanceLeft).
 static void BuildRoute(Route* lpRoute)
 {
     std::memset(lpRoute, 0, sizeof(Route));
@@ -79,10 +79,10 @@ static void BuildRoute(Route* lpRoute)
     const f32 lafDist[3] = { 200.0f, 100.0f, 0.0f };
     for (s32 liNode = 0; liNode < 3; ++liNode)
     {
-        RouteNode* lpNode = reinterpret_cast<RouteNode*>(&lpRoute->maNodes[liNode]);
-        lpNode->mfX = 0.0f;
-        lpNode->mfY = lafZ[liNode];
-        lpNode->mfDistanceToCheckpoint = lafDist[liNode];
+        RouteNode* lpNode = &lpRoute->maNodes[liNode];
+        lpNode->mfPositionX = 0.0f;
+        lpNode->mfPositionZ = lafZ[liNode];
+        lpNode->mfDistanceLeft = lafDist[liNode];
         lpNode->muSectionIndex = 1;
     }
     lpRoute->miNodeCount = 3;
@@ -181,7 +181,7 @@ static void GroupTargetSpeedAndPrepare()
     // Prepare over a node whose distance-to-checkpoint is NaN: the inlined completion ratio clamps
     // it to 1.0, so the par times stay finite on the console.
     BuildRoute(gCar.GetRoute());
-    reinterpret_cast<RouteNode*>(&gCar.GetRoute()->maNodes[1])->mfDistanceToCheckpoint = KF_NAN;
+    gCar.GetRoute()->maNodes[1].mfDistanceLeft = KF_NAN;
     RaceBalancingRoute lFresh{};
     lFresh.Prepare(gCar.GetPosition(), &gSections, &gManager.maRaceBalancingGraphs[0u], gCar.GetRoute(), 2);
     Check(!IsNaN(lFresh.mafTimes[E_GRAPH_TYPE_AHEAD][1]) && !IsNaN(lFresh.mafTimes[E_GRAPH_TYPE_AHEAD][2]),

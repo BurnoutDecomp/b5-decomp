@@ -21,6 +21,8 @@
 
 namespace BrnTraffic
 {
+    class DebugComponent;
+    class TrafficEntityModule;
     class TweakValues;   // BrnTrafficTweakConstants.h -- pointer-only here (mpTweakValues)
 
 namespace Fuzzy
@@ -51,6 +53,11 @@ namespace Fuzzy
         void DEBUGSetCurrentParamPos(Vector3 lParamPos) const;
 
     private:
+        // The recovered Traffic debug page reads the original byte registered at +0x00.
+        friend class ::BrnTraffic::DebugComponent;
+        // The original debug-ring producer reads this toggle and the saved camera position.
+        friend class ::BrnTraffic::TrafficEntityModule;
+
         // Seed all envelope sets + mega-tweek constants with their hard-coded defaults.
         void ResetToDefaults();
 

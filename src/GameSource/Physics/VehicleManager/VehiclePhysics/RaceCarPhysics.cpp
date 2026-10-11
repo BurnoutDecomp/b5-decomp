@@ -231,9 +231,9 @@ namespace Vehicle
     // CALLER gates the dispatch on a fourth (UpdateCrashing asm 0x82638E30 `beq`).
     //
     // ⭐ WHY A HISTOGRAM AND NOT A MAX. The previous wave's "peak yaw" numbers (6.499/6.336/...)
-    // were the +/-6.5 KF_MAX_CRASH_ANGVEL clamp being read back, not a torque. A gate question is
-    // answered by COUNTS of distinct outcomes, so this keys every crash frame by the four gate
-    // bits at once and counts the 16 combinations.
+    // were the default +/-6.5 per-axis angular-velocity clamp being read back, not a torque. A
+    // gate question is answered by COUNTS of distinct outcomes, so this keys every crash frame by
+    // the four gate bits at once and counts the 16 combinations.
     //
     // ⭐⭐ THE DENOMINATOR AND THE CONTROL BIT ARE BOTH IN THE KEY, DELIBERATELY.
     //   * `crashF` is incremented on EVERY frame the player's car is crashing, from

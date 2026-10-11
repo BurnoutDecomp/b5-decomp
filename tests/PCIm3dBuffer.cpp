@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <limits>
 #include <vector>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
@@ -14,6 +15,8 @@
 #include "pc/gcm/renderengine/texture.h"
 #include "pc/gcm/renderengine/ImWhiteTexture.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/VectorFont/CgsVectorFontData.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 
 namespace renderengine {
@@ -50,6 +53,11 @@ int BeginAssert() { return 0; }
 int FireAssert(const char* msg, const char*, int) { ++suAssertions; std::printf("ASSERT %s\n",msg); return 0; }
 void* EndAssert() { return nullptr; }
 } namespace Log { void WriteToLog(const char*) {} } }
+namespace CgsDev {
+// World labels execute before the manager opens its HUD block. Any route to
+// that separate renderer is a context failure, even when its font is loaded.
+void Debug2DImmediateRender::DrawLine(Vector2, Vector2, RGBA) { ++suAssertions; }
+}
 namespace CgsGraphics {
 ImRendererBase* ImRendererBase::mgpActiveRenderer = nullptr;
 void* ImRendererBase::mgpDevice = nullptr;
@@ -202,6 +210,136 @@ static void DebugGeometry(Im3dRenderBuffer& buffer, Im3d& renderer, IDirect3DSur
     unsigned green=0; for(auto colour:after) green+=(colour&0xffffff)==0x00ff00;
     Check(green>=80 && suPrimitive==3 && suCount==192,"the original indexed sphere produces green line-strip pixels");
 }
+static void DebugWorldText(Im3dRenderBuffer& buffer, Im3d& renderer, IDirect3DSurface9* target) {
+    auto* device=renderengine::gDevice;
+    const unsigned assertionsBefore=suAssertions, drawsBefore=suDraws;
+    CgsDev::Debug3DImmediateRender debug={};
+    debug.Construct(nullptr,1280,720);
+    debug.SetRenderBuffer(&buffer);
+    Check(debug.mVectorFont.mp2DRenderer==nullptr && debug.mVectorFont.mp3DRenderer==&debug &&
+          debug.mVectorFont.mSize.x==1.25f && debug.mVectorFont.mSize.y==1.25f &&
+          debug.mTextRenderer.mpIm2dRenderBuffer==nullptr && debug.mTextRenderer.mpIm3dRenderBuffer==nullptr,
+          "production Construct selects the 3D vector sink and initialises its text renderer");
+    CgsResource::Font loadedFont={}; CgsResource::Font* fontMemory=&loadedFont;
+    debug.mpFont.mpResourceMemory=&fontMemory;
+    Check(debug.HasResourceFont(),"world-label context includes the acquired bitmap font");
+    ImRenderBuffer<Basic2dColouredTexturedVertex> unopenedHud={};
+    unopenedHud.Construct();
+    Matrix44 vp=Identity(); vp.xAxis.x=.5f; vp.wAxis.w=7;
+    debug.Begin(vp,{0,0,0,0});
+    debug.DrawLine({-.8f,-.75f,1,0},{-.6f,-.75f,1,0},rw::RGBA(255,255,255,255));
+    debug.DrawText({.8f,.4f,2,0},"A",36,rw::RGBA(0,255,255,255));
+    Check(debug.meProjectionMode==CgsDev::Debug3DImmediateRender::E_PROJECTION_2D &&
+          debug.meDrawingMode==CgsDev::Debug3DImmediateRender::E_DRAWING_LINES && debug.miIm3dVertsHead==10,
+          "world label emits the original five A strokes inside the existing 3D block");
+    Check(std::fabs(debug.maIm3dVertsArray[0].mv3Pos.x-.2f)<1e-6f &&
+          std::fabs(debug.maIm3dVertsArray[0].mv3Pos.y+.1375f)<1e-6f &&
+          debug.maIm3dVertsArray[0].mv3Pos.z==0 && debug.maIm3dVertsArray[0].mv3Pos.w==0 &&
+          std::fabs(debug.maIm3dVertsArray[1].mv3Pos.x-.2125f)<1e-6f &&
+          std::fabs(debug.maIm3dVertsArray[1].mv3Pos.y+.1875f)<1e-6f,
+          "ARTIST label divides X and minus Y by projected Z and scales through screen height");
+    debug.DrawText({0,0,.0009f,0},"near plane",36);
+    debug.DrawText({0,0,-1,0},"behind camera",36);
+    Check(debug.miIm3dVertsHead==10,"projected Z below .001 rejects labels even with positive W");
+    debug.DrawLine({-.8f,-.5f,1,0},{-.6f,-.5f,1,0},rw::RGBA(255,255,0,255));
+    debug.End();
+    std::vector<const ImCommandRenderPrimitives<Im3dVertex>*> runs;
+    unsigned begins=0,ends=0;
+    for(u32 pos=0;pos<buffer.mpWriteBuffer->muCommandBufferWritePos;) {
+        const auto* command=reinterpret_cast<const ImCommand*>(buffer.mpWriteBuffer->mpu8CommandBuffer+pos);
+        begins+=command->muType==IM_CMD_BEGIN_RENDERING;
+        ends+=command->muType==IM_CMD_END_RENDERING;
+        if(command->muType==IM_CMD_RENDER_PRIMITIVES)
+            runs.push_back(static_cast<const ImCommandRenderPrimitives<Im3dVertex>*>(command));
+        pos+=command->muSize;
+    }
+    Check(begins==1 && ends==1 && runs.size()==3 &&
+          runs[0]->muNumVertices==2 && runs[1]->muNumVertices==10 && runs[2]->muNumVertices==2 &&
+          runs[1]->mePrimitiveType==2,
+          "world line, projected label and following line share one balanced production block");
+    Check(!unopenedHud.mbInRenderBlock && unopenedHud.maBuffers[0].muCommandBufferWritePos==0 &&
+          unopenedHud.maBuffers[0].muVertexBufferWritePos==0 && suAssertions==assertionsBefore &&
+          suDraws==drawsBefore,"world text neither opens nor writes the HUD bank or calls the device");
+    buffer.Swap(); buffer.Clear();
+    debug.maIm3dVertsArray[0].mv3Pos.x=10000;
+    device->Clear(0,nullptr,D3DCLEAR_TARGET,0xff000000,1,0);
+    device->BeginScene(); buffer.Dispatch(&renderer); device->EndScene();
+    auto pixels=Pixels(target);
+    unsigned cyan=0; for(auto colour:pixels) cyan+=(colour&0xffffff)==0x00ffff;
+    Check(suDraws==drawsBefore+3 && suAssertions==assertionsBefore &&
+          ImRendererBase::mgpActiveRenderer==nullptr && cyan>=3,
+          "frozen world-label strokes reach native pixels and release the active renderer");
+}
+static void DebugWorldTextArithmetic(Im3dRenderBuffer& buffer) {
+    CgsDev::Debug3DImmediateRender debug={};
+    debug.Construct(nullptr,1280,720);
+    debug.SetRenderBuffer(&buffer);
+    // 4097*4097 is exactly 16785409; binary32 multiplication alone rounds
+    // that to 16785408. The original fused translation therefore leaves 1.
+    Matrix44 vp=Identity(); vp.xAxis.z=4097; vp.zAxis.z=0; vp.wAxis.z=-16785408;
+    buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+    debug.DrawText({4097,0,0,0},"A",36);
+    Check(debug.miIm3dVertsHead==10,
+          "fused projection keeps a label whose rounded product would fail the clip gate");
+    debug.End();
+    vp=Identity(); vp.xAxis.x=4097; vp.wAxis.x=-16785408;
+    buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+    debug.DrawText({4097,0,2,0},"A",36);
+    Check(debug.miIm3dVertsHead==10 && debug.maIm3dVertsArray[0].mv3Pos.x==.5f,
+          "original fused translation survives cancellation in the recorded label coordinate");
+    debug.End();
+    const float depths[]={.001f,.0009f,0.0f,-0.0f,
+        (std::numeric_limits<float>::infinity)(),
+        -(std::numeric_limits<float>::infinity)(),
+        (std::numeric_limits<float>::quiet_NaN)()};
+    const bool accepted[]={true,false,false,false,true,false,true};
+    for(unsigned i=0;i<7;++i) {
+        vp=Identity(); vp.zAxis.z=0; vp.wAxis.z=depths[i];
+        buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+        debug.DrawText({.25f,.5f,0,0},"A",36);
+        Check(debug.miIm3dVertsHead==(accepted[i]?10:0),
+              "original ordered clip predicate retains equality and unordered NaN behavior");
+        if(i==4 || i==6) {
+            Check(std::isnan(debug.maIm3dVertsArray[0].mv3Pos.x) &&
+                  std::isnan(debug.maIm3dVertsArray[0].mv3Pos.y),
+                  "unconditional reciprocal refinements preserve NaN label coordinates");
+        }
+        debug.End();
+    }
+    vp=Identity(); vp.xAxis.x=std::ldexp(1.0f,120);
+    buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+    debug.DrawText({std::ldexp(1.0f,-140),0,1,0},"A",36);
+    Check(debug.miIm3dVertsHead==10 && debug.maIm3dVertsArray[0].mv3Pos.x==0,
+          "VMX flushes a subnormal projection operand before a large-axis multiplication");
+    debug.End();
+    vp=Identity(); vp.zAxis.z=0; vp.wAxis.z=(std::numeric_limits<float>::max)();
+    buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+    debug.DrawText({1,.5f,0,0},"A",36);
+    Check(debug.miIm3dVertsHead==10 && debug.maIm3dVertsArray[0].mv3Pos.x==0,
+          "VMX flushes a subnormal reciprocal seed before both refinements");
+    debug.End();
+    vp=Identity(); debug.mfVirtualScreenHeight=(std::numeric_limits<float>::denorm_min)();
+    buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+    debug.DrawText({0,0,1,0},"A",(std::numeric_limits<float>::denorm_min)());
+    Check(debug.miIm3dVertsHead==10 && std::isinf(debug.mVectorFont.mSize.x),
+          "scalar denominator rounds to binary32 zero before the original single-precision division");
+    debug.End();
+    debug.mfVirtualScreenHeight=2;
+    for(float scale : {(std::numeric_limits<float>::min)(),
+                       -(std::numeric_limits<float>::min)(),std::ldexp(1.0f,-140)}) {
+        buffer.Clear(); debug.Begin(vp,{0,0,0,0});
+        debug.DrawText({0,0,1,0},"A",scale);
+        Check(debug.miIm3dVertsHead==10 && debug.mVectorFont.mSize.x==0 &&
+              std::signbit(debug.mVectorFont.mSize.x)==std::signbit(scale),
+              "original vector size store flushes subnormal operands and signed subnormal results");
+        debug.End();
+    }
+    debug.mVectorFont.SetSize({8,-16,24,-32});
+    Check(debug.mVectorFont.mSize.x==1 && debug.mVectorFont.mSize.y==-2 &&
+          debug.mVectorFont.mSize.z==3 && debug.mVectorFont.mSize.w==-4,
+          "the inlined font-size store scales all four vector lanes");
+    buffer.Clear();
+}
 static void AllocationBudget() {
     Check(EnsureWorldDispatchAllocator(),"production joined allocator prepares");
     // Actual seven bank-pairs, with original3D capacities independent of the
@@ -327,6 +465,8 @@ int main() {
     Check((pixels[43*160+101]&0xffffff)==0x00ff00,"projected glyph right samples actual atlas green");
     Check((pixels[48*160+80]&0xffffff)==0,"world projection moves glyph away from old screen centre");
     DebugGeometry(buffer,renderer,target);
+    DebugWorldText(buffer,renderer,target);
+    DebugWorldTextArithmetic(buffer);
     Check(suAssertions==0,"no silent2D fallback or original assertion");
     target->Release(); atlas->Release(); spDeclaration->Release(); spVertexShader->Release(); spPixelShader->Release(); device->Release(); api->Release(); DestroyWindow(window);
     std::printf("PCIm3dBuffer: %u checks, %u failures\n",suChecks,suFailures); return suFailures ? 1 : 0;

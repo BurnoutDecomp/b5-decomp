@@ -1377,12 +1377,8 @@ s32 RacingLineGenerator::CacheLocalSections(RacingLine* lpRacingLine, const Rout
 
         const AISection* lpSection = lpAISectionsData->GetAISection(lpNode->muSectionIndex);
         lrEntry.mpLineSection  = lpSection;
-        // [FLAG header_request] RouteNode::muPortalIndex (DWARF BrnRoute.h:89, u8 @+0x0E) is
-        // modelled in the host BrnRoute.h -- which this lane does not own -- as the second half
-        // of a u16 `muPad0x0E`. The console reads the byte directly (`lbz r4, 0xE(node)`
-        // @0x8278EDFC); the low byte of the host u16 IS that byte on this little-endian target.
-        // DELETE-WHEN BrnRoute.h splits it into `u8 mu8PortalIndex; u8 mu8Pad0x0F;`.
-        lrEntry.mpTargetPortal = lpSection->GetPortal(static_cast<u8>(lpNode->muPad0x0E));
+        // ARTIST @0x8278EDFC reads the original portal byte directly.
+        lrEntry.mpTargetPortal = lpSection->GetPortal(lpNode->muPortalIndex);
         lrEntry.SetFastSectionCorners(lpSection);
     }
 

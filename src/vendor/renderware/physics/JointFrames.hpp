@@ -1,6 +1,8 @@
 #pragma once
 
-#include <cmath>   // std::sqrt (QuaternionFromMatrix33)
+#include <cmath>   // VMX arithmetic and reciprocal-square-root estimate model
+#include <cstdint> // original sign XOR and bit-select
+#include <cstring> // float-word transfers
 #include <cstddef> // offsetof (the layout pins below)
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::{Vector3, Matrix33}
@@ -40,68 +42,106 @@ namespace math
 {
 namespace vpu
 {
-    // rw::math::vpu::QuaternionFromMatrix33 -- inlined on the X360 into all
-    // three JointFrames setters (e.g. 0x8259B580). GROUND TRUTH: the EXACT
-    // original VMX source survives in the Feb-2007 tree (rwmath 1.02.00
-    // rw/math/vpu/detail/quaternion_operation_inline.h:282-382 -- matches the
-    // X360 body instruction-for-instruction: vspltw x/y/z diagonals, the
-    // three gQuatFromMat_{x,y,z}Signs vxor masks unk_8327F120/F100/F0F0,
-    // vaddfp fold, vrsqrtefp + two Newton-Raphson refines, s = t*rsqrt /
-    // s2 = 0.5*rsqrt, the two vperm+vsldoi(8) off-diagonal gathers
-    // (unk_82CDA360..430 lane controls), N = sub / S = add, four scaled
-    // candidates, three vsel selects). The body below is the SDK's own
-    // scalar branch twin (fpu/quaternion_operation.h:802-853, T = float),
-    // whose branch tree is exactly the console's vsel network:
-    //     mask3 = (trace > epsilon)              -> Q0 (w-largest)
-    //     mask2 = (xx > yy) & (xx > zz)          -> Q1 (x-largest)
-    //     mask1 = (yy > zz)                      -> Q2 else Q3
-    // The vrsqrtefp + 2x Newton-Raphson is de-optimised to the exact
-    // std::sqrt per the committed precedent. epsilon (unk_8208C24C, not
-    // byte-dumped in the extract) is the DEFAULTED argument
-    // `VecFloat(ZERO_FLOAT)` (vpu quaternion_operation.h:133; the fpu twin
-    // defaults `epsilon = (T)(0.0f)`), and the JointFrames setters pass no
-    // epsilon -- so 0.0f. Canonical home: rw/math/vpu/quaternion_operation.h.
+    namespace QuaternionFromMatrix33Detail
+    {
+        inline float Flush(float lfValue)
+        {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        }
+
+        inline float Add(float lfA, float lfB) { return Flush(Flush(lfA) + Flush(lfB)); }
+        inline float Subtract(float lfA, float lfB) { return Flush(Flush(lfA) - Flush(lfB)); }
+        inline float Multiply(float lfA, float lfB) { return Flush(Flush(lfA) * Flush(lfB)); }
+        inline float MultiplyAdd(float lfA, float lfC, float lfB)
+        {
+            return Flush(std::fmaf(Flush(lfA), Flush(lfC), Flush(lfB)));
+        }
+        inline float NegativeMultiplySubtract(float lfA, float lfC, float lfB)
+        {
+            const float lfDifference = Flush(std::fmaf(Flush(lfA), Flush(lfC), -Flush(lfB)));
+            return std::isnan(lfDifference) ? lfDifference : -lfDifference;
+        }
+        inline float FlipSign(float lfValue)
+        {
+            std::uint32_t luWord;
+            std::memcpy(&luWord, &lfValue, sizeof(luWord));
+            luWord ^= 0x80000000u;
+            std::memcpy(&lfValue, &luWord, sizeof(lfValue));
+            return lfValue;
+        }
+        inline float Select(float lfA, float lfB, bool lbSelectB)
+        {
+            std::uint32_t luA, luB;
+            std::memcpy(&luA, &lfA, sizeof(luA));
+            std::memcpy(&luB, &lfB, sizeof(luB));
+            const std::uint32_t luMask = 0u - static_cast<std::uint32_t>(lbSelectB);
+            const std::uint32_t luResult = (luA & ~luMask) | (luB & luMask);
+            float lfResult;
+            std::memcpy(&lfResult, &luResult, sizeof(lfResult));
+            return lfResult;
+        }
+        inline Quaternion Select(Quaternion lA, Quaternion lB, bool lbSelectB)
+        {
+            return Quaternion{Select(lA.x, lB.x, lbSelectB), Select(lA.y, lB.y, lbSelectB),
+                              Select(lA.z, lB.z, lbSelectB), Select(lA.w, lB.w, lbSelectB)};
+        }
+        inline float RefinedReciprocalSqrt(float lfValue)
+        {
+            // FLAG (model): correctly rounded vrsqrtefp seed, as in SLerpDetail.
+            // Both unconditional VMX Newton passes are retained, including 0*Inf.
+            float lfEstimate = Flush(static_cast<float>(1.0 / std::sqrt(static_cast<double>(Flush(lfValue)))));
+            for (int liStep = 0; liStep < 2; ++liStep)
+            {
+                const float lfSquared = Multiply(lfEstimate, lfEstimate);
+                const float lfHalf = Multiply(lfEstimate, 0.5f);
+                const float lfResidual = NegativeMultiplySubtract(lfValue, lfSquared, 1.0f);
+                lfEstimate = MultiplyAdd(lfHalf, lfResidual, lfEstimate);
+            }
+            return lfEstimate;
+        }
+    }
+
+    // ARTIST JointFrames setters 8259B580/8259B728/8259B8D0 inline this
+    // conversion. Four candidates are evaluated before the final three vsels.
+    // Runtime sign masks are written at 82C74000/30/60 (their BSS image is zero).
+    // Keep (signedX+signedY)+(signedZ+1), the two unguarded rsqrt refinements,
+    // t*rsqrt / 0.5*rsqrt, off-diagonal gathers and strict comparison order.
     inline Quaternion QuaternionFromMatrix33(const Matrix33& m, float epsilon = 0.0f)
     {
-        const float tr = m.xAxis.x + m.yAxis.y + m.zAxis.z;
+        using namespace QuaternionFromMatrix33Detail;
+        const float lfX = m.xAxis.x, lfY = m.yAxis.y, lfZ = m.zAxis.z;
+        const float laSignedX[4] = {lfX, lfX, FlipSign(lfX), FlipSign(lfX)};
+        const float laSignedY[4] = {lfY, FlipSign(lfY), lfY, FlipSign(lfY)};
+        const float laSignedZ[4] = {lfZ, FlipSign(lfZ), FlipSign(lfZ), lfZ};
+        float laSumXY[4], laS[4], laS2[4];
+        for (int liLane = 0; liLane < 4; ++liLane)
+        {
+            laSumXY[liLane] = Add(laSignedX[liLane], laSignedY[liLane]);
+            const float lfT = Add(laSumXY[liLane], Add(laSignedZ[liLane], 1.0f));
+            const float lfInverseRoot = RefinedReciprocalSqrt(lfT);
+            laS[liLane] = Multiply(lfT, lfInverseRoot);
+            laS2[liLane] = Multiply(0.5f, lfInverseRoot);
+        }
 
-        if (tr > epsilon)
-        {
-            // Q0 (w-largest): t = 1 + trace = 4w^2
-            const float s  = std::sqrt(tr + 1.0f);
-            const float s2 = 0.5f / s;
-            return Quaternion{ (m.yAxis.z - m.zAxis.y) * s2,
-                               (m.zAxis.x - m.xAxis.z) * s2,
-                               (m.xAxis.y - m.yAxis.x) * s2,
-                               0.5f * s };
-        }
-        if ((m.xAxis.x > m.yAxis.y) && (m.xAxis.x > m.zAxis.z))
-        {
-            // Q1 (x-largest): t = 1 + xx - yy - zz = 4x^2
-            const float s  = std::sqrt((m.xAxis.x - (m.yAxis.y + m.zAxis.z)) + 1.0f);
-            const float s2 = 0.5f / s;
-            return Quaternion{ 0.5f * s,
-                               (m.yAxis.x + m.xAxis.y) * s2,
-                               (m.xAxis.z + m.zAxis.x) * s2,
-                               (m.yAxis.z - m.zAxis.y) * s2 };
-        }
-        if (m.yAxis.y > m.zAxis.z)
-        {
-            // Q2 (y-largest): t = 1 - xx + yy - zz = 4y^2
-            const float s  = std::sqrt((m.yAxis.y - (m.zAxis.z + m.xAxis.x)) + 1.0f);
-            const float s2 = 0.5f / s;
-            return Quaternion{ (m.yAxis.x + m.xAxis.y) * s2,
-                               0.5f * s,
-                               (m.zAxis.y + m.yAxis.z) * s2,
-                               (m.zAxis.x - m.xAxis.z) * s2 };
-        }
-        // Q3 (z-largest): t = 1 - xx - yy + zz = 4z^2
-        const float s  = std::sqrt((m.zAxis.z - (m.xAxis.x + m.yAxis.y)) + 1.0f);
-        const float s2 = 0.5f / s;
-        return Quaternion{ (m.xAxis.z + m.zAxis.x) * s2,
-                           (m.zAxis.y + m.yAxis.z) * s2,
-                           0.5f * s,
-                           (m.xAxis.y - m.yAxis.x) * s2 };
+        // The original two vperm/vsldoi gathers end in half and zero, giving
+        // N.w = S.w = 0.5. Upper row W lanes never enter the conversion.
+        const Vector4 lN{Subtract(m.yAxis.z, m.zAxis.y), Subtract(m.zAxis.x, m.xAxis.z),
+                         Subtract(m.xAxis.y, m.yAxis.x), 0.5f};
+        const Vector4 lS{Add(m.yAxis.z, m.zAxis.y), Add(m.zAxis.x, m.xAxis.z),
+                         Add(m.xAxis.y, m.yAxis.x), 0.5f};
+        const Quaternion lQ0{Multiply(lN.x, laS2[0]), Multiply(lN.y, laS2[0]),
+                             Multiply(lN.z, laS2[0]), Multiply(lN.w, laS[0])};
+        const Quaternion lQ1{Multiply(lN.w, laS[1]), Multiply(lS.z, laS2[1]),
+                             Multiply(lS.y, laS2[1]), Multiply(lN.x, laS2[1])};
+        const Quaternion lQ2{Multiply(lS.z, laS2[2]), Multiply(lN.w, laS[2]),
+                             Multiply(lS.x, laS2[2]), Multiply(lN.y, laS2[2])};
+        const Quaternion lQ3{Multiply(lS.y, laS2[3]), Multiply(lS.x, laS2[3]),
+                             Multiply(lN.w, laS[3]), Multiply(lN.z, laS2[3])};
+        Quaternion lResult = Select(lQ3, lQ2, Flush(lfY) > Flush(lfZ));
+        lResult = Select(lResult, lQ1, (Flush(lfX) > Flush(lfY)) & (Flush(lfX) > Flush(lfZ)));
+        const float lfTrace = Add(laSumXY[0], lfZ);
+        return Select(lResult, lQ0, lfTrace > Flush(epsilon));
     }
 }
 }

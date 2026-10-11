@@ -139,8 +139,9 @@ namespace CgsDev
         {
             const f32 lfGridX = KF_GRAPHORIGINX + static_cast<f32>( luLine ) * KF_GRAPHCOLUMNPITCH;
             const Vector2 lv2Min = { lfGridX - KF_GRAPHGRIDHALF, KF_GRAPHORIGINY,                     0.0f, 0.0f };
-            const Vector2 lv2Max = { lfGridX + KF_GRAPHGRIDHALF, KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT, 0.0f, 0.0f };
-            lpDebug2DRender->DrawBox( lv2Min, lv2Max, 0xFFFFFFFFu );
+            const Vector2 lv2Size = { (lfGridX + KF_GRAPHGRIDHALF) - lv2Min.x,
+                                      (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - lv2Min.y, 0.0f, 0.0f };
+            lpDebug2DRender->DrawBox( lv2Min, lv2Size, 0xFFFFFFFFu );
         }
 
         // The five scale labels in light red (0xFF6666FF), scale 15.0. The first two are raw rodata
@@ -158,8 +159,9 @@ namespace CgsDev
         {
             const f32 lfBarRight = KF_GRAPHORIGINX + mfMaxGpu * KF_GRAPHVALUESCALE;   // fmadds vs flt_820DD6F4
             const Vector2 lv2Min = { KF_GRAPHORIGINX, KF_GRAPHORIGINY,                     0.0f, 0.0f };
-            const Vector2 lv2Max = { lfBarRight,      KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT, 0.0f, 0.0f };
-            lpDebug2DRender->DrawBox( lv2Min, lv2Max, KC_GRAPHSCALEBAR );
+            const Vector2 lv2Size = { lfBarRight - lv2Min.x,
+                                      (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - lv2Min.y, 0.0f, 0.0f };
+            lpDebug2DRender->DrawBox( lv2Min, lv2Size, KC_GRAPHSCALEBAR );
         }
 
         // Draw every monitor's segment (report-total suppressed: last arg false).
@@ -221,11 +223,11 @@ namespace CgsDev
         const f32 lfX = lpParam->mfDrawX;
         const f32 lfY = lpParam->mfDrawY;
 
-        // The asm builds the max corner itself (x+w, y+h) and calls the Vector2-min/Vector2-max
-        // DrawBox (see CgsWidgetLineGraph.cpp).
+        // ARTIST 8281F2C4/CC subtracts the origin to form the vector size.
         const Vector2 lv2Min = { lfX,               lfY,                         0.0f, 0.0f };
-        const Vector2 lv2Max = { lfX + lfBarLength, lfY + KF_GRAPHBARHEIGHT,      0.0f, 0.0f };
-        lpParam->mpRender->DrawBox( lv2Min, lv2Max, lColour );
+        const Vector2 lv2Size = { (lfX + lfBarLength) - lfX,
+                                  (lfY + KF_GRAPHBARHEIGHT) - lfY, 0.0f, 0.0f };
+        lpParam->mpRender->DrawBox( lv2Min, lv2Size, lColour );
 
         lpParam->mfDrawX    += lfBarLength;
         lpParam->mfTotalGpu += lrData.mfCurrentValue;
