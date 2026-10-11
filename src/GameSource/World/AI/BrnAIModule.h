@@ -68,6 +68,7 @@ const s32 KI_MAX_ACTIVE_RACE_CARS       = 8;
 struct Route;
 struct AICar;
 struct AISectionsData;
+class RouteMapDebugComponent;
 
 // ⭐⭐ 2026-08-25 (aimodule wave): AIModule NOW DERIVES FROM
 // CgsModule::ModuleSingleBuffered, which is what the X360 has done all along --
@@ -88,6 +89,7 @@ class AIModule : public CgsModule::ModuleSingleBuffered
 {
     friend class ::BrnWorld::WorldDebugComponent;
     friend class AIDebugComponent;   // the AI debug overlay reads the car array / buzz-by directly
+    friend class RouteMapDebugComponent; // its original minimap readers walk the named AI-car and route state
 
 public:
     // DWARF SetAIDrivesPlayer; inlined store in ARTIST WorldModule::Update @0x827D753C.
@@ -268,14 +270,10 @@ public:
         E_LOADMAPDATA_DONE            = 4,
     };
 
-    // Declared-only accessors needed by RouteMapDebugComponent::RenderHUD (its own TU). Bodies live
-    // in the AIModule TU. X360 offsets (read in RouteMapDebugComponent::RenderHUD @0x827940A0):
-    //   - the master route is a Route embedded at this+0x46B60 (289632); GetMasterRoute returns it.
-    //   - the default A* distance-function enum is at this+0x424A8 (271528); the X360 indexes the
-    //     KAPC_ASTAR_DISTANCE_FUNCTION_NAMES table with it -- GetDefaultDistanceFunctionName returns
-    //     the matching name string.
+    // RouteMap RenderHUD reads the embedded master route (ARTIST +0x46B60).
+    // Its heuristic label directly indexes the original table with the existing
+    // RouteRequestManager enum (+0x424A8); no separate AIModule name getter exists.
     const Route* GetMasterRoute() const;                  // this + 0x46B60
-    const char*  GetDefaultDistanceFunctionName() const;  // KAPC_..._NAMES[*(this + 0x424A8)]
 
     // Declared-only accessors needed by RaceBalancingDebugComponent (its own TU). Bodies live in the
     // AIModule TU (X360 standalone symbols BrnAI::AIModule::GetAICar @0x8276A5C8-region and

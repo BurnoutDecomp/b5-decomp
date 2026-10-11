@@ -458,14 +458,10 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     // read, so this store must stay ahead of them.
     mCameraLastFrame = lBrnCamera;
 
-    // ---- step 2, NAMED GATE (link, not knowledge) --------------------------
-    // The unconditional store at module +0x71870 is FuzzyBehaviourLogic::mDEBUGLastCameraPos,
-    // not a member of this class (see the arithmetic on the RenderTrafficCar declaration in
-    // BrnTrafficEntityModule.h). FuzzyBehaviourLogic::DEBUGSetLastCameraPos is declaration-only
-    // and BrnTrafficFuzzyLogicBehaviours.cpp is not on tools/build/build_game_exe.bat, so
-    // calling it leaves an unresolved external. Debug-render-only; omitting it draws the same.
-    // DELETE-WHEN that TU is mounted with a real body:
-    //     mFuzzyBehaviours.DEBUGSetLastCameraPos( lCameraPosition );
+    // ---- step 2 --------------------------------------------------------------
+    // ARTIST 0x8273B2DC unconditionally stores the camera position to module +0x71870,
+    // FuzzyBehaviourLogic::mDEBUGLastCameraPos, before either state gate.
+    mFuzzyBehaviours.DEBUGSetLastCameraPos(lCameraPosition);
 
     // ---- step 3: the two state gates ---------------------------------------
     if ( meState != E_STATE_RUNNING

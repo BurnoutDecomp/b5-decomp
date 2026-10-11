@@ -41,6 +41,7 @@
 
 namespace BrnAI
 {
+class RouteMapDebugComponent;
 // Forward-declared collaborator (its real home is its own TU; the full interface is
 // declared TU-local in BrnRouteRequestManager.cpp). Pointer-only here.
 struct BuzzBy;   // (struct: matches the definition in BrnAIBuzzBy.h -- MSVC mangles the class-key; `class` here made RouteRequestManager::Update unresolvable)
@@ -81,6 +82,8 @@ public:
     void ClearBlockSections();
 
 private:
+    friend class RouteMapDebugComponent; // original minimap text reads the existing checkpoint block lists
+
     // DWARF :99 -- dispatch one car to the request builder for its route-finding style.
     void GenerateRoute(AICar* lpAICar, AICar* lpPlayerCar, AICar* lpaAICars,
                        const AISectionsData* lpAISectionData,

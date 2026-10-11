@@ -29,6 +29,10 @@ namespace BrnAI
     f32 Portal::GetPositionY() const { return mPositionY; }
     f32 Portal::GetPositionZ() const { return mPositionZ; }
 
+    // DecFIGS AISectionsData.h:243; ARTIST DrawPortalGeometry @0x827744C0
+    // inlines the unsigned byte read at portal+0x12 for its boundary loop.
+    u8 Portal::GetNumBoundryLines() const { return mu8NumBoundaryLines; }
+
     // ------------------------------------------------------------------------------
     // Portal::FixUp / FixDown -- load-time relocation of the one pointer slot.
     //

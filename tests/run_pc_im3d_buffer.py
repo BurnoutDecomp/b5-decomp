@@ -65,8 +65,9 @@ template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44,Matri
 debug = tree.read("src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.cpp")
 start = debug.index("    struct Debug3DRenderStates")
 end = debug.index("    const f32 KF_PI", start)
-methods += "namespace {\n" + debug[start:end] + "}\nnamespace CgsDev {\n"
-for sig in ("void Debug3DImmediateRender::CreateDebugRenderStates(",
+methods += ("namespace {\n" + debug[start:end] + definition(debug, "struct ClipPoint") + ";\n" +
+            definition(debug, "ClipPoint TransformToClip(") + "\n}\nnamespace CgsDev {\n")
+for sig in ("void Debug3DImmediateRender::Construct(", "void Debug3DImmediateRender::CreateDebugRenderStates(",
             "void Debug3DImmediateRender::Begin(", "void Debug3DImmediateRender::End()",
             "rw::math::vpu::Vector3 Debug3DImmediateRender::GetCameraPosition() const",
             "void Debug3DImmediateRender::SetProjectionMode(", "void Debug3DImmediateRender::SetZTestEnable(",
@@ -76,6 +77,13 @@ for sig in ("void Debug3DImmediateRender::CreateDebugRenderStates(",
             "void Debug3DImmediateRender::DrawSolidTriangle(", "void Debug3DImmediateRender::BuildSphereIndices()",
             "void Debug3DImmediateRender::GetSphereVertices(", "void Debug3DImmediateRender::DrawSphere("):
     methods += definition(debug, sig) + "\n"
+for sig in ("void Debug3DImmediateRender::DrawText(", "void Debug3DImmediateRender::Draw2DLineForVectorFont("):
+    methods += definition(debug, sig) + "\n"
+vector = tree.read("src/GameShared/GameClasses/Development/VectorFont/CgsVectorFont.cpp")
+methods += "using namespace CompressedFontData;\n"
+for sig in ("void VectorFont::Construct()", "void VectorFont::SetSize(",
+            "void VectorFont::DrawLine(", "f32 VectorFont::Print("):
+    methods += definition(vector, sig) + "\n"
 methods += "}\n"
 im = REPO / "src/GameShared/GameClasses/Graphics/ImmediateMode"
 sources = [im / "ImRenderBuffer/CgsImRenderBufferTemplate.cpp",
