@@ -4,8 +4,16 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                      // CgsDev::StrStream (RemoveBrokenJointsFromSimulation's streamed assert)
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"        // ArticulatedJointCreateBuffer
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleOutputRequestInterface
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"                           // CgsPhysics::RigidBodyId
+#include "rw/math/vpu/matrix44affine_operation.h"                                  // IsValid(Matrix44Affine)
+#include "rw/math/vpu/vector3_operation.h"                                        // IsValid(Vector3)
+#include "vendor/renderware/physics/JointFrames.hpp"                              // real AddJoint frame payload
+#include "vendor/renderware/physics/JointLimits.hpp"                              // real AddJoint limit payload
+#include "SDKs/XboxMath/XMVectorCos.h"                                           // ARTIST 0x821F06B0
 
 #include <cstddef>       // offsetof (_AssertLayout)
+#include <cmath>
+#include <limits>
 #include <type_traits>   // std::is_floating_point (_AssertLayout -- see the tamper note there)
 
 // BrnPhysics::Vehicle::ArticulatedJointPool -- the bodies. The class itself moved to
@@ -39,6 +47,85 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+
+namespace
+{
+    // Instruction lowering for ConstructArticulatedJoint's inlined VMX math.
+    // FLAG (model): estimates start from correctly rounded values; vmsum3fp128
+    // is one rounding of a left-to-right f64 sum. Both NR passes are retained,
+    // with signed-zero denormal flushing and the shipped unguarded NaN paths.
+    float JointFlush(float lfValue)
+    {
+        return std::fpclassify(lfValue) == FP_SUBNORMAL
+            ? std::copysign(0.0f, lfValue) : lfValue;
+    }
+
+    float JointMultiply(float lfA, float lfB)
+    {
+        return JointFlush(JointFlush(lfA) * JointFlush(lfB));
+    }
+
+    float JointMultiplyAdd(float lfA, float lfB, float lfC)
+    {
+        return JointFlush(std::fmaf(JointFlush(lfA), JointFlush(lfB), JointFlush(lfC)));
+    }
+
+    float JointNegativeMultiplySubtract(float lfA, float lfB, float lfC)
+    {
+        const float lfDifference = JointFlush(
+            std::fmaf(JointFlush(lfA), JointFlush(lfB), -JointFlush(lfC)));
+        return lfDifference != lfDifference ? lfDifference : -lfDifference;
+    }
+
+    // ARTIST 0x825D8024..0x825D81AC inlines the orthonormal-body inverse and
+    // affine product. Keep its z/y/x inverse-translation accumulation and its
+    // x/y/z product accumulation; the generic scalar affine helpers do not keep
+    // those fused orders. The transpose has zero fourth lanes, as vmrghw/glw do.
+    Matrix44Affine JointFrameInBodySpace(const Matrix44Affine& lrJoint,
+                                         const Matrix44Affine& lrBody)
+    {
+        const Vector3 lvX{lrBody.xAxis.x, lrBody.yAxis.x, lrBody.zAxis.x, 0.0f};
+        const Vector3 lvY{lrBody.xAxis.y, lrBody.yAxis.y, lrBody.zAxis.y, 0.0f};
+        const Vector3 lvZ{lrBody.xAxis.z, lrBody.yAxis.z, lrBody.zAxis.z, 0.0f};
+        const Vector3 lvNegativePosition{
+            JointFlush(0.0f - JointFlush(lrBody.wAxis.x)),
+            JointFlush(0.0f - JointFlush(lrBody.wAxis.y)),
+            JointFlush(0.0f - JointFlush(lrBody.wAxis.z)),
+            JointFlush(0.0f - JointFlush(lrBody.wAxis.w))};
+        const Vector3 lvInversePosition{
+            JointMultiplyAdd(lvNegativePosition.x, lvX.x,
+                JointMultiplyAdd(lvNegativePosition.y, lvY.x, JointMultiply(lvNegativePosition.z, lvZ.x))),
+            JointMultiplyAdd(lvNegativePosition.x, lvX.y,
+                JointMultiplyAdd(lvNegativePosition.y, lvY.y, JointMultiply(lvNegativePosition.z, lvZ.y))),
+            JointMultiplyAdd(lvNegativePosition.x, lvX.z,
+                JointMultiplyAdd(lvNegativePosition.y, lvY.z, JointMultiply(lvNegativePosition.z, lvZ.z))),
+            JointMultiplyAdd(lvNegativePosition.x, lvX.w,
+                JointMultiplyAdd(lvNegativePosition.y, lvY.w, JointMultiply(lvNegativePosition.z, lvZ.w)))};
+        const auto Rotate = [&](Vector3 lvRow)
+        {
+            return Vector3{
+                JointMultiplyAdd(lvRow.z, lvZ.x, JointMultiplyAdd(lvRow.y, lvY.x, JointMultiply(lvRow.x, lvX.x))),
+                JointMultiplyAdd(lvRow.z, lvZ.y, JointMultiplyAdd(lvRow.y, lvY.y, JointMultiply(lvRow.x, lvX.y))),
+                JointMultiplyAdd(lvRow.z, lvZ.z, JointMultiplyAdd(lvRow.y, lvY.z, JointMultiply(lvRow.x, lvX.z))),
+                JointMultiplyAdd(lvRow.z, lvZ.w, JointMultiplyAdd(lvRow.y, lvY.w, JointMultiply(lvRow.x, lvX.w)))};
+        };
+        const Vector3 lvPosition = lrJoint.wAxis;
+        Matrix44Affine lResult;
+        lResult.xAxis = Rotate(lrJoint.xAxis);
+        lResult.yAxis = Rotate(lrJoint.yAxis);
+        lResult.zAxis = Rotate(lrJoint.zAxis);
+        lResult.wAxis = Vector3{
+            JointMultiplyAdd(lvPosition.z, lvZ.x, JointMultiplyAdd(lvPosition.y, lvY.x,
+                JointMultiplyAdd(lvPosition.x, lvX.x, lvInversePosition.x))),
+            JointMultiplyAdd(lvPosition.z, lvZ.y, JointMultiplyAdd(lvPosition.y, lvY.y,
+                JointMultiplyAdd(lvPosition.x, lvX.y, lvInversePosition.y))),
+            JointMultiplyAdd(lvPosition.z, lvZ.z, JointMultiplyAdd(lvPosition.y, lvY.z,
+                JointMultiplyAdd(lvPosition.x, lvX.z, lvInversePosition.z))),
+            JointMultiplyAdd(lvPosition.z, lvZ.w, JointMultiplyAdd(lvPosition.y, lvY.w,
+                JointMultiplyAdd(lvPosition.x, lvX.w, lvInversePosition.w)))};
+        return lResult;
+    }
+}
 
 // ---------------------------------------------------------------------------------------
 // ArticulatedJointPool::_AssertLayout   -- the gate that keeps the de-fork honest.
@@ -144,6 +231,131 @@ bool ArticulatedJointPool::IsJointInUse(s32 liJointIndex) const
     CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_NUM_JOINTS, "Invalid joint index: ");
     CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "invalid index : ");
     return mUsedJoints.IsBitSet(static_cast<u32>(liJointIndex));
+}
+
+// ---------------------------------------------------------------------------------------
+// ArticulatedJointPool::CreateJoint @ 0x826009C8 (named ARTIST export hole)
+//
+// The X360 checks the working buffer and both body transforms plus the world hinge point,
+// selects the first clear bit from the ten-slot pool, packs the cab/trailer entity ids with
+// that slot, marks the slot used, builds the InAddJoint payload, and flags its queue entry.
+// The original post-assert path continues even when the pool is full.
+// ---------------------------------------------------------------------------------------
+s32 ArticulatedJointPool::CreateJoint(
+    ArticulatedJointCreateBuffer* lpJointWorkingBuffer,
+    CgsPhysics::RigidBodyId lCabRigidBodyId,
+    CgsPhysics::RigidBodyId lTrailerRigidBodyId,
+    const Matrix44Affine& lrCabWorldTransform,
+    const Matrix44Affine& lrTrailerWorldTransform,
+    Vector3 lArticulationPointWorldSpace)
+{
+    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpAddJointEvent != NULL"); // :149
+    CGS_ASSERT(rw::math::vpu::IsValid(lrCabWorldTransform),
+               "RwMathVPU::IsValid( lCabWorldTransform )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lrTrailerWorldTransform),
+               "RwMathVPU::IsValid( lTrailerWorldTransform )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lArticulationPointWorldSpace),
+               "RwMathVPU::IsValid( lArticulationPointWorldSpace )");
+
+    const s32 liNewJointIndex = mUsedJoints.GetFirstZeroBit();
+    CGS_ASSERT(liNewJointIndex < KI_NUM_JOINTS,
+               "liNewJointIndex < kiMaxArticulatedTrafficVehicles"); // :162
+
+    ArticulatedJointId lJointId;
+    const EntityId lCabEntityId{static_cast<u32>(lCabRigidBodyId.GetEntityId())};
+    const EntityId lTrailerEntityId{static_cast<u32>(lTrailerRigidBodyId.GetEntityId())};
+    lJointId.Set(static_cast<u16>(liNewJointIndex), lCabEntityId, lTrailerEntityId);
+
+    mUsedJoints.SetBit(static_cast<u32>(liNewJointIndex));
+
+    ArticulatedJointCreateBuffer::InAddJoint lAddJointEvent;
+    ConstructArticulatedJoint(&lAddJointEvent, lJointId, lCabRigidBodyId,
+                              lTrailerRigidBodyId, lrCabWorldTransform,
+                              lrTrailerWorldTransform, lArticulationPointWorldSpace);
+    lpJointWorkingBuffer->FlagJointToBeCreated(liNewJointIndex, lAddJointEvent);
+    return liNewJointIndex;
+}
+
+// ConstructArticulatedJoint @0x825D7DD8. The asm keeps this/output/joint/cab/trailer/
+// cab-transform/trailer-transform in r3..r9 and the world hinge in v1. The three
+// handles are full u64 values; the apparent Hex-Rays register pairs are spurious.
+void ArticulatedJointPool::ConstructArticulatedJoint(
+    CgsPhysics::PhysicsSimulationIO::InAddJoint* lpOutAddJointEvent,
+    ArticulatedJointId lJointId,
+    CgsPhysics::RigidBodyId lCabRigidBodyId,
+    CgsPhysics::RigidBodyId lTrailerRigidBodyId,
+    const Matrix44Affine& lrCabWorldTransform,
+    const Matrix44Affine& lrTrailerWorldTransform,
+    Vector3 lWorldSpaceJointPos)
+{
+    CGS_ASSERT(lpOutAddJointEvent != nullptr, "lpOutAddJointEvent != NULL"); // :223
+    CGS_ASSERT(mfSwingAngleDegrees > 0.0f, "mfSwingAngleDegrees > 0.0f");   // :224
+
+    lpOutAddJointEvent->mu64Id = lJointId.mu64RawId;
+    lpOutAddJointEvent->mu64ParentBodyId = static_cast<u64>(lCabRigidBodyId);
+    lpOutAddJointEvent->mu64ChildBodyId = static_cast<u64>(lTrailerRigidBodyId);
+    lpOutAddJointEvent->mbSpy = true;
+
+    rw::physics::JointLimits& lrLimits = lpOutAddJointEvent->mJointLimits;
+    const float kfDegreesToRadians = 0.01745329238474369f; // 0x8208F5F4: 0x3C8EFA35
+    lrLimits.mSwingf = rw::physics::SWING_CONE;
+    lrLimits.mSwinga = mfSwingAngleDegrees * kfDegreesToRadians;
+    lrLimits.mSwingc = XboxMath::XMVectorCos(lrLimits.mSwinga);
+    lrLimits.mVswing = mfMaxSwingVelocityDegrees * kfDegreesToRadians;
+    lrLimits.mTwistf = mfTwistAngleDegrees == 0.0f
+        ? rw::physics::TWIST_LOCKED : rw::physics::TWIST_ARC;
+    lrLimits.mTwista = mfTwistAngleDegrees * kfDegreesToRadians;
+    lrLimits.mTwistc = XboxMath::XMVectorCos(lrLimits.mTwista);
+    lrLimits.mPprism = Vector3{0.1f, 0.1f, 0.1f, 0.0f};
+    lrLimits.mVprism = Vector3{0.1f, 0.1f, 0.1f, 0.0f};
+    lrLimits.mVtwist = mfMaxTwistVelocityDegrees * kfDegreesToRadians;
+
+    // 0x825D7EA4 / 0x825D7F30..0x825D8018: vxor negation of cab.At(),
+    // y/z/x/w swizzles and a multiply/nmsub cross, then unguarded Normalize.
+    const Vector3 lvHingeAxis{-lrCabWorldTransform.zAxis.x, -lrCabWorldTransform.zAxis.y,
+                              -lrCabWorldTransform.zAxis.z, -lrCabWorldTransform.zAxis.w};
+    const Vector3 lvUp = lrCabWorldTransform.yAxis;
+    Vector3 lvCross{
+        JointNegativeMultiplySubtract(lvHingeAxis.z, lvUp.y, JointMultiply(lvHingeAxis.y, lvUp.z)),
+        JointNegativeMultiplySubtract(lvHingeAxis.x, lvUp.z, JointMultiply(lvHingeAxis.z, lvUp.x)),
+        JointNegativeMultiplySubtract(lvHingeAxis.y, lvUp.x, JointMultiply(lvHingeAxis.x, lvUp.y)),
+        JointNegativeMultiplySubtract(lvHingeAxis.w, lvUp.w, JointMultiply(lvHingeAxis.w, lvUp.w))};
+    double ldLengthSquared = static_cast<double>(JointFlush(lvCross.x)) * JointFlush(lvCross.x);
+    ldLengthSquared += static_cast<double>(JointFlush(lvCross.y)) * JointFlush(lvCross.y);
+    ldLengthSquared += static_cast<double>(JointFlush(lvCross.z)) * JointFlush(lvCross.z);
+    const float lfLengthSquared = std::isfinite(ldLengthSquared)
+            && ldLengthSquared > (std::numeric_limits<float>::max)()
+        ? std::numeric_limits<float>::quiet_NaN()
+        : JointFlush(static_cast<float>(ldLengthSquared));
+    const float lfEstimate = JointFlush(static_cast<float>(1.0 / std::sqrt(static_cast<double>(lfLengthSquared))));
+    const float lfStep1 = JointMultiplyAdd(JointMultiply(lfEstimate, 0.5f),
+        JointNegativeMultiplySubtract(lfLengthSquared, JointMultiply(lfEstimate, lfEstimate), 1.0f), lfEstimate);
+    const float lfInverseLength = JointMultiplyAdd(JointMultiply(lfStep1, 0.5f),
+        JointNegativeMultiplySubtract(lfLengthSquared, JointMultiply(lfStep1, lfStep1), 1.0f), lfStep1);
+    lvCross = Vector3{JointMultiply(lvCross.x, lfInverseLength), JointMultiply(lvCross.y, lfInverseLength),
+                      JointMultiply(lvCross.z, lfInverseLength), JointMultiply(lvCross.w, lfInverseLength)};
+
+    Matrix44Affine lJointTransform;
+    lJointTransform.xAxis = lvHingeAxis;
+    lJointTransform.yAxis = lvUp;
+    lJointTransform.zAxis = lvCross;
+    lJointTransform.wAxis = lWorldSpaceJointPos;
+    lJointTransform = rw::math::vpu::OrthoNormalize3x3(lJointTransform); // bl 0x82203B28
+
+    const Matrix44Affine lParentToJointTransform = JointFrameInBodySpace(lJointTransform, lrCabWorldTransform);
+    const Matrix44Affine lChildToJointTransform = JointFrameInBodySpace(lJointTransform, lrTrailerWorldTransform);
+    rw::physics::JointFrames& lrFrames = lpOutAddJointEvent->mJointFrames;
+    lrFrames.SetChildAngularFrame(Matrix33{lChildToJointTransform.xAxis,
+                                          lChildToJointTransform.yAxis, lChildToJointTransform.zAxis});
+    lrFrames.SetParentAngularFrame(Matrix33{lParentToJointTransform.xAxis,
+                                           lParentToJointTransform.yAxis, lParentToJointTransform.zAxis});
+    lrFrames.SetParentLinearFrame(Matrix33{lrCabWorldTransform.xAxis,
+                                          lrCabWorldTransform.yAxis, lrCabWorldTransform.zAxis});
+    lrFrames.SetChildPosition(lChildToJointTransform.wAxis);
+    lrFrames.SetParentPosition(lParentToJointTransform.wAxis);
+
+    const u16 lu16JointIndex = static_cast<u16>(lJointId.mu64RawId); // clrlwi r11,r22,16
+    maJoints[lu16JointIndex].Set(lParentToJointTransform, lJointId);
 }
 
 // ---------------------------------------------------------------------------------------

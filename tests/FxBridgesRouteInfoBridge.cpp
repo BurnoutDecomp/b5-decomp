@@ -27,7 +27,7 @@ namespace Assert
     int   FireAssert(const char*, const char*, int) { ++gAsserts; return 0; }
     void* EndAssert() { return nullptr; }
 }
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 namespace Message { u64 gxMessageFilterFlags = 0; }   // VariableEventQueue::OutputQueueContents' filter word
 }
 
@@ -66,7 +66,7 @@ static RouteResponse MakeResponse(u16 luOwner, u16 luEvent, s32 liNodes, f32 lfD
     std::memset(&lResponse, 0, sizeof(lResponse));
     lResponse.Construct(luOwner, luEvent);
     lResponse.GetRoute()->miNodeCount = liNodes;
-    lResponse.GetRoute()->maNodes[0].z = lfDistance;   // Route +0x8 == node 0's distance to the checkpoint
+    lResponse.GetRoute()->maNodes[0].mfDistanceLeft = lfDistance;   // Route +0x8 == node 0's distance to the checkpoint
     return lResponse;
 }
 

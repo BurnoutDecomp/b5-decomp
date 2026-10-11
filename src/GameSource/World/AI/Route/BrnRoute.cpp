@@ -4,6 +4,7 @@
 
 #include <cmath>     // sqrtf
 #include <cstddef>   // offsetof (layout pinning)
+#include <cstring>   // full original record copies, including tail padding
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnAI::Route::AddNode    @ 0x827642A0
@@ -21,7 +22,7 @@
 
 namespace BrnAI
 {
-bool Route::AddNode(const Vector4& lrNode)
+bool Route::AddNode(const RouteNode& lrNode)
 {
     const s32 liCount = miNodeCount;
 
@@ -33,56 +34,48 @@ bool Route::AddNode(const Vector4& lrNode)
     // (the asm zero-fills the z/w lanes of both operands before vcmpeqfp).
     if (liCount != 0)
     {
-        const Vector4& lrLast = maNodes[liCount - 1];
-        if (lrLast.x == lrNode.x && lrLast.y == lrNode.y)
+        const RouteNode& lrLast = maNodes[liCount - 1];
+        if (lrLast.GetPositionX() == lrNode.GetPositionX()
+            && lrLast.GetPositionZ() == lrNode.GetPositionZ())
             return true;   // duplicate position -> success, nothing stored
     }
 
     // Store the full 16-byte node and advance the count.
-    Vector4& lrSlot = maNodes[liCount];
-    lrSlot.x = lrNode.x;
-    lrSlot.y = lrNode.y;
-    lrSlot.z = lrNode.z;
-    lrSlot.w = lrNode.w;
+    std::memmove(&maNodes[liCount], &lrNode, sizeof(RouteNode));
     miNodeCount = liCount + 1;
 
     return true;
 }
 
-// @0x82767B28  Copy-construct this route from lrSource. The X360 asm copies, in
+// @0x82767B28  Copy-construct this route from lpSource. The X360 asm copies, in
 // order: miNodeCount (0x1400), miDefaultStartNode (0x1404) -- stored BEFORE the
 // node loop -- then if miNodeCount > 0 the populated node prefix (all four 32-bit
 // words per node, 0x10 stride), and finally meStatus (0x1408). It is a faithful
 // field+node-prefix copy: no de-dup and no distance recompute.
-void Route::Construct(const Route& lrSource)
+void Route::Construct(const Route* lpSource)
 {
-    const s32 liCount = lrSource.miNodeCount;
+    const s32 liCount = lpSource->miNodeCount;
 
     miNodeCount        = liCount;                       // 0x1400
-    miDefaultStartNode = lrSource.miDefaultStartNode;   // 0x1404 (stored pre-loop in the asm)
+    miDefaultStartNode = lpSource->miDefaultStartNode;   // 0x1404 (stored pre-loop in the asm)
 
     for (s32 li = 0; li < liCount; ++li)
     {
         // Verbatim 16-byte node copy (lwz/stw of words 0,4,8,0xC in the asm).
-        const Vector4& lrSrc = lrSource.maNodes[li];
-        Vector4&       lrDst = maNodes[li];
-        lrDst.x = lrSrc.x;
-        lrDst.y = lrSrc.y;
-        lrDst.z = lrSrc.z;
-        lrDst.w = lrSrc.w;
+        std::memmove(&maNodes[li], &lpSource->maNodes[li], sizeof(RouteNode));
     }
 
-    meStatus = lrSource.meStatus;                       // 0x1408
+    meStatus = lpSource->meStatus;                       // 0x1408
 }
 
 // @0x82767B98  Finalise the route after the nodes have been AddNode-ed.
 //
 // Distance pass: walking the nodes backwards from the second-to-last, each
-// node[i+1].mfDistanceToCheckpoint is set to the cumulative planar (x,y) distance
+// node[i+1].mfDistanceLeft is set to the cumulative planar (x,y) distance
 // already accumulated, then the segment node[i]->node[i+1] is added. Net result:
-// node[k].mfDistanceToCheckpoint = sum of segment lengths from node[k] forward to
+// node[k].mfDistanceLeft = sum of segment lengths from node[k] forward to
 // the last node (the last node keeps 0); node[0] therefore holds the whole-route
-// length, which is mirrored into Route+8 (== maNodes[0].z) so GetDistance() reads
+// length, which is mirrored into Route+8 (== maNodes[0].mfDistanceLeft) so GetDistance() reads
 // it. The X360 computes each segment length with a vrsqrtefp + 2-step
 // Newton-Raphson refinement and a vcmpeqfp/vsel guard forcing 0 on an exactly-
 // zero squared length -- semantically sqrtf with a zero-input guard, which
@@ -102,13 +95,13 @@ bool Route::Prepare(s32 liDefaultStartNode)
     // last node keeps distance 0 and node[0] ends up with the total.
     for (s32 li = liNodeCount - 2; li >= 0; --li)
     {
-        // mfDistanceToCheckpoint lives in the z lane (node+8) of each Vector4 slot.
-        maNodes[li + 1].z = lfAccum;
+        // mfDistanceLeft lives in the z lane (node+8) of each scalar RouteNode.
+        maNodes[li + 1].SetDistanceLeft(lfAccum);
 
-        const Vector4& lrA = maNodes[li];
-        const Vector4& lrB = maNodes[li + 1];
-        const f32 lfDX = lrB.x - lrA.x;
-        const f32 lfDY = lrB.y - lrA.y;
+        const RouteNode& lrA = maNodes[li];
+        const RouteNode& lrB = maNodes[li + 1];
+        const f32 lfDX = lrB.GetPositionX() - lrA.GetPositionX();
+        const f32 lfDY = lrB.GetPositionZ() - lrA.GetPositionZ();
         const f32 lfSegment = sqrtf((lfDX * lfDX) + (lfDY * lfDY));
 
         lfAccum += lfSegment;
@@ -116,8 +109,8 @@ bool Route::Prepare(s32 liDefaultStartNode)
 
     if (liNodeCount > 0)
     {
-        // Route+8 == maNodes[0].z == node[0].mfDistanceToCheckpoint (whole-route length).
-        maNodes[0].z = lfAccum;
+        // Route+8 == maNodes[0].mfDistanceLeft == node[0].mfDistanceLeft (whole-route length).
+        maNodes[0].SetDistanceLeft(lfAccum);
 
         if (liDefaultStartNode >= liNodeCount)
         {
@@ -145,8 +138,15 @@ void Route::_AssertLayout()
     static_assert(offsetof(Route, miNodeCount)        == 0x1400, "miNodeCount must be at guest 0x1400");
     static_assert(offsetof(Route, miDefaultStartNode) == 0x1404, "miDefaultStartNode must be at guest 0x1404");
     static_assert(offsetof(Route, meStatus)           == 0x1408, "meStatus must be at guest 0x1408");
-    // GetDistance()/Prepare mirror the total into Route+8 == maNodes[0].z.
+    // GetDistance()/Prepare mirror the total into Route+8 == maNodes[0].mfDistanceLeft.
     static_assert(offsetof(Route, maNodes) == 0, "maNodes must start the object");
-    static_assert(sizeof(Vector4) == 16, "node stride must be 16 bytes");
+    static_assert(sizeof(RouteNode) == 16, "original scalar node stride");
+    static_assert(alignof(RouteNode) == 4, "scalar node alignment");
+    static_assert(offsetof(RouteNode, mfPositionX) == 0, "position X @0");
+    static_assert(offsetof(RouteNode, mfPositionZ) == 4, "position Z @4");
+    static_assert(offsetof(RouteNode, mfDistanceLeft) == 8, "distance @8");
+    static_assert(offsetof(RouteNode, muSectionIndex) == 12, "section @12");
+    static_assert(offsetof(RouteNode, muPortalIndex) == 14, "portal @14");
+    static_assert(sizeof(Route) == 0x140C && alignof(Route) == 4, "original route extent and alignment");
 }
 }

@@ -52,28 +52,32 @@
 //     0x825C2B40  GetJoint                           248 bytes   BODIED
 //     0x82600938  Construct                          144 bytes   BODIED
 //     0x826013C0  SendCreateRemoveJointEvents       1464 bytes   BODIED (this wave)
-//     0x825D7DD8  ConstructArticulatedJoint         1132 bytes   not bodied
+//     0x825D7DD8  ConstructArticulatedJoint         1132 bytes   BODIED (2026-10-11)
 //     0x825D8248  RemoveJoint                        580 bytes   BODIED (2026-09-24, G34-D3)
 //     0x825D8490  GetIndexOfOtherHalf                304 bytes   BODIED (wave G12, folded partfile)
-//     0x826009C8  CreateJoint                       1632 bytes   not bodied  (also an export HOLE:
+//     0x826009C8  CreateJoint                       1632 bytes   bodied 2026-10-11 (export HOLE;
 //                                                                absent from progress/identity.json)
 //                 RemoveBrokenJointsFromSimulation   920 bytes   BODIED
-// The class declares NO virtuals (the DWARF lists none and the console never seats a vptr), so an
-// unbodied method here cannot decay into a silent base default -- it is a hard LNK2019 the day
-// something calls it. That is the difference between this and a hollow shell.
+// The class declares NO virtuals (the DWARF lists none and the console never seats a vptr).
+// ConstructArticulatedJoint builds the ARTIST world/local frames and original limits;
+// CreateJoint queues that payload through the existing typed IO buffer.
 // The DWARF also lists Destruct/Prepare/Release/FlagJointToBeRemoved/GetSwingBreakAngleRadians/
 // GetTwistBreakAngleRadians/GetJointId/GetFirstJointIndex, none of which has an X360 symbol
 // (all inlined or absent); per the "gate each DWARF declaration on X360 attestation" rule they are
 // NOT declared here.
 
 #include "types.hpp"
+#include "BrnCommonTypes.h" // Matrix44Affine / Vector3
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"     // CgsContainers::BitArray<N>
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJoint.h"  // the REAL ArticulatedJoint
+
+namespace CgsPhysics { class RigidBodyId; namespace PhysicsSimulationIO { struct InAddJoint; } }
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+    class PhysicalTrafficManagerDebugComponent;
     // Forward decls: SendCreateRemoveJointEvents only takes pointers to these two, and pulling
     // either header in here would drag the whole physics-IO event vocabulary into every TU that
     // embeds the pool (BrnPhysicalTrafficManager.h is one). Their real homes are
@@ -91,6 +95,13 @@ namespace Vehicle
         typedef CgsContainers::BitArray<KU_NUM_JOINTS> ArticulatedJointBitArray;  // DWARF :57
 
         void              Construct();                                // @0x82600938 (DWARF :73)
+        // @0x826009C8 (ARTIST export hole; DWARF BrnArticulatedJointPool.h:92).
+        s32               CreateJoint(ArticulatedJointCreateBuffer* lpJointWorkingBuffer,
+                                      CgsPhysics::RigidBodyId lCabRigidBodyId,
+                                      CgsPhysics::RigidBodyId lTrailerRigidBodyId,
+                                      const Matrix44Affine& lrCabWorldTransform,
+                                      const Matrix44Affine& lrTrailerWorldTransform,
+                                      Vector3 lArticulationPointWorldSpace);
         ArticulatedJoint* GetJoint(s32 liJointIndex);                 // @0x825C2B40 (DWARF :136)
         bool              IsJointInUse(s32 liJointIndex) const;       // @0x825C29C8 (DWARF :119)
 
@@ -115,11 +126,23 @@ namespace Vehicle
         void SendCreateRemoveJointEvents(VehicleOutputRequestInterface* lpRequestInterface,
                                          const ArticulatedJointCreateBuffer* lpJointWorkingBuffer);
 
+        // @0x825D7DD8 (ARTIST body saved in the traffic-batch evidence packet; DWARF :168).
+        // The X360 assembles the frame and limit block inline before FlagJointToBeCreated.
+        void ConstructArticulatedJoint(CgsPhysics::PhysicsSimulationIO::InAddJoint* lpOutAddJointEvent,
+                                       ArticulatedJointId lJointId,
+                                       CgsPhysics::RigidBodyId lCabRigidBodyId,
+                                       CgsPhysics::RigidBodyId lTrailerRigidBodyId,
+                                       const Matrix44Affine& lrCabWorldTransform,
+                                       const Matrix44Affine& lrTrailerWorldTransform,
+                                       Vector3 lWorldSpaceJointPos);
+
         // Never called; bodied in BrnArticulatedJointPool.cpp (a MOUNTED TU) and nothing but
         // static_asserts. Static so it can see the private block through offsetof.
         static void _AssertLayout();
 
     private:
+        friend class PhysicalTrafficManagerDebugComponent;
+
         ArticulatedJoint         maJoints[KI_NUM_JOINTS];   // @0   (stride 80)  DWARF :145
         ArticulatedJointBitArray mUsedJoints;               // @800               DWARF :146
         ArticulatedJointBitArray mJointsBrokenThisFrame;    // @808               DWARF :147

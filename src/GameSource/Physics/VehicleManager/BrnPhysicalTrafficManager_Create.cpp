@@ -11,7 +11,7 @@
 //   GetLeastInterestingFullyPhysicalVehicle @0x825F1990 (446)
 //   GetTrafficInterest                  @0x825F1658 (206)
 //   PreparePhysicsForNewTrafficVehicle  @0x826440D0 (210)
-//   ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)  -- named gate (trailers parked)
+//   ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)
 //
 // Slice TU: the console home BrnPhysicalTrafficManager.cpp is a different, already-mounted file,
 // so these bodies land in their own translation unit.
@@ -40,34 +40,18 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"   // the two create queues
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"           // CreatePhysicalTrafficEvent
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"       // the interest walk's stride
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"                            // CgsPhysics::RigidBodyId
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                // the +0x158 handling RefSpec
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
 #include "rw/math/vpu/matrix44affine_operation.h"                                  // IsValid(Matrix44Affine)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // the named gates
 
 namespace
 {
-    // named one-shot gate banner. gpDebugPrint (CgsLog.h:33) is NULL until the log front-end is
-    // constructed and this drain runs at PostSceneUpdate, so it must be null-tested.
-    inline void TrafficCreateLogOnce(bool& lrbLogged, const char* lpcMessage)
-    {
-        if (!lrbLogged)
-        {
-            lrbLogged = true;
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << lpcMessage;
-        }
-    }
-
-    // 2.0f flt_82001D9C, 0.5f flt_82001DA0 -- the same two the race-car create drain names.
-    const f32 KF_HALF = 0.5f;
+    // The articulated create arm uses the same half-separation correction on both bodies.
+    const f32 KF_ARTICULATION_SEPARATION_SHARE = 0.5f; // flt_82001DA0
 }
-
-#define BRN_T3_CREATE_GATE(TAG)                                                              \
-    do { static bool s_bLogged = false;                                                      \
-         TrafficCreateLogOnce(s_bLogged, "conductor gate: " TAG " inert [FLAG PC boot gate]\n"); } while (0)
 
 namespace BrnPhysics
 {
@@ -98,11 +82,8 @@ namespace Vehicle
         CGS_ASSERT(lpaRaceCarVehicles        != 0, "lpaRaceCarVehicles != NULL");        // :795
         CGS_ASSERT(lpUsedRaceCars            != 0, "lpUsedRaceCars != NULL");            // :796
 
-        // GATE ArticulatedJointPool::RemoveBrokenJointsFromSimulation @0x82601028 (920)
-        //   blocker: declare-only (BrnArticulatedJointPool.h).
-        //   DELETE-WHEN ProcessCreateArticulatedTrafficEvents lands; until then no joint exists,
-        //   so the broken-joint set is always empty and this pass is a no-op.
-        BRN_T3_CREATE_GATE("ArticulatedJointPool::RemoveBrokenJointsFromSimulation @0x82601028 (920)");
+        // The original create drain removes any broken joint slots before processing new pairs.
+        mArticulatedJointPool.RemoveBrokenJointsFromSimulation(mpArticulatedJointCreateBuffer);
 
         ProcessCreateNonArticulatedTraffic(lpInputInterface->GetCreateTrafficBodyEvents(),
                                            lpManagerOutputInterface, lpOutputRequestInterface,
@@ -116,20 +97,106 @@ namespace Vehicle
     }
 
     // =============================================================================================
-    // ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)  -- NAMED GATE
-    //   blocker: the whole ArticulatedJointPool create/remove surface is declare-only, and
-    //   traffic generation builds InitialiseAsStandard cars only, so this queue is empty.
-    //   DELETE-WHEN the articulated wave lands VehicleInputInterface::CreateArticulatedTraffic
-    //   @0x8271C9C0 and the pool's ConstructArticulatedJoint/CreateJoint bodies.
+    // ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)
     // =============================================================================================
     void PhysicalTrafficManager::ProcessCreateArticulatedTrafficEvents(
             const CgsModule::EventQueue<CreateArticulatedTrafficEvent, 10>* lpCreateArticulatedTrafficEvents,
-            VehicleManagerOutputInterface*, VehicleOutputRequestInterface*,
-            Deformation::DeformationInputInterface*, RaceCarPhysics*, VehicleDriver*,
-            CgsContainers::BitArray<8u>*)
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars)
     {
-        (void)lpCreateArticulatedTrafficEvents;
-        BRN_T3_CREATE_GATE("PhysicalTrafficManager::ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)");
+        CGS_ASSERT(lpCreateArticulatedTrafficEvents != nullptr,
+                   "lpCreateArticulatedTrafficQueue != NULL"); // :935
+        CGS_ASSERT(lpManagerOutputInterface != nullptr,
+                   "lpManagerOutputInterface != NULL"); // :936
+        CGS_ASSERT(lpDeformationInterface != nullptr,
+                   "lpDeformationInterface != NULL"); // :937
+        CGS_ASSERT(lpaRaceCarVehicles != nullptr,
+                   "lpaRaceCarVehicles != NULL"); // :938
+        CGS_ASSERT(lpUsedRaceCars != nullptr,
+                   "lpUsedRaceCars != NULL"); // :939
+
+        TotalPhysicalTrafficBitArray lDoNotRecycle;
+
+        for (s32 liEvent = 0; liEvent < lpCreateArticulatedTrafficEvents->GetLength(); ++liEvent)
+        {
+            const CreateArticulatedTrafficEvent* const lpArticulatedEvent =
+                &lpCreateArticulatedTrafficEvents->GetEvent(liEvent);
+
+            CreatePhysicalTrafficEvent lCabEvent;
+            lpArticulatedEvent->GetCreateCabEvent(&lCabEvent);
+            CreatePhysicalTrafficEvent lTrailerEvent;
+            lpArticulatedEvent->GetCreateTrailerEvent(&lTrailerEvent);
+
+            // ARTIST 0x82648A80 clears the mask for EACH request; the cab is
+            // protected only while creating its own trailer below.
+            lDoNotRecycle.UnSetAll();
+            const s32 liCab = CreateTrafficVehicle(lCabEvent, lpManagerOutputInterface,
+                lpOutputRequestInterface, lpDeformationInterface, lpaRaceCarVehicles,
+                lpaRaceCarDrivers, lpUsedRaceCars, &lDoNotRecycle);
+            CGS_ASSERT(liCab < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+            lDoNotRecycle.SetBit(static_cast<u32>(liCab));
+
+            const s32 liTrailer = CreateTrafficVehicle(lTrailerEvent, lpManagerOutputInterface,
+                lpOutputRequestInterface, lpDeformationInterface, lpaRaceCarVehicles,
+                lpaRaceCarDrivers, lpUsedRaceCars, &lDoNotRecycle);
+            CGS_ASSERT(liCab < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+
+            CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liCab)),
+                       "mUsedTrafficVehicles.IsBitSet( liCab )"); // :1002
+            CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrailer)),
+                       "mUsedTrafficVehicles.IsBitSet( liTrailer )"); // :1003
+            CGS_ASSERT(liCab >= 0, "liVehicle >= 0"); // :740
+            CGS_ASSERT(liCab < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic"); // :741
+            CGS_ASSERT(liTrailer >= 0, "liVehicle >= 0"); // :740
+            CGS_ASSERT(liTrailer < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic"); // :741
+
+            PhysicalTrafficVehicle* const lpCab = GetTrafficVehicle(liCab);
+            PhysicalTrafficVehicle* const lpTrailer = GetTrafficVehicle(liTrailer);
+            lpCab->SetArticulated(lCabEvent, PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB);
+            lpTrailer->SetArticulated(lTrailerEvent,
+                PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER);
+
+            const Vector3 lCabHitch = lpCab->GetArticulationPointWorldSpace();
+            const Vector3 lTrailerHitch = lpTrailer->GetArticulationPointWorldSpace();
+            const Vector3 lSeparation = lCabHitch - lTrailerHitch;
+            const Vector3 lHalfSeparation = lSeparation * KF_ARTICULATION_SEPARATION_SHARE;
+
+            Matrix44Affine lCabTransform = lpCab->mpVehicleBody->GetTransform();
+            lCabTransform.wAxis = lCabTransform.wAxis - lHalfSeparation;
+            lpCab->mpVehicleBody->SetTransform(lCabTransform);
+
+            Matrix44Affine lTrailerTransform = lpTrailer->mpVehicleBody->GetTransform();
+            lTrailerTransform.wAxis = lTrailerTransform.wAxis + lHalfSeparation;
+            lpTrailer->mpVehicleBody->SetTransform(lTrailerTransform);
+
+            CGS_ASSERT(mpArticulatedJointCreateBuffer != nullptr,
+                       "mpArticulatedJointCreateBuffer != NULL"); // :1045
+            const EntityId lCabEntityId = GetPhysicsEntityId(liCab);
+            const EntityId lTrailerEntityId = GetPhysicsEntityId(liTrailer);
+            const CgsPhysics::RigidBodyId lCabRigidBodyId{
+                static_cast<u64>(lCabEntityId.muValue) << 32};
+            const CgsPhysics::RigidBodyId lTrailerRigidBodyId{
+                static_cast<u64>(lTrailerEntityId.muValue) << 32};
+            const s32 liJoint = mArticulatedJointPool.CreateJoint(
+                mpArticulatedJointCreateBuffer,
+                lCabRigidBodyId, lTrailerRigidBodyId,
+                lpCab->mpVehicleBody->GetTransform(), lpTrailer->mpVehicleBody->GetTransform(),
+                lpCab->GetArticulationPointWorldSpace());
+            CGS_ASSERT(liJoint >= -1 && liJoint < ArticulatedJointPool::KI_NUM_JOINTS,
+                       "liJointIndex >= -1 && liJointIndex < kiMaxArticulatedTrafficVehicles"); // :565
+            lpCab->miJointIndex = liJoint;
+            CGS_ASSERT(liJoint >= -1 && liJoint < ArticulatedJointPool::KI_NUM_JOINTS,
+                       "liJointIndex >= -1 && liJointIndex < kiMaxArticulatedTrafficVehicles"); // :565
+            lpTrailer->miJointIndex = liJoint;
+        }
     }
 
     // =============================================================================================
@@ -526,7 +593,7 @@ namespace Vehicle
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
             lavWheelPositions[liWheel] = lpModelData->maWheelSpecs[liWheel].mPosition;
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
-            lafWheelRadii[liWheel] = KF_HALF * lpModelData->maWheelSpecs[liWheel].mScale.y;
+            lafWheelRadii[liWheel] = 0.5f * lpModelData->maWheelSpecs[liWheel].mScale.y;
         }
 
         CGS_ASSERT(liTrafficVehicleIndex >= 0, "liVehicle >= 0");                        // h:740

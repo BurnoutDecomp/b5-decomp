@@ -28,7 +28,7 @@ def main():
               constant(astar, "AStar::KF_ZERO_EPSILON"),
               definition(astar, "AStarNode* AStarNodePool::GetNode("),
               definition(astar, "void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)"),
-              definition(route, "bool Route::AddNode(const Vector4& lrNode)"),
+              definition(route, "bool Route::AddNode(const RouteNode& lrNode)"),
               "}"]
     sys.exit(compile_and_run("FxTailsAAStarNormalise.cpp", chunks, extra_sources=EXTRA,
                              prefix="brn_fxtailsa_astarnorm_"))

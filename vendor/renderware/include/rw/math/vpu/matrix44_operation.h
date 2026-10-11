@@ -9,8 +9,9 @@
 // hand-maintained header (like its siblings) is immune to regeneration.
 //
 // Bodies live out-of-line in vendor/renderware/src/rw/math/vpu/Matrix44Operation.cpp --
-// the existing call sites (BrnShadowMap.cpp, BrnEffectsGlassManager.cpp) declare
-// `Inverse` TU-locally against exactly this signature and link against that TU.
+// Production BrnCommonTypes VecFloat is an alias of this vocabulary's Vector4.
+// The separate SDKs/EATech mV-based Matrix44/VecFloat headers are not included by
+// this canonical wrapper; their declaration-only Inverse is a separate recovery.
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44 / Vector4
 
@@ -23,6 +24,8 @@ namespace vpu
     // Inverse(m, det) @ X360 0x825B2628 -- the GENERAL 4x4 inverse (no affine/orthonormal
     // fast path; every one of the 16 elements participates). Returns adj(m)/det and writes
     // the determinant, broadcast to all four lanes, through `lrDeterminant`.
+    // The reciprocal has two unconditional Newton refinements: singular matrices
+    // retain the original NaN result, without an identity/affine/zero fallback.
     //
     // For an affine matrix with an orthonormal 3x3 prefer
     // InverseOfMatrixWithOrthonormal3x3 (matrix44affine_operation.h) -- that is the cheap
