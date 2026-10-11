@@ -144,6 +144,10 @@ namespace Vehicle
     class RaceCarPhysics;                 // pointer-only collaborator
     struct VehicleEffectsInputInterface;  // UpdateVehicleEffects arg (SharedIO/BrnVehicleEffectsInputInterface.h)
 
+    // The two VehicleManager world-contact paths and VehicleManagerDebugComponent::OnActivate
+    // share the original data variable at X360 0x82F2A148 (default 0.4f).
+    extern f32 gfGroundContactCullHeight;
+
     // MINIMAL-SLICE definition of the manager-side output interface the crash/takedown events fan
     // out through. The real home is BrnVehicleConstants.h (DWARF); only the surface SetRaceCarCrashing
     // + HandleRaceCarRaceCarContact poke is modelled here, declare-only. FLAG: the EXACT event-queue
