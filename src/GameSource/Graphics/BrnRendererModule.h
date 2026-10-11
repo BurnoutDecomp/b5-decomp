@@ -2,6 +2,7 @@
 #include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                             // Vector2 parameter of DebugDisplayRenderTarget
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
 extern f32 gfBloomLuminanceScale;
@@ -499,6 +500,10 @@ private:
     // them via the untextured Basic2dColouredVertex renderer at normalised coords; reconstructed
     // through mIm2dRenderer (untextured -> solid colour) at the same screen positions.
     void RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2);
+
+    // X360 DebugDisplayRenderTarget @0x82406208; draws one texture in the renderer's 2D tail.
+    void DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
+                                  Vector2 lrPosition, Vector2 lrSize, CgsDev::RGBA luColour);
 
     // Draw the two solid-black bars that frame a widescreen (letterboxed) view: one
     // across the top, one across the bottom. lfDestAspectRatio is the visible/kept vertical fraction

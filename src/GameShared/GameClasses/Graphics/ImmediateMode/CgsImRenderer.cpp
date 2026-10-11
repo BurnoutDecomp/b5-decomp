@@ -302,6 +302,17 @@ void* ImRendererBase::SetStateLowLevel(const void* lpState)
     return this;
 }
 
+// X360 CgsGraphics::ImRendererBase::SetState(const RasterizerState*) @0x82276E48.
+// Its active-renderer assertion is followed by the shadow device's rasterizer lock,
+// compare, low-level apply, and cache update (the same stages as shadow::Device::SetState
+// @0x82276B38).
+void ImRendererBase::SetState(const RasterizerState* lpState)
+{
+    CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
+
+    shadow::Device::SetState(reinterpret_cast<const renderengine::RasterizerState*>(lpState));
+}
+
 // ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::SetTexture  @ 0x82276EE8
 //
