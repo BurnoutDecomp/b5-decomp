@@ -76,7 +76,6 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
-#include "pc/debug/RaceCarControls.h"
 
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatus{,Interface} -- WorldModule::Update stages the environment frame delta
 
@@ -127,7 +126,6 @@ namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresen
 namespace BrnWorld
 {
 
-static void RegisterVehicleLodDebugVariablesPC();
 
 // qword_8300E9B8: X360 static initializer @0x82C6A9D8 hashes this exact text;
 // WorldModule::Prepare loads the resulting 64-bit key at @0x827D5B6C.
@@ -553,7 +551,6 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     // is NOT touched by the X360 Construct.
     mShaderLodInfo.Construct();
 
-    RegisterVehicleLodDebugVariablesPC();
 
     mbIsInJunkyard = false;                         // X360 +6175808
 
@@ -3381,34 +3378,6 @@ bool sbUseDynamicLods    = true;   // X360 byte_82F307DC  (initialised data, shi
 bool sbUseFixedLods      = false;  // X360 byte_8300E114  (zero-init segment)
 bool sbUseAggressiveLods = false;  // X360 byte_8300E115  (zero-init segment)
 s32  siFixedVehicleLod   = 0;      // X360 dword_8300E118 (zero-init segment, range [0,4])
-
-// FLAG PC-platform leaf: expose the original LOD globals before component
-// activation, so early INI and menu edits share the ARTIST registrations. The
-// recovered component uses the same registration guard to avoid duplicate rows.
-static void RegisterVehicleLodDebugVariablesPC()
-{
-    if (!CgsPC::Debug::BeginVehicleLodRegistration()) return;
-    CgsDev::DebugInterface lDebugInterface;
-    const char* lpcGroup = "Graphics/Vehicles.../LODs...";
-    lDebugInterface.RegisterVariable(&sbUseDynamicLods, lpcGroup, "Use Dynamic LODs");
-    lDebugInterface.RegisterVariable(&sbUseFixedLods, lpcGroup, "Use Fixed LODs");
-    lDebugInterface.RegisterVariable(&sbUseAggressiveLods, lpcGroup, "Use Aggressive LODs");
-    lDebugInterface.RegisterVariable(&siFixedVehicleLod, lpcGroup, "Vehicle LOD");
-    lDebugInterface.SetRange(&siFixedVehicleLod, 0, 4);
-    static const char* const kapcQuality[5] =
-        { "Quality LOD 0", "Quality LOD 1", "Quality LOD 2", "Quality LOD 3", "Quality LOD 4" };
-    static const char* const kapcAggressive[5] =
-        { "Aggressive LOD 0", "Aggressive LOD 1", "Aggressive LOD 2", "Aggressive LOD 3", "Aggressive LOD 4" };
-    for (u32 luLod = 0; luLod < KU_NUM_VEHICLE_LODS; ++luLod)
-    {
-        lDebugInterface.RegisterVariable(&KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod], lpcGroup, kapcQuality[luLod]);
-        lDebugInterface.RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[luLod], lpcGroup, kapcAggressive[luLod]);
-        lDebugInterface.SetRange(&KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod], 0.0f, 300.0f);
-        lDebugInterface.SetRange(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[luLod], 0.0f, 300.0f);
-        lDebugInterface.SetStep(&KA_VEHICLE_QUALITY_LOD_DISTANCE[luLod], 1.0f);
-        lDebugInterface.SetStep(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[luLod], 1.0f);
-    }
-}
 
 // The crowding-metric blend constants (X360 flt_82004744 / flt_820CC1CC, loaded by
 // the `fsubs f13,f31,f0` + `fmuls f0,f13,f0` pair @0x827C3930..0x827C3938).

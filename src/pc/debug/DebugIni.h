@@ -111,10 +111,20 @@ namespace CgsDev { namespace DebugUI
     inline bool DebugIniNeedsComponentPC(const char* lpcPath)
     {
         const std::string lPrefix = DebugIniPathPC(lpcPath ? lpcPath : "") + '/';
+        // ARTIST's Race Car Entity page also owns absolute Graphics/Vehicles...
+        // controls. Materialize that real owner for configured values instead
+        // of registering an early duplicate set of LOD variables.
+        const std::string lAbsolutePrefix = lPrefix == "race car entity/"
+            ? "graphics/vehicles.../" : "";
         auto& lrState = GetDebugIniStatePC();
         std::lock_guard<std::mutex> lLock(lrState.mMutex);
         return std::any_of(lrState.maEntries.begin(), lrState.maEntries.end(),
-            [&](const DebugIniEntryPC& lrEntry) { return lrEntry.mPath.compare(0, lPrefix.size(), lPrefix) == 0; });
+            [&](const DebugIniEntryPC& lrEntry)
+            {
+                return lrEntry.mPath.compare(0, lPrefix.size(), lPrefix) == 0 ||
+                    (!lAbsolutePrefix.empty() &&
+                     lrEntry.mPath.compare(0, lAbsolutePrefix.size(), lAbsolutePrefix) == 0);
+            });
     }
 
     inline void QueueDebugIniPC(const VariableManager* lpOwner, Variable* lpVariable,
