@@ -32,6 +32,7 @@ namespace BrnPhysics
 namespace Vehicle
 {
     class RaceCarPhysics;
+    struct VehiclePhysics;
 
     // One gear's worth of sampled shift data, 28 bytes. The component keeps six rows and
     // accumulates into the row miCurrentGear names until the gear-stat report closes it.
@@ -93,6 +94,9 @@ namespace Vehicle
         void OnActivate() override;
 
     private:
+        // ARTIST ApplySuspensionForces records directly into the four wheel
+        // force/flag pairs; keep that original typed producer access.
+        friend struct VehiclePhysics;
         // Compile-time seat gate. Every member below is pinned to its console offset through the
         // cumulative host-widening chain; defined in this class's .cpp so it compiles with the
         // class. Never called.
@@ -104,6 +108,9 @@ namespace Vehicle
         void DrawTractionLines(CgsDev::Debug3DImmediateRender* lpDisplay);
         void DrawTractionLineNormals(CgsDev::Debug3DImmediateRender* lpDisplay);
         void DrawAboveGroundLineTest(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawLastWallTriangle(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void RenderDeformationStats(CgsDev::Debug2DImmediateRender* lpDisplay);
 
         // ---- the sampled mirror of the car, refreshed every tick by Update ---------------------
         Wheel::RoadContact   maRoadContacts[4];                  // +0x010 (console stride 0x30)
