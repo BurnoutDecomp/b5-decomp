@@ -173,7 +173,16 @@ const char* RaceCarEntityModuleDebugComponent::GetName() const
 // "Apply Ram" menu action.
 void RaceCarEntityModuleDebugComponent::AirRamAddNew(void* lpData)
 {
-    static_cast<RaceCarEntityModuleDebugComponent*>(lpData)->mbAirRam = true;
+    auto* lpComponent = static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
+    lpComponent->mbAirRam = true; // ARTIST 822A79A8: the callback's sole side effect.
+    // FLAG PC-platform leaf: bounded passive witness; no physics event is invented.
+    static const bool sbTrace = std::getenv("BRN_RACECAR_RAM_TRACE") != nullptr;
+    static u32 suTraceLines = 0;
+    if (sbTrace && suTraceLines < 4 && CgsDev::Log::gpDebugPrint)
+    {
+        ++suTraceLines;
+        CgsDev::Log::gpDebugPrint->AppendFormat("[debug-racecar-ram] latched=1 magnitude=%g\n", lpComponent->mMag);
+    }
 }
 
 // "Reset average speed" menu action.
@@ -201,8 +210,11 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     RegisterVariable(&lpModule->mbSixaxisSteeringEnabled, "SIXAXIS steering");
     RegisterVariable(&mbShowEngineState,            "Show player engine state");
     RegisterVariable(&mbTrafficRelatedData,         "Traffic Related");
-    // FLAG PC-platform leaf: Apply Ram only sets mbAirRam; its runtime consumer
-    // is absent. Its action and otherwise unused Magnitude input stay unavailable.
+    // ARTIST registers both dormant controls. The callback only latches mbAirRam;
+    // no original consumer reads that flag or mMag to create a physics event.
+    RegisterFunction(AirRamAddNew, this, "Apply Ram");
+    RegisterVariable(&mMag, "Magnitude");
+    SetRange(&mMag, 0.0f, 100.0f);
 
     RegisterVariable(&lpModule->mbDisplayPlayerCarPosition, "Show Player Car Position");
     RegisterVariable(&mbRenderCurrentDistrict,              "Render current district");
@@ -326,9 +338,6 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     SetStep(&lpModule->mfResetOnWaterHeight, KF_RESET_ON_WATER_HEIGHT_STEP);
 
     RegisterVariable(&mbForceOnlineFreeburnSpawnPosition, "Force Online Freeburn Spawn Position");
-    // FLAG PC-platform leaf: the two mode-arming readers still use a constant
-    // false until the original diagnostic owner is integrated there.
-    SetReadOnly(&mbForceOnlineFreeburnSpawnPosition, true);
 }
 
 // ================================================================================================

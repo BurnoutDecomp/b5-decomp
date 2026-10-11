@@ -384,11 +384,9 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
             GetActiveRaceCar(leLocalPlayerActiveRaceCarIndex)->GetGlobalRaceCar()->GetModelId();
 
         // Respawn the local car everywhere but the lobby; in the lobby only when the roster names
-        // a different car for it. The console ORs in one more byte, module +0x17D06 == the
-        // RaceCarEntityModuleDebugComponent's +0x16 toggle (its Construct zeroes it and only the
-        // debug menu writes it); the component is not embedded on this build, so the byte is its
-        // constructed false.
-        const bool kbDebugComponentLobbyToggle = false;
+        // a different car for it. ARTIST 82309704..82309720 also ORs in the
+        // embedded component's +0x16 debug toggle (module +0x17D06).
+        const bool kbDebugComponentLobbyToggle = mRCEntityModuleDebugComponent.mbForceOnlineFreeburnSpawnPosition;
         bool lbRespawnLocalCar = !lbIsFreeburnLobby || kbDebugComponentLobbyToggle;
         s32  liLocalPlayerGridPosition = -1;
         const s32 liGridCount = static_cast<s32>(lpGameModeParams->miNumNetworkPlayers) + 1;
@@ -1038,8 +1036,8 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         if (lbIsLocal)
         {
             lPosition = lLocalPosition;
-            // Module +0x17D06, the debug component's toggle -- constructed false, see the caller.
-            const bool kbDebugComponentLobbyToggle = false;
+            // ARTIST 82300E08..82300E24: the same toggle selects the grid's debug spawn.
+            const bool kbDebugComponentLobbyToggle = mRCEntityModuleDebugComponent.mbForceOnlineFreeburnSpawnPosition;
             if (kbDebugComponentLobbyToggle)
             {
                 lPosition = KAV_FREEBURN_LOBBY_SPAWN_POSITIONS[liGridPosition];
@@ -1055,6 +1053,13 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
     const CgsID lModelId = lpGameModeParams->maModelIds[liGridPosition];
     const Matrix44Affine lTransform =
         BrnDirector::Camera::Utils::CreateLookAt(lPosition, rw::math::vpu::Add(lPosition, lDirection));
+
+    // FLAG PC-platform leaf: bounded, passive observation through the existing LAN witness.
+    BrnNetHarnessPC::Witness("debug-spawn", "lobby=%d force=%d local=%d respawn=%d grid=%d position=(%g,%g,%g)",
+                             lbIsFreeburnLobby ? 1 : 0,
+                             mRCEntityModuleDebugComponent.mbForceOnlineFreeburnSpawnPosition ? 1 : 0,
+                             lbIsLocal ? 1 : 0, lbRespawnLocalCar ? 1 : 0, liGridPosition,
+                             lPosition.x, lPosition.y, lPosition.z);
 
     // ---- 5. the local car's boost strategy + stats -----------------------------------------
     ERaceCarType leRaceCarType = E_RACE_CAR_TYPE_NETWORK;

@@ -20,6 +20,7 @@ these counts are not a completed menu audit.
 | Max Relative Speed | Changes the allowed velocity difference, in m/s. |
 | Min Duration | Changes when continuous tailgating earns boost credit. |
 | Race Car Entity / Show place on track info | Shows the latest reset transform, line test and intersection spheres; can be hidden and restored. |
+| Force Online Freeburn Spawn Position | Respawns the local lobby car at its original grid-row debug position. |
 
 Previously the menu and cone renderer used writable globals while detection and
 boost used independent constants. Both consumers now read the same original data.
@@ -42,8 +43,19 @@ live case verifies show/hide/restore, actual render dispatch and visible geometr
 Run `tools/tests/run_case.ps1 -Case debug_menu_reset_history -Slot 15` from the
 workflow. `BRN_RESET_HISTORY_TRACE` is a bounded, passive witness.
 
-Six registration sites are verified in this campaign. All other entries remain
-pending, including those previously tested for navigation. Other debug primitives
-and text still need individual parity audits. Next: the race-car page's forced
-online spawn control and Apply Ram, then the unavailable pages in
+The forced online spawn control reaches both original mode-arming reads. With it
+off, a same-model local lobby car keeps its pose; with it on, the car respawns at
+the original spawn-table position. Production checks pass 16/16. Separate isolated
+LAN-host runs pass 9/9 for both settings, including actual physics-position checks.
+Run `tools/tests/run_case.ps1 -Case debug_menu_racecar_spawn -Slot 16`; set
+`BPH_TEST_FORCE_ONLINE_SPAWN=0` in the runner's environment for the default case.
+
+Apply Ram and Magnitude are available with their original behavior: Apply Ram
+latches an unused diagnostic flag, and Magnitude stores a value in range 0..100.
+ARTIST has no gameplay consumer for either. No new ram effect is added.
+
+Seven registration sites are verified and two are classified as original no-ops.
+All other entries remain pending, including those previously tested for navigation.
+Other debug primitives and text still need individual parity audits. Next: the
+race-car visual/statistics controls, then the unavailable pages in
 [DEBUG_MENU_REPORT.md](DEBUG_MENU_REPORT.md).
