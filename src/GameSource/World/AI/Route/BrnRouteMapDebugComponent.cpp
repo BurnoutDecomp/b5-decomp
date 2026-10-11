@@ -1,4 +1,11 @@
 #include "GameSource/World/AI/Route/BrnRouteMapDebugComponent.h"
+#include "GameShared/GameClasses/Containers/CgsArray.h"
+#include "GameSource/Math/BrnMathUtils.h"
+#include "GameSource/World/AI/BrnRouteRequestManager.h"
+#include "GameSource/World/AI/BrnAIDebugUtils.h"
+#include "GameSource/World/AI/BrnAIBoundaryLine.h"
+#include "GameSource/World/AI/BrnAICar.h"
+#include <cmath>
 
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"                          // BrnAI::RouteMapModule
 #include "GameSource/World/AI/Route/BrnRoute.h"                                   // BrnAI::Route
@@ -30,6 +37,15 @@ namespace BrnAI
 {
 namespace
 {
+    // World-space RenderWare primitives take the vendor RGBA record; preserve ARTIST's packed
+    // immediate word verbatim (the debug renderer interprets the low byte as red).
+    inline rw::RGBA ToWorldColour(u32 luPackedColour)
+    {
+        rw::RGBA lColour;
+        lColour.m_rgba = luPackedColour;
+        return lColour;
+    }
+
     // Source path reproduced verbatim for the asserts (matches the X360 string literal).
     const char* const KPC_SOURCE_FILE =
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/Route/BrnRouteMapDebugComponent.cpp";
@@ -46,15 +62,14 @@ namespace
     // computes the inverse length, then compares against 25 -- flt_820C4870).
     const f32  KF_MIN_PORTAL_SEPARATION = 25.0f;     // flt_820C4870
 
-    // The packed RGBA colours used by the colour pickers (read straight off the X360 li/lis/ori
-    // immediates; AARRGGBB, alpha in the top byte).
+    // Packed RGBA8 colours used by the colour pickers (read straight off the X360 li/lis/ori
+    // immediates). CgsDev's packed value uses the low byte for red, then green, blue, alpha.
     // ⭐ 2026-09-06 CONSTANT AUDIT: this one is NOT an immediate like the table below it --
     // it is a memory word, and it was recorded as white by assumption. GetSectionTypeColour's
     // fall-through arm reads it (`lwz r11, 0x404(r11)` @0x827681B8, r11 = 0x82F30000) and the
-    // .data image word at dword_82F30404 is 0xFF00FFFF -- CYAN, not white. Same word feeds the
-    // section draw at 0x82775550. (The 0xFF0080FF entry below IS an immediate -- `lis 0xFF00 /
-    // ori 0x80FF` @0x82768198 -- which is what pins the AARRGGBB packing for both.)
-    const RGBA K_NORMAL_COLOUR        = 0xFF00FFFFu;  // dword_82F30404 (cyan, .data image word)
+    // .data image word at dword_82F30404 is 0xFF00FFFF. The renderer's channel extraction makes
+    // this yellow (R=255,G=255,B=0), not cyan. The same word feeds the section draw at 0x82775550.
+    const RGBA K_NORMAL_COLOUR        = 0xFF00FFFFu;  // dword_82F30404 (.data image word; yellow)
 
     // Type-colour table (GetSectionTypeColour @0x82768120).
     const RGBA K_TYPE_JUNCTION_COLOUR = 0xFFFFFF00u;  // bit 0x04 -> -256
@@ -74,13 +89,14 @@ namespace
     };
     const RGBA K_SPEED_DEFAULT_COLOUR = 0xFFFFFFFFu;  // -1
 
-    // Squared distance beyond which portals/portal-ids are culled (DWARF KF_PORTAL_CULL_DIST_SQ,
-    // BrnRouteMapDebugComponent.cpp:39 -- a file-scope const; the X360 loads it as flt_82F303FC).
-    // UNCERTAIN: the numeric value is a runtime data literal not present in the available references;
-    // the relationship KF_PORTAL_CULL_DIST_SQ == KF_PORTAL_CULL_DIST^2 holds. Placeholder kept so the
-    // cull's STRUCTURE (compare squared-distance > threshold -> skip) is faithful; flagged for review.
-    const f32  KF_PORTAL_CULL_DIST    = 200.0f;            // KF_PORTAL_CULL_DIST (value uncertain)
-    const f32  KF_PORTAL_CULL_DIST_SQ = KF_PORTAL_CULL_DIST * KF_PORTAL_CULL_DIST;
+    // X360 flt_82F303FC is the squared-distance threshold loaded by DrawPortalIds @0x82767F40
+    // and DrawPortals @0x82775280. The image word is 0x47742400 == 62500.0f (a 250-unit radius).
+    const f32  KF_PORTAL_CULL_DIST_SQ = 62500.0f;
+
+    // ARTIST table @0x82F30240, indexed in RenderHUD @0x82794110..118.
+    const char* const KAPC_ASTAR_DISTANCE_FUNCTION_NAMES[] = {
+        "Euclidean", "EuclideanXBiased", "EuclideanYBiased", "Manhattan", "Diagonal"
+    };
 }
 }
 
@@ -150,6 +166,21 @@ void RouteMapDebugComponent::Construct(RouteMapModule* lpRouteMapModule, AIModul
 const char* RouteMapDebugComponent::GetName() const
 {
     return "Route Map";
+}
+
+// ARTIST vtable @0x820CDFC4, slot 4 ->0x82767678, ICF-folded with
+// AIDebugComponent::GetPath. The three instructions return the literal "AI".
+const char* RouteMapDebugComponent::GetPath() const
+{
+    return "AI";
+}
+
+// ARTIST inlined in RouteMapModule::Destruct @0x827750E8..0x82775124.
+void RouteMapDebugComponent::Destruct()
+{
+    CGS_ASSERT(mpRouteMapModule != nullptr, "mpRouteMapModule != NULL");
+    mpRouteMapModule = nullptr;
+    CgsDev::DebugComponent::Destruct();
 }
 
 // ====================================================================================================
@@ -222,6 +253,17 @@ void RouteMapDebugComponent::Advance100SectionsCallback(void* lpUserData)
 }
 
 // ====================================================================================================
+// Back100SectionsCallback  @0x82768390 (ARTIST export hole)
+// ----------------------------------------------------------------------------------------------------
+// The callback subtracts 100 directly from +0x3C; there is no lower-bound clamp in the image.
+// ====================================================================================================
+void RouteMapDebugComponent::Back100SectionsCallback(void* lpUserData)
+{
+    RouteMapDebugComponent* lpComponent = static_cast<RouteMapDebugComponent*>(lpUserData);
+    lpComponent->miAISectionIndex -= 100;
+}
+
+// ====================================================================================================
 // RenderWorld  @0x8278C7D0
 // ----------------------------------------------------------------------------------------------------
 // 3D overlays, each gated on its toggle: portals, portal-ids, portal-geometry, HNG-as-planes.
@@ -261,13 +303,14 @@ void RouteMapDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay
     {
         // "Default distance function: <name>" -- the name table is indexed by the AI module's
         // current default distance-function enum. The label is rendered top-left, then the master
-        // route itself is drawn in blue.
+        // route itself uses the original packed value 0xFF0000FF (red with this renderer's packing).
         CgsDev::SimpleStrStream lStream;
-        const char* lpcDistanceFunction = mpAIModule->GetDefaultDistanceFunctionName();
+        const char* lpcDistanceFunction = KAPC_ASTAR_DISTANCE_FUNCTION_NAMES[
+            mpAIModule->mRouteRequestManager.meDefaultAStarDistanceFunction];
         lStream << "Default distance function: " << lpcDistanceFunction;
-        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, K_NORMAL_COLOUR, false);
+        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
 
-        DrawRouteInMap(lpDisplay, mpAIModule->GetMasterRoute(), 0xFF0000FFu /* -16776961, blue */);
+        DrawRouteInMap(lpDisplay, mpAIModule->GetMasterRoute(), 0xFF0000FFu /* -16776961 */);
     }
 
     if (mbDrawAStarInMap)
@@ -396,8 +439,8 @@ void RouteMapDebugComponent::DrawPortalIds(CgsDev::Debug3DImmediateRender* lpDis
 Vector2 RouteMapDebugComponent::ToMapCoords(Vector2 lv2World) const
 {
     Vector2 lv2Map;
-    lv2Map.x = lv2World.x * mfMapScale + mfMapOffsetX;
-    lv2Map.y = lv2World.y * mfMapScale + mfMapOffsetY;
+    lv2Map.x = std::fma(lv2World.x, mfMapScale, mfMapOffsetX);
+    lv2Map.y = std::fma(lv2World.y, mfMapScale, mfMapOffsetY);
     lv2Map.z = 0.0f;
     lv2Map.w = 0.0f;
     return lv2Map;
@@ -406,8 +449,8 @@ Vector2 RouteMapDebugComponent::ToMapCoords(Vector2 lv2World) const
 Vector2 RouteMapDebugComponent::ToMapCoords(Vector3 lv3World) const
 {
     Vector2 lv2Map;
-    lv2Map.x = lv3World.x * mfMapScale + mfMapOffsetX;
-    lv2Map.y = lv3World.z * mfMapScale + mfMapOffsetY;
+    lv2Map.x = std::fma(lv3World.x, mfMapScale, mfMapOffsetX);
+    lv2Map.y = std::fma(lv3World.z, mfMapScale, mfMapOffsetY);
     lv2Map.z = 0.0f;
     lv2Map.w = 0.0f;
     return lv2Map;
@@ -566,28 +609,435 @@ void RouteMapDebugComponent::DrawAISectionInfo(CgsDev::Debug2DImmediateRender* l
     MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
 }
 
-// ----------------------------------------------------------------------------------------------------
-// DEFERRED bodies (declared in the header, bodied here once their dependencies are exposed by name):
-//
-//   DrawAISectionMap            @0x8278C890   DrawCarsInMap               @0x8278D7B0
-//   DrawEventBlockSectionsInMap @0x8278DD28   DrawPortals                 @0x82775280
-//   DrawHNGAsPlanes             @0x82780138   DrawHNGSectionAsPlanes      @0x827758F0
-//
-// These six draw loops read deep into types whose X360 layouts are NOT yet recovered by name and
-// whose 3D-draw entry points (Debug3DImmediateRender::DrawSolidQuad / DrawText) are not yet on the
-// renderer's reconstructed surface:
-//   - DrawCarsInMap walks the per-car array inside RouteMapModule (5472-byte stride) and reads the
-//     car's run state / target section at raw guest offsets (+5320/+5430/+5442/+5449), plus the
-//     external helpers BrnMath::Flatten and the per-car StrStream distance label.
-//   - DrawEventBlockSectionsInMap walks the event-block checkpoint arrays embedded in RouteMapModule
-//     (offsets +270952/+270984/+322040) which RouteMapModule does not yet expose.
-//   - DrawHNGAsPlanes / DrawHNGSectionAsPlanes need the player car's HNG section indices (AICar
-//     +0x1762/+0x1764, not yet carved) and the renderer's DrawSolidQuad.
-//   - DrawPortals / DrawPortalIds need the renderer's camera position + DrawText.
-// Implementing them now would require either raw offset casts into those black-box types (forbidden
-// by the project's hard quality rules) or fabricated accessors; both are deferred until the owning
-// headers (RouteMapModule internals, AICar HNG members, the Debug3D draw surface) are carved.
-// The control flow, branch structure and cull constants for all six are captured in the dossier
-// review notes and will reconstruct cleanly once those named members land.
+
+// ARTIST 0x8278C890; DWARF BrnRouteMapDebugComponent.cpp:336.
+void RouteMapDebugComponent::DrawAISectionMap(CgsDev::Debug2DImmediateRender* lpDisplay) const
+{
+    CGS_ASSERT(mpRouteMapModule != NULL, "mpRouteMapModule != NULL");
+    CgsDev::SimpleStrStream lStream;
+    s32 liLineCount = 0;
+    for (u16 luSection = 0; luSection < mpAISectionsData->muNumSections; ++luSection)
+    {
+        const AISection* lpSection = mpAISectionsData->GetAISection(luSection);
+        if (liLineCount >= 2500 && !mbHighDetailMap)
+            break;
+        if (lpSection->mu8NumPortals <= 1)
+            continue;
+
+        const Vector3 lFirstPortal = lpSection->GetPortal(0)->GetPosition();
+        const Vector3 lSecondPortal = lpSection->GetPortal(1)->GetPosition();
+        const f32 lfDX = lSecondPortal.x - lFirstPortal.x;
+        const f32 lfDY = lSecondPortal.y - lFirstPortal.y;
+        const f32 lfDZ = lSecondPortal.z - lFirstPortal.z;
+        const f32 lfLength = std::sqrt(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ);
+        if (!mbHighDetailMap && (lpSection->miSpanIndex == -1 || (lpSection->mx8Flags & 0xC5) != 0
+                                || lfLength <= 25.0f))
+            continue;
+        // Original fcmpu/ble rejects <=25; unordered length takes the draw arm.
+
+        if (lpSection->mu8NumPortals == 2)
+        {
+            Vector2 lStart = ToMapCoords(lpSection->GetPortal(0)->GetPosition());
+            Vector2 lEnd = ToMapCoords(lpSection->GetPortal(1)->GetPosition());
+            if (static_cast<u32>(luSection) < mpAISectionsData->muNumSections - 1)
+            {
+                const u32 luNextSection = static_cast<u32>(luSection) + 1;
+                const AISection* lpNextSection = mpAISectionsData->GetAISection(luNextSection);
+                if (lpNextSection->mu8NumPortals == 2)
+                {
+                    const Vector2 lCurrent0 = ToMapCoords(lpSection->GetPortal(0)->GetPosition());
+                    const Vector2 lCurrent1 = ToMapCoords(lpSection->GetPortal(1)->GetPosition());
+                    const Vector2 lNext0 = ToMapCoords(lpNextSection->GetPortal(0)->GetPosition());
+                    const Vector2 lNext1 = ToMapCoords(lpNextSection->GetPortal(1)->GetPosition());
+
+                    // These are four independent original comparisons. Multiple
+                    // matches increment the u16 section cursor multiple times.
+                    if (lCurrent1.x == lNext0.x && lCurrent1.y == lNext0.y)
+                    {
+                        lStart = lCurrent0;
+                        lEnd = lNext1;
+                        ++luSection;
+                    }
+                    if (lCurrent0.x == lNext1.x && lCurrent0.y == lNext1.y)
+                    {
+                        lStart = lCurrent1;
+                        lEnd = lNext0;
+                        ++luSection;
+                    }
+                    if (lCurrent0.x == lNext0.x && lCurrent0.y == lNext0.y)
+                    {
+                        lStart = lCurrent1;
+                        lEnd = lNext1;
+                        ++luSection;
+                    }
+                    if (lCurrent1.x == lNext1.x && lCurrent1.y == lNext1.y)
+                    {
+                        lStart = lCurrent0;
+                        lEnd = lNext0;
+                        ++luSection;
+                    }
+                }
+            }
+            lpDisplay->DrawLine(lStart, lEnd, GetSectionColour(miMapColourMode, lpSection));
+            ++liLineCount;
+        }
+        else if (mbHighDetailMap)
+        {
+            const Vector2 lMiddle = ToMapCoords(lpSection->GetMiddle());
+            for (s32 liPortal = 0; liPortal < lpSection->mu8NumPortals; ++liPortal)
+            {
+                const Portal* lpPortal = lpSection->GetPortal(static_cast<u8>(liPortal));
+                const RGBA lColour = GetSectionColour(miMapColourMode, lpSection);
+                const Vector2 lPortal = ToMapCoords(lpPortal->GetPosition());
+                lpDisplay->DrawLine(lMiddle, lPortal, lColour);
+                ++liLineCount;
+            }
+        }
+        else
+        {
+            CGS_ASSERT(lpSection->mu8NumPortals <= 4, "lpAISection->GetPortalCount() <= 4");
+            Vector2 laPortalPositions[4];
+            s32 liPositionCount = 0;
+            for (s32 liPortal = 0; liPortal < lpSection->mu8NumPortals; ++liPortal)
+            {
+                const Portal* lpPortal = lpSection->GetPortal(static_cast<u8>(liPortal));
+                const AISection* lpLinkedSection = mpAISectionsData->GetAISection(lpPortal->GetLinkSectionIndex());
+                if ((lpLinkedSection->mx8Flags & 0x01) == 0)
+                    laPortalPositions[liPositionCount++] = ToMapCoords(lpPortal->GetPosition());
+            }
+            if (liPositionCount >= 2)
+            {
+                lpDisplay->DrawLine(laPortalPositions[0], laPortalPositions[1],
+                                    GetSectionColour(miMapColourMode, lpSection));
+                ++liLineCount;
+            }
+        }
+    }
+    lStream << "Section count: " << static_cast<s32>(mpAISectionsData->muNumSections)
+            << ", Line count: " << liLineCount;
+    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 50.0f, 16.0f, 0xFFFFFFFFu, false);
+}
+
+// ARTIST 0x8278D7B0; DWARF BrnRouteMapDebugComponent.cpp:582.
+void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDisplay) const
+{
+    for (s32 liCar = 0; liCar < KI_MAX_OUT_OF_RANGE_RACE_CARS; ++liCar)
+    {
+        const AICar* lpCar = &mpAIModule->maAICars[liCar];
+        if ((mbOnlyDrawOneCar && miCarIndex != liCar) || lpCar->meCarState == E_AI_CAR_STATE_INACTIVE)
+            continue;
+
+        const Vector2 lPosition = ToMapCoords(lpCar->GetPosition());
+        const Vector2 lFlatDirection = BrnMath::Flatten(lpCar->GetDirection());
+        const f32 lfInverseLength = 1.0f / std::sqrt(
+            lFlatDirection.x * lFlatDirection.x + lFlatDirection.y * lFlatDirection.y);
+        // Original normalization has no zero-length fallback.
+        const Vector2 lDirection = {lFlatDirection.x * lfInverseLength,
+                                   lFlatDirection.y * lfInverseLength, 0.0f, 0.0f};
+        const Vector2 lRight = {lDirection.y, -lDirection.x, 0.0f, 0.0f};
+
+        RGBA lColour = 0xFF000000u;
+        if (lpCar->mbIsPlayer)
+            lColour = 0xC8FF8000u;
+        else if (lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE)
+            lColour = 0xC80000FFu;
+        else if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
+            lColour = lpCar->mbIsCrashing ? 0xC8202020u : 0xC800FF00u;
+
+        const Vector2 lBack = {lPosition.x - lDirection.x * 4.0f,
+                              lPosition.y - lDirection.y * 4.0f, 0.0f, 0.0f};
+        const Vector2 laArrow[4] =
+        {
+            {std::fma(lDirection.x, 10.0f, lPosition.x),
+             std::fma(lDirection.y, 10.0f, lPosition.y), 0.0f, 0.0f},
+            {lBack.x - lRight.x * 5.0f, lBack.y - lRight.y * 5.0f, 0.0f, 0.0f},
+            lPosition,
+            {std::fma(lRight.x, 5.0f, lBack.x), std::fma(lRight.y, 5.0f, lBack.y), 0.0f, 0.0f},
+        };
+        lpDisplay->DrawSolidConvexPolygon(laArrow, 4, lColour);
+        lpDisplay->DrawWirePolygon(laArrow, 4, 0xFF000000u);
+
+        if (mbCarInfoInMap)
+        {
+            CgsDev::SimpleStrStream lStream;
+            lStream << static_cast<s32>(lpCar->mfDistanceToCheckpoint) << "m";
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lPosition.x, lPosition.y - 10.0f,
+                          10.0f, 0xFFFFFFFFu, false);
+            const u16 luDestination = lpCar->GetDestinationSectionIndex();
+            if (luDestination != AICar::KI_INVALID_SECTION_INDEX)
+            {
+                lpDisplay->DrawLine(lPosition,
+                    ToMapCoords(mpAISectionsData->GetAISection(luDestination)->GetMiddle()), 0xFFFFFFFFu);
+            }
+        }
+
+        if (mbDrawCarRoutesInMap)
+        {
+            const u16 luDestination = lpCar->GetDestinationSectionIndex();
+            if (luDestination != AICar::KI_INVALID_SECTION_INDEX)
+            {
+                lpDisplay->DrawCircle(ToMapCoords(mpAISectionsData->GetAISection(luDestination)->GetMiddle()),
+                                      5.0f, 6, 0xFFFFFFFFu);
+            }
+            const Route* lpRoute = lpCar->GetRoute();
+            if (lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED && lpRoute->GetNodeCount() > 0)
+                DrawRouteInMap(lpDisplay, lpRoute, lpCar->mbIsPlayer ? 0xFF8000FFu : 0xFFFF00FFu);
+        }
+    }
+}
+
+// ARTIST 0x8278DD28; DWARF BrnRouteMapDebugComponent.cpp:713.
+void RouteMapDebugComponent::DrawEventBlockSectionsInMap(CgsDev::Debug2DImmediateRender* lpDisplay) const
+{
+    for (s32 liCheckpoint = 0; liCheckpoint < 16; ++liCheckpoint)
+    {
+        CgsDev::SimpleStrStream lStream;
+        const Array<u32, 8u>& lrBlockIds = mpAIModule->mRouteRequestManager.mauBlockSectionIds[liCheckpoint];
+        // GetLength retains the original unconstructed-array assert. The signed
+        // comparison after that assert is also original; do not widen -1 to a loop.
+        const s32 liCount = static_cast<s32>(lrBlockIds.GetLength());
+        if (liCount <= 0)
+            continue;
+
+        lStream << "Checkpoint " << liCheckpoint << ", Block section count: " << liCount << " ( ";
+        for (s32 liBlock = 0; liBlock < liCount; ++liBlock)
+        {
+            const u32 luSectionId = lrBlockIds.GetItem(static_cast<u32>(liBlock));
+            static_cast<CgsDev::StrStreamBase&>(lStream) << luSectionId << " ";
+            for (u32 luSection = 0; luSection < mpAISectionsData->muNumSections; ++luSection)
+            {
+                if (mpAISectionsData->GetAISection(luSection)->mId == luSectionId)
+                {
+                    DrawX(lpDisplay, ToMapCoords(mpAISectionsData->GetAISection(luSection)->GetMiddle()),
+                          5.0f, 0xFF0000FFu);
+                    break;
+                }
+            }
+        }
+        lStream << " )";
+        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f,
+                      std::fma(static_cast<f32>(liCheckpoint), 20.0f, 100.0f),
+                      16.0f, 0xFFFFFFFFu, false);
+    }
+}
+
+// ARTIST 0x82775280; DWARF BrnRouteMapDebugComponent.cpp:869.
+void RouteMapDebugComponent::DrawPortals(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    CGS_ASSERT(mpRouteMapModule != NULL, "mpRouteMapModule != NULL");
+    const Vector3 lCamera = lpDisplay->GetCameraPosition();
+    for (u16 luSection = 0; luSection < mpAISectionsData->muNumSections; ++luSection)
+    {
+        const AISection* lpSection = mpAISectionsData->GetAISection(luSection);
+        const u8 luPortalCount = lpSection->mu8NumPortals;
+        if (luPortalCount == 0)
+            continue;
+
+        const Vector3 lFirstPortal = lpSection->GetPortal(0)->GetPosition();
+        const f32 lfDX = lFirstPortal.x - lCamera.x;
+        const f32 lfDY = lFirstPortal.y - lCamera.y;
+        const f32 lfDZ = lFirstPortal.z - lCamera.z;
+        if (lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ > 62500.0f)
+            continue;
+
+        for (u8 luPortal = 0; luPortal < luPortalCount; ++luPortal)
+        {
+            const Portal* lpPortal = lpSection->GetPortal(luPortal);
+            const Vector3 lPosition = lpPortal->GetPosition();
+            const Vector3 lMin = {lPosition.x - 1.0f, lPosition.y - 1.0f, lPosition.z - 1.0f, 0.0f};
+            const Vector3 lMax = {lPosition.x + 1.0f, lPosition.y + 1.0f, lPosition.z + 1.0f, 0.0f};
+            // ARTIST's unnamed 0x8281E548 is the actual AA solid-box renderer.
+            lpDisplay->DrawSolidBox(lMin, lMax, ToWorldColour(0xFF00FF00u));
+
+            const AISection* lpLinkedSection = mpAISectionsData->GetAISection(lpPortal->GetLinkSectionIndex());
+            const u8 luLinkedPortalCount = lpLinkedSection->mu8NumPortals;
+            for (u8 luLinkedPortal = 0; luLinkedPortal < luLinkedPortalCount; ++luLinkedPortal)
+            {
+                const Vector3 lLinkedPosition = lpLinkedSection->GetPortal(luLinkedPortal)->GetPosition();
+                const RGBA lColour = GetSectionTypeColour(lpLinkedSection);
+                lpDisplay->DrawLine(lPosition, lLinkedPosition, ToWorldColour(lColour));
+            }
+        }
+    }
+}
+
+// ARTIST 0x82780138; DWARF BrnRouteMapDebugComponent.cpp:978.
+void RouteMapDebugComponent::DrawHNGAsPlanes(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    // The original directly indexes the active-player cursor, with no -1 guard.
+    const AICar* lpPlayerCar = &mpAIModule->maAICars[mpAIModule->mePlayerActiveRaceCarIndex];
+    const u16 luSection = lpPlayerCar->GetBestSectionIndex();
+    if (luSection == AICar::KI_INVALID_SECTION_INDEX)
+        return;
+
+    const AISection* lpSection = mpAISectionsData->GetAISection(luSection);
+    DrawHNGSectionAsPlanes(lpDisplay, luSection);
+    if (mbOnlyDrawDataForPlayerSection)
+        return;
+
+    for (s32 liPortal = 0; liPortal < lpSection->mu8NumPortals; ++liPortal)
+    {
+        const u16 luNeighbour = lpSection->GetPortal(static_cast<u8>(liPortal))->GetLinkSectionIndex();
+        const AISection* lpNeighbour = mpAISectionsData->GetAISection(luNeighbour);
+        DrawHNGSectionAsPlanes(lpDisplay, luNeighbour);
+        for (s32 liNextPortal = 0; liNextPortal < lpNeighbour->mu8NumPortals; ++liNextPortal)
+        {
+            DrawHNGSectionAsPlanes(lpDisplay,
+                lpNeighbour->GetPortal(static_cast<u8>(liNextPortal))->GetLinkSectionIndex());
+        }
+    }
+}
+
+// ARTIST 0x827758F0; DWARF BrnRouteMapDebugComponent.cpp:1265.
+void RouteMapDebugComponent::DrawHNGSectionAsPlanes(CgsDev::Debug3DImmediateRender* lpDisplay,
+                                                   u16 luSectionIndex) const
+{
+    const AISection* lpSection = mpAISectionsData->GetAISection(luSectionIndex);
+    for (s32 liLine = 0; liLine < lpSection->muNumNoGoLines; ++liLine)
+    {
+        const u16 luLine = static_cast<u16>(liLine);
+        CGS_ASSERT(luLine < lpSection->muNumNoGoLines, "luHNGLineIndex < muNumNoGoLines");
+        const BoundaryLine& lrLine = lpSection->mpaNoGoLines[luLine];
+        const f32 lfMiddleY = lpSection->GetMiddle().y;
+        const Vector3 lBottomStart = {lrLine.mfStartX, lfMiddleY - 20.0f, lrLine.mfStartY, 0.0f};
+        const Vector3 lTopStart = {lrLine.mfStartX, lfMiddleY + 10.0f, lrLine.mfStartY, 0.0f};
+        const Vector3 lTopEnd = {lrLine.mfEndX, lfMiddleY + 10.0f, lrLine.mfEndY, 0.0f};
+        const Vector3 lBottomEnd = {lrLine.mfEndX, lfMiddleY - 20.0f, lrLine.mfEndY, 0.0f};
+        lpDisplay->DrawSolidQuad(lBottomStart, lTopStart, lTopEnd, lBottomEnd,
+                                 ToWorldColour(0x800040FFu));
+        lpDisplay->DrawSolidQuad(lBottomEnd, lTopEnd, lTopStart, lBottomStart,
+                                 ToWorldColour(0x804000FFu));
+    }
+}
+
+// ARTIST export hole 0x827755C8, called directly at RenderWorld 0x8278C85C.
+// DWARF BrnRouteMapDebugComponent.cpp:1022. This is an original separate method.
+void RouteMapDebugComponent::DrawAllPortalGeometry(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    CGS_ASSERT(mpRouteMapModule != NULL, "mpRouteMapModule != NULL");
+    const Vector3 lCamera = lpDisplay->GetCameraPosition();
+    for (u16 luSection = 0; luSection < mpAISectionsData->muNumSections; ++luSection)
+    {
+        const AISection* lpSection = mpAISectionsData->GetAISection(luSection);
+        const u8 luPortalCount = lpSection->mu8NumPortals;
+        if (luPortalCount == 0)
+            continue;
+
+        const Vector3 lMiddle = lpSection->GetMiddle();
+        const f32 lfDX = lMiddle.x - lCamera.x;
+        const f32 lfDY = lMiddle.y - lCamera.y;
+        const f32 lfDZ = lMiddle.z - lCamera.z;
+        if (lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ > 62500.0f)
+            continue;
+
+        // Original quirk: this arm reads slot zero, independently of the active
+        // player cursor used by DrawHNGAsPlanes. Do not repair that distinction.
+        const bool lbIsPlayerSection = luSection == mpAIModule->maAICars[0].GetBestSectionIndex();
+        if (mbOnlyDrawDataForPlayerSection && !lbIsPlayerSection)
+            continue;
+
+        for (u8 luPortal = 0; luPortal < luPortalCount; ++luPortal)
+            BrnAIDebugUtils::DrawPortalGeometry(lpDisplay, lpSection->GetPortal(luPortal), lbIsPlayerSection);
+    }
+}
+
+// ARTIST 0x827757F0. The export's Hex-Rays signature is register-soup; its VMX128
+// stream loads the by-value centre from v1, expands lfSize, then calls the scalar
+// DrawBox wrapper with the two min/max corners and forwards lColour unchanged.
+void RouteMapDebugComponent::DrawPoint(CgsDev::Debug2DImmediateRender* lpDisplay,
+                                      Vector2 lv2Centre, f32 lfSize, RGBA lColour) const
+{
+    const f32 lfMinX = lv2Centre.x - lfSize;
+    const f32 lfMinY = lv2Centre.y - lfSize;
+    const f32 lfMaxX = lv2Centre.x + lfSize;
+    const f32 lfMaxY = lv2Centre.y + lfSize;
+    lpDisplay->DrawBox(lfMinX, lfMinY, lfMaxX, lfMaxY, lColour);
+}
+
+// ARTIST export hole 0x8278D350, called directly from RenderHUD @0x827941B4.
+// The target stream is decoded from the original image with tools/re/ppcdis.py;
+// the X360 compares mx8Flags bits against DecFIGS' SHORTCUT (0x01) and NO_RESET
+// (0x02) values, then highlights one-way portal links and duplicate destinations.
+void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* lpDisplay) const
+{
+    const u16 luNumSections = static_cast<u16>(mpAISectionsData->muNumSections);
+    for (u32 luSectionIndex = 0; luSectionIndex < luNumSections; ++luSectionIndex)
+    {
+        const AISection* lpSection = mpAISectionsData->GetAISection(luSectionIndex);
+        const u8 luPortalCount = lpSection->mu8NumPortals;
+        bool lbDrawSection = false;
+        RGBA lColour = 0xFFFFFFFFu;
+
+        if (luPortalCount < 2)
+        {
+            // ARTIST tests NO_RESET before SHORTCUT and selects these three original colours.
+            if ((lpSection->mx8Flags & 0x02u) != 0)
+                lColour = 0xFFFF0000u;
+            else if ((lpSection->mx8Flags & 0x01u) != 0)
+                lColour = 0xFF0000FFu;
+            else
+                lColour = 0xFF00FF00u;
+
+            lbDrawSection = true;
+        }
+
+        // A portal with no reciprocal portal in its linked section marks this section yellow.
+        // Keep scanning after a match, as the original loop does.
+        for (s32 liPortal = 0; liPortal < luPortalCount; ++liPortal)
+        {
+            const Portal* lpPortal = lpSection->GetPortal(static_cast<u8>(liPortal));
+            const u16 luLinkSectionIndex = lpPortal->GetLinkSectionIndex();
+            const AISection* lpLinkSection = mpAISectionsData->GetAISection(luLinkSectionIndex);
+            bool lbBackPortalFound = false;
+
+            for (s32 liBackPortal = 0; liBackPortal < lpLinkSection->mu8NumPortals; ++liBackPortal)
+            {
+                if (lpLinkSection->GetPortal(static_cast<u8>(liBackPortal))->GetLinkSectionIndex() ==
+                    luSectionIndex)
+                {
+                    lbBackPortalFound = true;
+                }
+            }
+
+            if (!lbBackPortalFound)
+            {
+                lbDrawSection = true;
+                lColour = 0xFFFFFF00u;
+            }
+        }
+
+        // Repeated links from distinct portals mark the section white. The console checks
+        // every ordered pair (skipping i == j); retain that loop shape and its colour priority.
+        for (s32 liPortal0 = 0; liPortal0 < luPortalCount; ++liPortal0)
+        {
+            for (s32 liPortal1 = 0; liPortal1 < luPortalCount; ++liPortal1)
+            {
+                if (liPortal0 == liPortal1)
+                    continue;
+
+                const u16 luLink0 = lpSection->GetPortal(static_cast<u8>(liPortal0))->GetLinkSectionIndex();
+                const u16 luLink1 = lpSection->GetPortal(static_cast<u8>(liPortal1))->GetLinkSectionIndex();
+                if (luLink0 == luLink1)
+                {
+                    lbDrawSection = true;
+                    lColour = 0xFFFFFFFFu;
+                }
+            }
+        }
+
+        if (!lbDrawSection)
+            continue;
+
+        CgsDev::SimpleStrStream lStream;
+        static_cast<CgsDev::StrStreamBase&>(lStream) << luSectionIndex << "-" << lpSection->mId;
+
+        const Vector2 lv2MapPosition = ToMapCoords(lpSection->GetMiddle());
+        DrawX(lpDisplay, lv2MapPosition, 5.0f, lColour);
+
+        if (mbHighDetailMap)
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lv2MapPosition.x, lv2MapPosition.y,
+                          12.0f, 0xFFFFFFFFu, false);
+    }
+}
 
 }

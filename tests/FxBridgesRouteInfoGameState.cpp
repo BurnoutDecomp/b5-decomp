@@ -27,7 +27,7 @@ namespace Assert
     int   FireAssert(const char*, const char*, int) { ++gAsserts; return 0; }
     void* EndAssert() { return nullptr; }
 }
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 }
 
 // ---- AI-sections fixtures: the public surface FindNearestAISectionWithoutPointMap reads --------------------------

@@ -1,7 +1,10 @@
 #include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // DrawLine
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/VectorFont/CgsVectorFontData.h"                   // the carved glyph data
+#include <cmath>
 
 // CgsDev::VectorFont bodies (X360 Print 0x8281FBF8 / PrintComplex 0x8281F8A8). A glyph is drawn as its
 // CharLine strokes: each stroke endpoint is (pen + coord * mSize); the pen advances by KAN_CHARWIDTH.
@@ -17,20 +20,38 @@ namespace CgsDev
         mSize = { 1.0f, 1.0f, 0.0f, 0.0f };
         mColour = 0xFFFFFFFFu;
         mp2DRenderer = nullptr;
+        mp3DRenderer = nullptr;
     }
 
     void VectorFont::SetSize(Vector2 lSize)
     {
-        mSize.x = lSize.x / KF_CHARWIDTH;
-        mSize.y = lSize.y / KF_CHARHEIGHT;
-        mSize.z = 0.0f;
-        mSize.w = 0.0f;
+        // ARTIST's inlined store (8281FE68..FE74) multiplies all four lanes
+        // by 0.125, with VMX denormal operand/result flushing.
+        const auto Scale = [](f32 lfValue)
+        {
+            if (std::fpclassify(lfValue) == FP_SUBNORMAL)
+                lfValue = std::copysign(0.0f, lfValue);
+            const f32 lfResult = lfValue * 0.125f;
+            return std::fpclassify(lfResult) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfResult) : lfResult;
+        };
+        mSize = {Scale(lSize.x), Scale(lSize.y), Scale(lSize.z), Scale(lSize.w)};
     }
 
     void VectorFont::DrawLine(Vector2 lP1, Vector2 lP2, u32 luColour)
     {
         if (mp2DRenderer)
             mp2DRenderer->DrawLine(lP1, lP2, luColour);
+        else
+        {
+            // ARTIST 8281F18C..8281F244 widens the screen-space endpoints
+            // with zero Z/W and keeps the strokes in the owning 3D debug bank.
+            CGS_ASSERT(mp3DRenderer != nullptr, "mp3DRenderer");
+            rw::RGBA lColour;
+            lColour.m_rgba = luColour;
+            mp3DRenderer->Draw2DLineForVectorFont(
+                {lP1.x, lP1.y, 0.0f, 0.0f}, {lP2.x, lP2.y, 0.0f, 0.0f}, lColour);
+        }
     }
 
     // X360 0x82818E10.  Character advances are expressed in the source font's 8x8

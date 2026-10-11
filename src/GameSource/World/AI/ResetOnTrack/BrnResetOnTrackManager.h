@@ -352,16 +352,6 @@ namespace BrnAI
         // (ScanBackwards @0x82784B18..0x82784B3C: `stfs +0` x, `stfs +4` y, `stfs +8` distance,
         // `sth +0xC` section index, `stb +0xE` PORTAL index).
         //
-        // [FLAG header_request] THE PORTAL INDEX HAS NO NAME YET. BrnRoute.h models RouteNode's
-        // +14 as `u16 muPad0x0E` (that home only ever saw route nodes, where the field is unused);
-        // the reset-on-track nodes carry the section PORTAL index there as a single byte. The
-        // strategies read and write it through muPad0x0E, which is byte-correct on this
-        // little-endian host (a u16 store puts the low byte at +14, exactly where the console's
-        // `stb` puts it) and is self-consistent because ONLY this class touches these two nodes --
-        // every caller of ConvertNodesToPositionAndDirection / GetRoadSideForStartingLine is a
-        // ResetOnTrackManager member (checked against the X360 xrefs). The request filed against
-        // BrnRoute.h is to split that pad into `u8 mu8PortalIndex; u8 mu8Pad0x0F;`.
-        // DELETE-WHEN BrnRoute.h names the field.
         RouteNode mHelperNodeNext;
         RouteNode mHelperNodePrev;
 

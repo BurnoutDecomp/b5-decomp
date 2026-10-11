@@ -1121,7 +1121,7 @@ void AIModule::OnModeStartRacing(bool lbSkipPlayerCar)
         AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
         if (lpPlayerCar != 0)
         {
-            mMasterRoute.Construct(*lpPlayerCar->GetRoute());
+            mMasterRoute.Construct(lpPlayerCar->GetRoute());
         }
     }
 

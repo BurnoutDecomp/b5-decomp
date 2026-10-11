@@ -541,9 +541,17 @@ namespace CgsDev
         Draw2DLine(lStart.x, lStart.y, lEnd.x, lEnd.y, lColour);
     }
 
-    void DebugRender::Draw2DBox(Vector2 lMin, Vector2 lMax, RGBA lColour)
+    // ARTIST 8282B2D8: v1 is position and v2 is size, copied without subtraction.
+    void DebugRender::Draw2DBox(Vector2 lPosition, Vector2 lSize, RGBA lColour)
     {
-        Draw2DBox(lMin.x, lMin.y, lMax.x, lMax.y, lColour);
+        Internal::CInEventDrawBox2D lEvent;
+        lEvent.mfX      = lPosition.x;
+        lEvent.mfY      = lPosition.y;
+        lEvent.mfWidth  = lSize.x;
+        lEvent.mfHeight = lSize.y;
+        lEvent.mColour  = lColour;
+        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                              Internal::E_INEVENT_2D_BOX, static_cast<s32>(sizeof(lEvent)));
     }
 
     void DebugRender::Draw2DFrame(Vector2 lMin, Vector2 lMax, RGBA lColour)
@@ -631,18 +639,12 @@ namespace CgsDev
                               Internal::E_INEVENT_2D_LINE, static_cast<s32>(sizeof(lEvent)));
     }
 
-    // X360 Draw2DBox 0x8282B2D8 (CInEventDrawBox2D, ID 3): screen rect as origin + extent + colour.
-    // The record stores {mfX, mfY, mfWidth, mfHeight} (DWARF); the min/max interface converts here.
+    // FLAG PC-platform leaf: retain the existing native scalar min/max convenience
+    // API; ARTIST/DecFIGS expose the vector position/size publisher above.
     void DebugRender::Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
     {
-        Internal::CInEventDrawBox2D lEvent;
-        lEvent.mfX      = lfMinX;
-        lEvent.mfY      = lfMinY;
-        lEvent.mfWidth  = lfMaxX - lfMinX;
-        lEvent.mfHeight = lfMaxY - lfMinY;
-        lEvent.mColour  = lColour;
-        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                              Internal::E_INEVENT_2D_BOX, static_cast<s32>(sizeof(lEvent)));
+        Draw2DBox(Vector2{lfMinX, lfMinY, 0, 0},
+                  Vector2{lfMaxX - lfMinX, lfMaxY - lfMinY, 0, 0}, lColour);
     }
 
     void DebugRender::Draw2DFrame(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
@@ -698,7 +700,8 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawBox2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawBox2D*>(lpEvent);
-                    lpRenderer->DrawBox(lpEv->mfX, lpEv->mfY, lpEv->mfWidth, lpEv->mfHeight, lpEv->mColour);
+                    lpRenderer->DrawBox(Vector2{lpEv->mfX, lpEv->mfY, 0, 0},
+                                        Vector2{lpEv->mfWidth, lpEv->mfHeight, 0, 0}, lpEv->mColour);
                     break;
                 }
 

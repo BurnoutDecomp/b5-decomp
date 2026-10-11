@@ -113,7 +113,6 @@ AIModule::AIModule()
 // ⚠️ [FLAG PC boot gate] PARKED, each for the same reason -- the owning TU is not mounted and the
 // member has no named home in this class's pad spine:
 //     * the AIDebugComponent seed block (+270908..+270948), its Construct(+271532) and Register
-//     * BrnAI::RouteMapDebugComponent::Construct(+321948)
 //     * the six "AI Module, ..." perf monitors  (Update's StartMonitor/StopMonitor legs are parked
 //       with them)
 //     * +322040/+322044 and ContactSpyInterface::Construct(+322408)
@@ -130,20 +129,9 @@ void AIModule::Construct()
 
     mResourceReceiverQueue.Construct();
 
-    // ModuleSingleBuffered::Construct(this + 295896): the route map module's base. Written by
-    // name, so the tree's slot order (virtual dtor at slot 0) cannot matter.
-    mRouteMapModule.CgsModule::ModuleSingleBuffered::Construct();
-
-    // ⭐⭐ `*(this + 295900) = 1` -- 295900 == 295896 + 4 == THE ROUTE MAP MODULE'S OWN
-    // Module::mbIsNewModule. Exactly the same idiom, one object down, and the console does it
-    // right here because the base Construct it just called cleared the flag.
-    // ⛔ MEASURED, not reasoned: leaving this out made the first boot of this wave fire
-    // "This is a new module type - can't lock/unlock etc etc"
-    // (CgsModuleSingleBuffered.cpp:213) 823 times from
-    // ModuleSingleBuffered::CreateInputDataStructure <- ModuleSingleBuffered::Prepare <-
-    // RouteMapModule::Prepare <- AIModule::Prepare, and the boot never left BOOT phase. The
-    // flag is what makes every data-structure arm of the base Prepare skip itself.
-    mRouteMapModule.MarkAsNewModule();
+    // ARTIST inlines RouteMapModule::Construct(this) here: base init, ids,
+    // embedded Route Map debug owner, then the module's new-module flag.
+    mRouteMapModule.Construct(this);
 
     // THE 35 AI CARS. AICar::Construct @0x82792620 NOW RUNS (2026-09-04, R1 lane): the
     // function was parked here as an "ARTIST export HOLE", which it is -- it has no JSON in
@@ -175,8 +163,8 @@ void AIModule::Construct()
         maAICars[leCar].Construct(leCar);
     }
 
-    // [FLAG PC boot gate] RouteMapDebugComponent::Construct, the six perf monitors and
-    // AIDebugComponent::Construct -- see the banner.
+    // [FLAG PC boot gate] The six perf monitors and AIDebugComponent::Construct
+    // remain parked -- see the banner.
 
     // ⭐ The two player cursors. The console DOES store both here, and both are 0:
     //     0x82794D34  li   r30, 0                 (the only write to r30 in the whole body)

@@ -54,7 +54,7 @@ public:
     // map offset (580, 450), the 3 colour-mode dropdown labels ("Plain"/"Type"/"Speed").
     void Construct(RouteMapModule* lpRouteMapModule, AIModule* lpAIModule);
 
-    // Base teardown (bodied in its own TU; declared for the DWARF surface).
+    // Inlined in ARTIST RouteMapModule::Destruct @0x827750D0.
     void Destruct();
 
     // @0x8278C7D0  3D world overlays: portals / portal-ids / portal-geometry / HNG-as-planes.
@@ -67,7 +67,7 @@ public:
 protected:
     // @0x82767F30  "Route Map"
     virtual const char* GetName() const;
-    // Bodied in its own TU (DWARF :262); declared for the vtable surface.
+    // ARTIST vtable0x820CDFC4 slot4 ->0x82767678 (ICF): "AI".
     virtual const char* GetPath() const;
     // @0x8277FE50  Register every toggle/slider/dropdown/action with the debug menu.
     virtual void OnActivate();

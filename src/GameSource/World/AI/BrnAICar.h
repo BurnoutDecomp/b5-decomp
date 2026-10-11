@@ -88,6 +88,7 @@
 #include "types.hpp"               // f32, s32, u8, ...
 #include "BrnCommonTypes.h"        // Vector3 (rw::math::vpu::Vector3, 16-byte SIMD)
 #include "GameSource/BurnoutConstants.h"                // ::EGlobalRaceCarIndex (Construct's argument; DWARF BrnAICar.h:86)
+#include "GameSource/World/AI/Route/BrnRoute.h" // embedded scalar route
 #include "GameSource/World/AI/BrnAIAggressiveness.h"   // BrnAI::Aggressiveness (embedded by value)
 #include "GameSource/World/AI/BrnAISharedConstants.h"  // BrnAI::ERouteFindingStyle, BrnAI::EAICarState, EAISpeedSelectionMethod, EPersonalityType
 #include "SharedClasses/AI/AISectionsResourceType.h"   // BrnAI::AISectionsData (full type: Update's callees index its sections), EResetSpeedType
@@ -182,7 +183,7 @@ namespace BrnAI
         // ---- accessors the RaceBalancingDebugComponent (debug HUD) reads (its own TU) ----------
         // The car's embedded route (mRoute is at AICar+0; the X360 passes the AICar pointer straight
         // to Route::GetNode/GetNodeCount). Restored inline so the debug HUD reaches it by name.
-        const Route* GetRoute() const { return reinterpret_cast<const Route*>(this); }
+        const Route* GetRoute() const { return &mRoute; }
         // ---- ADDITIVE (aiwave lane A7, 2026-09-03): the NON-const twin. Five AIModule event
         //      handlers INVALIDATE a car's route in place -- `stw 0, 0x1408(car)` (Route::meStatus)
         //      + `stw 0, 0x1400(car)` (Route::miNodeCount) -- and the console reaches them exactly
@@ -193,8 +194,8 @@ namespace BrnAI
         //        OnModeEnd              @0x8277BB2C/0x8277BB30      (via the same two words)
         //        OnModeFinished         @0x8277B9F8/0x8277BA04
         //        OnRaceCarReachedFinish @0x8277B90C/0x8277B910
-        //      Same body, same cast, same reason as the const overload above.
-        Route* GetRoute() { return reinterpret_cast<Route*>(this); }
+        //      Both overloads return the actual embedded route.
+        Route* GetRoute() { return &mRoute; }
         // Distance the car is ahead of the player along the route (== mfDistanceAheadOfPlayer
         // @+0x14F8). The debug HUD prints it and uses the 80m threshold to label the active graph.
         f32 GetDistanceAheadOfPlayer() const { return mfDistanceAheadOfPlayer; }
@@ -351,8 +352,7 @@ namespace BrnAI
         f32  GetDistanceToPlayer() const { return mfBuzzDistanceToPlayer; }                 // DWARF :290 (== mfDistanceToPlayer @+0x1508)
 
         // ---- storage (declaration order == layout order; pinned by _AssertLayout below) -----
-        // [0x0000 .. 0x140B] mRoute and the early transform/scalar block. Opaque to these bodies.
-        u8 mPad0000[5132];
+        Route mRoute;                   // DecFIGS :653; ARTIST +0 .. +0x140B
 
         Aggressiveness mAggressiveness;                 // +0x140C (5132)
 
