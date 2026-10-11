@@ -46,6 +46,8 @@ namespace Vehicle
         // graph, sized to fit both tyres' curves with 20% headroom, ceil'd to a whole number.
         f32  GetSlipRatioRange();
         f32  GetCoefficientRange();
+        void Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent) override;
+        void Render(CgsDev::Debug2DImmediateRender* lpDisplay) override;
 
     private:
         GripCurveDebugGraph mLongGripCurveGraph;   // +0x30
