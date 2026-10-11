@@ -54,13 +54,15 @@ namespace BrnGame
         void FillKeyBindings(CgsInput::InputIO::ActionInfo* lpActionInfo);
 
         // --- LUA C callbacks (DWARF, bodied in other TUs) ---
-        s32 LUACBCallDebugFunction(lua_State* lpLua);
-        s32 LUACBRecordLog(lua_State* lpLua);
-        s32 LUACBPressButton(lua_State* lpLua);
-        s32 LUACBAcquirePad(lua_State* lpLua);
-        s32 LUACBRelinquishPad(lua_State* lpLua);
-        s32 LUACBActivateDebugComponent(lua_State* lpLua);
-        s32 LUACBDeactivateDebugComponent(lua_State* lpLua);
+        // ARTIST's callback table stores ordinary lua_CFunction pointers. Each
+        // callback receives the Lua state in r3, with no AutoTestManager this.
+        static s32 LUACBCallDebugFunction(lua_State* lpLua);
+        static s32 LUACBRecordLog(lua_State* lpLua);
+        static s32 LUACBPressButton(lua_State* lpLua);
+        static s32 LUACBAcquirePad(lua_State* lpLua);
+        static s32 LUACBRelinquishPad(lua_State* lpLua);
+        static s32 LUACBActivateDebugComponent(lua_State* lpLua);
+        static s32 LUACBDeactivateDebugComponent(lua_State* lpLua);
 
     private:
         // The three gamestate-dump report visitors take the record first and the log stream as
@@ -74,7 +76,7 @@ namespace BrnGame
         bool IsInGame();
         // --- other private helpers (bodied in other TUs) ---
         void GetCurrentGameState();
-        void* LuaAllocator(void* lpUserData, void* lpPtr, size_t luOldSize, size_t luNewSize);
+        static void* LuaAllocator(void* lpUserData, void* lpPtr, size_t luOldSize, size_t luNewSize);
         const char* ScriptReader(lua_State* lpLua, void* lpUserData, size_t* lpuSize);
         void LoadScripts();
         void UpdateScriptFSM();
