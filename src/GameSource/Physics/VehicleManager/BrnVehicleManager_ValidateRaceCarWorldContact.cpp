@@ -42,9 +42,9 @@ namespace BrnPhysics
 namespace Vehicle
 {
     // MEASURED namespace globals (console .data):
-    //   gfGroundContactCullHeight: STATICALLY-INITIALISED .data @0x82F2A148 == 0x3ECCCCCD ==
-    //     0.4f (image-read; same ordinary-initialised .data bank as the flt_82F2A2xx seed
-    //     constants -- nothing to disassemble).
+    //   gfGroundContactCullHeight: default .data @0x82F2A148 == 0x3ECCCCCD == 0.4f
+    //     (image-read; same ordinary-initialised .data bank as the flt_82F2A2xx seed constants).
+    //     VehicleManagerDebugComponent::OnActivate exposes this storage as a writable slider.
     //   KVF_WALL_NORMAL_DOT_THRESHOLD: DYNAMIC-INIT (zero in the image at 0x82FB7F20). Its
     //     initialiser was FOUND AND READ this wave @0x82C5BBD8..0x82C5BBF8:
     //       lis r11,0x8200 ; lfs f0,0x1DA0(r11)   <- flt_82001DA0 == 0.5f
@@ -54,7 +54,6 @@ namespace Vehicle
     //     below this are flattened to pure horizontal ("wall") normals.
     namespace
     {
-        const f32 KF_GROUND_CONTACT_CULL_HEIGHT    = 0.4f;   // gfGroundContactCullHeight @0x82F2A148
         const f32 KF_WALL_NORMAL_DOT_THRESHOLD     = 0.5f;   // KVF_WALL_NORMAL_DOT_THRESHOLD (init @0x82C5BBD8, value == flt_82001DA0)
         const f32 KF_MPS_TO_MPH                    = 2.236936330795288f; // KF_MPS_TO_MPH rodata @0x8208F820 (named X360 symbol; PS3 identical)
         const f32 KF_NORMAL_ZERO_EPSILON           = 1.1920928955078125e-07f; // stru_8208F620 lane 0 == 0x34000000 == FLT_EPSILON
@@ -145,9 +144,9 @@ namespace Vehicle
     //                                                    "Ground Contact Cull Height");
     //           SetRange(&flt_82F2A148, 0.0, 1.0);  SetStep(&flt_82F2A148, 0.01);
     //         which is exactly the debug slider a retail-build experimenter would move. Image byte
-    //         value (x360rd) 0x3ECCCCCD == 0.4 -> KF_GROUND_CONTACT_CULL_HEIGHT below. Its two live
-    //         consumers are this function and HandleTrafficCarWorldPotentialContact @0x8263F0F0
-    //         (BrnVehicleManager_TrafficCrashArms.cpp:77, also 0.4). Nothing writes it at runtime.
+    //         value (x360rd) 0x3ECCCCCD == 0.4 is the default. Its two live consumers are this
+    //         function and HandleTrafficCarWorldPotentialContact @0x8263F0F0
+    //         (BrnVehicleManager_TrafficCrashArms.cpp:77); the menu registration is its runtime writer.
     //       * kvfMaxCurbHeight is a SEPARATE literal. The load is unambiguous in the asm --
     //         0x825C6684  lfs f0, (flt_8208F834 - 0x8208F9C8)(r14)  -- and x360rd reads
     //         0x8208F834 == 0x3E800000 == 0.25. (The other seven functions that reference that word
@@ -526,7 +525,7 @@ namespace Vehicle
         }
 
         // ---- the speed-scaled ground-clearance gate --------------------------------------------
-        f32 lfCullHeight = KF_GROUND_CONTACT_CULL_HEIGHT;                     // v121 = splat(0.4)
+        f32 lfCullHeight = gfGroundContactCullHeight;                         // X360 reads flt_82F2A148
         if (KVF_GROUND_CLEARANCE_MAX_SPEED_MPH > lfSpeedMph)
         {
             if (KVF_GROUND_CLEARANCE_MIN_SPEED_MPH > lfSpeedMph)

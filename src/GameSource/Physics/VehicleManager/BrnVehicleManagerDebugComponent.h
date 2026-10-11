@@ -46,7 +46,7 @@
 // The layout below did not change; only the reason it is here did. `VehicleManagerDebugComponent::
 // Construct(this + 161968, this)` is now callable as `mDebugComponent.Construct(this)`.
 //
-// INCREMENTAL: this slice lands the full DATA layout plus Construct + GetName. The ~20
+// INCREMENTAL: this slice lands the full DATA layout plus Construct, GetName and OnActivate. The ~20
 // render/record members declared by the DWARF (RenderWorld, RenderHUD, RecordSlam,
 // RenderCarDiagram, ...) belong to the dev-UI render pass and are deliberately NOT declared here
 // -- declaring a virtual override without a body would put an unresolvable entry in this class's
@@ -111,6 +111,10 @@ namespace Vehicle
         // @0x825B5D80: the debug-menu display name.
         //   lis r11,aVehicleManager@ha ; addi r3,r11,aVehicleManager@l "Vehicle Manager" ; blr
         const char* GetName() const override;
+
+        // @0x825B5D90: bind the debug menu to this component, VehicleManager's tuning bank,
+        // and the VehiclePhysics debug globals using the original registration metadata.
+        void OnActivate() override;
 
     private:
         // Never called -- exists only so offsetof() can see the private members below (offsetof on
