@@ -34,7 +34,8 @@
 // calls is declared locally below.)
 #include <eathread/eathread_mutex.h>    // EA::Thread::Mutex / MutexParameters (vendor)
 #include "SDKs/Csis/CsisSystem.h"       // Csis::System::Lock/Unlock (the CsisMutex thunk targets)
-#include <intrin.h>                     // __rdtsc (GetCpuCycle PC leaf)
+#include <Windows.h>                    // QPC (GetCpuCycle PC leaf)
+#include <intrin.h>                     // overflow-safe 128-bit multiply/divide
 
 #include <cstddef> // offsetof
 #include <cstdint> // uintptr_t (the allocation-tail carve)
@@ -80,9 +81,29 @@ void CsisMutexUnlock() { Csis::System::Unlock(); }
 // wave 5 (was an undefined declaration, duplicated in TimerManager.cpp:31 /
 // Profiler.cpp:28 / CpuLoadBalancer.cpp:29 -- those keep their local declarations,
 // which link-merge onto this one definition).
-// FLAG PC-platform leaf: the console body is the PPC free-running timebase read
-// (mftb); the host fold is the x86 TSC low word.
-u32 GetCpuCycle() { return static_cast<u32>(__rdtsc()); }
+// FLAG PC-platform leaf: ARTIST @0x82B64558 reads mftb. Convert the host QPC
+// into that 49,875,000 Hz timebase, retaining the original u32 wrap domain.
+u32 GetCpuCycle()
+{
+    static const u64 luFrequency = [] {
+        LARGE_INTEGER lFrequency;
+        QueryPerformanceFrequency(&lFrequency);
+        return static_cast<u64>(lFrequency.QuadPart);
+    }();
+
+    LARGE_INTEGER lCounter;
+    QueryPerformanceCounter(&lCounter);
+    const u64 luCounter = static_cast<u64>(lCounter.QuadPart);
+    const u32 luTicksPerSecond = 49875000u;
+
+    // Reduce whole seconds modulo 2^32 before multiplying. The fractional
+    // product uses 128 bits; its quotient is always less than luTicksPerSecond.
+    const u32 luWholeTicks = static_cast<u32>(luCounter / luFrequency) * luTicksPerSecond;
+    u64 luHigh, luRemainder;
+    const u64 luLow = _umul128(luCounter % luFrequency, luTicksPerSecond, &luHigh);
+    const u64 luFractionTicks = _udiv128(luHigh, luLow, luFrequency, &luRemainder);
+    return luWholeTicks + static_cast<u32>(luFractionTicks);
+}
 
 // The shared object table the constructor points mpObjectTable at (dword_83271930..0x3C):
 // the static StackAllocator (rwaudio PDB name; TYPED with the phase-D Mixer slice
