@@ -260,7 +260,7 @@ namespace BrnAI
             if (mfWrongWayTime > KF_WRONG_WAY_TIME_LIMIT)
             {
                 mfWrongWayTime = 0.0f;
-                Route* lpThisRoute = reinterpret_cast<Route*>(this);
+                Route* lpThisRoute = GetRoute();
                 lpThisRoute->meStatus    = Route::E_STATUS_UNINITIALISED;   // stw 0,0x1408
                 lpThisRoute->miNodeCount = 0;                                // stw 0,0x1400
             }
@@ -407,7 +407,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::CheckForFreeRoamSwapToPursuit()
     {
-        Route* lpThisRoute = reinterpret_cast<Route*>(this);
+        Route* lpThisRoute = GetRoute();
 
         if (meRouteFindingStyle == E_ROUTE_FINDING_FREE_ROAM)
         {
@@ -446,14 +446,13 @@ namespace BrnAI
     // GetCurrentNodeY @0x8276EFD8
     //
     // The height of the current route node: the node's section portal's Y. The route node's
-    // w-high half-word (node+0xE) is the portal index within the node's section.
-    // (BrnRoute.h names that field muPad0x0E; here it IS the portal index -- see the report.)
+    // byte at node+0xE is the portal index within the node's section (lbz @0x8276F008).
     // ==================================================================================
     f32 AICar::GetCurrentNodeY(AISectionsData* lpAISectionsData)
     {
         const RouteNode*  lpNode    = GetRoute()->GetNode(miNextRouteNodeIndex);            // lwz 0x1524
         const AISection*  lpSection = lpAISectionsData->GetAISection(lpNode->muSectionIndex);   // lhz node+0xC
-        const Portal*     lpPortal  = lpSection->GetPortal(static_cast<u8>(lpNode->muPad0x0E)); // lhz node+0xE
+        const Portal*     lpPortal  = lpSection->GetPortal(lpNode->muPortalIndex); // lbz node+0xE
         return lpPortal->GetPositionY();                                                    // Portal[1]
     }
 
@@ -500,8 +499,8 @@ namespace BrnAI
             {
                 if (lpRoute->GetNode(liNode)->GetSectionIndex() == luSectionIndex)          // 0x8276ED90
                 {
-                    Route* lpThisRoute = reinterpret_cast<Route*>(this);
-                    lpThisRoute->Construct(*lpRoute);                                       // 0x8276EE24 bl Route::Construct
+                    Route* lpThisRoute = GetRoute();
+                    lpThisRoute->Construct(lpRoute);                                       // 0x8276EE24 bl Route::Construct
                     mbIsInMasterRoute = true;                                               // 0x8276EE30
                     SetNextRouteNodeIndex(liNode);                                          // 0x8276EE34
                     mfWrongWayTime = 0.0f;                                                  // 0x8276EE44
@@ -549,7 +548,7 @@ namespace BrnAI
 
         if (!HasValidRoute())                                                               // 0x8276F0DC
             return;
-        Route* lpThisRoute = reinterpret_cast<Route*>(this);
+        Route* lpThisRoute = GetRoute();
         if (miNextRouteNodeIndex >= lpThisRoute->GetNodeCount())                            // 0x8276F110
             return;
 
@@ -948,7 +947,7 @@ namespace BrnAI
         CGS_ASSERT(!(lfProgressionRankAsRatio < 0.0f) && !(lfProgressionRankAsRatio > 1.0f),
                    "lfProgressionRankAsRatio >= 0.0f && lfProgressionRankAsRatio <= 1.0f");  // :398
 
-        Route* lpThisRoute = reinterpret_cast<Route*>(this);
+        Route* lpThisRoute = GetRoute();
 
         mfRaceTimer             = 0.0f;                                                     // 0x14FC
         mfAlternativeRouteTimer = 0.0f;                                                     // 0x1500
@@ -1058,7 +1057,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::Construct(EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
-        Route* lpThisRoute = reinterpret_cast<Route*>(this);
+        Route* lpThisRoute = GetRoute();
 
         mfBehaviourTimer                = 0.0f;                                  // 0x82792650 stfs f31,0x14E0
         lpThisRoute->meStatus           = Route::E_STATUS_UNINITIALISED;         // 0x82792654 stw 0,0x1408
@@ -1145,7 +1144,7 @@ namespace BrnAI
         SetDirection(vpu::GetVector3_ZAxis());                                              // lvx128 unk_82181520
         SetRight(vpu::GetVector3_XAxis());                                                  // lvx128 gIVector
 
-        Route* lpThisRoute = reinterpret_cast<Route*>(this);
+        Route* lpThisRoute = GetRoute();
 
         mfWrongWayTime           = 0.0f;                                                    // 0x14F4
         mbIsOnStartLine          = false;                                                   // 0x1547

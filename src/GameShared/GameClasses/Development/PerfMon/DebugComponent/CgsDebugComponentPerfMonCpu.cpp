@@ -207,8 +207,8 @@ namespace CgsDev
 
         lpDebug2DRender->DrawFrame(32.0f, 408.0f, 608.0f, 412.0f,
                                    0xFF000000u, 2.0f);
-        lpDebug2DRender->DrawBox(32.0f, 408.0f, mfMaxCpu * 2.8799999f,
-                                 4.0f, 0xFF252525u);
+        lpDebug2DRender->DrawBox(Vector2{32.0f, 408.0f, 0, 0},
+                                Vector2{mfMaxCpu * 2.8799999f, 4.0f, 0, 0}, 0xFF252525u);
 
         f32 lfX = 32.0f;
         f32 lfTotal = 0.0f;
@@ -225,7 +225,8 @@ namespace CgsDev
                 continue;
 
             const f32 lfWidth = lData.mfCurrentValue * 2.8800001f;
-            lpDebug2DRender->DrawBox(lfX, 408.0f, lfWidth, 4.0f, 0xFFCC59CCu);
+            lpDebug2DRender->DrawBox(Vector2{lfX, 408.0f, 0, 0},
+                                    Vector2{lfWidth, 4.0f, 0, 0}, 0xFFCC59CCu);
             lfX += lfWidth;
             lfTotal += lData.mfCurrentValue;
         }

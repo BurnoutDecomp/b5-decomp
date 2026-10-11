@@ -271,6 +271,10 @@ namespace Deformation { struct DeformationManager; }
 namespace Vehicle
 {
 
+// X360 debug control storage, defined once in BrnPhysicalTrafficManager.cpp and read by
+// PhysicalTrafficVehicle::Update. The debug component binds the same bool cell.
+extern bool gbAllowTrafficFreezing;
+
 // Forward decls for the PhysicalTrafficVehicle wave-8 method params (real homes elsewhere; only
 // pointers/refs are taken here so incomplete types suffice).
 // CLASS-KEYS CORRECTED 2026-08-03 with the TrafficPhysics de-fork: including the real
@@ -950,7 +954,7 @@ private:
             RaceCarPhysics* lpaRaceCarVehicles, VehicleDriver* lpaRaceCarDrivers,
             CgsContainers::BitArray<8u>* lpUsedRaceCars);
 
-    // @0x826487C8 (614) DWARF :327. Trailer half; a named gate this round.
+    // @0x826487C8 (614) DWARF :327. Create the cab/trailer pair and queue its articulated joint.
     void ProcessCreateArticulatedTrafficEvents(
             const CgsModule::EventQueue<CreateArticulatedTrafficEvent, 10>* lpCreateArticulatedTrafficEvents,
             VehicleManagerOutputInterface* lpManagerOutputInterface,
@@ -1023,6 +1027,7 @@ private:
     // layout claim and adds no API. (Adding public accessors instead would have invented API that
     // the console does not have, and would have hidden the assert-count difference above.)
     friend class VehicleManager;
+    friend class PhysicalTrafficManagerDebugComponent;
 
     // ---- member SEQUENCE verbatim from the DecFIGS DWARF (offsets are X360/32-bit) --------
     TrafficPhysics                maFullTrafficPhysics[20];                 // :396

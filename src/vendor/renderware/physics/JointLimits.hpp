@@ -5,6 +5,8 @@
 #include "types.hpp"             // f32
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector3
 
+namespace BrnPhysics { namespace Vehicle { struct ArticulatedJointPool; } }
+
 // ===========================================================================
 // rw::physics::JointLimits -- the limit block a RenderWare physics JOINT points at:
 // the prismatic (linear) position/velocity box, the swing/twist angular limits, and the
@@ -50,6 +52,8 @@ namespace physics
 
     class JointLimits
     {
+        friend struct ::BrnPhysics::Vehicle::ArticulatedJointPool;
+
     public:
         // jointlimits.h:138. X360-ATTESTED BODY, and the attribution is a DEDUCTION rather than
         // a guess. CgsPhysics::JointData::JointData @0x827DB798 runs a 36-pass loop over

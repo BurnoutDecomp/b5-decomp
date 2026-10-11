@@ -10,9 +10,9 @@
 // zones / artic points / axles / spontaneous cones / ...), a clutch of read-only pool
 // counters refreshed every frame (active / free / purgatory params, active hulls), the
 // air-ram / kill-zone / vehicle-pick action inputs, and the cull distance. RenderWorld
-// (3D) and RenderHUD (2D) fan out to one private Draw* per toggle; OnActivate registers
-// every toggle / counter / action with the debug menu; UpdateStats refreshes the
-// counters from the owning module's param/hull pools.
+// (3D) and RenderHUD (2D) fan out to private render helpers per toggle; OnActivate registers
+// all 108 original rows with the debug menu; UpdateStats refreshes counters from the owning
+// module's param/hull pools.
 //
 // TYPE HOME for BrnTraffic::DebugComponent. Reconstructed from:
 //   - BURNOUT_X360_ARTIST.XEX asm (authoritative for behaviour + the X360 member byte
@@ -29,29 +29,25 @@
 // Construct @ 0x8274FC70 stores pin every offset used below:
 //   mpModule              @ +0x0C  TrafficEntityModule*   (stw r30,0xC; = lpModule)
 //   mfRenderCullDistance  @ +0x10  f32 = 200.0            (stfs flt_8201A1F0,0x10)
-//   mbDrawSegments..mbDrawHorns + the 3 trailing bools    bytes +0x14..+0x33, +0x69..+0x6B
-//   muDummyVehicleName    @ +0x34  (= 0)
+//   mbDrawSegments..mbDrawHorns                           bytes +0x14..+0x33
+//   mbUseCameraPosition   @ +0x34  (= 0)
 //   miHullToDrawFor       @ +0x38  s32 = -1               (stw r7=-1,0x38)
 //   miAirRamTypeToFire    @ +0x3C  s32 = 0                (stw 0,0x3C; OnActivate regs +0x3C)
-//   muKillZoneToFire      @ +0x44  u32 = 0
+//   muKillZoneToFire      @ +0x40  u32 = 0
+//   muDummyVehicleName    @ +0x44  u32 = 0
 //   macOverrideVehicleName@ +0x48  char[13] = "DEFAULT"   (the strcpy loop from +0x48)
 //   miNumActiveParams     @ +0x58  s32 = -1   miNumPurgatoryParams @ +0x5C
 //   miNumFreeParams       @ +0x60  s32 = -1   miNumActiveHulls     @ +0x64 = -1
 //   muCurrentVehicleToPick@ +0x70  u32 = -1
 //
-// BODIED (asm-recoverable, effect entirely over `this`'s own homed members / base):
-//   Construct 0x8274FC70, GetName 0x8274FF28, Update 0x82760AA8.
-// DECLARATION-ONLY + FLAG (the rest of the 51-function TU): every Draw* / Render* is a
-// multi-stage VMX debug-draw pipeline that reaches the still-un-homed BrnTraffic
-// Vehicle / Param / Section / Hull / Junction interiors (raw module-offset reads such as
-// *(mpModule + 464960/468928/...)) and/or dispatches to sibling Draw* in OTHER TUs and/or
-// reads un-dumped .rdata tuning globals. Per the project rules a multi-stage VMX pipeline
-// is NEVER paraphrased to scalar, and a raw offset read into an un-homed aggregate is not
-// a named accessor -- so those bodies live in their own follow-on slices. They are
-// declared here (this class owns them; DWARF declaration shape) but not defined in this
-// slice. RenderWorld / RenderHUD / OnActivate / UpdateStats / FireAirRam / OnPickVehicle /
-// ReloadBehaviourData are decl-only here for the same reason (they reach the un-homed
-// module interior at raw byte offsets).
+// Reconstructed in the Traffic batch (source evidence and reader limits are in
+// scratch/DEBUG_MENU_1011/traffic_batch/):
+//   Construct 0x8274FC70, GetName 0x8274FF28, Update 0x82760AA8, UpdateStats 0x827584F0,
+//   OnActivate 0x82762530, RenderWorld 0x82763E78, RenderHUD 0x82760AB0, and registered
+//   callbacks. OnActivate preserves all 108 ARTIST rows, including original range mis-targets;
+//   see scratch/DEBUG_MENU_1011/traffic_batch/registration_map.md. The ARTIST-dispatched
+//   render helpers are bodied from their original consumers; unrelated declarations without
+//   an attested live dispatch remain inert.
 // ============================================================================
 
 #include "types.hpp"        // u8/u32/s32/f32
@@ -59,9 +55,8 @@
 #include "rw/rwcore_structs.h" // rw::RGBA (by-value Draw* params)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent
 
-// Forward declarations -- the un-homed traffic value types the (decl-only) private draw
-// methods reach only by pointer / reference. Forward-declaring keeps this header free of
-// the not-yet-reconstructed traffic-graph interiors (their owning slices grow them).
+// Forward declarations keep the component header independent of the traffic graph's heavier
+// owner headers; the implementation includes the concrete types its render helpers read.
 namespace CgsDev
 {
     struct Debug2DImmediateRender;
@@ -74,10 +69,32 @@ namespace CgsDev
 namespace BrnTraffic
 {
     class TrafficEntityModule;   // homed: BrnTrafficEntityModule.h (reuse BY NAME)
-    struct Section;              // un-homed traffic-graph section record
-    struct Hull;                 // un-homed traffic hull record
-    struct KillZone;             // un-homed kill-zone record
-    struct Axle;                 // un-homed per-vehicle axle record
+    struct Section;
+    struct Hull;
+    struct KillZone;
+    struct Axle;
+
+    // File-scope ARTIST tuning cells registered by OnActivate. The bounded full-image reader
+    // review confirms no behavior consumer yet; preserve the original menu cells and defaults
+    // rather than binding unrelated fields. Export-hole limits are recorded in the traffic map.
+    extern f32 kfSideRamProportion; // X360 0x82F2FFEC, 0.15
+    extern f32 kfSideRamStrength;   // X360 0x82F2FF94, 0.04
+    extern f32 unk_8300D018;        // X360 0x8300D018, 0.0
+    extern f32 unk_82F2FFFC;        // X360 0x82F2FFFC, 0.01
+    extern f32 unk_82F30000;        // X360 0x82F30000, 0.05
+    extern f32 unk_82F30004;        // X360 0x82F30004, 0.01
+    extern f32 unk_82F30008;        // X360 0x82F30008, 0.05
+    extern f32 unk_82F3000C;        // X360 0x82F3000C, 0.15
+    extern f32 unk_82F30010;        // X360 0x82F30010, 0.4
+    extern f32 unk_82F30014;        // X360 0x82F30014, 1.0
+    extern f32 unk_82F30018;        // X360 0x82F30018, 0.04
+    extern f32 unk_82F3001C;        // X360 0x82F3001C, 0.06
+    extern f32 unk_82F30020;        // X360 0x82F30020, 0.07
+    extern f32 unk_82F30024;        // X360 0x82F30024, 0.09
+    extern f32 unk_82F30028;        // X360 0x82F30028, 0.5
+    extern f32 unk_82F30030;        // X360 0x82F30030, 20.0
+    extern f32 unk_82F30034;        // X360 0x82F30034, 3.0
+    extern f32 unk_82F30038;        // X360 0x82F30038, 30.0
 
     // ========================================================================
     // BrnTraffic::DebugComponent : public CgsDev::DebugComponent
@@ -95,38 +112,33 @@ namespace BrnTraffic
         // calls UpdateStats, matching the X360 `b UpdateStats`).
         virtual void Update();
 
-        // -- decl-only (reach the un-homed module interior) --
+        // The X360 module does not call this component destructor; it remains module-owned.
         void Destruct();   // (not in this build's postmortem set; declared for shape)
         void Activate();   // (not in this build's postmortem set; declared for shape)
 
-        // RenderWorld 0x82763E78 -- the 3D debug pass: fan out to one Draw* per draw toggle.
-        // DECL-ONLY: dispatches to ~39 Draw* (several in OTHER TUs), reads module-interior
-        // DEBUG flags at raw byte offsets, and inlines a VMX DrawSolidSphere block.
+        // RenderWorld 0x82763E78 -- original 3D dispatch gates and the inlined FUP sphere.
         virtual void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay);
-        // RenderHUD 0x82760AB0 -- the 2D debug pass (player hull id / active hulls / perf
-        // table). DECL-ONLY: third gate reads a module-interior DEBUG flag at a raw offset.
+        // RenderHUD 0x82760AB0 -- original player-hull, active-hulls, and perf-table gates.
         virtual void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay);
 
-        // 0x...: UseCameraPosition (DWARF :531) -- declared for shape; body is its own TU.
-        bool UseCameraPosition() const;
+        // DecFIGS :531; ARTIST UpdateRaceCarHulls @0x82721460 inlines its byte read at +0x34.
+        bool UseCameraPosition() const { return mbUseCameraPosition; }
 
     protected:
         // 0x8274FF28 -- "Traffic" (BODIED).
         virtual const char* GetName() const;
-        // OnActivate 0x82762530 -- register every toggle / counter / action / tuning global
-        // with the debug menu. DECL-ONLY: registers module-interior DEBUG members at raw byte
-        // offsets and many un-dumped .rdata tuning globals.
+        // OnActivate 0x82762530 -- registers all 108 original controls/actions and metadata.
         virtual void OnActivate();
 
     private:
-        // ---- the rest of the 51-function TU: all DECL-ONLY + FLAGGED (see header banner).
-        // Multi-stage VMX traffic-graph draw pipelines reaching un-homed Vehicle / Param /
-        // Section / Hull / Junction interiors; bodies are their own follow-on slices. ----
+        // Component lifecycle, page rendering, registered callbacks, and all ARTIST-
+        // dispatched render helpers are bodied in BrnTrafficDebugComponent.cpp. Only original
+        // declarations without an attested live dispatch remain intentionally unimplemented.
         void UpdateStats();                                                    // 0x827584F0
         void RenderPerformanceTable(CgsDev::Debug2DImmediateRender* lpDisplay); // 0x82754038
         void RenderPerfmon(CgsDev::Debug2DImmediateRender* lpDisplay,
                            const CgsDev::PerfMonCpuMonitorData* lpData,
-                           f32 lfX, f32 lfY, f32 lfWidth);                      // 0x8274FDD0
+                           f32 lfX, f32 lfY, f32 lfScale);                      // 0x8274FDD0
         bool ShouldObjectBeCulled(Vector3 lPosition,
                                   CgsDev::Debug3DImmediateRender* lpDisplay) const;
         bool ShouldSectionBeCulled(const Section* lpSection, const Hull* lpHull,
@@ -169,7 +181,7 @@ namespace BrnTraffic
         // the proven underlying width to avoid forcing the TrafficData resource type complete.
         void DrawKillZone(const KillZone* lpKillZone, u64 luKillZoneId,
                           CgsDev::Debug3DImmediateRender* lpDisplay) const;            // 0x8275B678
-        static void FireKillZone(void* lpUserData);
+        static void FireKillZone(void* lpUserData);                             // 0x8275BB40 (no named export)
         static void FireAirRam(void* lpUserData);                                      // 0x82750508
         void DrawRearArticPoints(CgsDev::Debug3DImmediateRender* lpDisplay) const;     // 0x82754DA8
         void DrawFrontArticPoints(CgsDev::Debug3DImmediateRender* lpDisplay) const;    // 0x82754F18
@@ -183,7 +195,7 @@ namespace BrnTraffic
         void DrawFuzzyLogic(CgsDev::Debug3DImmediateRender* lpDisplay) const;          // 0x8275C298
         void DrawShowtime(CgsDev::Debug3DImmediateRender* lpDisplay) const;            // 0x8275CA58
         void DrawJunctionFUPDetection(CgsDev::Debug3DImmediateRender* lpDisplay) const;
-        static void OnKillNearPlayer(void* lpUserData);
+        static void OnKillNearPlayer(void* lpUserData);                         // 0x82750748
         void DrawPickedVehicle(CgsDev::Debug3DImmediateRender* lpDisplay) const;
         static void OnPickVehicle(void* lpUserData);                                   // 0x82750788
         static void ReloadBehaviourData(void* lpUserData);                             // 0x827614D8
@@ -197,8 +209,9 @@ namespace BrnTraffic
         void DrawTextWithOffsets(CgsDev::DebugRender& lrDisplay, CgsDev::StrStream* lpStream,
                                  f32 lfX, f32 lfY) const;                              // 0x82750AE8
         void RenderVerticalMeter(CgsDev::Debug3DImmediateRender* lpDisplay, Vector3 lPosition,
-                                 Vector2 lSize, f32 lfMin, f32 lfMax, rw::RGBA lColourA,
-                                 rw::RGBA lColourB, f32 lfValueA, f32 lfValueB) const; // 0x82755848
+                                 Vector2 lOffset, f32 lfHalfWidth, f32 lfHeight,
+                                 rw::RGBA lOutlineColour, rw::RGBA lFillColour,
+                                 f32 lfFullScale, f32 lfValue) const; // 0x82755848
         static void DumpLoggedData(void* lpUserData);
 
     private:
@@ -239,12 +252,12 @@ namespace BrnTraffic
         bool                 mbDrawFrontArticPoints;    // +0x31
         bool                 mbDrawAxles;               // +0x32
         bool                 mbDrawHorns;               // +0x33
-        bool                 mbUseCameraPosition;       // (DWARF :128)
+        bool                 mbUseCameraPosition;       // +0x34 (DWARF :128)
 
         s32                  miHullToDrawFor;           // +0x38 (default -1)
         s32                  miAirRamTypeToFire;         // +0x3C (default 0)
-        u32                  muKillZoneToFire;          // +0x44 (default 0)
-        u32                  muDummyVehicleName;        // +0x34 (default 0)
+        u32                  muKillZoneToFire;          // +0x40 (default 0)
+        u32                  muDummyVehicleName;        // +0x44 (default 0)
         char                 macOverrideVehicleName[13];// +0x48 (default "DEFAULT")
 
         s32                  miNumActiveParams;         // +0x58 (default -1)
@@ -258,6 +271,6 @@ namespace BrnTraffic
         bool                 mbDrawPressure;            // (DWARF :153) +0x6B
         bool                 mbDrawJunctionFUPDetection;// (DWARF :154) +0x6C
 
-        u32                  muCurrentVehicleToPick;    // +0x70 (default -1)
+        mutable u32          muCurrentVehicleToPick;    // +0x70 (default -1; const DrawPickedVehicle cache)
     };
 }

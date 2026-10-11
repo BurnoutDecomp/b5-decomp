@@ -1,4 +1,4 @@
-"""FX-TAILS-A item 8 (crash parity 2026-09-24): log parity of the ResetOnTrack Strategies TU, and a stale comment.
+"""FX-TAILS-A item 8: production ResetOnTrack log gates and typed route-node consumers.
 
 The console prints "<AI> routeless fail" (0x8278450C..0x8278451C), "<AI> Car tried to start ahead of player..."
 (0x82784738..0x82784748), "<AI> Nodes in same place" (0x82785E9C..0x82785EB4), "Lerping t from a to b"
@@ -8,8 +8,7 @@ printed the fifth.
 
 Numeric: FxTailsARotLogGates.cpp runs the PRODUCTION ResetNearRoutelessPlayer, DeterminePositionBetweenNodes and
 ConvertNodesToPositionAndDirection (with the TU helper namespace and GetAICar) against a capturing gpDebugPrint with
-bit 0 of the filter clear and set. Wiring: BrnModeManager_WorldTick.cpp no longer says three Showtime hops are
-unreconstructed (they landed in b72520a2 / f2e66b94 / d6f7aba1).
+bit 0 of the filter clear and set. Historical comment/commit wording is not a runtime witness.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxtailsa_rot_log_gates.py [--rev <rev>]
 """
@@ -19,7 +18,6 @@ from aidrv_common import REPO, Tree, compile_and_run, definition, parse_args  # 
 
 MANAGER = "src/GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.cpp"
 STRATEGIES = "src/GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager_Strategies.cpp"
-WORLDTICK = "src/GameSource/GameState/ModeManager/BrnModeManager_WorldTick.cpp"
 EXTRA = [REPO / "src/GameSource/Math/BrnMathUtils.cpp",
          REPO / "src/GameShared/GameClasses/Development/CgsStrStream.cpp"]
 
@@ -27,13 +25,7 @@ EXTRA = [REPO / "src/GameSource/Math/BrnMathUtils.cpp",
 def main():
     args = parse_args()
     tree = Tree(args.rev)
-    manager, strategies, worldtick = tree.read(MANAGER), tree.read(STRATEGIES), tree.read(WORLDTICK)
-
-    stale = "Three of those hops are still" in worldtick and "unreconstructed -- see the stack's banner" in worldtick
-    named = all(sha in worldtick for sha in ("b72520a2", "f2e66b94", "d6f7aba1"))
-    wiring_ok = (not stale) and named
-    print(("PASS" if wiring_ok else "FAIL") + "  BrnModeManager_WorldTick.cpp: the stale 'three hops unreconstructed' "
-          "comment is corrected and names b72520a2 / f2e66b94 / d6f7aba1")
+    manager, strategies = tree.read(MANAGER), tree.read(STRATEGIES)
 
     chunks = ["namespace BrnAI {",
               definition(manager, "    AICar* ResetOnTrackManager::GetAICar("),
@@ -43,8 +35,8 @@ def main():
               definition(strategies, "bool ResetOnTrackManager::ResetNearRoutelessPlayer("),
               "}"]
     rc = compile_and_run("FxTailsARotLogGates.cpp", chunks, extra_sources=EXTRA, prefix="brn_fxtailsa_rotlog_")
-    print(f"run_fxtailsa_rot_log_gates: wiring {'1/1' if wiring_ok else '0/1'}, numeric rc={rc}")
-    sys.exit(0 if (rc == 0 and wiring_ok) else 1)
+    print(f"run_fxtailsa_rot_log_gates: numeric rc={rc}")
+    sys.exit(rc)
 
 
 if __name__ == "__main__":

@@ -15,9 +15,9 @@
 //   BrnAI::RouteMapModule::ProcessExtrapolatedRoute @0x8278C4C8  (aiwave A5, 2026-09-03; PARKED
 //                                                                 on the RacingLineGenerator)
 //
-// The ctor constructs the two read/write mutexes (handled by member construction),
-// clears the intrusive-list anchor and wires its node pointers back to the
-// anchor (empty circular list), and installs the static dispatch table.
+// Member constructors own the base DataBuffer mutexes, ResourcePtr list anchor,
+// and embedded debug-component vtable. Two-phase Construct initializes the ids
+// and debug owner as in the inlined ARTIST AIModule::Construct call site.
 
 namespace BrnAI
 {
@@ -60,23 +60,18 @@ namespace
     }
 }
 
-RouteMapModule::RouteMapModule()
+RouteMapModule::RouteMapModule() = default;
+
+// DecFIGS .cpp:46. ARTIST inlines this in AIModule::Construct @0x82794D08:
+// base Construct, the two halfword stores at +0x65C0/+0x65C2, debug Construct,
+// then the module's +4 new-module flag. Preserve that order.
+void RouteMapModule::Construct(AIModule* lpAIModule)
 {
-    mAnchorState = 0;
-    mUnk6505     = 0;
-    mUnk6506     = 0;
-
-    mpListHead   = &mAnchorState;
-    mpListTail   = &mAnchorState;
-    mpListCursor = &mAnchorState;
-    mUnk6510     = 0;
-
-    // Guest static dispatch table at 0x820CDFC4.
-    mpAllocatorIface = reinterpret_cast<void*>(0x820CDFC4);
-
-    // The console's .bss resting value; ProcessRaceRoute latches the real ids per request.
+    CgsModule::ModuleSingleBuffered::Construct();
     muEventId = 0;
     muOwnerId = 0;
+    mRoupeMapDebugComponent.Construct(this, lpAIModule);
+    mbIsNewModule = true;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -93,17 +88,11 @@ RouteMapModule::RouteMapModule()
 // compiling to exactly that ONE call at every attested assign site (FlaptManager::Construct,
 // the ChallengeList/WheelList slot resets) -- no list unlink, no re-init around it.
 //
-// ⚠️ [FLAG PC boot gate] the `DebugComponent::Register(this + 26052)` step is PARKED: the
-// route-map debug component that lives at that offset is not a member of this class yet (it
-// sits inside mWorkingSetPad), and registering an object that was never constructed is the
-// [[valid-pointer-invalid-object]] shape -- CgsDev::DebugComponent::Register links it into the
-// global debug list, after which the debug UI walks it every frame. Nothing on the reset-on-track
-// path needs it. Restore it WITH the component as a named member.
 bool RouteMapModule::Prepare(CgsResource::ResourceHandle lHandle)
 {
     mAISectionsData = lHandle;
 
-    // [FLAG PC boot gate] CgsDev::DebugComponent::Register(this + 26052) -- see the banner.
+    mRoupeMapDebugComponent.Register();
 
     // ⭐ UN-PARKED 2026-09-03 (aiwave A5). The previous park cited a 5 x LNK2019 closure gap in
     // BrnAStar.cpp (AStarNodePool::FindNode, AStar::IsBlockSection, Route::AddNode,
@@ -114,6 +103,19 @@ bool RouteMapModule::Prepare(CgsResource::ResourceHandle lHandle)
     mAStar.Construct(mAISectionsData.GetMemoryResource());
 
     return CgsModule::ModuleSingleBuffered::Prepare();
+}
+
+// ARTIST @0x82767E20 is a tail call to the base Release.
+bool RouteMapModule::Release()
+{
+    return CgsModule::ModuleSingleBuffered::Release();
+}
+
+// ARTIST @0x827750D0 calls the base first, then inlines the debug teardown.
+void RouteMapModule::Destruct()
+{
+    CgsModule::ModuleSingleBuffered::Destruct();
+    mRoupeMapDebugComponent.Destruct();
 }
 
 // The route map's bound road network (X360 offset 0x65A0; RouteMapDebugComponent::OnActivate
@@ -341,7 +343,7 @@ namespace
 {
     // 0x8278C568..0x8278C63C and 0x8278C6A0..0x8278C774: one route node per generated
     // (section, portal) pair -- the portal's ground-plane (x, z), distance slot 0.0f, and the
-    // section (u16 @+0xC) / portal (u8 @+0xE) packed into the w lane exactly as AStar::BuildRoute
+    // section (u16 @+0xC) / portal (u8 @+0xE) named as scalar fields, as AStar::BuildRoute
     // packs its nodes (and as AICar::GetCurrentNodeY reads them back).
     void AddExtrapolatedPortalNode(Route* lpRoute, const AISectionsData* lpAISectionsData,
                                    const SectionAndPortalIndices& lrIndices)
@@ -354,13 +356,9 @@ namespace
         const AISection* lpSection = lpAISectionsData->GetAISection(luSectionIndex);   // :1201
         const Portal*    lpPortal  = lpSection->GetPortal(luPortalIndex);
 
-        Vector4 lNode;
-        lNode.x = lpPortal->GetPositionX();
-        lNode.y = lpPortal->GetPositionZ();
-        lNode.z = 0.0f;                                                     // f31 = flt_82001CC0
-        lNode.w = 0.0f;
-        reinterpret_cast<u16*>(&lNode.w)[0] = luSectionIndex;               // sth ..,+0xC
-        reinterpret_cast<u8*>(&lNode.w)[2]  = luPortalIndex;                // stb ..,+0xE
+        RouteNode lNode;
+        lNode.Construct(lpPortal->GetPositionX(), lpPortal->GetPositionZ(),
+                        luSectionIndex, luPortalIndex);
         lpRoute->AddNode(lNode);
     }
 

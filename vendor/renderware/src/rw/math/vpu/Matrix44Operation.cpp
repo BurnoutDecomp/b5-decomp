@@ -41,16 +41,22 @@
 //    transpose-based path is the separate InverseOfMatrixWithOrthonormal3x3, in
 //    matrix44affine_operation.h.)
 //
-// PC lowering: the permutes exist only to get the lane rotations into VMX registers,
-// so the reconstruction indexes the lanes directly. The two Newton-Raphson passes
-// over a 12-bit vrefp seed converge to full f32 precision, so a plain `1.0f / det`
-// is the same value -- emulating the estimate would ADD hardware behaviour, not
-// preserve it (and it degenerates identically for det == 0: +/-inf, then NaN).
+// PC lowering: lane rotations are indexed directly; vmaddfp/vnmsubfp retain their
+// fused order, and the reciprocal retains BOTH unconditional refinement passes.
+// In particular, a zero determinant reaches NaNs through 0*infinity in the first
+// refinement; replacing this sequence with a divide changes the shipped result.
+// FLAG (model): vrefp starts from the correctly rounded reciprocal; vmsum4fp128
+// rounds the left-to-right f64 sum once (the project's Xenia DOT_PRODUCT_4 model).
+// VMX denormal operands/results are flushed to signed zero. NaN payloads and the
+// hardware estimate's final finite-result ULP are not hardware-verified here.
 // ===========================================================================
 
 #include "rw/math/vpu/matrix44_operation.h"
 
 #include <cstddef>   // offsetof
+#include <cmath>
+#include <cstring>
+#include <limits>
 
 namespace rw
 {
@@ -61,22 +67,37 @@ namespace vpu
 
 namespace
 {
-    // The four lanes of a row, in the order the VMX lane-rotate permute walks them.
-    // (Vector4 is four named f32 lanes; copying them into an indexable local is what
-    // lets the cyclic row^k rotation be written as arithmetic instead of a permute.)
-    struct Lanes
+    float Flush(float lfValue)
     {
-        float l[4];
-    };
+        return std::fpclassify(lfValue) == FP_SUBNORMAL
+            ? std::copysign(0.0f, lfValue) : lfValue;
+    }
 
-    inline Lanes GetLanes(const Vector4& lrRow)
+    float Multiply(float lfA, float lfB)
     {
-        Lanes lLanes;
-        lLanes.l[0] = lrRow.x;
-        lLanes.l[1] = lrRow.y;
-        lLanes.l[2] = lrRow.z;
-        lLanes.l[3] = lrRow.w;
-        return lLanes;
+        return Flush(Flush(lfA) * Flush(lfB));
+    }
+
+    float MultiplyAdd(float lfA, float lfB, float lfC)
+    {
+        return Flush(std::fmaf(Flush(lfA), Flush(lfB), Flush(lfC)));
+    }
+
+    // vnmsubfp negates the rounded difference, including an exact zero, but
+    // leaves a NaN un-negated (the established EffectsModule/XboxMath model).
+    float NegativeMultiplySubtract(float lfA, float lfB, float lfC)
+    {
+        const float lfDifference = Flush(std::fmaf(Flush(lfA), Flush(lfB), -Flush(lfC)));
+        return lfDifference != lfDifference ? lfDifference : -lfDifference;
+    }
+
+    float FlipSign(float lfValue)
+    {
+        unsigned int luBits;
+        std::memcpy(&luBits, &lfValue, sizeof(luBits));
+        luBits ^= 0x80000000u;
+        std::memcpy(&lfValue, &luBits, sizeof(lfValue));
+        return lfValue;
     }
 
     // One cofactor row: the lane-parallel 3x3 determinant of rows (A, B, C) -- the
@@ -90,29 +111,38 @@ namespace
     Vector4 CofactorRow(const Vector4& lrRowA, const Vector4& lrRowB, const Vector4& lrRowC,
                         bool lbOddRow)
     {
-        const Lanes lA = GetLanes(lrRowA);
-        const Lanes lB = GetLanes(lrRowB);
-        const Lanes lC = GetLanes(lrRowC);
-
-        Lanes lCofactor;
+        const float laA[4] = { lrRowA.x, lrRowA.y, lrRowA.z, lrRowA.w };
+        const float laB[4] = { lrRowB.x, lrRowB.y, lrRowB.z, lrRowB.w };
+        const float laC[4] = { lrRowC.x, lrRowC.y, lrRowC.z, lrRowC.w };
+        float laCofactor[4];
         for (int liLane = 0; liLane < 4; ++liLane)
         {
             const int liP = (liLane + 1) & 3;
             const int liQ = (liLane + 2) & 3;
             const int liS = (liLane + 3) & 3;
 
-            lCofactor.l[liLane] = lA.l[liP] * (lB.l[liQ] * lC.l[liS] - lB.l[liS] * lC.l[liQ])
-                                + lA.l[liQ] * (lB.l[liS] * lC.l[liP] - lB.l[liP] * lC.l[liS])
-                                + lA.l[liS] * (lB.l[liP] * lC.l[liQ] - lB.l[liQ] * lC.l[liP]);
+            // ARTIST 0x825B2688..0x825B2758: each minor starts with vmaddfp
+            // against +0, then vnmsubfp; the first triple product is vmulfp128,
+            // followed by the other two vmaddfp terms in cyclic-column order.
+            const float lfMinor0 = NegativeMultiplySubtract(laB[liS], laC[liQ],
+                MultiplyAdd(laB[liQ], laC[liS], 0.0f));
+            const float lfMinor1 = NegativeMultiplySubtract(laB[liP], laC[liS],
+                MultiplyAdd(laB[liS], laC[liP], 0.0f));
+            const float lfMinor2 = NegativeMultiplySubtract(laB[liQ], laC[liP],
+                MultiplyAdd(laB[liP], laC[liQ], 0.0f));
+            float lfCofactor = Multiply(laA[liP], lfMinor0);
+            lfCofactor = MultiplyAdd(laA[liQ], lfMinor1, lfCofactor);
+            lfCofactor = MultiplyAdd(laA[liS], lfMinor2, lfCofactor);
 
             const bool lbNegate = (((liLane + (lbOddRow ? 1 : 0)) & 1) != 0);
             if (lbNegate)
             {
-                lCofactor.l[liLane] = -lCofactor.l[liLane];
+                lfCofactor = FlipSign(lfCofactor);
             }
+            laCofactor[liLane] = lfCofactor;
         }
 
-        return Vector4{ lCofactor.l[0], lCofactor.l[1], lCofactor.l[2], lCofactor.l[3] };
+        return Vector4{ laCofactor[0], laCofactor[1], laCofactor[2], laCofactor[3] };
     }
 } // namespace
 
@@ -126,10 +156,14 @@ Matrix44 Inverse(const Matrix44& lrMatrix, Vector4& lrDeterminant)
 
     // -- determinant: vmsum4fp128 of the unpermuted row 0 with cofactor row 0, in every
     //    lane (the console stores the whole broadcast register through r5) -----------
-    const float lfDeterminant = lrMatrix.xAxis.x * lvCofactor0.x
-                              + lrMatrix.xAxis.y * lvCofactor0.y
-                              + lrMatrix.xAxis.z * lvCofactor0.z
-                              + lrMatrix.xAxis.w * lvCofactor0.w;
+    double ldDeterminant = static_cast<double>(Flush(lrMatrix.xAxis.x)) * lvCofactor0.x;
+    ldDeterminant += static_cast<double>(Flush(lrMatrix.xAxis.y)) * lvCofactor0.y;
+    ldDeterminant += static_cast<double>(Flush(lrMatrix.xAxis.z)) * lvCofactor0.z;
+    ldDeterminant += static_cast<double>(Flush(lrMatrix.xAxis.w)) * lvCofactor0.w;
+    const float lfDeterminant = std::isfinite(ldDeterminant)
+            && std::fabs(ldDeterminant) > (std::numeric_limits<float>::max)()
+        ? std::numeric_limits<float>::quiet_NaN()
+        : Flush(static_cast<float>(ldDeterminant));
 
     lrDeterminant.x = lfDeterminant;
     lrDeterminant.y = lfDeterminant;
@@ -138,17 +172,21 @@ Matrix44 Inverse(const Matrix44& lrMatrix, Vector4& lrDeterminant)
 
     // -- adjugate = transpose of the cofactor matrix (the vmrghw/vmrglw transpose),
     //    scaled by 1/det (vrefp + 2x Newton-Raphson) ----------------------------------
-    const float lfInvDeterminant = 1.0f / lfDeterminant;
+    const float lfEstimate = Flush(static_cast<float>(1.0 / static_cast<double>(lfDeterminant)));
+    const float lfStep1 = MultiplyAdd(lfEstimate,
+        NegativeMultiplySubtract(lfEstimate, lfDeterminant, 1.0f), lfEstimate);
+    const float lfInvDeterminant = MultiplyAdd(lfStep1,
+        NegativeMultiplySubtract(lfStep1, lfDeterminant, 1.0f), lfStep1);
 
     Matrix44 lInverse;
-    lInverse.xAxis = Vector4{ lvCofactor0.x * lfInvDeterminant, lvCofactor1.x * lfInvDeterminant,
-                              lvCofactor2.x * lfInvDeterminant, lvCofactor3.x * lfInvDeterminant };
-    lInverse.yAxis = Vector4{ lvCofactor0.y * lfInvDeterminant, lvCofactor1.y * lfInvDeterminant,
-                              lvCofactor2.y * lfInvDeterminant, lvCofactor3.y * lfInvDeterminant };
-    lInverse.zAxis = Vector4{ lvCofactor0.z * lfInvDeterminant, lvCofactor1.z * lfInvDeterminant,
-                              lvCofactor2.z * lfInvDeterminant, lvCofactor3.z * lfInvDeterminant };
-    lInverse.wAxis = Vector4{ lvCofactor0.w * lfInvDeterminant, lvCofactor1.w * lfInvDeterminant,
-                              lvCofactor2.w * lfInvDeterminant, lvCofactor3.w * lfInvDeterminant };
+    lInverse.xAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.x), Multiply(lfInvDeterminant, lvCofactor1.x),
+                              Multiply(lfInvDeterminant, lvCofactor2.x), Multiply(lfInvDeterminant, lvCofactor3.x) };
+    lInverse.yAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.y), Multiply(lfInvDeterminant, lvCofactor1.y),
+                              Multiply(lfInvDeterminant, lvCofactor2.y), Multiply(lfInvDeterminant, lvCofactor3.y) };
+    lInverse.zAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.z), Multiply(lfInvDeterminant, lvCofactor1.z),
+                              Multiply(lfInvDeterminant, lvCofactor2.z), Multiply(lfInvDeterminant, lvCofactor3.z) };
+    lInverse.wAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.w), Multiply(lfInvDeterminant, lvCofactor1.w),
+                              Multiply(lfInvDeterminant, lvCofactor2.w), Multiply(lfInvDeterminant, lvCofactor3.w) };
 
     return lInverse;
 }

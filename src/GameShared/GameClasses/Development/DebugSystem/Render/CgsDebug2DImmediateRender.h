@@ -63,8 +63,10 @@ namespace CgsDev
         bool Is2DBoxOnScreen(Vector2 lv2Min, Vector2 lv2Max) const;
         bool Is2DPolygonOnScreen(const Vector2* lpaPoints, u32 luCount) const;
 
-        void DrawBox(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
-        void DrawBox(f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, RGBA lColour);
+        // ARTIST 8281C2A0 takes position + size. The scalar wrapper 8281C3E0
+        // takes two corners and subtracts them before calling the vector form.
+        void DrawBox(Vector2 lv2Position, Vector2 lv2Size, RGBA lColour);
+        void DrawBox(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour);
         void DrawLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour);
         void DrawFrame(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
         // 6-arg frame overload (X360 @0x8281C960): draw a bordered frame around the rect
@@ -84,7 +86,8 @@ namespace CgsDev
         // Text + bar/value helpers: declared for the full API; bodies are the text/font follow-on.
         void DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCheckScreen);
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
-        void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax, RGBA lBackColour, RGBA lBarColour);
+        void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax,
+                               RGBA lForeColour, RGBA lBackColour);
         void DrawTextWithBackground(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale,
                                     RGBA lTextColour, RGBA lBackgroundColour, f32 lfBorder);
 
@@ -112,6 +115,10 @@ namespace CgsDev
         const CgsResource::SafeResourceHandle<CgsResource::Font>& GetDebugFontPC() const { return mpFont; }
 
     private:
+        // ARTIST 82816E50. Bounds are compared as supplied, with inclusive edges
+        // and no normalization of reversed corners or unordered coordinates.
+        bool Do2DBoxesIntersect(Vector2 lv2MinA, Vector2 lv2MaxA,
+                                Vector2 lv2MinB, Vector2 lv2MaxB) const;
         void DispatchVertices();
         void SetDebugRenderStates();
         void EmitQuad(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour);

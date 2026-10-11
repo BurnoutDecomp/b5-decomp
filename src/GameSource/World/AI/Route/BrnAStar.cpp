@@ -559,7 +559,7 @@ void AStar::BuildRoute(Route* lpOutRoute)
 //      the last node is zero (the RwMath::IsZero test against FLT_EPSILON == flt_820C3B70
 //      lane 0); add a final node at that portal's (x, z) tagging the
 //      BEST NODE'S OWN section index (node+0x12, NOT muEndSectionIndex) and chosen portal
-//      index into its w lane.
+//      index into the scalar record.
 //
 // SIMD note: the X360 vrsqrtefp + two Newton-Raphson refinement steps (vnmsubfp/vmaddfp)
 // are the hardware reciprocal-sqrt used to normalise the 2D direction; reconstructed here
@@ -573,7 +573,7 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
     // ---- 1. back-trace into a stack buffer (start..goal not yet reversed) ----
     // The X360 frame holds a KU_MAX_NODES-deep scratch (the assert below bounds the trace
     // at KU_MAX_NODES); Route::AddNode applies its own 320-node cap when emitting.
-    Vector4 laTraced[AStarNodePool::KU_MAX_NODES];
+    RouteNode laTraced[AStarNodePool::KU_MAX_NODES];
     s32 liNodeCount = 0;
 
     // Each iteration buffers the current node then steps to its parent; the loop exits at
@@ -586,15 +586,8 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
                    "liNodeCount < AStarNodePool::KU_MAX_NODES");
 
         const AStarVector2 lPosition = lpNode->GetPosition();
-        Vector4& lrSlot = laTraced[liNodeCount];
-        lrSlot.x = lPosition.X();
-        lrSlot.y = lPosition.Y();
-        lrSlot.z = 0.0f;
-        lrSlot.w = 0.0f;
-        // Pack the section index (low u16 of w) and portal index (next byte) -- the X360
-        // stores muSectionIndex as a halfword and muPortalIndex as a byte into the w lane.
-        reinterpret_cast<u16*>(&lrSlot.w)[0] = lpNode->GetSectionIndex();
-        reinterpret_cast<u8*>(&lrSlot.w)[2]  = lpNode->GetPortalIndex();
+        laTraced[liNodeCount].Construct(lPosition.X(), lPosition.Y(),
+                                       lpNode->GetSectionIndex(), lpNode->GetPortalIndex());
 
         ++liNodeCount;
         lpNode = mAStarNodePool.GetNode(lpNode->GetParentIndex());
@@ -679,13 +672,9 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
 
         // Append the exit node at the chosen portal's (x, z), tagging section + portal.
         const Portal* lpExitPortal = lpEndSection->GetPortal(luBestPortal);
-        Vector4 lExitNode;
-        lExitNode.x = lpExitPortal->GetPositionX();
-        lExitNode.y = lpExitPortal->GetPositionZ();
-        lExitNode.z = 0.0f;
-        lExitNode.w = 0.0f;
-        reinterpret_cast<u16*>(&lExitNode.w)[0] = luExitSection;
-        reinterpret_cast<u8*>(&lExitNode.w)[2]  = luBestPortal;
+        RouteNode lExitNode;
+        lExitNode.Construct(lpExitPortal->GetPositionX(), lpExitPortal->GetPositionZ(),
+                            luExitSection, luBestPortal);
         lpOutRoute->AddNode(lExitNode);
     }
 }
