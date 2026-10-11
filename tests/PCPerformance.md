@@ -1346,6 +1346,17 @@ reduces texture setup work; it does not establish a locked 165 FPS.
 
 ## Remaining original optimization gaps
 
+The canonical inventory and completion contract are now in
+[Original game optimization reconstruction](../docs/ORIGINAL_OPTIMIZATIONS.md).
+The 2026-10-11 audit found missing collision/cache-fill, frustum, particle/debris,
+tint, relocation, network-image and movie scheduling, plus substantial remaining
+vector work in collision, culling, wheel friction, solver and effect geometry.
+Those are separate from the already implemented opt-in jobs below.
+
+This historical performance record is not an exhaustive optimization checklist.
+The canonical tracker also requires reconciliation of unmatched original paths
+and conditional mechanisms before the umbrella issue can close.
+
 - Render-list sort jobs are restored as an opt-in path; the default still sorts
   synchronously. Object-to-mesh conversion jobs also remain opt-in because
   earlier paired native measurements did not show a reliable gain.

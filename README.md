@@ -18,6 +18,11 @@ public acceptance targets. Detailed TU progress remains in the workflow ledger.
 For known tooling or converter failures, use the
 [workflow tracker](https://github.com/BurnoutDecomp/BP-Decomp_Workflow/issues/new/choose).
 
+The [original optimization backlog](docs/ORIGINAL_OPTIMIZATIONS.md) tracks missing
+worker/SIMD mechanisms and the evidence required to finish their reconstruction.
+Previous PC measurements and validation are in
+[PC rendering performance](tests/PCPerformance.md).
+
 ## Layout
 
 | Path | Purpose |
