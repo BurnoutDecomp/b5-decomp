@@ -22,10 +22,9 @@
 // cannot go stale. VehicleManager embeds `DebugComponent maRaceCarDebugComponent[8]` by value and
 // the array subscript does the striding, so nothing in the tree spells a slot stride by hand.
 //
-// The render/HUD side (RenderWorld, RenderHUD and the ten draw/report leaves they dispatch to,
-// PrimitiveVehicleDebugRender2D, and the OnActivate menu registration) is owned by its own dev-UI
-// pass. The toggles those read are declared here because they are part of the layout and Construct
-// seeds every one of them.
+// The original active tick, world/HUD displays, draw/report leaves and menu/window lifecycle are
+// recovered in this class's TU. PrimitiveVehicleDebugRender2D has separate PS3 declaration evidence;
+// its ARTIST attribution remains unresolved.
 
 namespace BrnPhysics
 {
@@ -79,6 +78,7 @@ namespace Vehicle
         // component tick mirrors engine/inertia state and drives its windows.
         void Update() override;
         void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
 
         // Mirror the magnitude of the down force VehiclePhysics::UpdateDownForce just applied, for
         // the suspension page of the debug menu. Inlined by the console at its one call site.
@@ -114,6 +114,7 @@ namespace Vehicle
         void DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay);
         void RenderDeformationStats(CgsDev::Debug2DImmediateRender* lpDisplay);
         void RenderTireFrictions(CgsDev::Debug2DImmediateRender* lpDisplay);
+        void UpdateAndRenderGearStats(CgsDev::Debug2DImmediateRender* lpDisplay);
 
         // ---- the sampled mirror of the car, refreshed every tick by Update ---------------------
         Wheel::RoadContact   maRoadContacts[4];                  // +0x010 (console stride 0x30)
