@@ -25,6 +25,8 @@ class DispatchMeshContext;
 
 namespace BrnGraphics
 {
+    class DebugComponent;
+
     // BrnShadowMapRenderManager.cpp:98 (DWARF) -- namespace-scope selector: when set, all shadow faces
     // share render-target slot 0 (packed / multi-section combined viewport); when clear, each face has
     // its own shadow render target. Read by Begin/EndRenderShadowMap (X360 byte_82F2423F).
@@ -32,6 +34,8 @@ namespace BrnGraphics
 
     struct ShadowMapRenderManager
     {
+        friend class DebugComponent;
+
         // --- attested pass-bracket surface (bodies in BrnShadowMapRenderManager.cpp) -----------------
 
         // 0x823F7858 -- bind the shadow render target for face liIndex's draw pass (viewport + scissor),

@@ -96,9 +96,8 @@ struct BrnSunCorona
 
     // [FLAG PC bring-up] Seed the console's OWN switch (mbRenderSunCorona, +0x51) from the
     // config.ini knob. NOT a second piece of state (AGENTS.md rule 3): the byte already exists and
-    // Construct already sets it true; on the console its only other writer is
-    // BrnGraphics::DebugComponent, which registers the debug-menu toggle and is an empty
-    // placeholder in this tree. DELETE-WHEN DebugComponent is reconstructed.
+    // Construct already sets it true. The recovered Renderer debug page registers the separate
+    // module-level "Render coronas" switch; its ARTIST bindings do not include this member.
     void PCBringUpSetRenderSunCorona(bool lbRender) { mbRenderSunCorona = lbRender; }
 
     // ---- layout (DWARF GameSource/Graphics/BrnSunCorona.h, verified vs the X360 store offsets) --
