@@ -32,6 +32,9 @@
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
 
+// BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
+extern u32 suOcclusionCullIndexCountThreshold;
+
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
 //
@@ -677,8 +680,8 @@ namespace
             // BrnSunCorona::Construct sets mbRenderSunCorona true, which IS the console's value
             // (`stb r27(=1), 0x51(r31)` @0x824009EC). The knob only SEEDS that member, once, right
             // where Construct wrote it -- NO SECOND SWITCH IS MINTED (AGENTS.md rule 3); the
-            // console's other writer is BrnGraphics::DebugComponent, which is an empty placeholder
-            // in this tree. DELETE-WHEN the debug component owns the switch.
+            // The recovered Renderer debug page owns the module's corona-pass switch; it does not
+            // register BrnSunCorona::mbRenderSunCorona, so this host-only knob remains distinct.
             lrSunCorona.PCBringUpSetRenderSunCorona(renderengine::gSunCorona != 0);
             if (renderengine::gSunCorona == 0)
             {
@@ -1353,6 +1356,9 @@ void BrnRendererModule::Construct()
             CgsDev::Log::WriteToLog("[renderer] update-side mesh preparation enabled (two native bins).\n");
         }
     }
+
+    // ARTIST @8240BC94 constructs the renderer's debug-menu owner before the remaining managers.
+    mDebugComponent.Construct(this);
 
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
     mShadowMapRenderManager.Construct(2);
@@ -5814,6 +5820,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         }
 
         lRenderStage.Next(RENDER_WORLD);
+        // ARTIST Render @0x8240C0F8 publishes renderer+0xC430 immediately before the draw passes;
+        // DrawRenderableMesh::InterpretOcclusionQuery reads the corresponding global threshold.
+        suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
         lRenderStage.Next(RENDER_PARTICLES);
 
@@ -6042,20 +6051,15 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
                 // mfWhiteLevel, and BrnShaderConstantsFrame::GetKeyLightColour on the same frame).
                 //
                 // The last two arguments are the console's NO-OVERRIDE values: it reads them from
-                // BrnGraphics::DebugComponent (this+0xCA50 mfSunFlareOverrideBrightness and
-                // this+0xCA54 mbSunFlareOverrideBrightness -- DWARF
-                // BrnRendererModuleDebugComponent.h:86/87, exposed as GetOverriddenSunBrightness() /
-                // GetOverrideSunBrightness()), which is a DEBUG-MENU toggle and is an EMPTY
-                // PLACEHOLDER struct in this tree (BrnRendererModule.h:200). Passing (0.0f, false)
-                // is the console's own default, not an invention: with the flag false the float is
-                // never read and BrnSunCorona::RenderOccludedFlare uses mfSunBrightness.
-                // DELETE-WHEN BrnGraphics::DebugComponent is reconstructed.
+                // BrnGraphics::DebugComponent (renderer+0xCA50/0xCA54) owns the console's
+                // debug-menu override values; pass the same values the ARTIST call reads.
                 const BrnShaderConstantsFrame& lrSunFrame =
                     maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
                 mSunCorona.RenderOccludedFlare(mAllocatedRenderTargets.GetSunCoronaBuffer(),
                                                lrSunFrame.GetKeyLightColour(),
                                                lrSunFrame.GetWhiteLevel(),
-                                               0.0f, false);
+                                               mDebugComponent.GetOverriddenSunBrightness(),
+                                               mDebugComponent.GetOverrideSunBrightness());
             }
         }
 

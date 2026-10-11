@@ -100,7 +100,14 @@ namespace CgsGraphics
         void*                 mpIndexBuffer;             // +0x29C
         DrawIndexedParameters mDrawParameters;           // +0x2A0
         u16 maQueryIds[KI_MAX_NUM_QUERIES];     // +0x2B0 (128 bytes -> ends 0x330)
-        u8  mbRenderingMesh;                    // +0x330
-        u8  mbOcclusionEnabled;                 // +0x331
+        bool mbRenderingMesh = false;            // +0x330 (Construct @0x827F1E00)
+        bool mbOcclusionEnabled = false;         // +0x331
+        bool mbShowOccludeeBBs = false;           // +0x332
+        bool mbOccludeesDoubleSided = false;      // +0x333
+        bool mbOcclusionCheapShader = true;       // +0x334
+        bool mbDisplayStats = false;              // +0x335
+        bool mbDetectNearClipIntersections = true;// +0x336
+        bool mbImmediateMode = true;              // +0x337
+        bool mbConditionalRendering = false;      // +0x338
     };
 }
