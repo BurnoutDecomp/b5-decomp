@@ -19,11 +19,15 @@
 #include "SharedClasses/BrnSharedConstants.h"                            // BrnUpdateSet
 #include "GameSource/Game/X360/BrnSystemHWX360.h"                        // BrnHW::System360HW (embedded hardware, by value)
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                // BrnGame::DispatchThreadInputBufferManager (by value, h:531)
+#include "GameSource/Game/BrnAutoTestManager.h"                          // BrnGame::AutoTestManager (by value, h:182)
 
 // The GameTalk message type used by the RenderMetricsMessageHandler receiver signature.
 // A forward declaration suffices for the pointer-parameter method decl; the .cpp includes
 // the full SDKs/EA/GameTalk/GameTalk.h.
 namespace EA { namespace GameTalk { class GameTalkMessage; } }
+// Persistent IO buffers are pointer members; their full definitions stay in
+// BrnGameDataModuleIO.h, included by the implementation.
+namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
 
 // Per-frame IO-buffer payload types the game module pushes/pops on the update IO stacks.
 // PLACEHOLDER (empty) definitions so the loading-screen build can allocate them; the real
@@ -185,6 +189,8 @@ namespace BrnGame
     class BrnGameModule : public CgsModule::ModuleSingleBuffered, public CgsSystem::IThreadClass
     {
     public:
+        AutoTestManager mAutoTestManager;   // h:182; ARTIST game-module +0x648
+
         // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
         // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
@@ -380,6 +386,19 @@ namespace BrnGame
         // GetWorldUpdateOutputBuffer above serves the same caller.
         CgsInput::InputIO::OutputBuffer* GetPcInputOutputBuffer() { return &mPcInputOutputBuffer; }
 
+        // h:198; ARTIST Prepare @0x823DB848 resumes at these eight stages.
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_HARDWARE = 1,
+            E_PREPARESTAGE_MANAGER = 2,
+            E_PREPARESTAGE_GAMEDATAMODULE = 3,
+            E_PREPARESTAGE_RENDERMODULE = 4,
+            E_PREPARESTAGE_HARDWAREMEMORY = 5,
+            E_PREPARESTAGE_THREADS = 6,
+            E_PREPARESTAGE_DONE = 7,
+        };
+
         enum EGameUpdateStage   // h:248
         {
             E_GAMEUPDATESTAGE_PREPARE = 0,
@@ -417,6 +436,14 @@ namespace BrnGame
         ~BrnGameModule();
 
         void Construct() override;   // @ BrnGameModule.cpp:155 - construct the owned modules
+
+        // h:656; ARTIST 0x823DB848. main owns all five stacks; the game module
+        // retains the update/resource stacks and its persistent GameData IO pair.
+        virtual bool Prepare(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                             CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                             CgsModule::IOBufferStack* lpResourceInputBufferStack,
+                             CgsModule::IOBufferStack* lpResourceOutputBufferStack,
+                             CgsModule::IOBufferStack* lpDispatchThreadIOBufferStack);
 
         // @ BrnGameModule.cpp:1047 - tear down the owned modules + the module base. Overrides
         // CgsModule::Module::Destruct. Destructs all 11 engine modules (in the X360's destruct
@@ -1041,7 +1068,10 @@ namespace BrnGame
         BrnNetwork::BrnNetworkModule  mNetworkModule;                // h:368
         CgsModule::IOBufferStack* mpUpdateInputBufferStack;          // h:373
         CgsModule::IOBufferStack* mpUpdateOutputBufferStack;         // h:374
-        // [h:375-379: resource buffer stacks + gamedata module buffers - omitted]
+        CgsModule::IOBufferStack* mpResourceInputBufferStack;        // h:375
+        CgsModule::IOBufferStack* mpResourceOutputBufferStack;       // h:376
+        BrnResource::GameDataIO::InputBuffer* mpGameDataModuleInputBuffer;   // h:378
+        BrnResource::GameDataIO::OutputBuffer* mpGameDataModuleOutputBuffer; // h:379
         BrnGame::BrnCpuMonitors mCpuMonitors;                        // h:384
         CgsDev::DebugManager    mDebugManager;                       // h:387
         // h:388 -- the DEBUG FONT handle, X360 gm+0x99F150 (10482000). GamePrepare's id-5
@@ -1049,7 +1079,8 @@ namespace BrnGame
         // and then hands THIS OBJECT to DebugManager::SetDebugFont, so it has to outlive the
         // pass -- it is the module's member on the console for exactly that reason.
         CgsResource::SafeResourceHandle<CgsResource::Font> mDebugFont;   // h:388 (gm+0x99F150)
-        // [h:389-404: map-file reader, juice, mbHasGameTerminated - omitted]
+        // [h:389-399: map-file reader, juice, world-update trace - omitted]
+        bool mbHasGameTerminated;                                    // h:404; ARTIST +0x9A0620
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
         // [h:407-410: disk-error/controller/game-start/over flags - omitted]
@@ -1060,7 +1091,8 @@ namespace BrnGame
         bool mbWorldStreamingRequestedStall;                          // h:415
         bool mbStreamingStalled;                                     // h:416
         bool mbIsLoadingScreenVisible;                               // h:417
-        // [h:418-453: loading allocator, input-bind state, gui-flow, prepare stages - omitted]
+        // [h:418-453: loading allocator, input-bind state, gui-flow - omitted]
+        EPrepareStage    mePrepareStage;                             // h:454; ARTIST +0x9A064C
         EReleaseStage    meReleaseStage;                             // h:455 (Release() stage machine)
         EGamePrepareStage meGamePrepareStage;                        // h:456 (X360 gm+10094164)
         // [h:457: meGameReleaseStage - omitted]
