@@ -113,6 +113,7 @@ namespace Vehicle
         void DrawAngularVelocity(CgsDev::Debug3DImmediateRender* lpDisplay);
         void DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay);
         void RenderDeformationStats(CgsDev::Debug2DImmediateRender* lpDisplay);
+        void RenderTireFrictions(CgsDev::Debug2DImmediateRender* lpDisplay);
 
         // ---- the sampled mirror of the car, refreshed every tick by Update ---------------------
         Wheel::RoadContact   maRoadContacts[4];                  // +0x010 (console stride 0x30)

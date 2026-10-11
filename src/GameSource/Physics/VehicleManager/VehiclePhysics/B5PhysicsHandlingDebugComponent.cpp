@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/math/vpu/vector3_operation.h"
@@ -101,6 +103,44 @@ namespace Vehicle
                 lrBits ^= 0x80000000u;
             std::memcpy(&lValue, laBits, sizeof(laBits));
             return lValue;
+        }
+
+        Vector3 HandlingCross(Vector3 lA, Vector3 lB)
+        {
+            // vmulfp, vnmsubfp, then the YZXW word permutation. Preserve
+            // the rounded first product and fused subtraction separately.
+            return Vector3{
+                HandlingNegativeMultiplySubtract(lA.z, lB.y, HandlingMultiply(lA.y, lB.z)),
+                HandlingNegativeMultiplySubtract(lA.x, lB.z, HandlingMultiply(lA.z, lB.x)),
+                HandlingNegativeMultiplySubtract(lA.y, lB.x, HandlingMultiply(lA.x, lB.y)),
+                HandlingNegativeMultiplySubtract(lA.w, lB.w, HandlingMultiply(lA.w, lB.w))};
+        }
+
+        Vector3 HandlingWorldToBodyDirection(const Matrix44Affine& lrTransform, Vector3 lDirection)
+        {
+            // ARTIST 825D9D0C..825D9DD8 / 825D9DDC..825D9EA0 inline the
+            // general 3x3 adjugate inverse, including two reciprocal steps.
+            const Vector3 lYZ = HandlingCross(lrTransform.yAxis, lrTransform.zAxis);
+            const Vector3 lZX = HandlingCross(lrTransform.zAxis, lrTransform.xAxis);
+            const Vector3 lXY = HandlingCross(lrTransform.xAxis, lrTransform.yAxis);
+            const f32 lfDeterminant = HandlingFlush(rw::math::vpu::Dot(lrTransform.xAxis, lYZ));
+            const f32 lfReciprocal = HandlingReciprocal(lfDeterminant);
+            // The original merges duplicate the inverse Y component in W.
+            const Vector3 lRowX = HandlingScale(Vector3{lYZ.x, lZX.x, lXY.x, lZX.x}, lfReciprocal);
+            const Vector3 lRowY = HandlingScale(Vector3{lYZ.y, lZX.y, lXY.y, lZX.y}, lfReciprocal);
+            const Vector3 lRowZ = HandlingScale(Vector3{lYZ.z, lZX.z, lXY.z, lZX.z}, lfReciprocal);
+            return HandlingMultiplyAdd(lRowZ, lDirection.z,
+                HandlingMultiplyAdd(lRowY, lDirection.y, HandlingScale(lRowX, lDirection.x)));
+        }
+
+        Vector2 HandlingForcePoint(Vector2 lCentre, Vector3 lDirection, f32 lfForce)
+        {
+            const f32 lfForceScale = HandlingMultiply(0.0001f, lfForce);
+            const f32 lfX = HandlingMultiply(HandlingMultiply(lDirection.x, -30.0f), lfForceScale);
+            const f32 lfZ = HandlingMultiply(HandlingMultiply(lDirection.z, -30.0f), lfForceScale);
+            // vperm mask 82CDA350 is {X,Z,X,X}, followed by vaddfp.
+            return Vector2{HandlingAdd(lCentre.x, lfX), HandlingAdd(lCentre.y, lfZ),
+                           HandlingAdd(lCentre.z, lfX), HandlingAdd(lCentre.w, lfX)};
         }
 
         void AssertHandlingWheelPosition(Vector3 lPosition)
@@ -339,6 +379,50 @@ namespace Vehicle
             DrawAngularVelocity(lpDisplay);
         if (mbDrawSuspensionForces)
             DrawSuspensionForces(lpDisplay);
+    }
+
+    // ARTIST 825D9BE8: the four-wheel contact/force display. The stack
+    // DebugInterface keeps the original manager lock for the entire draw.
+    void DebugComponent::RenderTireFrictions(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        CgsDev::DebugInterface lDebug;
+        const CgsDev::DebugUI::Metrics lMetrics = lDebug.GetUI().GetMetrics();
+        const f32 lfMidX = lMetrics.mfScreenWidth * 0.5f;
+        const f32 lfBaseY = (lMetrics.mfScreenHeight - lMetrics.mfScreenBorderBottom) - 450.0f;
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            const Wheel& lrWheel = mpRaceCarPhysics->maWheels[liWheel];
+            const Matrix44Affine lTransform = mpRaceCarPhysics->GetTransform();
+            const Vector3 lLongDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLongDirection);
+            const Vector3 lLatDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLatDirection);
+            CGS_ASSERT(lrWheel.mpTireAttribs != nullptr, "mpTireAttribs != NULL");
+            const Wheel::TireAttribs& lrTire = *lrWheel.mpTireAttribs;
+            CgsDev::RGBA lWheelColour = 0xFFFF0000u;
+            if (lrWheel.mRoadContact.mbIsOnGround)
+                lWheelColour = lrWheel.mbBrokenAdhesiveLimit ? 0xFF0000FFu : 0xFF00FF00u;
+            const f32 lfX = (liWheel & 1) ? lfMidX - 100.0f : lfMidX + 100.0f;
+            const f32 lfY = std::fmaf(static_cast<f32>(liWheel >> 1), 250.0f, lfBaseY);
+            lpDisplay->DrawBox(lfX - 5.0f, lfY - 15.0f, lfX + 5.0f, lfY + 15.0f, lWheelColour);
+            const Vector2 lCentre{lfX, lfY, 0.0f, 0.0f};
+            lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.x),
+                                  0xFF000000u);
+            const f32 lfNormalLoad = HandlingMultiplyAdd(lrWheel.mSpeedAndMassOnWheelVariables.z,
+                                                          9.81f, mpRaceCarPhysics->GetDownForce().x);
+            // These radius stages are scalar fmuls, after the VMX load FMA.
+            const f32 lfFrictionRadius = ((lrTire.maPackedVariables.x * lfNormalLoad) * 0.0001f) * 30.0f;
+            lpDisplay->DrawCircle(lCentre, lfFrictionRadius, 64, 0xFFFF0000u);
+            const f32 lfAdhesiveRadius = (lrTire.maPackedVariables.z * 0.0001f) * 30.0f;
+            lpDisplay->DrawCircle(lCentre, lfAdhesiveRadius, 64, 0xFF0000FFu);
+            lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.y),
+                                  0xFF000000u);
+            if (lrWheel.mbBrokenAdhesiveLimit)
+            {
+                lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.z),
+                                      0xFF0000FFu);
+                lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.w),
+                                      0xFF0000FFu);
+            }
+        }
     }
 
     // ARTIST 82621208: a piecewise-linear curve through zero, peak and floor,
