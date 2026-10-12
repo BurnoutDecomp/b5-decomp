@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"                    // PerfMonGpu / PerfMonGpuMonitorData
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                      // CgsCore::SPrintf
 
+#include <cmath>  // std::fma preserves the X360 fused scale-bar endpoint
+
 // CgsDev::DebugComponentPerfMonGpu - the GPU performance overlay bodies. RenderHUD picks the table or
 // graph view; both walk the PerfMonGpu registry via ReportMonitors, drawing one row/bar per monitor
 // through the static RenderTableCallback / RenderGraphCallback (the shared draw cursor + running total
@@ -17,33 +19,39 @@ namespace CgsDev
 {
     namespace
     {
-        // Graph-view constants. The stacked-segment value scale (ms -> px, flt_820DC614) and the bar
-        // height (4.0, flt_82004EF4) ARE attested; the frame-rect magnitudes, gridline pitch and the
-        // (non-uniform) per-label X insets are NOT rodata-attested (IDA reported failed local-var
-        // allocation for RenderPerformanceGraph) and are reconstructed by role.
-        const f32 KF_GRAPHVALUESCALE = 2.8800001f;   // flt_820DC614 - value (ms) -> pixels
-        const f32 KF_GRAPHBARHEIGHT  = 4.0f;         // flt_82004EF4 - segment / gridline height
+        // ARTIST RenderGraph constants, read from the original image with x360rd.py and checked
+        // against the loads/stores in 0x8282CEA0 and 0x8281F250. The two scales differ by one ULP.
+        const f32 KF_GRAPHSEGMENTSCALE      = 2.8800001f;       // flt_820DC614, word 0x403851EC
+        const f32 KF_GRAPHREFERENCEBARSCALE = 2.8799999f;       // flt_820DD6F4, word 0x403851EB
+        const f32 KF_GRAPHBARHEIGHT         = 4.0f;             // flt_82004EF4
 
-        const f32 KF_GRAPHORIGINX    = 32.0f;        // flt_82013FA8 - initial draw cursor X
-        const f32 KF_GRAPHORIGINY    = 420.0f;       // flt_820DDC58 - initial draw cursor Y
-        const f32 KF_GRAPHSCALEMIN   = 0.0f;         // flt_82001CC0 - running-total seed + clamp floor
-        const f32 KF_GRAPHSCALEMAX   = 200.0f;       // clamp ceiling (200%)
+        const f32 KF_GRAPHORIGINX  = 32.0f;                     // flt_82013FA8
+        const f32 KF_GRAPHORIGINY  = 416.0f;                    // flt_820DDC58
+        const f32 KF_GRAPHSCALEMIN = 0.0f;                      // flt_82001CC0
+        const f32 KF_GRAPHSCALEMAX = 200.0f;                    // flt_8201A1F0
 
-        const f32 KF_GRAPHFRAMELEFT   = 32.0f;       // plot frame rect (best-effort)
-        const f32 KF_GRAPHFRAMETOP    = 416.0f;
-        const f32 KF_GRAPHFRAMERIGHT  = 608.0f;
-        const f32 KF_GRAPHFRAMEBOTTOM = 420.0f;
-        const f32 KF_GRAPHFRAMEBORDER = 2.0f;        // sub_8281C960 border thickness
+        const f32 KF_GRAPHFRAMERIGHT  = 608.0f;                 // flt_820DD6FC
+        const f32 KF_GRAPHFRAMEBOTTOM = 420.0f;                 // flt_8206B4A0
+        const f32 KF_GRAPHFRAMEBORDER = 2.0f;                   // flt_82001D9C
 
-        const f32 KF_GRAPHCOLUMNPITCH = 144.0f;      // gridline / label column pitch (best-effort)
-        const f32 KF_GRAPHGRIDHALF    = 1.0f;        // half-width of a vertical gridline (flt_8200426C)
-        const f32 KF_GRAPHLABELINSET  = 8.0f;        // label X inset (best-effort)
-        const f32 KF_GRAPHLABELDROP   = 8.0f;        // label Y drop (best-effort)
-        const f32 KF_GRAPHLABELSIZE   = 15.0f;       // flt_820047C4 - label text scale
+        const f32 KF_GRAPHCOLUMNPITCH = 144.0f;                 // flt_82020A78
+        const f32 KF_GRAPHGRIDHALF    = 5.0f;                    // flt_8200426C
+        const f32 KF_GRAPHGRIDEND     = 7.0f;                    // flt_820054D0, relative to origin Y
+        const f32 KF_GRAPHLABELDROP   = 8.0f;                    // flt_820DC2E0
+        const f32 KF_GRAPHLABEL50INSET = 8.0f;                   // same flt_820DC2E0 load
+        const f32 KF_GRAPHLABELINSET  = 16.0f;                   // flt_82004000
+        const f32 KF_GRAPHLABELSIZE   = 15.0f;                   // flt_820047C4
+        const f32 KF_GRAPHLABEL100X   = 288.0f;                  // flt_820DDC4C
+        const f32 KF_GRAPHLABEL150X   = 432.0f;                  // flt_820DDC40
+        const f32 KF_GRAPHLABEL200X   = 576.0f;                  // flt_820DDC34
 
-        const RGBA KC_GRAPHFRAME    = 0xFFFFFFFFu;   // plot frame colour
-        const RGBA KC_GRAPHLABEL    = 0xFF6666FFu;   // scale-label colour (light red)
-        const RGBA KC_GRAPHSCALEBAR = 0x80252525u;   // translucent reference bar
+        const f32 KF_TABLETITLEHEIGHT = 1.5f;                    // flt_82004D04
+        const f32 KF_TABLEVALUEOFFSET = 270.0f;                  // flt_82058984
+
+        const RGBA KC_GRAPHGRID     = 0xFFFFFFFFu;               // li r26,-1
+        const RGBA KC_GRAPHFRAME    = 0x80000000u;               // lis r8,-0x8000
+        const RGBA KC_GRAPHLABEL    = 0xFF6666FFu;               // lis/ori immediate in 0x8282CEA0
+        const RGBA KC_GRAPHSCALEBAR = 0x80252525u;               // lis/ori immediate in 0x8282CEA0
     }
 
     // PS3 DecFIGS @0xB213B0; the X360 inlines the identical body into DebugManager::Construct
@@ -100,25 +108,21 @@ namespace CgsDev
         lParameter.mfDrawX  = lrMetrics.mfScreenBorderLeft;    // metrics @ +0x70
         lParameter.mfDrawY  = lrMetrics.mfScreenBorderTop;     // metrics @ +0x74
 
-        // The title sits 1.5 rows above the first monitor row (fnmsubs: mfScreenBorderTop - mfTextSize*1.5).
+        // The title sits 1.5 text rows above the first monitor row (fnmsubs, flt_82004D04).
         const Vector2 lv2TitlePos = { lrMetrics.mfScreenBorderLeft,
-                                     lrMetrics.mfScreenBorderTop - lfRowHeight * 1.5f, 0.0f, 0.0f };
+                                     std::fma( -lfRowHeight, KF_TABLETITLEHEIGHT,
+                                               lrMetrics.mfScreenBorderTop ),
+                                     0.0f, 0.0f };
         lpDebug2DRender->DrawText( "GPU Render Cost", lv2TitlePos, lfRowHeight, 0xFFFFFFFFu, false );
 
         PerfMonGpu::ReportMonitors( &RenderTableCallback, &lParameter, /*lbReportTotal*/ true );
     }
 
     // X360 CgsDev::DebugComponentPerfMonGpu::RenderPerformanceGraph @ 0x8282CEA0.
-    // The graph (history) view: a bordered plot frame, five vertical grid-lines, five scale labels
-    // (empty / empty / 100% / 150% / 200%), a translucent 'current mfMaxGpu' reference bar, then one
-    // stacked segment per monitor via ReportMonitors(RenderGraphCallback). Finally the vertical scale
-    // (mfMaxGpu) is grown to fit and capped: if it falls below the floor it is raised to the floor,
-    // and if the floor itself exceeds 200% it is capped there.
-    //
-    // CONFIDENCE: LOW. IDA reported failed local-variable allocation and no rodata dump is available,
-    // so the exact frame-rect magnitudes, the gridline pitch, and the (non-uniform) per-label X insets
-    // are reconstructed by role, not attested to the bit. The control flow, member offsets, callback
-    // wiring, colours and the [floor,200] clamp ARE attested.
+    // Draw the original frame, grid bars, 0/50/100/150/200% labels and mfMaxGpu reference bar, then
+    // each reported monitor segment. Raw ARTIST loads and the original data strings pin the values.
+    // After ReportMonitors the function only raises a negative mfMaxGpu to zero; the following
+    // comparison of that zero floor against 200 cannot succeed. It does not grow the scale from totals.
     void DebugComponentPerfMonGpu::RenderPerformanceGraph( Debug2DImmediateRender* lpDebug2DRender )
     {
         // The user-data threaded through the per-monitor callback.
@@ -129,35 +133,44 @@ namespace CgsDev
         lParam.mfDrawY    = KF_GRAPHORIGINY;    // flt_820DDC58
         lParam.mfTotalGpu = KF_GRAPHSCALEMIN;   // flt_82001CC0 (also the vertical-scale clamp floor)
 
-        // The plot border (sub_8281C960 = DrawFrame(x0,y0,x1,y1,colour,border=2.0)).
-        lpDebug2DRender->DrawFrame( KF_GRAPHFRAMELEFT, KF_GRAPHFRAMETOP,
+        // sub_8281C960 is DrawFrame(x0,y0,x1,y1,colour,border); r8 carries packed color 0x80000000.
+        lpDebug2DRender->DrawFrame( KF_GRAPHORIGINX, KF_GRAPHORIGINY,
                                     KF_GRAPHFRAMERIGHT, KF_GRAPHFRAMEBOTTOM,
                                     KC_GRAPHFRAME, KF_GRAPHFRAMEBORDER );
 
-        // Five vertical grid-lines, spaced by KF_GRAPHCOLUMNPITCH along X.
+        // Five 10-pixel-wide grid bars. Their y span is (originY+4) through (originY+7).
         for ( u32 luLine = 0; luLine < 5u; ++luLine )
         {
-            const f32 lfGridX = KF_GRAPHORIGINX + static_cast<f32>( luLine ) * KF_GRAPHCOLUMNPITCH;
-            const Vector2 lv2Min = { lfGridX - KF_GRAPHGRIDHALF, KF_GRAPHORIGINY,                     0.0f, 0.0f };
+            const f32 lfGridX = std::fma( static_cast<f32>( luLine ), KF_GRAPHCOLUMNPITCH,
+                                          KF_GRAPHORIGINX );
+            const f32 lfGridY = KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT;
+            const Vector2 lv2Min = { lfGridX - KF_GRAPHGRIDHALF, lfGridY, 0.0f, 0.0f };
             const Vector2 lv2Size = { (lfGridX + KF_GRAPHGRIDHALF) - lv2Min.x,
-                                      (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - lv2Min.y, 0.0f, 0.0f };
-            lpDebug2DRender->DrawBox( lv2Min, lv2Size, 0xFFFFFFFFu );
+                                      (KF_GRAPHORIGINY + KF_GRAPHGRIDEND) - lv2Min.y,
+                                      0.0f, 0.0f };
+            lpDebug2DRender->DrawBox( lv2Min, lv2Size, KC_GRAPHGRID );
         }
 
-        // The five scale labels in light red (0xFF6666FF), scale 15.0. The first two are raw rodata
-        // sentinels (unk_820DDC54 / unk_820DDC50) -> empty strings; the rest literal.
-        static const char* const KAPCLABELS[5] = { "", "", "100%", "150%", "200%" };
+        // The first two raw strings are "0%" (unk_820DDC54) and "50%" (unk_820DDC50).
+        static const char* const KAPCLABELS[5] = { "0%", "50%", "100%", "150%", "200%" };
+        const f32 KAF_LABELX[5] = {
+            KF_GRAPHORIGINX,
+            (KF_GRAPHORIGINX + KF_GRAPHCOLUMNPITCH) - KF_GRAPHLABEL50INSET,
+            (KF_GRAPHORIGINX + KF_GRAPHLABEL100X) - KF_GRAPHLABELINSET,
+            (KF_GRAPHORIGINX + KF_GRAPHLABEL150X) - KF_GRAPHLABELINSET,
+            (KF_GRAPHORIGINX + KF_GRAPHLABEL200X) - KF_GRAPHLABELINSET
+        };
         for ( u32 luLabel = 0; luLabel < 5u; ++luLabel )
         {
-            const f32 lfLabelX = KF_GRAPHORIGINX + static_cast<f32>( luLabel ) * KF_GRAPHCOLUMNPITCH
-                                 - KF_GRAPHLABELINSET;
+            const f32 lfLabelX = KAF_LABELX[luLabel];
             const Vector2 lv2Pos = { lfLabelX, KF_GRAPHORIGINY + KF_GRAPHLABELDROP, 0.0f, 0.0f };
             lpDebug2DRender->DrawText( KAPCLABELS[luLabel], lv2Pos, KF_GRAPHLABELSIZE, KC_GRAPHLABEL, false );
         }
 
         // The translucent reference bar showing the current vertical scale (mfMaxGpu).
         {
-            const f32 lfBarRight = KF_GRAPHORIGINX + mfMaxGpu * KF_GRAPHVALUESCALE;   // fmadds vs flt_820DD6F4
+            const f32 lfBarRight = std::fma( mfMaxGpu, KF_GRAPHREFERENCEBARSCALE,
+                                             KF_GRAPHORIGINX ); // fmadds, flt_820DD6F4
             const Vector2 lv2Min = { KF_GRAPHORIGINX, KF_GRAPHORIGINY,                     0.0f, 0.0f };
             const Vector2 lv2Size = { lfBarRight - lv2Min.x,
                                       (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - lv2Min.y, 0.0f, 0.0f };
@@ -167,7 +180,8 @@ namespace CgsDev
         // Draw every monitor's segment (report-total suppressed: last arg false).
         PerfMonGpu::ReportMonitors( &DebugComponentPerfMonGpu::RenderGraphCallback, &lParam, false );
 
-        // Grow the vertical scale to fit, but never below the floor and never above 200%.
+        // Preserve the original floor then cap sequence. With floor 0 and cap 200, the nested cap
+        // condition is unreachable; neither mfTotalGpu nor the just-drawn callbacks feed this test.
         if ( mfMaxGpu < KF_GRAPHSCALEMIN )
         {
             mfMaxGpu = KF_GRAPHSCALEMIN;
@@ -176,9 +190,8 @@ namespace CgsDev
         }
     }
 
-    // X360 0x82826FC8. Per-monitor row of the GPU performance table (the ReportMonitors callback):
-    // the monitor's name on the left and its cost formatted as "%.03f" 270px to the right, both at the
-    // running draw cursor. Colour is the monitor's own colour forced opaque, or red when over budget.
+    // X360 0x82826FC8. Per-monitor row of the GPU performance table: draw the name at the cursor and
+    // the value as "%.03f" at x+270 (flt_82058984). The color is opaque monitor color or red over budget.
     // Advances the shared draw-Y cursor by one text row so the next monitor stacks below.
     void DebugComponentPerfMonGpu::RenderTableCallback( const PerfMonGpuMonitorData& lParameters,
                                                         void* lpUserData )
@@ -199,7 +212,8 @@ namespace CgsDev
         char lacValue[32];
         CgsCore::SPrintf( lacValue, 32, "%.03f", lParameters.mfCurrentValue );
 
-        const Vector2 lv2ValuePos = { lpParameter->mfDrawX + 270.0f, lpParameter->mfDrawY, 0.0f, 0.0f };
+        const Vector2 lv2ValuePos = { lpParameter->mfDrawX + KF_TABLEVALUEOFFSET,
+                                      lpParameter->mfDrawY, 0.0f, 0.0f };
         lpParameter->mpRender->DrawText( lacValue, lv2ValuePos, lfRowHeight, lColour, false );
 
         // Advance to the next row.
@@ -207,16 +221,16 @@ namespace CgsDev
     }
 
     // X360 CgsDev::DebugComponentPerfMonGpu::RenderGraphCallback @ 0x8281F250.
-    // Per-monitor callback for the graph view: draw this monitor's contribution as a horizontal
-    // segment of the stacked bar, advance the running draw-X cursor, and accumulate the total GPU
-    // cost. Static: threaded through PerfMonGpu::ReportMonitors as a plain FPerfMonGpuReportCallback*
-    // (the owning component is reached via lpUserData->mpThis).
+    // Per-monitor callback for the graph view: draw this monitor's percentage-of-frame contribution
+    // as a horizontal segment, advance the draw-X cursor, and update the threaded total. ARTIST
+    // writes that total to RenderCallbackParameter; the post-ReportMonitors clamp does not read it.
+    // Static: ReportMonitors receives this as a plain FPerfMonGpuReportCallback*.
     void DebugComponentPerfMonGpu::RenderGraphCallback( const PerfMonGpuMonitorData& lrData, void* lpUserData )
     {
         RenderCallbackParameter* lpParam = static_cast<RenderCallbackParameter*>( lpUserData );
 
-        // Value (ms) -> pixels along the bar (flt_820DC614).
-        const f32 lfBarLength = lrData.mfCurrentValue * KF_GRAPHVALUESCALE;
+        // Percentage-of-frame -> pixels along the bar (flt_820DC614, word 0x403851EC).
+        const f32 lfBarLength = lrData.mfCurrentValue * KF_GRAPHSEGMENTSCALE;
         // Force the segment opaque (mColour | 0xFF000000).
         const RGBA lColour = static_cast<RGBA>( lrData.mColour.m_rgba ) | 0xFF000000u;
 
