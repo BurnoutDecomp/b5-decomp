@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 #include <array>
 #include <cmath>
@@ -228,13 +229,11 @@ namespace CgsGeometric
 // CgsGeometric::ClipTriEdgeAgainstBox @ 0x8283FF90.
 //
 // The X360 body computes the six segment/box-face candidates with vrefp plus
-// three reciprocal refinements, checks the candidate lanes against the three
-// inclusive box slabs, and stores the clipped segment endpoints in two Vector3
-// slots with matching MaskScalar validity values. This scalar lowering keeps
-// the same endpoint order, comparison inclusivity, and fused point evaluation.
-// A zero direction lane is tested against its slab directly; the console's
-// reciprocal refinement for that lane becomes NaN, so that lane contributes no
-// crossing candidate.
+// three reciprocal refinements, checks each candidate against the segment and
+// the inclusive box slabs, then places the first two distinct valid boundary
+// points in its two Vector3 slots. Candidate order is max-X/Y/Z followed by
+// min-X/Y/Z; a segment wholly inside the box produces no points. This scalar
+// lowering retains that order, comparison inclusivity, and fused point eval.
 // ============================================================================
 
 namespace CgsGeometric
@@ -264,51 +263,6 @@ namespace CgsGeometric
             return lfReciprocal;
         };
 
-        f32 lfEnter = 0.0f;
-        f32 lfExit  = 1.0f;
-        bool lbIntersects = true;
-
-        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
-        {
-            const f32 lfDirection = lafEnd[liAxis] - lafStart[liAxis];
-            if (lfDirection == 0.0f)
-            {
-                // The X360 compares both endpoints against this slab even when
-                // the reciprocal lane is NaN.
-                if (!(lafStart[liAxis] >= lafMin[liAxis])
-                    || lafStart[liAxis] > lafMax[liAxis])
-                {
-                    lbIntersects = false;
-                    break;
-                }
-                continue;
-            }
-
-            const f32 lfReciprocal = Reciprocal3(lfDirection);
-            f32 lfParam0 = (lafMin[liAxis] - lafStart[liAxis]) * lfReciprocal;
-            f32 lfParam1 = (lafMax[liAxis] - lafStart[liAxis]) * lfReciprocal;
-            if (lfParam1 < lfParam0)
-            {
-                const f32 lfSwap = lfParam0;
-                lfParam0 = lfParam1;
-                lfParam1 = lfSwap;
-            }
-
-            if (lfParam0 > lfEnter)
-            {
-                lfEnter = lfParam0;
-            }
-            if (lfParam1 < lfExit)
-            {
-                lfExit = lfParam1;
-            }
-            if (!(lfEnter <= lfExit))
-            {
-                lbIntersects = false;
-                break;
-            }
-        }
-
         const auto MakeMask = [](bool lbValid)
         {
             rw::math::vpu::MaskScalar lMask;
@@ -329,16 +283,6 @@ namespace CgsGeometric
             lZero.w = 0.0f;
             return lZero;
         };
-
-        if (!lbIntersects)
-        {
-            lpaDest[0]      = MakeZero();
-            lpaDest[1]      = MakeZero();
-            lpaDestValid[0] = MakeMask(false);
-            lpaDestValid[1] = MakeMask(false);
-            return;
-        }
-
         const f32 lafDirection[4] = {
             lLineEnd.x - lLineStart.x,
             lLineEnd.y - lLineStart.y,
@@ -356,17 +300,74 @@ namespace CgsGeometric
             return lPoint;
         };
 
-        lpaDest[0]      = PointAt(lfEnter);
-        lpaDestValid[0] = MakeMask(true);
-        if (lfEnter < lfExit)
+        const f32 lafReciprocal[3] = {
+            Reciprocal3(lafDirection[0]),
+            Reciprocal3(lafDirection[1]),
+            Reciprocal3(lafDirection[2])
+        };
+        Vector3 laCandidates[6];
+        bool lbCandidateValid[6] = { false, false, false, false, false, false };
+
+        // The raw vector stream builds the three maximum-face candidates
+        // before the three minimum-face candidates. For a zero direction lane
+        // the refined reciprocal becomes NaN and both segment comparisons fail.
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
         {
-            lpaDest[1]      = PointAt(lfExit);
-            lpaDestValid[1] = MakeMask(true);
+            for (s32 liSide = 0; liSide < 2; ++liSide)
+            {
+                const f32 lfBoundary = (liSide == 0) ? lafMax[liAxis] : lafMin[liAxis];
+                const f32 lfParam = (lfBoundary - lafStart[liAxis]) * lafReciprocal[liAxis];
+                const bool lbOnSegment = (1.0f >= lfParam) && !(0.0f > lfParam);
+                if (!lbOnSegment)
+                {
+                    continue;
+                }
+
+                const s32 liCandidate = (liSide == 0) ? liAxis : liAxis + 3;
+                const Vector3 lPoint = PointAt(lfParam);
+                const bool lbInside =
+                    (lPoint.x >= lBox.mMin.x) && !(lPoint.x > lBox.mMax.x)
+                 && (lPoint.y >= lBox.mMin.y) && !(lPoint.y > lBox.mMax.y)
+                 && (lPoint.z >= lBox.mMin.z) && !(lPoint.z > lBox.mMax.z);
+                if (lbInside)
+                {
+                    laCandidates[liCandidate] = lPoint;
+                    lbCandidateValid[liCandidate] = true;
+                }
+            }
         }
-        else
+
+        lpaDest[0] = MakeZero();
+        lpaDest[1] = MakeZero();
+        lpaDestValid[0] = MakeMask(false);
+        lpaDestValid[1] = MakeMask(false);
+        s32 liStored = 0;
+        for (s32 liCandidate = 0; liCandidate < 6 && liStored < 2; ++liCandidate)
         {
-            lpaDest[1]      = MakeZero();
-            lpaDestValid[1] = MakeMask(false);
+            if (!lbCandidateValid[liCandidate])
+            {
+                continue;
+            }
+
+            const Vector3& lrCandidate = laCandidates[liCandidate];
+            bool lbDuplicate = false;
+            for (s32 liPrevious = 0; liPrevious < liStored; ++liPrevious)
+            {
+                const Vector3& lrPrevious = lpaDest[liPrevious];
+                if (lrCandidate.x == lrPrevious.x
+                    && lrCandidate.y == lrPrevious.y
+                    && lrCandidate.z == lrPrevious.z)
+                {
+                    lbDuplicate = true;
+                    break;
+                }
+            }
+            if (!lbDuplicate)
+            {
+                lpaDest[liStored] = lrCandidate;
+                lpaDestValid[liStored] = MakeMask(true);
+                ++liStored;
+            }
         }
     }
 
@@ -456,5 +457,218 @@ namespace CgsGeometric
                               lTriangleV1, lTriangleV2);
         ClipTriEdgeAgainstBox(lpaDest + 16, lpaDestValid + 16, lAABox,
                               lTriangleV2, lTriangleV0);
+    }
+
+    // ========================================================================
+    // CgsGeometric::IntersectTriangleBox @ 0x828406D0.
+    // ========================================================================
+    rw::math::vpu::MaskScalar IntersectTriangleBox(
+        const Box& lBox, const Triangle& lTriangle, VecFloat lPadding,
+        rw::math::vpu::MaskScalar lbClampPenetration,
+        Vector3* lpOutTriangleNormals, Vector3* lpOutContactNormals,
+        Vector3* lpOutTrianglePoints, Vector3* lpOutContactPoints,
+        s32* lpOutNumContacts, s32 liMaxContacts)
+    {
+        static const char* const klpOriginalFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\Intersection/CgsTriangleBox.cpp";
+        const auto ReportAssert = [&](const char* lpcExpression, s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lpcExpression, klpOriginalFile, liLine);
+            CgsDev::Assert::EndAssert();
+        };
+        const auto IsValid3 = [](const Vector3& lrVector)
+        {
+            // X360's vcmpeqfp x,x test rejects NaNs but permits infinities.
+            return (lrVector.x == lrVector.x)
+                && (lrVector.y == lrVector.y)
+                && (lrVector.z == lrVector.z);
+        };
+        const auto MakeMask = [](bool lbValue)
+        {
+            rw::math::vpu::MaskScalar lMask;
+            const u32 luLane = lbValue ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&lMask.x, &luLane, sizeof(luLane));
+            std::memcpy(&lMask.y, &luLane, sizeof(luLane));
+            std::memcpy(&lMask.z, &luLane, sizeof(luLane));
+            std::memcpy(&lMask.w, &luLane, sizeof(luLane));
+            return lMask;
+        };
+
+        if (!(lPadding.x >= 0.0f))
+        {
+            ReportAssert("lPadding >= 0.0f", 955);
+        }
+
+        const Matrix44Affine lBoxTransform = lBox.GetTransform();
+        const Matrix44Affine lBoxInverseTransform =
+            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lBoxTransform);
+
+        const Vector3 lBoxDimensions = lBox.GetDimensions();
+        const VecFloat lBoxFatness = lBox.GetFatness();
+        AxisAlignedBox lAABox;
+        lAABox.mMin.x = -lBoxDimensions.x;
+        lAABox.mMin.y = -lBoxDimensions.y;
+        lAABox.mMin.z = -lBoxDimensions.z;
+        lAABox.mMin.w = -lBoxFatness.x;
+        lAABox.mMax.x =  lBoxDimensions.x;
+        lAABox.mMax.y =  lBoxDimensions.y;
+        lAABox.mMax.z =  lBoxDimensions.z;
+        lAABox.mMax.w =  lBoxFatness.x;
+
+        Vector3 lTriangleV0 = rw::math::vpu::TransformPoint(
+            lBoxInverseTransform, lTriangle.Get(0));
+        Vector3 lTriangleV1 = rw::math::vpu::TransformPoint(
+            lBoxInverseTransform, lTriangle.Get(1));
+        Vector3 lTriangleV2 = rw::math::vpu::TransformPoint(
+            lBoxInverseTransform, lTriangle.Get(2));
+
+        // ARTIST forms the same local normal from edge01 and edge12, then
+        // applies vrsqrtefp with two Newton refinements. The console has no
+        // zero-length guard here: retain its NaN/assert path for a degenerate
+        // triangle instead of using the vendor Normalize zero-vector guard.
+        const Vector3 lTriangleNormalRaw = rw::math::vpu::Cross(
+            lTriangleV1 - lTriangleV0, lTriangleV2 - lTriangleV1);
+        const f32 lfTriangleNormalLengthSq =
+            rw::math::vpu::Dot(lTriangleNormalRaw, lTriangleNormalRaw);
+        const f32 lfTriangleNormalInverseLength =
+            1.0f / std::sqrt(lfTriangleNormalLengthSq);
+        Vector3 lTriangleNormal;
+        lTriangleNormal.x = lTriangleNormalRaw.x * lfTriangleNormalInverseLength;
+        lTriangleNormal.y = lTriangleNormalRaw.y * lfTriangleNormalInverseLength;
+        lTriangleNormal.z = lTriangleNormalRaw.z * lfTriangleNormalInverseLength;
+        lTriangleNormal.w = lTriangleNormalRaw.w * lfTriangleNormalInverseLength;
+        if (!IsValid3(lTriangleNormal))
+        {
+            ReportAssert("rw::math::IsValid(lTriangleNormal)", 986);
+        }
+
+        Vector3 lPaddingOffset;
+        lPaddingOffset.x = lTriangleNormal.x * lPadding.x;
+        lPaddingOffset.y = lTriangleNormal.y * lPadding.y;
+        lPaddingOffset.z = lTriangleNormal.z * lPadding.z;
+        lPaddingOffset.w = lTriangleNormal.w * lPadding.w;
+        lTriangleV0.x += lPaddingOffset.x;
+        lTriangleV0.y += lPaddingOffset.y;
+        lTriangleV0.z += lPaddingOffset.z;
+        lTriangleV0.w += lPaddingOffset.w;
+        lTriangleV1.x += lPaddingOffset.x;
+        lTriangleV1.y += lPaddingOffset.y;
+        lTriangleV1.z += lPaddingOffset.z;
+        lTriangleV1.w += lPaddingOffset.w;
+        lTriangleV2.x += lPaddingOffset.x;
+        lTriangleV2.y += lPaddingOffset.y;
+        lTriangleV2.z += lPaddingOffset.z;
+        lTriangleV2.w += lPaddingOffset.w;
+
+        Vector3 laClippedPoints[18];
+        rw::math::vpu::MaskScalar laClippedPointsValid[18];
+        ClipTriWithAABB(laClippedPoints, laClippedPointsValid, lAABox,
+                        lTriangleV0, lTriangleV1, lTriangleV2);
+
+        // The original 0x830390E0/0x830390D0 once-cache is referenced only by
+        // this X360 function. Keep the same zero -> flt_82013F90 (0.001f)
+        // transition as a function-local typed cache; no other ARTIST reader
+        // or writer needs a shared global declaration.
+        static bool lbPlaneOffsetLimitInitialized = false;
+        static f32 lfPlaneOffsetLimit = 0.0f;
+        if (!lbPlaneOffsetLimitInitialized)
+        {
+            lfPlaneOffsetLimit = 0.001f;
+            lbPlaneOffsetLimitInitialized = true;
+        }
+        const bool lbClampOffset = lbClampPenetration.GetBool();
+
+        const Vector3 lNormalWorldSpace =
+            rw::math::vpu::TransformVector(lBoxTransform, lTriangleNormal);
+        s32 liNumContacts = 0;
+
+        for (s32 liPoint = 0; liPoint < 18; ++liPoint)
+        {
+            u32 luPointValid = 0;
+            std::memcpy(&luPointValid, &laClippedPointsValid[liPoint].x,
+                        sizeof(luPointValid));
+            if (luPointValid == 0u)
+            {
+                continue;
+            }
+
+            if (liNumContacts >= liMaxContacts)
+            {
+                // Keep the console's assert-and-continue contract. The message
+                // stream's extra byte contains the original sink's terminator.
+                CgsDev::Assert::BeginAssert();
+                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE + 1];
+                CgsDev::StrStream lStrStream(
+                    lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream.Reset();
+                lStrStream << "Overrun contacts buffer - pass in a larger buffer\n";
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), klpOriginalFile, 1004);
+                CgsDev::Assert::EndAssert();
+            }
+
+            const Vector3 lClippedPoint = laClippedPoints[liPoint];
+            Vector3 lTrianglePointLocal;
+            lTrianglePointLocal.x = lClippedPoint.x - lPaddingOffset.x;
+            lTrianglePointLocal.y = lClippedPoint.y - lPaddingOffset.y;
+            lTrianglePointLocal.z = lClippedPoint.z - lPaddingOffset.z;
+            lTrianglePointLocal.w = lClippedPoint.w - lPaddingOffset.w;
+
+            Vector3 lNormalDirection;
+            lNormalDirection.x = (lTriangleNormal.x >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.y = (lTriangleNormal.y >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.z = (lTriangleNormal.z >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.w = (lTriangleNormal.w >= 0.0f) ? -1.0f : 1.0f;
+
+            Vector3 lBoxExtent;
+            lBoxExtent.x = lBoxDimensions.x * lNormalDirection.x;
+            lBoxExtent.y = lBoxDimensions.y * lNormalDirection.y;
+            lBoxExtent.z = lBoxDimensions.z * lNormalDirection.z;
+            lBoxExtent.w = lBoxFatness.x * lNormalDirection.w;
+
+            const f32 lfPlaneOffset =
+                rw::math::vpu::Dot(lTrianglePointLocal, lTriangleNormal)
+              - rw::math::vpu::Dot(lBoxExtent, lTriangleNormal);
+            const f32 lfSelectedOffset = lbClampOffset
+                ? ((lfPlaneOffset < lfPlaneOffsetLimit) ? lfPlaneOffset : lfPlaneOffsetLimit)
+                : lfPlaneOffset;
+
+            Vector3 lBoxPointLocal;
+            lBoxPointLocal.x = lTrianglePointLocal.x - lTriangleNormal.x * lfSelectedOffset;
+            lBoxPointLocal.y = lTrianglePointLocal.y - lTriangleNormal.y * lfSelectedOffset;
+            lBoxPointLocal.z = lTrianglePointLocal.z - lTriangleNormal.z * lfSelectedOffset;
+            lBoxPointLocal.w = lTrianglePointLocal.w - lTriangleNormal.w * lfSelectedOffset;
+
+            const Vector3 lBoxPointWorld =
+                rw::math::vpu::TransformPoint(lBoxTransform, lBoxPointLocal);
+            const Vector3 lTrianglePointWorld =
+                rw::math::vpu::TransformPoint(lBoxTransform, lTrianglePointLocal);
+
+            if (!IsValid3(lBoxPointWorld))
+            {
+                ReportAssert("Box point is invalid", 1031);
+            }
+            if (!IsValid3(lTrianglePointWorld))
+            {
+                ReportAssert("Triangle point is invalid", 1032);
+            }
+            if (!IsValid3(lNormalWorldSpace))
+            {
+                ReportAssert("Box normal is invalid", 1033);
+            }
+            if (!IsValid3(lNormalWorldSpace))
+            {
+                ReportAssert("Triangle normal is invalid", 1034);
+            }
+
+            lpOutTriangleNormals[liNumContacts] = lNormalWorldSpace;
+            lpOutContactNormals[liNumContacts] = lNormalWorldSpace;
+            lpOutTrianglePoints[liNumContacts] = lTrianglePointWorld;
+            lpOutContactPoints[liNumContacts] = lBoxPointWorld;
+            ++liNumContacts;
+        }
+
+        *lpOutNumContacts = liNumContacts;
+        return MakeMask(liNumContacts > 0);
     }
 }
