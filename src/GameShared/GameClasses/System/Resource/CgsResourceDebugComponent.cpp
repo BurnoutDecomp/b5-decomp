@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"        // Pool (heaps, entries, FindResource)
 #include "GameShared/GameClasses/System/Resource/CgsDebugPoolTextures.h"   // EDebugSortMode / EDebugTextureRenderMode + their name tables
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
 // CgsResource::DebugComponent -- Construct, GetPath ("Core"), DumpPoolStatistics, UpdateShareTest.
 
@@ -289,6 +291,47 @@ namespace CgsResource
         lrStream << "\t" << liMainMemSize << "\t" << liVideoMemSize << "\t";
         lrStream << liMainMemUsed << "\t" << liVideoMemUsed << "\t";
         lrStream << liMainMemFree << "\t" << liVideoMemFree << "\n";
+    }
+
+    // ARTIST828EE038. Allocate only the main-memory lane for a64KiB
+    // scratch buffer, and free that same single-lane resource after closing.
+    void DebugComponent::DumpStats()
+    {
+        rw::ResourceDescriptor lDescriptor;
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            lDescriptor.m_baseResourceDescriptors[luLane].m_size = 0;
+            lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size = 65536;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        const rw::Resource lResource = mParams.mpDebugAllocator->DoAllocate(lDescriptor, nullptr);
+        char* const lpcBuffer = static_cast<char*>(lResource.m_baseResources[0]);
+        if (lpcBuffer != nullptr)
+        {
+            char lacFileName[192];
+            CgsCore::SPrintf(lacFileName, 128, "d:\\cgsresourcedump_%d.txt", miStatsDumpCount);
+            {
+                CgsDev::Log::LogFileBuffered lLog;
+                miStatsDumpCount = static_cast<s32>(static_cast<u32>(miStatsDumpCount) + 1u);
+                lLog.Open(lacFileName, lpcBuffer, 65536);
+                lLog << "Pool Stats\n";
+                lLog << "Name\tMainMemSize(B)\tVideoMemSize(B)\tMainMemUsed(B)\tVideoMemUsed(B)\tMainMemFree(B)\tVideoMemFree(B)\n";
+                PoolModule& lrPools = mpResourceModule->GetPoolModule();
+                for (s32 liPool = 0; liPool < PoolModule::KI_MAX_POOLS; ++liPool)
+                {
+                    const Pool& lrPool = lrPools.GetPoolByIndex(liPool);
+                    if (lrPool.GetId() >= 0)
+                        DumpPoolStatistics(lLog, &lrPool);
+                }
+                lLog.Close();
+            }
+            rw::Resource lFreeResource;
+            lFreeResource.m_baseResources[0] = lpcBuffer;
+            mParams.mpDebugAllocator->DoFree(lFreeResource);
+        }
+        else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Failed to allocate buffer for stats dump\n";
     }
 
     // Clear the three totals, resolve both share-test pool ids to pool slots, and when both pools
