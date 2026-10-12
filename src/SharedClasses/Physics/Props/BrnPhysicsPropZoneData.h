@@ -14,7 +14,8 @@
 //
 // World grid constants (X360 GetCellId asm immediates): the world spans [-5000, +8000] in X
 // (half-extent 5000 + 3000 extension) and [-5000, +5000] in Z (half-extent 5000); cells are
-// 100 units square -- cellX = (s16)(lfX + 5000) / 100, cellZ = (s16)(lfZ + 5000) / 100.
+// 100 units square -- truncate each biased coordinate to s64, take its unsigned
+// low16 bits, then divide by100. Range assertions do not gate this calculation.
 namespace CgsDev { struct StrStreamBase; }
 
 namespace BrnPhysics
