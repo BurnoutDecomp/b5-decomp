@@ -251,7 +251,8 @@ namespace CgsDev
     // X360 CgsDev::DebugComponentPerfMonGpu::RenderGraphCallback @ 0x8281F250.
     // Per-monitor callback for the graph view: draw this monitor's percentage-of-frame contribution
     // as a horizontal segment, advance the draw-X cursor, and update the threaded total. ARTIST
-    // writes that total to RenderCallbackParameter; the post-ReportMonitors clamp does not read it.
+    // writes that total to RenderCallbackParameter; the graph reads it afterward
+    // to raise and cap the reference-bar maximum.
     // Static: ReportMonitors receives this as a plain FPerfMonGpuReportCallback*.
     void DebugComponentPerfMonGpu::RenderGraphCallback( const PerfMonGpuMonitorData& lrData, void* lpUserData )
     {
