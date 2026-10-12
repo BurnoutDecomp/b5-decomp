@@ -134,12 +134,26 @@ namespace CgsDev { namespace DebugUI
                                                (lpcName ? lpcName : ""));
         auto& lrState = GetDebugIniStatePC();
         std::lock_guard<std::mutex> lLock(lrState.mMutex);
-        for (auto& lrEntry : lrState.maEntries)
+        auto lEntry = std::find_if(lrState.maEntries.begin(), lrState.maEntries.end(),
+            [&](const DebugIniEntryPC& lrEntry) { return lrEntry.mPath == lPath; });
+        // The Race Car owner registers these groups through MakeFullPath, so
+        // their real menu paths include its component prefix. Accept the same
+        // absolute vehicle settings alias that materialized this lazy owner.
+        // An explicitly configured full path takes precedence over the alias.
+        const std::string lOwnerPrefix = "race car entity/";
+        const std::string lVehiclePrefix = "graphics/vehicles.../";
+        if (lEntry == lrState.maEntries.end() &&
+            lPath.compare(0, lOwnerPrefix.size(), lOwnerPrefix) == 0 &&
+            lPath.compare(lOwnerPrefix.size(), lVehiclePrefix.size(), lVehiclePrefix) == 0)
         {
-            if (lrEntry.mPath != lPath) continue;
-            lrEntry.mbMatched = true;
-            lrState.maPending.push_back({ lpOwner, lpVariable, lPath, lrEntry.mValue });
-            break;
+            const std::string lAlias = lPath.substr(lOwnerPrefix.size());
+            lEntry = std::find_if(lrState.maEntries.begin(), lrState.maEntries.end(),
+                [&](const DebugIniEntryPC& lrEntry) { return lrEntry.mPath == lAlias; });
+        }
+        if (lEntry != lrState.maEntries.end())
+        {
+            lEntry->mbMatched = true;
+            lrState.maPending.push_back({ lpOwner, lpVariable, lEntry->mPath, lEntry->mValue });
         }
     }
 
