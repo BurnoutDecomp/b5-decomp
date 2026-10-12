@@ -55,10 +55,10 @@ namespace BrnGui
         void TriggerMessage(bool lbWithTimer);
         void SelectNextMessage();
         void SelectPreviousMessage();
-        void TriggerMessageCallback(void* lpUserData);
-        void TriggerMessageWithoutTimerCallback(void* lpUserData);
-        void SelectNextMessageCallback(void* lpUserData);
-        void SelectPreviousMessageCallback(void* lpUserData);
+        static void TriggerMessageCallback(void* lpUserData);
+        static void TriggerMessageWithoutTimerCallback(void* lpUserData);
+        static void SelectNextMessageCallback(void* lpUserData);
+        static void SelectPreviousMessageCallback(void* lpUserData);
 
         // BrnGuiHudMessagesDebugComponent.h:76..:79
         HudMessageDirector*         mpMessageDirector;
