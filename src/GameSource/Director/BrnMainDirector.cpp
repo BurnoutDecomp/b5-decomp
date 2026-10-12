@@ -3403,25 +3403,18 @@ namespace BrnDirector
     // frame camera. The previous wave gated the whole middle on the belief that
     // BehaviourManager had no layout; it does, so the leg is transcribed.
     //
-    // ⚠️ WHAT IS STILL GATED INSIDE THE MIDDLE (each a documented quiet gate, none of which
-    // touches the camera the arbitrator just produced):
-    //   * UpdateDebugPrinters / DebugLog::Print / DebugLog::Update -- DebugPrinter and
-    //     DebugLog are un-homed named regions.
-    //   * (UpdateICE is bodied and CALLED since 2026-09-28, BrnMainDirector_wM_01.cpp; UpdateMoments
-    //     since 2026-09-24 -- see the call sites.)
-    //     ⚠️ ORDERING NOTE: the console runs those BEFORE UpdateArbitrator, so the
-    //     arbitrator sees last frame's behaviour output rather than this frame's. That is a
-    //     one-frame staleness in the behaviour-driven camera, not a wrong camera.
-    //   * lines 271-823 -- ~550 lines of VMX AllVehicleData debug-render work, the ICE-editor preview
-    //     and the world-map safe-position search. All reach un-homed aggregates and/or VMX pipelines, and
-    //     are dev-only. Live since 2026-09-25: the Event_Win(50) request (CC-16) and the camera
-    //     interpolation controller (CC-14); the effect-hook registration cascade has been live since
-    //     2026-09-17.
-    //   * the tail after the publish (lines 871-924): ONLY the debug-info/overlay passes
-    //     (UpdateDebugInfo, DebugDisplayCurrentCamera, the camera-state flag printer). The
-    //     time-step multiplier, PrepareBehaviours, UpdateAttribSys, the event-end push and the two
-    //     closing latches (0x82275290..0x822752D0, incl. the one-shot clear of
-    //     mbForceNextWorldCrashToBeFastTopDown) all run -- see each call site.
+    // ⚠️ THE REMAINING GATE inside the middle is lines 271-823 -- ~550 lines of VMX
+    // AllVehicleData debug-render work, the ICE-editor preview and the world-map safe-position
+    // search. Those paths reach un-homed aggregates and/or VMX pipelines. Live recovered work
+    // in this span includes the Event_Win(50) request (CC-16), camera interpolation controller
+    // (CC-14), and effect-hook registration cascade.
+    //
+    // The original UpdateMoments and UpdateICE call sites run before UpdateArbitrator, as on
+    // the console; the arbitrator therefore sees last frame's behaviour output. The live-car
+    // DebugPrinter/request-byte/DebugLog calls, post-publish debug-info overlays, camera-state
+    // flag printer, timestep multiplier, PrepareBehaviours, UpdateAttribSys, event-end push and
+    // closing latches (0x82275290..0x822752D0, including the one-shot clear of
+    // mbForceNextWorldCrashToBeFastTopDown) are restored at their original call sites below.
     //
     // DELETE-WHEN: per item above, as each aggregate is homed.
     // ------------------------------------------------------------------------
@@ -3535,7 +3528,16 @@ namespace BrnDirector
         else
         {
             UpdateDebugPrinters();
-            // ⚠️ GATE: the debug byte / DebugLog::Print+Update.
+            lpIO->mpOutputBuffer->SetRequestHookEnumeration(
+                maStateFlagTail[E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION] != 0);
+            mDebugLog.Print(*reinterpret_cast<DebugPrinter*>(maDebugPrinterMain));
+
+            const CgsSystem::TimerStatus* lpSimTimerStatus =
+                lpIO->mpInputBuffer->GetTimerStatusInterface()->GetSimTimerStatus();
+            if (lpSimTimerStatus->IsRunning())
+            {
+                mDebugLog.Update(lpSimTimerStatus->GetBaseTimeStep());
+            }
 
             // ⭐ @0x8224FD30 -- the pass that dispatches every live behaviour's Update. It is
             // REAL now (partially: see the body's FLAG list), which is what lets
@@ -3821,12 +3823,6 @@ namespace BrnDirector
             if (sbCamDiag && (suCamDiagCalls++ % 60u) == 0 && CgsDev::Log::gpDebugPrint != 0)
                 *CgsDev::Log::gpDebugPrint << "[cam-flags] director publish flags " << lCamera.mState_uFlags << "\n";
         }
-        // @0x82274070 pseudocode 255 (`*(out + 1872) = *(this + 218166)`): publish the
-        // hook-enumeration request byte. The console stores it in the un-paused branch right
-        // after UpdateDebugPrinters; the value is PostGuiUpdate's latch either way.
-        lpIO->mpOutputBuffer->SetRequestHookEnumeration(
-            maStateFlagTail[E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION] != 0);
-
         // ⭐⭐ X360 lines 871-875 (@0x82275128..0x82275148) -- THE TIME-DILATION PUBLISH, and the
         // whole reason a camera can slow the game down. It was GATED here with the note "none of
         // them alters the published camera -- the two publish calls are already done", which is
@@ -3959,9 +3955,23 @@ namespace BrnDirector
             maGameState.meEventType = BrnGameState::GameStateModuleIO::E_MODE_NONE;
         }
 
-        // ⚠️ GATE (debug display only): 0x8227520C..0x8227528C -- while mbShowCameraStateFlags
-        // (+0x3543B) is set, print the thirty CameraState flag names through the main DebugPrinter.
-        // Not reproduced (the printer is an opaque region here); it writes nothing but text.
+        // X360 0x8227520C..0x8227528C. Print all 30 flag names through the main printer while
+        // Show Camera state flags is set. PrintActive/PrintInactive preserve the original
+        // per-flag colors and each successful draw advances the same Y cursor.
+        if (maStateFlagTail[E_FLAG_TAIL_SHOW_CAMERA_STATE_FLAGS] != 0)
+        {
+            DebugPrinter& lrPrinter = *reinterpret_cast<DebugPrinter*>(maDebugPrinterMain);
+            for (u32 luFlag = 0; luFlag < Camera::CameraState::E_FLAG_COUNT; ++luFlag)
+            {
+                const Camera::CameraState::EFlag leFlag =
+                    static_cast<Camera::CameraState::EFlag>(luFlag);
+                const char* lpcFlagName = Camera::CameraState::GetDebugFlagName(leFlag);
+                if (lCamera.GetState().IsFlagSet(luFlag))
+                    lrPrinter.PrintActive(lpcFlagName);
+                else
+                    lrPrinter.PrintInactive(lpcFlagName);
+            }
+        }
 
         // ⭐ THE TAIL'S TWO LATCHES (2026-09-25, FX-DIRECTOR2), the console's last statements
         // (r28 == 0 from `li r28, 0` @0x82274F64, r27 == 1 from `li r27, 1` @0x82274F68, neither
