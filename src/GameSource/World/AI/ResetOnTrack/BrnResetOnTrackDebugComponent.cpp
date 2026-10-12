@@ -115,12 +115,11 @@ void ResetOnTrackDebugComponent::OnActivate()
 }
 
 // ARTIST 0x827867E8. The modulo tripwire is the console's division-by-zero fault for a
-// non-positive configured frame skip; the value is not clamped or repaired.
+// zero divisor (and separately signed overflow). Negative nonzero skips remain valid.
 void ResetOnTrackDebugComponent::Update()
 {
     if (mbContinousResetOnTrack)
     {
-        CGS_ASSERT(miContinuousResetFrameSkip > 0, "miContinuousResetFrameSkip > 0");
         if ((miFrameCount % miContinuousResetFrameSkip) == 0)
         {
             AIModuleIO::ResetOnTrackRequest lRequest;
@@ -132,7 +131,7 @@ void ResetOnTrackDebugComponent::Update()
         }
     }
 
-    ++miFrameCount;
+    miFrameCount = static_cast<s32>(static_cast<u32>(miFrameCount) + 1u);
 }
 
 // ARTIST 0x82786890. The registered callback's first argument is the component user data;
@@ -195,7 +194,7 @@ void ResetOnTrackDebugComponent::PushResetInfo(
         lfClampedDot = 1.0f;
     }
 
-    const Vector3 lCarPosition = lpRequestCar->GetPosition();
+    const Vector3 lCarPosition = lpResult->GetResetPosition();
     const Vector3 lPlayerPosition = lpPlayerCar->GetPosition();
     const f32 lfDX = lCarPosition.x - lPlayerPosition.x;
     const f32 lfDY = lCarPosition.y - lPlayerPosition.y;
@@ -240,7 +239,7 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
 
         CgsDev::SimpleStrStream lStream;
         lStream << "Reset on track section: "
-                << static_cast<s32>(lpPlayerCar->muBestSectionIndex)
+                << static_cast<s32>(lpPlayerCar->muResetOnTrackSectionIndex)
                 << ", Recent resets: " << mpResetOnTrackManager->mRecentResets.GetLength();
         if (!lpPlayerCar->IsDrivenByPlayer())
         {
@@ -277,8 +276,8 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
             lStream << "Car "
                     << static_cast<s32>(lrEntry.mRequest.GetGlobalRaceCarIndex())
                     << ", " << lpcResetType << ", "
-                    << lrEntry.mRequest.GetResetDistance() << "m, "
-                    << lrEntry.mResult.GetResetSpeed() * gResetSpeedDisplayScale
+                    << static_cast<s32>(lrEntry.mRequest.GetResetDistance()) << "m, "
+                    << static_cast<s32>(lrEntry.mResult.GetResetSpeed() * gResetSpeedDisplayScale)
                     << " mph";
             if (lrEntry.miHngTestCount > 1)
             {
@@ -288,7 +287,7 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
             {
                 lStream << ", No driver";
             }
-            lStream << ", " << lrEntry.mfDistanceToPlayer << "m from player";
+            lStream << ", " << static_cast<s32>(lrEntry.mfDistanceToPlayer) << "m from player";
             lStream << (lrEntry.mResult.GetState() ==
                             AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS
                             ? ", Success"
@@ -314,8 +313,7 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
             const EGlobalRaceCarIndex leCarIndex =
                 static_cast<EGlobalRaceCarIndex>(liCarIndex);
             const AICar* lpCar = mpResetOnTrackManager->GetAICar(leCarIndex);
-            const bool lbIsPlayer =
-                leCarIndex == mpResetOnTrackManager->mePlayerGlobalRaceCarIndex;
+            const bool lbIsPlayer = lpCar->IsPlayerCar();
             if (!lbIsPlayer && mbShowPlayerInfoOnly)
             {
                 continue;
@@ -397,15 +395,15 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
 
         const Vector3 lStartExtent = {3.0f, 3.0f, 3.0f, 0.0f};
         const Vector3 lEndExtent = {0.25f, 0.25f, 0.25f, 0.0f};
-        lpDisplay->DrawArrow(Add(lStart, lStartExtent),
-                             Vector3{lStart.x - lStartExtent.x,
+        lpDisplay->DrawSolidBox(Vector3{lStart.x - lStartExtent.x,
                                      lStart.y - lStartExtent.y,
                                      lStart.z - lStartExtent.z, 0.0f},
+                             Add(lStart, lStartExtent),
                              RenderColour(0x800000FFu));
-        lpDisplay->DrawArrow(Add(lEnd, lEndExtent),
-                             Vector3{lEnd.x - lEndExtent.x,
+        lpDisplay->DrawSolidBox(Vector3{lEnd.x - lEndExtent.x,
                                      lEnd.y - lEndExtent.y,
                                      lEnd.z - lEndExtent.z, 0.0f},
+                             Add(lEnd, lEndExtent),
                              RenderColour(0x80FF0000u));
     }
 }

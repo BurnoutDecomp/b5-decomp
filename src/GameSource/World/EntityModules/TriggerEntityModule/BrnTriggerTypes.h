@@ -38,7 +38,10 @@ namespace BrnWorld
         u32                         mHandle;     // +8   gameplay trigger handle (the add-event handle,
                                                  //      republished per-overlap by ProcessLineTestFineResult)
         ETriggerTypeID              meType;      // +12  E_TRIGGERTYPE_*
-        u8                          mPad1[16];   // +16  (pad to the 16-byte aligned transform)
+        u8                          mPad1[1];    // +16  unrecovered byte
+        s8                          miTriggerRegionType; // +17 ARTIST822D9434 / HUD822C45F8
+        s8                          miGenericRegionType; // +18 ARTIST822D943C
+        u8                          mPadRegion[13]; // +19 pad to the aligned transform
         rw::math::vpu::Matrix44Affine mTransform; // +32  world transform (W column == position)
         rw::math::vpu::Vector3      mDimensions; // +96  box half-extents source (full dimensions)
         f32                         mfRadius;    // +112 sphere radius

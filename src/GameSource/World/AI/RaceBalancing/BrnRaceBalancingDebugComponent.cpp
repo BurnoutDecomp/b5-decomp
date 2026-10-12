@@ -278,9 +278,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         lStream.Reset();
         lOut << "Difficulty: ";
         const f32 lfDifficultyPercent = mpAIModule->GetDifficulty() * 100.0f;
-        // The X360 chooses a one-decimal vs whole-number format based on a mode field; reproduced as
-        // the float stream (the formatting nuance is not load-bearing for parity).
-        lOut << lfDifficultyPercent;
+        lOut << static_cast<s32>(lfDifficultyPercent); //ARTIST82796EE4: fctiwz, signed%d
         lOut << "%";
         MaybeDrawText(lpDisplay, lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE, false);
 
@@ -523,12 +521,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         {
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXCur, lv2AheadCur.y - 24.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2AheadPrev.y - 24.0f,
                           KF_TEXT_SCALE, K_WHITE, false);
 
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_BEHIND, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXCur, lv2BehindCur.y + 8.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2BehindPrev.y + 8.0f,
                           KF_TEXT_SCALE, K_WHITE, false);
         }
     }

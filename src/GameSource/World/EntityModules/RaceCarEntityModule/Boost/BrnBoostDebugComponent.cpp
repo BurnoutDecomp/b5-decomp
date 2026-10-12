@@ -9,7 +9,8 @@ namespace BrnWorld
 {
     void BoostDebugComponent::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
     {
-        CgsDev::DebugComponent::Construct();
+        // ARTIST822FD904 calls the empty ICF body8284CB38; it does not
+        // clear the generic base's active flag or list link here.
         mpRaceCarEntityModule = lpRaceCarEntityModule;
         miBoostRules = 1;
         miActionTextModifiedTime = 0;

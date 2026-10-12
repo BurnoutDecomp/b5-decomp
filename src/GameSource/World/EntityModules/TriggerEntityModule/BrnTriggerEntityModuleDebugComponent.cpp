@@ -194,7 +194,7 @@ namespace BrnWorld
                  liIndex != -1;
                  liIndex = lrUsedTriggers.GetNextNonZeroBit(liIndex))
             {
-                if (mpTriggerEntityModule->GetTrigger(liIndex).meType == liType)
+                if (mpTriggerEntityModule->GetTrigger(liIndex).miTriggerRegionType == liType)
                 {
                     ++liCount;
                 }
