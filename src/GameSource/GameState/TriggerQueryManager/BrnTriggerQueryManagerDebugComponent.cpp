@@ -18,8 +18,8 @@ namespace BrnGameState
     // =============================================================================================
     // Construct  @ 0x8236E908
     //
-    // Two-phase init: base DebugComponent::Construct (the X360 image folds the trivial base body onto
-    // the BaseCollisionGenerator::Destruct address), cache the manager + its track TriggerData, default
+    // ARTIST8236E924 calls the positively empty8284CB38. Preserve existing
+    // base active/link state; cache the manager + its track TriggerData, default
     // the render flags / clip distances / type filters, then build the two enum-style option tables.
     // The trigger-type table is {Landmark, Blackspot, GenericRegion, VFXBoxRegion, All}; the
     // generic-region-type table mirrors GenericRegion::KAPC_GENERIC_REGION_TYPE_STRINGS plus a final
@@ -27,7 +27,7 @@ namespace BrnGameState
     // =============================================================================================
     void TriggerQueryManagerDebugComponent::Construct(TriggerQueryManager* lpTriggerQueryManager)
     {
-        CgsDev::DebugComponent::Construct();   // base two-phase init (X360 folded body)
+        // ARTIST8236E924 ->8284CB38 is blr; it writes no base active/link fields.
 
         mpTriggerQueryManager = lpTriggerQueryManager;
         mpTriggerData         = lpTriggerQueryManager->GetTriggerData();
