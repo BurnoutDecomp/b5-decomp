@@ -166,36 +166,6 @@ namespace BrnEffects
         return "Effects";
     }
 
-    // @ X360 0x82278DB8. The junkyard edit controls are backed by the playing LION slot.
-    // When the particle module leaves junkyard mode the target clears the editor fields; while
-    // editing with axes enabled it draws the active effect's transform origin.
-    void EffectsDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
-    {
-        CGS_ASSERT(mpEffectsModule != NULL, "mpEffectsModule != NULL");
-
-        if (!mpEffectsModule->IsJunkyardVfxActive())
-        {
-            mfJunkyardVfxPosX = 0.0f;
-            mbJunkyardVfxEdit = false;
-            mfJunkyardVfxPosY = 0.0f;
-            mfJunkyardVfxPosZ = 0.0f;
-            mfJunkyardVfxAngle = 0.0f;
-        }
-
-        if (mbJunkyardVfxEdit && mbJunkyardVfxShowAxes)
-        {
-            const u32 luEffectIndex = static_cast<u32>(mnJunkyardVfxId);
-            CGS_ASSERT(luEffectIndex < KU_MAX_JUNKYARD_VFX,
-                "( lnEffectIndex >= 0 ) && ( lnEffectIndex < static_cast<int32_t>( EffectsModule::KU_MAX_JUNKYARD_VFX ) )");
-
-            const u32 luHandle = mpEffectsModule->GetJunkyardEffectHandle(luEffectIndex);
-            BrnParticle::LionEffect* lpLionEffect =
-                mpEffectsModule->ParticleModule().GetLionEffect(luHandle);
-            if (lpLionEffect)
-                lpRender->DrawAxis(lpLionEffect->GetTransform());
-        }
-    }
-
     // ====================================================================================
     // OnActivate - X360 0x8228F3E8
     // Registers the whole effects debug-variable tree with the debug menu.
