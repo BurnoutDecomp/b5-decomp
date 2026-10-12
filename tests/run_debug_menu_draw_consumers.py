@@ -66,8 +66,11 @@ illum = render[illum_start:illum_end]
 lod = fx.definition(fx.definition(world, 'WorldModule::CalculateVehicleLODs('),
     '    for ( u32 luIndex = 0; luIndex < KU_NUM_VEHICLE_LODS; luIndex++ )')
 
+frustum_helpers = definitions(frustum, ['        inline Vector3 MakeFrustumDebugVector(',
+    '        inline Vector3 AddFrustumDebugVectors(', '        inline Vector3 ScaleFrustumDebugVector(',
+    '        inline Vector3 AverageFrustumDebugFace(', '        inline Vector3 AddFrustumDebugPlane('])
 code = ('namespace CgsSceneManager { static s32 siTriangleTestPerfMon=0;\n' + scene_code + '\n}\n'
-    'namespace CgsGeometric {\n' + fx.definition(frustum, '    void Frustum::DebugRenderCustomPlanes(') + '\n}\n'
+    'namespace CgsGeometric {\n' + frustum_helpers + '\n' + fx.definition(frustum, '    void Frustum::DebugRenderCustomPlanes(') + '\n}\n'
     'namespace BrnWorld {\n' + records + '\n'
     'TsmDebugRenderInfo gaTsmDebugRenderInfo[3]{}; BoundingBoxDebugRenderInfo gBoundingBoxDebugRenderInfo[3]{};\n'
     + shadow_code + '\n' + race_constants
