@@ -48,6 +48,7 @@ public:
     void Update() override;
 
 protected:
+    void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
     void OnActivate() override;
     void InitWindows();
     void GenerateStringList();
