@@ -70,6 +70,12 @@ namespace CgsPC { namespace VmxFloat
                  Subtract(lrA.z, lrB.z), Subtract(lrA.w, lrB.w) };
     }
 
+    inline Vector3 Add(const Vector3& lrA, const Vector3& lrB)
+    {
+        return { Add(lrA.x, lrB.x), Add(lrA.y, lrB.y),
+                 Add(lrA.z, lrB.z), Add(lrA.w, lrB.w) };
+    }
+
     inline Vector3 Multiply(const Vector3& lrVector, f32 lfScale)
     {
         return { Multiply(lrVector.x, lfScale), Multiply(lrVector.y, lfScale),
@@ -80,6 +86,12 @@ namespace CgsPC { namespace VmxFloat
     {
         return { MultiplyAdd(lrA.x, lfScale, lrB.x), MultiplyAdd(lrA.y, lfScale, lrB.y),
                  MultiplyAdd(lrA.z, lfScale, lrB.z), MultiplyAdd(lrA.w, lfScale, lrB.w) };
+    }
+
+    inline Vector3 MultiplyAdd(const Vector3& lrA, const Vector3& lrB, const Vector3& lrC)
+    {
+        return { MultiplyAdd(lrA.x, lrB.x, lrC.x), MultiplyAdd(lrA.y, lrB.y, lrC.y),
+                 MultiplyAdd(lrA.z, lrB.z, lrC.z), MultiplyAdd(lrA.w, lrB.w, lrC.w) };
     }
 
     inline f32 RefinedReciprocalSqrt(f32 lfValue, u32 luSteps)

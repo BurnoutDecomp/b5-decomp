@@ -24,6 +24,7 @@
 // =================================================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "pc/math/VmxFloat.h"
+#include "SDKs/XboxMath/XMVectorCos.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"  // InputBuffer_PostPhysics / OutputBuffer_PostPhysics accessors
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"         // VehicleManagerOutputInterface::FineTrafficCrashedEventQueue
@@ -181,7 +182,7 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const f32 lfConeCosine = CgsPC::VmxFloat::Dot3(
                 CgsPC::VmxFloat::Normalize3Unconditional(lSeparation, 2), lReversedHeading);
 
-        if( CgsPC::VmxFloat::Flush(std::cos(KF_TAILGATING_CONE_HALF_ANGLE_RADS))
+        if( CgsPC::VmxFloat::Flush(XboxMath::XMVectorCos(KF_TAILGATING_CONE_HALF_ANGLE_RADS))
                 > CgsPC::VmxFloat::Flush(lfConeCosine) )
         {
             continue;

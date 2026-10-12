@@ -1917,9 +1917,9 @@ namespace BrnWorld
             f32* lpfOut = &lvOut.x;
             for (int liLane = 0; liLane < 4; ++liLane)
             {
-                f32 lfValue = std::fma(lrPoint.x, lapRows[0][liLane], lapTranslation[liLane]);
-                lfValue = std::fma(lrPoint.y, lapRows[1][liLane], lfValue);
-                lfValue = std::fma(lrPoint.z, lapRows[2][liLane], lfValue);
+                f32 lfValue = CgsPC::VmxFloat::MultiplyAdd(lrPoint.x, lapRows[0][liLane], lapTranslation[liLane]);
+                lfValue = CgsPC::VmxFloat::MultiplyAdd(lrPoint.y, lapRows[1][liLane], lfValue);
+                lfValue = CgsPC::VmxFloat::MultiplyAdd(lrPoint.z, lapRows[2][liLane], lfValue);
                 lpfOut[liLane] = lfValue;
             }
             return lvOut;
@@ -3000,10 +3000,11 @@ namespace BrnWorld
             const Vector4& lrCorner1 = lrDebugInfo.maBoxPointsWorld[1];
             const Vector4& lrCorner2 = lrDebugInfo.maBoxPointsWorld[2];
             const Vector4& lrCorner3 = lrDebugInfo.maBoxPointsWorld[3];
-            lvTextPosition.x = (((lrCorner0.x + lrCorner1.x) + lrCorner2.x) + lrCorner3.x) * 0.25f;
-            lvTextPosition.y = (((lrCorner0.y + lrCorner1.y) + lrCorner2.y) + lrCorner3.y) * 0.25f;
-            lvTextPosition.z = (((lrCorner0.z + lrCorner1.z) + lrCorner2.z) + lrCorner3.z) * 0.25f;
-            lvTextPosition.w = (((lrCorner0.w + lrCorner1.w) + lrCorner2.w) + lrCorner3.w) * 0.25f;
+            namespace vmx = CgsPC::VmxFloat;
+            lvTextPosition.x = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.x, lrCorner1.x), lrCorner2.x), lrCorner3.x), 0.25f);
+            lvTextPosition.y = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.y, lrCorner1.y), lrCorner2.y), lrCorner3.y), 0.25f);
+            lvTextPosition.z = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.z, lrCorner1.z), lrCorner2.z), lrCorner3.z), 0.25f);
+            lvTextPosition.w = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.w, lrCorner1.w), lrCorner2.w), lrCorner3.w), 0.25f);
             lRender.DrawText(ToShadowDebugVector3(lvTextPosition), lacAspectText, 16.0f,
                              static_cast<CgsDev::RGBA>(0xFFFFFFFFu));
 
