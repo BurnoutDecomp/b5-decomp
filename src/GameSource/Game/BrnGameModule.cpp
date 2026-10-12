@@ -479,8 +479,8 @@ namespace BrnGame
 
         // [gated] The event-receiver queue at +10094268 and the two replay serialisers
         // (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) still need their exact
-        // typed storage. The Framerate and Step/Play interface registrations follow timer setup,
-        // at their original Construct position below.
+        // typed storage. The remaining menu controls are registered after timer setup below;
+        // the Force shutdown and Take screen shots bool readers/backends remain unproven.
 
         // NOTE: the bitmap debug font is NOT brought up here -- it arrives through GamePrepare's
         // id-5 AcquireResource reply (the console's own path: Font::CreateTextureState +
@@ -509,6 +509,10 @@ namespace BrnGame
         // seeds. Both are pure init so the order was not observable, but it was inverted
         // (boot audit F-P1-12).
         mMainFlowStateMachine.Construct();
+
+        // X360 Construct clears the registered bool at gm+10097332 (0x9A12B4) before timer
+        // setup and later exposes it as "Take screen shots". Its reader/backend is unresolved.
+        mbTakeScreenShots = false;
 
         {
             // ⚠️ FLAG PC QUALITY-OF-LIFE, 2026-08-17: THE SIMULATION RATE IS NOW FIXED AT
@@ -615,6 +619,10 @@ namespace BrnGame
             lDebugInterface.SetOptions(lpiFrameRateType, KAC_FRAMERATE_OPTIONS);
             lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
             lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
+            lDebugInterface.RegisterVariable(&mbForceShutdown, "Debug/Sim", "Force shutdown");
+            lDebugInterface.RegisterVariable(&mbTakeScreenShots,
+                                             "Core/Debug/Performance/CPU Monitors",
+                                             "Take screen shots");
         }
 
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
