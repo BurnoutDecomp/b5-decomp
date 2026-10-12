@@ -40,10 +40,9 @@ namespace
     template <s32 N>
     struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
     {
-        u8  mu8Flag;        // +0x0C
-        u8  maPad[3];
+        u8  mu8Flag;        // +0x00
         GuiCommandEvent16(u8 lu8Flag = 0)
-            :  mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
+            :  mu8Flag(lu8Flag) {}
     };
 
     // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.

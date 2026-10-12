@@ -164,16 +164,10 @@ namespace BrnGui
         typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
         struct GuiEventShowHideHudWire : public ShowHideHudHeader
         {
-            bool mbShowHud;   // +0x0C
-            u8   maPad[3];    // +0x0D (the record is 16 bytes on the wire)
-
+            bool mbShowHud;   // +0x00
             explicit GuiEventShowHideHudWire(bool lbShowHud)
                 :  mbShowHud(lbShowHud)
-            {
-                maPad[0] = 0;
-                maPad[1] = 0;
-                maPad[2] = 0;
-            }
+            {}
         };
 
         // Record-size pins. Every one of these payloads is pointer-free, so the X360's

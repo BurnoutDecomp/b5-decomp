@@ -285,10 +285,9 @@ bool CrashedHudState::UpdateSetupState()
     struct BoostVisibility : CgsGui::GuiEvent<214>
     {
         u8 mbVisible;
-        u8 maPad[3];
-        BoostVisibility(bool lbVisible) :  mbVisible(lbVisible), maPad{} {}
+        BoostVisibility(bool lbVisible) :  mbVisible(lbVisible) {}
     } lBoost(mbBoostBar);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
+    mpStateInterface->OutputViewState(lBoost);
     if (mbImpactTimer)
     {
         if (mbInImpactTime) EnterSteerWreckScreen();

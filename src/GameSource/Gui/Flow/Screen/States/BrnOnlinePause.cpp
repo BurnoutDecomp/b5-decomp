@@ -117,14 +117,10 @@ namespace BrnGui
         template <s32 N>
         struct GuiByteEventWire : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Value;    // +0x0C
-            u8 maPad[3];
-
+            u8 mu8Value;    // +0x00
             explicit GuiByteEventWire(u8 lu8Value)
                 :  mu8Value(lu8Value)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
+            {}
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.

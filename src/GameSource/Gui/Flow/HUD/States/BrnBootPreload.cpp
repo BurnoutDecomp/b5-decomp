@@ -38,10 +38,9 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;    // +0x0C (the X360 stores a single byte then leaves the record at 16)
-            u8 maPad[3];
+            u8 mu8Flag;    // +0x00 (the X360 stores a single byte then leaves the record at 16)
             GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         template <s32 N>

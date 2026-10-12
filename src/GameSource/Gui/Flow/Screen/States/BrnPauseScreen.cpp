@@ -77,29 +77,20 @@ namespace
 
     // The GuiEvent<533> command the pause screen posts on its out-queue when the pause
     // menu closes back into the game (the sibling of the GuiEvent<532> record
-    // BrnPausedHudState posts on enter). The X360 fills { muHeader0 = 1, muEventType = 533,
-    // muHeader2 = 12 } and pushes a 16-byte record on channel 40; the trailing word is
-    // left uninitialised.
+    // BrnPausedHudState posts on enter). The X360 builds { 1, 533, 12 } and queues a
+    // 16-byte channel-40 wrapper; its one payload byte is unwritten.
     struct GuiEventPauseScreenClosed : public CgsGui::GuiEvent<533>
     {
-        u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size 16)
-
-        GuiEventPauseScreenClosed()  {}
     };
 
-    // The { 1, 148, 12, flag } HUD-components command record (BrnInGame.cpp's
-    // GuiCommandEvent16<148> twin: flag 1 = bring the HUD components up, 0 = shut them
-    // down; the X360 zeroes only the flag byte, the pad is modelled zeroed).
+    // The { 1, 148, 12, flag } HUD-components command payload (BrnInGame.cpp's
+    // GuiCommandEvent16<148> twin): flag 1 brings the HUD components up; 0 shuts them down.
     struct GuiEventHudComponentsCommand : public CgsGui::GuiEvent<148>
     {
-        u8 mu8Enable;    // +0x0C
-        u8 maPad[3];
-
+        u8 mu8Enable;    // +0x00
         explicit GuiEventHudComponentsCommand(u8 lu8Enable)
             :  mu8Enable(lu8Enable)
-        {
-            maPad[0] = maPad[1] = maPad[2] = 0;
-        }
+        {}
     };
 
     // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record (@0x82476E98):

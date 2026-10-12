@@ -68,9 +68,8 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
             GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         template <s32 N>

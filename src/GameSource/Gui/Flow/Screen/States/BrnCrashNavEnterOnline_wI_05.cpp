@@ -181,14 +181,10 @@ namespace BrnGui
 
         struct GuiEventShowHideHudWire : public ShowHideHudHeader
         {
-            u8 mu8Show;      // +0x0C
-            u8 maPad[3];
-
+            u8 mu8Show;      // +0x00
             explicit GuiEventShowHideHudWire(u8 lu8Show)
                 :  mu8Show(lu8Show)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
+            {}
         };
     }
 

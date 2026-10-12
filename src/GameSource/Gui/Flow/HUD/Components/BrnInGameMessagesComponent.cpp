@@ -151,9 +151,8 @@ namespace
     struct GuiCommandEvent16_157 : public CgsGui::GuiEvent<157>
     {
         u8 mu8Flag;
-        u8 maPad[3];
         GuiCommandEvent16_157() :  mu8Flag(0)
-        { maPad[0] = maPad[1] = maPad[2] = 0; }
+        {}
     };
 
     // StartMessage / EndMessage's post: the 40-byte OutputGuiEvent<BrnGui::GuiAudioEvent>

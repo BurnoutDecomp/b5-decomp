@@ -122,9 +122,8 @@ namespace
     template <s32 N>
     struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
     {
-        u8  mu8Flag;        // +0x0C (the X360 stores a single byte then leaves the record at 16)
-        u8  maPad[3];
-        GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
+        u8  mu8Flag;        // +0x00 (the X360 stores a single byte then leaves the record at 16)
+        GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag) {}
     };
 
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a 1.0f payload word
@@ -168,21 +167,19 @@ namespace
     // CgsGui::GuiEventPlayMusicOnMenuStream -- carries a sound-name hash + two flag bytes.
     struct MusicOnMenuStreamEvent : public CgsGui::GuiEvent<155>
     {
-        s32 miHash;     // +0x0C (the MakeHash result, or dword_830082A8)
-        u8  mu8FlagA;   // +0x10
-        u8  mu8FlagB;   // +0x11
-        u8  maPad[2];
+        s32 miHash;     // +0x00 (the MakeHash result, or dword_830082A8)
+        u8  mu8FlagA;   // +0x04
+        u8  mu8FlagB;   // +0x05
         explicit MusicOnMenuStreamEvent(s32 liHash)
             :  miHash(liHash), mu8FlagA(0), mu8FlagB(0)
-        { maPad[0] = maPad[1] = 0; }
+        {}
     };
 
     // BrnGui::GuiMuteDac -- a one-byte mute command.
     struct MuteDacEvent : public CgsGui::GuiEvent<200>
     {
-        u8 mu8Mute;     // +0x0C (0)
-        u8 maPad[3];
-        MuteDacEvent() :  mu8Mute(0) { maPad[0] = maPad[1] = maPad[2] = 0; }
+        u8 mu8Mute;     // +0x00 (0)
+        MuteDacEvent() :  mu8Mute(0) {}
     };
 
     // BrnGui::GuiEventPlayVideo / GuiEventStopVideo -- carry a 112-byte MovieManager
