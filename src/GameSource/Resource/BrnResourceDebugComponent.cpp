@@ -1,6 +1,9 @@
 #include "GameSource/Resource/BrnResourceDebugComponent.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   BrnResource::DebugComponent::OnActivate       @ 0x826626A8
 //   BrnResource::DebugComponent::InterpolateColours @ 0x82661410
 //
 // Per-channel linear interpolation between two packed 32-bit colours in 0xAARRGGBB byte
@@ -21,6 +24,46 @@
 
 namespace BrnResource
 {
+    // X360 GameDataModule::Construct @0x82671E48-0x82671E74; DecFIGS
+    // BrnResource::DebugComponent::Construct @0x7CC378. The X360 inlines
+    // the base Construct and these member stores at the embedded member.
+    void DebugComponent::Construct(GameDataModule* lpModule, rw::IResourceAllocator* lpAllocator)
+    {
+        CgsDev::DebugComponent::Construct();
+
+        mpModule = lpModule;
+        mbShowHud = true;
+        mpAllocatorStats = nullptr;
+        miSlotsUsed = 0;
+        miSlotsFree = 0;
+        mpAllocator = lpAllocator;
+    }
+
+    // X360 0x826626A8; DecFIGS 0x7D94F8. ARTIST calls the bool, int,
+    // read-only operations in this exact order and continues after the
+    // non-fatal module assertion.
+    void DebugComponent::OnActivate()
+    {
+        if (mpModule == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "No module\n";
+            CgsDev::Assert::FireAssert(
+                lacMessageBuffer,
+                "..\\..\\..\\GameSource\\Resource/BrnResourceDebugComponent.cpp",
+                313);
+            CgsDev::Assert::EndAssert();
+        }
+
+        RegisterVariable(&mbShowHud, "Show HUD");
+        RegisterVariable(&miSlotsUsed, "Slots Used");
+        SetReadOnly(&miSlotsUsed, true);
+        RegisterVariable(&miSlotsFree, "Slots Free");
+        SetReadOnly(&miSlotsFree, true);
+    }
+
     namespace
     {
         // Round a non-negative interpolated channel to the nearest integer the way the X360
