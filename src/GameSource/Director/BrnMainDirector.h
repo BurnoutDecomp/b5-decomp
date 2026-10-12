@@ -485,7 +485,9 @@ namespace BrnDirector
         // +0x33768 / +0x3378C / +0x337B0  the three BrnDirector::DebugPrinters Construct
         //           builds. The THIRD (+0x337B0) is the one ArbStateSharedInfo carries as
         //           mpDebugPrinter, so the three are named separately rather than as one span.
-        //           FLAG: DebugPrinter is un-homed; named opaque storage.
+        //           DebugPrinter has a typed home in BrnDirectorModuleDebugPrinter.h; these
+        //           spans retain the MainDirector's console member order and are accessed
+        //           through that type by the debug-print and registration paths.
         u8 maDebugPrinterA[0x3378C - 0x33768];       // +0x33768
         u8 maDebugPrinterB[0x337B0 - 0x3378C];       // +0x3378C
         u8 maDebugPrinterMain[0x337E0 - 0x337B0];    // +0x337B0  <- ArbStateSharedInfo +0x04
