@@ -33,13 +33,10 @@
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
 #include "GameSource/Resource/BrnResourceAllocator.h" // Allocators and the debug/global graphics allocators
 #include "rw/rwcore_general_alloc.h"              // rw::core::GeneralResourceAllocator base conversion
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 
 // BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
 extern u32 suOcclusionCullIndexCountThreshold;
-// PC immediate-mode equivalents of X360 dword_83010F20 and dword_83010F3C.
-extern void* gpImStandardAlphaBlendState;
-extern void* gpSkyDomeRasterizerState;
-void ImDeviceSetRasterizerState(void* lpState);
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -426,6 +423,13 @@ void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTextur
                                                   Vector2 lrPosition, Vector2 lrSize,
                                                   CgsDev::RGBA luColour)
 {
+    mIm2dRenderer.BeginRendering();
+    // ARTIST8240623C..82406298 rebuilds the actual owned TextureState in
+    // its existing resource, then binds its complete sampler/raster at stage0.
+    mTextureStateParams.mpTexture = lpTexture;
+    mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource, &mTextureStateParams);
+    mIm2dRenderer.SetState(mpTextureState);
+
     const f32 KF_LOGICAL_WIDTH = 1280.0f;
     const f32 KF_LOGICAL_HEIGHT = 720.0f;
     const f32 lfLeft = lrPosition.x * KF_LOGICAL_WIDTH;
@@ -434,10 +438,10 @@ void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTextur
     const f32 lfBottom = (lrPosition.y + lrSize.y) * KF_LOGICAL_HEIGHT;
 
     const CgsGraphics::RGBA8 lColour = {
-        static_cast<u8>((luColour >> 24) & 0xFFu),
-        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>(luColour & 0xFFu),
         static_cast<u8>((luColour >> 8) & 0xFFu),
-        static_cast<u8>(luColour & 0xFFu)
+        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>((luColour >> 24) & 0xFFu)
     };
     CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
     laVertices[0].mv2Pos = { lfLeft, lfTop };
@@ -451,15 +455,13 @@ void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTextur
     for (u32 luVertex = 0; luVertex < 4; ++luVertex)
         laVertices[luVertex].mv4Colour = lColour;
 
-    // Im2d::BeginRendering publishes the canonical 1280x720 screen transform; this
-    // is the PC-side state carried by ARTIST's SetTransform(flt_830112D0).
-    mIm2dRenderer.BeginRendering();
-    mIm2dRenderer.SetTexture(lpTexture);
+    // The native backend consumes logical pixels; BeginRendering's published
+    // screen transform and the coordinate conversion above lower ARTIST's
+    // SetTransform(flt_830112D0). Reuse the full shared F20/F3C state objects.
     mIm2dRenderer.SetState(
-        reinterpret_cast<const CgsGraphics::BlendState*>(gpImStandardAlphaBlendState));
-    // The original bind is sub_82276E48(dword_83010F3C). On this PC path the
-    // immediate-mode state is the D3D9 cull-none equivalent owned by ImmediateMode.cpp.
-    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
+        reinterpret_cast<const CgsGraphics::BlendState*>(CgsGui::gpGuiBlendStateStandard));
+    mIm2dRenderer.SetState(
+        reinterpret_cast<const CgsGraphics::RasterizerState*>(CgsGui::gpGuiRasterizerStateCullNone));
     mIm2dRenderer.Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
     mIm2dRenderer.EndRendering();
 }
@@ -1409,6 +1411,17 @@ void BrnRendererModule::Construct()
 
     // ARTIST @8240BC94 constructs the renderer's debug-menu owner before the remaining managers.
     mDebugComponent.Construct(this);
+
+    // ARTIST8240BD14..8240BD94: clamp U/V, retain the constructor's point
+    // filters and allocate the five-lane resource used by the preview's
+    // TextureState::Initialize. The existing native allocator owns its memory;
+    // no per-frame heap state or opaque one-byte Resource is used by the preview.
+    mTextureStateParams.muAddressU = mTextureStateParams.muAddressV = 2;
+    mTextureStateParams.muMagFilter = mTextureStateParams.muMinFilter = 0;
+    rw::ResourceDescriptor lTextureStateDescriptor;
+    renderengine::TextureState::GetResourceDescriptor(&lTextureStateDescriptor);
+    mTextureStateResource = BrnResource::Allocators::GetGlobalGraphicsAllocator()->DoAllocate(
+        lTextureStateDescriptor, nullptr);
 
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
     mShadowMapRenderManager.Construct(2);
@@ -5065,6 +5078,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         return;
     }
 
+    // ARTIST 8240C0EC..8240C0F8 publishes renderer+0xC430 before loading
+    // commands, dispatch conversion, shadow draws and environment-map draws.
+    suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
+
     // Forward the dispatch buffer's loading-screen command into the renderer - the X360
     // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)),
     // the `lwzx r4, r26, 0x9990` at 0x8240C17C). The command is one-shot: the manager's
@@ -5975,9 +5992,6 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         }
 
         lRenderStage.Next(RENDER_WORLD);
-        // ARTIST Render @0x8240C0F8 publishes renderer+0xC430 immediately before the draw passes;
-        // DrawRenderableMesh::InterpretOcclusionQuery reads the corresponding global threshold.
-        suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
         lRenderStage.Next(RENDER_PARTICLES);
 

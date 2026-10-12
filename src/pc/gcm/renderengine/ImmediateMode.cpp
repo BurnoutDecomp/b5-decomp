@@ -1421,10 +1421,8 @@ namespace shadow
 
 namespace CgsGraphics
 {
-    // X360 dword_83010F9C. The immediate-mode layer's "which renderer owns the device
-    // right now" static; BeginRendering asserts it is null and claims it, EndRendering
-    // asserts it is this and releases it.
-    ImRendererBase* ImRendererBase::mgpActiveRenderer = nullptr;
+    // The original active-renderer static is defined once in CgsImRenderer.cpp.
+    // All native and fixed-function renderers share that owner bracket.
 
     // Build the shared immediate-mode render-state library exactly once (X360 home
     // CgsImRenderer.cpp, called behind a module-static guard from ImRenderer<V>::

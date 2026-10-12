@@ -24,6 +24,8 @@ namespace BrnEffects { class EffectsModule; }
 #include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList (Prepare input)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
+#include "pc/gcm/renderengine/renderstates.h" // preview TextureState::Parameters
+#include "rw/rwcore_structs.h"                // preview's owning rw::Resource
 
 // EA::Jobs::Job is the real type (SDKs/EATech/eajobs/job.h): this module embeds thirty-two of
 // them by value (the object-to-mesh dispatch jobs, the shadow/envmap/scene sort jobs), and the
@@ -709,8 +711,8 @@ private:
     CgsGraphics::Im2dRenderBuffer       mIm2dAssertRenderBufferPC;
     CgsGraphics::Im2d                   mAssertIm2dRendererPC;
     renderengine::TextureState*         mpTextureState;
-    TextureStateParameters              mTextureStateParams;
-    Resource                            mTextureStateResource;
+    renderengine::TextureState::Parameters mTextureStateParams;
+    rw::Resource                       mTextureStateResource;
     renderengine::TextureState*         mpEnvMapTextureState;
     TextureStateParameters              mEnvMapTextureStateParams;
     Resource                            mEnvMapTextureStateResource;
@@ -939,6 +941,15 @@ inline BrnRendererModule::BrnRendererModule()
         maInterpretFunctions[luIndex] = 0;
 
     mpTextureState = 0;
+    // ARTIST C++ constructor827E008C..827E0110: the preview/single-shadow
+    // sampler starts with point filters, mip mode2, anisotropy13 and two flags.
+    // Construct later changes U/V to clamp; DebugDisplay only replaces raster.
+    mTextureStateParams = {};
+    mTextureStateParams.muMipFilter = 2;
+    mTextureStateParams.muMaxAnisotropy = 13;
+    mTextureStateParams.muField10 = 1;
+    mTextureStateParams.mu8Field43 = 1;
+    mTextureStateParams.mu8Field44 = 1;
     mpEnvMapTextureState = 0;
     mpGlassFractureTexture = 0;
     mpGlassFractureTextureState = 0;
