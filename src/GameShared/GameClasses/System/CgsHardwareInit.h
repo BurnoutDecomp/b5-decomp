@@ -46,9 +46,9 @@ namespace CgsSystem
         static void InitializeHardware(s32 lnArgc, char* lapcArgv[]);
 #endif
 
-#if defined(CGS_PLATFORM_X360)
-        static void EnableJobThread();   // @0x828D6138 -- X360 stub, always asserts "Not supported on xbox\n"
-#endif
+        // ARTIST 0x828D6138. The original X360 entry is an unconditional unsupported-path
+        // assertion; the PC port exposes the same dependency and assertion behavior.
+        static void EnableJobThread();
 
         static char* GetWorkingDirectory() { return macRootPath; }
         static char* GetFOPENDirectory() { return macFOPENPath; }

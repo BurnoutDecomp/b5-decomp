@@ -25,6 +25,53 @@ namespace
     }
 }
 
+// DecFIGS rw/collision/frustum.h: the object owns six Plane values. Plane's
+// existing default constructor initializes each lane; ARTIST's Triangle debug
+// Construct does not overwrite mViewFrustum.
+Frustum::Frustum()
+{
+}
+
+void Frustum::SetPlane(u32 luIndex, const Plane& lrPlane)
+{
+    m_planes[luIndex] = lrPlane;
+}
+
+const Plane& Frustum::GetPlane(u32 luIndex) const
+{
+    return m_planes[luIndex];
+}
+
+Plane Frustum::GetPlane(u32 luIndex)
+{
+    return m_planes[luIndex];
+}
+
+int Frustum::IsBoxInFrustum(const Vector3* lapCorners)
+{
+    unsigned int luPlane = 0;
+    while (true)
+    {
+        const Plane& lrPlane = m_planes[luPlane];
+        int liAllCornersOnCulledSide = 1;
+        for (int liCorner = 0; liCorner < 8; ++liCorner)
+        {
+            const Vector3& lrCorner = lapCorners[liCorner];
+            const f32 lfDot = lrPlane.x * lrCorner.x + lrPlane.y * lrCorner.y
+                            + lrPlane.z * lrCorner.z;
+            const int liOnCulledSide = (lrPlane.w >= lfDot) ? 1 : 0;
+            liAllCornersOnCulledSide &= liOnCulledSide;
+        }
+
+        if (liAllCornersOnCulledSide)
+            return 0;
+
+        ++luPlane;
+        if (luPlane >= 6)
+            return 1;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Frustum::IsBoxInFrustum @ 0x82BA7FA0
 //
