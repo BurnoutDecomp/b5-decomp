@@ -38,6 +38,7 @@
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
+#include "pc/math/VmxFloat.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
@@ -3715,13 +3716,13 @@ namespace BrnDirector
                 if (lbHasSafePosition)
                 {
                     const Vector3 lPredictedPosition =
-                        mVehicleTracker.GetPositionJournal()[0] + mVehicleTracker.GetLinearVelocityLastFrame();
+                        CgsPC::VmxFloat::Add(mVehicleTracker.GetPositionJournal()[0], mVehicleTracker.GetLinearVelocityLastFrame());
                     lrDebugRender.DrawArrow(lPredictedPosition, lSafePosition, 0xFF00FF00u);
                 }
 
                 const Vector3 lCurrentPositionForArrow = mVehicleTracker.GetPositionJournal()[0];
                 const Vector3 lPredictedPosition =
-                    lCurrentPositionForArrow + mVehicleTracker.GetLinearVelocityLastFrame();
+                    CgsPC::VmxFloat::Add(lCurrentPositionForArrow, mVehicleTracker.GetLinearVelocityLastFrame());
                 lrDebugRender.DrawArrow(lCurrentPositionForArrow, lPredictedPosition,
                                         lbHasSafePosition ? 0xFF00FF00u : 0xFF0000FFu);
             }

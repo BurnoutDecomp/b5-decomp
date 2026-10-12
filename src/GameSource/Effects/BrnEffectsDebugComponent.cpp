@@ -21,7 +21,9 @@
 
 #include "GameSource/Effects/BrnEffectsDebugComponent.h"
 
-#include <cmath>   // atan2f / sinf / cosf (the de-optimised form of the inlined VMX heading math)
+#include <cmath>
+#include "pc/math/VmxFloat.h"
+#include "SDKs/XboxMath/XMVectorATan.h"
 
 #include "GameSource/Effects/EffectsModule.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"
@@ -60,6 +62,40 @@ namespace BrnEffects
     // left the link short by 35 symbols (measured: it did).
     namespace
     {
+        // ARTIST82287D38..DCC uses the degree-five folded-cycle approximation,
+        // not the SDK Taylor sin/cos. Its BSS vectors are populated by CRT
+        // routines82C6EB00/EBC8/F100/F128/F150 from the cited rodata words.
+        f32 JunkyardSinCosLane(f32 lfRadians, f32 lfPhase)
+        {
+            namespace vmx = CgsPC::VmxFloat;
+            const f32 lfCycle = vmx::MultiplyAdd(lfRadians, 0.15915493667125702f, lfPhase); //3E22F983
+            const f32 lfFraction = vmx::Subtract(lfCycle, vmx::Flush(std::floor(lfCycle)));
+            const f32 lfMirror = vmx::Subtract(1.0f, lfFraction);
+            const f32 lfFolded = vmx::Add(lfFraction < lfMirror ? lfFraction : lfMirror, -0.25f);
+            const f32 lfSquare = vmx::Multiply(lfFolded, lfFolded);
+            f32 lfPolynomial = vmx::MultiplyAdd(lfSquare, -71.17897033691406f, 40.897369384765625f); //C28E5BA2/422396E8
+            lfPolynomial = vmx::MultiplyAdd(lfSquare, lfPolynomial, -6.278042793273926f); //C0C8E5BA
+            return vmx::Multiply(lfPolynomial, lfFolded);
+        }
+
+        // ARTIST8227F37C..3CC: one unconditional reciprocal refinement, ATan,
+        // signed-pi quadrant correction and an explicit z==0 signed-pi/2 select.
+        f32 JunkyardHeadingRadians(f32 lfX, f32 lfZ)
+        {
+            namespace vmx = CgsPC::VmxFloat;
+            lfZ = vmx::Flush(lfZ);
+            f32 lfReciprocal = vmx::Flush(static_cast<f32>(1.0 / static_cast<f64>(lfZ)));
+            const f32 lfError = vmx::NegativeMultiplySubtract(lfReciprocal, lfZ, 1.0f);
+            lfReciprocal = vmx::MultiplyAdd(lfReciprocal, lfError, lfReciprocal);
+            const f32 lfRatio = vmx::MultiplyAdd(lfX, lfReciprocal, 0.0f);
+            f32 lfAngle = XboxMath::XMVectorATan(lfRatio);
+            if (lfZ < 0.0f)
+                lfAngle = vmx::Add(std::copysign(3.1415927410125732f, lfX), lfAngle);
+            if (lfZ == 0.0f)
+                lfAngle = std::copysign(1.5707963705062866f, lfX);
+            return lfAngle;
+        }
+
         BrnCoronaTypeParams& CoronaParams(BrnCoronaType leType)
         {
             // GetCoronaTypeParams is the table's own accessor (smParams is private); the debug
@@ -468,7 +504,7 @@ namespace BrnEffects
         // into [0, 360). The forward direction is the transform's first row (Right()/xAxis):
         // the X360 reads LionEffect+0x10 (the matrix's first row) and runs XMVectorATan over
         // its .x/.z lanes. This is the equivalent scalar form.
-        f32 lfHeadingRadians = atan2f(lrTransform.Right().x, lrTransform.Right().z);
+        f32 lfHeadingRadians = JunkyardHeadingRadians(lrTransform.Right().x, lrTransform.Right().z);
         f32 lfHeadingDegrees = lfHeadingRadians * 57.295776f; // rad -> deg
         if (lfHeadingDegrees < 0.0f)
             lfHeadingDegrees += 360.0f;
@@ -531,24 +567,22 @@ namespace BrnEffects
         BrnParticle::LionEffect* lpLionEffect = lpModule->ParticleModule().GetLionEffect(luHandle);
         if (lpLionEffect)
         {
-            // Build the effect's world transform from the editor's position + heading and
-            // write it back, then flag the effect Changed. The X360 build inlines the matrix
-            // construction with VMX intrinsics; this is the equivalent scalar form: a heading
-            // rotation about the up (Y) axis, placed at the edited position. The forward
-            // direction goes in the FIRST row (Right()/xAxis) so that the index-change read-back
-            // atan2(Right().x, Right().z) recovers the same heading; Up() is the constant
-            // {0,1,0} the X360 writes; At() is the perpendicular completing a right-handed basis.
+            // ARTIST forms x=I*sin+K*cos and z=K*sin-I*cos, with each
+            // original VMX multiply/add/subtract boundary retained.
             // The Pos() row's w-lane is the affine/unused lane: the X360 stores 0.0 there
             // (stw r8=0 -> v26[3]=0.0, stvx128 into mTransform+0x30), matching
             // Matrix44Affine::SetIdentity (wAxis.w = 0.0), not a homogeneous 1.0.
             f32 lfHeadingRadians = lpThis->mfJunkyardVfxAngle * 0.017453292f; // deg -> rad
-            f32 lfSin = sinf(lfHeadingRadians);
-            f32 lfCos = cosf(lfHeadingRadians);
+            f32 lfSin = JunkyardSinCosLane(lfHeadingRadians, -0.25f);
+            f32 lfCos = JunkyardSinCosLane(lfHeadingRadians, 0.0f);
 
             rw::math::vpu::Matrix44Affine lTransform;
-            lTransform.Right() = rw::math::vpu::Vector3 {  lfSin, 0.0f,  lfCos, 0.0f };
+            const Vector3 lI = {1.0f, 0.0f, 0.0f, 0.0f};
+            const Vector3 lK = {0.0f, 0.0f, 1.0f, 0.0f};
+            lTransform.Right() = CgsPC::VmxFloat::MultiplyAdd(lI, lfSin, CgsPC::VmxFloat::Multiply(lK, lfCos));
             lTransform.Up()    = rw::math::vpu::Vector3 {  0.0f,  1.0f,  0.0f,  0.0f };
-            lTransform.At()    = rw::math::vpu::Vector3 {  lfCos, 0.0f, -lfSin, 0.0f };
+            lTransform.At() = CgsPC::VmxFloat::Subtract(CgsPC::VmxFloat::Multiply(lK, lfSin),
+                                                       CgsPC::VmxFloat::Multiply(lI, lfCos));
             lTransform.Pos()   = rw::math::vpu::Vector3 {  lpThis->mfJunkyardVfxPosX,
                                                            lpThis->mfJunkyardVfxPosY,
                                                            lpThis->mfJunkyardVfxPosZ, 0.0f };
