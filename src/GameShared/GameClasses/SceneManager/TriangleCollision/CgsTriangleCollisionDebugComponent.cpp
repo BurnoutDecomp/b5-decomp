@@ -4,11 +4,19 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox4.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupList.h"
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupPoly.h"
+#include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"
+#include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleBox.h"
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManager.h"
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 #include "SDKs/XboxMath/XMVectorACos.h"
+#include "SDKs/XboxMath/XMVectorSinCos.h"
 
 #include <cmath>
 #include <cstring>
@@ -102,6 +110,40 @@ namespace
         Vector3 lvResult(lvRotated);
         lvResult.mV.mafLane[3] = 0.0f;
         return lvResult;
+    }
+
+    // Matrix44AffineFromEulerXYZ, as the X360 inlines it at
+    // TestPolySoupBoxCollision @0x828BFE80: Rx * Ry * Rz for row vectors.
+    // Its three SinCos calls and the row products are also present in ARTIST.
+    rw::math::vpu::Matrix44Affine Matrix44AffineFromEulerXYZ(const Vector3& lrAngles)
+    {
+        f32 lfSinX, lfCosX, lfSinY, lfCosY, lfSinZ, lfCosZ;
+        XboxMath::XMVectorSinCos(&lfSinX, &lfCosX, lrAngles.x);
+        XboxMath::XMVectorSinCos(&lfSinY, &lfCosY, lrAngles.y);
+        XboxMath::XMVectorSinCos(&lfSinZ, &lfCosZ, lrAngles.z);
+
+        const f32 lfCosXSinZ = lfCosX * lfSinZ;
+        const f32 lfSinXSinZ = lfSinX * lfSinZ;
+        const f32 lfSinXCosZ = lfSinX * lfCosZ;
+        const f32 lfCosXCosZ = lfCosX * lfCosZ;
+
+        rw::math::vpu::Matrix44Affine lResult;
+        lResult.xAxis.x = lfCosY * lfCosZ;
+        lResult.xAxis.y = lfCosY * lfSinZ;
+        lResult.xAxis.z = -lfSinY;
+        lResult.xAxis.w = 0.0f;
+
+        lResult.yAxis.x = lfSinY * lfSinXCosZ - lfCosXSinZ;
+        lResult.yAxis.y = std::fma(lfSinY, lfSinXSinZ, lfCosXCosZ);
+        lResult.yAxis.z = lfCosY * lfSinX;
+        lResult.yAxis.w = 0.0f;
+
+        lResult.zAxis.x = std::fma(lfSinY, lfCosXCosZ, lfSinXSinZ);
+        lResult.zAxis.y = lfSinY * lfCosXSinZ - lfSinXCosZ;
+        lResult.zAxis.z = lfCosY * lfCosX;
+        lResult.zAxis.w = 0.0f;
+        lResult.wAxis.SetZero();
+        return lResult;
     }
 }
 
@@ -503,6 +545,221 @@ namespace CgsSceneManager
                                            : 0xFF0000FFu;
             lpRenderer->DrawLine(lPointA, lPointB, static_cast<rw::RGBA>(luColour));
         }
+    }
+
+    // ARTIST 0x828BFE80. Initialize the box from the debug camera when requested,
+    // draw its oriented wire/fill/axis, gather candidate Triangle4 batches through
+    // the map's typed box query and sphere extractor, then run the four-lane
+    // IntersectTriangleBox contact pass.
+    void TriangleCollisionDebugComponent::TestPolySoupBoxCollision(
+        CgsDev::Debug3DImmediateRender* lpRenderer)
+    {
+        if (mbNeedToInitBoxPos)
+        {
+            const rw::math::vpu::Vector3 lvCameraPosition =
+                lpRenderer->GetCameraPosition();
+            mBoxPos.x = lvCameraPosition.x;
+            mBoxPos.y = lvCameraPosition.y;
+            mBoxPos.z = lvCameraPosition.z;
+            mbNeedToInitBoxPos = false;
+            mBoxPos.z += 10.0f; // flt_82004A20
+        }
+
+        rw::math::vpu::Vector3 lvBoxPosition(mBoxPos.x, mBoxPos.y, mBoxPos.z);
+        lvBoxPosition.w = 0.0f;
+        rw::math::vpu::Vector3 lvBoxAngles(mBoxOrientation.x,
+                                           mBoxOrientation.y,
+                                           mBoxOrientation.z);
+        lvBoxAngles.w = 0.0f;
+        rw::math::vpu::Matrix44Affine lTransform =
+            Matrix44AffineFromEulerXYZ(lvBoxAngles);
+        lTransform.wAxis = lvBoxPosition;
+
+        rw::math::vpu::Vector3 lvBoxHalfSize(mBoxSize.x * 0.5f,
+                                              mBoxSize.y * 0.5f,
+                                              mBoxSize.z * 0.5f);
+        lvBoxHalfSize.w = 0.0f;
+        CgsGeometric::Box lBox;
+        lBox.Set(lTransform, lvBoxHalfSize,
+                 rw::math::vpu::Vector4{0.0f, 0.0f, 0.0f, 0.0f});
+
+        const rw::math::vpu::Vector3 lvLocalMin(-lvBoxHalfSize.x,
+                                                 -lvBoxHalfSize.y,
+                                                 -lvBoxHalfSize.z);
+        const rw::math::vpu::Vector3 lvLocalMax(lvBoxHalfSize.x,
+                                                 lvBoxHalfSize.y,
+                                                 lvBoxHalfSize.z);
+        lpRenderer->DrawBox(lvLocalMin, lvLocalMax, lTransform,
+                            static_cast<rw::RGBA>(0xFFFFFFFFu));
+        lpRenderer->DrawSolidBox(lvLocalMin, lvLocalMax, lTransform,
+                                 static_cast<rw::RGBA>(0x1EFFFFFFu));
+        lpRenderer->DrawAxis(lTransform);
+
+        // The console uses half of the largest authored dimension for both the
+        // query sphere radius and its AABB, including the w lane initialized from
+        // a zero Vector3 center. Keep that original broad-phase shape.
+        const f32 lfSizeXY = (mBoxSize.x - mBoxSize.y >= 0.0f)
+                           ? mBoxSize.x : mBoxSize.y;
+        const f32 lfMaxSize = (lfSizeXY - mBoxSize.z >= 0.0f)
+                            ? lfSizeXY : mBoxSize.z;
+        const f32 lfRadius = lfMaxSize * 0.5f;
+
+        CgsGeometric::Sphere lBoundingSphere;
+        lBoundingSphere.mPositionRadius.x = lvBoxPosition.x;
+        lBoundingSphere.mPositionRadius.y = lvBoxPosition.y;
+        lBoundingSphere.mPositionRadius.z = lvBoxPosition.z;
+        lBoundingSphere.mPositionRadius.w = lfRadius;
+
+        CgsGeometric::AxisAlignedBox lBoundingBox;
+        lBoundingBox.mMin = rw::math::vpu::Vector4{
+            lvBoxPosition.x - lfRadius,
+            lvBoxPosition.y - lfRadius,
+            lvBoxPosition.z - lfRadius,
+            -lfRadius};
+        lBoundingBox.mMax = rw::math::vpu::Vector4{
+            lvBoxPosition.x + lfRadius,
+            lvBoxPosition.y + lfRadius,
+            lvBoxPosition.z + lfRadius,
+            lfRadius};
+
+        // RunQuery publishes its leaf-index list into the mutable spatial map.
+        // The console stores this manager as const but calls that mutator directly.
+        TriangleCollisionManager* lpManager =
+            const_cast<TriangleCollisionManager*>(mpTriCollisionManager);
+        CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap =
+            lpManager->GetPolySoupListSpacialMap();
+        const s32 liNumSoupLists = lpSpatialMap->RunQuery(lBoundingBox);
+
+        CgsGeometric::Triangle4 laTriangles[1024];
+        s32 liNumTriangle4s = 0;
+        if (liNumSoupLists > 0)
+        {
+            const u16* lpaLeafIndices = lpSpatialMap->GetOutputQueryBuffer();
+            const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes =
+                lpSpatialMap->GetLeafNodes();
+
+            for (s32 liSoupList = 0; liSoupList < liNumSoupLists; ++liSoupList)
+            {
+                const CgsGeometric::PolygonSoupLeafNode& lrLeaf =
+                    lpaLeafNodes[lpaLeafIndices[liSoupList]];
+                const CgsGeometric::AxisAlignedBox& lrLeafBox = lrLeaf.mBox;
+
+                // The X360 SIMD reduction is inclusive on all four vector lanes.
+                const bool lbLeafOverlapsBox =
+                    (lrLeafBox.mMax.x >= lBoundingBox.mMin.x) &&
+                    (lrLeafBox.mMax.y >= lBoundingBox.mMin.y) &&
+                    (lrLeafBox.mMax.z >= lBoundingBox.mMin.z) &&
+                    (lrLeafBox.mMax.w >= lBoundingBox.mMin.w) &&
+                    (lBoundingBox.mMax.x >= lrLeafBox.mMin.x) &&
+                    (lBoundingBox.mMax.y >= lrLeafBox.mMin.y) &&
+                    (lBoundingBox.mMax.z >= lrLeafBox.mMin.z) &&
+                    (lBoundingBox.mMax.w >= lrLeafBox.mMin.w);
+                if (!lbLeafOverlapsBox)
+                    continue;
+
+                const s32 liRemainingTriangle4s = 1024 - liNumTriangle4s;
+                liNumTriangle4s += CgsGeometric::ExtractTriangle4ListIntersectingSphere(
+                    *lrLeaf.mpPolygonSoup,
+                    lBoundingSphere,
+                    laTriangles + liNumTriangle4s,
+                    liRemainingTriangle4s,
+                    nullptr);
+            }
+        }
+
+        miNumBoxTests = 0;
+        u64 luTotalIntersectionTicks = 0;
+        rw::math::vpu::Vector3 laTriangleNormals[32];
+        rw::math::vpu::Vector3 laContactNormals[32];
+        rw::math::vpu::Vector3 laTrianglePoints[32];
+        rw::math::vpu::Vector3 laContactPoints[32];
+        for (s32 liTriangle4 = 0; liTriangle4 < liNumTriangle4s; ++liTriangle4)
+        {
+            const CgsGeometric::Triangle4& lrTriangle4 = laTriangles[liTriangle4];
+            const f32* lapValidMaskLanes = &lrTriangle4.mValidMasks.x;
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                CGS_ASSERT(liLane < 4, "liIndex < 4");
+                if (lapValidMaskLanes[liLane] == 0.0f)
+                    continue;
+
+                CgsGeometric::Triangle4::AOSTriangle lAOSTriangle;
+                lrTriangle4.GetAOSTriangle(liLane, lAOSTriangle);
+                lpRenderer->DrawSolidTriangle(
+                    lAOSTriangle.mVertex0,
+                    lAOSTriangle.mVertex1,
+                    lAOSTriangle.mVertex2,
+                    static_cast<rw::RGBA>(0x320000FFu));
+                lpRenderer->DrawHollowTriangle(
+                    lAOSTriangle.mVertex0,
+                    lAOSTriangle.mVertex1,
+                    lAOSTriangle.mVertex2,
+                    static_cast<rw::RGBA>(0xFF000000u));
+
+                CgsGeometric::Triangle lTriangle;
+                lTriangle.Set(lAOSTriangle.mVertex0,
+                              lAOSTriangle.mVertex1,
+                              lAOSTriangle.mVertex2);
+                s32 liNumContacts = 0;
+                const rw::math::vpu::Vector4 lvPadding{
+                    0.1f, 0.1f, 0.1f, 0.1f}; // flt_82004014
+                const rw::math::vpu::MaskScalar lvClampPenetration{
+                    0.0f, 0.0f, 0.0f, 0.0f}; // unk_8327F240+0x10, raw initial zero
+
+                const u64 luIntersectionStart = CgsSystem::GetSystemTimerBaseTime64();
+                (void)CgsGeometric::IntersectTriangleBox(
+                    lBox,
+                    lTriangle,
+                    lvPadding,
+                    lvClampPenetration,
+                    laTriangleNormals,
+                    laContactNormals,
+                    laTrianglePoints,
+                    laContactPoints,
+                    &liNumContacts,
+                    0x20);
+                luTotalIntersectionTicks +=
+                    CgsSystem::GetSystemTimerBaseTime64() - luIntersectionStart;
+                ++miNumBoxTests;
+
+                for (s32 liContact = 0; liContact < liNumContacts; ++liContact)
+                {
+                    lpRenderer->DrawPoint(
+                        laTrianglePoints[liContact],
+                        static_cast<rw::RGBA>(0xFF00FFFFu));
+                    lpRenderer->DrawPoint(
+                        laContactPoints[liContact],
+                        static_cast<rw::RGBA>(0xFFFF00FFu));
+                    lpRenderer->DrawLine(
+                        laTrianglePoints[liContact],
+                        laContactPoints[liContact],
+                        static_cast<rw::RGBA>(0xFFFFFFFFu));
+
+                    rw::math::vpu::Vector3 lvNormalEnd(
+                        laTrianglePoints[liContact].x + laTriangleNormals[liContact].x,
+                        laTrianglePoints[liContact].y + laTriangleNormals[liContact].y,
+                        laTrianglePoints[liContact].z + laTriangleNormals[liContact].z);
+                    lvNormalEnd.w =
+                        laTrianglePoints[liContact].w + laTriangleNormals[liContact].w;
+                    lpRenderer->DrawArrow(
+                        laTrianglePoints[liContact],
+                        lvNormalEnd,
+                        static_cast<rw::RGBA>(0xFF0000FFu));
+                }
+            }
+        }
+
+        const u64 luTimerFrequency = CgsSystem::GetSystemTimerFrequency64();
+        muBoxTestCycles = static_cast<u32>(
+            (luTotalIntersectionTicks * 0xCCCCCCCCu) / luTimerFrequency);
+        mfBoxTestTime = static_cast<f32>(
+            static_cast<f64>(luTotalIntersectionTicks * 1000u) /
+            static_cast<f64>(luTimerFrequency));
+        muBoxTestCyclesPerTriangle = muBoxTestCycles /
+            static_cast<u32>(miNumBoxTests);
+        mfBoxTestPercent = static_cast<f32>(
+            static_cast<f64>(luTotalIntersectionTicks * 6000u) /
+            static_cast<f64>(luTimerFrequency));
     }
 
     // ARTIST 0x828AAD50. Rebuild only when the menu-selected level count changes.
