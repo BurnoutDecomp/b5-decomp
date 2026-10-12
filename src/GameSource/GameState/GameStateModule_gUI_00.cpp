@@ -538,7 +538,9 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // Update's crash jolt and UpdateImpacts read.
     mRumbleManager.UpdatePauseState(miSimPauseFlags != 0, lpActionQueue);
 
-    CopyScoringDataToOutput(mpOutputBuffer, lrTimerStatusInterface);
+    // The legacy adapter stages the timer supplied by its existing PC caller.
+    mTimerStatusInterface = lrTimerStatusInterface;
+    CopyScoringDataToOutput(mpOutputBuffer);
 
     // ARTIST823A5328 calls the complete pre-world trigger pass here, after
     // ProcessGameEvents and before StuntManager consumes its gameplay latches.
