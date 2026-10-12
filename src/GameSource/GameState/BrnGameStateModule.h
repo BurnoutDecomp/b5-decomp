@@ -224,18 +224,10 @@ public:
             const GameStateModuleIO::PreWorldInputBuffer* lpInput,
             GameStateModuleIO::OutputBuffer*              lpOutput);
 
-    // ⭐ X360 0x8239A428. The start-detection arm. Console arguments: r3 = this, r4 = the
-    // pre-world input buffer, r5 = the output buffer.
-    // ⚠️ THE TIMESTEP IS A PARAMETER HERE AND IS NOT ON THE CONSOLE: 0x8239A518 loads it as
-    // `lfs f1, 0(this + 292284)` -- the module's own cached game timestep, latched by
-    // PreWorldUpdate @0x823A54D8 out of the PreWorldInputBuffer's TimerStatusInterface
-    // (the game timer status's base step * multiplier). That member is not modelled on this minimal slice,
-    // and its producer (PreWorldUpdate's timer leg) is not reconstructed, so the value arrives
-    // from the caller -- exactly as PreWorldUpdateStuntBringUp / PreWorldUpdateTrainingBringUp
-    // above already take it. DELETE-WHEN the +292284 latch lands.
+    // ARTIST 8239A428; DecFIGS BrnGameStateModule.cpp:4936. The snap gesture and
+    // intro countdown use mfSimTimeStep; showtime's start gate reads the input game timer.
     void DetectModeStarts(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
-                          GameStateModuleIO::OutputBuffer*              lpOutput,
-                          f32                                           lfGameTimestep);
+                          GameStateModuleIO::OutputBuffer* lpOutput);
 
     // ⭐ X360 0x82363700. The gesture gate. Console arguments, read off DetectModeStarts'
     // call site @0x8239A504..0x8239A51C: r3 = this, r4 = `lbz 0x45(lpInput)` (the buffer's
