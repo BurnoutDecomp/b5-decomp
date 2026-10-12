@@ -1,11 +1,13 @@
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionDebugComponent.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox4.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
@@ -920,6 +922,219 @@ namespace CgsSceneManager
         mfBoxTestPercent = static_cast<f32>(
             static_cast<f64>(luTotalIntersectionTicks * 6000u) /
             static_cast<f64>(luTimerFrequency));
+    }
+
+    // ARTIST 0x828B3580. Build the swept sphere from the menu's start/velocity,
+    // gather Triangle4 candidates in the original padded query box, and draw the
+    // valid triangles plus the single-triangle swept-contact results.
+    void TriangleCollisionDebugComponent::TestPolySoupSweptSphereCollision(
+        CgsDev::Debug3DImmediateRender* lp3DRenderer,
+        CgsDev::Debug2DImmediateRender* lp2DRenderer)
+    {
+        if (mbNeedToInitSweptSpherePos)
+        {
+            mSweptSpherePos.X() = 3027.28f;       // flt_820F47AC
+            mSweptSpherePos.Y() = -2.5220001f;    // flt_820F47A8
+            mSweptSpherePos.Z() = -1945.551f;     // flt_820F47A4
+            mbNeedToInitSweptSpherePos = false;
+        }
+
+        if (lp2DRenderer)
+        {
+            lp2DRenderer->DrawText("Testing polygon soup swept sphere collision",
+                                   50.0f, 50.0f, 12.0f,
+                                   static_cast<rw::RGBA>(0xFFFFFFFFu));
+        }
+
+        const rw::math::vpu::Vector3 lvStartPosition{
+            mSweptSpherePos.X(), mSweptSpherePos.Y(), mSweptSpherePos.Z(), 0.0f
+        };
+        const rw::math::vpu::Vector3 lvVelocity{
+            mSweptSphereVelocity.X(), mSweptSphereVelocity.Y(),
+            mSweptSphereVelocity.Z(), 0.0f
+        };
+
+        // ARTIST computes length from the three velocity lanes. Its scalar broad-phase
+        // path uses fused multiply-adds for the squared-length accumulation.
+        const f32 lfVelocityXYLengthSquared =
+            std::fma(lvVelocity.x, lvVelocity.x, lvVelocity.y * lvVelocity.y);
+        const f32 lfVelocityLengthSquared =
+            std::fma(lvVelocity.z, lvVelocity.z, lfVelocityXYLengthSquared);
+        const f32 lfVelocityLength = std::sqrt(lfVelocityLengthSquared);
+
+        // The broad-phase sphere/AABB uses (length + 2*radius) * 1.05 (raw
+        // flt_82005448); the narrow-phase SweptSphere retains the authored radius.
+        const f32 lfBroadPhaseRadius =
+            std::fma(mSweptSphereSize, 2.0f, lfVelocityLength) * 1.05f;
+
+        CgsGeometric::Sphere lBroadPhaseSphere;
+        lBroadPhaseSphere.mPositionRadius = rw::math::vpu::Vector4{
+            lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, lfBroadPhaseRadius
+        };
+
+        CgsGeometric::AxisAlignedBox lQueryBox;
+        lQueryBox.Set(
+            rw::math::vpu::Vector4{
+                lvStartPosition.x - lfBroadPhaseRadius,
+                lvStartPosition.y - lfBroadPhaseRadius,
+                lvStartPosition.z - lfBroadPhaseRadius,
+                -lfBroadPhaseRadius
+            },
+            rw::math::vpu::Vector4{
+                lvStartPosition.x + lfBroadPhaseRadius,
+                lvStartPosition.y + lfBroadPhaseRadius,
+                lvStartPosition.z + lfBroadPhaseRadius,
+                lfBroadPhaseRadius
+            });
+
+        rw::math::vpu::Vector3 lvSweepDirection;
+        if (lfVelocityLength <= 0.00001f) // flt_82004884
+        {
+            // The console selects rw::math::vpu::detail::gIVector in this arm.
+            lvSweepDirection = rw::math::vpu::GetVector3_XAxis();
+        }
+        else
+        {
+            const f32 lfInverseLength = 1.0f / lfVelocityLength;
+            lvSweepDirection = rw::math::vpu::Vector3{
+                lvVelocity.x * lfInverseLength,
+                lvVelocity.y * lfInverseLength,
+                lvVelocity.z * lfInverseLength,
+                0.0f
+            };
+        }
+
+        CgsGeometric::SweptSphere lSweptSphere;
+        lSweptSphere.Set(
+            rw::math::vpu::Vector3Plus{
+                lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, mSweptSphereSize
+            },
+            rw::math::vpu::Vector3Plus{
+                lvSweepDirection.x, lvSweepDirection.y, lvSweepDirection.z, lfVelocityLength
+            });
+
+        if (lp3DRenderer)
+        {
+            lp3DRenderer->DrawSphere(lvStartPosition, mSweptSphereSize,
+                                     static_cast<rw::RGBA>(0xFFFF0000u));
+            const rw::math::vpu::Vector3 lvSweepEnd{
+                lvStartPosition.x + lvVelocity.x,
+                lvStartPosition.y + lvVelocity.y,
+                lvStartPosition.z + lvVelocity.z,
+                0.0f
+            };
+            lp3DRenderer->DrawArrow(lvStartPosition, lvSweepEnd,
+                                    static_cast<rw::RGBA>(0xFFFF00FFu));
+        }
+
+        // RunQuery mutates the map's result buffer; the X360 stores this manager as
+        // const but calls the map's non-const query directly through its first member.
+        TriangleCollisionManager* lpManager =
+            const_cast<TriangleCollisionManager*>(mpTriCollisionManager);
+        CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap =
+            lpManager->GetPolySoupListSpacialMap();
+        const s32 liNumLeaves = lpSpatialMap->RunQuery(lQueryBox);
+
+        CgsGeometric::Triangle4 laTriangle4s[1024];
+        s32 liNumTriangle4s = 0;
+        if (liNumLeaves > 0)
+        {
+            const u16* lpaLeafIndices = lpSpatialMap->GetOutputQueryBuffer();
+            const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes =
+                lpSpatialMap->GetLeafNodes();
+
+            for (s32 liQueryResult = 0; liQueryResult < liNumLeaves; ++liQueryResult)
+            {
+                const CgsGeometric::PolygonSoupLeafNode& lrLeaf =
+                    lpaLeafNodes[lpaLeafIndices[liQueryResult]];
+                const CgsGeometric::AxisAlignedBox& lrLeafBox = lrLeaf.mBox;
+
+                // The console's VMX reduction is inclusive on all four lanes.
+                const bool lbLeafOverlapsQuery =
+                    (lrLeafBox.mMax.x >= lQueryBox.mMin.x) &&
+                    (lrLeafBox.mMax.y >= lQueryBox.mMin.y) &&
+                    (lrLeafBox.mMax.z >= lQueryBox.mMin.z) &&
+                    (lrLeafBox.mMax.w >= lQueryBox.mMin.w) &&
+                    (lQueryBox.mMax.x >= lrLeafBox.mMin.x) &&
+                    (lQueryBox.mMax.y >= lrLeafBox.mMin.y) &&
+                    (lQueryBox.mMax.z >= lrLeafBox.mMin.z) &&
+                    (lQueryBox.mMax.w >= lrLeafBox.mMin.w);
+                if (!lbLeafOverlapsQuery)
+                    continue;
+
+                const s32 liRemainingTriangle4s = 1024 - liNumTriangle4s;
+                liNumTriangle4s += CgsGeometric::ExtractTriangle4ListIntersectingSphere(
+                    *lrLeaf.mpPolygonSoup, lBroadPhaseSphere,
+                    laTriangle4s + liNumTriangle4s, liRemainingTriangle4s, nullptr);
+            }
+        }
+
+        for (s32 liTriangle4 = 0; liTriangle4 < liNumTriangle4s; ++liTriangle4)
+        {
+            const CgsGeometric::Triangle4& lrTriangle4 = laTriangle4s[liTriangle4];
+            const f32 lafValidMask[4] = {
+                lrTriangle4.mValidMasks.x, lrTriangle4.mValidMasks.y,
+                lrTriangle4.mValidMasks.z, lrTriangle4.mValidMasks.w
+            };
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                CGS_ASSERT(liLane < 4, "liIndex < 4");
+                if (lafValidMask[liLane] == 0.0f)
+                    continue;
+
+                CgsGeometric::Triangle4::AOSTriangle lAOSTriangle;
+                lrTriangle4.GetAOSTriangle(liLane, lAOSTriangle);
+                if (lp3DRenderer)
+                {
+                    lp3DRenderer->DrawSolidTriangle(
+                        lAOSTriangle.mVertex0, lAOSTriangle.mVertex1, lAOSTriangle.mVertex2,
+                        static_cast<rw::RGBA>(0x320000FFu));
+                    lp3DRenderer->DrawHollowTriangle(
+                        lAOSTriangle.mVertex0, lAOSTriangle.mVertex1, lAOSTriangle.mVertex2,
+                        static_cast<rw::RGBA>(0xFF000000u));
+                }
+
+                CgsGeometric::Triangle lTriangle;
+                lTriangle.Set(lAOSTriangle.mVertex0, lAOSTriangle.mVertex1,
+                              lAOSTriangle.mVertex2);
+                rw::math::vpu::Vector3 lContactNormal;
+                rw::math::vpu::Vector3 lTriangleNormal;
+                rw::math::vpu::Vector3Plus lSphereContactPoint;
+                rw::math::vpu::Vector3Plus lTriangleContactPoint;
+                const rw::math::vpu::MaskScalar lHitMask =
+                    CgsGeometric::IntersectTriangleSweptSphere(
+                        lSweptSphere, lTriangle, lContactNormal, lTriangleNormal,
+                        lSphereContactPoint, lTriangleContactPoint);
+                if (lHitMask.x == 0.0f || !lp3DRenderer)
+                    continue;
+
+                const rw::math::vpu::Vector3 lvTriangleContactPoint{
+                    lTriangleContactPoint.x, lTriangleContactPoint.y,
+                    lTriangleContactPoint.z, lTriangleContactPoint.w
+                };
+                const rw::math::vpu::Vector3 lvSphereContactPoint{
+                    lSphereContactPoint.x, lSphereContactPoint.y,
+                    lSphereContactPoint.z, lSphereContactPoint.w
+                };
+                lp3DRenderer->DrawPoint(
+                    lvTriangleContactPoint, static_cast<rw::RGBA>(0xFF00FFFFu));
+                lp3DRenderer->DrawPoint(
+                    lvSphereContactPoint, static_cast<rw::RGBA>(0xFFFF00FFu));
+                lp3DRenderer->DrawLine(
+                    lvTriangleContactPoint, lvSphereContactPoint,
+                    static_cast<rw::RGBA>(0xFFFFFFFFu));
+
+                const rw::math::vpu::Vector3 lvArrowEnd{
+                    lvTriangleContactPoint.x + lContactNormal.x,
+                    lvTriangleContactPoint.y + lContactNormal.y,
+                    lvTriangleContactPoint.z + lContactNormal.z,
+                    lvTriangleContactPoint.w + lContactNormal.w
+                };
+                lp3DRenderer->DrawArrow(
+                    lvTriangleContactPoint, lvArrowEnd,
+                    static_cast<rw::RGBA>(0xFF0000FFu));
+            }
+        }
     }
 
     // ARTIST 0x828AAD50. Rebuild only when the menu-selected level count changes.
