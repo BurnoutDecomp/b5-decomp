@@ -77,34 +77,103 @@ namespace BrnGameState
     // mutate the profile immediately; StuntManager::Update consumes this pending type.
     void StuntManagerDebugComponent::CompleteAllJumps(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpData");
+        if (lpData == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpData",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                112);
+            CgsDev::Assert::EndAssert();
+        }
         StuntManagerDebugComponent* lpComponent =
             static_cast<StuntManagerDebugComponent*>(lpData);
-        CGS_ASSERT(lpComponent != 0, "lpStuntManagerDebugComponent");
-        CGS_ASSERT(lpComponent->mpStuntManager != 0,
-                   "lpStuntManagerDebugComponent->mpStuntManager");
+        if (lpData == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpStuntManagerDebugComponent",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                114);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpComponent->mpStuntManager == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpStuntManagerDebugComponent->mpStuntManager",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                115);
+            CgsDev::Assert::EndAssert();
+        }
         lpComponent->mpStuntManager->SetDebugCompletedUnlockType(E_STUNT_ELEMENT_TYPE_JUMP);
     }
 
     void StuntManagerDebugComponent::CompleteAllSmashes(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpData");
+        if (lpData == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpData",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                130);
+            CgsDev::Assert::EndAssert();
+        }
         StuntManagerDebugComponent* lpComponent =
             static_cast<StuntManagerDebugComponent*>(lpData);
-        CGS_ASSERT(lpComponent != 0, "lpStuntManagerDebugComponent");
-        CGS_ASSERT(lpComponent->mpStuntManager != 0,
-                   "lpStuntManagerDebugComponent->mpStuntManager");
+        if (lpData == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpStuntManagerDebugComponent",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                132);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpComponent->mpStuntManager == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpStuntManagerDebugComponent->mpStuntManager",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                133);
+            CgsDev::Assert::EndAssert();
+        }
         lpComponent->mpStuntManager->SetDebugCompletedUnlockType(E_STUNT_ELEMENT_TYPE_SMASH);
     }
 
     void StuntManagerDebugComponent::CompleteAllStunt(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpData");
+        if (lpData == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpData",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                147);
+            CgsDev::Assert::EndAssert();
+        }
         StuntManagerDebugComponent* lpComponent =
             static_cast<StuntManagerDebugComponent*>(lpData);
-        CGS_ASSERT(lpComponent != 0, "lpStuntManagerDebugComponent");
-        CGS_ASSERT(lpComponent->mpStuntManager != 0,
-                   "lpStuntManagerDebugComponent->mpStuntManager");
+        if (lpData == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpStuntManagerDebugComponent",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                149);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpComponent->mpStuntManager == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpStuntManagerDebugComponent->mpStuntManager",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp",
+                150);
+            CgsDev::Assert::EndAssert();
+        }
         lpComponent->mpStuntManager->SetDebugCompletedUnlockType(E_STUNT_ELEMENT_TYPE_BILLBOARD);
     }
 

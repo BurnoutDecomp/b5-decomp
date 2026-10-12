@@ -177,13 +177,12 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
             lHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
             mpTriggerData = lHandle;   // ResourcePtr::operator=(handle) -> CreateFromHandle
 
-            // [deferred] TriggerQueryManagerDebugComponent::Construct(this) +
-            // CgsDev::DebugComponent::Register(this) (X360 0x823983C0/0x823983C8). The
-            // component is the class's FIRST member (the console passes `this` for both the
-            // component and the owner), and its own TU is unmounted -- mounting it drags in the
-            // debug-UI option tables and its unbodied RenderWorld override. Debug-menu only; no
-            // gameplay effect. Same deferral GameDataModule::Prepare already carries for its
-            // two components. DELETE-WHEN BrnTriggerQueryManagerDebugComponent.cpp is mounted.
+            // X360 0x823983C0/0x823983C8: after binding the loaded TriggerData, construct the
+            // manager's first-member debug component with this owner, then link it into the
+            // DebugComponent list. This runs for each acquired TriggerData event, in the
+            // original position before the three player trigger-group IDs are cleared below.
+            mTriggerQueryManagerDebugComponent.Construct(this);
+            mTriggerQueryManagerDebugComponent.Register();
 
             // X360 0x823983D4/D8/E4: `std r28, 0x160/0x168/0x170(r31)` with r28 == 0 -- the
             // three player trigger-group ids are cleared every time the trigger data is bound.

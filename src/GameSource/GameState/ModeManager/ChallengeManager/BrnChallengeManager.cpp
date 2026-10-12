@@ -1108,9 +1108,9 @@ void ChallengeManager::Destruct()
 
     mScoresSetThisFrameBitArray.UnSetAll();       // X360 std 0,+0xFD0 (PITFALL 1)
 
-    // Embedded debug component tear-down (X360 stw 0,+0x1010 then the ICF'd DebugComponent::Destruct).
+    // Embedded debug component owner clear. The X360 then calls 0x8284CB38, whose body is only `blr`;
+    // do not substitute the port's DebugComponent::Destruct(), which also clears mbActive.
     mChallengeManagerDebugComponent.mpChallengeManager = 0;   // X360 stw 0,+0x1010
-    mChallengeManagerDebugComponent.Destruct();               // X360 ICF tail (PITFALL 2)
 }
 
 // ----------------------------------------------------------------------------

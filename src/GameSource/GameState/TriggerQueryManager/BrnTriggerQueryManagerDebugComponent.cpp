@@ -10,8 +10,8 @@
 //   GetName     @ 0x82358788  (this TU)
 //   GetPath     @ 0x822A9008  (this TU)
 //   OnActivate  @ 0x82358798  (this TU)
-//   RenderWorld @ 0x82364E10  -- heavy VMX body, follow-on wave (declared in the header)
-//   Destruct    @ DWARF cpp:112 -- X360-inlined, follow-on wave (declared in the header)
+//   RenderWorld @ 0x82364E10  (BrnTriggerQueryManagerDebugComponent_RenderWorld.cpp)
+//   Destruct    @ DWARF cpp:112 -- X360-inlined, still declared-only
 
 namespace BrnGameState
 {

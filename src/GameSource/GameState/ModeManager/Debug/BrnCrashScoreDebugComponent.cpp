@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // CgsDev::Debug2DImmediateRender, RGBA, Vector2
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                       // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"           // BrnGameState::CrashModeScoring
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Showtime score" crash-mode debug overlay.
 // RenderHUD/Update assert the scoring object is wired, OnActivate registers the two bool tweakables,
@@ -16,6 +17,23 @@ namespace BrnGameState
     // File-scope debug-HUD text colour (X360 dword_82CDB850, referenced only here). Packed RGBA8;
     // the X360 stores a single constant word -- white for the readout text.
     static const CgsDev::RGBA KU_INFO_TEXT_COLOUR = 0xFFFFFFFFu;
+
+    // The inlined owner construction at ScoringSystem::Construct @0x82337FE0 stores exactly the
+    // scoring-owner pointer at component+0x0C and clears the local display byte at component+0x10.
+    // The inlined console body has no additional stores into the DebugComponent base.
+    void CrashScoreDebugComponent::Construct(CrashModeScoring* lpCrashScoring)
+    {
+        mpCrashScoring = lpCrashScoring;
+        mbShowScoring = false;
+    }
+
+    // DecFIGS names this override at 0x1CC534 and returns "Gameplay". ARTIST has no separate named
+    // CrashScore symbol; its CrashPlayDebugComponent::GetPath @0x82312480 is the matching literal-return
+    // leaf, which corroborates the inherited path value.
+    const char* CrashScoreDebugComponent::GetPath() const
+    {
+        return "Gameplay";
+    }
 
     // @ 0x82312168 - assert the scoring object is wired (the base Update has nothing else to do here).
     void CrashScoreDebugComponent::Update()

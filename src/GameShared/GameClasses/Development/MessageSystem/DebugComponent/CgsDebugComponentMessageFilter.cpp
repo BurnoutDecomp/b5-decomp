@@ -81,7 +81,15 @@ namespace CgsDev
             lxProbe <<= 1;
         }
 
-        CGS_ASSERT(liBitIndex != -1, "only one bit must be set");
+        if (liBitIndex == -1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "only one bit must be set",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.cpp",
+                186);
+            CgsDev::Assert::EndAssert();
+        }
 
         gaMessageFilterNames[liBitIndex].miValue = liBitIndex;
         gaMessageFilterNames[liBitIndex].mpcName = lpcName;
@@ -105,15 +113,16 @@ namespace CgsDev
         SetChangeCallback(&mbFilterEnable, &FilterTypeChangeCallback, this);
         SetSaveEnabled(&mbFilterEnable, false);
 
-        // The two hidden raw-mask halves (the X360 registers &gxMessageFilterFlags and that address
-        // + 4 as two u32 variables, then hides both).
-        u32* lpuFilterLow  = reinterpret_cast<u32*>(&Message::gxMessageFilterFlags);
-        u32* lpuFilterHigh = lpuFilterLow + 1;
+        // The X360 registers &gxMessageFilterFlags first and that address + 4 second. On X360's
+        // big-endian u64, those addresses are the high then low words; map that same logical order
+        // onto the PC's little-endian u64 storage before exposing the two hidden u32 variables.
+        u32* lpuFilterValue1 = reinterpret_cast<u32*>(&Message::gxMessageFilterFlags) + 1;
+        u32* lpuFilterValue2 = reinterpret_cast<u32*>(&Message::gxMessageFilterFlags);
 
-        RegisterVariable(lpuFilterLow,  "(filter value 1)");
-        RegisterVariable(lpuFilterHigh, "(filter value 2)");
-        SetVisible(lpuFilterLow,  false);
-        SetVisible(lpuFilterHigh, false);
+        RegisterVariable(lpuFilterValue1, "(filter value 1)");
+        RegisterVariable(lpuFilterValue2, "(filter value 2)");
+        SetVisible(lpuFilterValue1, false);
+        SetVisible(lpuFilterValue2, false);
 
         // Sync the toggle to the selected category's current state in the mask.
         const Message::FilterFlag lxBit = static_cast<Message::FilterFlag>(1) << miFilterIndex;
