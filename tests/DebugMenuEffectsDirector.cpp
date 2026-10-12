@@ -53,12 +53,12 @@ struct EffectsDebugComponent {
     EffectsModule* mpEffectsModule=nullptr;
     bool mbJunkyardVfxEdit=false,enabled=false,qa=false,force=false,transition=false;
     s32 mnJunkyardVfxId=0;f32 mfJunkyardVfxPosX=0,mfJunkyardVfxPosY=0,mfJunkyardVfxPosZ=0,mfJunkyardVfxAngle=0;
-    EffectsDebugJumping jumping;f32 blend=.625f;
+    EffectsDebugJumping jumping;f32 blend=.625f,transitionMin=3,transitionMax=6;
     const EffectsDebugJumping& JumpParams() const {return jumping;}
     bool IsEnabled() const {return enabled;} bool QAEnabled() const {return qa;}
     bool IsForceStateBlend() const {return force;} f32 ForceStateBlendValue() const {return blend;}
     bool IsBoostTransitionEditing() const {return transition;}
-    f32 BoostTransitionMin() const {return 3;} f32 BoostTransitionMax() const {return 6;}
+    f32 BoostTransitionMin() const {return transitionMin;} f32 BoostTransitionMax() const {return transitionMax;}
     static void OnJunkyardEffectIndexChange(void*,void*);
     static void OnJunkyardEffectValueChange(void*,void*);
 };
@@ -180,6 +180,10 @@ static void StateMachines() {
     Check(boost.OnDetermineNextState(s,false,EffectsStateExhaustSmokeOn,h)==EffectsStateExhaustSmokeStopping,"E7 unordered speed takes smoke stopping arm");
     s.mfSpeedMPH=0;car.mLinearVelocity={};car.maWheels[3].mfRadiansPerSecond=std::numeric_limits<f32>::quiet_NaN();car.maWheels[3].mfRadius=1;
     boost.OnDetermineNextState(s,false,EffectsStateExhaustSmokeOn,h);Check(h.recordedBlend==1,"E7 unordered final wheel flows through original fsel clamps");
+    d.transition=true;d.transitionMin=FromBits(0x00800001);d.transitionMax=FromBits(0x00800002);
+    s.mbIsBoosting=true;s.mfBoostAmount=d.transitionMin;
+    boost.OnDetermineNextState(s,false,EffectsStateBoosting,h);
+    Check(h.recordedBlend==1,"E10 Boost transition midpoint keeps original scalar fused rounding");
     EffectsStateMachine timer;timer.mState=EffectsStateBoostStopping;timer.mTime=1;s.dt=std::numeric_limits<f32>::quiet_NaN();timer.Tick(s,h);
     Check(timer.expired && timer.mState==EffectsStateAllOff && timer.entries==1 && timer.ticks==1,"E9 unordered timer expires before entry and tick hooks");
 }
