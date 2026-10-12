@@ -1,4 +1,5 @@
 #include "GameSource/Effects/EffectsModule.h"
+#include "pc/math/VmxFloat.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameSource/Effects/ParticleEffectHelper.h"                               // ParticleEffectHelper / RaceCarParticleEffectHelper
@@ -4399,9 +4400,9 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
         lrEffectTransform.zAxis = lrCarTransform.zAxis;
 
         Vector3 lvPosition = lrCarTransform.wAxis;
-        lvPosition = MaddSplat4(lrCarTransform.xAxis, lrPoint.x, lvPosition);
-        lvPosition = MaddSplat4(lrCarTransform.yAxis, lrPoint.y, lvPosition);
-        lvPosition = MaddSplat4(lrCarTransform.zAxis, lrPoint.z, lvPosition);
+        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.xAxis, lrPoint.x, lvPosition);
+        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.yAxis, lrPoint.y, lvPosition);
+        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.zAxis, lrPoint.z, lvPosition);
         lrEffectTransform.wAxis = lvPosition;
         lpInstanceEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
     }
@@ -4420,7 +4421,7 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
             lpQAEffect->mTransform.yAxis = lpRaceCarState->mTransform.yAxis;
             lpQAEffect->mTransform.zAxis = lpRaceCarState->mTransform.zAxis;
             lpQAEffect->mTransform.wAxis = lpRaceCarState->mTransform.wAxis;
-            lpQAEffect->mTransform.wAxis.y = lpRaceCarState->mTransform.wAxis.y + 0.75f;
+            lpQAEffect->mTransform.wAxis.y = CgsPC::VmxFloat::Add(lpRaceCarState->mTransform.wAxis.y, 0.75f);
             lpQAEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
         }
     }

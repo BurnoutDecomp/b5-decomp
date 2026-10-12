@@ -41,7 +41,7 @@ namespace BrnEffects
         if (mTime > 0.0f)
         {
             mTime -= lCarState.GetDt();   // asm `lfs f13, 0x10(r29)` == EffectsModuleParams::mDt
-            lbStateTimerExpired = (mTime <= 0.0f);
+            lbStateTimerExpired = !(mTime > 0.0f);
         }
 
         // Ask the derived machine for the next state.
