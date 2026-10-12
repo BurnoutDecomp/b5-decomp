@@ -272,8 +272,8 @@ void EnginePrepare()
                                    << ", " << liStackProbe << "\n";
     }
 
-    // [FLAG] ARTIST main prints PrintConsoleMemory("Game startup memory usage") at 0x827E6198;
-    // that print remains absent. Restore the following original memory-map initialization call.
+    // ARTIST main @0x827E60D8 prints this label at 0x827E6198 before memory-map initialization.
+    BrnResource::PrintConsoleMemory("Game startup memory usage");
     BrnResource::Allocators::InitMemoryMap();
 
     // Create the D3D9 device on the window opened by InitializeHardware, then construct

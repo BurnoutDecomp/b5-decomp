@@ -112,8 +112,8 @@ HeapResourceAllocator* GetDebugAllocator();
 // population is the faithful follow-on; see the allocator-gate memory.)
 rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator();
 
-// Logs the message (when given) and the platform memory status to the debug print, one line per
-// figure in MB plus the in-use percentage. Each line is gated on the debug-print message filter.
+// X360 0x82661760: the optional message prefix and each status line are gated by filter bit 0;
+// preserve the original labels/order and stream the PC's full-width native counters as u64 MB.
 void PrintConsoleMemory(const char* lpcMessage);
 
 // The platform's free physical memory in bytes.

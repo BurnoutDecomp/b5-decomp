@@ -54,6 +54,15 @@ namespace BrnResource
                 s_DebugGeneralAllocator.AddCore(lpBlock, KN_DEBUG_HEAP_SIZE);
             s_bDebugHeapBacked = true;
         }
+
+        MEMORYSTATUSEX GetHostMemoryStatusPC()
+        {
+            // FLAG PC-platform leaf: query the host's full-width virtual, physical and page-file status.
+            MEMORYSTATUSEX lMemoryStatus = {};
+            lMemoryStatus.dwLength = static_cast<DWORD>(sizeof(lMemoryStatus));
+            ::GlobalMemoryStatusEx(&lMemoryStatus);
+            return lMemoryStatus;
+        }
     }
 
     // Published non-null at static init; points at the root HeapResourceAllocator (which IS-A
@@ -122,8 +131,7 @@ namespace BrnResource
             *CgsDev::Log::gpDebugPrint << lpcMessage << " ";
         }
 
-        MEMORYSTATUS lMemoryStatus;
-        GlobalMemoryStatus(&lMemoryStatus);
+        const MEMORYSTATUSEX lMemoryStatus = GetHostMemoryStatusPC();
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -131,32 +139,32 @@ namespace BrnResource
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalVirtual >> 20)
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u64>(lMemoryStatus.ullTotalVirtual >> 20)
                                        << " total MB of virtual memory.\n";
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailVirtual >> 20)
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u64>(lMemoryStatus.ullAvailVirtual >> 20)
                                        << " free MB of virtual memory.\n";
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalPhys >> 20)
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u64>(lMemoryStatus.ullTotalPhys >> 20)
                                        << " total MB of physical memory.\n";
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailPhys >> 20)
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u64>(lMemoryStatus.ullAvailPhys >> 20)
                                        << " free MB of physical memory.\n";
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalPageFile >> 20)
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u64>(lMemoryStatus.ullTotalPageFile >> 20)
                                        << " total MB of paging file.\n";
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailPageFile >> 20)
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u64>(lMemoryStatus.ullAvailPageFile >> 20)
                                        << " free MB of paging file.\n";
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
