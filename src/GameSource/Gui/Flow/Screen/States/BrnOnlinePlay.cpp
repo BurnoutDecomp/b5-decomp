@@ -76,15 +76,6 @@ namespace
     };
 
     // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-    struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-    {
-        GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-        GuiOverlayWaitFinishWire()
-            
-        {
-        }
-    };
 
     // { 4, 266, 12, <request> }, channel 40, 16 bytes: the news / terms-of-service request.
     struct GuiEventNetworkNewsAndTOSWire : public CgsGui::GuiEvent<266>
@@ -116,16 +107,8 @@ namespace
     //   memcpy(record+0x10, &request, 0x120); header {0x120=288, 0xB8=184, 0x10=16};
     //   AddEvent(iface+0xC, record, 40, 0x130=304)
     // (headless-IDA disasm, 2026-08-04). This wire mirrors the committed sibling
-    // GuiOverlayRequestWire in BrnOnlineCustomMatch_wJ_04.cpp / BrnCarSelectMain_wG_02.cpp.
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-    {
-        GuiOverlayRequest mRequest;   // +0x10
+    // GuiOverlayRequest in BrnOnlineCustomMatch_wJ_04.cpp / BrnCarSelectMain_wG_02.cpp.
 
-        GuiOverlayRequestWire()
-            
-        {
-        }
-    };
 }   // anonymous namespace
 
 // ---- statics ------------------------------------------------------------------------
@@ -333,8 +316,8 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
             {
                 // OutputGuiEvent<GuiOverlayRequest> @0x824A76D0: wire {288, 184, 16, request},
                 // channel 40, 304 bytes.
-                GuiOverlayRequestWire lRequest;
-                lRequest.mRequest.Construct("CNOnlPrivErr");
+                GuiOverlayRequest lRequest;
+                lRequest.Construct("CNOnlPrivErr");
                 mpStateInterface->OutputGuiEvent(lRequest);
                 break;
             }
@@ -354,8 +337,8 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
                 {
                     // OutputGuiEvent<GuiOverlayRequest> @0x824A7698: wire {288, 184, 16, request},
                     // channel 40, 304 bytes.
-                    GuiOverlayRequestWire lRequest;
-                    lRequest.mRequest.Construct("CNOnlStrtQn");
+                    GuiOverlayRequest lRequest;
+                    lRequest.Construct("CNOnlStrtQn");
                     mpStateInterface->OutputGuiEvent(lRequest);
                 }
                 else
@@ -625,8 +608,8 @@ void OnlinePlay::CheckForCompletedLoads()
              luOverlay < sizeof(KAPC_OVERLAYS_TO_FINISH) / sizeof(KAPC_OVERLAYS_TO_FINISH[0]);
              ++luOverlay)
         {
-            GuiOverlayWaitFinishWire lWaitFinish;
-            lWaitFinish.mRequest.Construct(KAPC_OVERLAYS_TO_FINISH[luOverlay]);
+            GuiOverlayWaitFinishRequest lWaitFinish;
+            lWaitFinish.Construct(KAPC_OVERLAYS_TO_FINISH[luOverlay]);
             mpStateInterface->OutputGuiEvent(lWaitFinish);
         }
 
@@ -644,8 +627,8 @@ void OnlinePlay::CheckForCompletedLoads()
         const s32 liDisconnectReason = mpGuiCache->GetDoDisconnectPopupError();
         if (liDisconnectReason != 0)
         {
-            GuiOverlayRequestWire lRequest;
-            lRequest.mRequest.Construct(liDisconnectReason == KI_DISCONNECT_REASON_DEDICATED_POPUP
+            GuiOverlayRequest lRequest;
+            lRequest.Construct(liDisconnectReason == KI_DISCONNECT_REASON_DEDICATED_POPUP
                                             ? "CNLobbyDiscD"
                                             : "CNLobbyDisc");
             mpStateInterface->OutputGuiEvent(lRequest);
@@ -654,8 +637,8 @@ void OnlinePlay::CheckForCompletedLoads()
 
         if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
         {
-            GuiOverlayRequestWire lRequest;
-            lRequest.mRequest.Construct("OnReqHDD");
+            GuiOverlayRequest lRequest;
+            lRequest.Construct("OnReqHDD");
             mpStateInterface->OutputGuiEvent(lRequest);
         }
 

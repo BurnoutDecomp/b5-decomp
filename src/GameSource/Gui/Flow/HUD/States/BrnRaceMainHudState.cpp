@@ -134,26 +134,10 @@ namespace BrnGui
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record OnLeave
         // stack-builds inline (@0x82479894..0x824798B8): { 8, 188, 16, <pad>, CgsID },
         // channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-            explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                
-            {
-                mRequest.Construct(lpcOverlayName);
-            }
-        };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes. Same shape
         // the BrnInGame.cpp precedent posts.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                 {}
-        };
 
         // The pre-event overlay's district message-parameter ids (@0x82F27718, image-read;
         // 18 entries, then a second "_LC" table follows at index 18). Kept file-local: the
@@ -640,7 +624,8 @@ namespace BrnGui
 
             // The record is { 8, 188, 16, <pad>, id } posted on the gui-out channel at
             // 24 bytes; Construct compresses the name into the id word.
-            GuiOverlayWaitFinishWire lWire(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
+            GuiOverlayWaitFinishRequest lWire;
+            lWire.Construct(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
             mpStateInterface->OutputGuiEvent(lWire);
         }
 
@@ -1083,13 +1068,13 @@ namespace BrnGui
             CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[leGameModeType] != 0,
                        "KAPC_PRE_EVENT_OVERLAYS[leGameModeType]");   // cpp:2615 (non-gating)
 
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAPC_PRE_EVENT_OVERLAYS[leGameModeType]);
+            GuiOverlayRequest lWire;
+            lWire.Construct(KAPC_PRE_EVENT_OVERLAYS[leGameModeType]);
             // The X360 adds the SAME district parameter twice (@0x8247A2CC / @0x8247A2DC),
             // both with id 2 -- faithful, not a transcription slip.
-            lWire.mRequest.AddMessageParam(
+            lWire.AddMessageParam(
                 2, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
-            lWire.mRequest.AddMessageParam(
+            lWire.AddMessageParam(
                 2, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
             mpStateInterface->OutputGuiEvent(lWire);
 
@@ -1176,7 +1161,6 @@ namespace BrnGui
 //      component the HUD loads and never reveals; that is what the [hud-reveal] diagnostic
 //      below exists to distinguish from a black screen.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -2765,7 +2749,6 @@ namespace BrnGui
 //   * EventInfoComponent::HandleTrigger -- undeclared on the component, and ICF-folded EMPTY
 //     in retail, so the deferral costs no behaviour at all.
 // ===================================================================================
-
 
 namespace BrnGui
 {

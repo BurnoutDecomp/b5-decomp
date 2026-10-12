@@ -191,30 +191,22 @@ namespace BrnGui
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;
-        };
 
         void PostOverlayRequest(CgsGui::StateInterface* lpInterface, const char* lpcOverlayId)
         {
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(lpcOverlayId);
+            GuiOverlayRequest lWire;
+            lWire.Construct(lpcOverlayId);
             lpInterface->OutputGuiEvent(lWire);
         }
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record
         // (@0x82476E98): { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;
-        };
 
         void PostOverlayWaitFinishRequest(CgsGui::StateInterface* lpInterface,
                                           const char* lpcOverlayId)
         {
-            GuiOverlayWaitFinishWire lWire;
-            lWire.mRequest.Construct(lpcOverlayId);
+            GuiOverlayWaitFinishRequest lWire;
+            lWire.Construct(lpcOverlayId);
             lpInterface->OutputGuiEvent(lWire);
         }
 
@@ -504,7 +496,6 @@ namespace BrnGui
             reinterpret_cast<const GuiEventMainMenuOptionPayload*>(lpEvent)->meMainMenuOption;
         if (std::getenv("BRN_EASYDRIVE_TRACE") && CgsDev::Log::gpDebugPrint)
             *CgsDev::Log::gpDebugPrint << "[easydrive-command] main option " << static_cast<s32>(leOption) << "\n";
-
 
         if (!CheckPrivileges(leOption))
         {

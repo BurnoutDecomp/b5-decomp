@@ -582,6 +582,7 @@ private:
 //
 // X360 layout (stores/loads authoritative on width / offset). Each parameter is a
 // 0x44-byte ParamInfo record { ...head 8B...; u32 muId @+0x08; char macText[56] @+0x0C }:
+//   mOverlayID     @0x00        (DecFIGS CgsID; aliases maMessages[0]'s head per Construct)
 //   maMessages[2]   @0x00..0x87  (2 message params; GetMessageParam indexes 0x44*idx)
 //   mButton1        @0x88        (id @0x90, text @0x94 == record+0x08 / record+0x0C)
 //   mButton2        @0xCC        (id @0xD4, text @0xD8 == record+0x08 / record+0x0C)
@@ -605,7 +606,7 @@ public:
     // with the id read at record+0x08 and the text formatted from record+0x0C.
     struct ParamInfo
     {
-        u8   maHead[0x08];   // +0x00..+0x07 (head; not touched by the accessors)
+        u8   maHead[0x08];   // +0x00..+0x07 (overlaid by the request's named CgsID)
         u32  muId;           // +0x08  (copied into the output record's leading dword)
         char macText[0x38];  // +0x0C..+0x43  (SPrintf "%s" source; 56 bytes to the 0x44 stride)
     };
@@ -641,7 +642,7 @@ public:
     // first param record's head.
     CgsID GetOverlayId() const
     {
-        return *reinterpret_cast<const CgsID*>(maMessages[0].maHead);
+        return mOverlayID;
     }
 
     // @0x82472A18 -- append one message param: SPrintf ("%s", cap 63 + forced NUL @+0x4B)
@@ -674,7 +675,16 @@ public:
     friend struct GuiOverlaysDirector;
 
 private:
-    ParamInfo maMessages[KI_MAX_MESSAGES];  // @0x00..0x87 (message params 0,1)
+    // DecFIGS identifies the leading named CgsID. ARTIST shows that this same first
+    // eight-byte region is also the head of message slot zero (AddMessageParam uses
+    // this+0x44*count, then reads/writes the id at +8 and text at +0xC). Model that
+    // attested overlap directly: the ID supplies the real 8-byte alignment, while the
+    // message records retain their original 0x44 stride and the other member offsets.
+    union
+    {
+        CgsID mOverlayID;                        // @0x00 (DecFIGS CgsID; Construct std @+0)
+        ParamInfo maMessages[KI_MAX_MESSAGES];   // @0x00..0x87 (ARTIST 0x44-stride records)
+    };
     ParamInfo mButton1;                     // @0x88 (id @0x90, text @0x94)
     ParamInfo mButton2;                     // @0xCC (id @0xD4, text @0xD8)
     u8        maReserved[0x118 - 0x110];    // @0x110..0x117 (unrecovered span before the count)
@@ -689,6 +699,9 @@ private:
     static_assert(__builtin_offsetof(ParamInfo, macText) == 0x0C, "param text @+0x0C");
     static_assert(__builtin_offsetof(ParamOut, macText) == 0x04, "out text @+0x04 (SPrintf out+4)");
 };
+
+static_assert(sizeof(GuiOverlayRequest) == 0x120, "overlay request payload is 288 bytes");
+static_assert(alignof(GuiOverlayRequest) == 8, "overlay request's CgsID aligns its payload to 8 bytes");
 
 // X360-pinned member offsets (the two button records and the count / guard bytes). At
 // namespace scope after the complete type; the members are non-public so these are

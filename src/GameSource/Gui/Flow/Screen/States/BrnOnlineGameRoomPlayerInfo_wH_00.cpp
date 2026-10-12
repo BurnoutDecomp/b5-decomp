@@ -139,17 +139,6 @@ namespace BrnGui
         // OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> @0x82476E98: the 8-byte
         // compressed overlay id sits at the 8-aligned payload slot, X360 record size 24,
         // channel 40 (the BrnPauseScreen.cpp / BrnInGame.cpp wire twin).
-        typedef CgsGui::GuiEvent<188> OverlayWaitFinishHeader;
-        struct GuiOverlayWaitFinishWire : public OverlayWaitFinishHeader
-        {
-            u32                         muPad0C;    // +0x0C (payload alignment pad)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
-
-            GuiOverlayWaitFinishWire()
-                :  muPad0C(0)
-            {
-            }
-        };
 
         // Id 463 -- the sound-volume settings record { 8, 463, 12, music, sfx }, X360
         // record size 20, channel 40. FLAG: the producer-side type name is not in the
@@ -174,8 +163,8 @@ namespace BrnGui
         void PostOverlayWaitFinish(CgsGui::StateInterface* lpStateInterface,
                                    const char* lpacOverlayName)
         {
-            GuiOverlayWaitFinishWire lWaitFinish;
-            lWaitFinish.mRequest.Construct(lpacOverlayName);
+            GuiOverlayWaitFinishRequest lWaitFinish;
+            lWaitFinish.Construct(lpacOverlayName);
             lpStateInterface->OutputGuiEvent(lWaitFinish);   // X360 record size 24
         }
     }

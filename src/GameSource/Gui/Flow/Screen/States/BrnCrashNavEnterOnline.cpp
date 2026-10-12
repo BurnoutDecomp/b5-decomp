@@ -124,9 +124,8 @@ namespace BrnGui
 //   ShowConnectingMessage       every panel Invisible plus the "OnConnecting" overlay
 //
 // Read store for store off the console asm. The out-queue records are the console's own
-// wire records, posted on channel 40 through GetOutputEventQueue()->AddEvent with host
-// sizeof sizes (the committed OutputGuiEvent template does not use channel 40; see
-// CgsGuiStateInterface.h).
+        // wire records, posted through the channel-40 GuiEventWrapper path (see
+        // CgsGuiStateInterface.h).
 // ===================================================================================
 namespace BrnGui
 {
@@ -191,27 +190,8 @@ namespace BrnGui
 
         // ---- out-queue wire records ------------------------------------------------------
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-            explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                
-            {
-                mRequest.Construct(lpcOverlayName);
-            }
-        };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         // { 1, 135, 12, <one payload byte> }, channel 40, 16 bytes. The console builds only
         // the three header words; the payload byte it sends is never written (zero here).
@@ -236,8 +216,8 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(GuiEventReply135Wire) == 16, "id-135 record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
         static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
@@ -254,7 +234,8 @@ namespace BrnGui
     // stop observing the twelve events and drop the apt components the screen was waiting on.
     void CrashNavEnterOnlineBase::OnLeave()
     {
-        const GuiOverlayWaitFinishWire lWaitConnecting(KAC_CONNECTING_STRING_ID);
+        GuiOverlayWaitFinishRequest lWaitConnecting;
+        lWaitConnecting.Construct(KAC_CONNECTING_STRING_ID);
         mpStateInterface->OutputGuiEvent(lWaitConnecting);
 
         // The console inlines StateInterface::PlayAptMovie here: { 8, 18, 12, name, level }
@@ -338,7 +319,8 @@ namespace BrnGui
                 // Only once the screen is past its two loading sub-states.
                 if (meSubState > E_SUBSTATE_LOADING_COMPONENTS)
                 {
-                    const GuiOverlayWaitFinishWire lWaitConnecting(KAC_CONNECTING_STRING_ID);
+                    GuiOverlayWaitFinishRequest lWaitConnecting;
+                    lWaitConnecting.Construct(KAC_CONNECTING_STRING_ID);
                     mpStateInterface->OutputGuiEvent(lWaitConnecting);
 
                     if (mbJunkyardEntered)
@@ -470,8 +452,8 @@ namespace BrnGui
         mSignInBackgroundAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
         mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
 
-        GuiOverlayRequestWire lConnecting;
-        lConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
+        GuiOverlayRequest lConnecting;
+        lConnecting.Construct(KAC_CONNECTING_STRING_ID);
         mpStateInterface->OutputGuiEvent(lConnecting);
 
         mfTimeInState = KF_TIME_IN_STATE_MESSAGE_SHOWN;

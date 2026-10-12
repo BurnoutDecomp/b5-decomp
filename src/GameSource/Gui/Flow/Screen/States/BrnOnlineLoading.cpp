@@ -169,10 +169,6 @@ namespace BrnGui
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;
-        };
 
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiCommandWire16<92>, 40>) == 16,
                       "command record is 16 bytes");
@@ -182,7 +178,7 @@ namespace BrnGui
                       "autosave record is 16 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40>) == 112,
                       "audio trigger record is 112 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequestWire, 40>) == 304,
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304,
                       "overlay request record is 304 bytes");
         static_assert(sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8, "the roster is 456 bytes");
         static_assert(sizeof(LobbyPlayerListPayload) <= 0x1C8, "the roster view fits the roster");
@@ -647,8 +643,8 @@ namespace BrnGui
             static_cast<const InviteFailedPayload*>(lpInviteFailedEvent);
         if (lpInviteFailed->meInviteFailedReason == KI_INVITE_FAIL_REASON_SAME_GAME)
         {
-            GuiOverlayRequestWire lInviteFailedOverlay;
-            lInviteFailedOverlay.mRequest.Construct(KAC_INVITE_FAILED_OVERLAY_ID);
+            GuiOverlayRequest lInviteFailedOverlay;
+            lInviteFailedOverlay.Construct(KAC_INVITE_FAILED_OVERLAY_ID);
             PostWire(mpStateInterface, lInviteFailedOverlay);
         }
     }

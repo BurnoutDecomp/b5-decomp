@@ -22,34 +22,16 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;   // GuiEventOut -- the AddEvent channel every site here uses
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-            GuiOverlayWaitFinishWire()
-                
-            {
-            }
-        };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes -- the
         // shape the out-of-line OutputGuiEvent<GuiOverlayRequest> instantiation
         // @0x82436BE0 builds (memcpy 0x120 into record+0x10, then the three header
         // words, then AddEvent(queue, record, 0x28, 0x130)).
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         // Record-size pins: every payload here is pointer-free, so the X360's AddEvent
         // size immediates must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
 
         const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
@@ -91,8 +73,8 @@ namespace BrnGui
         }
 
         {
-            GuiOverlayWaitFinishWire lWaitConnecting;
-            lWaitConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
+            GuiOverlayWaitFinishRequest lWaitConnecting;
+            lWaitConnecting.Construct(KAC_CONNECTING_STRING_ID);
 
             mpStateInterface->OutputGuiEvent(lWaitConnecting);
         }
@@ -136,12 +118,12 @@ namespace BrnGui
             return;
         }
 
-        GuiOverlayRequestWire lWire;
+        GuiOverlayRequest lWire;
         if (lpPayload->macReason[0] != 0)
         {
             // The server sent wording of its own: show it as the overlay's message.
-            lWire.mRequest.Construct(KAC_DISCONNECTED_WITH_REASON_STRING_ID);
-            lWire.mRequest.AddMessageParam(KU_DISCONNECT_REASON_MESSAGE_PARAM, lpPayload->macReason);
+            lWire.Construct(KAC_DISCONNECTED_WITH_REASON_STRING_ID);
+            lWire.AddMessageParam(KU_DISCONNECT_REASON_MESSAGE_PARAM, lpPayload->macReason);
         }
         else if (lpPayload->meLastError != 0)
         {
@@ -153,7 +135,7 @@ namespace BrnGui
         }
         else
         {
-            lWire.mRequest.Construct(KAC_DISCONNECTED_STRING_ID);
+            lWire.Construct(KAC_DISCONNECTED_STRING_ID);
         }
 
         mpStateInterface->OutputGuiEvent(lWire);
@@ -181,7 +163,7 @@ namespace BrnGui
     {
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
         static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
 
         // Event 189 ("overlay complete") payload view: the compressed overlay id then how
@@ -220,8 +202,8 @@ namespace BrnGui
         }
 
         {
-            GuiOverlayWaitFinishWire lWaitConnecting;
-            lWaitConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
+            GuiOverlayWaitFinishRequest lWaitConnecting;
+            lWaitConnecting.Construct(KAC_CONNECTING_STRING_ID);
 
             mpStateInterface->OutputGuiEvent(lWaitConnecting);
         }
@@ -318,8 +300,8 @@ namespace BrnGui
         // three header words, then AddEvent(queue, record, 0x28, 0x130)).
         // Record-size pins: every payload here is pointer-free, so the X360's AddEvent
         // size immediates must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHud) == 16, "show/hide-hud record is 16 bytes");
         static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
@@ -369,8 +351,8 @@ namespace BrnGui
         // The connecting spinner has served its purpose -- tell the overlays director to
         // finish waiting on it.
         {
-            GuiOverlayWaitFinishWire lWaitConnecting;
-            lWaitConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
+            GuiOverlayWaitFinishRequest lWaitConnecting;
+            lWaitConnecting.Construct(KAC_CONNECTING_STRING_ID);
 
             mpStateInterface->OutputGuiEvent(lWaitConnecting);
         }

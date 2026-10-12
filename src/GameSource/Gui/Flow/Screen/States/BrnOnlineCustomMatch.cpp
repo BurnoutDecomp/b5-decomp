@@ -371,7 +371,6 @@ namespace BrnGui
 // reads, whose single definition belongs in the consolidated .cpp (see the merge note).
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -719,7 +718,6 @@ namespace BrnGui
 // CgsStringUtils.cpp:31, GuiCache::IsOnlineStartInProgress is a header inline
 // (BrnGuiCache.h:499), and ShowNoGamesFound lands in BrnOnlineCustomMatch_wJ_01.cpp.
 // ===================================================================================
-
 
 namespace
 {
@@ -1113,7 +1111,6 @@ namespace BrnGui
 // b5-decomp/src/GameSource/Gui/BrnGuiEventTypeDefs.cpp:232. SelectGame calls it.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -1232,7 +1229,6 @@ namespace BrnGui
 {
     namespace
     {
-
 
         // The message-button row the in-game "no games found" page expects to be highlighted
         // (its message menu carries a single OK button). FLAG: the E_OK_BUTTON_OK enum the
@@ -1402,15 +1398,6 @@ namespace BrnGui
         // OutputGuiEvent<BrnGui::GuiOverlayRequest> (instantiation @0x82436BE0): the record is
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes -- the same
         // wire BrnCarSelectMain_wG_02.cpp builds for its overlay posts.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         // The overlay the join path raises while the network match is being entered.
         const char KAC_ENTER_GAME_OVERLAY[] = "CNOnlEntGame";
@@ -1486,8 +1473,8 @@ namespace BrnGui
                 mpStateInterface->OutputGuiEvent(lJoin);                      // X360 record size 16
 
                 // Raise the "entering game" overlay over the top of the list.
-                GuiOverlayRequestWire lRequest;
-                lRequest.mRequest.Construct(KAC_ENTER_GAME_OVERLAY);
+                GuiOverlayRequest lRequest;
+                lRequest.Construct(KAC_ENTER_GAME_OVERLAY);
                 mpStateInterface->OutputGuiEvent(lRequest);                   // X360 record size 304
 
                 // The X360 stores the sub-state BEFORE the ShowMessage call
@@ -1592,7 +1579,6 @@ namespace BrnGui
 //    BrnGuiEventTypeDefs.h; NOT a gap.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -1609,24 +1595,12 @@ namespace BrnGui
         // The id-188 "this wait overlay has finished" request. Its payload is the homed
         // BrnGui::GuiOverlayWaitFinishRequest -- one compressed overlay id, 8-aligned, so
         // it seats at +0x10 and the record totals the console's 24 bytes.
-        struct GuiOverlayWaitFinishRequestWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-            explicit GuiOverlayWaitFinishRequestWire(const char* lpcOverlayName)
-                
-            {
-                mRequest.Construct(lpcOverlayName);
-            }
-        };
 
         // Layout pins: the console publishes payload-size 8, payload-offset 16, record 24.
         typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_SIZE[
             sizeof(GuiOverlayWaitFinishRequest) == 8 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[
-            sizeof(GuiOverlayWaitFinishRequestWire) == 24 ? 1 : -1];
-        typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_OFFSET[
-            offsetof(GuiOverlayWaitFinishRequestWire, mRequest) == 16 ? 1 : -1];
+            sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24 ? 1 : -1];
     }
 
     // ------------------------------------------------- HandleInGameFailedEvent @0x82497F50
@@ -1638,7 +1612,8 @@ namespace BrnGui
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");   // cpp:1032
 
         // Take down the "entering game" wait overlay.
-        const GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
+        GuiOverlayWaitFinishRequest lRequest;
+        lRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
 
         mpStateInterface->OutputGuiEvent(lRequest);   // X360 record size 24
 
@@ -2028,7 +2003,6 @@ namespace BrnGui
 
 // wave-J partfile (group 6)
 
-
 namespace BrnGui
 {
 //
@@ -2403,7 +2377,6 @@ namespace BrnGui
 // standing project rule (see BrnVehicleManager_PerFrameLeaves.cpp).
 // ============================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -2458,13 +2431,12 @@ namespace BrnGui
             }
         };
 
-// (fold: an identical definition of GuiOverlayWaitFinishRequestWire was dropped here -- this TU defines it once, above)
+        // (fold: an identical definition of GuiOverlayWaitFinishRequest was dropped here -- this TU defines it once, above)
 
         typedef char KAC_ASSERT_STOP_WIRE_SIZE[sizeof(CustomMatchSearchStopWire) == 16 ? 1 : -1];
         typedef char KAC_ASSERT_CLEAR_WIRE_SIZE[sizeof(GuiTickerClearWire536) == 16 ? 1 : -1];
-        typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[sizeof(GuiOverlayWaitFinishRequestWire) == 24 ? 1 : -1];
-        typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_OFFSET[
-            offsetof(GuiOverlayWaitFinishRequestWire, mRequest) == 16 ? 1 : -1];
+        typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[
+            sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24 ? 1 : -1];
         // The 604-byte AddOutputGuiEvent record IS the member (headerless on both sides).
         typedef char KAC_ASSERT_RESULTS_RECORD_SIZE[sizeof(GuiEventNetworkCustomMatchResults) == 604 ? 1 : -1];
     }
@@ -2532,7 +2504,8 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:316
 
                 // Take down the "entering game" wait overlay, then advance the flow.
-                const GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
+                GuiOverlayWaitFinishRequest lRequest;
+                lRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
                 mpStateInterface->OutputGuiEvent(lRequest);   // X360 record size 24
 
                 SendStateEvent(KAC_ADVANCE_EVENT);

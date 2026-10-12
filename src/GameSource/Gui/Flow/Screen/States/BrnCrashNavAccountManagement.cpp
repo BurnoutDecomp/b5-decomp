@@ -203,20 +203,8 @@ namespace BrnGui
 
         // The OutputGuiEvent<GuiOverlayRequest> wire record: { 288, 184, 16, <pad>, request },
         // channel 40, 304 bytes -- the shape BrnRaceMainHudState.cpp already posts.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                 {}
-        };
 
         // The wait-finish wire record: { 8, 188, 16, <pad>, id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;  // +0x10
-            GuiOverlayWaitFinishWire()
-                 {}
-        };
 
         // The state's in-event queue (CgsGui::State +0x18).
         typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
@@ -490,12 +478,12 @@ namespace BrnGui
                 // The online session dropped out from under the tab: stop waiting on the
                 // account-management overlay and raise the lobby-disconnect one instead.
                 {
-                    GuiOverlayWaitFinishWire lWait;
-                    lWait.mRequest.Construct(KAC_OVERLAY_ACCT);
+                    GuiOverlayWaitFinishRequest lWait;
+                    lWait.Construct(KAC_OVERLAY_ACCT);
                     mpStateInterface->OutputGuiEvent(lWait);
 
-                    GuiOverlayRequestWire lRequest;
-                    lRequest.mRequest.Construct(KAC_OVERLAY_DISC);
+                    GuiOverlayRequest lRequest;
+                    lRequest.Construct(KAC_OVERLAY_DISC);
                     mpStateInterface->OutputGuiEvent(lRequest);
                 }
                 break;
@@ -703,8 +691,8 @@ namespace BrnGui
                    "Invalid event in CrashNavAccountManagement::HandleAccountUpdateComplete");   // cpp:773
         (void)lpEvent;
 
-        GuiOverlayWaitFinishWire lWait;
-        lWait.mRequest.Construct(KAC_OVERLAY_ACCT);
+        GuiOverlayWaitFinishRequest lWait;
+        lWait.Construct(KAC_OVERLAY_ACCT);
         mpStateInterface->OutputGuiEvent(lWait);
 
         mMenuToggleGroup.Unloaded();
@@ -743,8 +731,8 @@ namespace BrnGui
         }
 
         {
-            GuiOverlayRequestWire lRequest;
-            lRequest.mRequest.Construct(KAC_OVERLAY_ACCT);
+            GuiOverlayRequest lRequest;
+            lRequest.Construct(KAC_OVERLAY_ACCT);
             mpStateInterface->OutputGuiEvent(lRequest);
         }
 

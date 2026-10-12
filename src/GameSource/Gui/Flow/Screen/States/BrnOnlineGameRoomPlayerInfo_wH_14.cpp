@@ -37,10 +37,7 @@
 // 0x82498AE0 / 0x82498584) and by calling the out-of-line instantiation
 // (HandleLeftGameEvent's lobby-deleted overlay at 0x82498444) -- but both emit the
 // identical { sizeof(payload), <event id>, 16, <pad>, payload } record on channel 40.
-// The committed CgsGui::StateInterface::OutputGuiEvent template queues the bare
-// payload under channel == GetEventType() instead, which is NOT what the X360
-// instantiation does, so every site below posts the wire record directly (identical to
-// BrnCarSelectMain_wG_02.cpp / BrnOnlineGameRoomPlayerInfo_wH_08.cpp).
+// The typed OutputGuiEvent implementation constructs that wrapper from each payload.
 //
 // X360 LITERALS. The console's baked AddEvent sizes (0x130 / 0x18) and payload-size
 // words (0x120 / 8) are written as host sizeof() expressions; every payload involved is
@@ -107,32 +104,14 @@ namespace BrnGui
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> record: { 288, 184, 16, <pad>,
         // the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
 
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
-
-        // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> record:
+// The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> record:
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
 
-            GuiOverlayWaitFinishWire()
-                
-            {
-            }
-        };
-
-        // Record-size pins: both payloads are pointer-free, so the X360's AddEvent size
+// Record-size pins: both payloads are pointer-free, so the X360's AddEvent size
         // immediates must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "overlay wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "overlay wait-finish record is 24 bytes");
 
         // ---- overlay / state-event vocabularies (the asm's rodata literals) --------
         const char KAC_OVERLAY_LOBBY_DELETED[]   = "CNLobbyDlted";   // lobby went away under us
@@ -173,8 +152,8 @@ namespace BrnGui
         // not an if/else chain.
         if (lpPayload->miReason == KI_LEFT_GAME_REASON_LOBBY_DELETED && !mbKicked)
         {
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAC_OVERLAY_LOBBY_DELETED);
+            GuiOverlayRequest lWire;
+            lWire.Construct(KAC_OVERLAY_LOBBY_DELETED);
 
             mpStateInterface->OutputGuiEvent(lWire);
         }
@@ -184,14 +163,14 @@ namespace BrnGui
             // Tear down both outstanding "are you sure you want to leave" questions
             // before the kick overlay goes up.
             {
-                GuiOverlayWaitFinishWire lWaitGame;
-                lWaitGame.mRequest.Construct(KAC_OVERLAY_LEAVE_GAME_QN);
+                GuiOverlayWaitFinishRequest lWaitGame;
+                lWaitGame.Construct(KAC_OVERLAY_LEAVE_GAME_QN);
 
                 mpStateInterface->OutputGuiEvent(lWaitGame);
             }
             {
-                GuiOverlayWaitFinishWire lWaitChallenge;
-                lWaitChallenge.mRequest.Construct(KAC_OVERLAY_LEAVE_CHAL_QN);
+                GuiOverlayWaitFinishRequest lWaitChallenge;
+                lWaitChallenge.Construct(KAC_OVERLAY_LEAVE_CHAL_QN);
 
                 mpStateInterface->OutputGuiEvent(lWaitChallenge);
             }
@@ -202,8 +181,8 @@ namespace BrnGui
             CGS_ASSERT(lpPayload->miKickReason >= 0 && lpPayload->miKickReason < KI_KICK_REASON_COUNT,
                        "Invalid kick reason of ");
 
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAPC_KICKED_POPUP[lpPayload->miKickReason]);
+            GuiOverlayRequest lWire;
+            lWire.Construct(KAPC_KICKED_POPUP[lpPayload->miKickReason]);
 
             mpStateInterface->OutputGuiEvent(lWire);
 
@@ -242,9 +221,9 @@ namespace BrnGui
             // The X360 builds the request in a scratch stack slot and memcpy's the 288
             // bytes into the record (the inlined OutputGuiEvent<GuiOverlayRequest> copy);
             // constructed in place here.
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAC_OVERLAY_LAUNCH_FAILED);
-            lWire.mRequest.AddMessageParam(KU_LAUNCH_FAILED_MESSAGE_PARAM,
+            GuiOverlayRequest lWire;
+            lWire.Construct(KAC_OVERLAY_LAUNCH_FAILED);
+            lWire.AddMessageParam(KU_LAUNCH_FAILED_MESSAGE_PARAM,
                                            KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 
             mpStateInterface->OutputGuiEvent(lWire);

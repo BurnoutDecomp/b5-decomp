@@ -124,18 +124,9 @@ namespace BrnGui
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         static_assert(sizeof(GuiByteEventWire<1>) == 16, "byte record is 16 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
 
         template <s32 N>
@@ -153,8 +144,8 @@ namespace BrnGui
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, const char* lpcOverlayId)
         {
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(lpcOverlayId);
+            GuiOverlayRequest lWire;
+            lWire.Construct(lpcOverlayId);
             lpStateInterface->OutputGuiEvent(lWire);
         }
     }

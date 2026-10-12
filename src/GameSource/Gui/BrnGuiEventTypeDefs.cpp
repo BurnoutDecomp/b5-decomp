@@ -227,18 +227,15 @@ GuiEventUpdateSatNav* GuiEventUpdateSatNav::DoWorstCase()
 //   stb 0,   0x11D(this)   -> mbButton2Used = 0
 //   return result
 //
-// The X360 stores the compressed id at this+0x00 (`std r3,0(r27)`), i.e. over the first
-// 8 bytes of maMessages[0] (its 8-byte maHead). Reproduced as an 8-byte block write to the
-// head so the on-object id sits at the proven offset; sizeof(CgsID) == 8 matches the std.
+// The X360 stores the compressed id at this+0x00 (`std r3,0(r27)`). DecFIGS names this
+// leading qword `mOverlayID`; it overlays the first message record's otherwise-unused head.
 CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
 {
     CGS_ASSERT(lpcOverlayId != 0, "Invalid Overlay Id");
 
     const CgsID lId = CgsIDCompress(lpcOverlayId);
 
-    static_assert(sizeof(CgsID) == sizeof(maMessages[0].maHead),
-                  "overlay id (std r3,0) overlays the first param record's 8-byte head");
-    std::memcpy(&maMessages[0].maHead[0], &lId, sizeof(CgsID)); // std r3, 0(this)
+    mOverlayID = lId; // std r3, 0(this)
 
     miNumMessages = 0;   // stw 0, 0x118(this)
     mbButton1Used = 0;   // stb 0, 0x11C(this)

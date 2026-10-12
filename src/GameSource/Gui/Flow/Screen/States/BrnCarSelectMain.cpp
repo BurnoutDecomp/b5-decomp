@@ -334,7 +334,6 @@ namespace BrnGui
 // The sibling bodies live in BrnCarSelectMain.cpp and the other wave-G partfiles.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -568,24 +567,17 @@ namespace BrnGui
 //   HandleLeftGameEvent  @0x824C91C8  (in-queue event 273)
 //
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX (pseudocode + asm). Both
-// bodies build the same out-queue overlay records the rest of the SCREEN flow posts:
-// the 304-byte GuiOverlayRequest wire (id 184) and the 24-byte GuiOverlayWaitFinish
-// wire (id 188), published on channel 40 through
-// mpStateInterface->GetOutputEventQueue()->AddEvent(). The X360 reaches those records
-// either by inlining CgsGui::StateInterface::OutputGuiEvent<T> (HandleLaunchedEvent's
-// construct-then-memcpy at 0x824C8FC0) or by calling the out-of-line instantiation
-// (HandleLeftGameEvent's kick overlay at 0x824C93F4); both produce the identical
-// { sizeof(payload), <event id>, 16, <pad>, payload } record on channel 40, so the
-// reconstruction posts the wire record directly at every site (the committed
-// CgsGui::StateInterface::OutputGuiEvent template in CgsGuiStateInterface.h queues the
-// bare payload under channel == GetEventType() instead, which is NOT what the X360
-// instantiation does -- it is not called here, and its header is frozen this wave).
+// bodies build the 304-byte GuiOverlayRequest (id 184) and 24-byte GuiOverlayWaitFinish
+// (id 188) records on channel 40. The X360 reaches those records either by inlining
+// StateInterface::OutputGuiEvent<T> (HandleLaunchedEvent's construct-then-memcpy at
+// 0x824C8FC0) or by calling the out-of-line instantiation (HandleLeftGameEvent's kick
+// overlay at 0x824C93F4). The typed PC OutputGuiEvent now constructs the same
+// { sizeof(payload), <event id>, 16, <pad>, payload } record from each canonical payload.
 //
 // The kick-reason overlay table @0x82F26774 was read out of the image (see
 // KAPC_KICK_REASON_OVERLAYS below); KPC_LAUNCH_FAILED_STRINGIDS @0x82F26C94 is the
 // class static declared in the header and defined in BrnCarSelectMain_wG_01.cpp.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -617,21 +609,9 @@ namespace BrnGui
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> record: { 288, 184, 16, <pad>, the
         // 288-byte request }, channel 40, 304 bytes. The header words are host expressions
         // (sizeof / alignment), NOT the console's baked 0x120 / 0x130 immediates.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                 {}
-        };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> record:
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-            GuiOverlayWaitFinishWire()
-                 {}
-        };
 
         // ---- the left-game reason / kick-reason vocabularies ------------------------
 
@@ -675,9 +655,9 @@ namespace BrnGui
             // The X360 builds the request in a scratch stack slot and memcpy's the 288
             // bytes into the record (the inlined OutputGuiEvent<GuiOverlayRequest> copy);
             // constructed in place here.
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct("CNOnlLchFail");
-            lWire.mRequest.AddMessageParam(2, KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
+            GuiOverlayRequest lWire;
+            lWire.Construct("CNOnlLchFail");
+            lWire.AddMessageParam(2, KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 
             mpStateInterface->OutputGuiEvent(lWire);
         }
@@ -701,8 +681,8 @@ namespace BrnGui
 
         if (lpPayload->miReason == KI_LEFT_GAME_REASON_LOBBY_DELETED)
         {
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct("CNLobbyDlted");
+            GuiOverlayRequest lWire;
+            lWire.Construct("CNLobbyDlted");
 
             mpStateInterface->OutputGuiEvent(lWire);
         }
@@ -711,13 +691,13 @@ namespace BrnGui
             // Tear down the two outstanding "are you sure you want to leave" questions
             // before the kick overlay goes up.
             {
-                GuiOverlayWaitFinishWire lWaitGame;
-                lWaitGame.mRequest.Construct("CNOnlLvGmQn");
+                GuiOverlayWaitFinishRequest lWaitGame;
+                lWaitGame.Construct("CNOnlLvGmQn");
                 mpStateInterface->OutputGuiEvent(lWaitGame);
             }
             {
-                GuiOverlayWaitFinishWire lWaitChat;
-                lWaitChat.mRequest.Construct("CNOnlLvChaQn");
+                GuiOverlayWaitFinishRequest lWaitChat;
+                lWaitChat.Construct("CNOnlLvChaQn");
                 mpStateInterface->OutputGuiEvent(lWaitChat);
             }
 
@@ -728,8 +708,8 @@ namespace BrnGui
             CGS_ASSERT(lpPayload->miKickReason >= 0 && lpPayload->miKickReason < KI_KICK_REASON_COUNT,
                        "Invalid kick reason of ");
 
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAPC_KICK_REASON_OVERLAYS[lpPayload->miKickReason]);
+            GuiOverlayRequest lWire;
+            lWire.Construct(KAPC_KICK_REASON_OVERLAYS[lpPayload->miKickReason]);
 
             // The X360 calls the out-of-line OutputGuiEvent<GuiOverlayRequest>
             // instantiation here; it queues exactly this record on channel 40.
@@ -777,14 +757,13 @@ namespace BrnGui
 // call and the slot map only records WHICH member each X360 displacement resolved to.
 // ===================================================================================
 
-
-// NOTE on the event records: the canonical payload homes for events 93/406 are
-// GameSource/Gui/BrnGuiDemangledEventTypes.h, but that header and
-// GameSource/Gui/BrnGuiEventTypeDefs.h are MUTUALLY EXCLUSIVE by construction (both define
-// GuiEventRunFsm / GuiAudioTriggerEvent / GuiOverlayWaitFinishRequest -- see the banner in
-// the demangled header), and BrnGuiCache.h pulls BrnGuiEventTypeDefs.h in. So the two
-// payload fields this TU reads are modelled here as local in-queue VIEWS, exactly as the
-// sibling screen state does (BrnInGame.cpp "in-queue payload views").
+        // NOTE on the event records: the canonical payload homes for events 93/406 are
+        // GameSource/Gui/BrnGuiDemangledEventTypes.h, but that header and
+        // GameSource/Gui/BrnGuiEventTypeDefs.h are MUTUALLY EXCLUSIVE by construction (both define
+        // GuiEventRunFsm / GuiAudioTriggerEvent / GuiOverlayWaitFinishRequest -- see the banner in
+        // the demangled header), and BrnGuiCache.h pulls BrnGuiEventTypeDefs.h in. So the two
+        // payload fields this TU reads are modelled here as local in-queue VIEWS, exactly as the
+        // sibling screen state does (BrnInGame.cpp "in-queue payload views").
 
 namespace BrnGui
 {
@@ -1130,10 +1109,10 @@ namespace BrnGui
         const GuiEventNetworkLaunchingPayload* lpLaunchingEvent =
             reinterpret_cast<const GuiEventNetworkLaunchingPayload*>(lpEvent);
 
-        GuiOverlayRequestWire lWire;
+        GuiOverlayRequest lWire;
         if (mpGuiCache->IsLocalPlayerHost())
         {
-            lWire.mRequest.Construct("CNOnlLchGmH");
+            lWire.Construct("CNOnlLchGmH");
         }
         else
         {
@@ -1141,12 +1120,12 @@ namespace BrnGui
                 mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
             CGS_ASSERT(lpPlayerStatusData != 0, "lpPlayerStatusData");
 
-            lWire.mRequest.Construct("CNOnlLchGame");
-            lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,
+            lWire.Construct("CNOnlLchGame");
+            lWire.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,
                                            lpPlayerStatusData->mPlayerName.GetPlayerName());
         }
 
-        lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_GAME_MODE,
+        lWire.AddMessageParam(KU_LAUNCH_PARAM_GAME_MODE,
                                        KPAC_MODE_STRINGS[lpLaunchingEvent->meGameMode]);
 
         mpStateInterface->OutputGuiEvent(lWire);

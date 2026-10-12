@@ -202,14 +202,6 @@ namespace BrnGui
         // this record on the stack and memcpy's the 0x120-byte request into it; the header's
         // third word is 16 here, NOT 12, because the payload is 8-aligned (`li r11, 0x10 ;
         // stw r11, +8`). Verified at 0x824CD59C / 0x824CD638.
-        struct GuiOverlayRequestWire184 : public CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire184()
-                
-            {
-            }
-        };
 
         // The one-shot gap log the two PARKED platform sites share: a gap that is invisible
         // at runtime reads exactly like working code.
@@ -420,8 +412,8 @@ namespace BrnGui
 
         // The console's LABEL_65 "no code matched" arm, verbatim (0x824CD6D8 onward):
         // GuiOverlayRequest::Construct("CNSpnsrUnlkF") -> { 288, 184, 16, request }, ch 40.
-        GuiOverlayRequestWire184 lWire;
-        lWire.mRequest.Construct("CNSpnsrUnlkF");
+        GuiOverlayRequest lWire;
+        lWire.Construct("CNSpnsrUnlkF");
         mpStateInterface->OutputGuiEvent(lWire);
     }
 
