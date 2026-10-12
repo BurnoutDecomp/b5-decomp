@@ -116,8 +116,8 @@ namespace CgsGraphics
         bool mbOcclusionCheapShader = true;       // +0x334
         bool mbDisplayStats = false;              // +0x335
         bool mbDetectNearClipIntersections = true;// +0x336
-        bool mbImmediateMode = true;              // +0x337
-        bool mbConditionalRendering = false;      // +0x338
+        bool mbImmediateMode = false;              // +0x337
+        bool mbConditionalRendering = true;      // +0x338
         OcclusionQueryList* mpQueryList;           // +0x33C (Construct @0x827F1E00)
     };
 }
