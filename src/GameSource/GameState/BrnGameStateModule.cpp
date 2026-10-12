@@ -1938,6 +1938,7 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
     // referenced by both banners); only this CALL is removed. Delete the method with its
     // declaration when the supersession is consolidated.
 
+    GetPreWorldInputBuffer()->LockForRead();
     mpOutputBuffer->LockForWrite();
     GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
@@ -1952,11 +1953,12 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
         CheckForTailingRivals(mpOutputBuffer, &mpTakedownCache->mVehicleOutputInterface, lfGameTimestep);
     }
     const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
-    mpTrainingManager->Update(lpActionQueue, &mLastActiveRaceCarInterface,
+    mpTrainingManager->Update(GetPreWorldInputBuffer(), lpActionQueue, &mLastActiveRaceCarInterface,
                               lfGameTimestep, lbAllowTimedTips);
     mbIsUpdating = false;
 
     mpOutputBuffer->UnlockForWrite();
+    GetPreWorldInputBuffer()->UnlockForRead();
 }
 
 // --------------------------------------------------------------------------------------------
