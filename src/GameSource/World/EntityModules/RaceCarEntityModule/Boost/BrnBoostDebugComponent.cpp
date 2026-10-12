@@ -3,6 +3,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnWorld
 {
@@ -16,7 +17,19 @@ namespace BrnWorld
 
     void BoostDebugComponent::Destruct()
     {
-        CgsDev::DebugComponent::Destruct();
+        if (mpRaceCarEntityModule == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mpRaceCarEntityModule != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostDebugComponent.cpp",
+                68);
+            CgsDev::Assert::EndAssert();
+        }
+        mpRaceCarEntityModule = nullptr;
+        // ARTIST822F3E18 calls the empty ICF body8284CB38. The current
+        // generic DebugComponent::Destruct also clears mbActive, which this
+        // original Boost destruction path does not store.
     }
 
     const char* BoostDebugComponent::GetName() const
@@ -135,7 +148,7 @@ namespace BrnWorld
         BoostBurnout5* lpBoostBurnout5 = static_cast<BoostBurnout5*>(lpUserData);
         if (!lpBoostBurnout5->mbAddRemoveChunkMode)
         {
-            lpBoostBurnout5->miChainSize = 4;
+            lpBoostBurnout5->miBoostLevel = 4; //ARTIST822D5280: base+0x104
             lpBoostBurnout5->UpdateMaxBoost(false);
         }
     }
