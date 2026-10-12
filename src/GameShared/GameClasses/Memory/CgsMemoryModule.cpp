@@ -345,7 +345,7 @@ namespace CgsMemory
 
             // build a one-type leaf bank for the allocator and create it
             MemoryBank::Params lParams;
-            for (s32 lt = 0; lt < 6; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
+            for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
             const char* lpcName = lpReq->GetBankName();
             s32 li = 0;
             for (; li < MemoryBank::KI_NAME_SIZE - 1 && lpcName[li] != 0; ++li) lParams.macName[li] = lpcName[li];
@@ -433,7 +433,7 @@ namespace CgsMemory
         lResponse.SetDescriptor(lpDesc);
 
         MemoryBank::Params lParams;
-        for (s32 lt = 0; lt < 6; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
+        for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
 
         const s32 kiNumTypes = 4;   // rw::ResourceDescriptor entry count [VERIFY: X360 loops 5]
         MemoryIO::ResultCodes leResult = MemoryIO::E_RESULT_OK;
