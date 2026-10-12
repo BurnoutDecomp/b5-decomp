@@ -119,7 +119,7 @@ u32 CollisionDebugComponent::GetSurfaceRenderColour(u8 luSurfaceId)
     const u32 luGreen = static_cast<u8>(laColour[1] * 255.0f);
     const u32 luBlue = static_cast<u8>(laColour[2] * 255.0f);
     return (static_cast<u32>(siSurfaceAlpha) << 24) |
-           (luRed << 16) | (luGreen << 8) | luBlue;
+           (luBlue << 16) | (luGreen << 8) | luRed;
 }
 
 u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
@@ -133,6 +133,10 @@ u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
     {
         return 0x80FFFFFFu;
     }
+    if (!lbDrivable && !lbFatal)
+    {
+        return 0x80000000u;
+    }
     if (lbSuperFatal)
     {
         return 0xFF00FFFFu;
@@ -140,10 +144,6 @@ u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
     if (!lbDrivable && lbFatal)
     {
         return 0x800000FFu;
-    }
-    if (!lbDrivable && !lbFatal)
-    {
-        return 0x80000000u;
     }
     return 0;
 }
@@ -242,10 +242,10 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
     {
         if (siSurfaceAlpha != 0)
         {
-            lpDisplay->DrawSolidQuad(laPoints[0], laPoints[1], laPoints[2],
-                                     laPoints[3], RenderColour(luColour));
+            lpDisplay->DrawSolidQuad(laPoints[0], laPoints[1], laPoints[3],
+                                     laPoints[2], RenderColour(luColour));
         }
-        lpDisplay->DrawQuad(laPoints[0], laPoints[1], laPoints[2], laPoints[3],
+        lpDisplay->DrawQuad(laPoints[0], laPoints[1], laPoints[3], laPoints[2],
                             RenderColour(0xFFFFFFFFu));
         lPolyCentre = Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]),
                                 AddPositions(laPoints[2], laPoints[3])), 0.25f);
@@ -284,7 +284,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         if (sqrtf(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ) < 20.0f)
         {
             CgsDev::SimpleStrStream lStream;
-            lStream << "( " << static_cast<s32>(liPolyIndex & 0x7FFF) << ")";
+            lStream << "( " << static_cast<s32>(lCollisionTag.mu16GroupTag & 0x7FFF) << ")";
             lpDisplay->DrawText(lTagPosition, lStream.GetBuffer(), 10.0f);
         }
     }

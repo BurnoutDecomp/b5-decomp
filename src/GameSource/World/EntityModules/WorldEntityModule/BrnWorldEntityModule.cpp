@@ -26,6 +26,7 @@
 #include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 #include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
 #include "pc/gcm/renderengine/reflections/SceneSettingsDebug.h"
+#include "pc/math/VmxFloat.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -87,16 +88,19 @@ static const u64 gs_uSurfaceListKey = Attrib::StringToKey("340654");
 // across the four lanes of the sample-colour comparison.
 static const f32 KF_SURFACE_SANITY_EPSILON = 1.1920928955078125e-07f;
 
-// Maximum axis scale of an affine transform (the X360 inline: max of the three
-// basis-row magnitudes via the vrsqrte refinement pipeline).
+// ARTIST822D6588/65B0 first take the componentwise maximum of the
+// three basis vectors, then its magnitude (two rsqrt refinements and zero select).
 static f32 GetMaximumScale( const Matrix44Affine& lrTransform )
 {
-    f32 lfScale = rw::math::vpu::Magnitude( lrTransform.Right() );
-    const f32 lfUp = rw::math::vpu::Magnitude( lrTransform.Up() );
-    const f32 lfAt = rw::math::vpu::Magnitude( lrTransform.At() );
-    if ( lfUp > lfScale ) lfScale = lfUp;
-    if ( lfAt > lfScale ) lfScale = lfAt;
-    return lfScale;
+    using namespace CgsPC;
+    const Vector3 lRight = lrTransform.Right();
+    const Vector3 lUp = lrTransform.Up();
+    const Vector3 lAt = lrTransform.At();
+    const Vector3 lMaximum = {
+        VmxFloat::Maximum(VmxFloat::Maximum(lRight.x, lUp.x), lAt.x),
+        VmxFloat::Maximum(VmxFloat::Maximum(lRight.y, lUp.y), lAt.y),
+        VmxFloat::Maximum(VmxFloat::Maximum(lRight.z, lUp.z), lAt.z), 0.0f};
+    return VmxFloat::Magnitude3(lMaximum);
 }
 
 // =============================================================================

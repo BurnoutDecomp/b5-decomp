@@ -757,7 +757,7 @@ namespace BrnWorld
         //
         // flt_820149B4 is raw word 0x40A00000 (5.0), matching ARTIST's lfs at 0x822F0550.
         const f32 KF_PLAYER_CELL_MARKER_RADIUS = 5.0f;
-        const Vector2 lOrigin = ToCellGridScreenCoords(MakeVector3(0.0f, 0.0f, 0.0f));
+        const Vector2 lOrigin = ToCellGridScreenCoords(mpPropEntityModule->mPlayerPosition);
         lpDisplay->DrawCircle(lOrigin, KF_PLAYER_CELL_MARKER_RADIUS, 5, 0xFF0000FFu);  // ARGB 0xFF0000FF (blue)
     }
 
