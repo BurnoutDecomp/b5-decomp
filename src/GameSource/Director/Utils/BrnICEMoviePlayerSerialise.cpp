@@ -94,7 +94,15 @@ ICEMoviePlaylist::DebugMenuRemoveData ICEMoviePlaylist::GetRemoveData(s32 liMovi
 void ICEMoviePlaylist::SetDebugComponent(DebugComponent* lpDebugComponent)
 {
     mpDebugComponent = lpDebugComponent;
-    CGS_ASSERT(mpDebugComponent != NULL, "mpDebugComponent != NULL");
+    if (mpDebugComponent == NULL)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mpDebugComponent != NULL",
+            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h",
+            563);
+        CgsDev::Assert::EndAssert();
+    }
 }
 
 void ICEMoviePlaylist::SetDebugName(const char* lpcDebugName)
