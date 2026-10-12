@@ -38,6 +38,7 @@
 #include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"                 // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"                             // rw::math::vpu::VecFloat (Random::RandomVecFloat)
+#include "pc/math/VmxFloat.h"                                                      // CgsPC::VmxFloat (the QA placement's VMX flush/FMA boundaries)
 
 #include <cmath>    // std::fabs
 #include <cstring>  // std::memcpy / memset (the replayed contact, the recorded table)
@@ -68,7 +69,7 @@
 // trail system READY and PostWorldPreparePrepare that gives every surface its skid colours.
 //
 // ⚠ NOT RECONSTRUCTED ON THIS BUILD, EACH ONE LOUD (logs once when first reached, then
-// returns) -- the junkyard editor / QA tests and the post-fx effects frames
+// returns) -- the junkyard editor session and the post-fx effects frames
 // (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
 // for it).
 // ✅ UPDATED 2026-09-25 (FX-CRASHVFX): "and the prop-locator VFX" left this list with item 6b
@@ -141,6 +142,10 @@ namespace
     // ---- the X360 data cells this TU owns -------------------------------------------
     EffectsModule* gpEffectsModule = 0;          // off_82FAB594 (Construct stores `this`)
     bool           sbRestartEffects = false;     // byte_82FAB694 (RestartEffects raises, HandleQADebugTests consumes)
+    // HandleQADebugTests @0x82291700: one-time local-point table and bit-0 init latch
+    // (X360 unk_82FAD1C0 / dword_82FAD270; this function is their only original consumer).
+    Vector4 gaQADebugEffectPoints[11] = {};
+    u32     guQADebugEffectPointInitFlags = 0;
     s32            siEffectsSuspendState = 0;    // dword_82FAD294 (Update's suspend / resume ladder)
     s32            siEffectsSuspendFrames = 0;   // dword_82FAD290 (the 5-frame wait in state 4)
     f32            sfLastUpdateTime = 0.0f;      // flt_82FAD28C (the last non-stalled update time)
@@ -156,6 +161,9 @@ namespace
 
     // The convoy slip-stream effect name (the pointer baked into HandleConvoySlipStream).
     const char* const KAC_SLIPSTREAM_EFFECT = "gamedb://Instances/Effects/SlipStream/SlipStream";
+    // HandleQADebugTests' debug-only QA effect resource.
+    const char* const KAC_QA_EFFECT =
+        "gamedb://burnout5/Burnout/Effects/QA.lef.BurnoutFXLionEffectFile?ID=361081";
 
     // The post-fx vault + colour-cube dictionary PrepareResources loads / acquires.
     const char* const KAC_POSTFX_VAULT_BUNDLE      = "PostFx/postfxvault.bin";
@@ -4348,11 +4356,10 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
     mGlassSmashManager.UpdateVehicleEffectPositions(lpInputBuffer, lfTime);
 }
 
-// HandleQADebugTests @0x82291700: the ONE non-debug effect it has -- consuming the
-// RestartEffects latch (byte_82FAB694): when the effects debug component is not enabled
-// the particle module's simulation rate is put back to 1.0 -- is reconstructed; the QA
-// test-effect spawning behind dword_82FAD270 is announced, not performed.
-void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceCarState* /*lpRaceCarState*/)
+// HandleQADebugTests @0x82291700. Consume the restart latch, maintain the selected local
+// point on the existing test LION effect, then start/update/stop the QA test effect behind
+// the debug component's mbQAEnabled byte.
+void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceCarState* lpRaceCarState)
 {
     if (sbRestartEffects)
     {
@@ -4360,8 +4367,63 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
         if (!mDebugComponent.IsEnabled())                 // +0x2C34D
             mParticleModule.mfSimulationRate = 1.0f;      // +0x23B70
     }
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::HandleQADebugTests @0x82291700 (the QA test-effect spawns)");
+
+    // The console sets bit 0 before writing its eleven 16-byte local points. Row 8 is
+    // {0,-0.4,1.4,0}: every source lane is stored before its vector load at 0x82291910
+    // (x @0x82291874, y @0x82291878, z @0x82291810, w @0x8229187C).
+    if ((guQADebugEffectPointInitFlags & 1u) == 0)
+    {
+        guQADebugEffectPointInitFlags |= 1u;
+        gaQADebugEffectPoints[0]  = Vector4{ -1.0f, -0.5f,  1.4f, 0.0f };
+        gaQADebugEffectPoints[1]  = Vector4{  1.0f, -0.5f,  1.4f, 0.0f };
+        gaQADebugEffectPoints[2]  = Vector4{ -1.0f, -0.5f, -1.25f, 0.0f };
+        gaQADebugEffectPoints[3]  = Vector4{  1.0f, -0.5f, -1.25f, 0.0f };
+        gaQADebugEffectPoints[4]  = Vector4{  0.0f, -0.5f,  2.0f, 0.0f };
+        gaQADebugEffectPoints[5]  = Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
+        gaQADebugEffectPoints[6]  = Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
+        gaQADebugEffectPoints[7]  = Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
+        gaQADebugEffectPoints[8]  = Vector4{  0.0f, -0.4f,  1.4f, 0.0f };
+        gaQADebugEffectPoints[9]  = Vector4{  0.0f, -0.4f, -1.75f, 0.0f };
+        gaQADebugEffectPoints[10] = Vector4{  0.0f, -0.5f,  0.0f, 0.0f };
+    }
+
+    BrnParticle::LionEffect* const lpInstanceEffect = mParticleModule.GetLionEffect(mEffectInstanceHandle);
+    if (lpInstanceEffect != 0)
+    {
+        const Vector4& lrPoint = gaQADebugEffectPoints[liEffectInstanceIndex];
+        const Matrix44Affine& lrCarTransform = lpRaceCarState->mTransform;
+        Matrix44Affine lEffectTransform;
+        lEffectTransform.xAxis = lrCarTransform.xAxis;
+        lEffectTransform.yAxis = lrCarTransform.yAxis;
+        lEffectTransform.zAxis = lrCarTransform.zAxis;
+        Vector3 lvPosition = CgsPC::VmxFloat::MultiplyAdd(
+            lrCarTransform.xAxis, lrPoint.x, lrCarTransform.wAxis);
+        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.yAxis, lrPoint.y, lvPosition);
+        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.zAxis, lrPoint.z, lvPosition);
+        lEffectTransform.wAxis = lvPosition;
+        lpInstanceEffect->SetTransform(lEffectTransform);
+    }
+
+    if (mDebugComponent.mbQAEnabled)                         // +0x2C34C
+    {
+        BrnParticle::LionEffect* const lpQAEffect = mParticleModule.GetLionEffect(mQAEffectHandle);
+        if (lpQAEffect == 0)
+        {
+            const u32 luNameHash = BrnParticle::ParticleDescription::HashString(KAC_QA_EFFECT);
+            mQAEffectHandle = mParticleModule.StartLionEffect(luNameHash, KAC_QA_EFFECT, 0);
+            return;                                           // the new effect is positioned next update
+        }
+
+        Matrix44Affine lEffectTransform = lpRaceCarState->mTransform;
+        // The console's vaddfp + vrlimi128 mask 4 changes only wAxis.y (Y-up), by 0.75.
+        lEffectTransform.wAxis.y = CgsPC::VmxFloat::Add(lEffectTransform.wAxis.y, 0.75f);
+        lpQAEffect->SetTransform(lEffectTransform);
+    }
+    else
+    {
+        ParticleEffectHelper lHelper(mParticleModule);
+        lHelper.StopEffect(mQAEffectHandle);
+    }
 }
 
 // =================================================================================================
