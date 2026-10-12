@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
 #include "pc/math/VmxFloat.h"
+#include "pc/debug/IniComponentLifecycle.h"
 #include "SDKs/XboxMath/XMVectorSin.h"
 #include "SDKs/XboxMath/XMVectorCos.h"
 #include "SDKs/XboxMath/XMVectorTan.h"
@@ -121,6 +122,23 @@ namespace
     const f32 KF_MPS_TO_MPH = 1.0f / KF_MPH_TO_MPS;
 
     const CgsDev::RGBA KRGBA_TEXT_WHITE = 0xFFFFFFFFu;
+
+    // FLAG PC-platform leaf: loading configured vehicle LODs materializes this
+    // lazy page before a player exists. Its original frame/overlay methods
+    // require an attached player. Only INI-origin activation waits for that
+    // prerequisite; its bindings and configured values are already available.
+    bool IniPlayerUnavailablePC(const CgsDev::DebugComponent* lpComponent,
+                                const RaceCarEntityModule* lpModule)
+    {
+        if (!CgsPC::Debug::IsIniComponent(lpComponent))
+            return false;
+        if (!lpModule)
+            return true;
+        const EActiveRaceCarIndex leIndex = lpModule->GetPlayerActiveRaceCarIndex();
+        if (leIndex < E_ACTIVE_RACE_CAR_INDEX_0 || leIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            return true;
+        return !lpModule->GetActiveRaceCar(leIndex)->IsAttached();
+    }
 }
 
 // ================================================================================================
@@ -357,6 +375,8 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
 // The player's running mean speed (m/s): new mean = (speed + mean * n) / (n + 1).
 void RaceCarEntityModuleDebugComponent::Update()
 {
+    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
+        return;
     ActiveRaceCar* lpPlayerCar =
         mpRaceCarEntityModule->GetActiveRaceCar(mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex());
 
@@ -378,6 +398,8 @@ void RaceCarEntityModuleDebugComponent::Update()
 
 void RaceCarEntityModuleDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
 {
+    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
+        return;
     const rw::RGBA lWhite(0xFF, 0xFF, 0xFF, 0xFF);
 
     if (mbRenderTailgateCones)
@@ -551,6 +573,8 @@ void RaceCarEntityModuleDebugComponent::DrawResetOnWaterHeight(CgsDev::Debug3DIm
 
 void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
 {
+    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
+        return;
     // One line per active-race-car slot: "<slot>:" then, for an active car,
     // "Damaged: <bool>, <persistent damage>".
     if (mbRenderCarDamageState)

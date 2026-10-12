@@ -3,6 +3,7 @@
 #include "pc/debug/DebugIni.h"
 #include "pc/debug/ComponentActivation.h"
 #include "pc/debug/ComponentCapabilities.h"
+#include "pc/debug/IniComponentLifecycle.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
@@ -172,6 +173,7 @@ namespace CgsDev
             mpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
         mComponentList.Clear();
+        CgsPC::Debug::ResetIniComponents(); // PC startup sidecar follows the component-list lifetime.
         gDebugManagerSection.Create();
 
         mp3dRender = nullptr;
@@ -406,7 +408,9 @@ namespace CgsDev
         // names one of its controls. No debug action/function is executed.
         char lacIniPath[256];
         lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
-        if (DebugUI::DebugIniNeedsComponentPC(lacIniPath)) ActivateComponent(lpComponent);
+        const bool lbIniComponent = DebugUI::DebugIniNeedsComponentPC(lacIniPath);
+        CgsPC::Debug::SetIniComponent(lpComponent, lbIniComponent);
+        if (lbIniComponent) ActivateComponent(lpComponent);
     }
 
     // X360 0x8282E1E0. Register a "simple" component: a single bool row wired to its mbActive flag.
@@ -431,7 +435,9 @@ namespace CgsDev
         // on activation too; use the same configured-prefix rule as full pages.
         char lacIniPath[256];
         lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
-        if (DebugUI::DebugIniNeedsComponentPC(lacIniPath)) ActivateComponent(lpComponent);
+        const bool lbIniComponent = DebugUI::DebugIniNeedsComponentPC(lacIniPath);
+        CgsPC::Debug::SetIniComponent(lpComponent, lbIniComponent);
+        if (lbIniComponent) ActivateComponent(lpComponent);
     }
 
     // ARTIST 0x828320F0. A full component starts life as a function row. Its first activation
@@ -442,6 +448,10 @@ namespace CgsDev
         CGS_ASSERT(lpComponent, "lpComponent");
         if (!lpComponent)
             return;
+        // FLAG PC-platform leaf: an explicit menu request takes ownership from
+        // startup INI activation, including a page already materialized by it.
+        if (CgsPC::Debug::sbComponentMenuRequest)
+            CgsPC::Debug::SetIniComponent(lpComponent, false);
         // FLAG: ARTIST 0x8283213C-0x82832160 guards the whole activation on "if (mbActive == 0)" --
         // re-activating an already-active component is a no-op (it must NOT fire OnActivate again).
         if (lpComponent->IsActive())
