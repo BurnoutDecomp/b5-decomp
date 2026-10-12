@@ -468,9 +468,10 @@ namespace BrnEffects
         // glass, a spark shower and the 'ExploShort' LION effect (the .cpp region). A null record is replay playback.
         void HandleShowtimeTrafficBounce(const BrnGameState::GameStateModuleIO::JustBouncedAction* lpJustBouncedAction,
                                          const EffectsIO::InputBuffer* lpEffectsInputBuffer);
-        // ---- still NOT RECONSTRUCTED on this build (each logs ONCE when reached, then returns; see the
-        // .cpp banner): the QA test spawns, the junkyard VFX editor session ----
+        // QA LION effect and restart-latch path, X360 0x82291700. The uninitialised stack
+        // vector copied into QA point row 8 remains explicitly unresolved in the .cpp.
         void HandleQADebugTests(f32 lfDt, f32 lfTime, const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState);
+        // ---- still NOT RECONSTRUCTED on this build: the junkyard VFX editor session ----
         void JunkyardVfxStart(Vector3 lvCameraPosition);
         void JunkyardVfxStop();
 
