@@ -68,7 +68,7 @@
 // trail system READY and PostWorldPreparePrepare that gives every surface its skid colours.
 //
 // ⚠ NOT RECONSTRUCTED ON THIS BUILD, EACH ONE LOUD (logs once when first reached, then
-// returns) -- the junkyard editor / QA tests and the post-fx effects frames
+// returns) -- the junkyard editor session and the post-fx effects frames
 // (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
 // for it).
 // ✅ UPDATED 2026-09-25 (FX-CRASHVFX): "and the prop-locator VFX" left this list with item 6b
@@ -141,6 +141,13 @@ namespace
     // ---- the X360 data cells this TU owns -------------------------------------------
     EffectsModule* gpEffectsModule = 0;          // off_82FAB594 (Construct stores `this`)
     bool           sbRestartEffects = false;     // byte_82FAB694 (RestartEffects raises, HandleQADebugTests consumes)
+    // HandleQADebugTests @0x82291700: the X360 lazily writes 11 16-byte local spawn points
+    // into unk_82FAD1C0 and uses dword_82FAD270 bit 0 as its init latch. Row 8 is copied
+    // from an uninitialised stack vector before that vector's fields are stored, so ARTIST
+    // does not establish its value. Leave that row unwritten here rather than inventing one;
+    // EffectsModule::Construct seeds liEffectInstanceIndex to zero.
+    rw::math::vpu::Vector4 gaQADebugEffectPoints[11] = {};
+    u32                         guQADebugEffectPointInitFlags = 0;
     s32            siEffectsSuspendState = 0;    // dword_82FAD294 (Update's suspend / resume ladder)
     s32            siEffectsSuspendFrames = 0;   // dword_82FAD290 (the 5-frame wait in state 4)
     f32            sfLastUpdateTime = 0.0f;      // flt_82FAD28C (the last non-stalled update time)
@@ -156,6 +163,7 @@ namespace
 
     // The convoy slip-stream effect name (the pointer baked into HandleConvoySlipStream).
     const char* const KAC_SLIPSTREAM_EFFECT = "gamedb://Instances/Effects/SlipStream/SlipStream";
+    const char* const KAC_QA_EFFECT = "gamedb://burnout5/Burnout/Effects/QA.lef.BurnoutFXLionEffectFile?ID=361081";
 
     // The post-fx vault + colour-cube dictionary PrepareResources loads / acquires.
     const char* const KAC_POSTFX_VAULT_BUNDLE      = "PostFx/postfxvault.bin";
@@ -1546,13 +1554,13 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
         SkidGateExit("mDebugComponent.BypassAllVFXProcessing()");
         return;
     }
-    // +0x2C351 -- the "dump running lion effects" latch: consumed, and the step skipped.
+    // ARTIST 0x8229EC60..0x8229EC8C computes this+0x2C351 using addis/addi, reads the
+    // "Dump running Lion effects" latch, clears it when set, and returns before either IO lock.
     if (mDebugComponent.ConsumeDumpRunningLionEffects())
     {
         SkidGateExit("mDebugComponent.ConsumeDumpRunningLionEffects()");
         return;
     }
-
     lpOutputBuffer->LockForWrite();
     lpOutputBuffer->GetReplayRequestInterface()->RegisterSerialiser(&mEffectsSerialiser);
     lpInputBuffer->LockForRead();
@@ -4348,11 +4356,12 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
     mGlassSmashManager.UpdateVehicleEffectPositions(lpInputBuffer, lfTime);
 }
 
-// HandleQADebugTests @0x82291700: the ONE non-debug effect it has -- consuming the
-// RestartEffects latch (byte_82FAB694): when the effects debug component is not enabled
-// the particle module's simulation rate is put back to 1.0 -- is reconstructed; the QA
-// test-effect spawning behind dword_82FAD270 is announced, not performed.
-void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceCarState* /*lpRaceCarState*/)
+// HandleQADebugTests @0x82291700. The restart latch resets the particle simulation rate
+// when Effects debugging is disabled. It also updates the selected local point on the
+// existing test LION effect and starts, positions, or stops the QA test effect from the
+// page's mbQAEnabled gate. ARTIST copies an uninitialised stack vector into point row 8;
+// that row remains unwritten here because its value is not established by the console code.
+void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceCarState* lpRaceCarState)
 {
     if (sbRestartEffects)
     {
@@ -4360,8 +4369,66 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
         if (!mDebugComponent.IsEnabled())                 // +0x2C34D
             mParticleModule.mfSimulationRate = 1.0f;      // +0x23B70
     }
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::HandleQADebugTests @0x82291700 (the QA test-effect spawns)");
+
+    // The X360 dword at 0x82FAD270 is a low-bit lazy-init latch for the eleven vectors at
+    // 0x82FAD1C0. Set the bit before writing the rows, matching the original instruction order.
+    if ((guQADebugEffectPointInitFlags & 1u) == 0)
+    {
+        guQADebugEffectPointInitFlags |= 1u;
+        gaQADebugEffectPoints[0]  = rw::math::vpu::Vector4{ -1.0f, -0.5f,  1.4f, 0.0f };
+        gaQADebugEffectPoints[1]  = rw::math::vpu::Vector4{  1.0f, -0.5f,  1.4f, 0.0f };
+        gaQADebugEffectPoints[2]  = rw::math::vpu::Vector4{ -1.0f, -0.5f, -1.25f, 0.0f };
+        gaQADebugEffectPoints[3]  = rw::math::vpu::Vector4{  1.0f, -0.5f, -1.25f, 0.0f };
+        gaQADebugEffectPoints[4]  = rw::math::vpu::Vector4{  0.0f, -0.5f,  2.0f, 0.0f };
+        gaQADebugEffectPoints[5]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
+        gaQADebugEffectPoints[6]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
+        gaQADebugEffectPoints[7]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
+        // Row 8: the target loads 16 bytes from stack before storing its later x/y/z/w values.
+        gaQADebugEffectPoints[9]  = rw::math::vpu::Vector4{  0.0f, -0.4f, -1.75f, 0.0f };
+        gaQADebugEffectPoints[10] = rw::math::vpu::Vector4{  0.0f, -0.5f,  0.0f, 0.0f };
+    }
+
+    BrnParticle::LionEffect* const lpInstanceEffect = mParticleModule.GetLionEffect(mEffectInstanceHandle);
+    if (lpInstanceEffect != 0)
+    {
+        const rw::math::vpu::Vector4& lrPoint = gaQADebugEffectPoints[liEffectInstanceIndex];
+        const Matrix44Affine& lrCarTransform = lpRaceCarState->mTransform;
+        Matrix44Affine& lrEffectTransform = lpInstanceEffect->mTransform;
+        lrEffectTransform.xAxis = lrCarTransform.xAxis;
+        lrEffectTransform.yAxis = lrCarTransform.yAxis;
+        lrEffectTransform.zAxis = lrCarTransform.zAxis;
+
+        Vector3 lvPosition = lrCarTransform.wAxis;
+        lvPosition = MaddSplat4(lrCarTransform.xAxis, lrPoint.x, lvPosition);
+        lvPosition = MaddSplat4(lrCarTransform.yAxis, lrPoint.y, lvPosition);
+        lvPosition = MaddSplat4(lrCarTransform.zAxis, lrPoint.z, lvPosition);
+        lrEffectTransform.wAxis = lvPosition;
+        lpInstanceEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
+    }
+
+    if (mDebugComponent.QAEnabled())
+    {
+        BrnParticle::LionEffect* const lpQAEffect = mParticleModule.GetLionEffect(mQAEffectHandle);
+        if (lpQAEffect == 0)
+        {
+            mQAEffectHandle = mParticleModule.StartLionEffect(
+                BrnParticle::ParticleDescription::HashString(KAC_QA_EFFECT), KAC_QA_EFFECT, 0u);
+        }
+        else
+        {
+            lpQAEffect->mTransform.xAxis = lpRaceCarState->mTransform.xAxis;
+            lpQAEffect->mTransform.yAxis = lpRaceCarState->mTransform.yAxis;
+            lpQAEffect->mTransform.zAxis = lpRaceCarState->mTransform.zAxis;
+            lpQAEffect->mTransform.wAxis = lpRaceCarState->mTransform.wAxis;
+            lpQAEffect->mTransform.wAxis.y = lpRaceCarState->mTransform.wAxis.y + 0.75f;
+            lpQAEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
+        }
+    }
+    else
+    {
+        ParticleEffectHelper lHelper(mParticleModule);
+        lHelper.StopEffect(mQAEffectHandle);
+    }
 }
 
 // =================================================================================================
