@@ -500,10 +500,9 @@ namespace BrnEffects
         lpThis->mfJunkyardVfxPosY = lrTransform.Pos().y;
         lpThis->mfJunkyardVfxPosZ = lrTransform.Pos().z;
 
-        // Recover the effect's heading (degrees) from atan2(forward.x, forward.z), normalised
-        // into [0, 360). The forward direction is the transform's first row (Right()/xAxis):
-        // the X360 reads LionEffect+0x10 (the matrix's first row) and runs XMVectorATan over
-        // its .x/.z lanes. This is the equivalent scalar form.
+        // Recover the effect's heading from the first row (Right()/xAxis).
+        // ARTIST reads LionEffect+0x10, applies the reciprocal/ATan selections
+        // above, then converts to degrees and corrects a negative result.
         f32 lfHeadingRadians = JunkyardHeadingRadians(lrTransform.Right().x, lrTransform.Right().z);
         f32 lfHeadingDegrees = lfHeadingRadians * 57.295776f; // rad -> deg
         if (lfHeadingDegrees < 0.0f)
