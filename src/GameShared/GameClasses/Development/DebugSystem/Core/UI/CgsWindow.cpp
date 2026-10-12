@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"                // the DebugUI accessor surface
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // CalcTextWidth
 
+#include <cmath>
+
 // CgsDev::DebugUI::Window -- the debug-window base: caption/flags/transparency, the screen rect,
 // the intrusive list link, and the update/render virtual protocol the DebugUI window stack drives.
 //
@@ -274,19 +276,21 @@ namespace CgsDev
         // inactive and disabled windows receive the original opacity multipliers.
         RGBA Window::ScaleColour(RGBA lColour) const
         {
-            f32 lfAlpha = static_cast<f32>((lColour >> 24) & 0xFFu);
+            // ARTIST 828160D0..82816124 rounds each scalar operation in f32:
+            // normalize the alpha, apply state/opacity, then multiply by 255.
+            f32 lfAlpha = static_cast<f32>((lColour >> 24) & 0xFFu) * 0.0039215689f;
             if (!IsActiveWindow())
                 lfAlpha *= 0.9f;
             if (!IsEnabled())
                 lfAlpha *= 0.25f;
             lfAlpha *= 1.0f - mfTransparency;
+            lfAlpha *= 255.0f;
 
-            if (lfAlpha < 0.0f)
-                lfAlpha = 0.0f;
-            else if (lfAlpha > 255.0f)
-                lfAlpha = 255.0f;
-
-            return (lColour & 0x00FFFFFFu) | (static_cast<u32>(lfAlpha) << 24);
+            // fctidz then lbz retains the low byte, without saturation. Finite
+            // s64-representable inputs are modeled here; invalid conversion and
+            // hardware floating status remain outside this scalar lowering.
+            const u32 luAlpha = static_cast<u32>(static_cast<u64>(static_cast<s64>(lfAlpha)) & 0xFFu);
+            return (lColour & 0x00FFFFFFu) | (luAlpha << 24);
         }
 
         // The base virtuals. Update/OnGetFocus/OnLostFocus are empty in the X360 image (no out-of-line
@@ -304,45 +308,71 @@ namespace CgsDev
             RGBA lCaptionColour;
             RGBA lBackgroundColour;
             RGBA lCaptionTextColour;
+            RGBA lFrameColour;
             if (!IsEnabled())
             {
                 lCaptionColour = lrPalette.mColourDisabled;
                 lBackgroundColour = lrPalette.mColourWindow;
                 lCaptionTextColour = lrPalette.mColourDisabledText;
+                lFrameColour = lrPalette.mColourDisabledText;
             }
             else if (IsPinned())
             {
                 lCaptionColour = lrPalette.mColourPinned;
                 lBackgroundColour = lrPalette.mColourPinned;
                 lCaptionTextColour = lrPalette.mColourPinnedText;
+                lFrameColour = lrPalette.mColourBorder;
             }
             else
             {
                 lCaptionColour = IsActiveWindow() ? lrPalette.mColourActiveCaption : lrPalette.mColourCaption;
                 lBackgroundColour = lrPalette.mColourWindow;
                 lCaptionTextColour = lrPalette.mColourCaptionText;
+                lFrameColour = lrPalette.mColourBorder;
             }
 
-            const f32 lfCaptionHeight = CalcCaptionHeight();
+            // Only the caption and client background pass through ScaleColour.
+            // Preserve their call order before the first draw (82828FBC/8FD0).
+            lCaptionColour = ScaleColour(lCaptionColour);
+            lBackgroundColour = ScaleColour(lBackgroundColour);
+            if ((mxFlags & KX_FLAGNOCAPTION) != 0)
+            {
+                if ((mxFlags & KX_FLAGNOBACKGROUND) == 0)
+                {
+                    const f32 lfRight = mfWidth + mfX;
+                    const f32 lfBottom = mfHeight + mfY;
+                    lpRender->DrawBox(Vector2{mfX, mfY, 0, 0},
+                                      Vector2{lfRight - mfX, lfBottom - mfY, 0, 0},
+                                      lBackgroundColour);
+                }
+                if ((mxFlags & KX_FLAGNOBORDER) == 0)
+                    lpRender->DrawFrame(mfX, mfY, mfX + mfWidth, mfY + mfHeight,
+                                        lFrameColour, lrMetrics.mfWindowBorderSize);
+                return;
+            }
+
+            const f32 lfCaptionHeight = std::fma(lrMetrics.mfWindowBorderSize, 2.0f, lrMetrics.mfTextSize);
             if ((mxFlags & KX_FLAGNOBACKGROUND) == 0)
-                lpRender->DrawBox(Vector2{mfX, mfY, 0, 0}, Vector2{mfWidth, mfHeight, 0, 0},
-                                  ScaleColour(lBackgroundColour));
+            {
+                const f32 lfRight = mfWidth + mfX;
+                const f32 lfBottom = mfHeight + mfY;
+                lpRender->DrawBox(Vector2{mfX, mfY, 0, 0},
+                                  Vector2{lfRight - mfX, lfBottom - mfY, 0, 0},
+                                  lBackgroundColour);
+            }
 
             if ((mxFlags & KX_FLAGNOBORDER) == 0)
                 lpRender->DrawFrame(mfX, mfY - lfCaptionHeight, mfX + mfWidth, mfY + mfHeight,
-                                    ScaleColour(lrPalette.mColourBorder), lrMetrics.mfWindowBorderSize);
+                                    lFrameColour, lrMetrics.mfWindowBorderSize);
 
-            if ((mxFlags & KX_FLAGNOCAPTION) == 0)
-            {
-                lpRender->DrawBox(Vector2{mfX, mfY - lfCaptionHeight, 0, 0},
-                                  Vector2{mfWidth, lfCaptionHeight, 0, 0},
-                                  ScaleColour(lCaptionColour));
-                lpRender->DrawText(mpcCaption,
-                                   mfX + lrMetrics.mfWindowBorderSize,
-                                   mfY - lfCaptionHeight + lrMetrics.mfWindowBorderSize,
-                                   lrMetrics.mfTextSize,
-                                   ScaleColour(lCaptionTextColour));
-            }
+            const f32 lfCaptionTop = mfY - lfCaptionHeight;
+            const f32 lfCaptionRight = mfX + mfWidth;
+            lpRender->DrawBox(Vector2{mfX, lfCaptionTop, 0, 0},
+                              Vector2{lfCaptionRight - mfX, mfY - lfCaptionTop, 0, 0},
+                              lCaptionColour);
+            lpRender->DrawText(mpcCaption, mfX,
+                               mfY - lfCaptionHeight + lrMetrics.mfWindowBorderSize,
+                               lrMetrics.mfTextSize, lCaptionTextColour);
         }
         void Window::OnGetFocus() {}
         void Window::OnLostFocus() {}
