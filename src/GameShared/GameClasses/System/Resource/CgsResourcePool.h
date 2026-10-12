@@ -75,6 +75,7 @@ namespace CgsResource
         friend class BundleLoader;   // PC loader orchestrates the per-entry fixup/import passes
         friend class DebugComponent; // the stats dump reads the main/video heap totals inline
         friend class DebugPoolWindow; //ARTIST828E3A38 passes the first two embedded heaps
+        friend class DebugPoolTypeList; //ARTIST828EEB28..48 reads the named heap capacities
 
     public:
         // :179
