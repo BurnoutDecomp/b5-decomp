@@ -44,6 +44,9 @@ namespace CgsSceneManager
         // ARTIST 0x828B3340: bind the owning manager and initialize collision-test/menu state.
         void Construct(const TriangleCollisionManager* lpTriCollisionManager);
 
+        // ARTIST 0x828CAE88: run the enabled collision-debug passes in original order.
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRenderer) override;
+
         // ARTIST 0x828AAF18: add one callback to the four-slot static registry.
         bool RegisterDrawCollisionPolyCallback(
             DrawCollisionPolyCallbackData::DrawCollisionPolyCallback* lpfCallback,
@@ -65,6 +68,15 @@ namespace CgsSceneManager
         void OnActivate() override;
 
     private:
+        // ARTIST helper bodies are recovered from the same two owned component files.
+        void BuildSpacialMap();
+        void DrawPolySoups(CgsDev::Debug3DImmediateRender* lpRenderer);
+        void UpdateViewFrustum(CgsDev::Debug3DImmediateRender* lpRenderer);
+        void TestPolySoupSphereCollision(CgsDev::Debug3DImmediateRender* lpRenderer);
+        void TestPolySoupBoxCollision(CgsDev::Debug3DImmediateRender* lpRenderer);
+        void TestPolySoupSweptSphereCollision(CgsDev::Debug3DImmediateRender* lpRenderer,
+                                              CgsDev::Debug2DImmediateRender* lp2DRenderer);
+
         static DrawCollisionPolyCallbackData saDrawPolyCallbacks[KI_MAX_NUM_COLLISION_POLY_CALLBACKS];
         static s32 siNumDrawPolyCallbacks;
 

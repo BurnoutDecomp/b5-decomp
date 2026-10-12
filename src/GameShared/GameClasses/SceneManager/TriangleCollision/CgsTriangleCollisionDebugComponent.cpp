@@ -113,6 +113,62 @@ namespace CgsSceneManager
             "  LT: Process soups", lePage, false, 10.0f, true);
     }
 
+    // ARTIST 0x828CAE88. Preserve the per-frame order: update the current frustum,
+    // draw the previous spatial map, rebuild it if the level count changed, then run
+    // each enabled collision query. The swept-sphere pass receives a null 2D renderer
+    // exactly as the X360 caller's r5=0 argument does.
+    void TriangleCollisionDebugComponent::RenderWorld(
+        CgsDev::Debug3DImmediateRender* lpRenderer)
+    {
+        if (mbUpdateViewFrustum)
+            UpdateViewFrustum(lpRenderer);
+
+        if (mbDrawPolySoups)
+            DrawPolySoups(lpRenderer);
+
+        BuildSpacialMap();
+
+        if (mbTestSphere)
+            TestPolySoupSphereCollision(lpRenderer);
+
+        if (mbTestBox)
+            TestPolySoupBoxCollision(lpRenderer);
+
+        if (mbTestSweptSphere)
+            TestPolySoupSweptSphereCollision(lpRenderer, nullptr);
+    }
+
+    // ARTIST 0x828AAD50. Rebuild only when the menu-selected level count changes.
+    // The 2 MiB backing store is retained for the component's lifetime; subsequent
+    // rebuilds rewind the same LinearMalloc arena before carving the map.
+    void TriangleCollisionDebugComponent::BuildSpacialMap()
+    {
+        if (miNumLevels == miLastNumLevels)
+            return;
+
+        miLastNumLevels = miNumLevels;
+        if (mpcSpacialBuffer == 0)
+        {
+            mpcSpacialBuffer = new char[KI_SPACIAL_BUFFER_SIZE];
+            mMalloc.Construct();
+            mMalloc.Create(mpcSpacialBuffer, KI_SPACIAL_BUFFER_SIZE);
+            mMalloc.SetAlignment(16);
+        }
+        else
+        {
+            mMalloc.FreeAll();
+        }
+
+        // The original member is const-qualified in DecFIGS, while ARTIST calls the
+        // map's mutating BuildSpacialPartition through that stored manager pointer.
+        // Remove only that qualification to reach the existing typed mutator.
+        TriangleCollisionManager* lpManager =
+            const_cast<TriangleCollisionManager*>(mpTriCollisionManager);
+        lpManager->GetPolySoupListSpacialMap()->BuildSpacialPartition(
+            &mMalloc, miNumLevels, 0x800);
+        miMemUse = static_cast<s32>(mMalloc.GetUsage());
+    }
+
     // ARTIST 0x828AAA68. Register each original field, its range/step/read-only rule, then
     // seed the two test-position refresh flags and copy the live spatial-map level count.
     void TriangleCollisionDebugComponent::OnActivate()
