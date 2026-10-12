@@ -38,6 +38,13 @@ namespace
     const CgsDev::RGBA K_GREEN = 0xFF00FF00u;
     const CgsDev::RGBA K_BLUE  = 0xFF0000FFu;
 
+    rw::RGBA RenderColour(u32 luPacked)
+    {
+        rw::RGBA lColour;
+        lColour.m_rgba = luPacked;
+        return lColour;
+    }
+
     const char* const K_RESET_TYPE_NAMES[E_RESET_TYPE_COUNT] =
     {
         "Invalid",
@@ -339,7 +346,7 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
                 luColour = K_CYAN;
             }
 
-            lpDisplay->DrawLine(lPosition, lEndPosition, luColour);
+            lpDisplay->DrawLine(lPosition, lEndPosition, RenderColour(luColour));
         }
 
         const s32 liHngEntryCount = mHngTestRingBuffer.GetLength();
@@ -348,7 +355,7 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
             const HngTestEntry& lrEntry =
                 mHngTestRingBuffer[static_cast<u32>(liIndex)];
             lpDisplay->DrawLine(lrEntry.mStartPosition, lrEntry.mEndPosition,
-                                lrEntry.mbHit ? K_BLUE : K_GREEN);
+                                RenderColour(lrEntry.mbHit ? K_BLUE : K_GREEN));
         }
     }
 
@@ -386,7 +393,7 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
         const Vector3 lEnd =
             lpSection->GetPortal(lpCar->muResetOnTrackEndPortal)->GetPosition();
 
-        lpDisplay->DrawLine(lStart, lEnd, lbIsPlayer ? K_GREEN : K_CYAN);
+        lpDisplay->DrawLine(lStart, lEnd, RenderColour(lbIsPlayer ? K_GREEN : K_CYAN));
 
         const Vector3 lStartExtent = {3.0f, 3.0f, 3.0f, 0.0f};
         const Vector3 lEndExtent = {0.25f, 0.25f, 0.25f, 0.0f};
@@ -394,12 +401,12 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
                              Vector3{lStart.x - lStartExtent.x,
                                      lStart.y - lStartExtent.y,
                                      lStart.z - lStartExtent.z, 0.0f},
-                             0x800000FFu);
+                             RenderColour(0x800000FFu));
         lpDisplay->DrawArrow(Add(lEnd, lEndExtent),
                              Vector3{lEnd.x - lEndExtent.x,
                                      lEnd.y - lEndExtent.y,
                                      lEnd.z - lEndExtent.z, 0.0f},
-                             0x80FF0000u);
+                             RenderColour(0x80FF0000u));
     }
 }
 

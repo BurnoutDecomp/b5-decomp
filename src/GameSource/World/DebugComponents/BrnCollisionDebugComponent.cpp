@@ -28,7 +28,14 @@ namespace
         0x20800040u, 0x20000000u, 0x20FFFFFFu, 0x20C08000u,
     };
 
-    Vector3 Add(Vector3 lA, Vector3 lB)
+    rw::RGBA RenderColour(u32 luPacked)
+    {
+        rw::RGBA lColour;
+        lColour.m_rgba = luPacked;
+        return lColour;
+    }
+
+    Vector3 AddPositions(Vector3 lA, Vector3 lB)
     {
         return Vector3{lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f};
     }
@@ -222,7 +229,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
     for (s32 liPoint = 0; liPoint < 4; ++liPoint)
     {
         const Vector3 lOffset = Scale(lNormal, 0.05f);
-        laPoints[liPoint] = Add(lpaPolyPoints[liPoint], lOffset);
+        laPoints[liPoint] = AddPositions(lpaPolyPoints[liPoint], lOffset);
     }
 
     CollisionTag lCollisionTag;
@@ -236,23 +243,23 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         if (siSurfaceAlpha != 0)
         {
             lpDisplay->DrawSolidQuad(laPoints[0], laPoints[1], laPoints[2],
-                                     laPoints[3], luColour);
+                                     laPoints[3], RenderColour(luColour));
         }
         lpDisplay->DrawQuad(laPoints[0], laPoints[1], laPoints[2], laPoints[3],
-                            0xFFFFFFFFu);
-        lPolyCentre = Scale(Add(Add(laPoints[0], laPoints[1]),
-                                Add(laPoints[2], laPoints[3])), 0.25f);
+                            RenderColour(0xFFFFFFFFu));
+        lPolyCentre = Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]),
+                                AddPositions(laPoints[2], laPoints[3])), 0.25f);
     }
     else if (liNumPolyPoints == 3)
     {
         if (siSurfaceAlpha != 0)
         {
             lpDisplay->DrawSolidTriangle(laPoints[0], laPoints[1], laPoints[2],
-                                         luColour);
+                                         RenderColour(luColour));
         }
         lpDisplay->DrawHollowTriangle(laPoints[0], laPoints[1], laPoints[2],
-                                      0xFFFFFFFFu);
-        lPolyCentre = Scale(Add(Add(laPoints[0], laPoints[1]), laPoints[2]),
+                                      RenderColour(0xFFFFFFFFu));
+        lPolyCentre = Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]), laPoints[2]),
                             1.0f / 3.0f);
     }
     else
@@ -263,13 +270,13 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
 
     if (sbDrawNormals)
     {
-        lpDisplay->DrawArrow(lPolyCentre, Add(lPolyCentre, lNormal), 0xFFFFFFFFu);
+        lpDisplay->DrawArrow(lPolyCentre, AddPositions(lPolyCentre, lNormal), RenderColour(0xFFFFFFFFu));
     }
 
     if (sbDrawTags)
     {
         const Vector3 lTagPosition =
-            Scale(Add(Add(laPoints[0], laPoints[1]), laPoints[2]), 0.333f);
+            Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]), laPoints[2]), 0.333f);
         const Vector3 lCameraPosition = lpDisplay->GetCameraPosition();
         const f32 lfDX = lTagPosition.x - lCameraPosition.x;
         const f32 lfDY = lTagPosition.y - lCameraPosition.y;
