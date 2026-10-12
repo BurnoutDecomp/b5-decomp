@@ -321,10 +321,6 @@ namespace BrnWorld
                 lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mfTsmSlideBack, lacPath, "TSM slideback" );
                 lDebugInterface.SetStep( &maTsmBBInfo[luCsm].mfTsmSlideBack, 0.05f );
                 lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mbDebugRender, lacPath, "DebugRender" );
-                // FLAG PC-platform leaf: the diagnostic IM pipeline below is
-                // still an explicit trap. Keep its status visible without an
-                // interactive toggle that would assert on the next frame.
-                lDebugInterface.SetReadOnly( &maTsmBBInfo[luCsm].mbDebugRender, true );
             }
             CgsPC::Shadows::RegisterSettings(lDebugInterface);
         }
