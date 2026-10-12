@@ -42,9 +42,8 @@ namespace CgsSceneManager
                                         CgsDev::Debug3DImmediateRender* lpRender,
                                         const Matrix44Affine& lTransform) const;
 
-        // ARTIST callees of RenderWorld. Their named host implementations are being recovered;
-        // DrawTriangleTest's original raw assembly is in the separate recovery packet because its
-        // per-address JSON export is absent.
+        // ARTIST callees of RenderWorld. DrawTriangleTest is decoded directly from its raw
+        // instruction packet; the other named consumers are reconstructed in this component.
         void DrawCachedObjectTriangles(CgsDev::Debug3DImmediateRender* lpRender);
         void DrawCachedObjectSpheres(CgsDev::Debug3DImmediateRender* lpRender);
         void DrawCachedTriangle(CgsDev::Debug3DImmediateRender* lpRender,

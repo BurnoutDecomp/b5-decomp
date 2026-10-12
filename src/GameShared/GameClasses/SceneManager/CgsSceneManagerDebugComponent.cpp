@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // the 3D draws
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                     // triangle-test monitor
+#include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h"                  // swept sphere / Triangle4 test
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"                      // SweptSphere
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"                       // entity + volume managers
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"         // cached slots and triangle batches
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"                        // four-lane cached triangle batches
@@ -12,6 +14,15 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                                            // TransformPoint / operator*
 
 #include <cmath>
+#include <cstring>
+
+// These are the exact 32-bit timer entry points used by the X360 function. The shared timer
+// header currently publishes GetSystemTimeMS; its implementation owns these two named wrappers.
+namespace CgsSystem
+{
+    u32 GetSystemTimerBaseTime();
+    u32 GetSystemTimerFrequency();
+}
 
 // CgsSceneManager::SceneManagerDebugComponent -- GetName, DrawPrimitives and the collision-volume
 // draw it drives.
@@ -28,6 +39,24 @@ namespace CgsSceneManager
         f32 GetTriangleLane(const rw::math::vpu::Vector4& lrValues, s32 liLane)
         {
             return (&lrValues.x)[liLane];
+        }
+
+        rw::math::vpu::MaskScalar BroadcastMaskLane(const f32& lrLane)
+        {
+            u32 luMaskBits = 0;
+            std::memcpy(&luMaskBits, &lrLane, sizeof(luMaskBits));
+
+            rw::math::vpu::MaskScalar lMask;
+            std::memcpy(&lMask.x, &luMaskBits, sizeof(luMaskBits));
+            std::memcpy(&lMask.y, &luMaskBits, sizeof(luMaskBits));
+            std::memcpy(&lMask.z, &luMaskBits, sizeof(luMaskBits));
+            std::memcpy(&lMask.w, &luMaskBits, sizeof(luMaskBits));
+            return lMask;
+        }
+
+        Vector3 CopyVector3Plus(const Vector3Plus& lrPoint)
+        {
+            return { lrPoint.x, lrPoint.y, lrPoint.z, lrPoint.w };
         }
 
         void DrawContactAxes(CgsDev::Debug3DImmediateRender* lpRender, const Vector3& lrPosition)
@@ -95,9 +124,8 @@ namespace CgsSceneManager
         SceneManagerModule::ResetDebugPageCounters();
     }
 
-    // @ X360 0x828D04E8. Preserve the target dispatch order and trailing camera-position store.
-    // The three named callees below are still in the pending consumer recovery set; their
-    // declarations are kept so the calls are not silently omitted from the source path.
+    // @ X360 0x828D04E8. Preserve dispatch order. The target returns directly from the
+    // triangle-test branch; it stores the current camera position only when that test is off.
     void SceneManagerDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
     {
         CGS_ASSERT(lpRender != NULL, "lpDisplay != NULL");
@@ -109,9 +137,116 @@ namespace CgsSceneManager
         if (mbDrawCollisionVolumes)
             DrawPrimitives(lpRender);
         if (mbDrawTriangleTest)
+        {
             DrawTriangleTest(lpRender);
+        }
+        else
+        {
+            mInitialCameraPosition = lpRender->GetCameraPosition();
+        }
+    }
 
-        mInitialCameraPosition = lpRender->GetCameraPosition();
+    // @ X360 0x828C2E70. Test the four identical Triangle4 lanes against the fixed swept sphere,
+    // time the requested number of kernel calls, then draw the sphere, optional padding sphere,
+    // and each lane's triangle/contact pair in the target order.
+    void SceneManagerDebugComponent::DrawTriangleTest(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        lpRender->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_OFF);
+        lpRender->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_ON);
+        lpRender->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_OFF);
+        lpRender->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_ON);
+
+        const Vector3Plus lSpherePositionAndRadius = { 0.5f, 1.0f, 0.5f, 0.5f };
+        const Vector3Plus lSphereDirectionAndLength = { 0.0f, -1.0f, 0.0f, 1.0f };
+        CgsGeometric::SweptSphere lSweptSphere;
+        lSweptSphere.Set(lSpherePositionAndRadius, lSphereDirectionAndLength);
+
+        const f32 lfTriX = mTriangleOffset.x;
+        const f32 lfTriY = mTriangleOffset.y;
+        const f32 lfTriZ = mTriangleOffset.z;
+        const f32 lfTriScale = mfTriangleScale;
+        const f32 lfTriXPlusScale = lfTriScale + lfTriX;
+        const f32 lfTriZPlusScale = lfTriScale + lfTriZ;
+
+        CgsGeometric::Triangle4 lTriangles = {};
+        lTriangles.mVertex0X = { lfTriX, lfTriX, lfTriX, lfTriX };
+        lTriangles.mVertex0Y = { lfTriY, lfTriY, lfTriY, lfTriY };
+        lTriangles.mVertex0Z = { lfTriZ, lfTriZ, lfTriZ, lfTriZ };
+        lTriangles.mVertex1X = { lfTriX, lfTriX, lfTriX, lfTriX };
+        lTriangles.mVertex1Y = { lfTriY, lfTriY, lfTriY, lfTriY };
+        lTriangles.mVertex1Z = { lfTriZPlusScale, lfTriZPlusScale, lfTriZPlusScale, lfTriZPlusScale };
+        lTriangles.mVertex2X = { lfTriXPlusScale, lfTriXPlusScale, lfTriXPlusScale, lfTriXPlusScale };
+        lTriangles.mVertex2Y = { lfTriY, lfTriY, lfTriY, lfTriY };
+        lTriangles.mVertex2Z = { lfTriZ, lfTriZ, lfTriZ, lfTriZ };
+
+        const u32 luValidLane = 0xFFFFFFFFu;
+        std::memcpy(&lTriangles.mValidMasks.x, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.y, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.z, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.w, &luValidLane, sizeof(luValidLane));
+        lTriangles.mSurfaceTags.SetZero();
+        lTriangles.mEdge0Cosigns.SetZero();
+        lTriangles.mEdge1Cosigns.SetZero();
+        lTriangles.mEdge2Cosigns.SetZero();
+
+        Vector3 laContactNormals[4];
+        Vector3 laTriangleNormals[4];
+        Vector3Plus laSphereContactPoints[4];
+        Vector3Plus laTriangleContactPoints[4];
+        CgsGeometric::Triangle4::Mask4 lIntersectMask;
+
+        CgsDev::PerfMonCpu::StartMonitor(siTriangleTestPerfMon);
+        const u32 luStartTime = CgsSystem::GetSystemTimerBaseTime();
+        for (s32 liTest = 0; liTest < miTestsToExecute; ++liTest)
+        {
+            lIntersectMask = CgsGeometric::IntersectTriangle4SweptSphere(
+                lSweptSphere, lTriangles,
+                laContactNormals[0], laTriangleNormals[0], laSphereContactPoints[0], laTriangleContactPoints[0],
+                laContactNormals[1], laTriangleNormals[1], laSphereContactPoints[1], laTriangleContactPoints[1],
+                laContactNormals[2], laTriangleNormals[2], laSphereContactPoints[2], laTriangleContactPoints[2],
+                laContactNormals[3], laTriangleNormals[3], laSphereContactPoints[3], laTriangleContactPoints[3]);
+        }
+        const u32 luElapsedTicks = CgsSystem::GetSystemTimerBaseTime() - luStartTime;
+        const u32 luTimerFrequency = CgsSystem::GetSystemTimerFrequency();
+        const u64 luElapsedScaled = static_cast<u64>(luElapsedTicks) * 3200000000ULL;
+        const u64 luTotalCycles = luElapsedScaled / luTimerFrequency;
+        miTotalCycles = static_cast<s32>(static_cast<u32>(luTotalCycles));
+        miCyclesPerCall = miTotalCycles / miTestsToExecute;
+        miCyclesPerTriangle = miCyclesPerCall / 4;
+        CgsDev::PerfMonCpu::StopMonitor(siTriangleTestPerfMon);
+
+        const Vector3 lSpherePosition = CopyVector3Plus(lSpherePositionAndRadius);
+        const Vector3 lSphereWorldPosition = {
+            lSpherePosition.x + mInitialCameraPosition.x,
+            lSpherePosition.y + mInitialCameraPosition.y,
+            lSpherePosition.z + mInitialCameraPosition.z,
+            lSpherePosition.w + mInitialCameraPosition.w };
+        lpRender->DrawSphere(lSphereWorldPosition, lSpherePositionAndRadius.w,
+            rw::RGBA(0xFFu, 0x00u, 0x00u, 0x64u)); // ARTIST r5 = 0x640000FF
+
+        if (mbDrawPadding)
+        {
+            lpRender->DrawSphere(lSphereWorldPosition, mfPadding,
+                rw::RGBA(0x00u, 0xFFu, 0xFFu, 0x63u)); // ARTIST r5 = 0x63FFFF00
+        }
+
+        const Vector3 lTriangleVertex0 = { lfTriX, lfTriY, lfTriZ, lfTriX };
+        const Vector3 lTriangleVertex1 = { lfTriX, lfTriY, lfTriZPlusScale, lfTriX };
+        const Vector3 lTriangleVertex2 = {
+            lfTriXPlusScale, lfTriY, lfTriZ, lfTriXPlusScale };
+
+        DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
+            BroadcastMaskLane(lIntersectMask.x),
+            CopyVector3Plus(laSphereContactPoints[0]), CopyVector3Plus(laTriangleContactPoints[0]));
+        DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
+            BroadcastMaskLane(lIntersectMask.y),
+            CopyVector3Plus(laSphereContactPoints[1]), CopyVector3Plus(laTriangleContactPoints[1]));
+        DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
+            BroadcastMaskLane(lIntersectMask.z),
+            CopyVector3Plus(laSphereContactPoints[2]), CopyVector3Plus(laTriangleContactPoints[2]));
+        DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
+            BroadcastMaskLane(lIntersectMask.w),
+            CopyVector3Plus(laSphereContactPoints[3]), CopyVector3Plus(laTriangleContactPoints[3]));
     }
 
     // @ X360 0x828C2560. Walk each used cache slot and its cached Triangle4 batches, drawing
