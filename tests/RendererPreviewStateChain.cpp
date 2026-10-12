@@ -42,7 +42,7 @@ u32 guPresentCount = 1;
 }
 IDirect3DDevice9* gpD3DDevice = nullptr;
 
-enum EventKind { E_BLEND, E_DEPTH, E_RASTER, E_SAMPLER, E_TEXTURE, E_DRAW };
+enum EventKind { RENDERER_EVENT_BLEND, RENDERER_EVENT_DEPTH, RENDERER_EVENT_RASTER, RENDERER_EVENT_SAMPLER, RENDERER_EVENT_TEXTURE, RENDERER_EVENT_DRAW };
 struct Event
 {
     EventKind meKind;
@@ -81,17 +81,17 @@ const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOffPC() { retur
 }
 namespace shadow {
 void* Device::Xbox2SetStateLowLevelShadowed(void* lpState, bool lbWasUnset)
-{ Record(E_BLEND, lpState, lbWasUnset); return lpState; }
+{ Record(RENDERER_EVENT_BLEND, lpState, lbWasUnset); return lpState; }
 void* Device::Xbox2SetDepthStencilStateLowLevelShadowed(void* lpState, bool lbWasUnset)
-{ Record(E_DEPTH, lpState, lbWasUnset); return lpState; }
+{ Record(RENDERER_EVENT_DEPTH, lpState, lbWasUnset); return lpState; }
 void* Device::Xbox2SetRasterizerStateLowLevelShadowed(void* lpState, bool lbWasUnset)
-{ Record(E_RASTER, lpState, lbWasUnset); return lpState; }
+{ Record(RENDERER_EVENT_RASTER, lpState, lbWasUnset); return lpState; }
 }
 extern "C" void* SetSamplerStateLowLevel(void* lpState, u32 luUnit, bool lbWasUnset)
-{ Record(E_SAMPLER, lpState, lbWasUnset, luUnit); return lpState; }
+{ Record(RENDERER_EVENT_SAMPLER, lpState, lbWasUnset, luUnit); return lpState; }
 extern "C" unsigned int D3DDevice_SetTexture(IDirect3DDevice9*, u32 luUnit,
                                              void* lpTexture, unsigned int luFlags)
-{ Record(E_TEXTURE, lpTexture, false, luUnit, luFlags); return 0; }
+{ Record(RENDERER_EVENT_TEXTURE, lpTexture, false, luUnit, luFlags); return 0; }
 
 using BasicVertex = CgsGraphics::Basic2dColouredTexturedVertex;
 static BasicVertex saCaptured[4];
@@ -107,7 +107,7 @@ struct RecordingIm2d : CgsGraphics::Im2d
         suCapturedCount = luCount;
         seCapturedPrimitive = lePrimitive;
         std::memcpy(saCaptured, lpVertices, sizeof(saCaptured));
-        Record(E_DRAW, shadow::Device::GetSamplerTextureShadow(0));
+        Record(RENDERER_EVENT_DRAW, shadow::Device::GetSamplerTextureShadow(0));
     }
 };
 
@@ -244,11 +244,11 @@ static void CheckTypedStates()
     renderengine::DepthStencilState lDepthA = {}, lDepthB = {};
     renderengine::RasterizerState lRasterA = {}, lRasterB = {};
     CheckStateCache<renderengine::BlendMaterialState, CgsGraphics::BlendState>(lOwner,
-        lBlendA, lBlendB, Shadow::mbBlendStateLocked, Shadow::mpBlendState, E_BLEND);
+        lBlendA, lBlendB, Shadow::mbBlendStateLocked, Shadow::mpBlendState, RENDERER_EVENT_BLEND);
     CheckStateCache<renderengine::DepthStencilState, CgsGraphics::DepthStencilState>(lOwner,
-        lDepthA, lDepthB, Shadow::mbDepthStencilStateLocked, Shadow::mpDepthStencilState, E_DEPTH);
+        lDepthA, lDepthB, Shadow::mbDepthStencilStateLocked, Shadow::mpDepthStencilState, RENDERER_EVENT_DEPTH);
     CheckStateCache<renderengine::RasterizerState, CgsGraphics::RasterizerState>(lOwner,
-        lRasterA, lRasterB, Shadow::mbRasteriserStateLocked, Shadow::mpRasterizerState, E_RASTER);
+        lRasterA, lRasterB, Shadow::mbRasteriserStateLocked, Shadow::mpRasterizerState, RENDERER_EVENT_RASTER);
     const unsigned luBefore = suAssertions;
     lOther.SetState(reinterpret_cast<const CgsGraphics::RasterizerState*>(&lRasterB));
     Check(suAssertions == luBefore + 1 && Shadow::mpRasterizerState == &lRasterB,
@@ -294,8 +294,8 @@ static void CheckWholeTexture()
     lStateA.mpRaster = &lRasterA; lStateB.mpRaster = &lRasterB;
     saEvents.clear();
     lOwner.SetState(&lStateA);
-    Check(saEvents.size() == 2 && saEvents[0].meKind == E_SAMPLER
-        && saEvents[0].mbWasUnset && saEvents[1].meKind == E_TEXTURE
+    Check(saEvents.size() == 2 && saEvents[0].meKind == RENDERER_EVENT_SAMPLER
+        && saEvents[0].mbWasUnset && saEvents[1].meKind == RENDERER_EVENT_TEXTURE
         && saEvents[1].muFlags == 0x80000000u, "whole TextureState applies sampler then stage-zero raster with original mask");
     Check(Shadow::mapTextureState[0] == &lStateA && Shadow::mapSamplerState[0] == &lStateA
         && Shadow::mapSamplerTexture[0] == &lRasterA, "whole TextureState publishes all three native-width keys");
@@ -361,11 +361,11 @@ static void CheckPreview()
             lbLanesIntact &= lModule.mTextureStateResource.m_baseResources[luLane] ==
                 reinterpret_cast<void*>(UINT64_C(0x1234567800000000) + luLane);
         Check(lbLanesIntact, "initializer leaves all other resource lanes untouched");
-        Check(saEvents.size() == 5 && saEvents[0].meKind == E_SAMPLER
-            && saEvents[0].mbWasUnset && saEvents[1].meKind == E_TEXTURE
-            && saEvents[1].mpValue == lpRaster && saEvents[2].meKind == E_BLEND
-            && saEvents[2].mpValue == &sStandardBlend && saEvents[3].meKind == E_RASTER
-            && saEvents[3].mpValue == &sCullNone && saEvents[4].meKind == E_DRAW,
+        Check(saEvents.size() == 5 && saEvents[0].meKind == RENDERER_EVENT_SAMPLER
+            && saEvents[0].mbWasUnset && saEvents[1].meKind == RENDERER_EVENT_TEXTURE
+            && saEvents[1].mpValue == lpRaster && saEvents[2].meKind == RENDERER_EVENT_BLEND
+            && saEvents[2].mpValue == &sStandardBlend && saEvents[3].meKind == RENDERER_EVENT_RASTER
+            && saEvents[3].mpValue == &sCullNone && saEvents[4].meKind == RENDERER_EVENT_DRAW,
             "preview orders full texture, standard blend, cull-none and primitive submission");
         bool lbOwnerValid = true;
         for (const Event& lrEvent : saEvents)
@@ -397,10 +397,10 @@ static void CheckPreview()
     Shadow::mbBlendStateLocked = Shadow::mbRasteriserStateLocked = true;
     saEvents.clear();
     lModule.DebugDisplayRenderTarget(&lRasterA, Vector2{0.0f, 0.0f}, Vector2{1.0f, 1.0f}, 0xFFFFFFFFu);
-    Check(EventCount(E_BLEND) == 0 && EventCount(E_RASTER) == 0
+    Check(EventCount(RENDERER_EVENT_BLEND) == 0 && EventCount(RENDERER_EVENT_RASTER) == 0
         && Shadow::mpBlendState == nullptr && Shadow::mpRasterizerState == nullptr,
         "preview respects locked blend/raster states after Begin shadow reset");
-    Check(EventCount(E_TEXTURE) == 1 && EventCount(E_DRAW) == 1 && Owner::mgpActiveRenderer == nullptr,
+    Check(EventCount(RENDERER_EVENT_TEXTURE) == 1 && EventCount(RENDERER_EVENT_DRAW) == 1 && Owner::mgpActiveRenderer == nullptr,
         "state locks retain original texture and draw behavior through End");
     UnlockStates();
     Owner::mgpActiveRenderer = nullptr;
