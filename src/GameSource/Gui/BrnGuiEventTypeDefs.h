@@ -598,7 +598,7 @@ private:
 // the 8 bytes between the last button record and the count are an explicitly-reserved
 // span, not a fabricated member.
 // ===================================================================================
-namespace BrnGui { struct CarSelectVehicle; }
+struct CarSelectVehicle;
 
 class GuiOverlayRequest
 {
@@ -679,7 +679,7 @@ public:
 private:
     // The X360 CarSelectVehicle handler writes the leading CgsID directly; DecFIGS names
     // this member, so grant that one consumer access without adding a new accessor.
-    friend struct BrnGui::CarSelectVehicle;
+    friend struct CarSelectVehicle;
 
     // DecFIGS identifies the leading named CgsID. ARTIST shows that this same first
     // eight-byte region is also the head of message slot zero (AddMessageParam uses
