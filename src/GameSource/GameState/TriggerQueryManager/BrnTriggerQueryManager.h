@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                             // Array<T,N> (generic, committed)
 #include "GameSource/GameState/BrnGameStateTypes.h"                                 // BrnGameState::LandmarkIndex
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"           // BrnGameState::LightTriggerId (committed typedef home)
+#include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.h" // embedded debug component
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                            // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"                // CgsModule::EventReceiverQueue<3072,16> (Prepare's reply queue)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"                  // CgsResource::ResourcePtr<T>
@@ -179,10 +180,11 @@ public:
 private:
 
     // ---- leading preamble (offsets 0..911), grown in place 2026-08-01 -----------------------
-    // this+0 .. this+351: mDebugComponent (BrnGameState::TriggerQueryManagerDebugComponent,
-    // DWARF h:211). Still reserved -- the component's own header is a separate slice and
-    // Prepare's Construct/Register of it is a documented deferral (see the Prepare body).
-    u8 mauReserved_DebugComponent[352];              // this+0 .. this+351
+    // DWARF BrnTriggerQueryManager.h:211. ARTIST Prepare constructs this component after the
+    // TriggerData resource handle is bound, then registers it with DebugComponent::Register.
+    // Its typed native size may grow with host pointers; following manager members are accessed
+    // by name, so no console-size padding is applied.
+    TriggerQueryManagerDebugComponent mTriggerQueryManagerDebugComponent;
     // this+352/360/368 (DWARF h:212/213/214). The three player trigger-GROUP ids.
     // TriggerQueryManager::Prepare zeroes all three with three 8-byte stores
     // (`std r28, 0x160/0x168/0x170(r31)` @0x823983D4/D8/E4) right after it binds the trigger
