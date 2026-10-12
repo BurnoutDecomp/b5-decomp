@@ -64,7 +64,7 @@ namespace
         s32 miValue;   // +0x0C
 
         GuiEventOnlineScreenAdvance()
-            : CgsGui::GuiEvent<KI_EVENT_ONLINE_SCREEN_ADVANCE>(4, 12), miValue(2) {}
+            :  miValue(2) {}
     };
 
     // { 1, 282, 12 }: posted once the screen's movie is up. The console leaves the payload
@@ -73,25 +73,22 @@ namespace
     {
         u32 muReserved;   // +0x0C
 
-        GuiEventMarkManLoaded() : CgsGui::GuiEvent<282>(1, 12), muReserved(0) {}
+        GuiEventMarkManLoaded() :  muReserved(0) {}
     };
 
     // The overlay request as the out-queue carries it: the GuiEvent<184> header sized to the
     // request, a pad word, then the request itself.
     struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
     {
-        u32               muPad0C;    // +0x0C
         GuiOverlayRequest mRequest;   // +0x10
         GuiOverlayRequestWire()
-            : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-            , muPad0C(0) {}
+             {}
     };
 
     void PostOnlineScreenAdvance(CgsGui::StateInterface* lpStateInterface)
     {
         GuiEventOnlineScreenAdvance lAdvance;
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAdvance), KI_CHANNEL_GUI_OUT, 16);
+        lpStateInterface->OutputGuiEvent(lAdvance);
     }
 }
 
@@ -282,8 +279,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_MARK_MAN_RESOURCE_ID], KI_MOVIE_LEVEL);
 
         GuiEventMarkManLoaded lLoaded;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lLoaded), KI_CHANNEL_GUI_OUT, 16);
+        mpStateInterface->OutputGuiEvent(lLoaded);
         return true;
     }
 
@@ -349,9 +345,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
                 {
                     GuiOverlayRequestWire lWire;
                     lWire.mRequest.Construct("OnLostConn");
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+                    mpStateInterface->OutputGuiEvent(lWire);
 
                     PostOnlineScreenAdvance(mpStateInterface);
                     SendStateEvent("ADVANCE");

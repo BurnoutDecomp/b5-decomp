@@ -1,4 +1,6 @@
 #pragma once
+
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"  // GuiEventAudioTraxLastPlayedIndexes (canonical payload home)
 #include "GameSource/Gui/Events/BrnGuiEventSetAvailablePresetRaces.h"
 #include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 #include "GameSource/Gui/Events/BrnGuiCrashEvents.h"
@@ -769,7 +771,7 @@ namespace BrnGui
     // opaque `GuiEvent<458> + u8[20]` mirror that stood here had the WRONG shape and was a
     // hard C2011 against the profile header's slice, so it is DELETED rather than left to
     // shadow the real home -- the same move GuiAutosaveRequestEvent got above.
-    struct alignas(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[12]; };  // id 459 size 24 [8-aligned: OGE off16]
+    // GuiEventAudioTraxLastPlayedIndexes is defined in the audio Trax event home.
     struct GuiEventAudioTraxPreview { u8 maData[8]; s32 GetEventType() const { return 460; } };  // id 460 size 8
     struct GuiEventAudioVoiceOver { u8 maData[4]; s32 GetEventType() const { return 466; } };  // id 466 size 4
     // The local camera's status (network -> GUI). The network module posts the object itself.
@@ -845,10 +847,7 @@ namespace BrnGui
         s32 miConnectType;
 
         explicit GuiEventNetworkConnect(s32 liConnectType)
-            : CgsGui::GuiEvent<272>(
-                  static_cast<u32>(sizeof(GuiEventNetworkConnect) - sizeof(CgsGui::GuiEvent<272>)),
-                  static_cast<u32>(sizeof(CgsGui::GuiEvent<272>)))
-            , miConnectType(liConnectType) {}
+            :  miConnectType(liConnectType) {}
     };
     struct GuiEventNetworkCustomMatchJoin { u8 maData[4]; s32 GetEventType() const { return 255; } };  // id 255 size 4
     // id 254, record 604 bytes -- HEADERLESS, and deliberately so. MEASURED: the only
@@ -931,11 +930,7 @@ namespace BrnGui
         u8   maPad[2];                // payload +0x0A -- the console reads the +8 word whole (`lwz`)
 
         GuiEventNetworkCustomMatchSearch()
-            : CgsGui::GuiEvent<252>(
-                  static_cast<u32>(sizeof(GuiEventNetworkCustomMatchSearch)
-                                   - offsetof(GuiEventNetworkCustomMatchSearch, meGameMode)),
-                  static_cast<u32>(offsetof(GuiEventNetworkCustomMatchSearch, meGameMode)))
-            , meGameMode(0), meSearchOpponentTypes(0), mbRanked(false), mbFreeburn(false)
+            :  meGameMode(0), meSearchOpponentTypes(0), mbRanked(false), mbFreeburn(false)
         { maPad[0] = 0; maPad[1] = 0; }
     };  // id 252, record 24 bytes
     static_assert(sizeof(GuiEventNetworkCustomMatchSearch) == 24,
@@ -1049,8 +1044,7 @@ namespace BrnGui
                                   //         highlighted gamertag against the current target)
         u8   maPad[3];            // +0x2D..0x2F
         GuiEventScoreboardRequestEvScoreTarget()
-            : CgsGui::GuiEvent<121>(36, 12)
-            , miScore(0), miCategory(0), miIndex(0), miVariation(0), mbIsCurrentTarget(false)
+            :  miScore(0), miCategory(0), miIndex(0), miVariation(0), mbIsCurrentTarget(false)
         { mPlayerName.macName[0] = 0; maPad[0] = maPad[1] = maPad[2] = 0; }
     };
     // X360 instantiation @0x82493D38: record { 16, 120, 12, name[16] }, ch40, 28 bytes
@@ -1059,7 +1053,7 @@ namespace BrnGui
     {
         CgsNetwork::PlayerName mPlayerName;   // +0x0C (16 bytes; the named home of the same char[16])
         GuiEventScoreboardRequestGamercardEvent()
-            : CgsGui::GuiEvent<120>(16, 12) { mPlayerName.macName[0] = 0; }
+             { mPlayerName.macName[0] = 0; }
     };
     // X360 instantiation @0x82493FF8: record { 4, 111, 12, <category> }, ch40, 16 bytes
     // (GameBridgeGUIToX reads the word at record+12 -- the old raw {maData[4]} shape
@@ -1068,21 +1062,21 @@ namespace BrnGui
     {
         s32 miCategory;   // +0x0C
         explicit GuiEventScoreboardRequestIndexEvent(s32 liCategory)
-            : CgsGui::GuiEvent<111>(4, 12), miCategory(liCategory) {}
+            :  miCategory(liCategory) {}
     };
     // X360 instantiation @0x82494098: record { 4, 113, 12, <variation/road> }, ch40, 16 bytes.
     struct GuiEventScoreboardRequestTableEvent : public CgsGui::GuiEvent<113>
     {
         s32 miVariation;   // +0x0C
         explicit GuiEventScoreboardRequestTableEvent(s32 liVariation)
-            : CgsGui::GuiEvent<113>(4, 12), miVariation(liVariation) {}
+            :  miVariation(liVariation) {}
     };
     // X360 instantiation @0x82494048: record { 4, 112, 12, <index> }, ch40, 16 bytes.
     struct GuiEventScoreboardRequestVariationEvent : public CgsGui::GuiEvent<112>
     {
         s32 miIndex;   // +0x0C
         explicit GuiEventScoreboardRequestVariationEvent(s32 liIndex)
-            : CgsGui::GuiEvent<112>(4, 12), miIndex(liIndex) {}
+            :  miIndex(liIndex) {}
     };
     struct GuiEventSetPlayer0ControllerPort { u8 maData[4]; s32 GetEventType() const { return 143; } };  // id 143 size 4
     struct GuiEventVoipSettings { u8 maData[4]; s32 GetEventType() const { return 474; } };  // id 474 size 4
@@ -1105,7 +1099,7 @@ namespace BrnGui
         s32  miTelemetryType;   // +0x0C
         char macParams[16];     // +0x10
         explicit GuiTelemetryEvent(s32 liTelemetryType)
-            : CgsGui::GuiEvent<323>(20, 12), miTelemetryType(liTelemetryType) { macParams[0] = 0; }
+            :  miTelemetryType(liTelemetryType) { macParams[0] = 0; }
     };
 
     // ============================================================================

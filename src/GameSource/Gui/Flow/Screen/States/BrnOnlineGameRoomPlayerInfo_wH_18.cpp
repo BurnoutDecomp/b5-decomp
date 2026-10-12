@@ -91,9 +91,7 @@ namespace BrnGui
             GuiEventNetworkGameOptionsRequest mRequest;   // +0x0C (never written)
 
             GuiEventNetworkGameOptionsRequestWire()
-                : NetworkGameOptionsRequestHeader(
-                      static_cast<u32>(sizeof(GuiEventNetworkGameOptionsRequest)),
-                      static_cast<u32>(sizeof(NetworkGameOptionsRequestHeader)))
+
             {
             }
         };

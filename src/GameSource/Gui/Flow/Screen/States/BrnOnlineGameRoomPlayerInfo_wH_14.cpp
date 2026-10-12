@@ -109,12 +109,10 @@ namespace BrnGui
         // the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (the payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -123,12 +121,10 @@ namespace BrnGui
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
         struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
         {
-            u32                         muPad0C;    // +0x0C (the payload is 8-aligned)
             GuiOverlayWaitFinishRequest mRequest;   // +0x10
 
             GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -180,9 +176,7 @@ namespace BrnGui
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(KAC_OVERLAY_LOBBY_DELETED);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            mpStateInterface->OutputGuiEvent(lWire);
         }
 
         if (lpPayload->miReason == KI_LEFT_GAME_REASON_KICKED)
@@ -193,17 +187,13 @@ namespace BrnGui
                 GuiOverlayWaitFinishWire lWaitGame;
                 lWaitGame.mRequest.Construct(KAC_OVERLAY_LEAVE_GAME_QN);
 
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWaitGame), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lWaitGame)));
+                mpStateInterface->OutputGuiEvent(lWaitGame);
             }
             {
                 GuiOverlayWaitFinishWire lWaitChallenge;
                 lWaitChallenge.mRequest.Construct(KAC_OVERLAY_LEAVE_CHAL_QN);
 
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWaitChallenge), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lWaitChallenge)));
+                mpStateInterface->OutputGuiEvent(lWaitChallenge);
             }
 
             // cpp:2433 -- SIGNED bound check (asm: blt on 0, then blt on 5). The X360
@@ -215,9 +205,7 @@ namespace BrnGui
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(KAPC_KICKED_POPUP[lpPayload->miKickReason]);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            mpStateInterface->OutputGuiEvent(lWire);
 
             mbKicked = true;
         }
@@ -259,9 +247,7 @@ namespace BrnGui
             lWire.mRequest.AddMessageParam(KU_LAUNCH_FAILED_MESSAGE_PARAM,
                                            KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            mpStateInterface->OutputGuiEvent(lWire);
 
             // Tab title. The X360 tests the two panels' visibility state words directly
             // (mPlayerStatsDisplay.meState @+0x11E4 and mRouteInfoDisplay.meState

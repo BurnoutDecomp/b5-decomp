@@ -188,17 +188,9 @@ namespace BrnGui
         // and the id 201 while the X360 wire words are 100 and 457.
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef GuiAudioTriggerEvent GuiAudioTriggerWire;
 
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
 
         // Walk the cache's eight online-player records looking for the one driving the given
         // active-race-car index. Same helper (and the same known divergence) as
@@ -1456,7 +1448,7 @@ namespace BrnGui
 
 // (fold: an identical definition of GuiAudioTriggerWire was dropped here -- this TU defines it once, above)
 
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
     }
 
     // ------------------------------------------------- UpdateSoundEvents @ 0x824CB8B0
@@ -1491,24 +1483,18 @@ namespace BrnGui
             {
                 GuiAudioTriggerWire lMoveStart;
                 lMoveStart.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_MOVE_START, "");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lMoveStart), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lMoveStart)));
+                mpStateInterface->OutputGuiEvent(lMoveStart);
 
                 GuiAudioTriggerWire lScrollStart;
                 lScrollStart.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_START, "");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lScrollStart), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lScrollStart)));
+                mpStateInterface->OutputGuiEvent(lScrollStart);
             }
         }
         else if (mSoundData.mbPrevIsScrolling)
         {
             GuiAudioTriggerWire lScrollEnd;
             lScrollEnd.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lScrollEnd), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lScrollEnd)));
+            mpStateInterface->OutputGuiEvent(lScrollEnd);
         }
 
         mSoundData.Update(lv3CursorWorldPos, lbIsMapScrolling);
@@ -2510,7 +2496,7 @@ namespace BrnGui
 
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
     }
 
     // ================================================================================
@@ -2553,9 +2539,7 @@ namespace BrnGui
                     GuiAudioTriggerWire lAudio;
                     lAudio.Construct(KI_AUDIO_ACTION_VIEW_EVENT_STOP, "",
                                      KPC_SOUND_MAP_VIEW_EVENT, "");
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lAudio),
-                        KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));
+                    mpStateInterface->OutputGuiEvent(lAudio);
                 }
                 break;
 
@@ -2583,9 +2567,7 @@ namespace BrnGui
                         GuiAudioTriggerWire lAudio;
                         lAudio.Construct(KI_AUDIO_ACTION_VIEW_EVENT_START, "",
                                          KPC_SOUND_MAP_VIEW_EVENT, "");
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lAudio),
-                            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));
+                        mpStateInterface->OutputGuiEvent(lAudio);
                     }
 
                     // The two fsel instructions, transcribed operand for operand -- see

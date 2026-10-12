@@ -55,7 +55,7 @@ namespace
         u8  mbPspQuality;    // +0x12 (the export-quality toggle is on "$PSP_QUALITY")
         u8  muReserved;      // +0x13 (never written by the console)
         GuiReplayPlayReelWire()
-            : CgsGui::GuiEvent<526>(8, 12), miReel(0), mbExport(0), mbFlag11(0),
+            :  miReel(0), mbExport(0), mbFlag11(0),
               mbPspQuality(0), muReserved(0) {}
     };
 
@@ -64,16 +64,15 @@ namespace
     {
         s32 miCameraType;   // +0x0C (0 chase, 1 bumper)
         explicit GuiEventSetCameraTypeWire(s32 liCameraType)
-            : CgsGui::GuiEvent<591>(4, 12), miCameraType(liCameraType) {}
+            :  miCameraType(liCameraType) {}
     };
 
     // OutputGuiEvent<GuiOverlayRequest>: { 288, 184, 16, <pad>, request }, 304 bytes.
     struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
     {
-        u32               muPad0C;    // +0x0C
         GuiOverlayRequest mRequest;   // +0x10
         GuiOverlayRequestWire()
-            : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16), muPad0C(0) {}
+             {}
     };
 
     void PostClearScreen(CgsGui::StateInterface* lpStateInterface, s32 liChannel,
@@ -82,8 +81,7 @@ namespace
         CgsGui::GuiEventClearScreenSet lEvent;
         lEvent.meClearScreen = leClearScreen;
         lEvent.mfAlpha       = 1.0f;
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lEvent, liChannel, static_cast<s32>(sizeof(lEvent)));
+        { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
     }
 
     template <typename TWire>

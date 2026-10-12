@@ -38,13 +38,13 @@ void OnlineViewChallenges::OnEnter()
     meSubState = E_SUBSTATE_LOADING_SCREEN;
     mpGuiCache = 0;
     GuiEventActivateCrashNav activate(false);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(&activate, 40, sizeof(activate));
+    mpStateInterface->OutputGuiEvent(activate);
     GuiEventShowHideHud hide = {};
     Output(mpStateInterface, hide);
     struct Request : CgsGui::GuiEvent<580>
     {
         u8 unused;
-        Request() : CgsGui::GuiEvent<580>(1, 12), unused(0) {}
+        Request() :  unused(0) {}
     } request;
     mpStateInterface->GetOutputEventQueue()->AddEvent(&request, 40, sizeof(request));
 }
@@ -138,7 +138,7 @@ void OnlineViewChallenges::HandleControllerInputSelectParams(const s32* event)
         if (mpGuiCache->IsOnlineStartPending())
         {
             CgsGui::GuiEventNetworkSuspension suspension(false);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&suspension, 40, sizeof(suspension));
+            mpStateInterface->OutputGuiEvent(suspension);
             mpGuiCache->SetOnlineStartPending(false);
             SendStateEvent("GO_BACK_EASY");
         }

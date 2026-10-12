@@ -54,9 +54,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C (not written by the X360)
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
+                
             {
             }
         };
@@ -95,9 +93,7 @@ namespace BrnGui
         meLeaderboardRequestState = E_LEADERBOARD_REQUEST_STATE_WF_TABLE;
 
         GuiCommandWire16<KI_EVENT_SCOREBOARD_PAGE_UP> lPageUpCommand;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lPageUpCommand), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lPageUpCommand)));   // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lPageUpCommand);   // X360 record size 16
     }
 
     // ================================================================================
@@ -130,9 +126,7 @@ namespace BrnGui
         meLeaderboardRequestState = E_LEADERBOARD_REQUEST_STATE_WF_TABLE;
 
         GuiCommandWire16<KI_EVENT_SCOREBOARD_PAGE_DOWN> lPageDownCommand;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lPageDownCommand), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lPageDownCommand)));   // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lPageDownCommand);   // X360 record size 16
     }
 
     // ================================================================================

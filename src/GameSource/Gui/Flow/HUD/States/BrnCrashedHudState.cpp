@@ -286,7 +286,7 @@ bool CrashedHudState::UpdateSetupState()
     {
         u8 mbVisible;
         u8 maPad[3];
-        BoostVisibility(bool lbVisible) : CgsGui::GuiEvent<214>(1, 12), mbVisible(lbVisible), maPad{} {}
+        BoostVisibility(bool lbVisible) :  mbVisible(lbVisible), maPad{} {}
     } lBoost(mbBoostBar);
     mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
     if (mbImpactTimer)

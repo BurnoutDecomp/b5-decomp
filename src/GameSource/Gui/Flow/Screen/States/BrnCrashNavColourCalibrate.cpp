@@ -85,7 +85,7 @@ namespace BrnGui
         // Same file-local wire view BrnOnlineGameOptions_wI_02.cpp / BrnCarSelectLivery.cpp
         // carry; id 457 is homed only in BrnGuiDemangledEventTypes.h, which hard-collides
         // with the BrnGuiEventTypeDefs.h this TU needs.
-        const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
+
 
         // ---- controller action ids (the action event's payload word +4) ------------
         // BrnGui::EGameInputActions (DWARF GameSource/Input/GameInputActions.h:24; no
@@ -170,7 +170,7 @@ namespace BrnGui
             u8 mu8Flag;    // +0x0C
             u8 maPad[3];   // +0x0D
             explicit GuiCommandWire16(u8 lu8Flag = 0)
-                : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+                :  mu8Flag(lu8Flag)
             { maPad[0] = 0; maPad[1] = 0; maPad[2] = 0; }
         };
 
@@ -182,32 +182,17 @@ namespace BrnGui
         {
             GuiOptionsBrightnessContrast mPayload;   // +0x0C
             GuiBrightnessContrastWire20(s32 liBrightness, s32 liContrast)
-                : CgsGui::GuiEvent<545>(static_cast<u32>(sizeof(GuiOptionsBrightnessContrast)), 12)
+                
             {
                 mPayload.mBrightness = liBrightness;
                 mPayload.mContrast   = liContrast;
             }
         };
 
-        // The audio cue record: { 100, 457, 12, <the 100-byte payload> }, 112 bytes on
-        // channel 40 -- the record the inlined OutputGuiEvent<GuiAudioTriggerEvent>
-        // builds. Identical view to BrnOnlineGameOptions_wI_02.cpp's.
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
-
-        // Record-size pins. Every payload here is pointer-free, so the X360's AddEvent
-        // size immediates (16 / 20 / 112) must survive unchanged on the x64 host; if a
-        // host layout ever drifts this is where it is caught rather than on the wire.
+        // The 100-byte audio payload is wrapped by StateInterface::OutputGuiEvent.
         static_assert(sizeof(GuiCommandWire16<514>) == 16, "card show/hide record is 16 bytes");
         static_assert(sizeof(GuiBrightnessContrastWire20) == 20, "brightness/contrast record is 20 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerEvent) == 100, "audio trigger payload is 100 bytes");
         static_assert(offsetof(GuiBrightnessContrastWire20, mPayload) == 12,
                       "the 545 payload sits at the record's own header offset word (12)");
 
@@ -217,21 +202,13 @@ namespace BrnGui
         // then `bl CgsGui::StateInterface::OutputGuiEvent<GuiAudioTriggerEvent>`), so it
         // is factored here as a file-local helper rather than invented as a class method
         // the DWARF does not declare. Posted as the wire record the console's inlined
-        // OutputGuiEvent builds (id 457, channel 40, 112 bytes) -- see the note on
-        // GuiAudioTriggerWire above.
+        // OutputGuiEvent builds (id 457, channel 40, 112 bytes).
         void PostMenuToggleSound(CgsGui::StateInterface* lpStateInterface)
         {
             GuiAudioTriggerWire lAudio;
             lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KAC_EMPTY,
                              KAC_SOUND_LABEL_MENU_TOGGLE, KAC_EMPTY);
-            lAudio.muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                                  sizeof(CgsGui::GuiEvent<201>));
-            lAudio.muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            lAudio.muHeader2   = 12u;
-
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lAudio)));
+            lpStateInterface->OutputGuiEvent(lAudio);
         }
     }
 
@@ -569,23 +546,17 @@ namespace BrnGui
         if (lbShow)
         {
             GuiCommandWire16<KI_EVENT_COLOUR_CALIBRATION_SHOW> lShow;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lShow), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lShow)));
+            mpStateInterface->OutputGuiEvent(lShow);
             return;
         }
 
         GuiCommandWire16<KI_EVENT_COLOUR_CALIBRATION_HIDE> lHide;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHide), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHide)));
+        mpStateInterface->OutputGuiEvent(lHide);
 
         // The hide path also posts the commit marker with its payload byte SET
         // (`li r11, 1 ; stb r11, var_24`).
         GuiCommandWire16<KI_EVENT_COMMIT_SETTINGS> lCommit(1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCommit), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lCommit)));
+        mpStateInterface->OutputGuiEvent(lCommit);
     }
 
     // ---- HandleControllerInput @ 0x824D9978 ----------------------------------------
@@ -710,9 +681,7 @@ namespace BrnGui
         // X360 `ld` of the ADJACENT member pair 0xED8/0xEDC into one 8-byte payload; on
         // the host the two words are copied by name (same bytes, no guest-offset read).
         GuiBrightnessContrastWire20 lCalibration(mBrightnessSetting, mContrastSetting);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCalibration), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lCalibration)));
+        mpStateInterface->OutputGuiEvent(lCalibration);
     }
 
     // ---- SaveSettings @ 0x824CEBF0 -------------------------------------------------
@@ -725,8 +694,6 @@ namespace BrnGui
         lpProfile->SetContrast(mContrastSetting);
 
         GuiCommandWire16<KI_EVENT_SAVE_PROFILE_REQUEST> lSaveRequest(1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lSaveRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lSaveRequest)));
+        mpStateInterface->OutputGuiEvent(lSaveRequest);
     }
 }

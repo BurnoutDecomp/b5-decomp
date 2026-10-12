@@ -24,24 +24,13 @@ namespace CgsGui
     const s32 KI_MAX_OBSERVERS           = 4;
     const s32 KI_MAX_EVENTS_PER_OBSERVER = 576;
 
-    // Base of every GUI event. The X360 emitters fill a small fixed header before
-    // pushing the record onto a queue: muHeader0 / muHeader2 are queue bookkeeping
-    // words (their precise meaning is not recovered from the leak), and muEventType
-    // carries the GuiEvent<N> template id. EventTypeId is the compile-time id.
+    // The typed event base is empty on the console. VariableEventQueue carries the
+    // event id separately from the caller's payload bytes. StateInterface output
+    // records that need a three-word {size,type,offset} prefix use GuiEventWrapper
+    // below; that wrapper is not part of GuiEvent<N> or its derived payload.
     template <s32 EventTypeId>
     struct GuiEvent : public CgsModule::Event
     {
-        u32 muHeader0;
-        u32 muEventType;
-        u32 muHeader2;
-
-        explicit GuiEvent(u32 luHeader0 = 0, u32 luHeader2 = 0)
-            : muHeader0(luHeader0)
-            , muEventType(static_cast<u32>(EventTypeId))
-            , muHeader2(luHeader2)
-        {
-        }
-
         s32 GetEventType() const { return EventTypeId; }
     };
 

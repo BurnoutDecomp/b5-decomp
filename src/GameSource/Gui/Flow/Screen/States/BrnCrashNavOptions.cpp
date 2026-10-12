@@ -184,7 +184,7 @@ namespace BrnGui
         struct GuiEventCrashNavVoipVolume : public CgsGui::GuiEvent<474>
         {
             s32 miVoipVolume;   // +0x0C
-            GuiEventCrashNavVoipVolume() : CgsGui::GuiEvent<474>(4, 12) {}
+            GuiEventCrashNavVoipVolume()  {}
         };
 
         // X360 `li r8, -1 ; clrldi r8, r8, 32` -- Selectable::K_INVALID_ID.
@@ -713,9 +713,7 @@ namespace BrnGui
         GuiEventCrashNavAudioVolumes lEvent;
         lEvent.miMusicVolume = static_cast<s32>(mOptionsData.GetMusicVolume());
         lEvent.miSFXVolume   = static_cast<s32>(mOptionsData.GetSFXVolume());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // ---- RestoreSoundSettings @0x824CDDA0 ------------------------------------------
@@ -730,9 +728,7 @@ namespace BrnGui
         GuiEventCrashNavAudioVolumes lEvent;
         lEvent.miMusicVolume = static_cast<s32>(lpProfile->GetMusicVolume());
         lEvent.miSFXVolume   = static_cast<s32>(lpProfile->GetSFXVolume());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // ---- RestoreVoipSettings @0x824CDE68 -------------------------------------------
@@ -744,9 +740,7 @@ namespace BrnGui
         GuiEventCrashNavVoipVolume lEvent;
         lEvent.miVoipVolume =
             static_cast<s32>(mpGuiCache->GetOptionsDataProfile()->GetVoipVolume());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // ---- PostAudioTrigger ----------------------------------------------------------

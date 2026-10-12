@@ -322,10 +322,7 @@ namespace BrnGui
                     // This screen armed the online start: lift the network suspension it
                     // put in place, then back out on the quiet path.
                     CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lNetworkSuspension)));   // record size 16
+                    mpStateInterface->OutputGuiEvent(lNetworkSuspension);   // record size 16
 
                     mpGuiCache->mbOnlineStartPending = false;
                     lpacStateEvent = "GO_BACK_EASY";
@@ -476,8 +473,7 @@ namespace BrnGui
             GuiTickerCustomMessagePayload mMessage;   // +0x0C
 
             GuiTickerCustomMessageWire()
-                : CgsGui::GuiEvent<537>(static_cast<u32>(sizeof(GuiTickerCustomMessagePayload)),
-                                        static_cast<u32>(sizeof(CgsGui::GuiEvent<537>)))
+                
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
                 mMessage.maFlags[0] = 1;   // +0x811 (this producer's distinguishing seed)
@@ -505,9 +501,7 @@ namespace BrnGui
             u8                               maPad0E[2]; // +0x0E (record is 16 bytes)
 
             GuiEventOnlineGameOptionsRefreshWire()
-                : OnlineGameOptionsRefreshHeader(
-                      static_cast<u32>(sizeof(GuiEventOnlineGameOptionsRefresh)),
-                      static_cast<u32>(sizeof(OnlineGameOptionsRefreshHeader)))
+
             {
                 mRefresh.mu8FlagA = 1;
                 mRefresh.mu8FlagB = 0;
@@ -568,9 +562,7 @@ namespace BrnGui
             GuiTickerCustomMessageWire lTicker;
             lTicker.mMessage.AddString(lpacTickerText, KI_TICKER_STRING_TYPE);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lTicker), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lTicker)));   // record size 0x824
+            mpStateInterface->OutputGuiEvent(lTicker);   // record size 0x824
         }
 
         // ---- either arm the page, or back straight out --------------------------------
@@ -597,10 +589,7 @@ namespace BrnGui
             // No multiplayer privilege, and this screen owns the pending online start:
             // lift the network suspension it armed, then back out on the quiet path.
             CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lNetworkSuspension)));   // record size 16
+            mpStateInterface->OutputGuiEvent(lNetworkSuspension);   // record size 16
 
             mpGuiCache->mbOnlineStartPending = false;
             SendStateEvent("GO_BACK_EASY");
@@ -624,9 +613,7 @@ namespace BrnGui
                 BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
         {
             GuiEventOnlineGameOptionsRefreshWire lRefresh;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRefresh), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRefresh)));   // record size 16
+            mpStateInterface->OutputGuiEvent(lRefresh);   // record size 16
 
             mpGuiCache->mbOnlineGameOptionsChanged = false;
         }

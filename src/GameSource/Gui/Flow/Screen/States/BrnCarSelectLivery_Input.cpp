@@ -110,10 +110,9 @@ namespace BrnGui
         // { 8, 410, 16, <pad>, CgsID }, channel 40, 24 bytes.
         struct GuiPlayerCarColourRequestWire410 : public CgsGui::GuiEvent<410>
         {
-            u32   muPad0C;   // +0x0C
             CgsID mCarId;    // +0x10
             GuiPlayerCarColourRequestWire410()
-                : CgsGui::GuiEvent<410>(8, 16), muPad0C(0), mCarId(0) {}
+                : mCarId(0) {}
         };
     }
 
@@ -379,8 +378,7 @@ namespace BrnGui
         {
             GuiPlayerCarColourRequestWire410 lRequest;
             lRequest.mCarId = mCurrentSetupInfo.mCarId;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lRequest, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lRequest)));
+            mpStateInterface->OutputGuiEvent(lRequest);
         }
 
         const GuiPlayerInfoResponsePayload* lpPayload =

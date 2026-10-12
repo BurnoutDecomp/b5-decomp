@@ -43,7 +43,7 @@ namespace
         u8  mu8Flag;        // +0x0C
         u8  maPad[3];
         GuiCommandEvent16(u8 lu8Flag = 0)
-            : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
+            :  mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
     };
 
     // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
@@ -51,8 +51,7 @@ namespace
     void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
     {
         GuiCommandEvent16<N> lEvent(lu8Flag);
-        lpInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+        { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
     }
 
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a reserved word
@@ -63,7 +62,7 @@ namespace
     {
         s32 miReserved;     // +0x0C (0)
         f32 mfValue;        // +0x10 (1.0f)
-        GuiOptionEvent20() : CgsGui::GuiEvent<25>(8, 12), miReserved(0), mfValue(1.0f) {}
+        GuiOptionEvent20() :  miReserved(0), mfValue(1.0f) {}
     };
 
     // FLAG boundary helper: the two far GuiCache flags the outro reads. No named accessor on
@@ -186,8 +185,7 @@ void ReplayOutro::UpdateRunning()
             SendStateEvent(lpacEvent);
 
             GuiOptionEvent20 lOption;   // GuiEvent<25> { 8, 25, 12, 0, 1.0f }
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_GUI_OUT, 20);
+            mpStateInterface->OutputGuiEvent(lOption);
         }
 
         const CgsModule::Event* lpNextEvent = 0;

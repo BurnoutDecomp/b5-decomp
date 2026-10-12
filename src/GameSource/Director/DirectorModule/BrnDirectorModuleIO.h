@@ -13,6 +13,7 @@
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h" // BrnDirector::BrnDirectorVehicleInputInterface (mVehicleDriverInputInterface @0x6780)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (mGlobalRaceCarInterface @0x0010)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h" // TrafficDirectorOutputInterface (mTrafficOutputInterface @0x6AC0)
+#include "GameSource/Gui/Events/BrnGuiPFXEvents.h" // GuiPFXHookEnumeration (typed GUI-to-Director payload)
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
 // Like every CgsModule IO buffer it derives the shared CgsModule::IOBuffer (status-flag-guarded
@@ -136,7 +137,7 @@ namespace DirectorIO
         CgsSystem::TimerStatusInterface*                   GetTimerStatusInterface();
         const BrnDirector::BrnDirectorVehicleInputInterface* GetVehicleInputInterface() const;
         BrnDirector::BrnDirectorVehicleInputInterface*       GetVehicleInputInterface();
-        const void*                                        GetHookEnumeration() const;
+        const BrnGui::GuiPFXHookEnumeration*               GetHookEnumeration() const;
         EActiveRaceCarIndex                                GetPlayerCarIndex() const;
         bool                                               GetShortcutMenuState() const;
         const ControlInput*                                GetControll() const;
@@ -291,12 +292,13 @@ namespace DirectorIO
         // --- mutators: all write-lock-asserted ---
         void AppendContacts(const void* lpContacts);
         void SetControllerInfo(const void* lpControllerInfo);
-        // The 501 record's size: console 404 == 4 + 100 * 4 (count + name pointers); host
-        // 816 == 12 (GuiEvent header) + 4 + 100 * 8. BrnGameModule's case 501 static_asserts
-        // the host figure against sizeof(BrnGui::GuiPFXHookEnumeration).
-        static const u32 KU_HOOK_ENUMERATION_BYTES    = 816;
-        static const u32 KU_HOOK_ENUMERATION_WIDENING = KU_HOOK_ENUMERATION_BYTES - 404;
-        void SetHookEnumeration(const void* lpHookEnumeration);
+        // Event 501 is a 404-byte X360 payload (count + 100 32-bit pointers). The native
+        // PC payload is 808 bytes: count at +0, compiler alignment at +4, and 100 native
+        // pointers at +8. The empty GuiEvent<501> tag contributes no bytes.
+        static const u32 KU_HOOK_ENUMERATION_X360_BYTES = 404;
+        static const u32 KU_HOOK_ENUMERATION_BYTES      = 808;
+        static const u32 KU_HOOK_ENUMERATION_WIDENING   = KU_HOOK_ENUMERATION_BYTES - KU_HOOK_ENUMERATION_X360_BYTES;
+        void SetHookEnumeration(const BrnGui::GuiPFXHookEnumeration* lpHookEnumeration);
         void SetRaceCarInfo(u32 luIndex, const BrnDirector::Camera::VehicleInfo& lrInfo);
         void SetCrashingCentreOfMass(u32 luIndex, const Matrix44Affine& lrCentreOfMass);
         void SetVehicleTeam(EActiveRaceCarIndex leIndex, s32 liTeam);
@@ -460,12 +462,9 @@ namespace DirectorIO
         BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface mTrafficOutputInterface;   // @0x6AC0 (DWARF :338)
         BrnDirector::Camera::PlayerCrashInfo mPlayerCrashInfo;   // @0x78E0 (DWARF :339)
 
-        // @0x7910 (30992): the GUI PFX hook enumeration, 404 (0x194) bytes (SetHookEnumeration
-        // memcpy). HONEST opaque, padded out to the scalar/flag tail @0x7AA8.
-        // [PC widening] the record is BrnGui::GuiPFXHookEnumeration -- an s32 count + 100 hook
-        // NAME POINTERS; the members after it shift by KU_HOOK_ENUMERATION_WIDENING (the
-        // layout asserts in the TU carry the same term).
-        u8  mHookEnumeration[KU_HOOK_ENUMERATION_BYTES]; // @0x7910 .. 0x7AA4 (console)
+        // @0x7910 (30992): the typed GUI PFX hook enumeration, copied from event 501.
+        // Native pointer width expands it from 404 bytes on X360 to 808 bytes on PC.
+        BrnGui::GuiPFXHookEnumeration mHookEnumeration;
 
         // @0x7AA4 (31396): the DWARF's mDirectorProfileData, which on this build is exactly the
         // four bytes between the hook enumeration and the car index. BridgeGuiToDirector's

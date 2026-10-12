@@ -36,8 +36,9 @@ namespace
         unsigned char laControllerBytes[224] = {};
         lBuffer.SetControllerInfo(laControllerBytes);
 
-        unsigned char laHookBytes[404] = {};
-        lBuffer.SetHookEnumeration(laHookBytes);
+        BrnGui::GuiPFXHookEnumeration lHookEnumeration;
+        lHookEnumeration.miHookNameCount = -1;
+        lBuffer.SetHookEnumeration(&lHookEnumeration);
 
         BrnDirector::Camera::VehicleInfo lInfo;
         lBuffer.SetRaceCarInfo(0u, lInfo);

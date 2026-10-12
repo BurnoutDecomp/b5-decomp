@@ -192,37 +192,26 @@ namespace BrnGui
         static_assert(sizeof(CgsGui::GuiEventWrapper<ImageExportRequestedPayload, 40>) == 32,
                       "export record is 32 bytes");
 
-        // { 1, 148, 12, <show byte> }: 16 bytes.
+        // Payload types; the channel-40 wrapper supplies the record prefix and alignment.
         struct GuiShowHideHudWire : public CgsGui::GuiEvent<KI_GUI_EVENT_SHOW_HIDE_HUD>
         {
-            u8 mu8Show;   // +0x0C
-            u8 maPad[3];
-
-            explicit GuiShowHideHudWire(bool lbShow)
-                : CgsGui::GuiEvent<KI_GUI_EVENT_SHOW_HIDE_HUD>(static_cast<u32>(sizeof(u8)), 12)
-                , mu8Show(lbShow ? 1 : 0)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
+            u8 mu8Show;
+            explicit GuiShowHideHudWire(bool lbShow) : mu8Show(lbShow ? 1 : 0) {}
         };
 
-        // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
-            {
-            }
+            GuiOverlayRequest mRequest;
         };
 
-        static_assert(sizeof(GuiShowHideHudWire) == 16, "show/hide hud record is 16 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(GuiAudioTriggerEvent) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiShowHideHudWire, KI_CHANNEL_GUI_OUT>) == 16,
+                      "show/hide hud record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequestWire, KI_CHANNEL_GUI_OUT>) == 304,
+                      "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, KI_CHANNEL_GUI_OUT>) == 20,
+                      "activate-crashnav record is 20 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, KI_CHANNEL_GUI_OUT>) == 112,
+                      "audio trigger record is 112 bytes");
 
         template <class TPayload>
         void PostWrapped(CgsGui::StateInterface* lpStateInterface, TPayload& lrPayload)
@@ -236,9 +225,8 @@ namespace BrnGui
         template <class TRecord>
         void PostRecord(CgsGui::StateInterface* lpStateInterface, const TRecord& lrRecord)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrRecord), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrRecord)));
+            TRecord lRecord(lrRecord);
+            lpStateInterface->OutputGuiEvent(lRecord);
         }
 
         void PostImageGalleryRequest(CgsGui::StateInterface* lpStateInterface, s32 liImageIndex,
@@ -1097,12 +1085,8 @@ namespace BrnGui
                 break;
         }
 
-        // The wire record is { 100, 457, 12 } + the 100-byte payload.
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KPC_EMPTY, lpcLabel, KPC_EMPTY);
-        lAudio.muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) - sizeof(CgsGui::GuiEvent<201>));
-        lAudio.muEventType = static_cast<u32>(KI_GUI_EVENT_AUDIO_TRIGGER);
-        lAudio.muHeader2   = 12u;
         PostRecord(mpStateInterface, lAudio);
     }
 

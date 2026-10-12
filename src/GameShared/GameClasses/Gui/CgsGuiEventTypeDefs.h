@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // CgsGui::GuiEvent<N> (12-byte event header)
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // CgsGui::GuiEvent<N> (empty event-type tag)
 #include "GameShared/GameClasses/Language/CgsSku.h"       // CgsLanguage::ELanguage / ESku enums
 
 // CgsGui::GuiEventTimeInfo - the per-frame time payload carried on GUI update events.
@@ -61,12 +61,11 @@ namespace CgsGui
     //     ...Axis, GuiControllerDisconnected) and the language event from the player pad.
     //
     // LAYOUT SOURCE: references/DecFIGS/dwarfdump/GameShared/GameClasses/Gui/
-    // CgsGuiEventTypeDefs.h names every member and the GuiEvent<N> event-type id (the
-    // template id is the on-queue record type tag). Each event carries the 12-byte
-    // GuiEvent header (muHeader0/muEventType/muHeader2 from CgsGuiEvent.h) followed by the
-    // named payload members below; the enum widths (s32) match the X360 stw/lwz widths.
-    // These are plain payload PODs (no out-of-line bodies in this header's X360 image);
-    // they are homed for layout so producers/consumers can reference them BY NAME.
+    // CgsGuiEventTypeDefs.h names every member and the GuiEvent<N> event-type id (returned
+    // by GetEventType()). GuiEvent<N> is an empty tag base; the queue carries its id
+    // separately, and channel-40/41/42 output paths add GuiEventWrapper around the payload
+    // where ARTIST does so. The enum widths (s32) match X360 stw/lwz widths. These PODs are
+    // homed for named producer/consumer access.
     // ===============================================================================
 
     // --- controller-input events (DWARF :77/:85/:92/:99/:106/:123) ------------------
@@ -146,13 +145,10 @@ namespace CgsGui
     };
 
     // GuiEventNetworkLaunching -- the "network session is launching" GUI event. The only
-    // CgsGui AddGuiEvent instance absent from any prior home: CgsGui::GuiModule::AddGuiEvent<
-    // GuiEventNetworkLaunching> @0x823CFCB0 -> AddEvent(&event, 57, 8). The 8-byte record is
-    // smaller than the 12-byte GuiEvent<N> header, so it is a raw payload carrying its own
-    // GetEventType()==57 (honest placeholder -- the total size 8 + id 57 are the X360 facts;
-    // the inner field breakdown is not recovered). A sibling of the other CgsGui network GUI
-    // events (Connected 43 / Disconnected 44 / InGame 50 / Launched 58) which are OutputGuiEvent
-    // instances homed by their own task.
+    // GuiEventNetworkLaunching> @0x823CFCB0 -> AddEvent(&event, 57, 8). Its 8-byte payload
+    // field breakdown is not recovered; the event tag contributes no wire bytes. It is a
+    // sibling of the other CgsGui network GUI events (Connected 43 / Disconnected 44 / InGame
+    // 50 / Launched 58) homed by their own task.
     struct GuiEventNetworkLaunching
     {
         u8  maData[8];
@@ -164,9 +160,9 @@ namespace CgsGui
     // The CgsGui network GUI events referenced by the note above (Connected 43 / Disconnected 44 /
     // InGame 50 / Launched 58) plus InGameFailed 51 / ShowLoginQuestion 47 / SetCircleButtonConfig 32,
     // homed here by the output GUI event wave. These are OutputGuiEvent / AddOutputGuiEvent /
-    // AddGuiOutEvent payloads (plain-add: only GetEventType()==id and sizeof matter). Same honest
-    // placeholder recipe: (id,size) are the two X360 AddEvent literals; size>=12&4-aligned derives
-    // from GuiEvent<id>, else a raw byte struct carrying its own GetEventType()==id.
+    // AddGuiOutEvent payloads. For payload-only records, id and size are the X360 AddEvent
+    // literals; GuiEvent<N> is only an empty type tag. Raw non-template records retain their
+    // explicit GetEventType() method.
     // ============================================================================
     struct GuiEventNetworkConnected { u8 maData[2]; s32 GetEventType() const { return 43; } };  // id 43 size 2
 
@@ -175,9 +171,8 @@ namespace CgsGui
     // BrnNetworkModule::AddOutputGuiEvent<GuiEventNetworkDisconnected> @0x825660B0 hands
     // AddEvent the OBJECT itself (`li r6, 0x84; li r5, 0x2C` @0x82566150/54), so the
     // 132-byte object IS the queued record and nothing is prepended to it -- matching
-    // DWARF CgsGuiEvent.h:6974, where GuiEvent<44> carries no data members. Modelling it
-    // with the tree's 12-byte GuiEvent<N> header in front would push every field 12 bytes
-    // out of phase for the consumer.
+    // DWARF CgsGuiEvent.h:6974, where GuiEvent<44> carries no data members. The consumer
+    // reads the first payload word at offset 0.
     //
     // FIELD ORDER is the X360's, taken off the consumer
     // CrashNavEnterOnlineBase::HandleDisconnectedEvent @0x824D8830: the error word is read
@@ -201,24 +196,22 @@ namespace CgsGui
     struct GuiEventNetworkLaunched { u8 maData[4]; s32 GetEventType() const { return 58; } };  // id 58 size 4
     struct GuiEventSetCircleButtonConfig { u8 maData[1]; s32 GetEventType() const { return 32; } };  // id 32 size 1
 
-    // X360-pinned payload offsets. CgsModule::Event is an empty base, so the GuiEvent<N>
-    // header (muHeader0/muEventType/muHeader2 == 3 x u32) occupies +0x00..+0x0B and the
-    // first payload member lands at +0x0C. This matches CgsSku::Update, which reads/writes
-    // the SetSku payload word at this+0xC (meSku) and the SetLanguageNotification payload
-    // word at the language source this+0x00. (The event-type id is the GuiEvent<N> template
-    // argument, self-documenting in each type name above.)
-    static_assert(sizeof(GuiEvent<27>) == 0x0C, "GuiEvent header is 12 bytes (3 x u32)");
-    static_assert(__builtin_offsetof(GuiEventSetSku, meSku)                       == 0x0C, "GuiEventSetSku::meSku @+0x0C (Update this+0xC)");
-    static_assert(__builtin_offsetof(GuiEventSetLanguageNotification, meLanguage) == 0x0C, "GuiEventSetLanguageNotification::meLanguage @+0x0C");
-    static_assert(__builtin_offsetof(GuiEventSetLanguage, meLanguage)             == 0x0C, "GuiEventSetLanguage::meLanguage @+0x0C");
-    static_assert(__builtin_offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x0C, "GuiEventActiveUserIndex::miActiveUserIndex @+0x0C");
-    static_assert(__builtin_offsetof(GuiEventControllerInputPressed, miPadId)     == 0x0C, "controller pad id @+0x0C");
-    static_assert(__builtin_offsetof(GuiEventControllerInputPressed, miButtonId)  == 0x10, "controller button id @+0x10");
-    static_assert(__builtin_offsetof(GuiEventControllerAxis, miAxis)              == 0x0C, "axis id @+0x0C");
-    static_assert(__builtin_offsetof(GuiEventControllerAxis, mfXAxis)             == 0x10, "axis x @+0x10");
-    static_assert(__builtin_offsetof(GuiEventControllerAxis, mfYAxis)             == 0x14, "axis y @+0x14");
-    static_assert(__builtin_offsetof(GuiControllerDisconnected, miPlayer)         == 0x0C, "disconnect player @+0x0C");
-    static_assert(__builtin_offsetof(GuiControllerDisconnected, miPort)           == 0x10, "disconnect port @+0x10");
+    // X360-pinned payload offsets. GuiEvent<N> is an empty tag base; the queue entry
+    // carries the event id outside the payload. CgsSku::Update reads its payload word
+    // at +0xC because that consumer receives a GuiEventWrapper record whose mOutEvent
+    // starts at +0xC, not because the typed payload itself has a 12-byte base.
+    static_assert(sizeof(GuiEvent<27>) == 1, "GuiEvent tag base has no data members");
+    static_assert(__builtin_offsetof(GuiEventSetSku, meSku)                       == 0x00, "SetSku payload begins at +0");
+    static_assert(__builtin_offsetof(GuiEventSetLanguageNotification, meLanguage) == 0x00, "language notification payload begins at +0");
+    static_assert(__builtin_offsetof(GuiEventSetLanguage, meLanguage)             == 0x00, "language payload begins at +0");
+    static_assert(__builtin_offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x00, "active-user payload begins at +0");
+    static_assert(__builtin_offsetof(GuiEventControllerInputPressed, miPadId)     == 0x00, "controller pad id @+0");
+    static_assert(__builtin_offsetof(GuiEventControllerInputPressed, miButtonId)  == 0x04, "controller button id @+4");
+    static_assert(__builtin_offsetof(GuiEventControllerAxis, miAxis)              == 0x00, "axis id @+0");
+    static_assert(__builtin_offsetof(GuiEventControllerAxis, mfXAxis)             == 0x04, "axis x @+4");
+    static_assert(__builtin_offsetof(GuiEventControllerAxis, mfYAxis)             == 0x08, "axis y @+8");
+    static_assert(__builtin_offsetof(GuiControllerDisconnected, miPlayer)         == 0x00, "disconnect player @+0");
+    static_assert(__builtin_offsetof(GuiControllerDisconnected, miPort)           == 0x04, "disconnect port @+4");
 
     // The disconnect record is header-free, so its own two fields sit at +0 and +4 and the
     // whole object is the 132-byte record. Every member is a scalar or a char array, so

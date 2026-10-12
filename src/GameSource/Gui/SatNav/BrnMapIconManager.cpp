@@ -2193,8 +2193,7 @@ void MapIconManager::UpdateCrashNavIcons()
         {
             GuiEventMapIconStatus mPayload;
             GuiEventMapIconStatusRecord(CrashNavIconComponent* lpBank, s32 liCount)
-                : CgsGui::GuiEvent<561>(static_cast<u32>(sizeof(GuiEventMapIconStatus)),
-                                        static_cast<u32>(offsetof(GuiEventMapIconStatusRecord, mPayload)))
+                
             {
                 mPayload.lpSatNavIcons   = lpBank;
                 mPayload.liNumberOfIcons = liCount;

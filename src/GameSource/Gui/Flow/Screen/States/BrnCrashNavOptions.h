@@ -41,7 +41,7 @@ namespace BrnGui
     struct GuiEventCrashNavCameraUserOption : public CgsGui::GuiEvent<278>
     {
         s32 miCameraUserOption;   // +0x0C
-        GuiEventCrashNavCameraUserOption() : CgsGui::GuiEvent<278>(4, 12) {}
+        GuiEventCrashNavCameraUserOption()  {}
     };
 
     // type 463 (0x1CF), record 20: { music, sfx } pair (CrashNavOptionsData+0x08/0x0C).
@@ -49,7 +49,7 @@ namespace BrnGui
     {
         s32 miMusicVolume;        // +0x0C
         s32 miSFXVolume;          // +0x10
-        GuiEventCrashNavAudioVolumes() : CgsGui::GuiEvent<463>(8, 12) {}
+        GuiEventCrashNavAudioVolumes()  {}
     };
 
     // type 472 (0x1D8), record 16: three controller toggles (CrashNavOptionsData+0x10..0x12).
@@ -59,7 +59,7 @@ namespace BrnGui
         u8 mbSixAxisSteering;     // +0x0D
         u8 mbForceFeedback;       // +0x0E
         u8 mbPad;                 // +0x0F (X360 leaves the 4th payload byte uninitialised)
-        GuiEventCrashNavControllerToggles() : CgsGui::GuiEvent<472>(3, 12) {}
+        GuiEventCrashNavControllerToggles()  {}
     };
 
     // type 475 (0x1DB), record 16: default-game-camera flag word read from the PROFILE
@@ -67,21 +67,21 @@ namespace BrnGui
     struct GuiEventCrashNavDefaultGameCamera : public CgsGui::GuiEvent<475>
     {
         s32 miDefaultGameCamera;  // +0x0C
-        GuiEventCrashNavDefaultGameCamera() : CgsGui::GuiEvent<475>(4, 12) {}
+        GuiEventCrashNavDefaultGameCamera()  {}
     };
 
     // type 473 (0x1D9), record 16: tips flag (CrashNavOptionsData+0x13).
     struct GuiEventCrashNavTips : public CgsGui::GuiEvent<473>
     {
         u8 mbTips;                // +0x0C
-        GuiEventCrashNavTips() : CgsGui::GuiEvent<473>(1, 12) {}
+        GuiEventCrashNavTips()  {}
     };
 
     // type 356 (0x164), record 16: trailing "commit / apply" marker (payload byte 0).
     struct GuiEventCrashNavCommit : public CgsGui::GuiEvent<356>
     {
         u8 mbFlag;                // +0x0C (X360 stores constant 0)
-        GuiEventCrashNavCommit() : CgsGui::GuiEvent<356>(1, 12) {}
+        GuiEventCrashNavCommit()  {}
     };
 
     // DWARF BrnCrashNavOptions.h:~120 -- the options screen's data model (camera /

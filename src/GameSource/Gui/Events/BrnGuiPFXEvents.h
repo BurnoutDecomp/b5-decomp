@@ -25,6 +25,9 @@
 // All are posted by BrnGameModule::BridgeDirectorToGui @0x823DD5C0 out of the director
 // camera's CameraEffects requests, except 501 which EffectsArbitrator::EventUpdate posts
 // back and BridgeGuiToDirector hands to EffectInterface::Update.
+// GuiEvent<N> is an empty type tag. Channel-40 GuiEventWrapper records are a separate
+// outer representation; ids 495..501 here describe payloads whose type id travels in the
+// VariableEventQueue entry.
 // =============================================================================
 namespace BrnGui
 {
@@ -72,8 +75,12 @@ namespace BrnGui
     struct GuiPFXHookEnumeration : public CgsGui::GuiEvent<501>
     {
         s32         miHookNameCount;                  // :6048
-        const char* mapHookNames[100];                // :6049  (widened: real pointers on PC)
+        const char* mapHookNames[100];                // :6049  (native-width pointers on PC)
     };
+
+    static_assert(sizeof(GuiPFXHookEvent) == 64, "X360 event 495 payload is 64 bytes");
+    static_assert(sizeof(GuiPFXHookEnumeration) == 808,
+                  "PC event 501 payload is count + alignment + 100 native pointers");
 }
 
 #endif

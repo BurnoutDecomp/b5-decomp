@@ -142,10 +142,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
-                , mu8Payload(0)
+                :  mu8Payload(0)
             {
             }
         };
@@ -156,7 +153,7 @@ namespace BrnGui
             u8 mau8Payload[2];   // +0x0C
 
             GuiTickerClearWire(u8 lu8First, u8 lu8Second)
-                : CgsGui::GuiEvent<536>(2, 12)
+                
             {
                 mau8Payload[0] = lu8First;
                 mau8Payload[1] = lu8Second;
@@ -168,45 +165,33 @@ namespace BrnGui
         {
             u8 mu8Payload;   // +0x0C
 
-            GuiAutosaveRequestWire() : CgsGui::GuiEvent<356>(1, 12), mu8Payload(0) {}
-        };
-
-        // { 100, 457, 12, the audio trigger }, channel 40, 112 bytes.
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
+            GuiAutosaveRequestWire() :  mu8Payload(0) {}
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
-            {
-            }
+            GuiOverlayRequest mRequest;
         };
 
-        static_assert(sizeof(GuiCommandWire16<92>) == 16, "command record is 16 bytes");
-        static_assert(sizeof(GuiTickerClearWire) == 16, "ticker-clear record is 16 bytes");
-        static_assert(sizeof(GuiAutosaveRequestWire) == 16, "autosave record is 16 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiCommandWire16<92>, 40>) == 16,
+                      "command record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiTickerClearWire, 40>) == 16,
+                      "ticker-clear record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiAutosaveRequestWire, 40>) == 16,
+                      "autosave record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40>) == 112,
+                      "audio trigger record is 112 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequestWire, 40>) == 304,
+                      "overlay request record is 304 bytes");
         static_assert(sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8, "the roster is 456 bytes");
         static_assert(sizeof(LobbyPlayerListPayload) <= 0x1C8, "the roster view fits the roster");
 
         template <typename TWire>
         void PostWire(CgsGui::StateInterface* lpStateInterface, const TWire& lrWire)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrWire)));
+            TWire lPayload(lrWire);
+            lpStateInterface->OutputGuiEvent(lPayload);
         }
     }
 
@@ -243,9 +228,7 @@ namespace BrnGui
         // Start the online bed music.
         GuiAudioTriggerEvent lBedMusic;
         lBedMusic.Construct(0, KPC_EMPTY_STRING, KAC_BED_MUSIC_LABEL, KPC_EMPTY_STRING);
-        GuiAudioTriggerWire lBedMusicWire = { 100, 457, 12, {} };
-        std::memcpy(&lBedMusicWire.mPayload, lBedMusic.macComponent, sizeof(lBedMusicWire.mPayload));
-        PostWire(mpStateInterface, lBedMusicWire);
+        PostWire(mpStateInterface, lBedMusic);
     }
 
     // ================================================================================

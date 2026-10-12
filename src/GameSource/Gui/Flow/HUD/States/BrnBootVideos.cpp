@@ -59,7 +59,7 @@ namespace BrnGui
         {
             u8 mu8Flag;
             u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -69,8 +69,7 @@ namespace BrnGui
             if (lpInterface == 0)
                 return;
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         // [loading-fade seat 2026-08-27] the 20-byte clear-screen record OnEnter posts on
@@ -85,7 +84,7 @@ namespace BrnGui
             s32 miMode;    // 0 == enable the black clear, 1 == disable
             f32 mfAlpha;   // the clear alpha (1.0f == opaque black)
             explicit GuiClearScreenEvent20(s32 liMode)
-                : CgsGui::GuiEvent<25>(8, 12), miMode(liMode), mfAlpha(1.0f) {}
+                :  miMode(liMode), mfAlpha(1.0f) {}
         };
 
         // Emit a GuiEventPlayVideo at the MovieManager (via the StateInterface output queue).
@@ -158,8 +157,7 @@ namespace BrnGui
             // loading screen's hide fade, so the fade lands on black and the logo fades in
             // from it -- the console's fade-out-into-the-first-video look.
             GuiClearScreenEvent20 lClearOn(0);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lClearOn), KI_CHANNEL_VIEW_STATE, 20);
+            mpStateInterface->OutputViewState(lClearOn);
         }
     }
 

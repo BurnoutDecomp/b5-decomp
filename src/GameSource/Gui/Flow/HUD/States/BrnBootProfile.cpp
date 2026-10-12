@@ -69,7 +69,7 @@ namespace BrnGui
         {
             u8 mu8Flag;
             u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -77,8 +77,7 @@ namespace BrnGui
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel)
         {
             GuiCommandEvent16<N> lEvent(0);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         // 20-byte GuiEvent<25> "set option" command { 8, 25, 12, reserved, 1.0f } on the
@@ -88,7 +87,7 @@ namespace BrnGui
             s32 miReserved;   // +0x0C
             f32 mfValue;      // +0x10 (1.0f)
             explicit GuiOptionEvent20(s32 liReserved)
-                : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+                :  miReserved(liReserved), mfValue(1.0f) {}
         };
 
         // 20-byte GuiEvent<18> "apt name + flag" record { 8, 18, 12, name, 1 } on the view
@@ -98,7 +97,7 @@ namespace BrnGui
             const char* mpacAptName;   // +0x0C ("" sentinel)
             s32         miFlag;        // +0x10 (1)
             GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
-                : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
+                :  mpacAptName(lpacAptName), miFlag(liFlag) {}
         };
 
         // The cache watcher is the ARTIST component-initialisation handshake:
@@ -364,8 +363,7 @@ namespace BrnGui
         if (mpProfileManager != 0)   // X360 unconditional; PC null-guard, see the flow's fallback
             mpProfileManager->AttachMessageDisplay(&mProfileMessage);
         GuiOptionEvent20 lOption(1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+        mpStateInterface->OutputViewState(lOption);
     }
 
     // @ 0x824784F8 -- detach the message display, unregister, unload the save/load apt
@@ -381,9 +379,7 @@ namespace BrnGui
         // used by SaveLoadComponent (level 3), so that prompt is gone before the
         // post-title intro state can begin.
         GuiAptNameFlagEvent20 lUnload("", 3);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnload), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
+        mpStateInterface->OutputViewState(lUnload);
         if (!mbCheckDiskSpace)
         {
             if (mpGuiCache != 0)

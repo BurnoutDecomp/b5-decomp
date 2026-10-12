@@ -92,9 +92,7 @@ namespace BrnGui
             s32 miPlayerID;   // +0x0C
 
             explicit GuiEventPlayerHighlightedWire(s32 liPlayerID)
-                : PlayerHighlightedHeader(static_cast<u32>(sizeof(s32)),
-                                          static_cast<u32>(sizeof(PlayerHighlightedHeader)))
-                , miPlayerID(liPlayerID)
+                :  miPlayerID(liPlayerID)
             {
             }
         };

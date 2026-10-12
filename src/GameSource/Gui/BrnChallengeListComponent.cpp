@@ -212,9 +212,7 @@ namespace {
     {
         GuiAudioTriggerEvent event;
         event.Construct(7, "", "MenuToggleDefault");
-        struct Record { s32 size, type, offset; GuiAudioTriggerWirePayload457 payload; } record = {100, 457, 12, {}};
-        std::memcpy(&record.payload, event.macComponent, sizeof(record.payload));
-        state->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&record), 40, sizeof(record));
+        Output(state, event);
     }
 }
 

@@ -170,7 +170,7 @@ namespace BrnGui
             u32 muWord1;   // +0x10 -- the TYPE (2 == E_CAR_SELECT_TYPE_ONLINE_EVENT_START)
 
             GuiEventActivateCarSelect20(u32 luWord0, u32 luWord1)
-                : CgsGui::GuiEvent<192>(8, 12), muWord0(luWord0), muWord1(luWord1) {}
+                :  muWord0(luWord0), muWord1(luWord1) {}
         };
 
         // The "clear the ticker" command: { 2, 536, 12, u8 1, u8 0 }, channel 40, 16 bytes.
@@ -179,7 +179,7 @@ namespace BrnGui
             u8 mbFlagA;   // +0x0C
             u8 mbFlagB;   // +0x0D
             GuiTickerFlagsWire536()
-                : CgsGui::GuiEvent<536>(2, 12), mbFlagA(1), mbFlagB(0) {}
+                :  mbFlagA(1), mbFlagB(0) {}
         };
 
         // The custom ticker message payload (0x818 bytes). Layout recovered store-for-store
@@ -227,7 +227,7 @@ namespace BrnGui
         {
             GuiTickerCustomMessagePayload mMessage;   // +0x0C
             GuiTickerCustomMessageWire()
-                : CgsGui::GuiEvent<537>(static_cast<u32>(sizeof(GuiTickerCustomMessagePayload)), 12)
+                
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
                 mMessage.maFlags[2] = 1;   // the one non-zero seed (+0x813)
@@ -497,8 +497,7 @@ namespace BrnGui
 
         {
             GuiTickerFlagsWire536 lTickerClear;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lTickerClear, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lTickerClear)));
+            mpStateInterface->OutputGuiEvent(lTickerClear);
         }
 
         // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h). The console dereferences
@@ -528,8 +527,7 @@ namespace BrnGui
         // string-kind selector; the X360 literal is 2 and it is passed straight through.
         lTicker.mMessage.AddString(lacBlurbKey, 2);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lTicker, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lTicker)));
+        mpStateInterface->OutputGuiEvent(lTicker);
     }
 
     // ---- TriggerSound @ 0x824CA0F8 -------------------------------------------------
@@ -543,12 +541,7 @@ namespace BrnGui
         // The X360 record is { 100, 457, 12, <the 100-byte audio record> }: same payload as
         // the committed GuiAudioTriggerEvent, different queued id (see
         // KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL above).
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL;
-        lAudio.muHeader2   = 12u;
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lAudio, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent(lAudio);
     }
 
     // ================================================================================
@@ -682,10 +675,7 @@ namespace BrnGui
                     // case 94, returns early for every non-junkyard car-select type anyway --
                     // so the literal is carried through as the console's, unnamed.
                     GuiEventActivateCarSelect20 lActivateEvent(2, 2);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lActivateEvent),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lActivateEvent)));   // X360 record size 20
+                    mpStateInterface->OutputGuiEvent(lActivateEvent);   // X360 record size 20
 
                     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
                         && CgsDev::Log::gpDebugPrint != 0)

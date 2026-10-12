@@ -920,15 +920,18 @@ namespace BrnNetwork
             const CgsModule::Event* lpRecord  = lpEvent;
             const void*             lpPayload = lpEvent;
             s32                     liCommand = liEventId;
-            const s32               liHeaderSize = static_cast<s32>(sizeof(CgsGui::GuiEvent<0>));
+            const s32 liHeaderSize = 3 * static_cast<s32>(sizeof(s32));
             if (liEventId == KI_GUI_CHANNEL_OUT && liEventSize >= liHeaderSize)
             {
-                const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
-                liCommand = static_cast<s32>(lpuRecord[1]);
-                const u32 luOffset = lpuRecord[2];
-                if (luOffset >= static_cast<u32>(liHeaderSize) && static_cast<s32>(luOffset) < liEventSize)
+                typedef CgsGui::GuiEventWrapper<CgsGui::GuiEvent<0>, 40> GuiOutputRecord;
+                const GuiOutputRecord* lpOutputRecord =
+                    reinterpret_cast<const GuiOutputRecord*>(lpEvent);
+                liCommand = lpOutputRecord->miOutEventType;
+                const u32 luOffset = static_cast<u32>(lpOutputRecord->miOutEventOffset);
+                if (luOffset >= static_cast<u32>(liHeaderSize) &&
+                    static_cast<s32>(luOffset) < liEventSize)
                 {
-                    lpPayload = reinterpret_cast<const u8*>(lpEvent) + luOffset;
+                    lpPayload = lpOutputRecord->GetRawEvent();
                 }
             }
 

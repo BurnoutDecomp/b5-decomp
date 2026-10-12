@@ -447,8 +447,7 @@ void SatNavComponent::Update()
         {
             GuiEventRenderSatNav mPayload;
             explicit GuiEventRenderSatNavRecord(const GuiEventRenderSatNav& lrPayload)
-                : CgsGui::GuiEvent<212>(48, 16)
-                , mPayload(lrPayload)
+                :  mPayload(lrPayload)
             {
             }
         } lRecord(mRenderSatNavEvent);

@@ -86,7 +86,7 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------
     struct GuiEventSetupDone : public CgsGui::GuiEvent<435>
     {
-        GuiEventSetupDone() : CgsGui::GuiEvent<435>(1, 12) {}
+        GuiEventSetupDone()  {}
     };
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;   // the AddEvent channel (OutputGuiEvent)
     static const s32 KI_SETUP_DONE_RECORD_SIZE = 16;  // `li r6, 0x10`
@@ -143,9 +143,7 @@ namespace BrnGui
         // arrives as the id-436 GuiEventStatsResponse CrashNavPanel::RecEvent forwards to
         // StorePlayerInfo.
         GuiEventSetupDone lSetupEvent;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lSetupEvent),
-            KI_OUT_CHANNEL_GUI_EVENT, KI_SETUP_DONE_RECORD_SIZE);
+        mpStateInterface->OutputGuiEvent(lSetupEvent);
     }
 
     // @ 0x82417738 -------------------------------------------------------------------

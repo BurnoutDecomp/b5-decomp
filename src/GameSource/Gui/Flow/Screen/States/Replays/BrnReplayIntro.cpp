@@ -35,7 +35,7 @@ namespace
     {
         bool mbShow;   // +0x0C
         explicit GuiEventShowHideAboveCarWire(bool lbShow)
-            : CgsGui::GuiEvent<215>(1, 12), mbShow(lbShow) {}
+            :  mbShow(lbShow) {}
     };
 
     // The intro card's outro request (console id 530): { 1, 530, 12 }, 16 bytes; the console
@@ -43,7 +43,7 @@ namespace
     struct GuiEventReplayIntroOutroWire : public CgsGui::GuiEvent<530>
     {
         u8 muReserved;   // +0x0C (never written by the console)
-        GuiEventReplayIntroOutroWire() : CgsGui::GuiEvent<530>(1, 12), muReserved(0) {}
+        GuiEventReplayIntroOutroWire() :  muReserved(0) {}
     };
 
     // The view's clear-screen control, { 8, 25, 12, mode, alpha } on the view-state channel.
@@ -53,8 +53,7 @@ namespace
         CgsGui::GuiEventClearScreenSet lEvent;
         lEvent.meClearScreen = leClearScreen;
         lEvent.mfAlpha       = 1.0f;
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lEvent, KI_CHANNEL_VIEW_STATE, static_cast<s32>(sizeof(lEvent)));
+        lpStateInterface->OutputViewState(lEvent);
     }
 }
 
@@ -79,8 +78,7 @@ void ReplayIntro::OnEnter()
     meIntroStage    = E_INTROSTAGE_SHOWING;
 
     GuiEventShowHideAboveCarWire lShowAboveCar(true);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        &lShowAboveCar, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lShowAboveCar)));
+    mpStateInterface->OutputGuiEvent(lShowAboveCar);
 
     mpGuiCache->ClearReplayPlayerActive();
 }
@@ -182,8 +180,7 @@ void ReplayIntro::UpdateRunning()
         {
             meIntroStage = E_INTROSTAGE_OUTRO;
             GuiEventReplayIntroOutroWire lOutro;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                &lOutro, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lOutro)));
+            mpStateInterface->OutputGuiEvent(lOutro);
         }
         else if (meIntroStage == E_INTROSTAGE_OUTRO)
         {

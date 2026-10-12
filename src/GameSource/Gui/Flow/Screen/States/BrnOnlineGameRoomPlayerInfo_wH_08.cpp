@@ -110,15 +110,7 @@ namespace BrnGui
         // this record and BrnGuiDemangledEventTypes.h attest for the audio trigger.)
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef GuiAudioTriggerEvent GuiAudioTriggerWire;
 
         // Id 463 == BrnGui::GuiEventAudioSettings. The record
         // OutputGuiEvent<GuiEventAudioSettings> @0x82493728 builds: { 8, 463, 12, the two
@@ -131,9 +123,7 @@ namespace BrnGui
             s32 miSFXVolume;     // +0x10
 
             GuiEventAudioSettingsWire(s32 liMusicVolume, s32 liSFXVolume)
-                : AudioSettingsHeader(static_cast<u32>(2 * sizeof(s32)),
-                                      static_cast<u32>(sizeof(AudioSettingsHeader)))
-                , miMusicVolume(liMusicVolume)
+                :  miMusicVolume(liMusicVolume)
                 , miSFXVolume(liSFXVolume)
             {
             }
@@ -150,9 +140,7 @@ namespace BrnGui
             s32 miVoipVolume;    // +0x0C
 
             explicit GuiEventVoipSettingsWire(s32 liVoipVolume)
-                : VoipSettingsHeader(static_cast<u32>(sizeof(s32)),
-                                     static_cast<u32>(sizeof(VoipSettingsHeader)))
-                , miVoipVolume(liVoipVolume)
+                :  miVoipVolume(liVoipVolume)
             {
             }
         };
@@ -163,12 +151,10 @@ namespace BrnGui
         // payload-offset word is 16, not 12).
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -182,9 +168,7 @@ namespace BrnGui
             u8   maPad[3];    // +0x0D (the record is 16 bytes on the wire)
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(bool)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
                 maPad[0] = 0;
                 maPad[1] = 0;
@@ -195,7 +179,7 @@ namespace BrnGui
         // Record-size pins. Every one of these payloads is pointer-free, so the X360's
         // AddEvent size immediate must survive unchanged on the x64 host; if a host
         // layout ever drifts, this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
         static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
         static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide hud record is 16 bytes");
@@ -238,9 +222,7 @@ namespace BrnGui
         GuiAudioTriggerWire lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent(lAudio);
     }
 
     // ---- ShowSettingsScreen @ 0x8249A780 -------------------------------------------
@@ -257,15 +239,11 @@ namespace BrnGui
 
         // Deactivate CrashNav (X360 record { 8, 191, 12, 0, 0 }, size 20, channel 40).
         GuiEventActivateCrashNav lDeactivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lDeactivateCrashNav)));
+        mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
         // Take the HUD down (X360 record { 1, 148, 12, 0 }, size 16, channel 40).
         GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));
+        mpStateInterface->OutputGuiEvent(lHideHud);
 
         mHelpItemAccept.Construct(KAC_HELPITEM_ACCEPT, mpStateInterface, 0);
 
@@ -344,9 +322,7 @@ namespace BrnGui
                     GuiOverlayRequestWire lWire;
                     lWire.mRequest.Construct(KAC_OVERLAY_CANCEL_CONFIRM);
 
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lWire)));
+                    mpStateInterface->OutputGuiEvent(lWire);
                 }
                 else
                 {
@@ -358,20 +334,14 @@ namespace BrnGui
 
                     GuiAudioTriggerWire lAudio;
                     lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lAudio)));
+                    mpStateInterface->OutputGuiEvent(lAudio);
 
                     GuiEventAudioSettingsWire lAudioSettings(liMusicVolume, liSFXVolume);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lAudioSettings), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lAudioSettings)));
+                    mpStateInterface->OutputGuiEvent(lAudioSettings);
 
                     GuiEventVoipSettingsWire lVoipSettings(
                         mpGuiCache->GetOptionsDataProfile()->GetVoipVolume());
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lVoipSettings), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lVoipSettings)));
+                    mpStateInterface->OutputGuiEvent(lVoipSettings);
 
                     mSettingToggle.Unloaded();
                     mSettingToggle.Clear();

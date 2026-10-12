@@ -77,18 +77,7 @@ namespace BrnGui
             GuiAudioTriggerEvent lEvent;
             lEvent.Construct(liAction, KAC_EMPTY, lpacLabel);
 
-            struct Record
-            {
-                s32 miSize;
-                s32 miType;
-                s32 miOffset;
-                GuiAudioTriggerWirePayload457 mPayload;
-            } lRecord = { 100, 457, 12, {} };
-            std::memcpy(&lRecord.mPayload, lEvent.macComponent, sizeof(lRecord.mPayload));
-
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
     }
 

@@ -51,7 +51,7 @@ namespace
     {
         u32 muPayload;   // +0x0C (the 4-byte payload; the X360 posts 0)
 
-        GuiEventCreditsEnter() : CgsGui::GuiEvent<587>(4, 12), muPayload(0) {}
+        GuiEventCreditsEnter() :  muPayload(0) {}
     };
 
     // The GuiEvent<588> "credits screen left" command record ({1, 588, 12}; channel 40,
@@ -62,7 +62,7 @@ namespace
     {
         u8 mucPad;   // +0x0C (the 1-byte empty payload; the console leaves it unwritten)
 
-        GuiEventCreditsLeave() : CgsGui::GuiEvent<588>(1, 12), mucPad(0) {}
+        GuiEventCreditsLeave() :  mucPad(0) {}
     };
 
     // The controller action sub-id that advances the credits (payload word +4 of action
@@ -96,8 +96,7 @@ void Credits::OnEnter()
     mpGuiCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
 
     GuiEventCreditsEnter lEnterEvent;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lEnterEvent), 40, 16);
+    mpStateInterface->OutputGuiEvent(lEnterEvent);
 
     meInternalState = E_INTERNALSTATE_LOADRESOURCES;
 }
@@ -112,8 +111,7 @@ void Credits::OnEnter()
 void Credits::OnLeave()
 {
     GuiEventCreditsLeave lLeaveEvent;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lLeaveEvent), 40, 16);
+    mpStateInterface->OutputGuiEvent(lLeaveEvent);
 
     // The console reads a dyn-initialised global whose only writer hashes the empty
     // string; cached here at first use rather than re-hashed per leave.

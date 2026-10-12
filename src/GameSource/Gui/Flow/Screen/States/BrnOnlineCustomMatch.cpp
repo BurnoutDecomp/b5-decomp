@@ -100,11 +100,7 @@ namespace BrnGui
 
             explicit GuiEventNetworkCustomMatchSearchWire(
                 const GuiEventNetworkCustomMatchSearch& lrParams)
-                : CgsGui::GuiEvent<252>(
-                      static_cast<u32>(sizeof(s32) + sizeof(s32) + sizeof(s32)),   // X360 12
-                      static_cast<u32>(offsetof(GuiEventNetworkCustomMatchSearchWire,
-                                                meGameMode)))                      // X360 12
-                , meGameMode(lrParams.meGameMode)
+                :  meGameMode(lrParams.meGameMode)
                 , meSearchOpponentTypes(lrParams.meSearchOpponentTypes)
                 , mbRanked(lrParams.mbRanked)
                 , mbFreeburn(lrParams.mbFreeburn)
@@ -165,9 +161,7 @@ namespace BrnGui
             mLastSearchParams.mbFreeburn       = true;
 
             GuiEventNetworkCustomMatchSearchWire lSearch(mLastSearchParams);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lSearch), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lSearch)));   // X360 record size 24
+            mpStateInterface->OutputGuiEvent(lSearch);   // X360 record size 24
 
             meSubState = E_SUBSTATE_SEARCHING;
 
@@ -502,10 +496,7 @@ namespace BrnGui
                 // This flow armed the online start: lift the network suspension it put in
                 // place, then back out on the quiet path.
                 CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNetworkSuspension)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lNetworkSuspension);   // X360 record size 16
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent("GO_BACK_EASY");
@@ -1185,10 +1176,7 @@ namespace BrnGui
             else if (mpGuiCache->IsOnlineStartPending())
             {
                 CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNetworkSuspension)));         // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lNetworkSuspension);         // X360 record size 16
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent("GO_BACK_EASY");
@@ -1208,10 +1196,7 @@ namespace BrnGui
                 if (mpGuiCache->IsOnlineStartPending())
                 {
                     CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lNetworkSuspension)));     // X360 record size 16
+                    mpStateInterface->OutputGuiEvent(lNetworkSuspension);     // X360 record size 16
 
                     mpGuiCache->SetOnlineStartPending(false);
                     SendStateEvent("GO_BACK_EASY");
@@ -1300,10 +1285,7 @@ namespace BrnGui
             if (mpGuiCache->IsOnlineStartPending())
             {
                 CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNetworkSuspension)));         // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lNetworkSuspension);         // X360 record size 16
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent("GO_BACK_EASY");
@@ -1323,10 +1305,7 @@ namespace BrnGui
                 if (mpGuiCache->IsOnlineStartPending())
                 {
                     CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lNetworkSuspension)));     // X360 record size 16
+                    mpStateInterface->OutputGuiEvent(lNetworkSuspension);     // X360 record size 16
 
                     mpGuiCache->SetOnlineStartPending(false);
                     SendStateEvent("GO_BACK_EASY");
@@ -1392,10 +1371,7 @@ namespace BrnGui
             s32 miGameId;   // payload +0x00 == mSearchResults.maiFoundGameIndex[<row>]
 
             explicit GuiEventNetworkCustomMatchJoinWire(s32 liGameId)
-                : CgsGui::GuiEvent<255>(
-                      static_cast<u32>(sizeof(s32)),                                            // X360 4
-                      static_cast<u32>(offsetof(GuiEventNetworkCustomMatchJoinWire, miGameId))) // X360 12
-                , miGameId(liGameId)
+                :  miGameId(liGameId)
             {
             }
         };
@@ -1418,10 +1394,7 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // payload +0x00 (never stored by the X360 -- see above)
 
             CustomMatchSearchStopWire()
-                : CgsGui::GuiEvent<253>(
-                      static_cast<u32>(sizeof(u8)),                                              // X360 1
-                      static_cast<u32>(offsetof(CustomMatchSearchStopWire, muUnwrittenPayload))) // X360 12
-                , muUnwrittenPayload(0)
+                :  muUnwrittenPayload(0)
             {
             }
         };
@@ -1431,14 +1404,10 @@ namespace BrnGui
         // wire BrnCarSelectMain_wG_02.cpp builds for its overlay posts.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(
-                      static_cast<u32>(sizeof(GuiOverlayRequest)),                          // X360 288
-                      static_cast<u32>(offsetof(GuiOverlayRequestWire, mRequest)))          // X360 16
-                , muPad0C(0)
+                
             {
             }
         };
@@ -1514,16 +1483,12 @@ namespace BrnGui
                 const s32 liSelectedGame = miFirstRow + mTable.miHighlightedIndex;
 
                 GuiEventNetworkCustomMatchJoinWire lJoin(mSearchResults.maiFoundGameIndex[liSelectedGame]);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lJoin), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lJoin)));                      // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lJoin);                      // X360 record size 16
 
                 // Raise the "entering game" overlay over the top of the list.
                 GuiOverlayRequestWire lRequest;
                 lRequest.mRequest.Construct(KAC_ENTER_GAME_OVERLAY);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lRequest)));                   // X360 record size 304
+                mpStateInterface->OutputGuiEvent(lRequest);                   // X360 record size 304
 
                 // The X360 stores the sub-state BEFORE the ShowMessage call
                 // (`stw r10, 0x38(r31)` at 0x824976BC, `bl` at 0x824976C0) -- keep the order.
@@ -1545,10 +1510,7 @@ namespace BrnGui
                     // This flow armed the online start: lift the network suspension it put
                     // in place, then back out on the quiet path.
                     CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lNetworkSuspension)));     // X360 record size 16
+                    mpStateInterface->OutputGuiEvent(lNetworkSuspension);     // X360 record size 16
 
                     mpGuiCache->SetOnlineStartPending(false);
                     SendStateEvent("GO_BACK_EASY");
@@ -1563,9 +1525,7 @@ namespace BrnGui
                 // Ranked/normal flow: stop the search that produced this list and go back
                 // to the parameter page.
                 CustomMatchSearchStopWire lStopSearch;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lStopSearch), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lStopSearch)));                // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lStopSearch);                // X360 record size 16
 
                 ShowParamSelection();
             }
@@ -1654,9 +1614,7 @@ namespace BrnGui
             GuiOverlayWaitFinishRequest mRequest;   // +0x10
 
             explicit GuiOverlayWaitFinishRequestWire(const char* lpcOverlayName)
-                : CgsGui::GuiEvent<188>(
-                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                      static_cast<u32>(offsetof(GuiOverlayWaitFinishRequestWire, mRequest)))
+                
             {
                 mRequest.Construct(lpcOverlayName);
             }
@@ -1682,9 +1640,7 @@ namespace BrnGui
         // Take down the "entering game" wait overlay.
         const GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRequest)));   // X360 record size 24
+        mpStateInterface->OutputGuiEvent(lRequest);   // X360 record size 24
 
         // ...and put the screen back to where it started.
         ShowInitialScreen();
@@ -1937,8 +1893,7 @@ namespace BrnGui
             GuiTickerCustomMessagePayload mMessage;   // +0x0C
 
             GuiTickerCustomMessageWire()
-                : CgsGui::GuiEvent<537>(static_cast<u32>(sizeof(GuiTickerCustomMessagePayload)),
-                                        static_cast<u32>(sizeof(CgsGui::GuiEvent<537>)))
+                
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
                 mMessage.maFlags[0] = 1;   // +0x811 (this producer's distinguishing seed)
@@ -1995,9 +1950,7 @@ namespace BrnGui
             GuiTickerCustomMessageWire lTicker;
             lTicker.mMessage.AddString(lpacTickerText, KI_TICKER_STRING_TYPE);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lTicker), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lTicker)));   // X360 record size 0x824
+            mpStateInterface->OutputGuiEvent(lTicker);   // X360 record size 0x824
         }
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1340
@@ -2038,10 +1991,7 @@ namespace BrnGui
             // No multiplayer privilege, and this screen owns the pending online start:
             // lift the network suspension it armed, then back out on the quiet path.
             CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lNetworkSuspension)));   // X360 record size 16
+            mpStateInterface->OutputGuiEvent(lNetworkSuspension);   // X360 record size 16
 
             mpGuiCache->SetOnlineStartPending(false);
             SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
@@ -2180,10 +2130,7 @@ namespace BrnGui
             bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),                                  // X360 1
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))   // X360 12
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };
@@ -2388,14 +2335,10 @@ namespace BrnGui
         // Take the front-end map (CrashNav) down while the custom-match page owns the screen.
         // Byte-identical to the record BrnOnlinePlay.cpp:172 posts.
         GuiEventActivateCrashNav lActivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lActivateCrashNav)));   // X360 record size 20
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);   // X360 record size 20
 
         GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));            // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lHideHud);            // X360 record size 16
     }
 }
 
@@ -2509,8 +2452,7 @@ namespace BrnGui
             u8 mau8Pad[2];
 
             GuiTickerClearWire536()
-                : CgsGui::GuiEvent<536>(2, 12)
-                , mbForceFadeOut(0), mbDeleteChallengeMessages(0)
+                :  mbForceFadeOut(0), mbDeleteChallengeMessages(0)
             {
                 mau8Pad[0] = mau8Pad[1] = 0;
             }
@@ -2540,15 +2482,11 @@ namespace BrnGui
 
         // Stop any custom-match search still in flight.
         const CustomMatchSearchStopWire lStop;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lStop), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lStop)));   // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lStop);   // X360 record size 16
 
         // ...and clear the ticker (no fade-out force, challenge messages kept).
         const GuiTickerClearWire536 lClear;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lClear), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lClear)));  // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lClear);  // X360 record size 16
     }
 
     // ================================================================================
@@ -2595,9 +2533,7 @@ namespace BrnGui
 
                 // Take down the "entering game" wait overlay, then advance the flow.
                 const GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lRequest)));   // X360 record size 24
+                mpStateInterface->OutputGuiEvent(lRequest);   // X360 record size 24
 
                 SendStateEvent(KAC_ADVANCE_EVENT);
                 break;

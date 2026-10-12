@@ -42,21 +42,21 @@ namespace
     struct GuiReplaySetModeWire : public CgsGui::GuiEvent<525>
     {
         s32 miMode;   // +0x0C
-        explicit GuiReplaySetModeWire(s32 liMode) : CgsGui::GuiEvent<525>(4, 12), miMode(liMode) {}
+        explicit GuiReplaySetModeWire(s32 liMode) :  miMode(liMode) {}
     };
 
     // GuiReplayDeleteReelEvent (console id 527): { 4, 527, 12 } + the reel index, 16 bytes.
     struct GuiReplayDeleteReelWire : public CgsGui::GuiEvent<527>
     {
         s32 miReel;   // +0x0C
-        explicit GuiReplayDeleteReelWire(s32 liReel) : CgsGui::GuiEvent<527>(4, 12), miReel(liReel) {}
+        explicit GuiReplayDeleteReelWire(s32 liReel) :  miReel(liReel) {}
     };
 
     // The screen-closed command (console id 533): { 1, 533, 12 }, 16 bytes; no payload written.
     struct GuiEventScreenClosedWire : public CgsGui::GuiEvent<533>
     {
         u8 muReserved;   // +0x0C (never written by the console)
-        GuiEventScreenClosedWire() : CgsGui::GuiEvent<533>(1, 12), muReserved(0) {}
+        GuiEventScreenClosedWire() :  muReserved(0) {}
     };
 
     template <typename TWire>

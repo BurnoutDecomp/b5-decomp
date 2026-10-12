@@ -40,7 +40,7 @@ namespace BrnGui
         {
             u8 mu8Flag;    // +0x0C (the X360 stores a single byte then leaves the record at 16)
             u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -48,8 +48,7 @@ namespace BrnGui
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel)
         {
             GuiCommandEvent16<N> lEvent(0);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
     }
 

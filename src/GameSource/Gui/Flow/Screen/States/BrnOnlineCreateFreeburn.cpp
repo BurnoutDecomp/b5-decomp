@@ -93,12 +93,10 @@ namespace BrnGui
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -109,9 +107,7 @@ namespace BrnGui
             GuiOverlayWaitFinishRequest mRequest;   // +0x10
 
             explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                : CgsGui::GuiEvent<188>(
-                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                      static_cast<u32>(offsetof(GuiOverlayWaitFinishWire, mRequest)))
+                
             {
                 mRequest.Construct(lpcOverlayName);
             }
@@ -124,10 +120,7 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // +0x0C
 
             GuiEvent533Wire()
-                : CgsGui::GuiEvent<533>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(offsetof(GuiEvent533Wire, muUnwrittenPayload)))
-                , muUnwrittenPayload(0)
+                :  muUnwrittenPayload(0)
             {
             }
         };
@@ -138,10 +131,7 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };
@@ -167,14 +157,10 @@ namespace BrnGui
 
         // The create page owns the screen: CrashNav down, HUD hidden.
         GuiEventActivateCrashNav lDeactivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lDeactivateCrashNav)));
+        mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
         const GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));
+        mpStateInterface->OutputGuiEvent(lHideHud);
     }
 
     // ================================================================================
@@ -288,9 +274,7 @@ namespace BrnGui
 
                 GuiOverlayRequestWire lEnterGameOverlay;
                 lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEnterGameOverlay), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lEnterGameOverlay)));
+                mpStateInterface->OutputGuiEvent(lEnterGameOverlay);
 
                 meSubState = E_SUBSTATE_WAIT_IN_GAME;
 
@@ -304,14 +288,10 @@ namespace BrnGui
                 mpStateInterface->OutputInternalState(lHideSatNav);
 
                 GuiEventActivateCrashNav lActivateCrashNav(true);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lActivateCrashNav)));
+                mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
                 const GuiEvent533Wire lHandBack;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lHandBack), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lHandBack)));
+                mpStateInterface->OutputGuiEvent(lHandBack);
             }
         }
     }
@@ -359,9 +339,7 @@ namespace BrnGui
         CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
 
         const GuiOverlayWaitFinishWire lWaitEnterGame(KAC_ENTER_GAME_OVERLAY_ID);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWaitEnterGame), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWaitEnterGame)));
+        mpStateInterface->OutputGuiEvent(lWaitEnterGame);
 
         BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "in game (GUI 50) -> ADVANCE");
         SendStateEvent(KAC_ADVANCE_EVENT);

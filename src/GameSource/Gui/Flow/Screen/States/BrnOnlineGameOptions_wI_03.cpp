@@ -86,10 +86,7 @@ namespace BrnGui
             GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
 
             GuiOverlayWaitFinishWire()
-                : OverlayWaitFinishHeader(
-                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                      static_cast<u32>(sizeof(OverlayWaitFinishHeader) + sizeof(u32)))
-                , muPad0C(0)
+                :  muPad0C(0)
             {
             }
         };

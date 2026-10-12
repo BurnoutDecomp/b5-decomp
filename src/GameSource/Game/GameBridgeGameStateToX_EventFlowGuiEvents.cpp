@@ -212,7 +212,7 @@ namespace
     {
         s32 miGameMode;                        // +0x0C  StartPlayingModeAction::meGameMode
         explicit GameModeStartedWire237(s32 liGameMode)
-            : CgsGui::GuiEvent<237>(4, 12), miGameMode(liGameMode) {}
+            :  miGameMode(liGameMode) {}
     };
     static_assert(sizeof(GameModeStartedWire237) == 16, "id 237 size 16");
 

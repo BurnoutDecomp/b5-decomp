@@ -46,7 +46,7 @@ namespace BrnGui
         {
             u8 mu8Flag;
             u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -54,8 +54,7 @@ namespace BrnGui
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         // ---- the options-profile repost records (ApplyOptionsDataProfileSettings
@@ -68,15 +67,14 @@ namespace BrnGui
         struct GuiWordEvent16 : public CgsGui::GuiEvent<N>
         {
             u32 muValue;   // +0x0C
-            explicit GuiWordEvent16(u32 luValue) : CgsGui::GuiEvent<N>(4, 12), muValue(luValue) {}
+            explicit GuiWordEvent16(u32 luValue) :  muValue(luValue) {}
         };
 
         template <s32 N>
         void PostWordEvent16(CgsGui::StateInterface* lpInterface, u32 luValue)
         {
             GuiWordEvent16<N> lEvent(luValue);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+            lpInterface->OutputGuiEvent(lEvent);
         }
 
         // { 1, 473, 12, byte } (16 bytes) -- the game-options settings byte repost.
@@ -84,7 +82,7 @@ namespace BrnGui
         {
             u8 mu8Value;   // +0x0C
             u8 maPad[3];
-            explicit GuiByteEvent16(u8 lu8Value) : CgsGui::GuiEvent<473>(1, 12), mu8Value(lu8Value)
+            explicit GuiByteEvent16(u8 lu8Value) :  mu8Value(lu8Value)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -94,27 +92,11 @@ namespace BrnGui
             u32 muWord0;   // +0x0C
             u32 muWord1;   // +0x10
             GuiSettingsEvent20(u32 luWord0, u32 luWord1)
-                : CgsGui::GuiEvent<463>(8, 12), muWord0(luWord0), muWord1(luWord1) {}
+                :  muWord0(luWord0), muWord1(luWord1) {}
         };
 
-        // { 32, 458, 16, <pad>, 32 payload bytes } (48 bytes) -- the trax-availability
-        // repost (two 128-bit trax bit sets; the OutputGuiEvent<GuiEventAudioTraxUpdate>
-        // wire @0x824C30A0).
-        struct GuiTraxUpdateEvent48 : public CgsGui::GuiEvent<458>
-        {
-            u32 muPad0C;          // +0x0C (payload is 16-aligned past the header)
-            u8  maTraxBits[32];   // +0x10 (EATraxArrayType pair)
-            GuiTraxUpdateEvent48() : CgsGui::GuiEvent<458>(32, 16), muPad0C(0) {}
-        };
-
-        // { 24, 459, 16, <pad>, 24 payload bytes } (40 bytes) -- the last-played-indexes
-        // repost (the OutputGuiEvent<GuiEventAudioTraxLastPlayedIndexes> wire @0x824C3110).
-        struct GuiTraxLastPlayedEvent40 : public CgsGui::GuiEvent<459>
-        {
-            u32 muPad0C;          // +0x0C
-            u8  maIndexes[24];    // +0x10
-            GuiTraxLastPlayedEvent40() : CgsGui::GuiEvent<459>(24, 16), muPad0C(0) {}
-        };
+        typedef GuiEventAudioTraxUpdate GuiTraxUpdateEvent48;
+        typedef GuiEventAudioTraxLastPlayedIndexes GuiTraxLastPlayedEvent40;
 
         // { 3, 472, 12, 3 bytes } (16 bytes) -- the controller-settings repost (the
         // OutputGuiEvent<GuiEventControllerSettings> wire @0x82493778).
@@ -123,7 +105,7 @@ namespace BrnGui
             u8 maSettings[3];   // +0x0C
             u8 muPad;
             explicit GuiControllerSettingsEvent16(const u8* lpau8Settings)
-                : CgsGui::GuiEvent<472>(3, 12), muPad(0)
+                :  muPad(0)
             {
                 maSettings[0] = lpau8Settings[0];
                 maSettings[1] = lpau8Settings[1];
@@ -138,7 +120,7 @@ namespace BrnGui
             s32 miBrightness;   // +0x0C
             s32 miContrast;     // +0x10
             GuiBrightnessContrastEvent20(s32 liBrightness, s32 liContrast)
-                : CgsGui::GuiEvent<545>(8, 12), miBrightness(liBrightness), miContrast(liContrast) {}
+                :  miBrightness(liBrightness), miContrast(liContrast) {}
         };
 
         // ---- GuiCache boundary (X360 members past the committed layout tail; same
@@ -174,16 +156,12 @@ namespace BrnGui
         CgsGui::GuiEventPlayAptMovie lUnloadLevel3;
         lUnloadLevel3.mpacMovieName = "";
         lUnloadLevel3.miLevelNum    = 3;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnloadLevel3), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(CgsGui::GuiEventPlayAptMovie)));
+        mpStateInterface->OutputViewState(lUnloadLevel3);
 
         CgsGui::GuiEventPlayAptMovie lUnloadLevel1;
         lUnloadLevel1.mpacMovieName = "";
         lUnloadLevel1.miLevelNum    = 1;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnloadLevel1), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(CgsGui::GuiEventPlayAptMovie)));
+        mpStateInterface->OutputViewState(lUnloadLevel1);
 
         mpGuiCache                    = 0;
         mbInviteInProgress            = false;
@@ -313,10 +291,8 @@ namespace BrnGui
             {
                 CGS_ASSERT(lpEvent != 0, "lpTraxEvent");       // cpp:216
                 GuiTraxUpdateEvent48 lTraxUpdate;
-                std::memcpy(lTraxUpdate.maTraxBits, lpEvent, sizeof(lTraxUpdate.maTraxBits));
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lTraxUpdate),
-                    KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(GuiTraxUpdateEvent48)));
+                std::memcpy(&lTraxUpdate, lpEvent, sizeof(lTraxUpdate));
+                mpStateInterface->OutputGuiEvent(lTraxUpdate);
                 break;
             }
 
@@ -324,10 +300,8 @@ namespace BrnGui
             {
                 CGS_ASSERT(lpEvent != 0, "lpTraxEvent");       // cpp:224
                 GuiTraxLastPlayedEvent40 lLastPlayed;
-                std::memcpy(lLastPlayed.maIndexes, lpEvent, sizeof(lLastPlayed.maIndexes));
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lLastPlayed),
-                    KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(GuiTraxLastPlayedEvent40)));
+                std::memcpy(&lLastPlayed, lpEvent, sizeof(lLastPlayed));
+                mpStateInterface->OutputGuiEvent(lLastPlayed);
                 break;
             }
 
@@ -341,9 +315,7 @@ namespace BrnGui
                 CGS_ASSERT(lpEvent != 0, "lpSettingsEvent");   // cpp:232
                 const u32* lpauWords = reinterpret_cast<const u32*>(lpEvent);
                 GuiSettingsEvent20 lSettings(lpauWords[0], lpauWords[1]);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lSettings),
-                    KI_CHANNEL_GUI_OUT, 20);
+                mpStateInterface->OutputGuiEvent(lSettings);
                 break;
             }
 
@@ -351,9 +323,7 @@ namespace BrnGui
             {
                 CGS_ASSERT(lpEvent != 0, "lpControllerSettingsEvent");   // cpp:256
                 GuiControllerSettingsEvent16 lController(reinterpret_cast<const u8*>(lpEvent));
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lController),
-                    KI_CHANNEL_GUI_OUT, 16);
+                mpStateInterface->OutputGuiEvent(lController);
                 break;
             }
 
@@ -361,9 +331,7 @@ namespace BrnGui
             {
                 CGS_ASSERT(lpEvent != 0, "lpGameOptionsSettingsEvent");   // cpp:264
                 GuiByteEvent16 lGameOptions(*reinterpret_cast<const u8*>(lpEvent));
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lGameOptions),
-                    KI_CHANNEL_GUI_OUT, 16);
+                mpStateInterface->OutputGuiEvent(lGameOptions);
                 break;
             }
 
@@ -379,7 +347,6 @@ namespace BrnGui
 
         GuiBrightnessContrastEvent20 lCalibration(lpProfile->GetBrightness(),
                                                   lpProfile->GetContrast());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCalibration), KI_CHANNEL_GUI_OUT, 20);
+        mpStateInterface->OutputGuiEvent(lCalibration);
     }
 }

@@ -83,7 +83,7 @@ namespace BrnGui
         struct GuiScreenLeaveWire80 : public CgsGui::GuiEvent<80>
         {
             u8 muPayload;   // +0x0C
-            GuiScreenLeaveWire80() : CgsGui::GuiEvent<80>(1, 12), muPayload(0) {}
+            GuiScreenLeaveWire80() :  muPayload(0) {}
         };
 
         // The play-apt-movie record PlayMovie posts: { 8, 18, 12, <name>, 3 }, channel 41,
@@ -108,8 +108,7 @@ namespace BrnGui
             u32 muAction;           // +0x0C (X360 word0 == 1, enter modification)
             u32 muCarSelectType;    // +0x10 (X360 word1 == GsmIO::ECarSelectType)
             GuiActivateCarSelectWire()
-                : CgsGui::GuiEvent<192>(8, 12)
-                , muAction(0)
+                :  muAction(0)
                 , muCarSelectType(0) {}
         };
 
@@ -249,8 +248,7 @@ namespace BrnGui
 
         {
             GuiScreenLeaveWire80 lLeave;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lLeave, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lLeave)));
+            mpStateInterface->OutputGuiEvent(lLeave);
         }
 
         // Re-arm the one-shot transition gate this screen consumes (see SetupComponents and
@@ -321,8 +319,7 @@ namespace BrnGui
             lCarSelectType.muAction        = 1;   // X360 HIDWORD == 1 (enter modification)
             lCarSelectType.muCarSelectType =
                 static_cast<u32>(mpGuiCache->GetCurrentCarSelectType());
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lCarSelectType, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lCarSelectType)));
+            mpStateInterface->OutputGuiEvent(lCarSelectType);
 
             mbFirstFrame = false;
         }
@@ -443,12 +440,7 @@ namespace BrnGui
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(leAction, KAC_EMPTY, "CodeLivery", KAC_EMPTY);
 
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID;
-        lAudio.muHeader2   = 12u;
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lAudio, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent(lAudio);
     }
 }
 

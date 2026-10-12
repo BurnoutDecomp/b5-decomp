@@ -210,14 +210,10 @@ namespace BrnGui
         void PostExitToInGame(CgsGui::StateInterface* lpStateInterface)
         {
             CgsGui::GuiEventNetworkSuspension lResume(false);              // { 4, 45, 12, 0 } ch40 16
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_EVENT,
-                static_cast<s32>(sizeof(lResume)));
+            lpStateInterface->OutputGuiEvent(lResume);
 
             GuiEventActivateCrashNav lActivate(true);                      // { 8, 191, 12, 1, 0 } ch40 20
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivate), KI_CHANNEL_GUI_EVENT,
-                static_cast<s32>(sizeof(lActivate)));
+            lpStateInterface->OutputGuiEvent(lActivate);
 
             CgsGui::GuiEvent<533> lDone(1, 12);                            // { 1, 533, 12 } ch40 16
             lpStateInterface->GetOutputEventQueue()->AddEvent(
@@ -282,16 +278,12 @@ namespace BrnGui
 
         // 0x824CCA1C..0x824CCA40 -- { 8, 191, 12, 0, 0 } ch 40, 20 bytes.
         GuiEventActivateCrashNav lDeactivate(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivate), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lDeactivate)));
+        mpStateInterface->OutputGuiEvent(lDeactivate);
 
         // 0x824CCA44..0x824CCA70 -- { 4, 45, 12, 1 } ch 40, 16 bytes. Id 45 ==
         // CgsGui::GuiEventNetworkSuspension; payload 1 is E_SUSPENSION_TYPE_RESUME.
         CgsGui::GuiEventNetworkSuspension lResume(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lResume)));
+        mpStateInterface->OutputGuiEvent(lResume);
 
         // 0x824CCA84 / 0x824CCA88 -- the two stores the pause-wave partial could not
         // make. +24928 is this class's own byte; +56 is the base's meMapState.

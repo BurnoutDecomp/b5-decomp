@@ -42,14 +42,14 @@ namespace
     struct GuiReplaySetModeWire : public CgsGui::GuiEvent<525>
     {
         s32 miMode;   // +0x0C
-        explicit GuiReplaySetModeWire(s32 liMode) : CgsGui::GuiEvent<525>(4, 12), miMode(liMode) {}
+        explicit GuiReplaySetModeWire(s32 liMode) :  miMode(liMode) {}
     };
 
     // GuiReplayDeleteReelEvent (console id 527): { 4, 527, 12 } + the reel index, 16 bytes.
     struct GuiReplayDeleteReelWire : public CgsGui::GuiEvent<527>
     {
         s32 miReel;   // +0x0C
-        explicit GuiReplayDeleteReelWire(s32 liReel) : CgsGui::GuiEvent<527>(4, 12), miReel(liReel) {}
+        explicit GuiReplayDeleteReelWire(s32 liReel) :  miReel(liReel) {}
     };
 
     template <typename TWire>

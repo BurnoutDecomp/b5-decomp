@@ -27,11 +27,9 @@ namespace
     // request, a pad word, then the request itself (304 bytes on the console).
     struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
     {
-        u32               muPad0C;    // +0x0C
         GuiOverlayRequest mRequest;   // +0x10
         GuiOverlayRequestWire()
-            : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-            , muPad0C(0) {}
+             {}
     };
 }
 
@@ -68,8 +66,6 @@ namespace
         lWire.mRequest.Construct("OnRouteShort");
         lWire.mRequest.AddMessageParam(2, "ONLINE_ROUTE_DISTANCE");
         lWire.mRequest.AddMessageParam(2, "ONLINE_ROUTE_MINIMUM_DISTANCE");
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+        mpStateInterface->OutputGuiEvent(lWire);
     }
 }
