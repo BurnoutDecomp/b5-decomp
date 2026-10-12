@@ -24,6 +24,35 @@
 
 namespace BrnResource
 {
+    // ARTIST inlines this DecFIGS helper into Update: fade the current-usage bar,
+    // then raise the stored maximum and restart its colour transition on a new peak.
+    void DebugComponent::MemTypeInfo::UpdateMax()
+    {
+        if (miCurrUsed > miMaxUsed)
+        {
+            mfColInterp = 1.0f;
+            miMaxUsed = miCurrUsed;
+        }
+    }
+
+    // X360 0x826627A8. Bit 4 is allocated and bit 2 is free; the allocated test
+    // takes precedence if both bits are set. ReportHeap continues after every block.
+    bool DebugComponent::GeneralAllocatorReportCB(
+        const EA::Allocator::GeneralAllocator::BlockInfo* lpBlockInfo, void* lpContext)
+    {
+        GenAllocUsage* lpUsage = static_cast<GenAllocUsage*>(lpContext);
+        if ((lpBlockInfo->mBlockType & 4) != 0)
+        {
+            lpUsage->muAllocated += lpBlockInfo->mnDataSize;
+            return true;
+        }
+
+        if ((lpBlockInfo->mBlockType & 2) != 0)
+            lpUsage->muFree += lpBlockInfo->mnDataSize;
+
+        return true;
+    }
+
     // X360 GameDataModule::Construct @0x82671E48-0x82671E74; DecFIGS
     // BrnResource::DebugComponent::Construct @0x7CC378. The X360 inlines
     // the base Construct and these member stores at the embedded member.
