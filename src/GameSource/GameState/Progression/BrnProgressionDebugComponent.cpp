@@ -28,6 +28,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
+#include <cmath>
+#include <limits>
+
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
@@ -70,6 +73,27 @@ namespace BrnProgression
             lv2Result.z = 0.0f;
             lv2Result.w = 0.0f;
             return lv2Result;
+        }
+
+        f32 AddRankBarVectorLane(f32 lfA, f32 lfB)
+        {
+            // ARTIST vaddfp: flush subnormal inputs and the rounded result.
+            const auto Flush = [](f32 lfValue)
+            {
+                return std::fpclassify(lfValue) == FP_SUBNORMAL
+                    ? std::copysign(0.0f, lfValue) : lfValue;
+            };
+            return Flush(Flush(lfA) + Flush(lfB));
+        }
+
+        s32 TruncateRankBarPercentage(f32 lfValue)
+        {
+            // ARTIST 8237EA2C fctiwz: truncate, saturate, and map NaN to INT_MIN.
+            if (std::isnan(lfValue) || lfValue <= -2147483648.0f)
+                return (std::numeric_limits<s32>::min)();
+            if (lfValue >= 2147483648.0f)
+                return (std::numeric_limits<s32>::max)();
+            return static_cast<s32>(lfValue);
         }
     }
 
@@ -144,6 +168,61 @@ namespace BrnProgression
     const char* ProgressionDebugComponent::GetName() const
     {
         return "Progression";
+    }
+
+    // ARTIST 8237E910: this=r3, display=r4, mode=r5, colour=r6, name=r7,
+    // position=v1. DecFIGS attests the by-value Vector2 declaration.
+    void ProgressionDebugComponent::DrawRankAsBar(
+        CgsDev::Debug2DImmediateRender* lpDisplay,
+        BrnGameState::GameStateModuleIO::EGameModeType leGameModeType,
+        CgsDev::RGBA lColour, Vector2 lv2Position, const char* lpcName)
+    {
+        const f32 lfRank = mpProgressionManager->GetProgressionRankForGameModeNormalised(leGameModeType);
+        lpDisplay->DrawText(lpcName, lv2Position, 16.0f, 0xFFFFFFFFu, false);
+
+        lv2Position.y = AddRankBarVectorLane(lv2Position.y, 15.0f);
+        char lacText[KI_HUD_TEXT_LENGTH];
+        CgsDev::StrStream lText(lacText, sizeof(lacText));
+        lText << "\nDifficulty : " << TruncateRankBarPercentage(lfRank * 100.0f) << "%\n";
+        lpDisplay->DrawText(lText.GetBuffer(), lv2Position, 16.0f, 0xFFFFFFFFu, false);
+
+        lv2Position.y = AddRankBarVectorLane(lv2Position.y, 15.0f);
+        const f32 lfMaxX = AddRankBarVectorLane(lv2Position.x, 140.0f);
+        const f32 lfMaxY = AddRankBarVectorLane(lv2Position.y, 10.0f);
+        // ARTIST vperm mask 82CDA350 selects {A.x, B.y, A.x, A.x}.
+        const Vector2 lv2Max = {lfMaxX, lfMaxY, lfMaxX, lfMaxX};
+        lpDisplay->DrawHorizontalBar(lv2Position, lv2Max, lfRank, 1.0f, lColour, 0xFF000000u);
+    }
+
+    // ARTIST 8235A1D0: append before checking the current character, retain the
+    // breaking newline/space, and always publish the final line (including empty).
+    void ProgressionDebugComponent::DrawTextWithOffsets(
+        CgsDev::Debug2DImmediateRender* lpDisplay, CgsDev::StrStream* lpStream, f32 lfX, f32 lfY)
+    {
+        char lacLine[4096];
+        CgsDev::StrStream lLine(lacLine, sizeof(lacLine));
+        s32 liIndex = 0;
+        s32 liLineLength = 0;
+        s8 liChar = static_cast<s8>(lpStream->GetBuffer()[liIndex]);
+        lLine.AppendFormat("%c", static_cast<s32>(liChar));
+
+        while (liChar != 0)
+        {
+            if (liChar == '\n' || (liLineLength > 128 && liChar == ' '))
+            {
+                MaybeDrawText(lpDisplay, lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu, false);
+                lLine.Reset();
+                lfY += 12.0f;
+                liLineLength = 0;
+            }
+            ++liIndex;
+            ++liLineLength;
+            liChar = static_cast<s8>(lpStream->GetBuffer()[liIndex]);
+            lLine.AppendFormat("%c", static_cast<s32>(liChar));
+        }
+
+        MaybeDrawText(lpDisplay, lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu, false);
+        lLine.Reset();
     }
 
     // X360 0x823A0638. Registration order, captions, ranges, option list and callback owners are
