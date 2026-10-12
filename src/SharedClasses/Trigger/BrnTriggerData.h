@@ -90,6 +90,11 @@ struct TriggerData
     // X360 0x8230E490. The liRegionIndex'th entry of the region table. Body in the BrnTriggerData TU.
     const TriggerRegion* GetRegion(int liRegionIndex) const;
 
+    // Inlined region-table read used by TriggerQueryManagerDebugComponent::RenderWorld. That
+    // caller owns the original `liRegionIndex < miRegionCount` assertion and its source location
+    // (BrnTriggerData.h:624), so this named read deliberately performs no second range assertion.
+    const TriggerRegion* GetRegionUnchecked(int liIndex) const { return mppRegions[liIndex]; }
+
     // X360 0x8231B648. Maps a region-table index back to its owning Landmark (asserts the type).
     const Landmark* GetLandmarkFromRegionIndex(int liRegionIndex) const;
 
@@ -121,8 +126,12 @@ struct TriggerData
     int  GetBlackspotCount() const { return miBlackspotCount; }
     const RoamingLocation* GetRoamingLocation(int liIndex) const;
     int  GetRoamingLocationCount() const { return miRoamingLocationCount; }
+    // RenderWorld @0x82364E10 carries the inlined bound assertion from BrnTriggerData.h:569.
+    const RoamingLocation* GetRoamingLocationUnchecked(int liIndex) const { return &mpRoamingLocations[liIndex]; }
     const SpawnLocation*   GetSpawnLocation(int liIndex) const;
     int  GetSpawnLocationCount() const { return miSpawnLocationCount; }
+    // RenderWorld @0x82364E10 carries the inlined bound assertion from BrnTriggerData.h:585.
+    const SpawnLocation* GetSpawnLocationUnchecked(int liIndex) const { return &mpSpawnLocations[liIndex]; }
 
     // X360 0x82675738. Linear scan of the landmark table for one whose GetId() == lId. Returns the
     // matching Landmark, or the base pointer mpLandmarks (NOT null) on miss/empty. Body in the TU.
