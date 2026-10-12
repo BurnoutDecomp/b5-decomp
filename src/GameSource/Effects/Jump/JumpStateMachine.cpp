@@ -29,7 +29,7 @@
 //
 //   Gates (all must hold or the blend stays 0):
 //     speed = |mLinearVelocity| > 20.0                       (fast enough)
-//     mLinearVelocity.y >= speed                             (essentially moving up)
+//     mLinearVelocity.y >= 0.0                           (horizontal or rising)
 //     dot(normalize(mLinearVelocity), mTransform.zAxis) > 0  (facing into the jump)
 //   Then blend = SmoothStep(dir) * SmoothStep(time); the debug "Force State Blend"
 //   override replaces the computed blend when enabled.
