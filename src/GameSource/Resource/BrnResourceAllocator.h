@@ -2,6 +2,7 @@
 #define GAMESOURCE_RESOURCE_BRNRESOURCEALLOCATOR_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::ResourceDescriptor
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // KX_FILTER_* (memory-check print)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (LinearResourceAllocator queries)
@@ -45,22 +46,24 @@ public:
     rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) override;
 };
 
-// The Burnout linear (bump) RenderWare resource allocator. Sub-allocates from a fixed
-// region by advancing a cursor; frees happen en masse (re-Construct). Like
-// HeapResourceAllocator it IS-A rw::IResourceAllocator, so the resource modules can carve
-// memory through the virtual DoAllocate. MINIMAL SLICE -- only the polymorphic surface and
-// the rw allocator interface are modelled here; Construct (@0x82661A60), DoAllocate
-// (@0x82664800), DoFree (@0x82661CF8) and DoFreeDisposable (@0x82661D88) land when those
-// TUs are reconstructed (GROW this class then, do NOT fork it elsewhere). The X360 emits a
-// scalar deleting destructor for it (@0x82666948) because it is deleted polymorphically.
-// It inherits the rw::IResourceAllocator virtual surface (DoAllocate / virtual dtor); the
-// concrete overrides land with the allocator-leaf TUs. The out-of-line (defaulted) virtual
-// destructor anchors the vtable in BrnResourceAllocator.cpp so the X360's polymorphic-delete
-// thunk (`scalar deleting destructor' @0x82666948) is emitted there.
+// The initial process-wide RenderWare resource allocator. ARTIST Construct @0x82661A60 and
+// DoAllocate @0x82664800 traverse exactly five LinearMalloc records at the X360 0x1C stride;
+// DecFIGS declares six, which is the PS3 shape and is not used by the X360 target. The native
+// member array remains typed and widens naturally with the host pointers. DoFree and
+// DoFreeDisposable preserve the original assertion-only behavior.
 class DefaultLinearAllocator : public rw::IResourceAllocator
 {
 public:
+    void Construct(u32 luPreAllocatedSize);
     ~DefaultLinearAllocator() override;
+
+protected:
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
+    void DoFree(const rw::Resource& lrResource) override;
+    void DoFreeDisposable(rw::Resource& lrResource) override;
+
+private:
+    CgsMemory::LinearMalloc maAllocators[5];
 };
 
 // The named game-side wrapper over an rw::LinearResourceAllocator (the GlobalGraphics,
@@ -131,6 +134,9 @@ public:
     // managers) fires "Memory check failed". Never written by the game; false.
     static bool mbAssertOnMemoryChange;
 
+    // The startup memory-map/initial-default-allocator chain (ARTIST 0x82664728).
+    static void InitMemoryMap();
+
     // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
     // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
     // need GPU-visible memory (e.g. BrnRendererMemory's blit texture state) carve through its virtual
@@ -138,6 +144,9 @@ public:
     // the vtable). DECLARATION-ONLY here; the concrete object + ConstructGlobalGraphicsMemory land
     // with the Allocators TU.
     static rw::IResourceAllocator* GetGlobalGraphicsAllocator();
+
+private:
+    static DefaultLinearAllocator mInitialDefaultAllocator;
 };
 
 } // namespace BrnResource

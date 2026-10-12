@@ -1752,6 +1752,8 @@ namespace BrnResource
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: root type0="
                                   << (s32)(u32)(size_t)lType0.m_baseResources[0]
                                   << " -> ResourceModule::Construct\n";
+        // X360 ConstructResourceModule stores the already-fixed ARTIST map pointer.
+        mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
         mResourceModule.Construct(&s_InitOptions, lpAllocator);
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";
 
