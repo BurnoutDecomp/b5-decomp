@@ -283,6 +283,11 @@ void RaceCarEntityModule::Construct()
 
     mReceiverQueue.Construct();
 
+    // X360 Construct @0x822FD8F8..0x822FD914 initializes the embedded Boost page:
+    // the base Construct is the folded empty body, followed by the owner pointer,
+    // miBoostRules = 1, and miActionTextModifiedTime = 0.
+    mBoostDebugComponent.Construct(this);
+
     // X360: the module Construct brings the streamer up along with the rest of the
     // interior (the receiver queue and the streamer are adjacent members, +0x100E8 and
     // +0x11100). Without this the five component streamers have no request/receiver
@@ -702,11 +707,11 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // 0x82303FE8 `addi r3, r3, -0x7DB0` (module + 0x18250) ; 0x82304048 bl
         // PowerParkingManager::Prepare -- clears the scorer and registers its debug component;
         // the bool it returns is not tested (crash parity FX-SCENEMGR item 4, 2026-09-24).
-        // [FLAG PC bring-up] the other inlined scalar resets the console runs between the two
-        // calls (on +0x180D8 / +0x180E8: the air-time and traffic-check seats) and the three
-        // diagnostic storage at +0x180F0/+0x17E50 remains incomplete. The recovered
-        // Race Car Entity component (+0x17CF0) is registered below.
+        // [FLAG PC bring-up] the other inlined scalar resets (the air-time and traffic-check
+        // seats) remain separate from this stage. The Boost page (+0x17E50) and Race Car Entity
+        // diagnostic component (+0x17CF0) register below in the original order.
         mPowerParkingManager.Prepare();
+        mBoostDebugComponent.Register(); // ARTIST 823040C0
         mRCEntityModuleDebugComponent.Register(); // ARTIST 823040C4..823040CC
         mePrepareStage = 0;
     // fall through

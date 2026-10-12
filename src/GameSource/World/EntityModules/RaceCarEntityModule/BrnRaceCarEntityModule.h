@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"             // CgsResource::ResourceHandle (mDistrictMapResourceHandle, +0x23C)
 #include "SharedClasses/World/BrnWorldRegion.h"                                   // BrnWorld::WorldRegion (mCurrentWorldRegion, +0x244)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostDebugComponent.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"         // BrnWorld::NearMissManager (by value, +0x17E68)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/AirTime/BrnAirTimeManager.h"             // BrnWorld::AirTimeManager (by value, +0x18098) [boost-ticker wave]
 #include "GameSource/World/EntityModules/RaceCarEntityModule/TrafficCheck/BrnTrafficCheckManager.h"    // BrnWorld::TrafficCheckManager (by value, +0x180E8) [boost-wave2]
@@ -178,6 +179,7 @@ struct RaceCarNeedsHidingEventRecord
 class RaceCarEntityModule
 {
     friend class WorldDebugComponent;
+    friend class BoostDebugComponent;
     friend struct CgsPC::Reflections::LightCapture;
     friend struct RaceCarEntityModuleDebugComponent;   // reads the module's debug switches/members directly
     friend class PlaceOnTrackManager; // writes the embedded diagnostic history
@@ -1618,6 +1620,10 @@ private:
     // also owns the BoostStrategy* at +0x450 (module+97504) that the same body virtual-dispatches
     // IsBoosting() through.
     BoostManager mBoostManager;
+
+    // ARTIST embeds the boost debug page beside the manager and registers it during stage 0
+    // of Prepare. Its original console seat is +0x17E50.
+    BoostDebugComponent mBoostDebugComponent;
 
     // X360 +0x17E68 (97896). DWARF :348 (the run between mBoostManager :347 and
     // mCrashPlayManager :355). ADDITIVE CARVE (boost-bar 206 wave): the near-miss chain
