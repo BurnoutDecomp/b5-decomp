@@ -74,7 +74,7 @@ namespace BrnGui
     void EffectsArbitrator::Construct()
     {
         mpGuiCache = 0;
-        mpHookInfo = CgsResource::ResourcePtr<PFXHookBundle>(CgsResource::NULLResourceHandle);   // CreateFromHandle(&dword_82FB55C4)
+        mpHookInfo = CgsResource::NULLResourceHandle;   // one CreateFromHandle(&dword_82FB55C4)
         muColourCubeCount = 0;
         mpCurrent            = &mBlender1;
         mpOutgoing           = &mBlender2;
@@ -92,27 +92,6 @@ namespace BrnGui
         mfBackgroundWeight = 0.2f;
         mbForceTime        = false;
         miPfxHookIndex     = 0;
-        // The console leaves these to the zeroed carve it lives in; spelled so the PC object
-        // does not depend on its allocator.
-        meStateBeforeMenu           = E_NORMAL;
-        meBackgroundHookState       = E_BACKGROUND_INACTIVE;
-        mfMenuPhaseTimeExpired      = 0.0f;
-        mfMenuPhaseTimeToEnd        = 0.0f;
-        mfCrossFadeTimeExpired      = 0.0f;
-        mfCrossFadeTimeToEnd        = 0.0f;
-        mfBackgroundFadeTimeExpired = 0.0f;
-        mfBackgroundFadeTimeToEnd   = 0.0f;
-        for (u32 luCube = 0; luCube < KU_MAX_NUM_COLOURCUBES; ++luCube)
-        {
-            mauColourCubeRequestIds[luCube] = 0;
-            maColourCubes[luCube].muResourceId = 0;
-        }
-        for (s32 liHook = 0; liHook < 100; ++liHook)
-        {
-            maPfxHookList[liHook].miValue = 0;
-            maPfxHookList[liHook].mpcName = 0;
-        }
-
         // The "PFX" debug-menu group, in the console's registration order.
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.RegisterVariable(&mbForceTime, "PFX", "ForceTime");
