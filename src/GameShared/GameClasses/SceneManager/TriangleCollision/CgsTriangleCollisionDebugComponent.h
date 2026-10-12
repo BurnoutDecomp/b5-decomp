@@ -12,6 +12,7 @@
 #include "vendor/renderware/collision/Frustum.hpp" // rw::collision::Frustum: six Plane lanes
 
 namespace CgsDev { struct Debug3DImmediateRender; }
+namespace CgsGeometric { struct PolygonSoup; }
 
 namespace CgsSceneManager
 {
@@ -71,6 +72,11 @@ namespace CgsSceneManager
         // ARTIST helper bodies are recovered from the same two owned component files.
         void BuildSpacialMap();
         void DrawPolySoups(CgsDev::Debug3DImmediateRender* lpRenderer);
+        void DrawPolySoupPoly(CgsDev::Debug3DImmediateRender* lpRenderer,
+                              const CgsGeometric::PolygonSoup* lpPolySoup,
+                              s32 liSoup,
+                              u8 lu8Poly,
+                              bool lbCullPolys);
         bool IsPolyVisible(const rw::math::vpu::Vector3* lapVertices,
                            s32 liNumVertices,
                            CgsDev::Debug3DImmediateRender* lpRenderer);
