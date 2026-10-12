@@ -6,6 +6,7 @@
 // responders and rotation, and the collision pass republishes their current state.
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState (owner identity + GetName)
 #include "GameSource/Director/MomentController/BrnMoment.h"       // Moment (owner identity + GetName)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"      // Behaviour::GetDebugParametersName / GetName
