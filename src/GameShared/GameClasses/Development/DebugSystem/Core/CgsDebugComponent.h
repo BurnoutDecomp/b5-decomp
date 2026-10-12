@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"
 
+namespace CgsResource { class DebugComponent; }
+
 // CgsDev::DebugComponent - the base every in-game debug component derives from (perfmon
 // overlays, the takedown/mode-manager debug menus, etc.). Subclasses register their member
 // variables and action callbacks with the debug menu (RegisterVariable / SetRange / SetStep /
@@ -37,6 +39,13 @@ namespace CgsDev
         // MenuItemFunction::IsUseful compares its callback with the private section callback
         // (ARTIST 0x82832240) so auto-generated component headers are not treated as actions.
         friend struct CgsDev::DebugUI::MenuItemFunction;
+
+        // Native C++ constructor selection, not a recovered engine API. The
+        // Resource constructor at ARTIST 827E08D0 leaves these base data members
+        // untouched. Only that class may select this empty initialization path.
+        friend class CgsResource::DebugComponent;
+        struct ResourceConstructorTag {};
+        explicit DebugComponent(ResourceConstructorTag) {}
 
     public:
         DebugComponent();
