@@ -467,40 +467,10 @@ namespace BrnGame
             mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
                 static_cast<CgsDev::PerfMonCpuPage>(liPage), KAPC_PERFMON_PAGE_NAMES[liPage]);
 
-        // ⭐ THE DEBUG-INTERFACE REGISTRATIONS, PINNED 2026-08-17 (boot audit F-P1-14). The
-        // note used to say only "Debug/Framerate + Debug/Sim (Step/Play via StepFrameCB/
-        // PlayFrameCB) + screenshot registrations". Read off Construct @0x823CAEBC-F48, they
-        // are three calls on a stack DebugInterface, and they do NOT all need the same thing:
-        //
-        //   DebugInterface lIface(&mDebugManager);                       @0x823CAEBC
-        //   lIface.SetOptions(<"Framerate type" under "Debug/Framerate">) @0x823CAF00
-        //   lIface.RegisterFunction("Step", "Debug/Sim", StepFrameCB)    @0x823CAF28
-        //   lIface.RegisterFunction("Play", "Debug/Sim", PlayFrameCB)    @0x823CAF48
-        //
-        // AVAILABLE: RegisterVariable + SetOptions are both on CgsDev::DebugInterface
-        // (CgsDebugInterface.h:80-92), and the variable is meFrameRateManagerType -- so the
-        // Framerate half needs only its StringList of type names recovered.
-        // ⭐ ...AND THE SIM HALF LANDED TOO, minutes later. I recorded RegisterFunction as
-        // "missing, do not invent the signature" -- then checked what was behind it:
-        // DebugUI::FunctionManager::RegisterFunction is already BODIED (CgsFunctionManager.cpp,
-        // X360 0x8282E7E0) with exactly the argument order the two call sites pin, and
-        // DebugUI::GetFunctionManager + DebugInterface::GetUI both exist. So the "missing API"
-        // was a four-line forwarder over machinery that was already there, and nothing had to
-        // be guessed. Registered below.
-        //
-        // @0x823CAEBC-F48 -- the Debug/Sim step + play actions.
-        {
-            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
-            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
-            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
-        }
-
-        // [gated] the rest of steps 7-9 (the
-        // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
-        // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
-        // via StepFrameCB/PlayFrameCB) + screenshot debug-interface registrations, and the two
-        // replay serialisers (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) -- their
-        // members/subsystems are not in this layout yet.
+        // [gated] The event-receiver queue at +10094268 and the two replay serialisers
+        // (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) still need their exact
+        // typed storage. The Framerate and Step/Play interface registrations follow timer setup,
+        // at their original Construct position below.
 
         // NOTE: the bitmap debug font is NOT brought up here -- it arrives through GamePrepare's
         // id-5 AcquireResource reply (the console's own path: Font::CreateTextureState +
@@ -616,6 +586,25 @@ namespace BrnGame
                             : "CONSOLE-LOCKED (one simulation step per rendered frame)")
                     << ", min/max steps " << (s32)mi8FrameRateMinSteps << "/"
                     << (s32)mi8FrameRateMaxSteps << "\n";
+        }
+
+        // X360 Construct @0x823CAEBC-F48 registers the Framerate variable, its 0..2 range and
+        // options, then the two simulation actions. The option pairs are the raw table at
+        // 0x8203525C: {0,"Single"}, {1,"Multiple Capped"}, {2,"Multiple Uncapped"}.
+        {
+            static const CgsDev::DebugUI::StringList KAC_FRAMERATE_OPTIONS[] = {
+                {0, "Single"},
+                {1, "Multiple Capped"},
+                {2, "Multiple Uncapped"},
+            };
+
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            s32* const lpiFrameRateType = reinterpret_cast<s32*>(&meFrameRateManagerType);
+            lDebugInterface.RegisterVariable(lpiFrameRateType, "Debug/Framerate", "Framerate type");
+            lDebugInterface.SetRange(lpiFrameRateType, 0, 2);
+            lDebugInterface.SetOptions(lpiFrameRateType, KAC_FRAMERATE_OPTIONS);
+            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
+            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
         }
 
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
