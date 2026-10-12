@@ -720,26 +720,24 @@ namespace CgsSceneManager
         {
             const rw::math::vpu::Vector3 lvCameraPosition =
                 lpRenderer->GetCameraPosition();
-            mBoxPos.x = lvCameraPosition.x;
-            mBoxPos.y = lvCameraPosition.y;
-            mBoxPos.z = lvCameraPosition.z;
+            mBoxPos.Set(lvCameraPosition.x, lvCameraPosition.y, lvCameraPosition.z);
             mbNeedToInitBoxPos = false;
-            mBoxPos.z += 10.0f; // flt_82004A20
+            mBoxPos.Z() += 10.0f; // flt_82004A20
         }
 
-        rw::math::vpu::Vector3 lvBoxPosition(mBoxPos.x, mBoxPos.y, mBoxPos.z);
+        rw::math::vpu::Vector3 lvBoxPosition(mBoxPos.X(), mBoxPos.Y(), mBoxPos.Z());
         lvBoxPosition.w = 0.0f;
-        rw::math::vpu::Vector3 lvBoxAngles(mBoxOrientation.x,
-                                           mBoxOrientation.y,
-                                           mBoxOrientation.z);
+        rw::math::vpu::Vector3 lvBoxAngles(mBoxOrientation.X(),
+                                           mBoxOrientation.Y(),
+                                           mBoxOrientation.Z());
         lvBoxAngles.w = 0.0f;
         rw::math::vpu::Matrix44Affine lTransform =
             Matrix44AffineFromEulerXYZ(lvBoxAngles);
         lTransform.wAxis = lvBoxPosition;
 
-        rw::math::vpu::Vector3 lvBoxHalfSize(mBoxSize.x * 0.5f,
-                                              mBoxSize.y * 0.5f,
-                                              mBoxSize.z * 0.5f);
+        rw::math::vpu::Vector3 lvBoxHalfSize(mBoxSize.X() * 0.5f,
+                                              mBoxSize.Y() * 0.5f,
+                                              mBoxSize.Z() * 0.5f);
         lvBoxHalfSize.w = 0.0f;
         CgsGeometric::Box lBox;
         lBox.Set(lTransform, lvBoxHalfSize,
@@ -760,10 +758,10 @@ namespace CgsSceneManager
         // The console uses half of the largest authored dimension for both the
         // query sphere radius and its AABB, including the w lane initialized from
         // a zero Vector3 center. Keep that original broad-phase shape.
-        const f32 lfSizeXY = (mBoxSize.x - mBoxSize.y >= 0.0f)
-                           ? mBoxSize.x : mBoxSize.y;
-        const f32 lfMaxSize = (lfSizeXY - mBoxSize.z >= 0.0f)
-                            ? lfSizeXY : mBoxSize.z;
+        const f32 lfSizeXY = (mBoxSize.X() - mBoxSize.Y() >= 0.0f)
+                           ? mBoxSize.X() : mBoxSize.Y();
+        const f32 lfMaxSize = (lfSizeXY - mBoxSize.Z() >= 0.0f)
+                            ? lfSizeXY : mBoxSize.Z();
         const f32 lfRadius = lfMaxSize * 0.5f;
 
         CgsGeometric::Sphere lBoundingSphere;
