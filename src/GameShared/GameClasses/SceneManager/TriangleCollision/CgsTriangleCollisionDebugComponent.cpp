@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox4.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
@@ -13,6 +14,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupPoly.h"
 #include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleBox.h"
+#include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h"
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManager.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 #include "SDKs/XboxMath/XMVectorACos.h"
@@ -544,6 +546,164 @@ namespace CgsSceneManager
             const u32 luColour = lbIsQuad ? KAU_QUAD_EDGE_COLOURS[liEdge]
                                            : 0xFF0000FFu;
             lpRenderer->DrawLine(lPointA, lPointB, static_cast<rw::RGBA>(luColour));
+        }
+    }
+
+    // ARTIST 0x828BF8E0. Initialize and draw the selected sphere, reject soup lists
+    // whose whole-list AABB does not strictly contain its center, then run the
+    // original four-lane sphere contact and valid-triangle debug passes.
+    void TriangleCollisionDebugComponent::TestPolySoupSphereCollision(
+        CgsDev::Debug3DImmediateRender* lpRenderer)
+    {
+        if (mbNeedToInitSpherePos)
+        {
+            const rw::math::vpu::Vector3 lvCameraPosition =
+                lpRenderer->GetCameraPosition();
+            mSpherePos.X() = lvCameraPosition.x;
+            mSpherePos.Y() = lvCameraPosition.y;
+            mSpherePos.Z() = lvCameraPosition.z;
+            mbNeedToInitSpherePos = false;
+            mSpherePos.Z() += 10.0f; // flt_82004A20
+        }
+
+        const rw::math::vpu::Vector3 lvSphereCentre{
+            mSpherePos.X(), mSpherePos.Y(), mSpherePos.Z(), mfSphereRad
+        };
+        const CgsGeometric::Sphere lSphere{
+            rw::math::vpu::Vector4{
+                mSpherePos.X(), mSpherePos.Y(), mSpherePos.Z(), mfSphereRad
+            }
+        };
+        lpRenderer->DrawSphere(lvSphereCentre, mfSphereRad,
+                               static_cast<rw::RGBA>(0xFFFFFFFFu));
+
+        const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap =
+            mpTriCollisionManager->GetPolySoupListSpacialMap();
+        const s32 liNumPolySoupLists = lpSpatialMap->GetNumPolySoupLists();
+        const f32 KF_SPHERECONTACTPADDING = 5.0f; // flt_820F2718
+        const f32 KF_TRIANGLEOFFSET = 0.02f;       // flt_82005574
+        const rw::math::vpu::VecFloat lvSphereContactPadding{
+            KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING,
+            KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING
+        };
+
+        for (s32 liSoupList = 0; liSoupList < liNumPolySoupLists; ++liSoupList)
+        {
+            const CgsGeometric::PolygonSoupList* lpPolySoupList =
+                lpSpatialMap->GetPolySoupList(liSoupList);
+
+            // ARTIST calls AxisAlignedBox::ContainsPoint on the resource's first
+            // eight floats: a strict center-in-whole-list test, not a radius overlap.
+            const f32* const lapOverallAabb = lpPolySoupList->mOverallAabb;
+            CgsGeometric::AxisAlignedBox lOverallAabb;
+            lOverallAabb.Set(
+                rw::math::vpu::Vector4{
+                    lapOverallAabb[0], lapOverallAabb[1], lapOverallAabb[2], lapOverallAabb[3]
+                },
+                rw::math::vpu::Vector4{
+                    lapOverallAabb[4], lapOverallAabb[5], lapOverallAabb[6], lapOverallAabb[7]
+                });
+            if (!lOverallAabb.ContainsPoint(lSphere.mPositionRadius))
+                continue;
+
+            const CgsGeometric::PolygonSoup* const* lpapPolySoups =
+                reinterpret_cast<const CgsGeometric::PolygonSoup* const*>(
+                    lpPolySoupList->mpapPolySoups);
+            for (s32 liPolySoup = 0; liPolySoup < lpPolySoupList->miNumPolySoups;
+                 ++liPolySoup)
+            {
+                CGS_ASSERT(liPolySoup >= 0 && liPolySoup < lpPolySoupList->miNumPolySoups,
+                           "liPolySoupIndex >= 0 && liPolySoupIndex < GetNumPolygonSoups()");
+                const CgsGeometric::PolygonSoup& lrPolySoup = *lpapPolySoups[liPolySoup];
+
+                CgsGeometric::Triangle4 laTriangle4s[1024];
+                const s32 liNumTriangle4s =
+                    CgsGeometric::ExtractTriangle4ListIntersectingSphere(
+                        lrPolySoup, lSphere, laTriangle4s, 0x400, nullptr);
+                for (s32 liTriangle4 = 0; liTriangle4 < liNumTriangle4s; ++liTriangle4)
+                {
+                    rw::math::vpu::Vector3 laContactNormals[4];
+                    rw::math::vpu::Vector3 laTriangleNormals[4];
+                    rw::math::vpu::Vector3Plus laSphereContactPoints[4];
+                    rw::math::vpu::Vector3Plus laTriangleContactPoints[4];
+                    const CgsGeometric::Triangle4::Mask4 lContactMask =
+                        CgsGeometric::IntersectTriangle4Sphere_HackyBurnoutVersion(
+                            lSphere, laTriangle4s[liTriangle4], lvSphereContactPadding,
+                            laContactNormals[0], laTriangleNormals[0],
+                            laSphereContactPoints[0], laTriangleContactPoints[0],
+                            laContactNormals[1], laTriangleNormals[1],
+                            laSphereContactPoints[1], laTriangleContactPoints[1],
+                            laContactNormals[2], laTriangleNormals[2],
+                            laSphereContactPoints[2], laTriangleContactPoints[2],
+                            laContactNormals[3], laTriangleNormals[3],
+                            laSphereContactPoints[3], laTriangleContactPoints[3]);
+
+                    const f32 lafContactMask[4] = {
+                        lContactMask.x, lContactMask.y, lContactMask.z, lContactMask.w
+                    };
+                    for (s32 liLane = 0; liLane < 4; ++liLane)
+                    {
+                        // IntersectTriangle4Sphere returns full-word masks for hits.
+                        if (lafContactMask[liLane] != 0.0f)
+                        {
+                            // The X360 vector call orders triangle contact before sphere contact.
+                            lpRenderer->DrawLine(
+                                laTriangleContactPoints[liLane].GetVector3(),
+                                laSphereContactPoints[liLane].GetVector3(),
+                                static_cast<rw::RGBA>(0xFF0000FFu));
+                        }
+                    }
+
+                    const f32 lafValidMask[4] = {
+                        laTriangle4s[liTriangle4].mValidMasks.x,
+                        laTriangle4s[liTriangle4].mValidMasks.y,
+                        laTriangle4s[liTriangle4].mValidMasks.z,
+                        laTriangle4s[liTriangle4].mValidMasks.w
+                    };
+                    for (s32 liLane = 0; liLane < 4; ++liLane)
+                    {
+                        // The extractor marks unused tail lanes with an all-zero valid mask.
+                        if (lafValidMask[liLane] == 0.0f)
+                            continue;
+
+                        CgsGeometric::Triangle4::AOSTriangle lAOSTriangle;
+                        laTriangle4s[liTriangle4].GetAOSTriangle(liLane, lAOSTriangle);
+                        // VMX vmaddfp computes normal*0.02 + vertex before the solid draw.
+                        const rw::math::vpu::Vector3 lvV0{
+                            std::fma(lAOSTriangle.mNormal.x, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex0.x),
+                            std::fma(lAOSTriangle.mNormal.y, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex0.y),
+                            std::fma(lAOSTriangle.mNormal.z, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex0.z),
+                            std::fma(lAOSTriangle.mNormal.w, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex0.w)
+                        };
+                        const rw::math::vpu::Vector3 lvV1{
+                            std::fma(lAOSTriangle.mNormal.x, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex1.x),
+                            std::fma(lAOSTriangle.mNormal.y, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex1.y),
+                            std::fma(lAOSTriangle.mNormal.z, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex1.z),
+                            std::fma(lAOSTriangle.mNormal.w, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex1.w)
+                        };
+                        const rw::math::vpu::Vector3 lvV2{
+                            std::fma(lAOSTriangle.mNormal.x, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex2.x),
+                            std::fma(lAOSTriangle.mNormal.y, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex2.y),
+                            std::fma(lAOSTriangle.mNormal.z, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex2.z),
+                            std::fma(lAOSTriangle.mNormal.w, KF_TRIANGLEOFFSET,
+                                     lAOSTriangle.mVertex2.w)
+                        };
+                        lpRenderer->DrawSolidTriangle(
+                            lvV0, lvV1, lvV2, static_cast<rw::RGBA>(0x64FFFFFFu));
+                    }
+                }
+            }
         }
     }
 
