@@ -541,6 +541,58 @@ namespace CgsDev
         Draw2DLine(lStart.x, lStart.y, lEnd.x, lEnd.y, lColour);
     }
 
+    // X360 0x8282B340. The line angle is counter-clockwise in the logical screen plane;
+    // screen Y grows downward, so the endpoint subtracts sin(angle) from the starting Y.
+    void DebugRender::Draw2DLineAtAngle(Vector2 lv2Start, f32 lfAngleRad,
+                                        f32 lfLength, RGBA lColour)
+    {
+        const Vector2 lv2End =
+        {
+            lv2Start.x + (std::cos(lfAngleRad) * lfLength),
+            lv2Start.y - (std::sin(lfAngleRad) * lfLength),
+            0.0f, 0.0f
+        };
+        Draw2DLine(lv2Start, lv2End, lColour);
+    }
+
+    // X360 0x8282B5C8. Both wing lines start at the arrow tip and differ by +/-135 degrees.
+    void DebugRender::Draw2DArrowHead(Vector2 lv2Tip, f32 lfAngleRad,
+                                      f32 lfLength, RGBA lColour)
+    {
+        const f32 lfWingAngle = 2.3561945f; // ARTIST flt_820DD7D8
+        Draw2DLineAtAngle(lv2Tip, lfAngleRad + lfWingAngle, lfLength, lColour);
+        Draw2DLineAtAngle(lv2Tip, lfAngleRad - lfWingAngle, lfLength, lColour);
+    }
+
+    // X360 0x8282B658. Draw the shaft, then the arrow head at its endpoint; the original scales
+    // the head length by 0.25 (ARTIST flt_82003F40 == 0x3E800000).
+    void DebugRender::Draw2DArrow(Vector2 lv2Start, f32 lfAngleRad,
+                                  f32 lfLength, RGBA lColour)
+    {
+        const f32 lfDirectionX = std::cos(lfAngleRad);
+        const f32 lfDirectionY = std::sin(lfAngleRad);
+        const Vector2 lv2End =
+        {
+            lv2Start.x + lfLength * lfDirectionX,
+            lv2Start.y - lfLength * lfDirectionY,
+            0.0f, 0.0f
+        };
+
+        Draw2DLine(lv2Start, lv2End, lColour);
+        Draw2DArrowHead(lv2End, lfAngleRad, lfLength * 0.25f, lColour);
+    }
+
+    // X360 0x8282B940. Convert the endpoint displacement to the console's screen-space angle,
+    // then forward to the angle/length overload. The PPC body negates delta-Y before atan.
+    void DebugRender::Draw2DArrow(Vector2 lv2Start, Vector2 lv2End, RGBA lColour)
+    {
+        const f32 lfDeltaX = lv2End.x - lv2Start.x;
+        const f32 lfDeltaY = lv2End.y - lv2Start.y;
+        const f32 lfLength = std::sqrt(lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY);
+        const f32 lfAngleRad = std::atan2(-lfDeltaY, lfDeltaX);
+        Draw2DArrow(lv2Start, lfAngleRad, lfLength, lColour);
+    }
+
     // ARTIST 8282B2D8: v1 is position and v2 is size, copied without subtraction.
     void DebugRender::Draw2DBox(Vector2 lPosition, Vector2 lSize, RGBA lColour)
     {

@@ -538,7 +538,9 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // Update's crash jolt and UpdateImpacts read.
     mRumbleManager.UpdatePauseState(miSimPauseFlags != 0, lpActionQueue);
 
-    CopyScoringDataToOutput(mpOutputBuffer, lrTimerStatusInterface);
+    // The legacy adapter stages the timer supplied by its existing PC caller.
+    mTimerStatusInterface = lrTimerStatusInterface;
+    CopyScoringDataToOutput(mpOutputBuffer);
 
     // ARTIST823A5328 calls the complete pre-world trigger pass here, after
     // ProcessGameEvents and before StuntManager consumes its gameplay latches.
@@ -698,11 +700,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
                 SendSetUpAllDriveThrusMessage(mpOutputBuffer->GetGameActionQueue());
             }
         }
-        // [!] D3's DetectModeStarts carries a THIRD argument the console does not: the
-        // module's cached game timestep at +292284, whose producer (PreWorldUpdate's own
-        // timer leg) is not reconstructed -- see its declaration. Fed the same game-timer
-        // product every other leg in this function uses.
-        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer, lfGameTimestep);
+        // The original two-argument arm reads the sim latch set above.
+        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer);
 
         // â­ [D4] THE HARNESS START INJECTION (NOT IN THE X360 BINARY). Runs immediately after
         // DetectModeStarts, inside the same read-lock bracket, because it stands in for exactly

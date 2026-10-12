@@ -21,6 +21,8 @@ namespace
 const s32 KI_ACTION_CAR_SELECTION_CHANGED_ONLINE = 67;    // E_ACTION_CAR_SELECTION_CHANGED_ONLINE (62), 8 bytes
 const s32 KI_ACTION_CAR_SELECT_ONLINE_END        = 83;    // E_ACTION_CAR_SELECT_ONLINE_END (78), 1 byte
 const s32 KI_ACTION_PLAYER_RESET_ON_TRACK        = 119;   // E_ACTION_PLAYER_RESET_ON_TRACK (114), 1 byte
+const s32 KI_ACTION_CAR_SELECT_ONLINE_TIME_LEFT   = 82;    // ARTIST Update @0x8239C480, f32 payload
+const s32 KI_ACTION_CAR_SELECT_ONLINE_SHOWABLE    = 85;    // ARTIST Update @0x8239C480, u8 payload
 
 // KF_MAX_CAR_SELECT_DURATION: the seconds a player has to pick a car (rodata value 30.0).
 const f32 KF_MAX_CAR_SELECT_DURATION = 30.0f;
@@ -282,6 +284,53 @@ void OnlineCarSelectManager::StartWaitForOnline(GameStateModuleIO::GameActionQue
     const u8 lu8OnlineEnd = 0;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8OnlineEnd),
                             KI_ACTION_CAR_SELECT_ONLINE_END, sizeof(lu8OnlineEnd));
+}
+
+// X360 ARTIST 0x8239C480; DecFIGS prototype: void Update(GameActionQueue*,
+// const ControllerInput*, float32_t). The controller snapshot is an unused parameter in
+// this build. While online selection is active, publish the remaining seconds, begin the
+// wait-for-online state on the original timeout gates, advance the one active car-change
+// state, then publish whether another car may be shown.
+void OnlineCarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
+                                   const GameStateModuleIO::ControllerInput* /*lpControllerInput*/,
+                                   f32 lfFrameDelta)
+{
+    if (!mbIsInOnlineCarSelect)
+    {
+        return;
+    }
+
+    mfTimeLeftInCarSelect -= lfFrameDelta;
+    const f32 lfTimeLeft = mfTimeLeftInCarSelect;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lfTimeLeft),
+                            KI_ACTION_CAR_SELECT_ONLINE_TIME_LEFT,
+                            sizeof(lfTimeLeft));
+
+    if (!(mfTimeLeftInCarSelect > 0.0f)
+        && meInternalState != E_INTERNAL_STATE_WAIT_FOR_ONLINE
+        && meInternalState != E_INTERNAL_STATE_WAIT_FOR_HOST_TO_CHOOSE
+        && meStateOfChangingCars != E_CAR_CHANGE_BUSY)
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "TIMEOUT\n";
+        }
+        StartWaitForOnline(lpActionQueue);
+    }
+
+    if (meStateOfChangingCars == E_CAR_CHANGE_REQUEST)
+    {
+        UpdateRequestCarChangeState(lpActionQueue);
+    }
+    else if (meStateOfChangingCars == E_CAR_CHANGE_BUSY)
+    {
+        UpdateChangeCarState(lpActionQueue);
+    }
+
+    const bool lbCanShowCar = !mbWaitingForStreaming;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lbCanShowCar),
+                            KI_ACTION_CAR_SELECT_ONLINE_SHOWABLE,
+                            sizeof(lbCanShowCar));
 }
 
 // A car pick from the carousel. While a change is being carried out the pick is cached for

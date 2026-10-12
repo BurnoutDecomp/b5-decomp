@@ -25,6 +25,7 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"   // GameStateModule::GetPlayerActiveRaceCarIndex (SendModeResults)
+#include "GameSource/GameState/BrnGameStateModuleIO.h" // paused GameModeOutputInterface snapshot
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<>::AddEvent (SendModeResults)
 // The race-car output interfaces are completed here so GetGlobalRaceCarIndex can be called by name.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -37,6 +38,27 @@
 
 namespace BrnGameState
 {
+
+// ARTIST 82350DE0. Publish the paused mode snapshot before advancing the
+// previous-state mirror; a finished mode still exits while simulation is paused.
+void ModeManager::PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
+{
+    CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutput");
+    GameStateModuleIO::GameModeOutputInterface* const lpModeOutput =
+        lpOutputBuffer->GetGameModeOutputInterface();
+    lpModeOutput->miCurrentGameModeType = meCurrentGameModeType;
+    lpModeOutput->miPreviousGameModeType = mePreviousGameModeType;
+    lpModeOutput->miCurrentGameModeState = mpCurrentGameMode != nullptr
+        ? mpCurrentGameMode->GetCurrentState() : -1;
+    lpModeOutput->miPreviousGameModeState = mePreviousGameModeState;
+
+    mePreviousGameModeType = meCurrentGameModeType;
+    mePreviousGameModeState = static_cast<GameStateModuleIO::EGameModeState>(
+        mpCurrentGameMode != nullptr ? mpCurrentGameMode->GetCurrentState() : -1);
+    if (mpCurrentGameMode != nullptr && mpCurrentGameMode->HasFinished())
+        ExitCurrentMode(lpOutputBuffer, mbHasTimedOut,
+                        static_cast<GameStateModuleIO::EGameModeType>(18));
+}
 
 // ----------------------------------------------------------------------------
 // SendModeResults' wire record. The X360 posts it with a HARD-CODED `li r6,0x30` size argument, so

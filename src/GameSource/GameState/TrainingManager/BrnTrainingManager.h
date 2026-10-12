@@ -71,13 +71,12 @@ public:
     // GameStateModule::PreWorldUpdate @0x823A57C8. Console signature (PS3 DWARF):
     //     Update(const GameStateModuleIO::PreWorldInputBuffer*, BaseGameActionQueue<13312>*,
     //            RCEntityActiveRaceCarOutputInterface*, f32, bool)
-    // [FLAG PC signature deviation] the PreWorldInputBuffer parameter is DROPPED on PC: no PC
-    // code creates that buffer, and the console's only use of it here is
-    // GetControllerToGameStateInterface(..)->user index -> XUserGetSigninState, feeding
-    // mbIsOnlinePossible. The PC body calls the stubbed XUserGetSigninState(0) (returns 0 ==
-    // signed out) with the deviation named at the read.
-    void Update(GameStateModuleIO::GameActionQueue* lpGameActionQueue,
-                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+    // ARTIST 823937E4 keeps r4 as the input buffer; 823938C4..823938D0 reads
+    // its controller interface's active port before calling XUserGetSigninState.
+    // The PC signin leaf retains that original user-index argument.
+    void Update(const GameStateModuleIO::PreWorldInputBuffer* lpInputBuffer,
+                GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
                     lpcActiveRaceCarInterface,
                 f32 lfGameTimestep, bool lbAllowTimedTips);
 
@@ -160,6 +159,7 @@ public:
     bool IsTipAllowedInGameMode(BrnProgression::ETrainingType leTrainingType) const;
 
 private:
+    friend class GameStateDebugComponent; // ARTIST PlayTrainingMessageCallback stores these two slots in order
     // X360 0x82365FC8. Pick the next unseen Atomika free-burn VO tip (ids 128+miNext..); called
     // by Update's idle arm once the player has free-burned long enough. [tut-ticker] bodied.
     void PlayNewAtomikaFreeburnVO();

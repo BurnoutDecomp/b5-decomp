@@ -6,10 +6,9 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::GameActionQueue (real typedef)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h" // BrnGameState::HostPointer
 
-// Minimal owning slice for BrnGameState::OnlineCarSelectManager (DWARF: BrnOnlineCarSelectManager.h:61,
-// non-polymorphic struct). Only the members the four reconstructed functions of this TU touch are
-// named; the full ~0x6C layout is reconstructed by this TU's .cpp. The DWARF member ORDER is preserved
-// (it matches the X360 store order exactly: see the per-member X360 offset comments). Pointers are
+// Recovered source slice for BrnGameState::OnlineCarSelectManager (DWARF: BrnOnlineCarSelectManager.h:61,
+// non-polymorphic struct). The declaration shape follows DecFIGS; member order and each named field
+// are gated by ARTIST stores and accesses in the owning functions. Pointers are
 // 32-bit on the console and held as full host pointers here (HostPointer<T>, as BrnCarSelectManager.h
 // does); semantic parity is by named member (x64 byte offsets differ per AGENTS.md), so no
 // byte-exact inter-member padding is forced here.
@@ -84,6 +83,13 @@ struct OnlineCarSelectManager
                               const Vector3 lPlayerPosition, const Vector3 lPlayerDirection,
                               s32 liVehicleClassLimit, bool lbHostChoiceAndNotHost);
     void StartWaitForOnline(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // X360 ARTIST 0x8239C480; DecFIGS declares void Update(GameActionQueue*,
+    // const ControllerInput*, float32_t). The online timer event, timeout handoff,
+    // state-specific car-change step and showability byte are all emitted here.
+    void Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
+                const GameStateModuleIO::ControllerInput* lpControllerInput,
+                f32 lfFrameDelta);
     void RequestChangeCar(GameStateModuleIO::GameActionQueue* lpActionQueue, const CgsID& lCardId);
     void SubmitFinalCarSelection(GameStateModuleIO::GameActionQueue* lpActionQueue);
 

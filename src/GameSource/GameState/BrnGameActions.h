@@ -30,6 +30,7 @@
 
 namespace CgsNetwork { class NetworkTexture; }             // DXTDecodeImageAction (held by pointer only)
 namespace BrnNetwork { struct LocalEventScoreUploadData; }  // NonUploadedModeScoresAction (held by pointer only)
+namespace BrnProgression { class Profile; struct ProgressionData; }
 namespace BrnGameState { struct StreetManager; }             // RoadRulesChallengeScoresAction (held by pointer only)
 
 namespace BrnResource
@@ -121,6 +122,7 @@ enum EGameActionType
     E_ACTION_UNLOCKED_LIVERY_RESPONSE   = 183,   // debug info 175; size 72, case 82
     E_ACTION_CAR_SELECTION_RESPONSE     = 184,   // debug info 176; size 1072, case 88
     E_ACTION_SET_LOADING_STATE          = 191,   // debug info 183; size 1, ProcessStreamingCompleteEvent / FinishStreaming
+    E_ACTION_WAIT_FOR_STREAMING         = 192,   // ARTIST823A58F4; DecFIGS184 (+8), empty size1
     E_ACTION_ONLINE_PLAYER_REMOVED      = 220,   // DWARF 212 (+8 X360); size 8   BAND
     // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 221 -> 229, and this is
     // the FIFTH id of the same species as the four the closure round was chartered to settle. It
@@ -561,6 +563,7 @@ enum EGameActionType
     //             KI_GAME_ACTION_PROP_SMASH_REPORT).
     //   DWARF     BrnGameActions.h:196 E_ACTION_LOAD_PROFILE == 186 and :201
     //             E_ACTION_PROP_SMASH_PROGRESSION == 191.
+    E_ACTION_PROGRESSION_PROFILE_DATA   = 193,   // ARTIST PreWorldUpdate; DWARF185 (+8), console payload12
     E_ACTION_LOAD_PROFILE               = 194,   // DWARF 186 (+8 X360); size 1    PINNED (producer + consumer)
     E_ACTION_PROP_SMASH_PROGRESSION     = 199,   // DWARF 191 (+8 X360); size 4 (a pointer on the console)
 
@@ -1075,6 +1078,23 @@ enum EGameActionType
 
 template <EGameActionType T>
 struct GameAction { };
+
+// DecFIGS BrnGameActions.h:3189. ARTIST 823A58F0..823A5900 copies the
+// empty record's one object-representation byte without assigning it a value.
+struct WaitForStreamingAction : public GameAction<E_ACTION_WAIT_FOR_STREAMING> {};
+static_assert(sizeof(WaitForStreamingAction) == 1, "empty streaming action is one byte");
+
+// ARTIST PreWorldUpdate @823A5328 publishes pointer/pointer/bool as action193.
+// DecFIGS BrnGameActions.h attests these field names and pointee qualifiers.
+// The queue must copy sizeof(the host record), rather than the console's12 bytes.
+struct ProgressionProfileDataAction : public GameAction<E_ACTION_PROGRESSION_PROFILE_DATA>
+{
+    BrnProgression::Profile* mpProgressionProfile;
+    const BrnProgression::ProgressionData* mpProgressionData;
+    bool mbAreRoadRulesAvailable;
+};
+static_assert(sizeof(ProgressionProfileDataAction) == (sizeof(void*) == 8 ? 24 : 12),
+              "profile-data action retains both native-width pointers and the availability byte");
 
 // DWARF BrnGameActions.h: empty action; ARTIST case42 posts size1.
 struct PlayerCrashEndingSoonAction : public GameAction<E_ACTION_PLAYER_CRASH_ENDING_SOON> {};
