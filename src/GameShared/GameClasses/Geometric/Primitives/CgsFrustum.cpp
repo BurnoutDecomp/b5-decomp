@@ -79,28 +79,19 @@ namespace CgsGeometric
 
         inline Vector3 MakeFrustumDebugVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
         {
-            Vector3 lvResult(lfX, lfY, lfZ);
-            lvResult.GetVector().mafLane[3] = lfW;
-            return lvResult;
+            return Vector3{ lfX, lfY, lfZ, lfW };
         }
 
         inline Vector3 AddFrustumDebugVectors(const Vector3& lrA, const Vector3& lrB)
         {
-            const rw::math::vpu::VectorIntrinsic& lrALanes = lrA.GetVector();
-            const rw::math::vpu::VectorIntrinsic& lrBLanes = lrB.GetVector();
-            return MakeFrustumDebugVector(lrALanes.mafLane[0] + lrBLanes.mafLane[0],
-                                          lrALanes.mafLane[1] + lrBLanes.mafLane[1],
-                                          lrALanes.mafLane[2] + lrBLanes.mafLane[2],
-                                          lrALanes.mafLane[3] + lrBLanes.mafLane[3]);
+            return MakeFrustumDebugVector(lrA.x + lrB.x, lrA.y + lrB.y,
+                                          lrA.z + lrB.z, lrA.w + lrB.w);
         }
 
         inline Vector3 ScaleFrustumDebugVector(const Vector3& lrVector, f32 lfScale)
         {
-            const rw::math::vpu::VectorIntrinsic& lrLanes = lrVector.GetVector();
-            return MakeFrustumDebugVector(lrLanes.mafLane[0] * lfScale,
-                                          lrLanes.mafLane[1] * lfScale,
-                                          lrLanes.mafLane[2] * lfScale,
-                                          lrLanes.mafLane[3] * lfScale);
+            return MakeFrustumDebugVector(lrVector.x * lfScale, lrVector.y * lfScale,
+                                          lrVector.z * lfScale, lrVector.w * lfScale);
         }
 
         // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
@@ -115,11 +106,8 @@ namespace CgsGeometric
         inline Vector3 AddFrustumDebugPlane(const Vector3& lrPoint,
                                             const rw::collision::Plane& lrPlane)
         {
-            const rw::math::vpu::VectorIntrinsic& lrLanes = lrPoint.GetVector();
-            return MakeFrustumDebugVector(lrLanes.mafLane[0] + lrPlane.x,
-                                          lrLanes.mafLane[1] + lrPlane.y,
-                                          lrLanes.mafLane[2] + lrPlane.z,
-                                          lrLanes.mafLane[3] + lrPlane.w);
+            return MakeFrustumDebugVector(lrPoint.x + lrPlane.x, lrPoint.y + lrPlane.y,
+                                          lrPoint.z + lrPlane.z, lrPoint.w + lrPlane.w);
         }
 
         // The 8 stored lanes are a struct-of-arrays: maSwizzledPlanes[batch + comp]
@@ -641,12 +629,11 @@ namespace CgsGeometric
                             continue;
                         }
 
-                        const rw::math::vpu::VectorIntrinsic& lrPointLanes = lIntersection.GetVector();
                         const rw::collision::Plane& lrPlane = laPlanes[luOtherPlane];
                         const f32 lfSignedDistance =
-                              (lrPlane.x * lrPointLanes.mafLane[0]
-                             + lrPlane.y * lrPointLanes.mafLane[1])
-                             + lrPlane.z * lrPointLanes.mafLane[2]
+                              (lrPlane.x * lIntersection.x
+                             + lrPlane.y * lIntersection.y)
+                             + lrPlane.z * lIntersection.z
                              - lrPlane.w;
 
                         if (-0.001f > lfSignedDistance)
@@ -760,8 +747,8 @@ namespace CgsGeometric
         lIntersectionPointOut.x = std::fma(l01.x, lPlane2.w, std::fma(l12.x, lPlane0.w, l20.x * lPlane1.w)) * lfInverseDeterminant;
         lIntersectionPointOut.y = std::fma(l01.y, lPlane2.w, std::fma(l12.y, lPlane0.w, l20.y * lPlane1.w)) * lfInverseDeterminant;
         lIntersectionPointOut.z = std::fma(l01.z, lPlane2.w, std::fma(l12.z, lPlane0.w, l20.z * lPlane1.w)) * lfInverseDeterminant;
-        lIntersectionPointOut.SetComponent(
-            3, std::fma(l01.w, lPlane2.w, std::fma(l12.w, lPlane0.w, l20.w * lPlane1.w)) * lfInverseDeterminant);
+        lIntersectionPointOut.w =
+            std::fma(l01.w, lPlane2.w, std::fma(l12.w, lPlane0.w, l20.w * lPlane1.w)) * lfInverseDeterminant;
         return true;
     }
 }

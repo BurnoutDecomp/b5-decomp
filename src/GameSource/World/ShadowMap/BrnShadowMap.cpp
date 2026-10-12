@@ -1926,9 +1926,7 @@ namespace BrnWorld
 
         Vector3 ToShadowDebugVector3(const Vector4& lrVector)
         {
-            Vector3 lvResult(lrVector.x, lrVector.y, lrVector.z);
-            lvResult.SetComponent(3, lrVector.w);
-            return lvResult;
+            return Vector3{ lrVector.x, lrVector.y, lrVector.z, lrVector.w };
         }
 
         // ARTIST DebugRender transforms the three +/-20 axis pairs, then a
