@@ -39,6 +39,7 @@
 // =================================================================================================
 
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
+#include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackDebugComponent.h"
 
 #include "GameSource/World/AI/BrnAICar.h"                    // AICar (state + driver)
 #include "GameSource/World/AI/BrnAIDriver.h"                 // AIDriver::GetNearbyVehicles (TestCarHNG's set)
@@ -49,6 +50,7 @@
 #include "SharedClasses/AI/AISectionsResourceType.h"         // AISection / AISectionsData
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include <math.h>     // sqrtf
 #include <cstdlib>    // std::getenv (the BRN_ROT_TRAFFIC_DIAG witness only)
@@ -153,7 +155,7 @@ bool ResetOnTrackManager::TestRecentResets(Vector3 lTestPosition)
 // =================================================================================================
 // TestSectionHNG @0x82785F90 (DWARF :344)
 //
-//   0x82785FC4  StartMonitor(muTestLineHNGPM)                                    [PARKED]
+//   0x82785FC4  StartMonitor(muTestLineHNGPM)
 //   0x82785FC8  assert(lpAISection != NULL)                                      (:2254)
 //   0x82785FFC  lbHit = LineTestSectionHNG(lpAISection, lStartPos, lEndPos)
 //   0x82786024  for (i = 0; i < lpAISection->mu8NumPortals; ++i)  {
@@ -164,7 +166,7 @@ bool ResetOnTrackManager::TestRecentResets(Vector3 lTestPosition)
 //                 if (lpLinked->PassesThrough(lStartPos, lEndPos))
 //                     lbHit = LineTestSectionHNG(lpLinked, lStartPos, lEndPos)    ⭐ ASSIGN, not OR
 //               }
-//   0x827860CC  StopMonitor / PushHngTestInfo                                    [PARKED]
+//   0x827860CC  StopMonitor / PushHngTestInfo
 //
 // ⭐ THE INNER RESULT IS ASSIGNED, NOT OR'd (`mr r26, r3` @0x827860B4), so a linked section that
 // the query segment crosses but that has no no-go line CLEARS a hit the owning section had already
@@ -177,9 +179,8 @@ bool ResetOnTrackManager::TestRecentResets(Vector3 lTestPosition)
 // `AISection::Vector2` (the section's own corner type -- see its banner). The conversion below is
 // explicit for that reason; passing one where the other belongs re-strides the corner walk.
 //
-// [FLAG PC boot gate] the PerfMonCpu Start/StopMonitor pair (muTestLineHNGPM) and
-// ResetOnTrackDebugComponent::PushHngTestInfo -- both parked exactly as ResetOnTrackManager::
-// Construct's own banner parks the monitor registrations and the debug component.
+// The monitor and history writer are registered in ResetOnTrackManager::Construct and follow the
+// console's Start -> line-query loop -> Stop -> Push order.
 // =================================================================================================
 bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
                                           Vector2 lStartPos, Vector2 lEndPos)
@@ -190,6 +191,7 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
         return false;   // [GUARD] the console dereferences both unconditionally
     }
 
+    CgsDev::PerfMonCpu::StartMonitor(muTestLineHNGPM);
     bool lbHitHNG = LineTestSectionHNG(lpAISection, lStartPos, lEndPos);
 
     const AISectionsData* lpAISectionsData = mpAISectionData.operator->();
@@ -215,7 +217,8 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
         }
     }
 
-    // [FLAG PC boot gate] StopMonitor + ResetOnTrackDebugComponent::PushHngTestInfo -- see banner.
+    CgsDev::PerfMonCpu::StopMonitor(muTestLineHNGPM);
+    mResetOnTrackDebugComponent.PushHngTestInfo(lStartPos, lEndPos, lbHitHNG);
     return lbHitHNG;
 }
 

@@ -71,7 +71,7 @@
 //                                     +0x38C..+0x38F is alignment padding)
 //   mRandom                   @0x4F0  CgsNumeric::Random (0x30)
 //   mHelperNodeNext/Prev      @0x520 / @0x530 RouteNode (16B each)
-//   mResetOnTrackDebugComponent@0x540 opaque 0x870 -> footprint 0xDB0
+//   mResetOnTrackDebugComponent@0x540 original X360 component size 0x870 -> footprint 0xDB0
 //
 // ⚠️⚠️ SIZE CORRECTED 2026-08-25 (aimodule wave) -- THE DEBUG COMPONENT WAS DECLARED
 // 0x540 BYTES TOO SMALL, AND THE OLD COMMENT DESCRIBED THE MISTAKE. It read "opaque 0x330 ->
@@ -102,6 +102,7 @@
 #include "GameSource/BurnoutConstants.h"                               // EGlobalRaceCarIndex
 #include "BrnCommonTypes.h"                                            // Vector3
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h" // AIModuleIO::ResetOnTrackRequest (16B)
+#include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackDebugComponent.h"
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"          // CgsContainers::FixedRingBuffer
 #include "GameShared/GameClasses/Containers/CgsArray.h"               // Array<T,N> (global)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (0x30)
@@ -113,6 +114,7 @@ namespace BrnAI
 {
     struct AICar;                 // pointer-only here (opaque, sizeof == 0x1560 == 5472)
     struct AISectionsData;        // resource type held by ResourcePtr
+    struct ResetOnTrackDebugComponent;
     // ⚠️ CORRECTED 2026-08-26 (aicar_reset wave). This was `struct AIModuleResultInterface;` at
     // BrnAI scope -- a DIFFERENT, never-defined type from the real one, which lives in the nested
     // AIModuleIO namespace (BrnAIModuleResultInterface.h). Nothing had noticed because Update was
@@ -139,6 +141,8 @@ namespace BrnAI
 
     struct ResetOnTrackManager
     {
+        friend struct ResetOnTrackDebugComponent;
+
         // DWARF BrnResetOnTrackManager.h:78. 32-byte element. Layout-identical to the copy in
         // the committed BrnResetOnTrackManagerTypes.h (Vector3 mPosition@0 + f32 mfTime@0x10,
         // padded to 32 by the 16-byte align).
@@ -355,9 +359,10 @@ namespace BrnAI
         RouteNode mHelperNodeNext;
         RouteNode mHelperNodePrev;
 
-        // +0x540 : embedded debug component (opaque; 0x870 bytes -- the manager footprint
-        // runs to 0xDB0). See the SIZE CORRECTED note in the banner: this was 0x330.
-        u8 mResetOnTrackDebugComponent[0x870];
+        // +0x540 : embedded debug component. ARTIST Construct @0x82791A48 initializes it
+        // and registers it immediately after the reset-history ring; the component owns its
+        // named declaration and typed fixed ring buffers.
+        ResetOnTrackDebugComponent mResetOnTrackDebugComponent;
 
     private:
         // ---- DWARF static perf-mon handles (BrnResetOnTrackManager.h:349-351). ----
