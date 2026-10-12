@@ -302,6 +302,19 @@ void* ImRendererBase::SetStateLowLevel(const void* lpState)
     return this;
 }
 
+// ARTIST 82276D08 / 82276DA8: the immediate owner assertion wraps the
+// same lock/compare/apply/cache operations used by ordinary dispatch.
+void ImRendererBase::SetState(const BlendState* lpState)
+{
+    SetStateLowLevel(lpState);
+}
+
+void ImRendererBase::SetState(const DepthStencilState* lpState)
+{
+    CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
+    shadow::Device::SetState(reinterpret_cast<const renderengine::DepthStencilState*>(lpState));
+}
+
 // X360 CgsGraphics::ImRendererBase::SetState(const RasterizerState*) @0x82276E48.
 // Its active-renderer assertion is followed by the shadow device's rasterizer lock,
 // compare, low-level apply, and cache update (the same stages as shadow::Device::SetState
@@ -360,12 +373,21 @@ void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
     shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
 }
 
+// ARTIST 8240625C..82406298 inlines the stage-zero TextureState overload.
+// The indexed twin is homed in CgsIm2d_wBT_01.cpp; both reach the one shadow.
+void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
+{
+    CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
+    shadow::Device::SetState(lpTextureState, 0);
+}
+
 // ---- module statics (X360 .data home of this TU) --------------------------------------------------
 ImRendererBase*       ImRendererBase::mgpActiveRenderer        = nullptr;  // dword_83010F9C
 // mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled were second host
 // homes for dword_83010964 / dword_830109E8 / dword_83010968 / byte_83010907, all of which
 // shadow::Device already owns -- see CgsImRenderer.h for the address evidence. Deleted with their
 // declarations.
-void*                 ImRendererBase::mgpDevice                 = nullptr;  // off_83271608
+// mgpDevice's native platform definition is in SkidImmediateMode.cpp. It is
+// shared by the existing direct-draw backend; no second definition lives here.
 
 }  // namespace CgsGraphics
