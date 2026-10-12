@@ -4359,8 +4359,8 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
 // HandleQADebugTests @0x82291700. The restart latch resets the particle simulation rate
 // when Effects debugging is disabled. It also updates the selected local point on the
 // existing test LION effect and starts, positions, or stops the QA test effect from the
-// page's mbQAEnabled gate. ARTIST copies an uninitialised stack vector into point row 8;
-// that row remains unwritten here because its value is not established by the console code.
+// page's mbQAEnabled gate. ARTIST's reused stack vector for row8 is fully written
+// before lvx/stvx at82291910/24; its later stack stores prepare row10.
 void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceCarState* lpRaceCarState)
 {
     if (sbRestartEffects)
@@ -4383,7 +4383,7 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
         gaQADebugEffectPoints[5]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
         gaQADebugEffectPoints[6]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
         gaQADebugEffectPoints[7]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
-        // Row 8: the target loads 16 bytes from stack before storing its later x/y/z/w values.
+        gaQADebugEffectPoints[8]  = rw::math::vpu::Vector4{  0.0f, -0.4f,  1.4f, 0.0f };
         gaQADebugEffectPoints[9]  = rw::math::vpu::Vector4{  0.0f, -0.4f, -1.75f, 0.0f };
         gaQADebugEffectPoints[10] = rw::math::vpu::Vector4{  0.0f, -0.5f,  0.0f, 0.0f };
     }
