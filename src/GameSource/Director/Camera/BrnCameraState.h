@@ -118,6 +118,10 @@ public:
     // raw field.
     bool IsFlagSet(u32 luIndex) const { return mCurrentFlags.IsBitSet(luIndex); }
 
+    // X360 0x821F8440; static by the r3-only ABI (there is no this pointer).
+    // The 30-entry KAAC_FLAG_NAMES table and body are in BrnCameraState.cpp.
+    static const char* GetDebugFlagName(EFlag leFlag);
+
     // @0x82694478 -- "this flag was set last frame and is clear now". A real X360 function
     // (`!IsFlagSet(flag) && HasChanged(flag)`, two calls and a fold) that progress/identity
     // .json does not carry, so a name search for it comes back empty; IDA has the symbol.

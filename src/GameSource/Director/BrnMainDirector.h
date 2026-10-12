@@ -260,14 +260,18 @@ namespace BrnDirector
         // the module that owned the world map.
         void CalcTrafficLightSpace(const DirectorInputOutput* lpIO);
 
-        // ---- debug helpers (all DECLARATION-ONLY + FLAGGED) ----------------------------
+        // ---- camera/debug helpers ------------------------------------------------------
 
-        // X360 0x82209128. Snapshot the current camera into the debug scratch region.
-        // FLAG: selects the near-clip from the un-dumped rodata floats flt_82CDA55C /
-        //   flt_82CDA560 (VALUES not recovered) -- the same constants Camera.h FLAGS.
-        void UpdateDebugInfo(const DirectorInputOutput* lpIO);
-        void UpdateDebugPrinters();                 // X360 0x82208FC8
-        void DebugDisplayCurrentCamera(s32 liArg);  // X360 0x821F6740
+        // X360 0x82209128. Copy the finalized camera's position, FOV, aspect, near clip, and
+        // look-at vector into the snapshot the debug page exposes. DecFIGS declares the input
+        // as const Camera reference; ARTIST assembly reads the camera argument at +0x30/+0x34/+0x38,
+        // +0x58/+0x5C, +0x150, +0x15D, +0x140, and +0x20.
+        void UpdateDebugInfo(const Camera::Camera& lrCamera);
+        // X360 0x82208FC8. Refresh the three DebugPrinter layouts from current UI metrics.
+        void UpdateDebugPrinters();
+        // X360 0x821F6740. Draw the finalized camera's behavior name when the original camera-name
+        // flags allow it. DecFIGS and the callsite carry a const Camera reference.
+        void DebugDisplayCurrentCamera(const Camera::Camera& lrCamera);
 
         // ---- committed sub-object accessors --------------------------------------------
 
@@ -481,7 +485,9 @@ namespace BrnDirector
         // +0x33768 / +0x3378C / +0x337B0  the three BrnDirector::DebugPrinters Construct
         //           builds. The THIRD (+0x337B0) is the one ArbStateSharedInfo carries as
         //           mpDebugPrinter, so the three are named separately rather than as one span.
-        //           FLAG: DebugPrinter is un-homed; named opaque storage.
+        //           DebugPrinter has a typed home in BrnDirectorModuleDebugPrinter.h; these
+        //           spans retain the MainDirector's console member order and are accessed
+        //           through that type by the debug-print and registration paths.
         u8 maDebugPrinterA[0x3378C - 0x33768];       // +0x33768
         u8 maDebugPrinterB[0x337B0 - 0x3378C];       // +0x3378C
         u8 maDebugPrinterMain[0x337E0 - 0x337B0];    // +0x337B0  <- ArbStateSharedInfo +0x04

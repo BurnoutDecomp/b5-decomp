@@ -157,6 +157,8 @@ namespace BrnDirector
         EState GetState() const                     { return meState; }
 
     private:
+        // MainDirector reads this X360-attested +0x301 camera-name gate at +0x130C1.
+        friend class MainDirector;
         // The debug page registers the testbed and the attract / render-metrics requests.
         friend class DebugComponent;
 
