@@ -6,8 +6,8 @@
 //   RenderWorld, RenderTailgateCones, RenderSingleDebugCone, DrawResetOnWaterHeight,
 //   RenderHUD, RenderEngineState, RenderTrafficRelated, DrawTextWithOffsets.
 //
-// Colours: the console words are 0xAARRGGBB. The 3D immediate renderer takes rw::RGBA, spelled
-// rw::RGBA(r, g, b, a); the 2D immediate renderer takes the packed word (CgsDev::RGBA).
+// The 3D renderer's rw::RGBA(r,g,b,a) packs (a<<24)|(b<<16)|(g<<8)|r;
+// the 2D renderer takes the original packed word (CgsDev::RGBA).
 //
 // The console's "draw text at x, y" helper used by these HUDs is the scalar
 // Debug2DImmediateRender::DrawText(text, x, y, scale, colour) overload (it builds the Vector2 and
@@ -30,6 +30,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
+#include "pc/math/VmxFloat.h"
 
 #include <cmath>                                                                          // atan2, sinf, cosf, tanf
 #include <cstdlib>
@@ -358,12 +359,12 @@ void RaceCarEntityModuleDebugComponent::Update()
 
     if (lpPlayerCar != nullptr)
     {
-        const f32 lfSpeed = vpu::Magnitude(lpPlayerCar->GetVelocity());
+        const f32 lfSpeed = CgsPC::VmxFloat::Magnitude3(lpPlayerCar->GetVelocity());
 
         const s32 liFrameCount = miAverageSpeedFrameCount;
         miAverageSpeedFrameCount = liFrameCount + 1;
 
-        mfAverageSpeed = (static_cast<f32>(liFrameCount) * mfAverageSpeed + lfSpeed)
+        mfAverageSpeed = std::fma(static_cast<f32>(liFrameCount), mfAverageSpeed, lfSpeed)
                        / static_cast<f32>(liFrameCount + 1);
     }
 }
@@ -494,7 +495,7 @@ void RaceCarEntityModuleDebugComponent::RenderSingleDebugCone(CgsDev::Debug3DImm
                                                               Matrix44Affine lTransform, VecFloat lvfHalfAngle,
                                                               rw::RGBA lColour, s32 liNumSegments) const
 {
-    const f32 lfRadius = vpu::Magnitude(lTransform.zAxis) * tanf(lvfHalfAngle.x);
+    const f32 lfRadius = CgsPC::VmxFloat::Magnitude3(lTransform.zAxis) * tanf(lvfHalfAngle.x);
     const f32 lfStep   = KF_TWO_PI / static_cast<f32>(liNumSegments);
 
     for (s32 liSegment = 0; liSegment < liNumSegments; ++liSegment)

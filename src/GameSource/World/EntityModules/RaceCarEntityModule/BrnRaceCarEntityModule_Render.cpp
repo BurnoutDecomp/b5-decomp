@@ -76,6 +76,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "pc/math/VmxFloat.h"
 #include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // InputBuffer_GenerateDispatchLists
 
@@ -416,21 +417,17 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         }
     }
 
-    // vmaxfp against the three debug floats (all zero at retail, so a no-op), then the
-    // splat multiply, de-optimised back to the scalar it is.
+    // vmaxfp against the three editable floats, then vmulfp. Both flush
+    // subnormals; the vector maximum propagates unordered operands.
     const Vector4 lv4DebugIllumination = { DEBUG_mfSelfIlluminationR,
                                            DEBUG_mfSelfIlluminationG,
                                            DEBUG_mfSelfIlluminationB,
                                            0.0f };
     const Vector4 lv4SelfIlluminationMask = {
-        ( lv4DebugIllumination.x > lv4LightState.x ? lv4DebugIllumination.x : lv4LightState.x )
-            * KF_SELF_ILLUMINATION_INTENSITY,
-        ( lv4DebugIllumination.y > lv4LightState.y ? lv4DebugIllumination.y : lv4LightState.y )
-            * KF_SELF_ILLUMINATION_INTENSITY,
-        ( lv4DebugIllumination.z > lv4LightState.z ? lv4DebugIllumination.z : lv4LightState.z )
-            * KF_SELF_ILLUMINATION_INTENSITY,
-        ( lv4DebugIllumination.w > lv4LightState.w ? lv4DebugIllumination.w : lv4LightState.w )
-            * KF_SELF_ILLUMINATION_INTENSITY };
+        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.x, lv4LightState.x), KF_SELF_ILLUMINATION_INTENSITY),
+        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.y, lv4LightState.y), KF_SELF_ILLUMINATION_INTENSITY),
+        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.z, lv4LightState.z), KF_SELF_ILLUMINATION_INTENSITY),
+        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.w, lv4LightState.w), KF_SELF_ILLUMINATION_INTENSITY) };
 
     // ---- the shadow-pass selector ------------------------------------------
     // v320 = (shadowMap[0] && shadowMap[1]): the two LEADING ShadowMap bytes the asm reads

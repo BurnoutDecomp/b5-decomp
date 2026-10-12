@@ -76,6 +76,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
+#include "pc/math/VmxFloat.h"
 
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatus{,Interface} -- WorldModule::Update stages the environment frame delta
 
@@ -3491,7 +3492,7 @@ WorldModule::CalculateVehicleLODs(
             lpRaceCar->GetRenderParams()->GetBodyTransform().Pos();
 
         const f32 lfDistance =
-            rw::math::vpu::Magnitude( lCameraPos - lVehiclePosition );
+            CgsPC::VmxFloat::Magnitude3(CgsPC::VmxFloat::Subtract(lCameraPos, lVehiclePosition));
 
         lafRaceCarDistances[ liRaceCarIndex ] = lfDistance;
         lfRenderingCostEstimate += 1.0f / lfDistance;
@@ -3522,8 +3523,10 @@ WorldModule::CalculateVehicleLODs(
     {
         const f32 lfQuality    = KA_VEHICLE_QUALITY_LOD_DISTANCE[ luIndex ];
         const f32 lfAggressive = KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[ luIndex ];
-        lafLODDistances[ luIndex ] =
-            ( lfQuality + ( lfAggressive - lfQuality ) * lfAlpha ) * lfZoomFactor;
+        // VMX subtract/fused lerp, then a distinct scalar fmuls zoom stage.
+        const f32 lfBand = CgsPC::VmxFloat::MultiplyAdd(
+            CgsPC::VmxFloat::Subtract(lfAggressive, lfQuality), lfAlpha, lfQuality);
+        lafLODDistances[ luIndex ] = lfBand * lfZoomFactor;
     }
 
     CgsPC::Reflections::SetVehicleLodDistances(lafLODDistances);

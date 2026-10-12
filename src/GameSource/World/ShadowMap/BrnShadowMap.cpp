@@ -1,4 +1,5 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
+#include "pc/math/VmxFloat.h"
 #include "pc/gcm/renderengine/GraphicsSettings.h"
 #include "pc/gcm/renderengine/ShadowQuality.h"
 #include "pc/gcm/renderengine/shadows/SceneSettingsDebug.h"
@@ -2987,7 +2988,7 @@ namespace BrnWorld
             }
 
             DrawShadowDebugMatrixGuides(lRender, lrDebugInfo.mLightToWorld,
-                                        lrDebugInfo.mZOffset.z + 0.01f);
+                                        CgsPC::VmxFloat::Add(lrDebugInfo.mZOffset.z, 0.01f));
 
             char lacAspectText[31];
             CgsCore::SPrintf(lacAspectText, 31, "AR : %.2f", lrDebugInfo.mfAspectRatio);
