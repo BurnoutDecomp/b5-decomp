@@ -46,4 +46,9 @@ namespace CgsResource
         miNumTypes = 0;
         std::memset(maCategories, 0, sizeof(maCategories));
     }
+
+    void DebugPoolTypeList::SetMode(EPoolTypeListMode leMode)
+    {
+        meMode = leMode; //inlined store828F719C, console Window+0x484C
+    }
 }
