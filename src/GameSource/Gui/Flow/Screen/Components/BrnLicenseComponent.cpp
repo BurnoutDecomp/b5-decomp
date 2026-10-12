@@ -196,8 +196,10 @@ namespace BrnGui
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            CgsGui::GuiEventWrapper<GuiCommandEvent16<N>, 40> lWrapper(lEvent);
-            { CgsGui::GuiEventWrapper<decltype(lWrapper), 40> lGuiOutputWrapper1(lWrapper); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
+            CgsGui::GuiEventWrapper<GuiCommandEvent16<N>, 40> lOutputRecord(lEvent);
+            lpInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lOutputRecord), liChannel,
+                static_cast<s32>(sizeof(lOutputRecord)));
         }
 
         void PostPlayerTextureEvent(CgsGui::StateInterface* lpStateInterface, s32 leMode)
