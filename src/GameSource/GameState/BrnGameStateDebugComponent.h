@@ -7,13 +7,16 @@
 namespace CgsDev
 {
     struct Debug2DImmediateRender;
+    class DebugRender;
+    namespace DebugUI
+    {
+        struct Metrics;
+    }
 }
 
 namespace BrnGameState
 {
     class GameStateModule;
-    struct DebugRender;
-    struct Metrics;
 
     // GameStateModule's X360-owned debug page. The declaration shape is from DecFIGS;
     // ARTIST registration, consumer and lifecycle accesses gate the X360-attested members.
@@ -30,8 +33,10 @@ namespace BrnGameState
         void OnActivate() override;
 
     private:
-        void RenderCurrentLandmarkInfo(DebugRender& lrRender, const Metrics& lrMetrics) const;
-        void RenderNextLandmarkInfo(DebugRender& lrRender, const Metrics& lrMetrics) const;
+        void RenderCurrentLandmarkInfo(CgsDev::DebugRender& lrRender,
+                                       const CgsDev::DebugUI::Metrics& lrMetrics) const;
+        void RenderNextLandmarkInfo(CgsDev::DebugRender& lrRender,
+                                    const CgsDev::DebugUI::Metrics& lrMetrics) const;
         void DrawUpcomingRoads(CgsDev::Debug2DImmediateRender* lpRender);
         void DrawStuntBreakdown(CgsDev::Debug2DImmediateRender* lpRender);
         s32 FindRoadNameIndexFromId(CgsID lRoadId);
