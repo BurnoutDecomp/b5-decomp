@@ -31,6 +31,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
 #include "pc/math/VmxFloat.h"
+#include "SDKs/XboxMath/XMVectorSin.h"
+#include "SDKs/XboxMath/XMVectorCos.h"
+#include "SDKs/XboxMath/XMVectorTan.h"
 
 #include <cmath>                                                                          // atan2, sinf, cosf, tanf
 #include <cstdlib>
@@ -478,8 +481,9 @@ void RaceCarEntityModuleDebugComponent::RenderTailgateCones(CgsDev::Debug3DImmed
         Matrix44Affine lConeTransform = lpCar->GetTransform();
         const Vector3  lDirection     = lpCar->GetDirection();
 
-        lConeTransform.wAxis = lDirection * KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX + lConeTransform.wAxis;
-        lConeTransform.zAxis = lConeTransform.zAxis * -KF_TAILGATING_CONE_DEPTH;
+        lConeTransform.wAxis = CgsPC::VmxFloat::MultiplyAdd(
+            lDirection, KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX, lConeTransform.wAxis);
+        lConeTransform.zAxis = CgsPC::VmxFloat::Multiply(lConeTransform.zAxis, -KF_TAILGATING_CONE_DEPTH);
 
         const VecFloat lvfHalfAngle = { KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS,
                                         KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS };
@@ -495,25 +499,31 @@ void RaceCarEntityModuleDebugComponent::RenderSingleDebugCone(CgsDev::Debug3DImm
                                                               Matrix44Affine lTransform, VecFloat lvfHalfAngle,
                                                               rw::RGBA lColour, s32 liNumSegments) const
 {
-    const f32 lfRadius = CgsPC::VmxFloat::Magnitude3(lTransform.zAxis) * tanf(lvfHalfAngle.x);
+    namespace vmx = CgsPC::VmxFloat;
+    const f32 lfLength = vmx::Magnitude3(lTransform.zAxis);
+    const Vector3 lRadius = {
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.x)),
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.y)),
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.z)),
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.w)) };
     const f32 lfStep   = KF_TWO_PI / static_cast<f32>(liNumSegments);
 
     for (s32 liSegment = 0; liSegment < liNumSegments; ++liSegment)
     {
-        const f32 lfAngle     = lfStep * static_cast<f32>(liSegment);
-        const f32 lfNextAngle = lfAngle + lfStep;
+        const f32 lfAngle     = vmx::Multiply(lfStep, static_cast<f32>(liSegment));
+        const f32 lfNextAngle = vmx::Add(lfAngle, lfStep);
 
-        Vector3 lEdge = lTransform.yAxis * sinf(lfAngle);
-        lEdge = lTransform.xAxis * cosf(lfAngle) + lEdge;
-        lEdge = lEdge * lfRadius + lTransform.zAxis;
+        Vector3 lEdge = vmx::Multiply(lTransform.yAxis, XboxMath::XMVectorSin(lfAngle));
+        lEdge = vmx::MultiplyAdd(lTransform.xAxis, XboxMath::XMVectorCos(lfAngle), lEdge);
+        lEdge = vmx::MultiplyAdd(lRadius, lEdge, lTransform.zAxis);
 
-        Vector3 lNextEdge = lTransform.yAxis * sinf(lfNextAngle);
-        lNextEdge = lTransform.xAxis * cosf(lfNextAngle) + lNextEdge;
-        lNextEdge = lNextEdge * lfRadius + lTransform.zAxis;
+        Vector3 lNextEdge = vmx::Multiply(lTransform.yAxis, XboxMath::XMVectorSin(lfNextAngle));
+        lNextEdge = vmx::MultiplyAdd(lTransform.xAxis, XboxMath::XMVectorCos(lfNextAngle), lNextEdge);
+        lNextEdge = vmx::MultiplyAdd(lRadius, lNextEdge, lTransform.zAxis);
 
         const Vector3 lApex = lTransform.wAxis;
-        lpRender->DrawSolidQuad(lApex, lApex, lApex + lEdge, lApex + lNextEdge, lColour);
-        lpRender->DrawSolidQuad(lApex, lApex, lApex + lNextEdge, lApex + lEdge, lColour);
+        lpRender->DrawSolidQuad(lApex, lApex, vmx::Add(lApex, lEdge), vmx::Add(lApex, lNextEdge), lColour);
+        lpRender->DrawSolidQuad(lApex, lApex, vmx::Add(lApex, lNextEdge), vmx::Add(lApex, lEdge), lColour);
     }
 }
 

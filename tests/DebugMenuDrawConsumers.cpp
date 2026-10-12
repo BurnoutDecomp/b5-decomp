@@ -5,6 +5,9 @@
 #include "rw/rwcore_structs.h"
 #include "rw/math/vpu/vector3_operation.h"
 #include "pc/math/VmxFloat.h"
+#include "SDKs/XboxMath/XMVectorSin.h"
+#include "SDKs/XboxMath/XMVectorCos.h"
+#include "SDKs/XboxMath/XMVectorTan.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -23,7 +26,8 @@ static void Assert(bool ok) { if(!ok) { std::puts("fixture owner assert"); ++fai
 struct Draw { Vector3 a,b,c,d; u32 colour; };
 static std::vector<Draw> lines,quads,triangles;
 static std::vector<f32> spheres;
-static void Clear() { lines.clear();quads.clear();triangles.clear();spheres.clear(); }
+static std::vector<Vector3> textPositions;
+static void Clear() { lines.clear();quads.clear();triangles.clear();spheres.clear();textPositions.clear(); }
 namespace CgsDev {
 using RGBA=u32;
 struct Debug3DImmediateRender {
@@ -39,7 +43,7 @@ struct Debug3DImmediateRender {
 struct DebugRender {
     void DrawLine(Vector3 a,Vector3 b,RGBA c) { lines.push_back({a,b,{},{},c}); }
     void DrawCross(Vector3,f32,RGBA) {}
-    void DrawText(Vector3,const char*,f32,RGBA) {}
+    void DrawText(Vector3 p,const char*,f32,RGBA) { textPositions.push_back(p); }
 };
 static DebugRender renderer;
 struct DebugInterface { DebugRender& GetRender() { return renderer; } };
@@ -158,6 +162,10 @@ static void ShadowWitnesses() {
     s.maShadowMapTypes[0]=E_SHADOWMAP_TYPE_BOUNDINGBOX;auto& b=gBoundingBoxDebugRenderInfo[0];b.mLightToWorld.SetIdentity();b.mZOffset.z=2;
     Clear();s.DebugRender(0);plane=true;for(const auto& l:lines)if(l.colour==0xff804080u)plane &= Near(l.a.z,2.01f)&&Near(l.b.z,2.01f);
     Check(plane,"bounding-box guide retains separate depth plus .01");
+    b.mLightToWorld.xAxis.x=1e-40f;for(auto& p:b.maBoxPointsWorld)p.x=1e-40f;
+    Clear();s.DebugRender(0);bool axes=true;for(const auto& l:lines)if(l.colour==0xff804040u)axes &= l.a.x==0&&l.b.x==0;
+    Check(axes,"shadow guide transforms flush subnormal matrix coefficients at each FMA");
+    Check(textPositions.size()==1&&textPositions[0].x==0,"shadow label average flushes vector input lanes");
 }
 static void RaceWitnesses() {
     using namespace BrnWorld;RaceCarEntityModule m;RaceCarEntityModuleDebugComponent d;d.mpRaceCarEntityModule=&m;
@@ -171,6 +179,9 @@ static void RaceWitnesses() {
     d.RenderSingleDebugCone(&r,x,{.3f,.3f,.3f,.3f},{},4);
     bool collapsed=!quads.empty();for(auto& q:quads)collapsed &= q.c.x==0&&q.c.y==0&&q.d.x==0&&q.d.y==0;
     Check(collapsed,"tiny cone depth collapses radius after VMX zero selection");
+    x.zAxis={0,0,1e-10f,0};Clear();d.RenderSingleDebugCone(&r,x,{1e-30f,1e-30f,1e-30f,1e-30f},{},4);
+    collapsed=!quads.empty();for(auto& q:quads)collapsed &= q.c.x==0&&q.c.y==0&&q.d.x==0&&q.d.y==0;
+    Check(collapsed,"cone radius multiply flushes a subnormal result after normal magnitude");
     m.maActiveRaceCars[1].active=true;m.maActiveRaceCars[1].transform.SetIdentity();Clear();d.RenderTailgateCones(&r);
     Check(!quads.empty()&&quads[0].colour==0x5032b400u,"cone caller preserves packed RGBA word");
     m.maActiveRaceCars[0].position={0,0,2,1};m.maActiveRaceCars[1].position={0,0,0,1};
@@ -186,6 +197,11 @@ static void FrustumWitness() {
     for(unsigned i=4;i<7;++i)f.planes[i]={0,0,0,-1};f.planes[7]={1e-40f,1,0,.005f};
     Clear();f.DebugRenderCustomPlanes();Check(lines.empty(),"custom-plane clip flushes subnormal coefficient before signed-distance test");
     CgsGeometric::sbFrustumDebugClipCustomPlanesToHull=false;Clear();f.DebugRenderCustomPlanes();Check(!lines.empty(),"custom-plane bypass still publishes retained pair");
+    const Vector3 tiny={1e-40f,1e-40f,1e-40f,1e-40f};
+    auto p=CgsGeometric::AverageFrustumDebugFace(tiny,tiny,tiny,tiny);
+    Check(p.x==0&&p.y==0&&p.z==0&&p.w==0,"frustum face centre flushes each original vector add/scale");
+    p=CgsGeometric::AddFrustumDebugPlane({}, {1e-40f,1e-40f,1e-40f,1e-40f});
+    Check(p.x==0&&p.y==0&&p.z==0&&p.w==0,"frustum arrow endpoint preserves VMX add flushing");
 }
 int main() {
     SceneWitnesses();ShadowWitnesses();RaceWitnesses();FrustumWitness();
