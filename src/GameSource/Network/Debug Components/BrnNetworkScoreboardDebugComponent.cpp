@@ -26,8 +26,34 @@
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"   // ScoreboardManager::HandleScoreboardEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // original streamed assert messages
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (PrintScoreboard)
 #include <cstring>                                    // std::strlen / std::strncpy
+
+namespace
+{
+    void FireOriginalAssert(const char* lpcMessage, const char* lpcFile, s32 liLine)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(lpcMessage, lpcFile, liLine);
+        CgsDev::Assert::EndAssert();
+    }
+
+    void AssertHeadingNameLength(const char* lpcHeading)
+    {
+        if (std::strlen(lpcHeading) >= 31)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "String too long: ";
+            lStrStream << (lpcHeading ? lpcHeading : "<NULLSTRING>");
+            FireOriginalAssert(
+                lacMessage,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                55);
+        }
+    }
+}
 
 namespace BrnNetwork
 {
@@ -147,9 +173,20 @@ namespace BrnNetwork
     void ScoreboardDebugComponent::HandleScoreboardHeadingEvent(
         IO::NetworkOutScoreboardHeadingList* lpHeadingEvent)
     {
-        CGS_ASSERT(lpHeadingEvent != nullptr, "lpHeadingEvent");
-        CGS_ASSERT(lpHeadingEvent->meHeadingType != IO::E_HEADING_COUNT,
-                   "meHeadingType != E_HEADING_COUNT");
+        if (!lpHeadingEvent)
+        {
+            FireOriginalAssert(
+                "lpHeadingEvent",
+                "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
+                279);
+        }
+        if (lpHeadingEvent->meHeadingType == IO::E_HEADING_COUNT)
+        {
+            FireOriginalAssert(
+                "meHeadingType != E_HEADING_COUNT",
+                "..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h",
+                1778);
+        }
 
         const s32 liCount = lpHeadingEvent->miLength;
 
@@ -160,7 +197,7 @@ namespace BrnNetwork
             for (s32 li = 0; li < liCount; ++li)
             {
                 const char* lpcName = lpHeadingEvent->maHeadings[li];
-                CGS_ASSERT(std::strlen(lpcName) < static_cast<u32>(KI_NAME_LENGTH), "String too long");
+                AssertHeadingNameLength(lpcName);
                 std::strncpy(maacCategories[li], lpcName, KI_NAME_LENGTH);
                 maCategoryList[li].miValue = li;
                 maCategoryList[li].mpcName = maacCategories[li];
@@ -182,7 +219,7 @@ namespace BrnNetwork
             for (s32 li = 0; li < liCount; ++li)
             {
                 const char* lpcName = lpHeadingEvent->maHeadings[li];
-                CGS_ASSERT(std::strlen(lpcName) < static_cast<u32>(KI_NAME_LENGTH), "String too long");
+                AssertHeadingNameLength(lpcName);
                 std::strncpy(maacIndexes[li], lpcName, KI_NAME_LENGTH);
                 maIndexList[li].miValue = li;
                 maIndexList[li].mpcName = maacIndexes[li];
@@ -203,7 +240,7 @@ namespace BrnNetwork
             for (s32 li = 0; li < liCount; ++li)
             {
                 const char* lpcName = lpHeadingEvent->maHeadings[li];
-                CGS_ASSERT(std::strlen(lpcName) < static_cast<u32>(KI_NAME_LENGTH), "String too long");
+                AssertHeadingNameLength(lpcName);
                 std::strncpy(maacVariations[li], lpcName, KI_NAME_LENGTH);
                 maVariationList[li].miValue = li;
                 maVariationList[li].mpcName = maacVariations[li];
@@ -219,10 +256,20 @@ namespace BrnNetwork
         }
 
         default:
+        {
             // meHeadingType outside [0,2] (and != COUNT): a programming error. The X360 streams the
             // numeric type into the assert message ("Unhandled scoreboard event type: <n>\n").
-            CGS_ASSERT(false, "Unhandled scoreboard event type");
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Unhandled scoreboard event type: ";
+            lStrStream << static_cast<s32>(lpHeadingEvent->meHeadingType);
+            lStrStream << "\n";
+            FireOriginalAssert(
+                lacMessage,
+                "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
+                359);
             break;
+        }
         }
     }
 
