@@ -128,6 +128,8 @@ public:
     void AddOngoingRivalryMessage(FlybyManager::RivalRating* lpRating);
 
 private:
+    // ARTIST PreWorldUpdate copies the typed network snapshot into +0x2A0.
+    friend class GameStateModule;
     BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerInputInterface;       // console +0x2A0
     CgsContainers::FastBitArray<5>                              mAvailableNoRivalryMessages; // console +0xC90
 };
