@@ -470,7 +470,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
                 lfMax = lpDebug->BoostTransitionMax();
             }
 
-            const Vector3 lvParams = { lfMin, ((lfMax - lfMin) * 0.5f) + lfMin, lfMax, 0.0f };
+            const Vector3 lvParams = { lfMin, std::fma(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
             const Vector2 lvScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
             BrnEffects::Curves::SmoothStep lCurve;
             const f32 lfBlend = 1.0f - lCurve.Evaluate(lvParams, lvScale,
