@@ -84,6 +84,10 @@ namespace CgsSceneManager
         s32 GetNumPolySoupLists() const;
 
     private:
+        // ARTIST TriangleCollisionDebugComponent::OnActivate reads the original
+        // mPolySoupListSpatialMap::miNumLevels field through this owning object.
+        friend class CgsSceneManager::TriangleCollisionDebugComponent;
+
         CgsGeometric::PolygonSoupListSpatialMap mPolySoupListSpacialMap;            // +0x00  (h:101)
         CgsResource::ResourceHandle*            mpaPolySoupListHandles;             // +0x70  (h:102)
         s32                                     miMaxNumSoupLists;                  // +0x74  (h:103)
