@@ -199,6 +199,7 @@ public:
     static void _AssertLayout();
 
 private:
+    friend class GameStateDebugComponent; // ARTIST GameStateDebugComponent::OnActivate binds these console fields
     State                                          meState;                       // +0x00  :172
     f32                                            mfStateTimer;                  // +0x04  :173
     HostPointer<GameStateModule>                   mpGameStateModule;             // +0x08  :175

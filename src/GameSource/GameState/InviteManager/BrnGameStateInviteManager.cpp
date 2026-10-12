@@ -18,6 +18,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/InviteManager/BrnGameStateInviteManager.h"
+#include "GameSource/GameState/SharedIO/BrnGameStateModuleInputIOInterfaces.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                     // CgsDev::Assert::Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                           // CgsDev::StrStream (dynamic assert message)
@@ -27,6 +28,31 @@
 
 namespace BrnGameState
 {
+    // ARTIST PreWorldUpdate @823A5748..823A577C inlines these two queue resets
+    // and copies into the invite manager's existing +0x6A8/+0x714 members.
+    void GameStateInviteManager::AppendFromPreWorldInputData(
+            const GameStateModuleIO::PreWorldInputBuffer* lpInputBuffer)
+    {
+        mInputBindResultQueue.Clear();
+        mInputUnBindResultQueue.Clear();
+        mInputBindResultQueue.Append(
+            *lpInputBuffer->GetControllerToGameStateInterface()->GetBindResultsQueue());
+        mInputUnBindResultQueue.Append(
+            *lpInputBuffer->GetControllerToGameStateInterface()->GetUnBindResultsQueue());
+    }
+
+    // The ARTIST event merge at 823A5840..823A5848 appends this first member.
+    GameStateModuleIO::GameEventQueue* GameStateInviteManager::GetGameEventQueue()
+    {
+        return &mGameEventQueue;
+    }
+
+    // ARTIST PreWorldUpdate 823A5644..823A565C inlines the state != COUNT test.
+    bool GameStateInviteManager::IsInviteInProgress()
+    {
+        return meInviteState != E_INVITE_STATE_COUNT;
+    }
+
     // ------------------------------------------------------------------------
     // File-scope constants (DWARF BrnGameStateInviteManager.cpp:27-42).
     // ------------------------------------------------------------------------

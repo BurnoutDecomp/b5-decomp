@@ -355,6 +355,7 @@ public:
     s32          GetCurrentState() const          { return meCurrentState; }
     f32          GetUpdateTimeStep() const        { return mfTimeStepSeconds; }
     bool         IsOnline() const                 { return mbIsOnline; }
+    bool         HasFinished() const              { return mbFinished; } // DecFIGS declaration; inlined ARTIST 82350E88
     void         SetFinished(bool lbFinished)     { mbFinished = lbFinished; }
     void         SetIntroJustFinished(bool lbFin) { mbIntroJustFinished = lbFin; }
     void         SetVisibleCars(bool lbVisible)   { mbVisibleCars = lbVisible; }

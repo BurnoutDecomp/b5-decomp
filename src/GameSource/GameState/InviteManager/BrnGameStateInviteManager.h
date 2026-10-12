@@ -97,10 +97,9 @@ namespace BrnGameState
         void RenderDebugText(const char* lpcDebugText, Vector2 lTextPosition);    // 0x82357DA8 (this TU)
 
         // ---- members (X360 layout; offsets pinned in the file banner) ----
-        // mGameEventQueue is GameStateModuleIO::GameEventQueue, which IS
-        // CgsModule::VariableEventQueue<1536,16>; embedded by value as the concrete impl so
-        // its 0x610-byte footprint and AddEvent are available directly.
-        CgsModule::VariableEventQueue<1536, 16> mGameEventQueue;                        // +0x000
+        // DecFIGS BrnGameStateInviteManager.h:118; the named queue derives from
+        // VariableEventQueue<1536,16> without adding storage.
+        GameStateModuleIO::GameEventQueue mGameEventQueue;                            // +0x000
         CgsInput::InputIO::PostWorldInputBuffer::BindRequestQueue   mOutputBindRequestQueue;   // +0x610
         CgsInput::InputIO::PostWorldInputBuffer::UnBindRequestQueue mOutputUnBindRequestQueue; // +0x65C
         CgsInput::InputIO::OutputBuffer::BindResultQueue            mInputBindResultQueue;      // +0x6A8

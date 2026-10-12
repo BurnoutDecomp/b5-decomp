@@ -97,6 +97,13 @@ namespace CgsDev
         // code (ICERender) passes the screen rect/position as Vector2 values and a packed RGBA.
         void Draw2DText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour);
         void Draw2DLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour);
+        // X360 0x8282B340 / 0x8282B5C8 / 0x8282B658 / 0x8282B940; DecFIGS :99-102.
+        // On PPC, the angle/length overload receives start in VMX v1, angle in f1,
+        // length in f2 and RGBA in r6; the endpoint overload receives start/end in v1/v2.
+        void Draw2DLineAtAngle(Vector2 lv2Start, f32 lfAngleRad, f32 lfLength, RGBA lColour);
+        void Draw2DArrowHead(Vector2 lv2Tip, f32 lfAngleRad, f32 lfLength, RGBA lColour);
+        void Draw2DArrow(Vector2 lv2Start, f32 lfAngleRad, f32 lfLength, RGBA lColour);
+        void Draw2DArrow(Vector2 lv2Start, Vector2 lv2End, RGBA lColour);
         // ARTIST 8282B2D8 stores position and size directly in the box event.
         void Draw2DBox(Vector2 lv2Position, Vector2 lv2Size, RGBA lColour);
         void Draw2DFrame(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
