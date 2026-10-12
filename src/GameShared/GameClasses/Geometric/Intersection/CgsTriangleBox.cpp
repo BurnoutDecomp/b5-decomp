@@ -1,5 +1,10 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleBox.h"
 
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"
+
+#include <array>
 #include <cmath>
 #include <cstring>   // std::memcpy (ClipBoxEdgeAgainstTriangle's mask bit pattern)
 #include <limits>    // std::numeric_limits (ClipBoxEdgeAgainstTriangle's refined reciprocal)
@@ -216,5 +221,240 @@ namespace CgsGeometric
         std::memcpy(&lResult.z, &luLane, sizeof(u32));
         std::memcpy(&lResult.w, &luLane, sizeof(u32));
         return lResult;
+    }
+}
+
+// ============================================================================
+// CgsGeometric::ClipTriEdgeAgainstBox @ 0x8283FF90.
+//
+// The X360 body computes the six segment/box-face candidates with vrefp plus
+// three reciprocal refinements, checks the candidate lanes against the three
+// inclusive box slabs, and stores the clipped segment endpoints in two Vector3
+// slots with matching MaskScalar validity values. This scalar lowering keeps
+// the same endpoint order, comparison inclusivity, and fused point evaluation.
+// A zero direction lane is tested against its slab directly; the console's
+// reciprocal refinement for that lane becomes NaN, so that lane contributes no
+// crossing candidate.
+// ============================================================================
+
+namespace CgsGeometric
+{
+    void ClipTriEdgeAgainstBox(Vector3* const                  lpaDest,
+                               rw::math::vpu::MaskScalar* const lpaDestValid,
+                               const AxisAlignedBox&            lBox,
+                               Vector3                          lLineStart,
+                               Vector3                          lLineEnd)
+    {
+        const f32 lafStart[3] = { lLineStart.x, lLineStart.y, lLineStart.z };
+        const f32 lafEnd[3]   = { lLineEnd.x, lLineEnd.y, lLineEnd.z };
+        const f32 lafMin[3]   = { lBox.mMin.x, lBox.mMin.y, lBox.mMin.z };
+        const f32 lafMax[3]   = { lBox.mMax.x, lBox.mMax.y, lBox.mMax.z };
+
+        // vrefp followed by the same three Newton-Raphson rounds used by the
+        // other recovered X360 reciprocal paths. In particular, a zero input
+        // refines to NaN; the parallel-axis branch below uses the raw slab test.
+        const auto Reciprocal3 = [](f32 lfValue)
+        {
+            f32 lfReciprocal = 1.0f / lfValue;
+            for (s32 liStep = 0; liStep < 3; ++liStep)
+            {
+                const f32 lfError = std::fma(-lfValue, lfReciprocal, 1.0f);
+                lfReciprocal      = std::fma(lfReciprocal, lfError, lfReciprocal);
+            }
+            return lfReciprocal;
+        };
+
+        f32 lfEnter = 0.0f;
+        f32 lfExit  = 1.0f;
+        bool lbIntersects = true;
+
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+        {
+            const f32 lfDirection = lafEnd[liAxis] - lafStart[liAxis];
+            if (lfDirection == 0.0f)
+            {
+                // The X360 compares both endpoints against this slab even when
+                // the reciprocal lane is NaN.
+                if (!(lafStart[liAxis] >= lafMin[liAxis])
+                    || lafStart[liAxis] > lafMax[liAxis])
+                {
+                    lbIntersects = false;
+                    break;
+                }
+                continue;
+            }
+
+            const f32 lfReciprocal = Reciprocal3(lfDirection);
+            f32 lfParam0 = (lafMin[liAxis] - lafStart[liAxis]) * lfReciprocal;
+            f32 lfParam1 = (lafMax[liAxis] - lafStart[liAxis]) * lfReciprocal;
+            if (lfParam1 < lfParam0)
+            {
+                const f32 lfSwap = lfParam0;
+                lfParam0 = lfParam1;
+                lfParam1 = lfSwap;
+            }
+
+            if (lfParam0 > lfEnter)
+            {
+                lfEnter = lfParam0;
+            }
+            if (lfParam1 < lfExit)
+            {
+                lfExit = lfParam1;
+            }
+            if (!(lfEnter <= lfExit))
+            {
+                lbIntersects = false;
+                break;
+            }
+        }
+
+        const auto MakeMask = [](bool lbValid)
+        {
+            rw::math::vpu::MaskScalar lMask;
+            const u32 luLane = lbValid ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&lMask.x, &luLane, sizeof(luLane));
+            std::memcpy(&lMask.y, &luLane, sizeof(luLane));
+            std::memcpy(&lMask.z, &luLane, sizeof(luLane));
+            std::memcpy(&lMask.w, &luLane, sizeof(luLane));
+            return lMask;
+        };
+
+        const auto MakeZero = []()
+        {
+            Vector3 lZero;
+            lZero.x = 0.0f;
+            lZero.y = 0.0f;
+            lZero.z = 0.0f;
+            lZero.w = 0.0f;
+            return lZero;
+        };
+
+        if (!lbIntersects)
+        {
+            lpaDest[0]      = MakeZero();
+            lpaDest[1]      = MakeZero();
+            lpaDestValid[0] = MakeMask(false);
+            lpaDestValid[1] = MakeMask(false);
+            return;
+        }
+
+        const f32 lafDirection[4] = {
+            lLineEnd.x - lLineStart.x,
+            lLineEnd.y - lLineStart.y,
+            lLineEnd.z - lLineStart.z,
+            lLineEnd.w - lLineStart.w
+        };
+
+        const auto PointAt = [&](f32 lfParam)
+        {
+            Vector3 lPoint;
+            lPoint.x = std::fma(lafDirection[0], lfParam, lLineStart.x);
+            lPoint.y = std::fma(lafDirection[1], lfParam, lLineStart.y);
+            lPoint.z = std::fma(lafDirection[2], lfParam, lLineStart.z);
+            lPoint.w = std::fma(lafDirection[3], lfParam, lLineStart.w);
+            return lPoint;
+        };
+
+        lpaDest[0]      = PointAt(lfEnter);
+        lpaDestValid[0] = MakeMask(true);
+        if (lfEnter < lfExit)
+        {
+            lpaDest[1]      = PointAt(lfExit);
+            lpaDestValid[1] = MakeMask(true);
+        }
+        else
+        {
+            lpaDest[1]      = MakeZero();
+            lpaDestValid[1] = MakeMask(false);
+        }
+    }
+
+    // ========================================================================
+    // CgsGeometric::ClipTriWithAABB @ 0x82840210.
+    //
+    // The stack slots and call sequence are taken from the X360 stream:
+    //  - twelve box edges, in the captured edge-pair order below;
+    //  - the three triangle edges V0->V1, V1->V2, V2->V0;
+    //  - the resulting points occupy lpaDest[0..17].
+    //
+    // The corner W lane is x (vperm control 0x82CDA350), not zero. Plane
+    // distances are the dot3 values consumed by ClipBoxEdgeAgainstTriangle.
+    // ========================================================================
+    void ClipTriWithAABB(Vector3* const                  lpaDest,
+                         rw::math::vpu::MaskScalar* const lpaDestValid,
+                         const AxisAlignedBox&            lAABox,
+                         Vector3                          lTriangleV0,
+                         Vector3                          lTriangleV1,
+                         Vector3                          lTriangleV2)
+    {
+        BT::TriangleData lTriangleData;
+        lTriangleData.Construct(lTriangleV0, lTriangleV1, lTriangleV2);
+
+        const f32 lfMinX = lAABox.mMin.x;
+        const f32 lfMinY = lAABox.mMin.y;
+        const f32 lfMinZ = lAABox.mMin.z;
+        const f32 lfMaxX = lAABox.mMax.x;
+        const f32 lfMaxY = lAABox.mMax.y;
+        const f32 lfMaxZ = lAABox.mMax.z;
+
+        const std::array<Vector3, 8> laCorners = {{
+            { lfMinX, lfMinY, lfMaxZ, lfMinX }, // var_400, slot 0
+            { lfMaxX, lfMinY, lfMinZ, lfMaxX }, // var_3D0, slot 1
+            { lfMinX, lfMaxY, lfMaxZ, lfMinX }, // var_3A0, slot 2
+            { lfMaxX, lfMaxY, lfMinZ, lfMaxX }, // var_370, slot 3
+            { lfMaxX, lfMinY, lfMaxZ, lfMaxX }, // var_340, slot 4
+            { lfMinX, lfMaxY, lfMinZ, lfMinX }, // var_310, slot 5
+            { lfMinX, lfMinY, lfMinZ, lfMinX }, // var_2E0, slot 6
+            { lfMaxX, lfMaxY, lfMaxZ, lfMaxX }  // var_2B0, slot 7
+        }};
+
+        const auto MakeSplat = [](f32 lfValue)
+        {
+            VecFloat lValue;
+            lValue.x = lfValue;
+            lValue.y = lfValue;
+            lValue.z = lfValue;
+            lValue.w = lfValue;
+            return lValue;
+        };
+
+        std::array<BT::BoxVertexData, 8> laBoxVertices;
+        for (s32 liCorner = 0; liCorner < static_cast<s32>(laCorners.size()); ++liCorner)
+        {
+            const Vector3& lrPosition = laCorners[static_cast<std::size_t>(liCorner)];
+            const f32 lfPlaneOffset = lrPosition.x * lTriangleData.mNormal.x
+                                    + lrPosition.y * lTriangleData.mNormal.y
+                                    + lrPosition.z * lTriangleData.mNormal.z;
+
+            laBoxVertices[static_cast<std::size_t>(liCorner)].mPosition = lrPosition;
+            laBoxVertices[static_cast<std::size_t>(liCorner)].mPlaneOffset = MakeSplat(lfPlaneOffset);
+            laBoxVertices[static_cast<std::size_t>(liCorner)].mPlaneOffsetFromTriangle =
+                MakeSplat(lfPlaneOffset - lTriangleData.mPlaneOffset.x);
+        }
+
+        // BoxVertexData stack slots from the X360 caller, in call order.
+        static const s32 laBoxEdgePairs[12][2] = {
+            { 6, 5 }, { 1, 3 }, { 0, 2 }, { 4, 7 },
+            { 6, 0 }, { 1, 4 }, { 6, 1 }, { 0, 4 },
+            { 5, 2 }, { 3, 7 }, { 5, 3 }, { 2, 7 }
+        };
+
+        for (s32 liEdge = 0; liEdge < 12; ++liEdge)
+        {
+            const BT::BoxVertexData& lrStart =
+                laBoxVertices[static_cast<std::size_t>(laBoxEdgePairs[liEdge][0])];
+            const BT::BoxVertexData& lrEnd =
+                laBoxVertices[static_cast<std::size_t>(laBoxEdgePairs[liEdge][1])];
+            lpaDestValid[liEdge] = ClipBoxEdgeAgainstTriangle(
+                lTriangleData, lrStart, lrEnd, lpaDest[liEdge]);
+        }
+
+        ClipTriEdgeAgainstBox(lpaDest + 12, lpaDestValid + 12, lAABox,
+                              lTriangleV0, lTriangleV1);
+        ClipTriEdgeAgainstBox(lpaDest + 14, lpaDestValid + 14, lAABox,
+                              lTriangleV1, lTriangleV2);
+        ClipTriEdgeAgainstBox(lpaDest + 16, lpaDestValid + 16, lAABox,
+                              lTriangleV2, lTriangleV0);
     }
 }
