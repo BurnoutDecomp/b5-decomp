@@ -349,19 +349,50 @@ namespace BrnDirector
                                                              const DirectorResourceManager& lrResources,
                                                              const char* lpcMenuPath)
     {
-        CGS_ASSERT(lpShotGroup != NULL, "lpShotgroup != NULL");
-        CGS_ASSERT(spDebugComponent != NULL, "spDebugComponent != NULL");
+        if (lpShotGroup == NULL)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpShotgroup != NULL",
+                "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp",
+                386);
+            CgsDev::Assert::EndAssert();
+        }
+        if (spDebugComponent == NULL)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "spDebugComponent != NULL",
+                "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp",
+                387);
+            CgsDev::Assert::EndAssert();
+        }
 
         const u32 luNumShots = lpShotGroup->Num_ShotList();
         for (u32 luLoop = 0; luLoop < luNumShots; ++luLoop)
         {
-            CGS_ASSERT(lpShotGroup->ShotList(luLoop)->GetClassKey()
-                           == static_cast<u64>(Attrib::Gen::iceanim::ClassKey()),
-                       "lpShotgroup->ShotList(luLoop).GetClassKey() == Attrib::Gen::iceanim::ClassKey()");
+            if (lpShotGroup->ShotList(luLoop)->GetClassKey()
+                != static_cast<u64>(Attrib::Gen::iceanim::ClassKey()))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "lpShotgroup->ShotList(luLoop).GetClassKey() == Attrib::Gen::iceanim::ClassKey()",
+                    "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp",
+                    398);
+                CgsDev::Assert::EndAssert();
+            }
 
             const Attrib::Gen::iceanim lIceAnim(*lpShotGroup->ShotList(luLoop), 0);
             const ICE::ICETakeData* const lpTakeData = lrResources.GetKeyAnimFromGuid(lIceAnim.GetAnimGuid());
-            CGS_ASSERT(lpTakeData != NULL, "lpTakeData != NULL");
+            if (lpTakeData == NULL)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "lpTakeData != NULL",
+                    "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp",
+                    401);
+                CgsDev::Assert::EndAssert();
+            }
 
             spDebugComponent->RegisterFunction(&ArbStateTestbed::ActivateIceCam,
                                                const_cast<Attrib::RefSpec*>(lpShotGroup->ShotList(luLoop)),
