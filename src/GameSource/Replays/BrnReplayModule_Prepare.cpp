@@ -87,19 +87,9 @@ namespace BrnReplays
             return false;
         }
 
-        // `CgsDev::DebugComponent::Register(a1 + 6297)` -- the replay debug component is not
-        // registered on this build (its component object is not modelled at that offset).
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[replays] NOT RECONSTRUCTED: ReplayModule::Prepare's "
-                    "CgsDev::DebugComponent::Register(this + 6297) and its "
-                    "rw::IResourceAllocator::AllocateMemoryResource(debug, 524360, 16, 0)\n");
-            }
-        }
+        // ARTIST 0x82652768 registers the component before acquiring allocator bank 48.
+        // Construct has now initialized this embedded component at the typed member mDebugComponent.
+        mDebugComponent.Register();
 
         mpLinearMalloc = lpAllocatorList->GetLinearAllocator(KI_REPLAY_LINEAR_BANK);
         if (mpLinearMalloc == 0)

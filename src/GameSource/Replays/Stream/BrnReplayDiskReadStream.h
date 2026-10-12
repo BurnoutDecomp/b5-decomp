@@ -34,8 +34,15 @@ extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
 
 namespace BrnReplays
 {
+    class ReplayModule;
+
     class DiskReadStream
     {
+        // ReplayModule::Construct initializes each inline ring slot's owner and the
+        // original 0x13C sentinel directly; this grants access without adding a
+        // wrapper or changing DiskReadStream behavior.
+        friend class ReplayModule;
+
     public:
         // ---- sizing (DWARF BrnReplayDiskReadStream.h:81-82) ----
         static const s32 KI_MAX_STREAM_BLOCKS = 32;    // ring slot count
@@ -155,6 +162,7 @@ namespace BrnReplays
         // (lwz 0x134 / lwz 0x138), the names are inferred from that use.
         s32             miNormalPriority;                    // X360 +0x134 priority when buffered
         s32             miUrgentPriority;                    // X360 +0x138 priority when starved
+        s32             miConsoleValue13C;                   // X360 +0x13C Construct stores -1; meaning unresolved
         // The compound device file handle {device, device-private handle}. The console packed
         // the pair into the two words here; this is the typed value itself.
         CgsFileSystem::Handle mHandle;                       // +0x140 open device file handle

@@ -2,6 +2,7 @@
 #include "GameSource/Replays/BrnReplayRequestInterface.h"   // ReplayIO::RequestInterface
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // BaseSerialiser
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList
+#include "GameSource/Resource/BrnResourceAllocator.h"       // Allocators / GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -15,6 +16,7 @@
 // BrnReplays::ReplayModule -- the constructor + the two off-path module methods.
 //
 //   * ReplayModule::ReplayModule         (runs on every boot)
+//   * ReplayModule::Construct             (the module's original runtime initialization)
 //   * ReplayModule::Update_Dispatch
 //   * ReplayModule::WaitForSerialiseJobs
 //   * ReplayModule::Destruct / WaitForOpenReplayFiles / UpdateRestoring_PostSim
@@ -61,6 +63,90 @@ namespace BrnReplays
         mGameEventCache.MarkUnconstructed();   // the console stores 0 at +0x23C
 
         // Embedded jobs (+0x2B10, the four at +0x4940, +0x5680) sub-construction DEFERRED.
+    }
+
+    // X360 0x82656E20. The embedded streams and debug component are initialized here,
+    // after the C++ object constructor and before Prepare registers the component.
+    void ReplayModule::Construct()
+    {
+        CgsModule::ModuleSingleBuffered::Construct();
+
+        // The X360 stores 2 at +0x22C, clears the base prepare-stage word at +0x228,
+        // then sets the replay state at +0x230 to IDLE. +0x22C has no recovered name.
+        muConsoleValue22C = 2;
+        mbPrepared = false;
+        meState = E_STREAM_STATE_IDLE;
+
+        CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+                   "Allocators::mpInternalDebugAllocator");
+        mDebugComponent.Construct(this, BrnResource::GetDebugAllocator());
+
+        mbStartPlaying = false;
+        mbStopPlaying = false;
+        mbStartRecording = false;
+        mbStopRecording = false;
+        mfCurrentRecordingTime = 0.0f;
+        mbMarkActionReplay = false;
+        mfConsoleValue625C = 0.0f;
+        mbStartActionReplay = false;
+        mbAutoStart = true;
+
+        mpLinearMalloc = 0;
+        mpRecordingBuffer = 0;
+        mpSmallRecordingBuffer = 0;
+        mpDebugMemoryResource = 0;
+        muConsoleValue918 = 0;
+        miConsoleValue924 = 10;
+        mbConsoleFlag238 = false;
+        maPad239[0] = 0;
+        maPad239[1] = 0;
+        maPad239[2] = 0;
+        miCurrentRecordReel = -1;
+        miCurrentPlaybackReel = -1;
+        mbConsoleFlag6258 = false;
+        mbConsoleFlag5C3E = false;
+
+        mGameEventCache.Construct();
+        mGameDataReceiverQueue.Construct();
+
+        // The module embeds a WriteStream whose first member is its LinearMalloc base.
+        // Preserve each original store by the existing typed member name.
+        mWriteStream.mHeaderMalloc.Construct();
+        mWriteStream.mpStreamHeader = 0;
+        mWriteStream.miStallCount = 0;
+        mWriteStream.mbEnded = true;
+        mWriteStream.mbPaused = false;
+        mWriteStream.mpStream = 0;
+        mWriteStream.miFilePosition = 0;
+        mWriteStream.miBufferPosition = 0;
+
+        mpReadStream = 0;
+        miReadBlockStart = 0;
+        muConsoleValue8F0 = 0;
+        mGpuWriteStream.Construct();
+
+        // ReplayModule::Construct inlines the owner assignment for all 32 disk-read
+        // slots, clears the stream status/range, and stores the original -1 sentinel.
+        mPrimaryDiskReadStream.miConsoleValue13C = -1;
+        mPrimaryDiskReadStream.meStatus = DiskReadStream::E_STATUS_CLOSED;
+        mPrimaryDiskReadStream.miLoopStart = 0;
+        mPrimaryDiskReadStream.miLoopEnd = 0;
+        for (s32 liBlock = 0; liBlock < DiskReadStream::KI_MAX_STREAM_BLOCKS; ++liBlock)
+            mPrimaryDiskReadStream.maBlocks[liBlock].mpOwner = &mPrimaryDiskReadStream;
+
+        meStreamStage = E_STREAM_STAGE_CLOSED;
+        for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+            mapSerialisers[liSerialiser] = 0;
+
+        for (s32 liReel = 0; liReel < 6; ++liReel)
+        {
+            maReels[liReel].macName[0] = '\0';
+            maReels[liReel].mbUsed = false;
+        }
+
+        mbConsoleFlag5C3C = false;
+        mbConsoleFlag5C3B = false;
+        muConsoleValue6260 = 0;
     }
 
     // Vtable slot 3. The debug component's teardown, the game-event cache's, then the module
