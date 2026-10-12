@@ -36,7 +36,7 @@
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 
 // BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
-extern u32 suOcclusionCullIndexCountThreshold;
+namespace CgsGraphics { extern u32 suOcclusionCullIndexCountThreshold; }
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -5080,7 +5080,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 
     // ARTIST 8240C0EC..8240C0F8 publishes renderer+0xC430 before loading
     // commands, dispatch conversion, shadow draws and environment-map draws.
-    suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
+    CgsGraphics::suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
 
     // Forward the dispatch buffer's loading-screen command into the renderer - the X360
     // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)),
