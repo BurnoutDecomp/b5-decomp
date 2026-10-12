@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // DebugInterface
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h" // DebugRender::Draw2DText
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // original streamed replay asserts
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameShared/GameClasses/System/CgsHardwareInit.h" // original unsupported EnableJobThread path
@@ -19,6 +20,7 @@
 #include <cstddef>  // ptrdiff_t for the serialized stream-header relative pointer
 #include <cstdint>  // uintptr_t for ReadStream's X360-relative header fix-up
 #include <cstdio>   // snprintf
+#include <cstring>  // strlen/strncpy for the original reel-name event
 
 // ============================================================================
 // GameSource/Replays/BrnReplayModule.cpp
@@ -55,6 +57,55 @@
 
 namespace BrnReplays
 {
+    namespace
+    {
+        struct ReplayPostSimWordPayload
+        {
+            u32 muValue;
+        };
+
+        struct ReplaySetModePayload
+        {
+            s32 miMode;
+        };
+
+        struct ReplayReelPayload
+        {
+            s32 miReel;
+        };
+
+        struct ReplaySelectReelPayload
+        {
+            s32 miReel;
+            u8 maFlags[3];
+        };
+
+        struct ReplayRenameReelPayload
+        {
+            s32 miReel;
+            char macName[1];
+        };
+
+        void FireReplayModuleAssert(const char* lpcMessage, s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                lpcMessage,
+                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp",
+                liLine);
+            CgsDev::Assert::EndAssert();
+        }
+
+        void FireReplayReelAssert(const char* lpcPrefix, s32 liReel,
+                                  const char* lpcSuffix, s32 liLine)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lMessage << lpcPrefix << liReel << lpcSuffix;
+            FireReplayModuleAssert(lMessage.GetBuffer(), liLine);
+        }
+    }
+
     ReplayModule::ReplayModule()
         : mSerialiseJob(nullptr)
     {
@@ -670,6 +721,207 @@ namespace BrnReplays
 
         ++miConsoleValue918;
         mfCurrentRecordingTime += 0.016666668f;
+    }
+
+    // ARTIST 0x8265F618. Copy the cached replay game events to the output buffer,
+    // consume the replay GUI command payloads, and dispatch the state-specific
+    // post-simulation body. The unnamed 0x8264E320 request reader is recovered in
+    // ReplayModuleIO as the const/read-locked overload.
+    void ReplayModule::Update_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                      ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                      BrnUpdateSet lUpdateSet)
+    {
+        CgsModule::LockBuffersForIO(lpOutputBuffer,
+                                    const_cast<ReplayIO::InputBuffer_PostSim*>(lpInputBuffer));
+        StoreSerialisers(*lpInputBuffer->GetRequestInterface());
+        lpOutputBuffer->AppendGameEventQueue(&mGameEventCache);
+        mGameEventCache.Clear();
+
+        mbConsoleFlag6258 = false;
+        mbConsoleFlag6259 = false;
+        mbConsoleFlag625A = false;
+
+        const ReplayIO::InputBuffer_PostSim::GuiEventQueue* lpGuiEvents =
+            lpInputBuffer->GetGuiEvent();
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventId = lpGuiEvents->GetFirstEvent(&lpEvent, &liEventSize);
+        while (lpEvent != 0)
+        {
+            switch (liEventId)
+            {
+            case 349:
+                muConsoleValue6260 =
+                    reinterpret_cast<const ReplayPostSimWordPayload*>(lpEvent)->muValue;
+                break;
+
+            case 525:
+            {
+                const s32 liMode = reinterpret_cast<const ReplaySetModePayload*>(lpEvent)->miMode;
+                if (static_cast<u32>(liMode) >= 2u)
+                    FireReplayModuleAssert("Invalid mode\n", 438);
+                miConsoleValue238 = liMode;
+                break;
+            }
+
+            case 526:
+            {
+                const ReplaySelectReelPayload* lpPlayEvent =
+                    reinterpret_cast<const ReplaySelectReelPayload*>(lpEvent);
+                const s32 liReel = lpPlayEvent->miReel;
+                if (miConsoleValue238 != 1)
+                    FireReplayModuleAssert("Invalid mode to trigger playback\n", 447);
+                if (meState != E_STREAM_STATE_IDLE)
+                    FireReplayModuleAssert("Invalid state to trigger playback\n", 448);
+                if (static_cast<u32>(liReel) >= 6u)
+                    FireReplayReelAssert("Reel ", liReel, " out of range\n", 449);
+                if (liReel == miCurrentRecordReel)
+                    FireReplayReelAssert("Currently recording to reel ", liReel,
+                                         " so can't play it\n", 450);
+                if (!maReels[liReel].mbUsed)
+                    FireReplayReelAssert("Reel ", liReel, " is empty so can't play it\n", 451);
+
+                if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                    *CgsDev::Log::gpDebugPrint << "Replay module playing back reel " << liReel << "\n";
+
+                miCurrentPlaybackReel = liReel;
+                mbConsoleFlag5C38 = lpPlayEvent->maFlags[0] != 0;
+                mbConsoleFlag5C39 = lpPlayEvent->maFlags[1] != 0;
+                mbConsoleFlag5C3B = false;
+                mbConsoleFlag5C3C = lpPlayEvent->maFlags[2] != 0;
+                break;
+            }
+
+            case 527:
+            {
+                const s32 liReel = reinterpret_cast<const ReplayReelPayload*>(lpEvent)->miReel;
+                if (miConsoleValue238 != 1)
+                    FireReplayModuleAssert("Invalid mode to trigger delete\n", 465);
+                if (meState != E_STREAM_STATE_IDLE)
+                    FireReplayModuleAssert("Invalid state to trigger delete\n", 466);
+                if (static_cast<u32>(liReel) >= 6u)
+                    FireReplayReelAssert("Reel ", liReel, " out of range\n", 467);
+                if (liReel == miCurrentRecordReel)
+                    FireReplayReelAssert("Currently recording to reel ", liReel,
+                                         " so can't delete it\n", 468);
+                if (!maReels[liReel].mbUsed)
+                    FireReplayReelAssert("Reel ", liReel, " is empty so can't delete it\n", 469);
+
+                if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                    *CgsDev::Log::gpDebugPrint << "Replay module deleting reel " << liReel << "\n";
+
+                maReels[liReel].mbUsed = false;
+                break;
+            }
+
+            case 528:
+                if (miConsoleValue238 != 1)
+                    FireReplayModuleAssert("Invalid mode to stop playback\n", 477);
+                if (meState != E_STREAM_STATE_PLAYING)
+                    FireReplayModuleAssert("Invalid state to stop playback\n", 478);
+                mbConsoleFlag6258 = true;
+                break;
+
+            case 529:
+                if (miConsoleValue238 != 1)
+                    FireReplayModuleAssert("Invalid mode to stop playback\n", 485);
+                if (meState != E_STREAM_STATE_PLAYING)
+                    FireReplayModuleAssert("Invalid state to stop playback\n", 486);
+                if (!mbConsoleFlag5C3C)
+                    mbConsoleFlag5C3B = true;
+                break;
+
+            case 530:
+                if (miConsoleValue238 != 1)
+                    FireReplayModuleAssert("Invalid mode to stop playback\n", 496);
+                if (meState != E_STREAM_STATE_PLAYING)
+                    FireReplayModuleAssert("Invalid state to stop playback\n", 497);
+                mbConsoleFlag5C3C = false;
+                mbConsoleFlag5C3B = false;
+                break;
+
+            case 531:
+                mbConsoleFlag6259 = true;
+                break;
+
+            case 532:
+                mbConsoleFlag625A = true;
+                break;
+
+            case 533:
+                if (meState == E_STREAM_STATE_RECORDING &&
+                    mGpuWriteStream.GetStatus() == GPUDiskWriteStream::KI_STATE_OPEN &&
+                    !(mfStopRecordingTime > 0.0f))
+                    mWriteStream.ResetStream();
+                break;
+
+            case 594:
+            {
+                const ReplayRenameReelPayload* lpRenameEvent =
+                    reinterpret_cast<const ReplayRenameReelPayload*>(lpEvent);
+                const char* lpcName = lpRenameEvent->macName;
+                if (std::strlen(lpcName) >= 0x100u)
+                {
+                    char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                    CgsDev::StrStream lMessage(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                    lMessage << "String too long: " << lpcName;
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        lMessage.GetBuffer(),
+                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                        55);
+                    CgsDev::Assert::EndAssert();
+                }
+                std::strncpy(maReels[lpRenameEvent->miReel].macName, lpcName,
+                             sizeof(maReels[lpRenameEvent->miReel].macName));
+                break;
+            }
+
+            default:
+                break;
+            }
+
+            liEventId = lpGuiEvents->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        }
+
+        switch (meState)
+        {
+        case E_STREAM_STATE_IDLE:
+            break;
+        case E_STREAM_STATE_RECORDING:
+            UpdateRecording_PostSim(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+            break;
+        case E_STREAM_STATE_PLAYING:
+            UpdatePlaying_PostSim(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+            break;
+        case E_STREAM_STATE_RESTORING:
+            UpdateRestoring_PostSim(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+            break;
+        default:
+            FireReplayModuleAssert("Invalid update state for replay module\n", 569);
+            break;
+        }
+
+        if (lpInputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                272);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                273);
+            CgsDev::Assert::EndAssert();
+        }
+        lpInputBuffer->UnlockForRead();
+        lpOutputBuffer->UnlockForWrite();
     }
 
     // ARTIST 0x826608A8. Read the replay header, stream its frunks, and drive the
