@@ -71,6 +71,15 @@ namespace CgsSceneManager
         // ARTIST helper bodies are recovered from the same two owned component files.
         void BuildSpacialMap();
         void DrawPolySoups(CgsDev::Debug3DImmediateRender* lpRenderer);
+        bool IsPolyVisible(const rw::math::vpu::Vector3* lapVertices,
+                           s32 liNumVertices,
+                           CgsDev::Debug3DImmediateRender* lpRenderer);
+        static void DrawCollisionPoly(CgsDev::Debug3DImmediateRender* lpRenderer,
+                                      const rw::math::vpu::Vector3* lapVertices,
+                                      s32 liNumVertices,
+                                      rw::math::vpu::Vector3 lrNormal,
+                                      u32 luSurfaceTag,
+                                      s32 liPolyIndex);
         void UpdateViewFrustum(CgsDev::Debug3DImmediateRender* lpRenderer);
         void TestPolySoupSphereCollision(CgsDev::Debug3DImmediateRender* lpRenderer);
         void TestPolySoupBoxCollision(CgsDev::Debug3DImmediateRender* lpRenderer);

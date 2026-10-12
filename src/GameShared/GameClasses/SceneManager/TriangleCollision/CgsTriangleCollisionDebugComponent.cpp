@@ -1,7 +1,10 @@
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionDebugComponent.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManager.h"
+
+#include <cmath>
 
 namespace CgsSceneManager
 {
@@ -167,6 +170,73 @@ namespace CgsSceneManager
         lpManager->GetPolySoupListSpacialMap()->BuildSpacialPartition(
             &mMalloc, miNumLevels, 0x800);
         miMemUse = static_cast<s32>(mMalloc.GetUsage());
+    }
+
+    // ARTIST 0x828AAE08. For each of the six planes, count vertices whose camera-relative
+    // signed distance is strictly negative. The console returns false once all three
+    // triangle vertices are behind any plane; an empty input returns true.
+    bool TriangleCollisionDebugComponent::IsPolyVisible(
+        const rw::math::vpu::Vector3* lapVertices,
+        s32 liNumVertices,
+        CgsDev::Debug3DImmediateRender* lpRenderer)
+    {
+        if (liNumVertices <= 0)
+            return true;
+
+        const rw::math::vpu::Vector3 lvCameraPosition = lpRenderer->GetCameraPosition();
+        const rw::collision::Frustum& lrFrustum = mViewFrustum;
+        for (u32 luPlane = 0; luPlane < 6; ++luPlane)
+        {
+            const rw::collision::Plane& lrPlane = lrFrustum.GetPlane(luPlane);
+            const f32 lfNormalLength = std::sqrt(
+                lrPlane.x * lrPlane.x + lrPlane.y * lrPlane.y + lrPlane.z * lrPlane.z);
+            const f32 lfInverseNormalLength = 1.0f / lfNormalLength;
+            const f32 lfNormalX = lrPlane.x * lfInverseNormalLength;
+            const f32 lfNormalY = lrPlane.y * lfInverseNormalLength;
+            const f32 lfNormalZ = lrPlane.z * lfInverseNormalLength;
+
+            s32 liVerticesBehindPlane = 0;
+            for (s32 liVertex = 0; liVertex < liNumVertices; ++liVertex)
+            {
+                const rw::math::vpu::Vector3& lrVertex = lapVertices[liVertex];
+                const f32 lfSignedDistance =
+                    (lrVertex.x - lvCameraPosition.x) * lfNormalX +
+                    (lrVertex.y - lvCameraPosition.y) * lfNormalY +
+                    (lrVertex.z - lvCameraPosition.z) * lfNormalZ;
+                if (lfSignedDistance < 0.0f)
+                    ++liVerticesBehindPlane;
+            }
+
+            if (liVerticesBehindPlane == 3)
+                return false;
+        }
+
+        return true;
+    }
+
+    // ARTIST 0x828AAFC0. DrawPolySoupPoly calls this class-scoped routine with the
+    // renderer in r3 (no component `this`); each registered callback receives the
+    // original geometry, normal, surface tag, and polygon index after its user data.
+    void TriangleCollisionDebugComponent::DrawCollisionPoly(
+        CgsDev::Debug3DImmediateRender* lpRenderer,
+        const rw::math::vpu::Vector3* lapVertices,
+        s32 liNumVertices,
+        rw::math::vpu::Vector3 lrNormal,
+        u32 luSurfaceTag,
+        s32 liPolyIndex)
+    {
+        for (s32 liCallback = 0; liCallback < siNumDrawPolyCallbacks; ++liCallback)
+        {
+            DrawCollisionPolyCallbackData& lrCallback =
+                GetDrawCollisionPolyCallback(liCallback);
+            lrCallback.GetCallback()(lpRenderer,
+                                     lrCallback.GetUserData(),
+                                     lapVertices,
+                                     liNumVertices,
+                                     lrNormal,
+                                     luSurfaceTag,
+                                     liPolyIndex);
+        }
     }
 
     // ARTIST 0x828AAA68. Register each original field, its range/step/read-only rule, then
