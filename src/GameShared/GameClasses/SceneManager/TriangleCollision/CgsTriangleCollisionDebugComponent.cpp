@@ -2,6 +2,10 @@
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox4.h"
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupList.h"
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManager.h"
 
 #include <cmath>
@@ -183,6 +187,94 @@ namespace CgsSceneManager
             const rw::math::vpu::Vector4 lPlane(
                 lrClipPlane.x, lrClipPlane.y, lrClipPlane.z, -lrClipPlane.w);
             mViewFrustum.SetPlane(luPlane, rw::collision::Plane(lPlane));
+        }
+    }
+
+    // ARTIST 0x828C09D8. Cull each soup list against the camera, then cull each
+    // soup by its typed AxisAlignedBox4 bounds or the original strict 100-unit
+    // squared-distance limit. Polygon and optional AABB drawing retain soup-list
+    // order, and the callback-facing liSoup remains the soup index within its list.
+    void TriangleCollisionDebugComponent::DrawPolySoups(
+        CgsDev::Debug3DImmediateRender* lpRenderer)
+    {
+        CGS_ASSERT(lpRenderer != 0, "lpDisplay != NULL");
+
+        static const u32 KAU_SOUP_COLOURS[16] =
+        {
+            0x608080FFu, 0x6000FFFFu, 0x6080FF80u, 0x60FF0000u,
+            0x60400080u, 0x60808040u, 0x60FFFF00u, 0x600080FFu,
+            0x60FF0080u, 0x60C0C0C0u, 0x60008000u, 0x600000FFu,
+            0x60800040u, 0x60000000u, 0x60FFFFFFu, 0x60C08000u
+        };
+
+        const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap =
+            mpTriCollisionManager->GetPolySoupListSpacialMap();
+        const s32 liNumPolySoupLists = lpSpatialMap->GetNumPolySoupLists();
+        const rw::math::vpu::Vector3 lvCameraPosition = lpRenderer->GetCameraPosition();
+        const rw::math::vpu::Vector4 lvCameraPoint(lvCameraPosition.GetVector());
+
+        for (s32 liSoupList = 0; liSoupList < liNumPolySoupLists; ++liSoupList)
+        {
+            const CgsGeometric::PolygonSoupList* lpSoupList =
+                lpSpatialMap->GetPolySoupList(liSoupList);
+
+            CgsGeometric::AxisAlignedBox lSoupListBounds;
+            lSoupListBounds.mMin.Set(lpSoupList->mOverallAabb[0],
+                                     lpSoupList->mOverallAabb[1],
+                                     lpSoupList->mOverallAabb[2],
+                                     lpSoupList->mOverallAabb[3]);
+            lSoupListBounds.mMax.Set(lpSoupList->mOverallAabb[4],
+                                     lpSoupList->mOverallAabb[5],
+                                     lpSoupList->mOverallAabb[6],
+                                     lpSoupList->mOverallAabb[7]);
+            if (!lSoupListBounds.ContainsPoint(lvCameraPoint))
+                continue;
+
+            const CgsGeometric::PolygonSoup* const* lppaPolySoups =
+                reinterpret_cast<const CgsGeometric::PolygonSoup* const*>(
+                    lpSoupList->mpapPolySoups);
+            const CgsGeometric::AxisAlignedBox4* lpaSoupBounds =
+                reinterpret_cast<const CgsGeometric::AxisAlignedBox4*>(
+                    lpSoupList->mpaPolySoupBoxes);
+
+            for (s32 liSoup = 0; liSoup < lpSoupList->miNumPolySoups; ++liSoup)
+            {
+                CGS_ASSERT(liSoup >= 0 && liSoup < lpSoupList->miNumPolySoups,
+                           "liPolySoupIndex >= 0 && liPolySoupIndex < GetNumPolygonSoups()");
+                const s32 li4BoxIndex = liSoup / 4;
+                const s32 liNum4Boxes = (lpSoupList->miNumPolySoups + 3) & ~3;
+                CGS_ASSERT(li4BoxIndex >= 0 && li4BoxIndex < liNum4Boxes,
+                           "li4BoxIndex >= 0 && li4BoxIndex < GetNum4Boxes()");
+
+                const CgsGeometric::PolygonSoup* lpPolySoup = lppaPolySoups[liSoup];
+                const CgsGeometric::AxisAlignedBox lSoupBounds =
+                    lpaSoupBounds[li4BoxIndex].GetAxisAlignedBox(
+                        static_cast<u32>(liSoup % 4));
+                const rw::math::vpu::Vector4& lrMin = lSoupBounds.mMin;
+                const rw::math::vpu::Vector4& lrMax = lSoupBounds.mMax;
+                const f32 lfDx = lvCameraPosition.x - (lrMin.x + lrMax.x) * 0.5f;
+                const f32 lfDy = lvCameraPosition.y - (lrMin.y + lrMax.y) * 0.5f;
+                const f32 lfDz = lvCameraPosition.z - (lrMin.z + lrMax.z) * 0.5f;
+                const f32 lfSqDistToSoup = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+
+                if (!lSoupBounds.ContainsPoint(lvCameraPoint) && !(lfSqDistToSoup < 10000.0f))
+                    continue;
+
+                for (u32 lu8Poly = 0; lu8Poly < lpPolySoup->mu8NumPolygons; ++lu8Poly)
+                {
+                    DrawPolySoupPoly(lpRenderer, lpPolySoup, liSoup,
+                                     static_cast<u8>(lu8Poly), true);
+                }
+
+                if (mbDrawSoupAabbs)
+                {
+                    const rw::math::vpu::Vector3 lvMin(lSoupBounds.mMin.GetVector());
+                    const rw::math::vpu::Vector3 lvMax(lSoupBounds.mMax.GetVector());
+                    const u32 luColour = KAU_SOUP_COLOURS[static_cast<u32>(liSoup) % 16u]
+                                       | 0xFF000000u;
+                    lpRenderer->DrawBox(lvMin, lvMax, static_cast<rw::RGBA>(luColour));
+                }
+            }
         }
     }
 
