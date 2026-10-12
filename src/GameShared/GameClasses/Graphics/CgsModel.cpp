@@ -16,6 +16,19 @@
 
 namespace CgsGraphics
 {
+    // ARTIST 827EC618: scan the serialized four-byte renderable slots, skipping
+    // null entries and returning on the first attested Renderable predicate hit.
+    bool Model::UsesTexture(const renderengine::Texture* lpTexture) const
+    {
+        for (u32 luIndex = 0; luIndex < mu8NumRenderables; ++luIndex)
+        {
+            const Renderable* lpRenderable = mppRenderables[luIndex].Get();
+            if (lpRenderable != nullptr && lpRenderable->UsesTexture(lpTexture))
+                return true;
+        }
+        return false;
+    }
+
     // GetRenderable @ 0x822A0AC8
     //   lbz   r11, 0x12(this)            ; mu8NumStates
     //   cmpw  leState, r11 ; assert leState < mu8NumStates
