@@ -144,8 +144,9 @@ namespace CgsDev
     // X360 CgsDev::DebugComponentPerfMonGpu::RenderPerformanceGraph @ 0x8282CEA0.
     // Draw the original frame, grid bars, 0/50/100/150/200% labels and mfMaxGpu reference bar, then
     // each reported monitor segment. Raw ARTIST loads and the original data strings pin the values.
-    // After ReportMonitors the function only raises a negative mfMaxGpu to zero; the following
-    // comparison of that zero floor against 200 cannot succeed. It does not grow the scale from totals.
+    // ReportMonitors updates the callback parameter's total. ARTIST reloads
+    // that same stack field after the callbacks and raises the stored maximum,
+    // capped at200, for the next frame's translucent reference bar.
     void DebugComponentPerfMonGpu::RenderPerformanceGraph( Debug2DImmediateRender* lpDebug2DRender )
     {
         // The user-data threaded through the per-monitor callback.
@@ -154,7 +155,7 @@ namespace CgsDev
         lParam.mpRender   = lpDebug2DRender;
         lParam.mfDrawX    = KF_GRAPHORIGINX;    // flt_82013FA8
         lParam.mfDrawY    = KF_GRAPHORIGINY;    // flt_820DDC58
-        lParam.mfTotalGpu = KF_GRAPHSCALEMIN;   // flt_82001CC0 (also the vertical-scale clamp floor)
+        lParam.mfTotalGpu = KF_GRAPHSCALEMIN;   // flt_82001CC0, initial callback total
 
         // sub_8281C960 is DrawFrame(x0,y0,x1,y1,colour,border); r8 carries packed color 0x80000000.
         lpDebug2DRender->DrawFrame( KF_GRAPHORIGINX, KF_GRAPHORIGINY,
@@ -203,12 +204,12 @@ namespace CgsDev
         // Draw every monitor's segment (report-total suppressed: last arg false).
         PerfMonGpu::ReportMonitors( &DebugComponentPerfMonGpu::RenderGraphCallback, &lParam, false );
 
-        // Preserve the original floor then cap sequence. With floor 0 and cap 200, the nested cap
-        // condition is unreachable; neither mfTotalGpu nor the just-drawn callbacks feed this test.
-        if ( mfMaxGpu < KF_GRAPHSCALEMIN )
+        // ARTIST8282D1D4 reloads var60: &var70+0x10, the total written by
+        // RenderGraphCallback. Compare after drawing, as the original does.
+        if ( mfMaxGpu < lParam.mfTotalGpu )
         {
-            mfMaxGpu = KF_GRAPHSCALEMIN;
-            if ( KF_GRAPHSCALEMIN > KF_GRAPHSCALEMAX )
+            mfMaxGpu = lParam.mfTotalGpu;
+            if ( lParam.mfTotalGpu > KF_GRAPHSCALEMAX )
                 mfMaxGpu = KF_GRAPHSCALEMAX;
         }
     }
