@@ -41,13 +41,12 @@ namespace CgsNetwork
         // never reads it.
         const f32 KF_DRAWBAR_BASELINE = 0.0f;
 
-        // Debug-menu option labels for the "Measurement Type" enum variable (the console's
-        // .rdata StringList[2]).
-        const CgsDev::DebugUI::StringList KA_AVERAGE_TYPES[3] =
+        // Exact two-entry ARTIST table at 0x820E964C. The console data has no null-name terminator;
+        // the registered range is 0..1. Keep the original table extent instead of appending a row.
+        const CgsDev::DebugUI::StringList KA_AVERAGE_TYPES[2] =
         {
             { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT, "Average Over Last Second" },
             { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_RUNNING, "Maximum Over Second"      },
-            { 0, nullptr },
         };
     }
 
