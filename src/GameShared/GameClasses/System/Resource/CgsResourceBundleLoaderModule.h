@@ -25,6 +25,7 @@ struct LoadedBundleData {
 };
 
 class BundleLoaderModule : public CgsModule::ModuleSingleBuffered {
+    friend class DebugComponent;
 public:
     enum EStage { E_STAGE_START=0, E_STAGE_RUNNING=1, E_STAGE_DONE=2 };
     enum EStreamStage {

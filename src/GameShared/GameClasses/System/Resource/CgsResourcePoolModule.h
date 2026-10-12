@@ -61,6 +61,8 @@ namespace CgsResource
 
     class PoolModule : public CgsModule::ModuleSingleBuffered
     {
+        friend class DebugPoolTypeList; //ARTIST828E4334..4388 reads the registered type names
+
     public:
         static const s32 KI_MAX_POOLS = 128;
         static const s32 KI_MAX_TYPES = 128;
