@@ -561,4 +561,46 @@ namespace CgsResource
         mUsedNodes.Init(0, 0);
         mbPrepared = false;
     }
+
+    // ARTIST828ECAE8. Only a dirty cache walks the used-node list; empty
+    // heaps still clear the dirty bit and cache a largest-free size of zero.
+    int Heap::GetLargestFreeBlock()
+    {
+        if (mbNeedToRecalcLargestFree)
+        {
+            u32 luLargestFree = 0;
+            HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : nullptr;
+            while (lpNode)
+            {
+                const HeapEntry* lpEntry = lpNode->GetData();
+                if (lpEntry->IsFree() && lpEntry->GetSize() > luLargestFree)
+                    luLargestFree = lpEntry->GetSize();
+                lpNode = mUsedNodes.GetNext(lpNode);
+            }
+            muLargestFree = luLargestFree;
+            mbNeedToRecalcLargestFree = false;
+        }
+        return static_cast<int>(muLargestFree);
+    }
+
+    // ARTIST828ECB78. This is free-node count / allocated-node count,
+    // with no division when there are at most one free nodes. The original
+    // permits an infinite result when multiple free nodes have no allocated node.
+    float Heap::GetFragmentationLevel()
+    {
+        u32 luFreeNodes = 0;
+        u32 luAllocatedNodes = 0;
+        HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : nullptr;
+        while (lpNode)
+        {
+            if (lpNode->GetData()->IsAllocated())
+                ++luAllocatedNodes;
+            else
+                ++luFreeNodes;
+            lpNode = mUsedNodes.GetNext(lpNode);
+        }
+        if (luFreeNodes <= 1u)
+            return 0.0f;
+        return static_cast<f32>(luFreeNodes) / static_cast<f32>(luAllocatedNodes);
+    }
 }

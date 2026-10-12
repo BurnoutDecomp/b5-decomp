@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
 #include <cmath>
 #include <cstring>
@@ -149,5 +151,153 @@ namespace CgsResource
         }
         return 0xFF000000u | (ColourByte(lfFirst) << 16) |
                (ColourByte(lfSecond) << 8) | ColourByte(lfThird);
+    }
+
+    // DecFIGS CgsDebugPoolWindow.cpp:387; inlined throughout ARTIST828F7250.
+    void DebugPoolWindow::AddTextLine(CgsDev::Debug2DImmediateRender* lpRender, char* lpcText,
+                                      CgsDev::RGBA lColour)
+    {
+        lpRender->DrawText(lpcText, GetX() + 2.0f, mrTextDrawPos, 14.0f, lColour);
+        mrTextDrawPos += 15.0f;
+    }
+
+    // ARTIST828F7250. The resource/selection lines precede the validity test;
+    // only the selected heap statistics and all-heap map are conditional on it.
+    void DebugPoolWindow::Render(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        CgsDev::DebugUI::Window::Render(lpRender);
+        mrTextDrawPos = GetY();
+        char lacText[1024];
+        const s32 liFreeResources = mpPool->muNumFreeResources;
+        const s32 liUsedResources = static_cast<s32>(mpPool->GetMaxResources()) - liFreeResources;
+        CgsCore::SPrintf(lacText, sizeof(lacText), "Resources: %d used, %d free",
+                        liUsedResources, liFreeResources);
+        AddTextLine(lpRender, lacText, 0xFF000000u);
+        CgsCore::SPrintf(lacText, sizeof(lacText), "DefragMode: SrcCopy, MM_LO");
+        AddTextLine(lpRender, lacText, 0xFF000000u);
+        mrTextDrawPos += 2.0f;
+        CgsCore::SPrintf(lacText, sizeof(lacText), "Selected Heap: %s", maHeaps[miSelectedHeap].macName);
+        AddTextLine(lpRender, lacText, 0xFF000000u);
+        CgsCore::SPrintf(lacText, sizeof(lacText), "    Pos: %d, BytesPerPixel: %d",
+                        static_cast<s32>(maHeaps[miSelectedHeap].muScroll),
+                        static_cast<s32>(maHeaps[miSelectedHeap].muBytesPerSegment));
+        AddTextLine(lpRender, lacText, 0xFF000000u);
+        if (mpPool->IsValid())
+        {
+            Heap* lpHeap = maHeaps[miSelectedHeap].mpHeap;
+            const u32 luTotal = lpHeap->GetTotalSizeBytes();
+            const u32 luFree = lpHeap->GetAmountFreeBytes();
+            const u32 luUsed = luTotal - luFree;
+            const u32 luLargestFree = static_cast<u32>(lpHeap->GetLargestFreeBlock());
+            const f32 lfFragmentation = lpHeap->GetFragmentationLevel();
+            CgsCore::SPrintf(lacText, sizeof(lacText),
+                            "    Size: %du (%.2fkb), Used: %ub (%.2fkb), Free: %du (%.2fkb)",
+                            static_cast<s32>(luTotal), static_cast<f32>(luTotal) * 0.0009765625f,
+                            luUsed, static_cast<f32>(luUsed) * 0.0009765625f,
+                            static_cast<s32>(luFree), static_cast<f32>(luFree) * 0.0009765625f);
+            AddTextLine(lpRender, lacText, 0xFF000000u);
+            CgsCore::SPrintf(lacText, sizeof(lacText),
+                            "    LargestBlock: %.2fkb, Fragmentation: %.2f",
+                            static_cast<f32>(luLargestFree) * 0.0009765625f, lfFragmentation * 100.0f);
+            AddTextLine(lpRender, lacText, 0xFF000000u);
+            f32 lfHeapY = mrTextDrawPos + 4.0f;
+            const f32 lfHeapHeight = ((GetHeight() + GetY()) - lfHeapY) /
+                                      static_cast<f32>(miNumHeaps) - 2.0f;
+            const f32 lfHeapStep = lfHeapHeight + 2.0f;
+            for (s32 liHeap = 0; liHeap < miNumHeaps; ++liHeap)
+            {
+                RenderHeap(lpRender, &maHeaps[liHeap], GetX(), lfHeapY, GetWidth(), lfHeapHeight);
+                lfHeapY = lfHeapStep + lfHeapY;
+            }
+        }
+    }
+
+    // ARTIST828EE540. Walk the original used-node list across each inclusive
+    // byte interval; exhaustion aborts the map rather than synthesizing a column.
+    void DebugPoolWindow::RenderHeap(CgsDev::Debug2DImmediateRender* lpRender,
+                                     HeapDisplayInfo* lpInfo, f32 lfX, f32 lfY,
+                                     f32 lfWidth, f32 lfHeight)
+    {
+        Heap* lpHeap = lpInfo->mpHeap;
+        lpRender->DrawText(lpInfo->macShortName, lfX,
+                           std::fma(lfHeight, 0.5f, lfY) - 4.0f, 14.0f, 0xFF000000u);
+        const u32 luBytesPerSegment = lpInfo->muBytesPerSegment;
+        // The original unsigned divides have zero-divisor traps. No extra
+        // range, validity, or empty-list guards are placed ahead of them.
+        const u32 luTotalSegments = lpHeap->GetTotalSizeBytes() / luBytesPerSegment;
+        const f32 lfPixelWidth = lfWidth - 29.0f;
+        u32 luPixelWord = 0;
+        // ARTIST828EE5D4..E5E0: fctidz, low32 word, then logical shift by1.
+        // The PPC indefinite result for non-finite/out-of-s64 values has low32=0.
+        if (std::isfinite(lfPixelWidth) && lfPixelWidth >= -9223372036854775808.0 &&
+            lfPixelWidth < 9223372036854775808.0)
+        {
+            luPixelWord = static_cast<u32>(static_cast<u64>(static_cast<s64>(lfPixelWidth)));
+        }
+        const u32 luColumns = luPixelWord >> 1;
+        const f32 lfBarX = lfX + 27.0f;
+        if (luTotalSegments != 0)
+        {
+            u32 luFirstSegment = lpInfo->muScroll / luBytesPerSegment;
+            if (luFirstSegment >= luTotalSegments - 1u)
+                luFirstSegment = luTotalSegments - 1u;
+            Heap::HeapEntryNode* lpNode = lpHeap->mUsedNodes.GetCount() > 0
+                ? lpHeap->mUsedNodes.GetHead() : nullptr;
+            u32 luBackgroundColumns = luTotalSegments - luFirstSegment;
+            if (luBackgroundColumns > luColumns)
+                luBackgroundColumns = luColumns;
+            const f32 lfBottom = lfY + lfHeight;
+            const CgsDev::RGBA lBackground = lpInfo == &maHeaps[miSelectedHeap]
+                ? 0xFF555555u : 0xFF222222u;
+            lpRender->DrawBox(lfBarX, lfY,
+                              static_cast<f32>(luBackgroundColumns << 1) + lfBarX, lfBottom, lBackground);
+            u32 luPixelX = 0;
+            for (u32 luColumn = 0; luColumn < luColumns; ++luColumn, luPixelX += 2u)
+            {
+                const u32 luColumnBytes = lpInfo->muBytesPerSegment;
+                const u32 luOffset = (luColumn + luFirstSegment) * luColumnBytes;
+                char* lpcStart = lpHeap->GetBaseAddress() + luOffset;
+                char* lpcEnd = lpcStart + luColumnBytes - 1u;
+                if (!lpNode)
+                    return;
+                while (!lpNode->GetData()->Contains(lpcStart))
+                {
+                    lpNode = lpHeap->mUsedNodes.GetNext(lpNode);
+                    if (!lpNode)
+                        return;
+                }
+                u32 luAllocated = 0;
+                for (;;)
+                {
+                    const HeapEntry* lpEntry = lpNode->GetData();
+                    if (lpEntry->IsAllocated())
+                    {
+                        const u32 luEntrySize = lpEntry->GetSize();
+                        u32 luCovered = luEntrySize;
+                        if (lpEntry->Contains(lpcStart))
+                            luCovered -= static_cast<u32>(lpcStart - lpEntry->GetAddress());
+                        if (lpEntry->Contains(lpcEnd))
+                        {
+                            luCovered -= luEntrySize;
+                            luCovered += static_cast<u32>(lpcEnd - lpEntry->GetAddress()) + 1u;
+                        }
+                        luAllocated += luCovered;
+                    }
+                    if (lpEntry->Contains(lpcEnd))
+                        break;
+                    lpNode = lpHeap->mUsedNodes.GetNext(lpNode);
+                    if (!lpNode)
+                        return;
+                }
+                if (luAllocated != 0)
+                {
+                    const f32 lfRatio = static_cast<f32>(luAllocated) /
+                                         static_cast<f32>(luColumnBytes);
+                    const f32 lfColumnX = static_cast<f32>(luPixelX) + lfBarX;
+                    const CgsDev::RGBA lColour = CalculateColour(lfRatio);
+                    lpRender->DrawBox(lfColumnX, lfY + 1.0f, lfColumnX + 2.0f, lfBottom - 1.0f, lColour);
+                }
+            }
+        }
     }
 }
