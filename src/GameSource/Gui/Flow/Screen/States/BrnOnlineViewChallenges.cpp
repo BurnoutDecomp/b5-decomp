@@ -46,7 +46,7 @@ void OnlineViewChallenges::OnEnter()
         u8 unused;
         Request() :  unused(0) {}
     } request;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(&request, 40, sizeof(request));
+    Output(mpStateInterface, request);
 }
 
 // ARTIST 0x824A1EC8.
