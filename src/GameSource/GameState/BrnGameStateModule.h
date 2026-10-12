@@ -1422,10 +1422,25 @@ private:
     // value for the window before Construct.
     bool mbPropSystemNeedsProgression = false;
 
-    // Console +0x475EC (292332): the PerfMonCpu handle ProcessGameEvents brackets its walk with.
-    // The console's Construct registers it as "Process events" (this tree's Construct does not register
-    // the module's monitors yet); -1 is the unregistered handle StartMonitor ignores.
+    // DecFIGS :887..904; ARTIST Construct stores these monitor handles at
+    // +0x475C4..+0x47604. The host follows named members, not console offsets.
+    s32 miTriggersPostPM = -1;
+    s32 miTriggersPrePM = -1;
+    s32 miShowTimeUpdate = -1;
+    s32 miCarSelectManagerUpdate = -1;
+    s32 miGameStatePrePM = -1;
+    s32 miGameStatePostPM = -1;
+    s32 miTakedownPM = -1;
+    s32 miDetectModeStartsPM = -1;
+    s32 miRoadRulesPM = -1;
+    s32 miDriveThrusPM = -1;
     s32 miProcessEventsPM = -1;
+    s32 miEmmUpdatePM = -1;
+    s32 miModeManagerPrePM = -1;
+    s32 miModeManagerPostPM = -1;
+    s32 miCopyingAndResettingPM = -1;
+    s32 miProcessContactsPM = -1;
+    s32 miStreetManagerPM = -1;
 
     // Console +0x32DC8 (208328), 48 bytes: the module's copy of the PreWorldInputBuffer's timer block,
     // taken at the top of ProcessGameEvents and read by the mode and scoring updates after it.
@@ -1979,6 +1994,14 @@ private:
     u16 muShowtimeRequestedTrafficIndex = 0xFFFFu;
 
 public:
+    // ARTIST 8238EF50; called inside PreWorldUpdate's input/output lock bracket.
+    // The event-queue argument is retained from the attested declaration even
+    // though ARTIST does not read it. The full PreWorldUpdate caller is pending.
+    void EmmPreWorldUpdate(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                          GameStateModuleIO::OutputBuffer* lpOutput,
+                          const GameStateModuleIO::GameEventQueue* lpGameEvents,
+                          bool lbIsOnline);
+
     // Called by EmmPreWorldUpdate's not-sim-paused arm
     // (GameStateModule_gUI_00.cpp leg 1c) with the output buffer and the pre-world input buffer's
     // ControllerInput; the caller holds the output buffer's write lock and the input buffer's read
