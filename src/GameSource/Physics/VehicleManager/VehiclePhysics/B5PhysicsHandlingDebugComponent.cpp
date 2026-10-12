@@ -285,7 +285,7 @@ namespace Vehicle
                 const f32 lfScale = HandlingReciprocal(2000.0f); // flt_82F2A504
                 const Vector3 lEnd = HandlingMultiplyAdd(maSuspensionForces[liWheel], lfScale, lStart);
                 lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
-                lpDisplay->DrawHollowSphere(lStart, mpRaceCarPhysics->maWheels[liWheel].mSlipVariables.w,
+                lpDisplay->DrawHollowSphere(lStart, mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mSlipVariables.w,
                                             HandlingColour(0xFFFFFFFFu));
             }
         }
@@ -350,12 +350,12 @@ namespace Vehicle
             for (s32 liWheel = 0; liWheel < 4; ++liWheel)
             {
                 const Matrix44Affine lTransform = mpRaceCarPhysics->GetTransform();
-                AssertHandlingWheelPosition(mpRaceCarPhysics->maWheels[liWheel].mPosition);
-                const Vector3 lLocalPosition = mpRaceCarPhysics->maWheels[liWheel].mPosition;
+                AssertHandlingWheelPosition(mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mPosition);
+                const Vector3 lLocalPosition = mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mPosition;
                 Vector3 lWorldPosition = HandlingMultiplyAdd(lTransform.xAxis, lLocalPosition.x, lTransform.wAxis);
                 lWorldPosition = HandlingMultiplyAdd(lTransform.yAxis, lLocalPosition.y, lWorldPosition);
                 lWorldPosition = HandlingMultiplyAdd(lTransform.zAxis, lLocalPosition.z, lWorldPosition);
-                lpDisplay->DrawSphere(lWorldPosition, mpRaceCarPhysics->maWheels[liWheel].mSlipVariables.w,
+                lpDisplay->DrawSphere(lWorldPosition, mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mSlipVariables.w,
                                         HandlingColour(0xFFFFFFFFu));
             }
             lpDisplay->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_ON);
@@ -390,7 +390,7 @@ namespace Vehicle
         const f32 lfBaseY = (lMetrics.mfScreenHeight - lMetrics.mfScreenBorderBottom) - 450.0f;
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
         {
-            const Wheel& lrWheel = mpRaceCarPhysics->maWheels[liWheel];
+            const Wheel& lrWheel = mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel));
             const Matrix44Affine lTransform = mpRaceCarPhysics->GetTransform();
             const Vector3 lLongDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLongDirection);
             const Vector3 lLatDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLatDirection);
@@ -841,11 +841,12 @@ namespace Vehicle
         RegisterVariable(&mbRenderFrontWheelsGripCurves, "Front wheel grip curves");
         RegisterVariable(&mbRenderRearWheelsGripCurves, "Rear wheel grip curves");
 
-        mFrontWheelsGripCurveWindow.Prepare(&mpRaceCarPhysics->maWheels[0],
-                                            &mpRaceCarPhysics->maWheels[1],
+        SimpleVehiclePhysics& lrSimplePhysics = *mpRaceCarPhysics;
+        mFrontWheelsGripCurveWindow.Prepare(lrSimplePhysics.GetWheel(eFrontLeftWheel),
+                                            lrSimplePhysics.GetWheel(eFrontRightWheel),
                                             "Front wheel grip curves");
-        mRearWheelsGripCurveWindow.Prepare(&mpRaceCarPhysics->maWheels[2],
-                                           &mpRaceCarPhysics->maWheels[3],
+        mRearWheelsGripCurveWindow.Prepare(lrSimplePhysics.GetWheel(eRearLeftWheel),
+                                           lrSimplePhysics.GetWheel(eRearRightWheel),
                                            "Rear wheel grip curves");
     }
 
