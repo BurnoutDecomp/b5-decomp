@@ -3,6 +3,10 @@
 
 #include "DebugSystem/Core/CgsDebugComponent.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceDebugPoolTypeList.h"  // embedded mPoolTypeList
+#include "GameShared/GameClasses/System/Resource/CgsDebugPoolWindow.h"
+#include "GameShared/GameClasses/System/Resource/CgsDebugPoolHistogram.h"
+#include "GameShared/GameClasses/System/Resource/CgsDebugPoolTextures.h"
+#include "GameShared/GameClasses/System/Resource/CgsDebugBundleFilesWindow.h"
 
 namespace CgsDev { namespace Log { struct LogFileBuffered; } }
 namespace rw { struct IResourceAllocator; }
@@ -28,10 +32,8 @@ struct DebugComponentParams
 // embeds it by value, runs Construct from its own Construct and registers it with the debug manager
 // at the end of its Prepare.
 //
-// Layout follows the class's declared member order. The console also embeds a window table
-// (mapWindows[4]) and four sub-windows ahead of maiPoolIds -- the pool window, the pool histogram,
-// the texture browser (DebugPoolTextures) and the bundle-files window -- beside mPoolTypeList; those
-// five members are not part of this class in this tree yet.
+// The original window table and all five windows are embedded in DecFIGS
+// declaration order, attested by ARTIST827E08D0 and the named consumers.
 class DebugComponent : public CgsDev::DebugComponent
 {
 public:
@@ -56,7 +58,12 @@ protected:
     // also holds (looked up by id) into maiPoolShareTestResults.
     void UpdateShareTest();
 
-    DebugPoolTypeList           mPoolTypeList;
+    CgsDev::DebugUI::Window*     mapWindows[KI_MAX_VISIBLE_POOLS];
+    DebugPoolWindow             mPoolWindow;
+    DebugPoolHistogram          mPoolHistogram;
+    DebugPoolTypeList            mPoolTypeList;
+    DebugPoolTextures           mPoolTextures;
+    DebugBundleFilesWindow      mBundleFilesWindow;
     s32                         maiPoolIds[KI_MAX_VISIBLE_POOLS];
     s32                         maiPrevPoolIds[KI_MAX_VISIBLE_POOLS];
     CgsDev::DebugUI::StringList maStringList[130];

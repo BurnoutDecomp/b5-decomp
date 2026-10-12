@@ -1,72 +1,49 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceDebugPoolTypeList.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
+#include <cstring>
 
 namespace CgsResource
 {
-
-// Read from the image's data section (three pointers, in EPoolTypeListMode order).
-const char* KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_COUNT] =
-{
-    "Raw",
-    "Detailed",
-    "Summary",
-};
-
-// CgsResource::DebugPoolTypeList::DebugPoolTypeList @ 0x827DF8E8
-//
-// Seed the debug pool-type accounting table. The X360 ctor installs the type's vtable, then runs
-// two element-construction loops with one running-total seeding pass between them:
-//
-//   * First loop (512 pool-type entries, counter 0x1FF..0 inclusive): the X360 calls the array
-//     constructor-iterator over the three rw::BaseResourceDescriptor of each entry (default-
-//     constructing them to size=alignment=0), then stores the qword {0,1} over the first
-//     descriptor -- i.e. seeds descriptor[0] = { m_size = 0, m_alignment = 1 }.
-//   * Between the loops: three running-total pairs are stored as {0,1} (the b-halves to 1, the
-//     a-halves to 0).
-//   * Second loop (7 category entries, counter 6..0 inclusive): same per-entry construction then
-//     descriptor[0] = { m_size = 0, m_alignment = 1 }.
-//
-// The C++ aggregate initialisation here reproduces those observable effects (the three descriptors
-// per entry start zeroed; descriptor[0] is seeded {0,1}; the running totals are seeded {0,1}). The
-// vtable is installed by entering this (virtual) type's constructor.
-DebugPoolTypeList::DebugPoolTypeList()
-{
-    for (s32 liIndex = 0; liIndex < KI_NUM_POOL_TYPES; ++liIndex)
+    const char* KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_COUNT] =
     {
-        PoolTypeEntry& lEntry = maPoolTypes[liIndex];
-        for (s32 liDesc = 0; liDesc < 3; ++liDesc)
+        "Raw", "Detailed", "Summary",
+    };
+
+    // ARTIST827DF8E8. Real BaseResourceDescriptor constructors initialize
+    // every descriptor to {0,1} (821F05C8). Retain the additional first-pair
+    // stores and the pool descriptor stores. Counts, names, mode and owner
+    // pointers are not initialized by this original constructor.
+    DebugPoolTypeList::DebugPoolTypeList()
+    {
+        for (s32 liIndex = 0; liIndex < KI_NUMTYPES; ++liIndex)
         {
-            lEntry.mDescriptors.m_baseResourceDescriptors[liDesc].m_size      = 0;
-            lEntry.mDescriptors.m_baseResourceDescriptors[liDesc].m_alignment = 0;
+            maTypes[liIndex].mSize.m_baseResourceDescriptors[0].m_size = 0;
+            maTypes[liIndex].mSize.m_baseResourceDescriptors[0].m_alignment = 1;
         }
-        // Seed the first sub-allocation descriptor (X360 std {0,1} over entry +0).
-        lEntry.mDescriptors.m_baseResourceDescriptors[0].m_size      = 0;
-        lEntry.mDescriptors.m_baseResourceDescriptors[0].m_alignment = 1;
-
-        lEntry.mauScratch[0] = 0;
-        lEntry.mauScratch[1] = 0;
-        lEntry.mauScratch[2] = 0;
-    }
-
-    for (s32 liIndex = 0; liIndex < KI_NUM_RUNNING_TOTALS; ++liIndex)
-    {
-        maRunningTotals[liIndex].muA = 0;
-        maRunningTotals[liIndex].muB = 1;
-    }
-
-    for (s32 liIndex = 0; liIndex < KI_NUM_CATEGORY_ENTRIES; ++liIndex)
-    {
-        CategoryEntry& lEntry = maCategoryEntries[liIndex];
-        for (s32 liDesc = 0; liDesc < 3; ++liDesc)
+        for (s32 liType = 0; liType < 3; ++liType)
         {
-            lEntry.mDescriptors.m_baseResourceDescriptors[liDesc].m_size      = 0;
-            lEntry.mDescriptors.m_baseResourceDescriptors[liDesc].m_alignment = 0;
+            mPoolDescriptor.m_baseResourceDescriptors[liType].m_size = 0;
+            mPoolDescriptor.m_baseResourceDescriptors[liType].m_alignment = 1;
         }
-        // Seed the first sub-allocation descriptor (X360 std {0,1} over entry +0).
-        lEntry.mDescriptors.m_baseResourceDescriptors[0].m_size      = 0;
-        lEntry.mDescriptors.m_baseResourceDescriptors[0].m_alignment = 1;
-
-        lEntry.muScratch = 0;
+        for (s32 liIndex = 0; liIndex <= E_DEBUGRESOURCECATEGORY_COUNT; ++liIndex)
+        {
+            maCategories[liIndex].mSize.m_baseResourceDescriptors[0].m_size = 0;
+            maCategories[liIndex].mSize.m_baseResourceDescriptors[0].m_alignment = 1;
+        }
     }
-}
 
+    // ARTIST828DABC8: title is the pool's name; seven category entries,
+    // including the COUNT slot, are cleared byte-for-byte after construction.
+    void DebugPoolTypeList::Reset(const Pool* lpPool, const PoolModule* lpPoolModule,
+                                  EPoolTypeListMode leMode)
+    {
+        CgsDev::DebugUI::Window::Prepare(100.0f, 100.0f, lpPool->GetName(), KX_FLAGNORMAL);
+        mpPool = lpPool;
+        mpPoolModule = lpPoolModule;
+        meMode = leMode;
+        mfTransparency = 0.75f;
+        miMaxResources = 0;
+        miNumTypes = 0;
+        std::memset(maCategories, 0, sizeof(maCategories));
+    }
 }
