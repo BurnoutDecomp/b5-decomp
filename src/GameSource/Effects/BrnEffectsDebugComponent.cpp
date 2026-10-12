@@ -75,22 +75,18 @@ namespace BrnEffects
 
     // ------------------------------------------------------------------------------------
     // EffectsDebugJumping / EffectsDebugProps constructors (declared in the header).
-    // EffectsDebugProps is left as the X360 leaves it (fields set up by SetupPropMenu and edited
-    // through the debug UI). EffectsDebugJumping is NOT: SetupJumpMenu only registers the menu
-    // entries, and the ARTIST Construct stores nothing into +0x64..+0x74, so on the console the
-    // defaults come from the member constructor the compiler folded into EffectsModule's. The
-    // one value the jump state machine reads unconditionally is seeded here:
-    // mfLandingSparksTime is the state-11 (FiringSparks) timer; at 0.0 the timer never expires
-    // and the machine sticks in FiringSparks after the first landing. The Xbox One build folds
-    // the constant into its OnChangeState case 11 as 0x3DCCCCCD == 0.1f (the same fold gives
-    // case 12's 3.0f, which matches the ARTIST rodata exactly, so the pair is trustworthy).
-    // The other four fields have no attested value yet and stay unseeded (FLAG).
+    // ARTIST folds these member defaults into EffectsModule's C++ constructor
+    // at827E366C..3684. SetupJumpMenu/SetupPropMenu only register the live fields.
     // ------------------------------------------------------------------------------------
     EffectsDebugJumping::EffectsDebugJumping()
     {
-        mfLandingSparksTime = 0.1f;   // Xbox One OnChangeState case 11: 0x3DCCCCCD
+        mbForceJumping = false;
+        mfJumpLandingSparkSpeed = 50.0f;
+        mfLandingSparksTime = 0.1f;
+        mfVapourDelayTime = 0.2f;
+        mfVapourRampTime = 0.2f;
     }
-    EffectsDebugProps::EffectsDebugProps() {}
+    EffectsDebugProps::EffectsDebugProps() : mbEnable(false), mMaterialIndex(0) {}
 
     // ====================================================================================
     // Construct - X360 0x82278C98
