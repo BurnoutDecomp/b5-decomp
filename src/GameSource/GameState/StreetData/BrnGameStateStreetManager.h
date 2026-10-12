@@ -639,6 +639,7 @@ namespace BrnGameState
         bool AreRoadsAFollowOnPair( BrnStreetData::RoadIndex liRoadIndex1, BrnStreetData::RoadIndex liRoadIndex2 );
 
     private:
+        friend class GameStateDebugComponent; // ARTIST GameStateDebugComponent::OnActivate binds the road-index state
         // ===== member layout (DWARF :499..:618 order; X360 offsets in comments) =====
         BrnStreetData::ChallengeHighScoreEntry   maNetworkChallengeData[KI_MAX_CHALLENGES];   // +0x0000
         BrnStreetData::ChallengePlayerScoreEntry maChallengeData[KI_MAX_CHALLENGES];          // +0x0E00

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                         // CgsID (CarSelect player-car-change grows)
+#include "BrnCommonTypes.h"                                         // CgsID and RenderWare math aliases
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
 #include "SharedClasses/BrnSharedConstants.h"                       // BrnUpdateSet (PostWorldUpdate)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
@@ -20,6 +20,7 @@
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
 #include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h" // BrnGameState::OnlineCarSelectManager (mOnlineCarSelectManager, by value)
 #include "GameSource/GameState/BrnResetPlayerDebugComponent.h"
+#include "GameSource/GameState/BrnGameStateDebugComponent.h" // embedded debug page registered by Prepare
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"          // [FX-BRIDGES CC-11] BrnAI::RouteMapModuleIO::RequestOwner (SendRouteRequestAction)
@@ -1213,6 +1214,7 @@ public:
     bool IsModeChangeInProgress() const;
 
 private:
+    friend class GameStateDebugComponent; // the original GameState debug page binds module-owned menu values
     // [P1 sim-pause] the PostWorldInput free function returns the private carry queue (see its
     // declaration above the class) -- friendship, not a fabricated public accessor, per the
     // GuiCache exposure rule.
@@ -1404,6 +1406,13 @@ private:
         BrnResource::ChallengeListEntry::E_FREEBURN_STYLE_NONE;
     // Console +0x475BC, reference header mfSimTimeStep. PreWorldUpdate latches the sim timer's
     // step here at its top; UpdateRoadRulesManager and StreetManager::Update read it.
+    // X360 +0x475B0..+0x475B6 (DecFIGS :440..:437): the four registered signature-takedown
+    // debug controls. The export set has no other body naming these variables; keep them as
+    // unresolved reader candidates until their full original consumer map is complete.
+    u32 muDebugSigTDRegionIndex;
+    bool mbDrawCrashDebugText;
+    bool mbDrawSignatureTakedownRegionText;
+    bool mbDebugMakeAllTakedownsSignature;
     f32 mfSimTimeStep = 0.0f;
 
     // [L4 WORLDVFX 2026-09-27] Console +0x475C0 (292288), DWARF BrnGameStateModule.h:449
@@ -1489,6 +1498,10 @@ private:
     // Street/road display state, held by value as in the original. The AI snapshot
     // is copied during PostWorldUpdate before the next street-tracking update.
     StreetManager                            mStreetManager;
+    // DecFIGS BrnGameStateModule.h:870; ARTIST RenderNextLandmarkInfo reads zAxis/wAxis at
+    // this+0x47590/+0x475A0. The matrix starts immediately after StreetManager
+    // (X360 +0x456C8, sizeof 0x1E08), at +0x47570.
+    Matrix44Affine                            mPlayerCarTransform;
     RoadRulesManager                         mRoadRulesManager;
     BrnAI::AIModuleIO::AICarOutputInterface    mLastAICarOutputInterface;
 
@@ -1675,8 +1688,9 @@ private:
     // GetOutputGuiEventQueue() returns". It is not -- that one is a VariableEventQueue<18432,16>
     // at a different offset (its accessor is X360 0x823566F8); +248384 is this <1536,16> queue,
     // as both Append<1536,16> call sites prove. That comment had no member behind it either.
-    CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
+    GameStateDebugComponent mGameStateDebugComponent; // ARTIST +0x32DF8 (208376)
     ResetPlayerDebugComponent mResetPlayerDebugComponent; // ARTIST +0x32EA0 (208544)
+    CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
 
     // ⚠️ [FLAG PC bring-up] X360 this+46640. The console embeds TrainingManager BY VALUE here
     // (PreWorldUpdate @0x823A5328 calls `TrainingManager::Update(a1 + 46640, ...)`, and four
@@ -1888,6 +1902,12 @@ private:
     // (`stb r29(=0), 0(r31)` @0x82380F78). Construct @0x82380388 stores 0.
     bool               mbToggleShowtimeBehaviour        = false;
 
+    // X360 +284511/+284514 (0x4575F/0x45762), DecFIGS DWARF :404/:380. These are the two
+    // snap-race controls registered by GameStateDebugComponent::OnActivate; Construct sets both
+    // true. ShouldStartSnapRaceMode's ARTIST body does not read either byte, so their original
+    // reader disposition remains unresolved pending the complete image-wide consumer scan.
+    bool               mbDebugLimitSnapRaceStartConditions;
+
     // X360 +284510 (0x4575E), DWARF :857. "The car has been on the ground at some point during the
     // intro window." Cleared when the window opens (`stbx r28(0), r30, r9`, r9 == 0x4575E,
     // @0x8239A6C8) and OR-ed every frame with `!(mfTimeInAir > 0.0f)` (@0x8239A7A0..0x8239A7BC).
@@ -1908,6 +1928,7 @@ private:
     // Starts false: the console's own initial state is "not in showtime", so the first entry into
     // showtime IS a rising edge, which is exactly what makes the first post happen.
     bool mbWasInShowtimeGameMode        = false;
+    bool mbAllowSnapRaceMode;
 
     // =========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH-CHAIN HAND-OFF, three members.

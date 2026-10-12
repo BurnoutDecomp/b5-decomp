@@ -160,6 +160,7 @@ public:
     bool IsTipAllowedInGameMode(BrnProgression::ETrainingType leTrainingType) const;
 
 private:
+    friend class GameStateDebugComponent; // ARTIST PlayTrainingMessageCallback stores these two slots in order
     // X360 0x82365FC8. Pick the next unseen Atomika free-burn VO tip (ids 128+miNext..); called
     // by Update's idle arm once the player has free-burned long enough. [tut-ticker] bodied.
     void PlayNewAtomikaFreeburnVO();
