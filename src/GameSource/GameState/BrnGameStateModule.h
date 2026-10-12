@@ -361,6 +361,14 @@ public:
     // game-event snapshots into the module, runs the mode manager and the trigger queries, then
     // ProcessContacts, the per-car crashing flags, the player-index publish and the boost tips.
     // Body in GameStateModule_wW_01.cpp.
+    // ARTIST 823A5328; DecFIGS BrnGameStateModule.cpp:1032. The original
+    // caller owns its input/output lock and temporary event-queue lifetime.
+    void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                        CgsModule::IOBufferStack* lpOutputBufferStack,
+                        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                        GameStateModuleIO::OutputBuffer* lpOutput,
+                        BrnUpdateSet lUpdateSet);
+
     void PostWorldUpdate(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
                          CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                          const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer,
@@ -459,16 +467,8 @@ public:
     // between `RumbleManager::UpdatePauseState` and the `(a6 & 8)` TriggerQueryManager block,
     // inside the `LockForWrite(lpOutput)` bracket, monitored by the +292348 PerfMon slot.
     //
-    // [FLAG PC bring-up] ONE deviation, the same one PreWorldUpdateStuntBringUp above carries
-    // and for the same measured reason: the frame's Time comes from a TimerStatusInterface
-    // handed in by the caller instead of from the module's own 48-byte copy of the
-    // PreWorldInputBuffer's timer block (the console reads gsm+208368, which is that copy's
-    // mSimTimerStatus.mTime -- EmmPreWorldUpdate @0x8238EF50 fills gsm+208328..+208372 with the
-    // twelve-word copy). Nothing on PC fills that block, so the console route would hand this
-    // function an all-zero "now" and every published mode time would be garbage. Same data, one
-    // copy earlier. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
-    void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput,
-                                 const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
+    // ARTIST 8236CDC0 reads the module timer cache, refreshed by EmmPreWorldUpdate.
+    void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput);
 
     // [takedown wave 2026-09-02] the manager's plumbing, bodied in GameStateModule_gTD_00.cpp:
     // Construct/Prepare at their console stages, the post-world input cache (the console's
@@ -491,7 +491,7 @@ public:
     // takedown the player scored it calls ScoringSystem::OnPlayerDoesATakedown (-> RoadRageModeScoring::
     // IncrementPlayerNumTakedowns, THE road-rage counter), the profile / achievement /
     // developer-challenge / telemetry hooks, and for a takedown the player SUFFERED in Marked Man it
-    // requests training tip 56. Four hooks are parked with log-once FLAGs -- see the partfile banner.
+    // requests training tip 56. The hooks are bodied in the partfile's existing chain.
     //
     // DWARF BrnGameStateModule.h:709:
     //     void ProcessTakedownEvents(InputBuffer::GameActionQueue*, const InputBuffer::TakedownEventQueue*,
@@ -508,14 +508,10 @@ public:
     // ProcessGameEvents (#68) and BEFORE EmmPreWorldUpdate (#86). Staged at that point in
     // PreWorldUpdateStuntBringUp.
     //
-    // [FLAG PC signature deviation] the FOURTH parameter, the same one CopyScoringDataToOutput
-    // above carries and for the same measured reason: the console's Time is gsm+208368, the module's
-    // copy of the PreWorldInputBuffer timer block, which nothing on PC fills. DELETE-WHEN
-    // DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
-    void ProcessTakedownEvents(GameStateModuleIO::GameActionQueue*            lpGameActionQueue,
+    // ARTIST 8238FC50 reads the module timer cache before this frame's EMM refresh.
+    void ProcessTakedownEvents(GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                                const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
-                               GameStateModuleIO::OutputBuffer*               lpOutputBuffer,
-                               const CgsSystem::TimerStatusInterface&         lrTimerStatusInterface);
+                               GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
     // ⭐ [FX-BRIDGES CC-11, 2026-09-24] SendRouteRequestAction -- X360 0x82381DC8, DWARF
     // BrnGameStateModule.h:648 (body BrnGameStateModule.cpp:5622). Turns a two-point
@@ -1988,7 +1984,7 @@ private:
 public:
     // ARTIST 8238EF50; called inside PreWorldUpdate's input/output lock bracket.
     // The event-queue argument is retained from the attested declaration even
-    // though ARTIST does not read it. The full PreWorldUpdate caller is pending.
+    // though ARTIST does not read it.
     void EmmPreWorldUpdate(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                           GameStateModuleIO::OutputBuffer* lpOutput,
                           const GameStateModuleIO::GameEventQueue* lpGameEvents,
