@@ -466,6 +466,7 @@ namespace CgsDev
         lpComponent->GetComponentPath(lacCompletePath, sizeof(lacCompletePath));
         DebugUI::Menu* lpComponentVariablePath =
             GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, nullptr);
+        CgsPC::Debug::BindIniComponentMenu(lpComponent, lpComponentVariablePath);
         // FLAG PC-platform leaf: passive, opt-in witness shared with the UI-key harness.
         if (std::getenv("BRN_DEBUG_UI_TRACE"))
         {

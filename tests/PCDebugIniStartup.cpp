@@ -5,6 +5,24 @@
 #include <cstdio>
 
 namespace CgsDev { struct DebugComponent {}; }
+namespace CgsDev::DebugUI
+{
+    struct Window {};
+    struct MenuWindow : Window {};
+    struct Menu { Menu* parent=nullptr; Menu* GetParent() const { return parent; } };
+    struct UI { int activations=0; void SetActiveWindow(Window*) { ++activations; } };
+    struct MenuManager
+    {
+        MenuWindow window;
+        UI ui;
+        bool existing=false;
+        int creations=0;
+        MenuWindow* FindMenuWindow(Menu*) { return existing ? &window : nullptr; }
+        MenuWindow* CreateMenuWindow(Menu*) { ++creations; return &window; }
+        UI& GetUI() { return ui; }
+        Window* Open(Menu*);
+    };
+}
 namespace BrnWorld
 {
     enum EActiveRaceCarIndex { E_ACTIVE_RACE_CAR_INDEX_0=0, E_ACTIVE_RACE_CAR_INDEX_COUNT=4 };
@@ -95,6 +113,21 @@ int main()
     CgsPC::Debug::SetIniComponent(&other,true);
     CgsPC::Debug::ResetIniComponents();
     Check(!CgsPC::Debug::IsIniComponent(&component) && !CgsPC::Debug::IsIniComponent(&other),"manager reconstruction clears all startup origins");
+    CgsDev::DebugUI::Menu rootMenu, childMenu, unrelated;
+    childMenu.parent=&rootMenu;
+    CgsDev::DebugUI::MenuManager menus;
+    CgsPC::Debug::SetIniComponent(&component,true);
+    CgsPC::Debug::BindIniComponentMenu(&component,&rootMenu);
+    menus.Open(&unrelated);
+    Check(CgsPC::Debug::IsIniComponent(&component),"unrelated menu navigation retains startup origin");
+    menus.Open(&childMenu);
+    Check(!CgsPC::Debug::IsIniComponent(&component),"real MenuManager::Open transfers a materialized child page to explicit activation");
+    CgsPC::Debug::SetIniComponent(&component,true);
+    CgsPC::Debug::BindIniComponentMenu(&component,&rootMenu);
+    menus.existing=true;
+    menus.Open(&rootMenu);
+    Check(!CgsPC::Debug::IsIniComponent(&component) && menus.ui.activations==1,
+          "reopening an existing component window transfers origin and preserves focus");
     std::printf("PCDebugIniStartup: %d checks, %d failures\n",checks,failures);
     return failures ? 1 : 0;
 }
