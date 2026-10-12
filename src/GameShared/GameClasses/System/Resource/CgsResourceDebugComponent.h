@@ -23,7 +23,8 @@ class Pool;
 // GameDataModule, debugAllocator = Allocators::mpInternalDebugAllocator.
 struct DebugComponentParams
 {
-    void*                   mpTextureRenderCallback;
+    typedef CgsResource::DebugTextureRenderCallback DebugTextureRenderCallback;
+    DebugTextureRenderCallback mpTextureRenderCallback;
     void*                   mpTextureRenderUserData;
     rw::IResourceAllocator* mpDebugAllocator;
 };
@@ -46,6 +47,17 @@ public:
     void Construct(ResourceModule* lpResourceModule, const DebugComponentParams* lpParams);
 
 protected:
+    void OnActivate() override;
+    void InitWindows();
+    void GenerateStringList();
+    static void TriggerDefragCallback(void* lpData);
+    static void IncTextureCallback(void* lpData);
+    static void DecTextureCallback(void* lpData);
+    static void IncPageCallback(void* lpData);
+    static void DecPageCallback(void* lpData);
+    static void TriggerStatsCallback(void* lpData);
+    static void ShowBundleWindowChangeCallback(void* lpValue, void* lpData);
+
     virtual const char* GetName() const { return "Resource"; }
     virtual const char* GetPath() const;
     virtual bool        IsSimple() const { return false; }
@@ -77,7 +89,7 @@ protected:
     bool                        mbShowBundleWindow;
     bool                        mbTriggerStatsDump;
     DebugComponentParams        mParams;
-    void*                       mpTextureRenderCallback;
+    DebugComponentParams::DebugTextureRenderCallback mpTextureRenderCallback;
     s32                         miStatsDumpCount;
     s32                         miPoolShareTest0;          // console +0x52FC
     s32                         miPoolShareTest1;          // console +0x5300
