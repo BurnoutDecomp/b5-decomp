@@ -26,26 +26,23 @@ namespace BrnNetwork
 {
     namespace
     {
-        // Per-stat debug-menu labels, indexed by NetworkPlayerStats::EStatsValue. Only index 0 is
-        // attested by the X360 asm (the file-scope name table `off_82F29F5C` whose first slot is
-        // "Total Events"); the remaining slots' string bytes are not in the available exports, so
-        // those labels are derived from the DecFIGS EStatsValue enum constant names (same documented
-        // approach as the sibling BrnNetworkServerInterfaceDebugComponent option labels). The table
-        // shape (12 entries, one per EStatsValue) and its first entry ARE attested.
+        // Exact X360 ARTIST strings from the 12-pointer table at off_82F29F5C. Slots 9 and 10
+        // point to the same "Games Started" string in the original table.
+        const char* const KPC_GAMES_STARTED = "Games Started";
         const char* const KPC_STAT_NAMES[NetworkPlayerStats::E_STATS_VALUE_COUNT] =
         {
-            "Total Events",              // E_STATS_VALUE_TOTAL_GAMES_COMPLETED (asm-attested)
-            "Ranked Games Completed",    // E_STATS_VALUE_RANKED_GAMES_COMPLETED
-            "Unranked Games Completed",  // E_STATS_VALUE_UNRANKED_GAMES_COMPLETED
-            "Win Percent",               // E_STATS_VALUE_WIN_PERCENT
-            "Takedowns",                 // E_STATS_VALUE_TAKEDOWNS
-            "Number Of Rivals",          // E_STATS_VALUE_NUMBER_OF_RIVALS
-            "Achievements Earnt",        // E_STATS_VALUE_ACHIEVEMENTS_EARNT
-            "Challenges Completed",      // E_STATS_VALUE_CHALLENGES_COMPLETED
-            "Rank",                      // E_STATS_VALUE_RANK
-            "Ranked Games Started",      // E_STATS_VALUE_RANKED_GAMES_STARTED
-            "Unranked Games Started",    // E_STATS_VALUE_UNRANKED_GAMES_STARTED
-            "Wins",                      // E_STATS_VALUE_WINS
+            "Total Events",
+            "Total Ranked Events",
+            "Total Unranked Events",
+            "Win Percent",
+            "Total Takedowns",
+            "Number of Rivals",
+            "Number of Scalps",
+            "Disconnect Percent",
+            "Rank",
+            KPC_GAMES_STARTED,
+            KPC_GAMES_STARTED,
+            "Races won",
         };
 
         // The custom-commands component for the local player's ELO get/set requests. The X360 reaches

@@ -328,3 +328,9 @@ private:
     T   maElements[N];
     s32 miCount;                 // live-element count; -1 == not yet Constructed/Cleared
 };
+
+// The Array<int,20> GetItem overloads have independently emitted X360 bodies with streamed
+// bounds-assert messages. Their explicit specializations live in CgsArrayInt20.cpp; the generic
+// accessors and operator[] remain unchanged for every other instantiation.
+template <> s32&       Array<s32, 20>::GetItem(u32 luIndex);
+template <> const s32& Array<s32, 20>::GetItem(u32 luIndex) const;

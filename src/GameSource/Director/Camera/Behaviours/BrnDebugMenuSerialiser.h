@@ -81,7 +81,14 @@ public:
         else if (meMode == E_MODE_REMOVE_FROM_MENU)
             mpDebugComponent->UnregisterFunction(lpfFunction, lpUserData);
         else
-            CGS_ASSERT(false, "unhandled case");
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "unhandled case",
+                "..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
+                311);
+            CgsDev::Assert::EndAssert();
+        }
     }
 
     // ---- leaf visitors ----------------------------------------------------------------

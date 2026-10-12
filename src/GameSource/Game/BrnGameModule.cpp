@@ -93,6 +93,9 @@ namespace BrnGame
     static bool         _lbForceAssert = false;
     static volatile s32 sbSimUpdateComplete = 0;
     bool                sbShowStreamStallMessage = false; // byte_82FAE28A
+    // Mutable UI latch from ARTIST byte_82FAE28C. Its original symbol and startup writer are
+    // unresolved; findinit finds only the BridgeGuiToGame read/clear sites.
+    static bool         sbForceQuitToStartMenu;
 
     BrnGameModule::BrnGameModule()
         : mpUpdateInputBufferStack(0)
@@ -298,6 +301,13 @@ namespace BrnGame
             mDebugManager.Construct(&lParams);
         }
 
+        // X360 Construct @0x823CA000 registers this mutable bool with an empty path. The raw
+        // path pointer (0x820046A7) is the NUL terminator at the end of "%s%s%s".
+        {
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            lDebugInterface.RegisterVariable(&sbForceQuitToStartMenu, "", "Force Quit to Start Menu");
+        }
+
         // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
         // 0x823A90A8), then register all 40 monitors. Rows are (name, page, minimum, budget-ms,
         // libperf-tagged), transcribed store-for-store from 0x823C9EA8 (the 5-arg AddMonitor:
@@ -467,40 +477,10 @@ namespace BrnGame
             mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
                 static_cast<CgsDev::PerfMonCpuPage>(liPage), KAPC_PERFMON_PAGE_NAMES[liPage]);
 
-        // ⭐ THE DEBUG-INTERFACE REGISTRATIONS, PINNED 2026-08-17 (boot audit F-P1-14). The
-        // note used to say only "Debug/Framerate + Debug/Sim (Step/Play via StepFrameCB/
-        // PlayFrameCB) + screenshot registrations". Read off Construct @0x823CAEBC-F48, they
-        // are three calls on a stack DebugInterface, and they do NOT all need the same thing:
-        //
-        //   DebugInterface lIface(&mDebugManager);                       @0x823CAEBC
-        //   lIface.SetOptions(<"Framerate type" under "Debug/Framerate">) @0x823CAF00
-        //   lIface.RegisterFunction("Step", "Debug/Sim", StepFrameCB)    @0x823CAF28
-        //   lIface.RegisterFunction("Play", "Debug/Sim", PlayFrameCB)    @0x823CAF48
-        //
-        // AVAILABLE: RegisterVariable + SetOptions are both on CgsDev::DebugInterface
-        // (CgsDebugInterface.h:80-92), and the variable is meFrameRateManagerType -- so the
-        // Framerate half needs only its StringList of type names recovered.
-        // ⭐ ...AND THE SIM HALF LANDED TOO, minutes later. I recorded RegisterFunction as
-        // "missing, do not invent the signature" -- then checked what was behind it:
-        // DebugUI::FunctionManager::RegisterFunction is already BODIED (CgsFunctionManager.cpp,
-        // X360 0x8282E7E0) with exactly the argument order the two call sites pin, and
-        // DebugUI::GetFunctionManager + DebugInterface::GetUI both exist. So the "missing API"
-        // was a four-line forwarder over machinery that was already there, and nothing had to
-        // be guessed. Registered below.
-        //
-        // @0x823CAEBC-F48 -- the Debug/Sim step + play actions.
-        {
-            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
-            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
-            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
-        }
-
-        // [gated] the rest of steps 7-9 (the
-        // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
-        // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
-        // via StepFrameCB/PlayFrameCB) + screenshot debug-interface registrations, and the two
-        // replay serialisers (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) -- their
-        // members/subsystems are not in this layout yet.
+        // [gated] The event-receiver queue at +10094268 and the two replay serialisers
+        // (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) still need their exact
+        // typed storage. The remaining menu controls are registered after timer setup below;
+        // the Force shutdown and Take screen shots bool readers/backends remain unproven.
 
         // NOTE: the bitmap debug font is NOT brought up here -- it arrives through GamePrepare's
         // id-5 AcquireResource reply (the console's own path: Font::CreateTextureState +
@@ -529,6 +509,10 @@ namespace BrnGame
         // seeds. Both are pure init so the order was not observable, but it was inverted
         // (boot audit F-P1-12).
         mMainFlowStateMachine.Construct();
+
+        // X360 Construct clears the registered bool at gm+10097332 (0x9A12B4) before timer
+        // setup and later exposes it as "Take screen shots". Its reader/backend is unresolved.
+        mbTakeScreenShots = false;
 
         {
             // ⚠️ FLAG PC QUALITY-OF-LIFE, 2026-08-17: THE SIMULATION RATE IS NOW FIXED AT
@@ -616,6 +600,29 @@ namespace BrnGame
                             : "CONSOLE-LOCKED (one simulation step per rendered frame)")
                     << ", min/max steps " << (s32)mi8FrameRateMinSteps << "/"
                     << (s32)mi8FrameRateMaxSteps << "\n";
+        }
+
+        // X360 Construct @0x823CAEBC-F48 registers the Framerate variable, its 0..2 range and
+        // options, then the two simulation actions. The option pairs are the raw table at
+        // 0x8203525C: {0,"Single"}, {1,"Multiple Capped"}, {2,"Multiple Uncapped"}.
+        {
+            static const CgsDev::DebugUI::StringList KAC_FRAMERATE_OPTIONS[] = {
+                {0, "Single"},
+                {1, "Multiple Capped"},
+                {2, "Multiple Uncapped"},
+            };
+
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            s32* const lpiFrameRateType = reinterpret_cast<s32*>(&meFrameRateManagerType);
+            lDebugInterface.RegisterVariable(lpiFrameRateType, "Debug/Framerate", "Framerate type");
+            lDebugInterface.SetRange(lpiFrameRateType, 0, 2);
+            lDebugInterface.SetOptions(lpiFrameRateType, KAC_FRAMERATE_OPTIONS);
+            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
+            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
+            lDebugInterface.RegisterVariable(&mbForceShutdown, "Debug/Sim", "Force shutdown");
+            lDebugInterface.RegisterVariable(&mbTakeScreenShots,
+                                             "Core/Debug/Performance/CPU Monitors",
+                                             "Take screen shots");
         }
 
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
@@ -757,6 +764,14 @@ namespace BrnGame
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
+        // X360 BridgeGuiToGame @0x823CB7A8/B8 polls and clears byte_82FAE28C before walking
+        // GUI events, then sets the game-flow return latch at gm+10094118.
+        if (sbForceQuitToStartMenu)
+        {
+            sbForceQuitToStartMenu = false;
+            BrnGameMainFlowController::gBrnReturnToFrontEndRequested = true;
+        }
+
         while (liId >= 0 && lpEvent != 0)
         {
             const s32 liCommand = liId;

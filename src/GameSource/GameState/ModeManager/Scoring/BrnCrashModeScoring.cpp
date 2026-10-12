@@ -205,23 +205,13 @@ namespace BrnGameState
     // (CgsRingBuffer.h:145 -> RingBuffer::Construct(maData, Length)), field for field and in the
     // same order, which is the cross-check that the offsets are read correctly.
     //
-    // [!] TWO STORES ARE NOT REPRODUCED, both into sub-objects this tree deliberately keeps as
-    // opaque byte storage, and both named rather than faked:
-    //   * +0x0C / +0x10 land inside maCrashScoreDebugComponent[0x20] -- the embedded
-    //     CrashScoreDebugComponent's own construction (owner pointer + enabled flag). Its real
-    //     type is homed in BrnCrashScoreDebugComponent.h and is not embedded here by value.
-    //     Behaviour lost: the crash-score debug overlay is not registered. Nothing on the
-    //     scoring path reads it.
-    //   * mRecentStuntSet (+0x280) was maRecentStuntSet[0x58], an opaque blob, so its attach
-    //     could not be written by name.
-    //     ✅ RESTORED 2026-08-29 (showtime-score wave), in the same change that un-opaqued the
-    //     member and landed DealWithShowtimeStunt -- exactly as this note demanded. It is no
-    //     longer inert: DealWithShowtimeStunt Pushes into it, so without the attach it would
-    //     repeat the prop-ring crash verbatim (mpData null, miMaxLength 0) on the first stunt
-    //     element scored in showtime.
+    // The previous opaque representations have now been replaced with named subobjects: the debug
+    // component's two stores, both FixedRingBuffer attachments, the recent-crash count clear, and
+    // the infinite-crash flag are represented by the following member accesses.
     // ------------------------------------------------------------------------
     void CrashModeScoring::Construct()
     {
+        mCrashScoreDebugComponent.Construct(this); // 0x82338058/0x82338060: owner and display flag
         mRecentlyHitPropSet.Construct();   // 0x82338068..0x82338078 (the five-store group)
         mRecentStuntSet.Construct();       // 0x8233807C..0x8233808C (the identical five stores)
         maRecentCrashes.Clear();           // 0x82338064  stw r30, 0x27C(r3)

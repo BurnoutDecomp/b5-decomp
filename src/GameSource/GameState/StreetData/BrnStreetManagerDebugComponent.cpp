@@ -6,7 +6,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager (OnTrophyUnlock / CheckForSpecialCarUnlocks / GetAchievementManager)
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h"  // AchievementManagerBase::OnSetAllRoadRules
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID, CgsIDCompress
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CgsDev::Assert
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The in-game debug menu for the road-rules
 // StreetManager. Seven of this TU's eight X360-attested functions are bodied here:
@@ -20,8 +20,8 @@
 //   * WinSpecificNumberOfCrashRoadRules (0x82341AC0) -- best-crash the first N roads, then award.
 //
 // The three Win* actions share an inlined "award road-rule trophies" tail that the X360 folds in
-// from BrnGameStateStreetManager.cpp (its two range asserts carry that file's line numbers); it is
-// reproduced faithfully in each action through the X360-attested StreetManager road-rule accessors
+// from BrnGameStateStreetManager.cpp; its two range asserts retain that file's original lines 2807
+// and 2808. The tail is represented once here through the X360-attested StreetManager accessors
 // (GetNumberOf*RuledByLocalPlayer / UpdateTrophyUnlockOnRoadRuleWin / GetProgressionManager, declared
 // on BrnGameStateStreetManager.h) and the now-committed ProgressionManager / AchievementManagerBase.
 //
@@ -69,8 +69,21 @@ void StreetManagerDebugComponent::SendRoadRulesScoresToNetwork( void* lpData )
     StreetManagerDebugComponent* lpStreetManagerDebugCmpt =
         static_cast<StreetManagerDebugComponent*>( lpData );
 
-    CGS_ASSERT( lpData != NULL, "lpData" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt != NULL, "lpStreetManagerDebugCmpt" );
+    if ( lpData == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpData",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            477);
+        CgsDev::Assert::EndAssert();
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            479);
+        CgsDev::Assert::EndAssert();
+    }
 
     lpStreetManagerDebugCmpt->mbOutputRoadRulesScoresToNetwork = true;
 }
@@ -81,10 +94,30 @@ void StreetManagerDebugComponent::PopulateUserChallengeScores( void* lpData )
     StreetManagerDebugComponent* lpStreetManagerDebugCmpt =
         static_cast<StreetManagerDebugComponent*>( lpData );
 
-    CGS_ASSERT( lpData != NULL, "lpData" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt != NULL, "lpStreetManagerDebugCmpt" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt->mpStreetManager != NULL,
-                "lpStreetManagerDebugCmpt->mpStreetManager" );
+    if ( lpData == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpData",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            165);
+        CgsDev::Assert::EndAssert();
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            167);
+        CgsDev::Assert::EndAssert();
+    }
+    if ( lpStreetManagerDebugCmpt->mpStreetManager == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt->mpStreetManager",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            168);
+        CgsDev::Assert::EndAssert();
+    }
 
     // A plain 64-bit linear-congruential generator (multiplier 0x5851F42D4C957F2D, increment 1
     // -- the well-known Vigna/PCG constant) seeded from the system timer and warmed up eight
@@ -155,10 +188,24 @@ namespace
             lpStreetManager->GetNumberOfCompleteRoadsRuledByLocalPlayer();
         const int32_t liTotalNumberOfRoads = lpStreetManager->GetStreetData()->GetRoadCount();
 
-        CGS_ASSERT( liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads,
-                    "liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads" );
-        CGS_ASSERT( liNumberOfTimeTrialRoadsRuled <= liTotalNumberOfRoads,
-                    "liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads" );
+        if ( liNumberOfShowTimeRoadsRuled > liTotalNumberOfRoads )
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads",
+                "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp",
+                2807);
+            CgsDev::Assert::EndAssert();
+        }
+        if ( liNumberOfTimeTrialRoadsRuled > liTotalNumberOfRoads )
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads",
+                "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp",
+                2808);
+            CgsDev::Assert::EndAssert();
+        }
 
         BrnProgression::ProgressionManager* lpProgressionManager =
             lpStreetManager->GetProgressionManager();
@@ -192,10 +239,30 @@ void StreetManagerDebugComponent::WinAllRoadRules( void* lpData )
     StreetManagerDebugComponent* lpStreetManagerDebugCmpt =
         static_cast<StreetManagerDebugComponent*>( lpData );
 
-    CGS_ASSERT( lpData != NULL, "lpData" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt != NULL, "lpStreetManagerDebugCmpt" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt->mpStreetManager != NULL,
-                "lpStreetManagerDebugCmpt->mpStreetManager" );
+    if ( lpData == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpData",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            292);
+        CgsDev::Assert::EndAssert();
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            294);
+        CgsDev::Assert::EndAssert();
+    }
+    if ( lpStreetManagerDebugCmpt->mpStreetManager == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt->mpStreetManager",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            295);
+        CgsDev::Assert::EndAssert();
+    }
 
     StreetManager* lpStreetManager = lpStreetManagerDebugCmpt->mpStreetManager;
 
@@ -229,10 +296,30 @@ void StreetManagerDebugComponent::WinSpecificNumberOfTimeRoadRules( void* lpData
     StreetManagerDebugComponent* lpStreetManagerDebugCmpt =
         static_cast<StreetManagerDebugComponent*>( lpData );
 
-    CGS_ASSERT( lpData != NULL, "lpData" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt != NULL, "lpStreetManagerDebugCmpt" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt->mpStreetManager != NULL,
-                "lpStreetManagerDebugCmpt->mpStreetManager" );
+    if ( lpData == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpData",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            207);
+        CgsDev::Assert::EndAssert();
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            209);
+        CgsDev::Assert::EndAssert();
+    }
+    if ( lpStreetManagerDebugCmpt->mpStreetManager == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt->mpStreetManager",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            210);
+        CgsDev::Assert::EndAssert();
+    }
 
     StreetManager* lpStreetManager = lpStreetManagerDebugCmpt->mpStreetManager;
 
@@ -259,10 +346,30 @@ void StreetManagerDebugComponent::WinSpecificNumberOfCrashRoadRules( void* lpDat
     StreetManagerDebugComponent* lpStreetManagerDebugCmpt =
         static_cast<StreetManagerDebugComponent*>( lpData );
 
-    CGS_ASSERT( lpData != NULL, "lpData" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt != NULL, "lpStreetManagerDebugCmpt" );
-    CGS_ASSERT( lpStreetManagerDebugCmpt->mpStreetManager != NULL,
-                "lpStreetManagerDebugCmpt->mpStreetManager" );
+    if ( lpData == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpData",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            255);
+        CgsDev::Assert::EndAssert();
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            257);
+        CgsDev::Assert::EndAssert();
+    }
+    if ( lpStreetManagerDebugCmpt->mpStreetManager == NULL )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpStreetManagerDebugCmpt->mpStreetManager",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp",
+            258);
+        CgsDev::Assert::EndAssert();
+    }
 
     StreetManager* lpStreetManager = lpStreetManagerDebugCmpt->mpStreetManager;
 
