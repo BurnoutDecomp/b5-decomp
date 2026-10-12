@@ -59,10 +59,9 @@ namespace BrnNetwork
     // it through the manager's normal new-personal-best path - a developer shortcut for testing the
     // online road-rules score flow. The decompiler's raw `v4 |= 1 / v5 |= 1` are the dirty/valid bit-0
     // sets on the two CgsContainers::BitArray<2u> sub-objects; reconstructed as named SetBit calls.
-    // The X360 inlines ScoreList::SetScore's [min,max] range guard here (KAI_MIN_SCORES/KAI_MAX_SCORES
-    // for E_SCORE_TYPE_TIME @ 0x820A764C/0x820A7654): the dirty/valid bit sets AND the SetScore call
-    // itself only run when the literal score 10 is within range; otherwise the record is pushed through
-    // untouched (still all-zero/unset from Construct()).
+    // The X360 sets the valid-score bit, then the dirty bit, then calls ScoreList::SetScore(TIME, 10)
+    // unconditionally. ScoreList::SetScore checks only the score-type index; the neighboring
+    // KAI_MIN_SCORES/KAI_MAX_SCORES tables are not consulted on this path.
     void RoadRulesManagerDebugComponent::TriggerPersonalBest( void* lpData )
     {
         CGS_ASSERT( lpData != nullptr, "lpData" );
@@ -75,14 +74,9 @@ namespace BrnNetwork
         BrnStreetData::ChallengePlayerScoreEntry& lScoreEntry = lPBEvent.mPersonalBestScore;
         lScoreEntry.Construct();
 
-        const int32_t kiScore = 10;
-        if ( kiScore >= BrnStreetData::ScoreList::KAI_MIN_SCORES[ BrnStreetData::E_SCORE_TYPE_TIME ] &&
-             kiScore <= BrnStreetData::ScoreList::KAI_MAX_SCORES[ BrnStreetData::E_SCORE_TYPE_TIME ] )
-        {
-            lScoreEntry.mDirty.SetBit( 0 );          // v4 |= 1: mark the TIME score dirty
-            lScoreEntry.mValidScores.SetBit( 0 );    // v5 |= 1: mark the TIME score valid
-            lScoreEntry.mScoreList.SetScore( BrnStreetData::E_SCORE_TYPE_TIME, kiScore );
-        }
+        lScoreEntry.mValidScores.SetBit( 0 );    // v5 |= 1 at +0x08: mark the TIME score valid
+        lScoreEntry.mDirty.SetBit( 0 );          // v4 |= 1 at +0x00: mark the TIME score dirty
+        lScoreEntry.mScoreList.SetScore( BrnStreetData::E_SCORE_TYPE_TIME, 10 );
 
         lPBEvent.mChallengeIndex     = 0;
         lPBEvent.mbLobbyPersonalBest = false;
