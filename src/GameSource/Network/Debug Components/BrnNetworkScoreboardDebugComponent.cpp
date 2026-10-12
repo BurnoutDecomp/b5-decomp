@@ -19,9 +19,9 @@
 // pull the next level down.
 //
 // The X360 inlines a "copy string with length check" CgsStringUtils helper (the per-name strlen + "String
-// too long: <name>" StrStream assert at 0x82585C1C / 0x82585DC0 / 0x82585F70) and the three streamed
-// assert messages; all are reduced to CGS_ASSERT per project convention. The decompiler's sub_8282D720 is
-// DebugComponent::RegisterVariable(s32*, name); sub_8282F598 is DebugComponent::SetRange(s32*, min, max).
+// too long: <name>" StrStream assertion at 0x82585C1C / 0x82585DC0 / 0x82585F70); the dynamic messages,
+// Begin/Fire/End order, and original assertion locations are retained below. The decompiler's
+// sub_8282D720 is DebugComponent::RegisterVariable(s32*, name); sub_8282F598 is DebugComponent::SetRange.
 
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"   // ScoreboardManager::HandleScoreboardEvent
@@ -43,14 +43,16 @@ namespace
     {
         if (std::strlen(lpcHeading) >= 31)
         {
+            CgsDev::Assert::BeginAssert();
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "String too long: ";
             lStrStream << (lpcHeading ? lpcHeading : "<NULLSTRING>");
-            FireOriginalAssert(
+            CgsDev::Assert::FireAssert(
                 lacMessage,
                 "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
                 55);
+            CgsDev::Assert::EndAssert();
         }
     }
 }
@@ -259,15 +261,17 @@ namespace BrnNetwork
         {
             // meHeadingType outside [0,2] (and != COUNT): a programming error. The X360 streams the
             // numeric type into the assert message ("Unhandled scoreboard event type: <n>\n").
+            CgsDev::Assert::BeginAssert();
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Unhandled scoreboard event type: ";
             lStrStream << static_cast<s32>(lpHeadingEvent->meHeadingType);
             lStrStream << "\n";
-            FireOriginalAssert(
+            CgsDev::Assert::FireAssert(
                 lacMessage,
                 "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
                 359);
+            CgsDev::Assert::EndAssert();
             break;
         }
         }
