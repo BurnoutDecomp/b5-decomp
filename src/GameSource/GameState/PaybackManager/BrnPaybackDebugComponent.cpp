@@ -14,13 +14,15 @@ namespace BrnGameState
     {
         // The shared dirty-trick options table (X360 &unk_8202AC40 in .rdata): each EPaybackType
         // value paired with its display name. CgsDev::DebugUI::StringList = { s32 miValue; const
-        // char* mpcName; }. The array decays to the const StringList* SetOptions takes.
+        // char* mpcName; }. Raw reads confirm the fourth entry's name pointer resolves to an empty
+        // string; keep that blank label rather than substituting the enum's descriptive name. The
+        // array decays to the const StringList* SetOptions takes.
         const CgsDev::DebugUI::StringList KA_DIRTY_TRICK_OPTIONS[] =
         {
-            { BrnNetwork::E_PAYBACK_TYPE_REVERSE_STEERING,                "Reverse Steering"   },
+            { BrnNetwork::E_PAYBACK_TYPE_REVERSE_STEERING,                "Reverse steering"   },
             { BrnNetwork::E_PAYBACK_TYPE_BOOST_LOCK,                      "Boost Lock"         },
-            { BrnNetwork::E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM, "Aggressor Controls" },
-            { BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING,               "Six Axis Steering"  },
+            { BrnNetwork::E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM, "Aggressor controls victim" },
+            { BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING,               ""                    },
         };
     }
 
