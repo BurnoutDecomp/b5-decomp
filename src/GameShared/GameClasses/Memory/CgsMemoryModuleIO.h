@@ -165,6 +165,14 @@ namespace MemoryIO
         s32                      GetSize() const         { return mnSize; }
         CgsMemory::HeapMalloc*   GetHeapAllocator() const   { return mpHeapAllocator; }
         CgsMemory::LinearMalloc* GetLinearAllocator() const { return mpLinearAllocator; }
+
+        void SetBankName(const char* lpcName);
+        void SetBankId(s32 liBankId);
+        void SetParentBankId(s32 liParentBankId);
+        void SetResourceType(s32 liResourceType);
+        void SetSize(s32 liSize);
+        void SetHeapAllocator(CgsMemory::HeapMalloc* lpAllocator);
+        void SetLinearAllocator(CgsMemory::LinearMalloc* lpAllocator);
     private:
         char                     macBankName[32];
         s32                      mnBankId;

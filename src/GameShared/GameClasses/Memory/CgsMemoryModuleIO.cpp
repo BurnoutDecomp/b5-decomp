@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::StrCpy
 
 #include <cstring>  // std::strncpy (models the X360 strncpy default-name fill)
 
@@ -74,5 +75,19 @@ namespace MemoryIO
         mParams.mbIsLeaf             = false;
         mParams.mbAllowFragmentation = true;
     }
+
+    // The X360 GameDataModule::CreateAllocators table path copies the records and writes its
+    // active allocator pointer directly; these public setters expose the same named fields.
+    void CreateAllocatorRequest::SetBankName(const char* lpcName)
+    {
+        CgsCore::StrCpy(macBankName, sizeof(macBankName), lpcName);
+    }
+
+    void CreateAllocatorRequest::SetBankId(s32 liBankId) { mnBankId = liBankId; }
+    void CreateAllocatorRequest::SetParentBankId(s32 liParentBankId) { mnParentBankId = liParentBankId; }
+    void CreateAllocatorRequest::SetResourceType(s32 liResourceType) { mnResourceType = liResourceType; }
+    void CreateAllocatorRequest::SetSize(s32 liSize) { mnSize = liSize; }
+    void CreateAllocatorRequest::SetHeapAllocator(CgsMemory::HeapMalloc* lpAllocator) { mpHeapAllocator = lpAllocator; }
+    void CreateAllocatorRequest::SetLinearAllocator(CgsMemory::LinearMalloc* lpAllocator) { mpLinearAllocator = lpAllocator; }
 }
 }
