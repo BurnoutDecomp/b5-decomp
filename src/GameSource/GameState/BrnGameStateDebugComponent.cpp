@@ -18,6 +18,8 @@
 #include "SharedClasses/Trigger/BrnRegion.h"
 #include "SharedClasses/Trigger/BrnTriggerBase.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
+#include "pc/math/VmxFloat.h"
+#include "SDKs/XboxMath/XMVectorACos.h"
 
 #include <cmath>
 
@@ -253,12 +255,11 @@ namespace
     void GameStateDebugComponent::DrawUpcomingRoads(CgsDev::Debug2DImmediateRender* lpRender)
     {
         StreetManager* lpStreetManager = mpGameStateModule->GetStreetManager();
-        const BrnStreetData::StreetData* lpStreetData = lpStreetManager->GetStreetData();
-
         const BrnStreetData::RoadIndex liLeftRoadIndex = lpStreetManager->mLeftRoadIndex;
         CgsID lLeftRoadId = 0;
         if (liLeftRoadIndex != -1)
         {
+            const BrnStreetData::StreetData* lpStreetData = lpStreetManager->GetStreetData();
             lLeftRoadId = lpStreetData->GetRoad(liLeftRoadIndex)->GetId();
         }
         const s32 liLeftRoadNameIndex = FindRoadNameIndexFromId(lLeftRoadId);
@@ -269,6 +270,7 @@ namespace
         CgsID lRightRoadId = 0;
         if (liRightRoadIndex != -1)
         {
+            const BrnStreetData::StreetData* lpStreetData = lpStreetManager->GetStreetData();
             lRightRoadId = lpStreetData->GetRoad(liRightRoadIndex)->GetId();
         }
         const s32 liRightRoadNameIndex = FindRoadNameIndexFromId(lRightRoadId);
@@ -332,8 +334,10 @@ namespace
             }
             else if (lpScoringSystem->IsTimeLimitActive())
             {
+                const CgsSystem::Time lModuleTime =
+                    mpGameStateModule->mTimerStatusInterface.GetSimTimerStatus()->GetTime();
                 const CgsSystem::Time lTimeRemaining =
-                    lpScoringSystem->GetModeTimeRemaining(lCurrentTime);
+                    lpScoringSystem->GetModeTimeRemaining(lModuleTime);
                 const s32 liRemainingSeconds = lTimeRemaining.GetSeconds();
                 CgsCore::SPrintf(macScoreText, KI_SCORE_TEXT_LENGTH,
                                  "Time remaining %d.%d",
@@ -487,80 +491,47 @@ namespace
             lpTriggerData->GetLandmarkFromRegionIndex(liLandmarkRegionIndex);
         const Matrix44Affine& lrPlayerCarTransform = mpGameStateModule->mPlayerCarTransform;
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-        const f32 lfDeltaX = lv3LandmarkPosition.x - lrPlayerCarTransform.wAxis.x;
-        const f32 lfDeltaY = lv3LandmarkPosition.y - lrPlayerCarTransform.wAxis.y;
-        const f32 lfDeltaZ = lv3LandmarkPosition.z - lrPlayerCarTransform.wAxis.z;
-        const f32 lfDistance = std::sqrt(lfDeltaX * lfDeltaX +
-                                         lfDeltaY * lfDeltaY +
-                                         lfDeltaZ * lfDeltaZ);
+        namespace vmx = CgsPC::VmxFloat;
+        Vector3 lv3Displacement = vmx::Subtract(lv3LandmarkPosition, lrPlayerCarTransform.wAxis);
+        lv3Displacement.w = 0.0f;
 
-        // ARTIST normalizes the transform's zAxis and the target displacement, then clamps their
-        // dot product to [-1,1] before XMVectorACos. Its VMX zero-vector selection leaves a zero
-        // direction at zero instead of dividing it by zero.
-        f32 lfForwardLength = std::sqrt(lrPlayerCarTransform.zAxis.x * lrPlayerCarTransform.zAxis.x +
-                                        lrPlayerCarTransform.zAxis.y * lrPlayerCarTransform.zAxis.y +
-                                        lrPlayerCarTransform.zAxis.z * lrPlayerCarTransform.zAxis.z);
-        f32 lfForwardX = 0.0f;
-        f32 lfForwardY = 0.0f;
-        f32 lfForwardZ = 0.0f;
-        if (lfForwardLength != 0.0f)
-        {
-            const f32 lfInverseLength = 1.0f / lfForwardLength;
-            lfForwardX = lrPlayerCarTransform.zAxis.x * lfInverseLength;
-            lfForwardY = lrPlayerCarTransform.zAxis.y * lfInverseLength;
-            lfForwardZ = lrPlayerCarTransform.zAxis.z * lfInverseLength;
-        }
+        // ARTIST8236C55C..5C4: one unconditional rsqrt refinement for
+        // each normalization, then the original VMX max/min and XDK ACos.
+        const Vector3 lv3Forward = vmx::Normalize3Unconditional(lrPlayerCarTransform.zAxis, 1);
+        const Vector3 lv3Direction = vmx::Normalize3Unconditional(lv3Displacement, 1);
+        const f32 lfLowerClampedDot = vmx::Maximum(vmx::Dot3(lv3Forward, lv3Direction), -1.0f);
+        const f32 lfForwardDot = std::isnan(lfLowerClampedDot) || lfLowerClampedDot < 1.0f
+            ? lfLowerClampedDot : 1.0f;
+        const f32 lfRelativeAngle = XboxMath::XMVectorACos(lfForwardDot);
 
-        f32 lfDirectionX = 0.0f;
-        f32 lfDirectionY = 0.0f;
-        f32 lfDirectionZ = 0.0f;
-        if (lfDistance != 0.0f)
-        {
-            const f32 lfInverseDistance = 1.0f / lfDistance;
-            lfDirectionX = lfDeltaX * lfInverseDistance;
-            lfDirectionY = lfDeltaY * lfInverseDistance;
-            lfDirectionZ = lfDeltaZ * lfInverseDistance;
-        }
-
-        f32 lfForwardDot = lfForwardX * lfDirectionX +
-                           lfForwardY * lfDirectionY +
-                           lfForwardZ * lfDirectionZ;
-        if (lfForwardDot < -1.0f)
-        {
-            lfForwardDot = -1.0f;
-        }
-        else if (lfForwardDot > 1.0f)
-        {
-            lfForwardDot = 1.0f;
-        }
-
-        f32 lfRelativeAngle = std::acos(lfForwardDot);
-        const f32 lfRightDot = lrPlayerCarTransform.xAxis.x * lfDirectionX +
-                               lrPlayerCarTransform.xAxis.y * lfDirectionY +
-                               lrPlayerCarTransform.xAxis.z * lfDirectionZ;
-        if (lfRightDot < 0.0f)
-        {
-            lfRelativeAngle = -lfRelativeAngle;
-        }
-
+        // The CRT sin/cos calls return double; ARTIST rounds each result
+        // to f32 before the scalar products. The side test uses displacement,
+        // not the normalized direction, and vsel has a distinct zero arm.
+        const f32 lfSin = static_cast<f32>(std::sin(static_cast<f64>(lfRelativeAngle)));
+        const f32 lfCos = static_cast<f32>(std::cos(static_cast<f64>(lfRelativeAngle)));
+        const f32 lfRightDot = vmx::Dot3(lrPlayerCarTransform.xAxis, lv3Displacement);
+        const f32 lfSide = lfRightDot > 0.0f ? 1.0f : (lfRightDot >= 0.0f ? 0.0f : -1.0f);
+        const f32 lfArrowHalfX = (lfSide * lfSin) * 30.0f;
+        const f32 lfArrowHalfY = lfCos * 30.0f;
         const Vector2 lv2ArrowCentre =
             { lrMetrics.mfScreenWidth - 80.0f, 60.0f, 0.0f, 0.0f };
-        const f32 lfArrowHalfX = std::sin(lfRelativeAngle) * 30.0f;
-        const f32 lfArrowHalfY = std::cos(lfRelativeAngle) * 30.0f;
-        const Vector2 lv2ArrowTail =
-        {
-            lv2ArrowCentre.x - lfArrowHalfX,
-            lv2ArrowCentre.y + lfArrowHalfY,
-            0.0f, 0.0f
-        };
         const Vector2 lv2ArrowTip =
         {
-            lv2ArrowCentre.x + lfArrowHalfX,
-            lv2ArrowCentre.y - lfArrowHalfY,
+            vmx::Subtract(lv2ArrowCentre.x, lfArrowHalfX),
+            vmx::Subtract(lv2ArrowCentre.y, lfArrowHalfY),
+            0.0f, 0.0f
+        };
+        const Vector2 lv2ArrowTail =
+        {
+            vmx::Subtract(vmx::Multiply(lv2ArrowCentre.x, 2.0f), lv2ArrowTip.x),
+            vmx::Subtract(vmx::Multiply(lv2ArrowCentre.y, 2.0f), lv2ArrowTip.y),
             0.0f, 0.0f
         };
         lrRender.Draw2DArrow(lv2ArrowTail, lv2ArrowTip, 0xFF00FFFFu);
 
+        // ARTIST8236C710..75C computes the displayed magnitude separately,
+        // with two refinements and its final zero selection.
+        const f32 lfDistance = vmx::Magnitude3(lv3Displacement);
         char lacDistanceText[336];
         const char* lpcDistancePrefix =
             static_cast<u32>(liNextLandmarkIndex) == luNumLandmarks ? "Finish" : "Next";
