@@ -14,7 +14,8 @@
 //
 // World grid constants (X360 GetCellId asm immediates): the world spans [-5000, +8000] in X
 // (half-extent 5000 + 3000 extension) and [-5000, +5000] in Z (half-extent 5000); cells are
-// 100 units square -- cellX = (s16)(lfX + 5000) / 100, cellZ = (s16)(lfZ + 5000) / 100.
+// 100 units square -- truncate each biased coordinate to s64, take its unsigned
+// low16 bits, then divide by100. Range assertions do not gate this calculation.
 namespace CgsDev { struct StrStreamBase; }
 
 namespace BrnPhysics
@@ -112,12 +113,10 @@ namespace Props
 
         // BrnPhysicsPropZoneData.h:216 -- map a world XZ position to its owning grid cell.
         // X360 @ 0x822BB2D0: range-asserts X/Z then computes (cellX, cellZ).
-        // CONST-QUALIFIED 2026-08-12 (prop-spawn wave): the DWARF renders this without
-        // a trailing const, but PropZoneManager::LoadProp -- whose own DWARF signature
-        // takes `const PropZoneData *` -- calls it on that const pointer, so the shipped
-        // declaration must be const (the body is pure: four range tripwires and two
-        // divisions, no member touched). Widening only; every existing caller still binds.
-        PropCellId GetCellId(f32 lfX, f32 lfZ) const;
+        // ARTIST takes hidden result r3 and floats f1/f2, with no implicit this.
+        // DecFIGS names the overload without const; object-call syntax at other
+        // callers does not imply an instance member. No zone data is accessed.
+        static PropCellId GetCellId(f32 lfX, f32 lfZ);
 
         // ADDITIVE GROW (PropZoneManager::LoadZone group): the three trivial header-inline
         // getters LoadZone (0x822FC168) reads off the streamed record. The X360 LoadZone

@@ -14,8 +14,29 @@
 // count, siNumDrawPolyCallbacks); both live in BSS and start zeroed.
 namespace CgsSceneManager
 {
-    DrawCollisionPolyCallback TriangleCollisionDebugComponent::siDrawPolyCallbacks[KI_MAX_NUM_COLLISION_POLY_CALLBACKS] = {};
+    DrawCollisionPolyCallbackData TriangleCollisionDebugComponent::siDrawPolyCallbacks[KI_MAX_NUM_COLLISION_POLY_CALLBACKS] = {};
     s32 TriangleCollisionDebugComponent::siNumDrawPolyCallbacks = 0;
+
+    // X360 0x828AAF18. The callback pointer and user data arrive in r3/r4 (there is no
+    // instance argument). The registry count is incremented only while a slot is
+    // available; a full table returns false without changing its contents.
+    bool TriangleCollisionDebugComponent::RegisterDrawCollisionPolyCallback(
+        DrawCollisionPolyCallbackData::DrawCollisionPolyCallback* lpCallbackFunc,
+        void* lpUserData)
+    {
+        CGS_ASSERT(lpCallbackFunc != 0, "lpHandlerFunc != NULL");
+
+        if (siNumDrawPolyCallbacks >= KI_MAX_NUM_COLLISION_POLY_CALLBACKS)
+        {
+            return false;
+        }
+
+        const s32 liIndex = siNumDrawPolyCallbacks++;
+        DrawCollisionPolyCallbackData& lrCallback = GetDrawCollisionPolyCallback(liIndex);
+        CGS_ASSERT(lpCallbackFunc != 0, "lpCallbackFunc != NULL");
+        lrCallback.Construct(lpCallbackFunc, lpUserData);
+        return true;
+    }
 
     // ------------------------------------------------------------------------
     // Register -- FLAG PC-platform leaf (2026-08-10, spatial-partition wave).

@@ -47,6 +47,8 @@ namespace BrnWorld
     // DWARF BrnCollisionTag.h:104.
     struct CollisionTag
     {
+        friend class CollisionDebugComponent;
+
         void Construct();                              // :110 (own slice)
         // Inlined two-halfword store, DWARF :115; preserve group/material order
         // when decoding the physics interface's packed host integer.

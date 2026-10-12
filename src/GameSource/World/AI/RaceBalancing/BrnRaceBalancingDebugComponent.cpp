@@ -161,8 +161,8 @@ void RaceBalancingDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lp
     Vector3 lv3Centre = lpCar->GetPosition();
     lv3Centre.y += 2.0f;            // flt_820C41F4 == 2.0 (added to the y lane)
 
-    // UNCERTAIN: the X360 colour immediate is 0xFF0000FF; mapped to red (255,0,0,255) -- the exact
-    // rw::RGBA channel packing is not byte-verified here.
+    // ARTIST passes 0xFF0000FF. rw::RGBA packs (alpha<<24)|(blue<<16)|(green<<8)|red, so this is
+    // the same packed value for red (255,0,0,255).
     lpDisplay->DrawSphere(lv3Centre, 1.0f /* flt_82001C98 */, rw::RGBA(255, 0, 0, 255));
 }
 
@@ -191,11 +191,10 @@ void RaceBalancingDebugComponent::DrawGraphFrame(CgsDev::Debug2DImmediateRender*
     // The two axis-name labels, offset from the origin (DrawGraphFrame @0x827747F8). X-label:
     // (origin.x + 50, origin.y + 10) -- vaddfp, asm-confirmed. Y-label: (origin.x - 50,
     // origin.y - flt_820C3FAC) -- vsubfp origin.x - var_70(=50.0) @0x827749F0, vsubfp origin.y -
-    // flt_820C3FAC @0x827749FC. The Y-label's Y offset is the un-dumped .rdata flt_820C3FAC
-    // (FLAGGED placeholder 50.0f until that rodata is dumped); the X offset is the exact -50.0.
+    // flt_820C3FAC @0x827749FC. Raw word 0x42C80000 pins flt_820C3FAC as 100.0.
     MaybeDrawText(lpDisplay, lpcXAxisLabel, lv2Origin.x + 50.0f, lv2Origin.y + 10.0f,
                   KF_TEXT_SCALE, K_WHITE, false);
-    MaybeDrawText(lpDisplay, lpcYAxisLabel, lv2Origin.x - 50.0f, lv2Origin.y - 50.0f,
+    MaybeDrawText(lpDisplay, lpcYAxisLabel, lv2Origin.x - 50.0f, lv2Origin.y - 100.0f,
                   KF_TEXT_SCALE, K_WHITE, false);
 }
 
@@ -279,9 +278,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         lStream.Reset();
         lOut << "Difficulty: ";
         const f32 lfDifficultyPercent = mpAIModule->GetDifficulty() * 100.0f;
-        // The X360 chooses a one-decimal vs whole-number format based on a mode field; reproduced as
-        // the float stream (the formatting nuance is not load-bearing for parity).
-        lOut << lfDifficultyPercent;
+        lOut << static_cast<s32>(lfDifficultyPercent); //ARTIST82796EE4: fctiwz, signed%d
         lOut << "%";
         MaybeDrawText(lpDisplay, lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE, false);
 
@@ -524,12 +521,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         {
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXCur, lv2AheadCur.y - 24.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2AheadPrev.y - 24.0f,
                           KF_TEXT_SCALE, K_WHITE, false);
 
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_BEHIND, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXCur, lv2BehindCur.y + 8.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2BehindPrev.y + 8.0f,
                           KF_TEXT_SCALE, K_WHITE, false);
         }
     }

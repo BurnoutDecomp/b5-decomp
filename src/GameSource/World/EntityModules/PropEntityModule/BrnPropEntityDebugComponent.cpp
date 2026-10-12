@@ -43,6 +43,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
 #include "rw/rwcore_structs.h"                                                      // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                   // Matrix44Affine operator*
+#include "pc/math/VmxFloat.h"
 
 #include <cstring>                                                                  // strlen
 #include <cmath>                                                                    // acosf (Lean angle stat)
@@ -54,6 +55,13 @@ namespace BrnWorld
         // World-space render distances (the squared form is what the X360 compares).
         const f32 KF_MAX_DIST_FOR_VOLUME_RENDERING = 30.0f;
         const f32 KF_MAX_DIST_FOR_STAT_RENDERING   = 20.0f;
+
+        // ARTIST loads this 16-byte vector at 0x82FAD600 in RenderInertiaBox. A CRT-bank leaf
+        // beginning at 0x82C4C270 would splat 1.5 into all four lanes, but its startup registration
+        // or execution has not been established. Keep a mutable source shadow and do not assert
+        // that the original runtime value is zero.
+        f32 gaInertiaScaleVector[4];
+        static_assert(sizeof(gaInertiaScaleVector) == 16, "ARTIST inertia scale is one VMX vector");
 
         // --- de-inlined rwmath helpers (the RwMath:: free functions the X360 folded in) ---
 
@@ -92,6 +100,21 @@ namespace BrnWorld
             lValue.z = lfValue;
             lValue.w = lfValue;
             return lValue;
+        }
+
+        // FLAG PC-platform leaf: scalar model of vrefp and the two original
+        // Newton refinements. Exact hardware estimate bits/status are unverified.
+        inline f32 RefinedCellGridReciprocal(f32 lfValue)
+        {
+            using namespace CgsPC::VmxFloat;
+            lfValue = Flush(lfValue);
+            f32 lfEstimate = Flush(1.0f / lfValue);
+            for (u32 luStep = 0; luStep < 2; ++luStep)
+            {
+                const f32 lfError = NegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
+                lfEstimate = MultiplyAdd(lfEstimate, lfError, lfEstimate);
+            }
+            return lfEstimate;
         }
     }
 
@@ -541,18 +564,15 @@ namespace BrnWorld
     // the box max corner, negates it (sign-bit XOR) for the min corner, and calls
     // DrawBox(min, max, lTransform, white).
     //
-    // FLAG (rodata): the per-axis scale/normalisation vector unk_82FAD600 (asm 0x822C54F4:
-    // `lvx128 v6, r0, r11` from unk_82FAD600) is an un-homed .rdata constant absent from the
-    // exports. The reciprocal/normalize/sqrt STRUCTURE, the zero guards, the min = -max, and the
-    // white DrawBox call are reconstructed EXACTLY; the numeric scale (KF_INERTIA_SCALE) stays 0
-    // until the constant is recovered, so the drawn extents are honest-inert. NEVER fabricated.
+    // The X360 loads the four-lane scale from unk_82FAD600. Its image bytes are zero, but the raw
+    // CRT-bank writer at 0x82C4C270 stores a splat of flt_82014A8C (1.5) into that vector. The leaf
+    // boundary is 0x82C4C270..0x82C4C294; no direct call or absolute pointer-table entry was found,
+    // so startup registration/execution remains unresolved. Preserve a mutable source shadow and
+    // the producer gap instead of treating the image-zero bytes as proof of an original no-op.
     void PropEntityDebugComponent::RenderInertiaBox(CgsDev::Debug3DImmediateRender* lpDisplay,
                                                     Matrix44Affine lTransform, Vector3 lCentre,
                                                     VecFloat lfExtent)
     {
-        // FLAG: un-homed .rdata scale vector unk_82FAD600 @ 0x822C54F4 -> honest flagged-0 placeholder.
-        static const f32 KF_INERTIA_SCALE = 0.0f;
-
         // Newton-refined reciprocal of the box extent (vrefp v11 + two vnmsubfp/vmaddfp steps),
         // scaled by the broadcast lfExtent (vmulfp128 v11, v11, v1).
         const f32 lfScale = lfExtent.x;
@@ -562,9 +582,9 @@ namespace BrnWorld
 
         // Per-axis inertia-diagonal combination (sum of the OTHER two lanes minus this lane),
         // each scaled by the un-homed constant, then sqrt (vrsqrtefp + Newton), zero-guarded.
-        const f32 lfTermX = (lfRy + lfRz - lfRx) * KF_INERTIA_SCALE;   // v11 = y+z-x
-        const f32 lfTermY = (lfRz + lfRx - lfRy) * KF_INERTIA_SCALE;   // v10 = z+x-y
-        const f32 lfTermZ = (lfRx + lfRy - lfRz) * KF_INERTIA_SCALE;   // v9  = x+y-z
+        const f32 lfTermX = (lfRy + lfRz - lfRx) * gaInertiaScaleVector[0]; // v11 = y+z-x
+        const f32 lfTermY = (lfRz + lfRx - lfRy) * gaInertiaScaleVector[1]; // v10 = z+x-y
+        const f32 lfTermZ = (lfRx + lfRy - lfRz) * gaInertiaScaleVector[2]; // v9  = x+y-z
 
         const f32 lfHx = (lfTermX > 0.0f) ? std::sqrt(lfTermX) : 0.0f;  // vcmpeqfp/vsel zero-guard
         const f32 lfHy = (lfTermY > 0.0f) ? std::sqrt(lfTermY) : 0.0f;
@@ -726,64 +746,76 @@ namespace BrnWorld
                    "strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE");
     }
 
-    // @ 0x822EFF48. The 2D top-down cell-grid map centred on the player's prop zone.
-    //
-    // SCOPE NOTE: the X360 body additionally walks the player zone's loaded-cell bitset
-    // (PropCellManager / PropZoneData internals at deep manager offsets) drawing each cell as
-    // a quad -- solid via DrawSolidConvexPolygon when the cell is active, wire via
-    // DrawWirePolygon otherwise -- and rings every occupied prop cell with a marker. That walk
-    // depends on the (not-yet-reconstructed) PropCellManager cell-grid layout and the
-    // out-of-line ToCellGridScreenCoords projector, so it is summarised here. What IS pinned
-    // from the asm is reconstructed faithfully: the projection-cache setup (map scale =
-    // 1000/mfCellGridZoom, written to mMapDimensions / mScreenSize / mfAspect) the projector
-    // reads, and the player-cell origin marker (blue circle) drawn last.
+    // @ 0x822EFF48. Loaded-cell quads, the used-slot prop markers, then the
+    // player's actual position. The original indexes maProps by the used-slot
+    // bit directly; it does not multiply that index by the per-zone capacity.
     void PropEntityDebugComponent::RenderCellGrid(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
-        // map scale = 1000 / zoom (X360 fdivs flt_82009E10(=1000.0) / mfCellGridZoom @ +0x40).
         const f32 lfMapScale = 1000.0f / mfCellGridZoom;
-        mMapDimensions.x = lfMapScale;
-        mMapDimensions.y = lfMapScale;
-        mScreenSize = lpDisplay->GetVirtualScreenSize();
-        mfAspect = (mScreenSize.y != 0.0f) ? (mScreenSize.x / mScreenSize.y) : 1.0f;
+        mMapDimensions = { lfMapScale, lfMapScale, 0.0f, 0.0f };
+        const Vector2 lVirtualSize = lpDisplay->GetVirtualScreenSize();
+        mScreenSize = { lVirtualSize.x, lVirtualSize.y, 0.0f, 0.0f };
+        mfAspect = CgsPC::VmxFloat::Multiply(
+            RefinedCellGridReciprocal(mScreenSize.y), mScreenSize.x);
 
-        // The player's current cell origin is ringed with a blue marker (X360: the final
-        // DrawCircle, 5 segments, ARGB 0xFF0000FF, after projecting the player cell world
-        // position through ToCellGridScreenCoords). The player cell position is read from the
-        // owning module's player-tracking state (manager +864800), reached out-of-line.
-        //
-        // FLAG: the marker radius is the .rdata float flt_820149B4 (asm 0x822F0550:
-        // `lfs f1, flt_820149B4@l(r10)`). That constant is not present in the IDA exports
-        // (only the symbol reference is dumped, not its value), so the radius below is a
-        // PLACEHOLDER -- see still_open. Modelled as a named const at the asm address.
-        const f32 KF_PLAYER_CELL_MARKER_RADIUS = 5.0f;  // FLAG: flt_820149B4 @ 0x822F0550 (value un-dumped)
-        const Vector2 lOrigin = ToCellGridScreenCoords(MakeVector3(0.0f, 0.0f, 0.0f));
-        lpDisplay->DrawCircle(lOrigin, KF_PLAYER_CELL_MARKER_RADIUS, 5, 0xFF0000FFu);  // ARGB 0xFF0000FF (blue)
+        // The result is unused, but the original range assertions still run.
+        BrnPhysics::Props::PropZoneData::GetCellId(
+            mpPropEntityModule->mPlayerPosition.x, mpPropEntityModule->mPlayerPosition.z);
+
+        PropZoneManager& lrZoneManager = mpPropEntityModule->mZoneManager;
+        PropCellManager& lrCellManager = lrZoneManager.mCellManager;
+        for (s32 liCell = 0; liCell < lrCellManager.miNumLoadedCells; ++liCell)
+        {
+            const PropCellRecord lCell = lrCellManager.maCells[liCell];
+            const BrnPhysics::Props::PropCellId lId = lCell.GetId();
+            const Vector3 lCorner0 = MakeVector3(
+                static_cast<f32>(100 * lId.GetX()) - 5000.0f, 0.0f,
+                static_cast<f32>(100 * lId.GetZ()) - 5000.0f);
+            const Vector3 lCorner1 = CgsPC::VmxFloat::Add(lCorner0, MakeVector3(100.0f, 0.0f, 0.0f));
+            const Vector3 lCorner2 = CgsPC::VmxFloat::Add(lCorner1, MakeVector3(0.0f, 0.0f, 100.0f));
+            const Vector3 lCorner3 = CgsPC::VmxFloat::Add(lCorner2, MakeVector3(-100.0f, 0.0f, 0.0f));
+            const Vector2 laPoints[4] = {
+                ToCellGridScreenCoords(lCorner0), ToCellGridScreenCoords(lCorner1),
+                ToCellGridScreenCoords(lCorner2), ToCellGridScreenCoords(lCorner3)
+            };
+            if (lCell.IsActive())
+                lpDisplay->DrawSolidConvexPolygon(laPoints, 4, 0x3200FF00u);
+            else
+                lpDisplay->DrawWirePolygon(laPoints, 4, 0xFFFFFFFFu);
+        }
+
+        s32 liProp = lrZoneManager.maUsedProps.GetFirstNonZeroBit();
+        if (liProp < static_cast<s32>(KU_NUM_ZONE_SLOTS))
+        {
+            while (liProp != -1)
+            {
+                const PropEntityInstance& lrProp = lrZoneManager.maProps[liProp];
+                const u32 luColour = (lrProp.mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT)
+                    ? 0xFF0000FFu : 0xFFFFFFFFu;
+                const Vector2 lPosition = ToCellGridScreenCoords(lrProp.GetWorldTransform().Pos());
+                lpDisplay->DrawCircle(lPosition, 2.0f, 3, luColour);
+                liProp = lrZoneManager.maUsedProps.GetNextNonZeroBit(liProp);
+            }
+        }
+        const Vector2 lPlayer = ToCellGridScreenCoords(mpPropEntityModule->mPlayerPosition);
+        lpDisplay->DrawCircle(lPlayer, 5.0f, 5, 0xFF0000FFu);
     }
 
     // @ 0x822DC3D8. Translate into player-relative XZ space, shift the map by
     // half its world dimensions, normalise, then scale to the current virtual screen.
     Vector2 PropEntityDebugComponent::ToCellGridScreenCoords(Vector3 lWorldPosition)
     {
-        const Vector3 lPlayerRelative = {
-            lWorldPosition.x - mpPropEntityModule->mPlayerPosition.x,
-            lWorldPosition.y - mpPropEntityModule->mPlayerPosition.y,
-            lWorldPosition.z - mpPropEntityModule->mPlayerPosition.z,
-            0.0f
-        };
-
-        Vector2 lScreenPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
-        if (mMapDimensions.x != 0.0f)
-        {
-            lScreenPosition.x =
-                ((lPlayerRelative.x + mMapDimensions.x * 0.5f) / mMapDimensions.x) *
-                mScreenSize.x;
-        }
-        if (mMapDimensions.y != 0.0f)
-        {
-            lScreenPosition.y =
-                ((lPlayerRelative.z + mMapDimensions.y * 0.5f) / mMapDimensions.y) *
-                mScreenSize.y;
-        }
+        const Vector3 lRelative = CgsPC::VmxFloat::Subtract(
+            lWorldPosition, mpPropEntityModule->mPlayerPosition);
+        // Raw vperm mask82CDA450 selects {x,z,x,x}; later inserts only replace
+        // lanes0/1. Preserve the two otherwise unused output lanes as well.
+        Vector2 lScreenPosition = { lRelative.x, lRelative.z, lRelative.x, lRelative.x };
+        lScreenPosition.x = CgsPC::VmxFloat::MultiplyAdd(mMapDimensions.x, 0.5f, lScreenPosition.x);
+        lScreenPosition.y = CgsPC::VmxFloat::MultiplyAdd(mMapDimensions.y, 0.5f, lScreenPosition.y);
+        lScreenPosition.x = CgsPC::VmxFloat::Multiply(lScreenPosition.x, RefinedCellGridReciprocal(mMapDimensions.x));
+        lScreenPosition.y = CgsPC::VmxFloat::Multiply(lScreenPosition.y, RefinedCellGridReciprocal(mMapDimensions.y));
+        lScreenPosition.x = CgsPC::VmxFloat::Multiply(lScreenPosition.x, mScreenSize.x);
+        lScreenPosition.y = CgsPC::VmxFloat::Multiply(lScreenPosition.y, mScreenSize.y);
         return lScreenPosition;
     }
 
