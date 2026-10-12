@@ -1,8 +1,10 @@
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
+#include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackDebugComponent.h"
 #include "GameSource/World/AI/BrnAICar.h"                                 // AICar (the array element)
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"      // AIModuleResultInterface
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/AI/BrnAIPortal.h"
 #include "GameSource/World/AI/Route/BrnRoute.h"
 #include "rw/math/vpu/vector3_operation.h"
@@ -186,18 +188,10 @@ namespace BrnAI
     //                            intrusive-list unlink + self-link) -- emitted by the compiler
     //                            here, not written out.
     //
-    // ⚠️ [FLAG PC boot gate] THE DEBUG COMPONENT BLOCK AND ITS Register ARE PARKED. Its interior
-    // is `u8 mResetOnTrackDebugComponent[0x870]` -- no named members, so writing its two ring
-    // buffers would mean poking raw offsets into an opaque blob, and Register() links the object
-    // into the global debug list where the debug UI walks it every frame. Constructing it by
-    // offset arithmetic and then publishing it is exactly [[valid-pointer-invalid-object]]. It is
-    // pure debug surface; nothing on the reset-on-track path reads it. Restore it WITH the
-    // component's own named layout.
-    // ⚠️ [FLAG PC boot gate] the three PerfMonCpu::AddMonitor calls are parked with it -- their
-    // handles are only read by the parked bodies (ComputeInitialCoordinates / AvoidObstacles /
-    // TestLineHNG), and registering a monitor nothing starts or stops just adds a permanent
-    // empty row to the profiler HUD. The static handles keep their -1-less default (0) exactly as
-    // the console's .bss does before registration.
+    // The embedded debug component now has its named typed layout. Register publishes it after
+    // the complete two-ring-buffer initialization, matching the original order. The three
+    // monitor handles are also registered here because the X360 body stores their AddMonitor
+    // results in the manager's static handles.
     // =============================================================================================
     void ResetOnTrackManager::Construct(CgsResource::ResourcePtr<AISectionsData> lAISectionData,
                                         AICar* lpaAICars)
@@ -213,8 +207,15 @@ namespace BrnAI
         mePlayerGlobalRaceCarIndex = static_cast<EGlobalRaceCarIndex>(-1);
         miResetCount               = 0;
 
-        // [FLAG PC boot gate] the ResetOnTrackDebugComponent Construct + Register and the three
-        // "ROT, ..." perf monitors -- see the banner.
+        mResetOnTrackDebugComponent.Construct(this);
+        mResetOnTrackDebugComponent.Register();
+
+        miInitialCoordinatesPM = CgsDev::PerfMonCpu::AddMonitor(
+            "ROT, Initial coordinates", CgsDev::E_PMP_7, false, 1.0f, true);
+        muAvoidHNGPM = CgsDev::PerfMonCpu::AddMonitor(
+            "ROT, avoid obstacles", CgsDev::E_PMP_7, false, 1.0f, true);
+        muTestLineHNGPM = CgsDev::PerfMonCpu::AddMonitor(
+            "ROT, test HNG", CgsDev::E_PMP_7, false, 1.0f, true);
     }
 
     // X360 0x82765878. Private helper; called by 17 sites (PlayerIsLookingBackwards,
@@ -401,9 +402,8 @@ namespace BrnAI
     // since 2026-09-22 (crash parity G07-D2, with ScanForwardsAndAlongJunction and
     // InterpolatePositionFromAngle); PlayerIsLookingBackwards is the leaf that still reports
     // itself parked until the camera reaches this object.
-    // [FLAG PC boot gate] the two PerfMonCpu Start/StopMonitor calls -- miInitialCoordinatesPM is
-    // never registered (see Construct's flag), so starting a monitor on handle 0 would time an
-    // unnamed row.
+    // The original "ROT, Initial coordinates" monitor brackets the reset-type strategy
+    // dispatch. Its registration and handle assignment are restored in Construct above.
     // ---------------------------------------------------------------------------------------------
     bool ResetOnTrackManager::ComputeResetOnTrack(ResetOnTrackCoords* lpOutCoords,
                                                   const AIModuleIO::ResetOnTrackRequest* lpRequest)
@@ -416,6 +416,7 @@ namespace BrnAI
 
         bool lbFoundCoordinates = false;
 
+        CgsDev::PerfMonCpu::StartMonitor(miInitialCoordinatesPM);
         switch (lpRequest->GetResetType())
         {
             case E_RESET_TYPE_STANDARD:
@@ -487,6 +488,8 @@ namespace BrnAI
                 break;
             }
         }
+
+        CgsDev::PerfMonCpu::StopMonitor(miInitialCoordinatesPM);
 
         if (!lbFoundCoordinates)
         {
@@ -625,8 +628,7 @@ namespace BrnAI
 
         ++miResetCount;
 
-        // [FLAG PC boot gate] ResetOnTrackDebugComponent::PushResetInfo(this + 1344, ...) and its
-        // two queue tripwires -- see the banner.
+        mResetOnTrackDebugComponent.PushResetInfo(lpRequest, &lResult);
 
         if (CgsDev::Log::gpDebugPrint != 0)
         {
