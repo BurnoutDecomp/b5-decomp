@@ -132,6 +132,11 @@ namespace BrnReplays
         void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
                            ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
                            BrnUpdateSet lUpdateSet);
+        // ARTIST 0x8265F618: consume replay GUI commands, publish cached events, and
+        // dispatch the post-simulation state machine.
+        void Update_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                            ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                            BrnUpdateSet lUpdateSet);
 
         // . Drain the game-data receiver queue for the header file's open response,
         // then report whether the replay files are open: a primary stream (read or write) open

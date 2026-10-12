@@ -165,6 +165,9 @@ namespace ReplayIO
     {
         typedef OutputBuffer_PreSim::GuiEventQueue GuiEventQueue;  // same GuiEventQueueSmall typedef
 
+        // ARTIST raw target 0x8264E320: read-lock (bit 4, "Not locked for reading",
+        // BrnReplayModuleIO.h:141); returns the same request interface at this+4.
+        const RequestInterface* GetRequestInterface() const;
         // X360 0x823BB278: write-lock (bit 3, "Not locked for writing", :142); returns
         // &mRequestInterface (this+4).
         RequestInterface* GetRequestInterface();
