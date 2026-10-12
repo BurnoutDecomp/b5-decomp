@@ -10,8 +10,8 @@
 // DWARF home: SharedClasses/Progression/BrnRival.h. A single rival (named opponent) record
 // in the progression resource. This is a MINIMAL OWNING SLICE: the full DWARF data layout
 // (so ProgressionData's rival lookups land mId at byte +0 and the 56-byte stride lines up by
-// name) plus the GetId accessor those lookups read. The remaining attested API
-// (Construct/SetName/GetCarId/...) is declared-only; bodies land with the Rival TU.
+// name) plus the inline accessors used by the progression and street-data readers.
+// The remaining attested API (Construct/SetName/...) is declared-only; bodies land with the Rival TU.
 // Single owner -- grow here, do not fork.
 //
 // LAYOUT is X360-faithful (DWARF BrnRival.h:46). 56 bytes (CgsID is 8-byte aligned, so the
@@ -61,10 +61,14 @@ struct Rival
     // a bare `ld r26, 8(r29)` on the 56-byte record, and Profile::AddRival is fed that same
     // register (`ld r5, 8(r29)` @0x8237B29C). A header inline IS the faithful shape.
     CgsID          GetCarId() const { return mCarId; }
-    s16            GetPursuitTarget() const;
-    const char*    GetName() const;
+    // Inlined by ARTIST ProgressionDebugComponent::RenderProfileRivals:
+    // lhz +0x12 @82372634 and lbz +0x15 @8237263C preserve the field bits;
+    // that caller explicitly displays them as unsigned. DecFIGS pins the signed returns.
+    s16            GetPursuitTarget() const { return miPursuitTarget; }
+    // RenderHUD @8238C2E0 passes the embedded +0x18 name buffer directly.
+    const char*    GetName() const { return macName; }
     s16            GetPersonalityIndex() const;
-    s8             GetUnlockRank() const;
+    s8             GetUnlockRank() const { return miUnlockRank; }
     void           SetUnlockRank(s8 liUnlockRank);
     // ---- ADDITIVE (progression wave 2026-09-06, lane rivals) -------------------------------
     // BODIED (it was in the declared-only list above and defined nowhere in the tree -- the same
