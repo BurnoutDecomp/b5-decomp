@@ -182,6 +182,14 @@ namespace ReplayIO
         // on pointer-bearing replay-IO members).
     }
 
+    // ARTIST raw target 0x8264E320 (no named JSON export): read-lock; return the
+    // request interface for ReplayModule::Update_PostSim while it reads this buffer.
+    const RequestInterface* InputBuffer_PostSim::GetRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mRequestInterface;
+    }
+
     // X360 0x823BB278: write-lock; returns &mRequestInterface (this+4).
     RequestInterface* InputBuffer_PostSim::GetRequestInterface()
     {

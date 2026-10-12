@@ -27,15 +27,16 @@
 //   +0x230 (560)   meState         -- EStreamState (RenderStatus/RenderMainWindow)
 //   +0x234 (564)   meStreamStage   -- EStreamStage
 //   +0x84C..+0x874 mapSerialisers[11] -- BaseSerialiser* per ESerialiserId
-//   +0x89C (2204)  mpWriteStream   -- WriteStream* (RenderWriteStreamBlocks)
-//   +0x8C0 (2240)  miWriteIndex    -- s32 write cursor / block-start
-//   +0x8C4 (2244)  miWriteStalls   -- s32 stall count
-//   +0x8E0 (2272)  mpReadStream    -- ReadStream* (RenderReadStreamBlocks)
-//   +0x8E4 (2276)  miReadBlockStart-- s32 read block-start
+//   +0x880..       mWriteStream   -- embedded WriteStream (ResetStartFrame / status fields)
+//   +0x89C (2204)  mpStreamHeader -- first typed member after WriteStream's LinearMalloc
+//   +0x8C0 (2240)  miCurrentWriteIndex -- WriteStream write cursor
+//   +0x8C4 (2244)  miStallCount   -- WriteStream stall count
+//   +0x8E0 (2272)  mReadStream     -- embedded ReadStream (header pointer at +0, current frunk at +4)
+//   +0x8F0 (2288)  ReadStream::mpStream -- DiskReadStream* used by UpdatePlaying_PreSim
 //   +0x5C3F..+0x5C45 (23615..23621) action-replay control flags (bool)
 //
 // X360 offsets the ctor / Update_Dispatch / WaitForSerialiseJobs touch:
-//   +0x23C  (572)   mbFlag23C        -- bool, ctor stores 0
+//   +0x23C  (572)   mGameEventCache -- VariableEventQueue<1536,16>
 //   +0x980  (2432)  mGpuWriteStream  -- BrnReplays::GPUDiskWriteStream (Update_Dispatch
 //                                        calls .Dispatch())
 //   +0x2B10 (11024) job              -- EA::Jobs::Job (placeholder; ctor sub-ctor DEFERRED)
@@ -51,6 +52,11 @@
 
 #include "types.hpp"
 #include "GameSource/Replays/BrnReplayShared.h"
+#include "GameSource/Replays/BrnReplayBaseSerialiser.h"     // BaseSerialiser::EMode
+#include "GameSource/Replays/BrnReplayReels.h"               // Reel
+#include "GameSource/Replays/Stream/BrnReplayReadStream.h"  // embedded ReadStream @ +0x8E0
+#include "GameSource/Replays/Stream/BrnReplayWriteStream.h" // embedded WriteStream
+#include "SDKs/EATech/eajobs/job.h"                         // typed mSerialiseJob::WaitOn
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (base; vtable + the two RWMutexes via its DataBuffers)
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"   // BrnReplays::GPUDiskWriteStream (embedded @ +0x980)
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h" // CgsMemory::DataStreamCommandPoster (embedded @ +0x5A80)
@@ -63,7 +69,13 @@
 #include "SharedClasses/BrnSharedConstants.h"                         // BrnUpdateSet (UpdateRestoring_PostSim)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Prepare's argument
-namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PostSim; struct OutputBuffer_PostSim; } }
+namespace BrnReplays { namespace ReplayIO {
+    struct InputBuffer_PreSim;
+    struct OutputBuffer_PreSim;
+    struct InputBuffer_PostSim;
+    struct OutputBuffer_PostSim;
+    struct StatusInterface;
+} }
 namespace CgsMemory { class LinearMalloc; }                               // mpLinearMalloc
 
 namespace BrnReplays
@@ -72,19 +84,14 @@ namespace BrnReplays
     // are BaseSerialiser instances (PreUpdateRecord @0x8264BD08).
     class BaseSerialiser;
 
-    // DWARF home: BrnReplayModuleIO.h:96 et al. The write/read replay streams the
-    // debug overlay's block view reaches by pointer; their block-table layout is
-    // owned by the ReplayModule TU.
-    class WriteStream;
-    class ReadStream;
-
     // DWARF: BrnReplayShared.h -- the replay stream-state machine the overlay labels.
     enum EStreamState
     {
         E_STREAM_STATE_IDLE      = 0,
         E_STREAM_STATE_RECORDING = 1,
         E_STREAM_STATE_PLAYING   = 2,
-        E_STREAM_STATE_COUNT     = 3,
+        E_STREAM_STATE_RESTORING = 3,
+        E_STREAM_STATE_COUNT     = 4,
     };
 
     // The per-state stream stage the overlay labels (five named stages).
@@ -110,6 +117,9 @@ namespace BrnReplays
 
         ReplayModule();
 
+        // X360 0x82656E20 -- initialize the module's replay state and embedded streams.
+        void Construct() override;
+
         // BrnReplayModule.h.
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
         typedef CgsModule::EventReceiverQueue<1024, 16> GameDataReceiverQueue;
@@ -117,6 +127,16 @@ namespace BrnReplays
         // Vtable slot 3 : tear down the debug component and the game-event cache,
         // then the module base.
         void Destruct() override;
+
+        // X360 0x82660E78 -- pre-simulation replay state dispatcher.
+        void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                           ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                           BrnUpdateSet lUpdateSet);
+        // ARTIST 0x8265F618: consume replay GUI commands, publish cached events, and
+        // dispatch the post-simulation state machine.
+        void Update_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                            ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                            BrnUpdateSet lUpdateSet);
 
         // . Drain the game-data receiver queue for the header file's open response,
         // then report whether the replay files are open: a primary stream (read or write) open
@@ -155,11 +175,11 @@ namespace BrnReplays
         BaseSerialiser* GetSerialiser(s32 liId) const { return mapSerialisers[liId]; }
 
         // --- write/read stream surface (RenderWriteStreamBlocks/...Status) ---
-        WriteStream* GetWriteStream() const    { return mpWriteStream; }
-        ReadStream*  GetReadStream() const     { return mpReadStream; }
-        s32          GetWriteIndex() const      { return miWriteIndex; }
-        s32          GetWriteStalls() const     { return miWriteStalls; }
-        s32          GetReadBlockStart() const  { return miReadBlockStart; }
+        WriteStream* GetWriteStream() const    { return const_cast<WriteStream*>(&mWriteStream); }
+        ReadStream*  GetReadStream() const     { return const_cast<ReadStream*>(&mReadStream); }
+        s32          GetWriteIndex() const      { return mWriteStream.miCurrentWriteIndex; }
+        s32          GetWriteStalls() const     { return mWriteStream.miStallCount; }
+        s32          GetReadBlockStart() const  { return mReadStream.miCurrentFrunk; }
 
         // --- action-replay control flags driven by the overlay's menu callbacks ---
         void RequestStartPlaying()    { mbStartPlaying = true; }
@@ -177,6 +197,32 @@ namespace BrnReplays
         // present entries receive their original BaseSerialiser lock operation.
         void LockSerialisers();
         void UnlockSerialisers();
+        void UpdateRecording_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                                    ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                                    BrnUpdateSet lUpdateSet);
+        void UpdatePlaying_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                   ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                   BrnUpdateSet lUpdateSet);
+        void UpdateRecording_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                     ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                     BrnUpdateSet lUpdateSet);
+        void UpdatePlaying_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                                  ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                                  BrnUpdateSet lUpdateSet);
+        void StopPlaying(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                         ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                         BrnUpdateSet lUpdateSet);
+        bool WaitForCloseReplayFiles();
+        void BeginRestoring(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                            ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                            BrnUpdateSet lUpdateSet);
+        void ClearSerialisers(BaseSerialiser::EMode leMode, bool lbAllowStreaming);
+        void StopRecording(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                           ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                           BrnUpdateSet lUpdateSet);
+        void CloseReplayFiles(ReplayIO::OutputBuffer_PreSim* lpOutputBuffer);
+        void SetStatusInterface(ReplayIO::StatusInterface* lpInterface);
+        void RenderDebugHUD();
 
         // X360 sequence markers (offsets in the comments). The host ModuleSingleBuffered
         // base and the embedded real types host-inflate past their X360 byte spans, so the
@@ -193,9 +239,11 @@ namespace BrnReplays
         // and the BASE is what advances it past 1 so the allocations never run twice. This port's
         // base does not expose that slot, so the same "already done" fact is carried by name.
         bool                 mbPrepared;              // stands in for the base stage at +0x228
+        u8                   maPad229[3];              // @0x229..0x22B
+        u32                  muConsoleValue22C;        // @0x22C (Construct stores 2; meaning unresolved)
         EStreamState         meState;                 // @0x230
         EStreamStage         meStreamStage;           // @0x234
-        u8                   maPad238[0x23C - 0x238];  // @0x238
+        s32                  miConsoleValue238;       // @0x238 (PostSim event 525 stores the full mode word)
         GameEventQueue       mGameEventCache;          // @0x23C..@0x84C (; ctor marks it unconstructed)
         BaseSerialiser*      mapSerialisers[KI_NUM_SERIALISERS]; // @0x84C..@0x874 (11 ptrs)
         // @0x878 (2168): the module's LINEAR allocator -- ReplayModule::Prepare @0x82652768
@@ -203,15 +251,19 @@ namespace BrnReplays
         // `SetAlignment(16)`) and StoreSerialisers @0x8264B600 carves every serialiser's stream
         // and static buffers out of it (`Malloc(*(a1 + 2168), size)`).
         CgsMemory::LinearMalloc* mpLinearMalloc;       // @0x878
-        u8                   maPad87C[0x89C - 0x87C];  // @0x87C
-        WriteStream*         mpWriteStream;            // @0x89C
-        u8                   maPad8A0[0x8C0 - 0x8A0];  // @0x8A0
-        s32                  miWriteIndex;             // @0x8C0
-        s32                  miWriteStalls;            // @0x8C4
-        u8                   maPad8C8[0x8E0 - 0x8C8];  // @0x8C8
-        ReadStream*          mpReadStream;             // @0x8E0
-        s32                  miReadBlockStart;         // @0x8E4
-        u8                   maPad8E8[0x930 - 0x8E8];  // @0x8E8
+        WriteStream          mWriteStream;              // @0x880 (includes the inline LinearMalloc base)
+        ReadStream           mReadStream;               // @0x8E0 (header/frunk/stall/position/disk stream/file position)
+        StreamHeader*        mpFileStreamHeader;       // @0x8F8 (0x20000-byte Prepare allocation)
+        void*                mpRecordingBuffer;        // @0x8FC (0x80000-byte Prepare allocation)
+        u8                   maPad900[0x908 - 0x900];  // @0x900
+        void*                mpSmallRecordingBuffer;   // @0x908 (0x4000-byte Prepare allocation)
+        void*                mpDebugMemoryResource;    // @0x910 (Prepare resource allocation)
+        s32                  miConsoleValue914;        // @0x914 (UpdatePlaying_PreSim compares to 10 and decrements)
+        s64                  miConsoleValue918;        // @0x918 (signed modulo operand; semantic name unresolved)
+        f32                  mfCurrentRecordingTime;   // @0x920
+        s32                  miConsoleValue924;        // @0x924 (Construct stores 10; modulo divisor)
+        f32                  mfHistoryStartTime;       // @0x928
+        f32                  mfStopRecordingTime;      // @0x92C
         CgsFileSystem::FileHandle mHeaderFile;         // @0x930  the replay header file
         u8                   maPad938[0x980 - 0x938];  // @0x938
 
@@ -222,9 +274,8 @@ namespace BrnReplays
         // DECLARATION ORDER without absolute-offset pads: the members exist BY NAME at
         // their proven sequence positions (shape-faithful, not byte-exact -- the same
         // rule the committed module siblings follow once a real heavy embed appears).
-        // The job sub-objects stay asm-sized opaque placeholders (0x350 == the X360
-        // Job stride) so their footprint is documented; their EA::Jobs::Job::Job(.,0)
-        // sub-constructions are DEFERRED (see the .cpp).
+        // The serialise job is now the typed EA::Jobs::Job used by the restored WaitOn
+        // legs. The unrelated job sub-objects remain asm-sized opaque placeholders.
         // ------------------------------------------------------------------------
 
         // @0x980 (2432): the embedded GPU disk write stream (Update_Dispatch dispatches it).
@@ -249,9 +300,9 @@ namespace BrnReplays
         static const s32     KI_NUM_SERIALISE_JOBS = 4;
         u8                   maJobs4940Placeholder[KI_NUM_SERIALISE_JOBS * 0x350]; // @0x4940
 
-        // FLAG: PLACEHOLDER. EA::Jobs::Job @ +0x5680 (WaitForSerialiseJobs WaitOn's it).
-        // Sub-ctor DEFERRED; the WaitOn on it is FLAGGED in the .cpp.
-        u8                   maSerialiseJobPlaceholder[0x350]; // @0x5680
+        // @0x5680 (22144): typed job waited by WaitForSerialiseJobs and UpdatePlaying_PreSim.
+        // Its null-name constructor is the original EA::Jobs::Job::Job(., 0).
+        EA::Jobs::Job        mSerialiseJob;             // @0x5680
 
         bool                 mbSerialiseActive;        // @0x59D0
         // @0x5A80 (23168): the data-stream command poster (WaitForSerialiseJobs ends it).
@@ -266,6 +317,32 @@ namespace BrnReplays
         bool                 mbMarkActionReplay;       // @0x5C43 (23619)
         bool                 mbStartActionReplay;      // @0x5C44 (23620)
         bool                 mbAutoStart;              // @0x5C45 (23621) -- Enable auto-start
+
+        // X360 reel/status state. The status bytes without DWARF names retain their
+        // measured widths and addresses; no unproven semantics are assigned to them.
+        u8                   maPad5B01[0x5C30 - 0x5B01];
+        bool                 mbConsoleFlag5C30;          // UpdatePlaying_PreSim sets when stopping
+        bool                 mbConsoleFlag5C31;          // SetStatusInterface / UpdatePlaying_PreSim
+        bool                 mbConsoleFlag5C32;          // UpdatePlaying_PreSim read-block gate
+        u8                   maPad5C33[0x5C38 - 0x5C33];
+        bool                 mbConsoleFlag5C38;          // StopPlaying tests before EnableJobThread
+        bool                 mbConsoleFlag5C39;          // set from replay-play event; role unresolved
+        bool                 mbConsoleFlag5C3A;          // UpdatePlaying_PreSim sets on stop request
+        bool                 mbConsoleFlag5C3B;          // Construct clears
+        bool                 mbConsoleFlag5C3C;          // Construct clears; SetStatusInterface reads
+        bool                 mbConsoleFlag5C3D;          // SetStatusInterface reads
+        bool                 mbConsoleFlag5C3E;          // Construct clears; SetStatusInterface reads
+        u8                   maPad5C46[1];
+        Reel                 maReels[6];                 // @0x5C47; six 257-byte records
+        u8                   maPad624D[3];
+        s32                  miCurrentRecordReel;        // @0x6250
+        s32                  miCurrentPlaybackReel;      // @0x6254
+        bool                 mbConsoleFlag6258;          // Construct clears
+        bool                 mbConsoleFlag6259;          // UpdateRecording_PreSim sets/clears
+        bool                 mbConsoleFlag625A;          // UpdateRecording_PreSim reads
+        u8                   maPad625B[1];
+        f32                  mfConsoleValue625C;         // recording state timer value
+        u32                  muConsoleValue6260;         // Construct clears
 
         // @0x6264 (25188): the replay debug component ; the ctor's vtable stamp
         // here is its inlined construction (its vtable carries DebugComponent::RenderHUD /

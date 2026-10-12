@@ -6,7 +6,7 @@
 // Members in declaration order; the console puts the first one right after the base (+0x0C):
 //   mpGuiModule +0x0C  miDisplayMode +0x10  mbShowGuiCacheStatus +0x14
 //   mbShowAptComponentGuiCacheStatus +0x15  maStringList[5] +0x18  mInputQueue +0x40
-// Only Construct and Update are emitted as standalone functions in the target build.
+// OnActivate registers the two status callbacks and the display-mode selector.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent
@@ -31,7 +31,13 @@ namespace BrnGui
         // Per frame: hand the queued events to the GUI module's input buffer.
         void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
 
+    protected:
+        void OnActivate() override;
+
     private:
+        static void ShowGuiCacheStatusCallback(void* lpUserData);
+        static void ShowAptComponentGuiCacheStatusCallback(void* lpUserData);
+
         GuiModule*                 mpGuiModule;
         s32                        miDisplayMode;
         bool                       mbShowGuiCacheStatus;

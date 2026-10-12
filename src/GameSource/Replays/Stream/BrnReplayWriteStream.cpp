@@ -1,15 +1,18 @@
 #include "GameSource/Replays/Stream/BrnReplayWriteStream.h"
 
+#include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
 #include "GameSource/Replays/BrnReplayShared.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnReplays::WriteStream).
 //
 //   ResetStream            @ 0x8264D100
 //   InvalidateFrunksAhead  @ 0x8264D190
+//   AddFrunk               @ 0x8265EB70 (raw ARTIST image; no named JSON export)
 //
 // When a frunk is written at index liStartFrunk, later frunks whose disk bytes
 // it overwrites are stale. This marks those overlapped frunks VOID, then trims
@@ -18,6 +21,158 @@
 
 namespace BrnReplays
 {
+    namespace
+    {
+        // ARTIST AddFrunk materialises 0x82FDA380 and uses it as a shared 0x20000-byte
+        // staging buffer for each frunk before passing its 64 KiB-rounded blocks to
+        // GPUDiskWriteStream::AddBlock. The name is unresolved; this is the one recovered
+        // source home for the original scratch storage.
+        const s32 KI_FRUNK_SCRATCH_CAPACITY = 0x20000;
+        alignas(0x80) u8 gacFrunkScratchBuffer[KI_FRUNK_SCRATCH_CAPACITY];
+
+        void FireOriginalWriteStreamAssert(const char* lpcMessage, s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                lpcMessage,
+                "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayWriteStream.cpp",
+                liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST raw body @ 0x8265EB70; declaration shape from the DecFIGS mangled name.
+    // Preserve the assertion-and-continue path, staged-header bytes, 128 KiB buffer
+    // capacity, block rounding, and ring updates as observed in the X360 instructions.
+    void WriteStream::AddFrunk(s32 liFrameIndex, f32 lfFrameTime,
+                               FrunkSerialiserEntry* lpEntries, void** lppBlocks,
+                               s32 liNumEntries, bool lbIsKeyFrame)
+    {
+        if (mbEnded)
+            FireOriginalWriteStreamAssert("Stream has ended - need to start it again!", 137);
+        if (mbPaused)
+            FireOriginalWriteStreamAssert("Stream is paused - must continue it first", 138);
+        if (lppBlocks == 0)
+            FireOriginalWriteStreamAssert("No blocks passed in", 139);
+        if (lpEntries == 0)
+            FireOriginalWriteStreamAssert("No block sizes in", 140);
+
+        StreamOffset* lpFrunkOffset = 0;
+        if (miNumFrunksAllocated < KI_MAX_FRUNKS)
+        {
+            lpFrunkOffset = static_cast<StreamOffset*>(mHeaderMalloc.Malloc(
+                static_cast<s32>(sizeof(StreamOffset))));
+            if (lpFrunkOffset == 0)
+                FireOriginalWriteStreamAssert("Failed to allocate memory for new offset entry", 151);
+
+            if (mpStreamHeader->mpFrameOffsets == 0)
+                mpStreamHeader->mpFrameOffsets = lpFrunkOffset;
+            ++miNumFrunksAllocated;
+        }
+        else
+        {
+            if (mpStreamHeader->miNumFrunks > KI_MAX_FRUNKS)
+                FireOriginalWriteStreamAssert("Should never go past max frames", 164);
+
+            lpFrunkOffset = mpStreamHeader->mpFrameOffsets + miCurrentWriteIndex;
+        }
+
+        mCurrentFrunkHeader.mfFrameTime = lfFrameTime;
+        mCurrentFrunkHeader.miFrameNumber = liFrameIndex;
+        mCurrentFrunkHeader.mxFlags = lbIsKeyFrame ? KU_FLAG_KEYFRAME : 0;
+        mCurrentFrunkHeader.miNumSerialisers = liNumEntries;
+        static const char KacFrunkMagic[4] = { 'f', 'r', 'k', '\0' };
+        std::memcpy(mCurrentFrunkHeader.macMagicNumber, KacFrunkMagic, sizeof(KacFrunkMagic));
+
+        lpFrunkOffset->mfFrameTime = lfFrameTime;
+        lpFrunkOffset->miFrameNumber = liFrameIndex;
+        lpFrunkOffset->mxFlags = mCurrentFrunkHeader.mxFlags;
+        lpFrunkOffset->miFileOffset = miFilePosition;
+
+        const s32 liHeaderBytes = static_cast<s32>(sizeof(FrunkHeader));
+        const s32 luEntryBytes = static_cast<s32>(static_cast<u32>(liNumEntries) << 3);
+        s32 liHeaderCopied = 0;
+        if (KI_FRUNK_SCRATCH_CAPACITY - miBufferPosition >= liHeaderBytes)
+        {
+            std::memcpy(gacFrunkScratchBuffer + miBufferPosition,
+                        &mCurrentFrunkHeader,
+                        static_cast<size_t>(liHeaderBytes));
+            miBufferPosition += liHeaderBytes;
+            liHeaderCopied = liHeaderBytes;
+        }
+
+        s32 liEntriesCopied = 0;
+        if (KI_FRUNK_SCRATCH_CAPACITY - miBufferPosition >= luEntryBytes)
+        {
+            std::memcpy(gacFrunkScratchBuffer + miBufferPosition,
+                        lpEntries,
+                        static_cast<size_t>(luEntryBytes));
+            miBufferPosition += luEntryBytes;
+            liEntriesCopied = luEntryBytes;
+        }
+
+        const s32 liExpectedPayloadOffset = static_cast<s32>(
+            static_cast<u32>(liHeaderBytes) + static_cast<u32>(luEntryBytes));
+        s32 liBytesWritten = static_cast<s32>(
+            static_cast<u32>(liHeaderCopied) + static_cast<u32>(liEntriesCopied));
+        for (s32 liEntry = 0; liEntry < liNumEntries; ++liEntry)
+        {
+            const s32 liBlockSize = lpEntries[liEntry].miSize;
+            s32 liBlockBytesCopied = 0;
+            if (KI_FRUNK_SCRATCH_CAPACITY - miBufferPosition >= liBlockSize)
+            {
+                std::memcpy(gacFrunkScratchBuffer + miBufferPosition,
+                            lppBlocks[liEntry],
+                            static_cast<size_t>(liBlockSize));
+                miBufferPosition = static_cast<s32>(
+                    static_cast<u32>(miBufferPosition) + static_cast<u32>(liBlockSize));
+                liBlockBytesCopied = liBlockSize;
+            }
+            liBytesWritten = static_cast<s32>(
+                static_cast<u32>(liBytesWritten) + static_cast<u32>(liBlockBytesCopied));
+        }
+
+        const s32 liPayloadSize = static_cast<s32>(
+            static_cast<u32>(liBytesWritten) - static_cast<u32>(liExpectedPayloadOffset));
+        if (liPayloadSize != 0)
+        {
+            const s32 liRoundedBlockSize = static_cast<s32>(
+                (static_cast<u32>(liBytesWritten) + 0xFFFFu) & 0xFFFF0000u);
+            if (mpStream->AddBlock(miFilePosition, gacFrunkScratchBuffer, liRoundedBlockSize))
+            {
+                lpFrunkOffset->miFrunkSize = liBytesWritten;
+                miFilePosition = static_cast<s32>(
+                    static_cast<u32>(miFilePosition) + static_cast<u32>(liRoundedBlockSize));
+            }
+            else
+            {
+                lpFrunkOffset->miFrunkSize = 0;
+                lpFrunkOffset->mxFlags |= KU_FLAG_VOID;
+                ++miStallCount;
+            }
+        }
+
+        if (mpStreamHeader->miNumFrunks < KI_MAX_FRUNKS)
+        {
+            ++mpStreamHeader->miNumFrunks;
+        }
+        else
+        {
+            mpStreamHeader->miFirstFrunk = (miCurrentWriteIndex + 1) % KI_MAX_FRUNKS;
+        }
+
+        InvalidateFrunksAhead(miCurrentWriteIndex);
+        ++miCurrentWriteIndex;
+        if (miCurrentWriteIndex > KI_MAX_FRUNKS)
+            FireOriginalWriteStreamAssert("Should never go past max frames for write index", 253);
+        if (miCurrentWriteIndex >= KI_MAX_FRUNKS)
+        {
+            miCurrentWriteIndex = 0;
+            miFilePosition = 0;
+        }
+        miBufferPosition = 0;
+    }
+
     // @ 0x8264D100
     // Reset the write stream to an empty, freshly-allocated header. Frees every
     // allocation the header allocator has made, carves a new StreamHeader out of it,

@@ -40,11 +40,23 @@ namespace BrnGui
         // non-fatal; the pointer is returned either way).
         static GuiDebugComponent* GetSingletonPtr();
 
+        // ARTIST 0x82505488. Construct this module-owned debug component and its menu defaults.
+        void Construct(GuiModule* lpGuiModule);
+
+        const char* GetName() const override;
+
     protected:
+        // ARTIST 0x8252A3B8: register the GUI/debug-menu variables and callback entries.
+        void OnActivate() override;
+
         // Post the selected post-FX hook (by name, every maximum weight 1.0) to the GUI.
         void TriggerPFX();
         // Post a made-up offline post-event result built from the debug finish settings.
         void TriggerPostEvent();
+        void BootupProfile();
+        void AutosaveProfile();
+        void SaveProfile();
+        void LoadProfile();
 
     private:
         // The single live GuiDebugComponent instance, set when the debug component is created.
@@ -79,5 +91,29 @@ namespace BrnGui
         bool                        mbToggleableRaceHUDEnabled;
         bool                        mabTogglableRaceHUDElementsState[KI_NUM_TOGGLEABLE_RACE_HUD_ITEMS];
         CgsModule::VariableEventQueue<18432, 16> mInputQueue;   // InputBuffer::GuiEventQueue
+
+        static void EnterCarSelectCallback(void* lpData);
+        static void TriggerIntroCallback(void* lpData);
+        static void TriggerPostEventCallback(void* lpData);
+        static void OpenCrashNavCallback(void* lpData);
+        static void MiniMapSwitchCallback(void* lpData);
+        static void ToggleShow43AreaCallback(void* lpData);
+        static void ToggleShowSafeAreaCallback(void* lpData);
+        static void ChangeFontSpacingCallback(void* lpData);
+        static void BootupProfileCallback(void* lpData);
+        static void AutosaveProfileCallback(void* lpData);
+        static void SaveProfileCallback(void* lpData);
+        static void LoadProfileCallback(void* lpData);
+        static void ShowKeyboardCallback(void* lpData);
+        static void PlayMovieCallback(void* lpData);
+        static void RotateThroughFontsCallback(void* lpData);
+        static void RotateThroughFontEffectsCallback(void* lpData);
+        static void TriggerPFXCallback(void* lpData);
+        static void TriggerClosePFXCallback(void* lpData);
+        static void ToggleGenericHUDPriorityOverrideCallback(void* lpData);
+        static void TriggerEATraxComponentCallback(void* lpData);
+        static void TriggerOnlineInviteCallback(void* lpData);
+        static void TriggerPaybackComponent(void* lpData);
+        static void ToggleRaceHudComponentsCallback(void* lpValue, void* lpData);
     };
 }

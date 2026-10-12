@@ -51,6 +51,8 @@ namespace ViewIO
 }
 }
 
+namespace BrnGui { struct GuiDebugComponent; }
+
 namespace CgsGui
 {
     // KI_NUM_MOVIE_LEVELS -- the assert "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS"
@@ -203,6 +205,10 @@ namespace CgsGui
         void AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lrTypeface);
 
     protected:
+        // ARTIST GuiDebugComponent::OnActivate @0x8252A3B8 binds this field directly
+        // through GuiModule's embedded ViewModule pointer (guest +0x1B400, member +0x228).
+        friend struct BrnGui::GuiDebugComponent;
+
         bool mbUpdateFlash;
         f32 mfHack_LastValidTimeStep;
         f32 mfCurrentTime;
