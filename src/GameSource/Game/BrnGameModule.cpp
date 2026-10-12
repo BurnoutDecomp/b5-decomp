@@ -93,6 +93,9 @@ namespace BrnGame
     static bool         _lbForceAssert = false;
     static volatile s32 sbSimUpdateComplete = 0;
     bool                sbShowStreamStallMessage = false; // byte_82FAE28A
+    // Mutable UI latch from ARTIST byte_82FAE28C. Its original symbol and startup writer are
+    // unresolved; findinit finds only the BridgeGuiToGame read/clear sites.
+    static bool         sbForceQuitToStartMenu;
 
     BrnGameModule::BrnGameModule()
         : mpUpdateInputBufferStack(0)
@@ -296,6 +299,13 @@ namespace BrnGame
             // absent allocator layer (F-P0-1), and the debug pools' backing still comes from
             // the global heap, which ignores it.
             mDebugManager.Construct(&lParams);
+        }
+
+        // X360 Construct @0x823CA000 registers this mutable bool with an empty path. The raw
+        // path pointer (0x820046A7) is the NUL terminator at the end of "%s%s%s".
+        {
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            lDebugInterface.RegisterVariable(&sbForceQuitToStartMenu, "", "Force Quit to Start Menu");
         }
 
         // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
@@ -746,6 +756,14 @@ namespace BrnGame
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
+        // X360 BridgeGuiToGame @0x823CB7A8/B8 polls and clears byte_82FAE28C before walking
+        // GUI events, then sets the game-flow return latch at gm+10094118.
+        if (sbForceQuitToStartMenu)
+        {
+            sbForceQuitToStartMenu = false;
+            BrnGameMainFlowController::gBrnReturnToFrontEndRequested = true;
+        }
+
         while (liId >= 0 && lpEvent != 0)
         {
             const s32 liCommand = liId;
