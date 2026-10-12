@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 
 #include <math.h>
 #include <cstring>
@@ -437,6 +438,32 @@ namespace CgsDev
         char lacValue[256];
         std::snprintf(lacValue, sizeof(lacValue), "%d", liValue);
         DrawText(lacValue, lfX, lfY, lfScale, lColour);
+    }
+
+    // DecFIGS CgsDebug2DImmediateRender::DrawDataSize. ARTIST's Resource HUD
+    // calls this typed renderer method for each of the six size/usage columns.
+    void Debug2DImmediateRender::DrawDataSize(s32 liBytes, f32 lfX, f32 lfY,
+                                               f32 lfScale, RGBA lColour)
+    {
+        char lacSize[256];
+        const s32 liMegabytes = liBytes / 0x100000;
+        const s32 liKilobytes = liBytes % 0x100000 / 1024;
+        const s32 liRemainder = liBytes % 0x100000 % 1024;
+
+        if (liMegabytes <= 0)
+        {
+            if (liKilobytes <= 0)
+                CgsCore::SPrintf(lacSize, sizeof(lacSize), "%dB", liRemainder);
+            else
+                CgsCore::SPrintf(lacSize, sizeof(lacSize), "%dKB, %dB", liKilobytes, liRemainder);
+        }
+        else
+        {
+            CgsCore::SPrintf(lacSize, sizeof(lacSize), "%dMB, %dKB, %dB",
+                             liMegabytes, liKilobytes, liRemainder);
+        }
+
+        DrawText(lacSize, lfX, lfY, lfScale, lColour);
     }
 
     Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const

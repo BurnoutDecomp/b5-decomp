@@ -37,6 +37,7 @@ namespace rw
 namespace BrnResource
 {
     class GameDataModule;   // CreateAllocators/DestroyAllocators populate the registry
+    class DebugComponent;  // Update preserves ARTIST's nullable allocator-slot checks
 
     namespace GameDataIO
     {
@@ -46,6 +47,7 @@ namespace BrnResource
             // maeAllocatorType / the per-type pointer arrays directly as it builds each
             // allocator (the X360 pokes them in-module; the DWARF lists no setters).
             friend class ::BrnResource::GameDataModule;
+            friend class ::BrnResource::DebugComponent;
 
         public:
             // Valid bank ids are 0..KI_MAX_BANK_ID (X360 GetHeapAllocator asserts id > 0x42 is out of range).
