@@ -59,10 +59,6 @@ class Im2dUntex
 // including the Lion blend renderer, since Im3dBlend derives from Im3dBase<V> in CgsIm3d.h.
 // This mirrors what was already done for the 2D pair noted at the top of this block.
 
-class Im3dZOnly
-{
-};
-
 }
 
 // EffectsArbitrator is the real type (BrnEffectsArbitrator.h); Im3dSkyDome is the real
