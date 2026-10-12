@@ -67,9 +67,8 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
             GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         template <s32 N>
@@ -100,13 +99,12 @@ namespace BrnGui
         // typed OutputViewState<T> instantiations reduce to these records).
         struct GuiShowHideEvent24 : public CgsGui::GuiEvent<213>
         {
-            s32 miShow;      // +0x0C
-            f32 mfValue;     // +0x10
-            u8  mu8Flag;     // +0x14
-            u8  maPad[3];
+            s32 miShow;      // +0x00
+            f32 mfValue;     // +0x04
+            u8  mu8Flag;     // +0x08
             GuiShowHideEvent24(s32 liShow, f32 lfValue, u8 lu8Flag)
                 :  miShow(liShow), mfValue(lfValue), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         void PostShowHide24(CgsGui::StateInterface* lpInterface, s32 liChannel,

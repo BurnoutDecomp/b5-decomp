@@ -45,9 +45,8 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
             GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         template <s32 N>
@@ -80,10 +79,9 @@ namespace BrnGui
         // { 1, 473, 12, byte } (16 bytes) -- the game-options settings byte repost.
         struct GuiByteEvent16 : public CgsGui::GuiEvent<473>
         {
-            u8 mu8Value;   // +0x0C
-            u8 maPad[3];
+            u8 mu8Value;   // +0x00
             explicit GuiByteEvent16(u8 lu8Value) :  mu8Value(lu8Value)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         // { 8, 463, 12, w0, w1 } (20 bytes) -- the settings qword repost.

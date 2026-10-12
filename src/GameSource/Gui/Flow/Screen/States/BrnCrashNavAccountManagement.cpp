@@ -185,10 +185,9 @@ namespace BrnGui
         // and wants a 1 here, re-read 0x824CE1F4..0x824CE218 before changing it.
         struct GuiEventAccountSettingsRequest : public CgsGui::GuiEvent<124>
         {
-            u8  mbRequest;   // +0x0C
-            u8  maPad[3];    // +0x0D (the rest of the leftover word; never read, size == 1)
+            u8  mbRequest;   // +0x00
             GuiEventAccountSettingsRequest()
-                :  mbRequest(0) { maPad[0] = 0; maPad[1] = 0; maPad[2] = 1; }
+                :  mbRequest(0) {}
         };
 
         // ApplyAndSaveSettings's post: { 3, 126, 12 } + the three answer bytes.

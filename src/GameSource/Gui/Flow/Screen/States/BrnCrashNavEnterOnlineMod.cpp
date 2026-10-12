@@ -28,14 +28,10 @@ namespace
     // reason they do -- id 148 has no committed type home in this tree.
     struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
     {
-        u8 mu8Show;    // +0x0C payload byte: 0 == hide the HUD
-        u8 maPad[3];   // the rest of the word the console never reads (size == 1)
-
+        u8 mu8Show;    // +0x00 payload byte: 0 == hide the HUD
         explicit GuiEventShowHideHud(bool lbShow)
             :  mu8Show(lbShow ? 1u : 0u)
-        {
-            maPad[0] = maPad[1] = maPad[2] = 0;
-        }
+        {}
     };
 
     const s32 KI_CHANNEL_GUI_OUT = 40;

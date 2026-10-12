@@ -19,15 +19,10 @@
 namespace BrnGui
 {
 
-// The GUI event PausedHudState publishes when it is entered. The X360 fills a GuiEvent<532>
-// header { muHeader0 = 1, muEventType = 532, muHeader2 = 12 } and pushes a 16-byte record
-// (channel id 40 = GuiEventOut); the trailing payload word is left uninitialised. Type id 532
-// is the X360 GuiEvent<N> template id; the payload semantics beyond the header are not recovered.
+// The X360 builds { 1, 532, 12 } and queues a 16-byte channel-40 wrapper. Its single
+// payload byte is unwritten; the empty event tag supplies the one-byte payload type.
 struct GuiEventPausedHudEnter : public CgsGui::GuiEvent<532>
 {
-    u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size is 16)
-
-    GuiEventPausedHudEnter()  {}
 };
 
 // The 3 observed event ids (dword_8205B060). The FLAG that stood here -- "the exports carry no

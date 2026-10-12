@@ -352,14 +352,10 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;    // +0x0C
-            u8 maPad[3];   // +0x0D (the X360 never writes these; modelled zeroed)
-
+            u8 mu8Flag;    // +0x00
             explicit GuiCommandEvent16(u8 lu8Flag = 0)
                 :  mu8Flag(lu8Flag)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
+            {}
         };
 
         template <s32 N>
@@ -402,15 +398,11 @@ namespace BrnGui
         // big-endian). The trailing two bytes are never written by the X360.
         struct GuiEventCarSelectAccept16 : public CgsGui::GuiEvent<536>
         {
-            u8 mu8Byte0;   // +0x0C (X360 stores 1)
-            u8 mu8Byte1;   // +0x0D (X360 stores 0)
-            u8 maPad[2];   // +0x0E (untouched by the X360; modelled zeroed)
-
+            u8 mu8Byte0;   // +0x00 (X360 stores 1)
+            u8 mu8Byte1;   // +0x01 (X360 stores 0)
             GuiEventCarSelectAccept16(u8 lu8Byte0, u8 lu8Byte1)
                 :  mu8Byte0(lu8Byte0), mu8Byte1(lu8Byte1)
-            {
-                maPad[0] = maPad[1] = 0;
-            }
+            {}
         };
     }
 

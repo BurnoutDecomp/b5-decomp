@@ -154,10 +154,10 @@ bool CrashedStuntHudState::UpdateSetupState()
     mbHudMessages = true;
     struct BoostVisibility : CgsGui::GuiEvent<214>
     {
-        u8 mbVisible; u8 maPad[3];
-        BoostVisibility() :  mbVisible(false), maPad{} {}
+        u8 mbVisible;
+        BoostVisibility() :  mbVisible(false) {}
     } lBoost;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
+    mpStateInterface->OutputViewState(lBoost);
     miStartScore = mpCache->miLastStuntScore;
     miStartMultiplier = mpCache->miGameFlowResetWord_9FD8;
     miFinishMultiplier = 1;

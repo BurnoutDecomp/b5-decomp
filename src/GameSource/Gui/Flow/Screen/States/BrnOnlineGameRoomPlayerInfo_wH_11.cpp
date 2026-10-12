@@ -103,13 +103,9 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;    // +0x0C (the empty payload's byte; X360 leaves it untouched)
-            u8 maPad[3];   // +0x0D
-
+            u8 mu8Flag;    // +0x00 (the empty payload's byte; X360 leaves it untouched)
             GuiCommandEvent16() :  mu8Flag(0)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
+            {}
         };
 
         template <s32 N>

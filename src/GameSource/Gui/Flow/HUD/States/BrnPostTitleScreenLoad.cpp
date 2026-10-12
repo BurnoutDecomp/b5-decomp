@@ -111,9 +111,8 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
             GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            {}
         };
 
         template <s32 N>
@@ -129,13 +128,12 @@ namespace BrnGui
         // BrnBootLegal.cpp posts -- the module-out consumer dispatches on id 155.
         struct MusicOnMenuStreamEvent : public CgsGui::GuiEvent<155>
         {
-            s32 miHash;     // +0x0C (the MakeHash result, or gCurrentMenuMusicHash)
-            u8  mu8FlagA;   // +0x10
-            u8  mu8FlagB;   // +0x11
-            u8  maPad[2];
+            s32 miHash;     // +0x00 (the MakeHash result, or gCurrentMenuMusicHash)
+            u8  mu8FlagA;   // +0x04
+            u8  mu8FlagB;   // +0x05
             explicit MusicOnMenuStreamEvent(s32 liHash)
                 :  miHash(liHash), mu8FlagA(0), mu8FlagB(0)
-            { maPad[0] = maPad[1] = 0; }
+            {}
         };
     }
 

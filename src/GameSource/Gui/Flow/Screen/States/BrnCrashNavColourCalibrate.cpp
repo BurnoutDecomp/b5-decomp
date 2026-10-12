@@ -167,11 +167,10 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandWire16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;    // +0x0C
-            u8 maPad[3];   // +0x0D
+            u8 mu8Flag;    // +0x00
             explicit GuiCommandWire16(u8 lu8Flag = 0)
                 :  mu8Flag(lu8Flag)
-            { maPad[0] = 0; maPad[1] = 0; maPad[2] = 0; }
+            {}
         };
 
         // { 8, 545, 12, brightness, contrast } -- 20 bytes on channel 40. The payload is

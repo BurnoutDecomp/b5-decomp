@@ -42,23 +42,15 @@ namespace
     // { 1, 148, 12, <one payload byte> }: show (1) or hide (0) the in-game HUD.
     struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
     {
-        u8 mu8Show;    // +0x0C
-        u8 maPad[3];
-
+        u8 mu8Show;    // +0x00
         explicit GuiEventShowHideHud(bool lbShow)
             :  mu8Show(lbShow ? 1u : 0u)
-        {
-            maPad[0] = maPad[1] = maPad[2] = 0;
-        }
+        {}
     };
 
-    // { 1, 533, 12 }: the "front-end screen closed" record. The console leaves the payload
-    // word unwritten.
+    // { 1, 533, 12 }: the front-end screen-closed event has one unwritten payload byte.
     struct GuiEventScreenClosed : public CgsGui::GuiEvent<533>
     {
-        u32 muReserved;   // +0x0C
-
-        GuiEventScreenClosed() :  muReserved(0) {}
     };
 }
 
