@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SnPrintf (Construct's per-CSM debug paths)
 #include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h" // CgsNumeric::Min (CalcOptimisedLod)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // Construct's debug-variable registration
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"     // ShadowMap debug visualization
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"           // CgsDev::DebugUI::StringList (type options)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"    // ShaderConstantTable (SetConstantsForEnvmap)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // [FLAG PC bring-up probe] the "[shadow-cam]" stage report only
@@ -29,9 +30,10 @@
 //   CalculateShadowMapCameras @ 0x827DA820
 //   ComputeBoundingBoxMatrix  @ 0x827D91B0
 //   ComputeOptimalViewVolume  @ 0x827D8980
+//   DebugRender               @ 0x827C1BB8 (ARTIST line/cross/text visualization)
 //
-// STILL PARKED: DebugRender @0x827C1BB8 -- a ~1650-line debug-only immediate-mode
-// pipeline; the body is an assert trap (see the bottom of this file).
+// DebugRender @0x827C1BB8 publishes the ARTIST TSM and bounding-box visualizations
+// through the existing buffered CgsDev::DebugRender interface (see the bottom).
 //
 // CONSTANTS PASS 2026-08-12: this file previously carried a set of "not
 // recovered" placeholder ZEROS through a done review. Every one of them has now
@@ -319,10 +321,6 @@ namespace BrnWorld
                 lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mfTsmSlideBack, lacPath, "TSM slideback" );
                 lDebugInterface.SetStep( &maTsmBBInfo[luCsm].mfTsmSlideBack, 0.05f );
                 lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mbDebugRender, lacPath, "DebugRender" );
-                // FLAG PC-platform leaf: the diagnostic IM pipeline below is
-                // still an explicit trap. Keep its status visible without an
-                // interactive toggle that would assert on the next frame.
-                lDebugInterface.SetReadOnly( &maTsmBBInfo[luCsm].mbDebugRender, true );
             }
             CgsPC::Shadows::RegisterSettings(lDebugInterface);
         }
@@ -485,7 +483,7 @@ namespace BrnWorld
     static s32 siTsmDebugMatrixStage = 5;         // 0x82F30E24 == 5 (dumped)
 
     // unk_8300E220 -- the per-slot TSM debug-render blob (640 bytes each),
-    // consumed by the declaration-only ShadowMap::DebugRender
+    // consumed by ShadowMap::DebugRender
     // ("gTsmDebugRenderInfo"). Field names are semantic (what this function
     // stores); the offsets are the asm ground truth.
     struct TsmDebugRenderInfo
@@ -1770,8 +1768,8 @@ namespace BrnWorld
     };
 
     // BrnShadowMap.cpp:1187 (DWARF). The per-slot bounding-box debug blob
-    // (unk_8300EA70, 768-byte stride) ComputeBoundingBoxMatrix fills and the
-    // declaration-only DebugRender consumes.
+    // (unk_8300EA70, 768-byte stride) ComputeBoundingBoxMatrix fills and
+    // DebugRender consumes.
     struct BoundingBoxDebugRenderInfo
     {
         Vector4               maFrustumPoints[8];    // +0x000 (:1189) world sub-frustum verts
@@ -1905,6 +1903,75 @@ namespace BrnWorld
                 }
             }
             return lvOut;
+        }
+
+        // The debug renderer's inlined row-vector transform is a three-stage
+        // vmaddfp cascade: right*x + translation, then up*y, then at*z. Keep
+        // each stage fused; TransformPoint above is the older non-fused form.
+        Vector4 TransformShadowDebugPointFma(const Vector4& lrPoint, const Matrix44& lrMatrix)
+        {
+            const f32* lapRows[3] = { &lrMatrix.xAxis.x, &lrMatrix.yAxis.x, &lrMatrix.zAxis.x };
+            const f32* lapTranslation = &lrMatrix.wAxis.x;
+            Vector4 lvOut;
+            f32* lpfOut = &lvOut.x;
+            for (int liLane = 0; liLane < 4; ++liLane)
+            {
+                f32 lfValue = std::fma(lrPoint.x, lapRows[0][liLane], lapTranslation[liLane]);
+                lfValue = std::fma(lrPoint.y, lapRows[1][liLane], lfValue);
+                lfValue = std::fma(lrPoint.z, lapRows[2][liLane], lfValue);
+                lpfOut[liLane] = lfValue;
+            }
+            return lvOut;
+        }
+
+        Vector3 ToShadowDebugVector3(const Vector4& lrVector)
+        {
+            return Vector3{ lrVector.x, lrVector.y, lrVector.z, lrVector.w };
+        }
+
+        // ARTIST DebugRender transforms the three +/-20 axis pairs, then a
+        // four-corner plane at sourceDepth + 0.01 through mLightToWorld. The
+        // 0.01f word is 0x3C23D70A at X360 0x82F30E28.
+        void DrawShadowDebugMatrixGuides(CgsDev::DebugRender& lrRender,
+                                         const Matrix44& lrLightToWorld,
+                                         f32 lfSourceDepth)
+        {
+            const CgsDev::RGBA lAxisColour = static_cast<CgsDev::RGBA>(0xFF804040u);
+            const CgsDev::RGBA lPlaneColour = static_cast<CgsDev::RGBA>(0xFF804080u);
+            const Vector4 KAA_AXIS_LINES[3][2] =
+            {
+                { Vector4{ -20.0f,   0.0f,   0.0f, 0.0f }, Vector4{  20.0f,   0.0f,   0.0f, 0.0f } },
+                { Vector4{   0.0f, -20.0f,   0.0f, 0.0f }, Vector4{   0.0f,  20.0f,   0.0f, 0.0f } },
+                { Vector4{   0.0f,   0.0f, -20.0f, 0.0f }, Vector4{   0.0f,   0.0f, 20.0f, 0.0f } },
+            };
+
+            for (u32 luAxis = 0; luAxis < 3; ++luAxis)
+            {
+                lrRender.DrawLine(ToShadowDebugVector3(
+                                      TransformShadowDebugPointFma(KAA_AXIS_LINES[luAxis][0], lrLightToWorld)),
+                                  ToShadowDebugVector3(
+                                      TransformShadowDebugPointFma(KAA_AXIS_LINES[luAxis][1], lrLightToWorld)),
+                                  lAxisColour);
+            }
+
+            const f32 lfPlaneZ = lfSourceDepth + 0.01f;
+            const Vector4 KAA_PLANE_CORNERS[4] =
+            {
+                { -1.0f, -1.0f, lfPlaneZ, -1.0f },
+                {  1.0f, -1.0f, lfPlaneZ,  1.0f },
+                {  1.0f,  1.0f, lfPlaneZ,  1.0f },
+                { -1.0f,  1.0f, lfPlaneZ, -1.0f },
+            };
+
+            for (u32 luCorner = 0; luCorner < 4; ++luCorner)
+            {
+                const u32 luNext = (luCorner + 1u) & 3u;
+                lrRender.DrawLine(ToShadowDebugVector3(
+                                      TransformShadowDebugPointFma(KAA_PLANE_CORNERS[luCorner], lrLightToWorld)),
+                                  ToShadowDebugVector3(
+                                      TransformShadowDebugPointFma(KAA_PLANE_CORNERS[luNext], lrLightToWorld)),
+                                  lPlaneColour);
+            }
         }
 
         // rw::math::vpu::Normalize(Vector3) -- vmsum3fp + vrsqrtefp + 2x NR.
@@ -2823,13 +2890,122 @@ namespace BrnWorld
         }
     }
 
-    // @0x827C1BB8 (~1650 pseudocode lines): the immediate-mode debug renderer
-    // over gaTsmDebugRenderInfo / the bounding-box debug blobs. Dormant unless
-    // a per-map mbDebugRender toggle is set (Construct defaults all false).
-    void ShadowMap::DebugRender(u32 /*luIndex*/) const
+    // @0x827C1BB8. The debug interface is acquired before the selected map type
+    // is checked. Mode 1 consumes the TSM debug blob; mode 2 consumes the
+    // bounding-box blob. Other type values publish no draws.
+    void ShadowMap::DebugRender(u32 luIndex) const
     {
-        CGS_ASSERT(false,
-                   "ShadowMap::DebugRender: FLAG -- debug-only VMX/IM pipeline @0x827C1BB8 not yet "
-                   "reconstructed; set no maTsmBBInfo[].mbDebugRender toggle until it lands");
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lRender = lDebugInterface.GetRender();
+        const CgsDev::RGBA lCyan = static_cast<CgsDev::RGBA>(0xFF00FFFFu);
+        const CgsDev::RGBA lStageRed = static_cast<CgsDev::RGBA>(0xFFFF2020u);
+        const CgsDev::RGBA lBlue = static_cast<CgsDev::RGBA>(0xFF0000FFu);
+        const CgsDev::RGBA lGreen = static_cast<CgsDev::RGBA>(0xFF00FF00u);
+        const CgsDev::RGBA lEyeColour = static_cast<CgsDev::RGBA>(0xFFFF0000u);
+        const CgsDev::RGBA lMidPointColour = static_cast<CgsDev::RGBA>(0xFFFF00FFu);
+        const CgsDev::RGBA lSilhouetteAColour = static_cast<CgsDev::RGBA>(0xFF808000u);
+        const CgsDev::RGBA lSilhouetteBColour = static_cast<CgsDev::RGBA>(0xFF800080u);
+        const ShadowMapType leDebugType = maShadowMapTypes[luIndex];
+
+        if (leDebugType == E_SHADOWMAP_TYPE_TSM)
+        {
+            const TsmDebugRenderInfo& lrDebugInfo = gaTsmDebugRenderInfo[luIndex];
+
+            for (u32 luCorner = 0; luCorner < 4; ++luCorner)
+            {
+                const u32 luNext = (luCorner + 1u) & 3u;
+                lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.maTrapezoidCornersWorld[luCorner]),
+                                 ToShadowDebugVector3(lrDebugInfo.maTrapezoidCornersWorld[luNext]),
+                                 lCyan);
+                lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.maStageCornersWorld[luCorner]),
+                                 ToShadowDebugVector3(lrDebugInfo.maStageCornersWorld[luNext]),
+                                 lStageRed);
+            }
+
+            for (u32 luVertex = 0; luVertex < 8; ++luVertex)
+            {
+                lRender.DrawCross(ToShadowDebugVector3(lrDebugInfo.maFrustumVertsWorld[luVertex]),
+                                  2.0f, lBlue);
+            }
+
+            lrDebugInfo.mFrustum.DebugRender();
+            lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mFarCentreWorld),
+                             ToShadowDebugVector3(lrDebugInfo.mNearCentreWorld), lGreen);
+            lRender.DrawCross(ToShadowDebugVector3(lrDebugInfo.mEyeWorld), 2.0f, lEyeColour);
+            lRender.DrawCross(ToShadowDebugVector3(lrDebugInfo.mMidPointWorld), 2.0f,
+                              lMidPointColour);
+
+            lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mSilhouetteAWorld),
+                             ToShadowDebugVector3(lrDebugInfo.mSilhouetteADirWorld),
+                             lSilhouetteAColour);
+            lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mSilhouetteBWorld),
+                             ToShadowDebugVector3(lrDebugInfo.mSilhouetteBDirWorld),
+                             lSilhouetteBColour);
+
+            DrawShadowDebugMatrixGuides(lRender, lrDebugInfo.mLightToWorld,
+                                        lrDebugInfo.mLightToWorld.zAxis.z);
+        }
+        else if (leDebugType == E_SHADOWMAP_TYPE_BOUNDINGBOX)
+        {
+            const BoundingBoxDebugRenderInfo& lrDebugInfo = gBoundingBoxDebugRenderInfo[luIndex];
+
+            for (u32 luCorner = 0; luCorner < 4; ++luCorner)
+            {
+                const u32 luNext = (luCorner + 1u) & 3u;
+                lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.maBoxPointsWorld[luCorner]),
+                                 ToShadowDebugVector3(lrDebugInfo.maBoxPointsWorld[luNext]),
+                                 lCyan);
+                lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.maBoxPointsSquare[luCorner]),
+                                 ToShadowDebugVector3(lrDebugInfo.maBoxPointsSquare[luNext]),
+                                 lStageRed);
+            }
+
+            for (u32 luVertex = 0; luVertex < 8; ++luVertex)
+            {
+                lRender.DrawCross(ToShadowDebugVector3(lrDebugInfo.maFrustumPoints[luVertex]),
+                                  2.0f, lBlue);
+            }
+
+            lrDebugInfo.mCameraFrustum.DebugRender();
+            // ARTIST consumes these two blob slots here even though the known
+            // ComputeBoundingBoxMatrix producer has no stores to them.
+            lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mCentreLineStart),
+                             ToShadowDebugVector3(lrDebugInfo.mCentreLineEnd), lGreen);
+
+            for (u32 luLine = 0; luLine < 2; ++luLine)
+            {
+                lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mSideLineStart[luLine]),
+                                 ToShadowDebugVector3(lrDebugInfo.mSideLineEnd[luLine]),
+                                 lSilhouetteAColour);
+                lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mBaseLineStart[luLine]),
+                                 ToShadowDebugVector3(lrDebugInfo.mBaseLineEnd[luLine]),
+                                 lSilhouetteBColour);
+            }
+
+            DrawShadowDebugMatrixGuides(lRender, lrDebugInfo.mLightToWorld,
+                                        lrDebugInfo.mZOffset.z);
+
+            char lacAspectText[31];
+            CgsCore::SPrintf(lacAspectText, 31, "AR : %.2f", lrDebugInfo.mfAspectRatio);
+
+            // The X360 adds corners 0,1,2,3 in that order and multiplies the
+            // four-lane sum by its 0.25 reciprocal before publishing the label.
+            Vector4 lvTextPosition;
+            const Vector4& lrCorner0 = lrDebugInfo.maBoxPointsWorld[0];
+            const Vector4& lrCorner1 = lrDebugInfo.maBoxPointsWorld[1];
+            const Vector4& lrCorner2 = lrDebugInfo.maBoxPointsWorld[2];
+            const Vector4& lrCorner3 = lrDebugInfo.maBoxPointsWorld[3];
+            lvTextPosition.x = (((lrCorner0.x + lrCorner1.x) + lrCorner2.x) + lrCorner3.x) * 0.25f;
+            lvTextPosition.y = (((lrCorner0.y + lrCorner1.y) + lrCorner2.y) + lrCorner3.y) * 0.25f;
+            lvTextPosition.z = (((lrCorner0.z + lrCorner1.z) + lrCorner2.z) + lrCorner3.z) * 0.25f;
+            lvTextPosition.w = (((lrCorner0.w + lrCorner1.w) + lrCorner2.w) + lrCorner3.w) * 0.25f;
+            lRender.DrawText(ToShadowDebugVector3(lvTextPosition), lacAspectText, 16.0f,
+                             static_cast<CgsDev::RGBA>(0xFFFFFFFFu));
+
+            if (mbShowLightFrustumInDebugRender)
+            {
+                lrDebugInfo.mLightFrustum.DebugRenderCustomPlanes();
+            }
+        }
     }
 }
