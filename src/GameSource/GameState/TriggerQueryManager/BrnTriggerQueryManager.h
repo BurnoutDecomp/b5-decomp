@@ -42,7 +42,7 @@
 namespace BrnTrigger      { struct TriggerData; struct TriggerRegion; struct GenericRegion; }
 namespace BrnTraffic      { struct TrafficData; }
 namespace BrnProgression  { struct ProgressionManager; }
-namespace BrnGameState    { class TakedownManager; class RoadRulesManager; class StuntManager; class DriveThruManager; }
+namespace BrnGameState    { struct TakedownManager; class RoadRulesManager; class StuntManager; class DriveThruManager; }
 namespace BrnResource     { struct VehicleList; }
 namespace BrnGameState { namespace GameStateModuleIO { struct OutputBuffer; struct PreWorldInputBuffer; struct PostWorldInputBuffer; } }
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
