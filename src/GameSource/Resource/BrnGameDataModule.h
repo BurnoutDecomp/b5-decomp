@@ -20,6 +20,7 @@
 #include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
+namespace CgsMemory { struct MemoryMap; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
@@ -436,6 +437,7 @@ namespace BrnResource
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
         EPrepareStage                  meReleaseStage;   // +0x22C (a1[139])
+        const CgsMemory::MemoryMap*    mpMemoryMap;     // X360 ConstructResourceModule stores a1+0x6599C
         CgsResource::ResourceModule    mResourceModule;  // +0x280 (a1+160) the streaming engine
         // X360 a1+363096: the module's internal receiver queue -- every request the world
         // handlers post into the ResourceModule names it as mpUser, and Update drains the

@@ -15,6 +15,7 @@
 #include "GameSource/World/BrnWorldModule.h"
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Resource/BrnResourceAllocator.h"  // Allocators::InitMemoryMap
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
@@ -271,19 +272,9 @@ void EnginePrepare()
                                    << ", " << liStackProbe << "\n";
     }
 
-    // [FLAG] the line after it, BrnResource::PrintConsoleMemory("Game startup memory usage")
-    // @0x827E6198, is NOT restored: it walks the memory map's carves to report their usage,
-    // and the memory map is the absent allocator layer (F-P0-1). It is the first consumer to
-    // wire once InitMemoryMap lands, because it is what makes a bad carve visible at boot
-    // rather than as an overflow much later.
-
-    // [gated] X360 main 0x827E60D8 / TUB WinMain run the memory-map + allocator bring-up here
-    // (Allocators::InitMemoryMap / MemoryMap::FixUp, Allocators::Construct + the global
-    // graphics/resource/system/debug carves), then allocate the game module + the five IO
-    // buffer stacks from it and drive gm->Prepare(5 stacks) (vtable+64, X360 0x823DB848) in a
-    // loop until prepared. Until the allocator layer + that Prepare land, the game module is
-    // the file-static above and the update stacks are scratch-backed in BrnGameModule::
-    // Construct.
+    // [FLAG] ARTIST main prints PrintConsoleMemory("Game startup memory usage") at 0x827E6198;
+    // that print remains absent. Restore the following original memory-map initialization call.
+    BrnResource::Allocators::InitMemoryMap();
 
     // Create the D3D9 device on the window opened by InitializeHardware, then construct
     // the game's modules (the renderer module builds the loading-screen renderer).

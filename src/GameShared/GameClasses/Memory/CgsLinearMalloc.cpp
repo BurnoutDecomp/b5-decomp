@@ -20,6 +20,34 @@ namespace CgsMemory
 
     void LinearMalloc::Create(void* lpAlloc, size_t lnSize)
     {
+        if (mpAlloc != nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mpAlloc==NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                164);
+            CgsDev::Assert::EndAssert();
+        }
+        if (mbCreated)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mbCreated==false",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                165);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpAlloc == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                166);
+            CgsDev::Assert::EndAssert();
+        }
+
         mpAlloc = lpAlloc;
         mnStartAddress = reinterpret_cast<size_t>(lpAlloc);
         mnEndAddress = mnStartAddress + lnSize;

@@ -1,9 +1,11 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"
+#include "GameSource/Resource/BrnMemoryMapData.h"  // MemoryMapImageInitializer
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
 #include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include <new>   // std::nothrow (the GlobalGraphics arena carve)
+#include <malloc.h>   // _aligned_malloc (DefaultLinearAllocator PC backing)
 #include <Windows.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
@@ -59,6 +61,7 @@ namespace BrnResource
     // virtual DoAllocate. The backing 64 MB block is adopted lazily on first Allocate. (ICE null-checks
     // this; the resource modules cast it to rw::IResourceAllocator* and call DoAllocate.)
     void* Allocators::mpInternalDebugAllocator = static_cast<rw::IResourceAllocator*>(&s_DebugResourceAllocator);
+    DefaultLinearAllocator Allocators::mInitialDefaultAllocator;
 
     HeapResourceAllocator* GetDebugAllocator()
     {
@@ -163,6 +166,23 @@ namespace BrnResource
         }
     }
 
+    // ARTIST 0x82664728. Relocate the generated typed image once, then install the original
+    // initial default allocator before GameDataModule construction and its map consumers.
+    void Allocators::InitMemoryMap()
+    {
+        PrintConsoleMemory("Pre-memory map initialisation");
+
+        CgsMemory::MemoryMap& lrMap = MemoryMapImageInitializer::GetMemoryMap();
+        rw::Resource lMapResource;  // its native ctor nulls all five slots as main does explicitly on X360
+        lMapResource.m_baseResources[0] = &lrMap;
+        lrMap.FixUp(lMapResource);
+
+        mInitialDefaultAllocator.Construct(0);
+        rw::ResourceAllocatorRegistry::SetDefaultAllocator(&mInitialDefaultAllocator);
+
+        PrintConsoleMemory("Post-memory map initialisation");
+    }
+
     // FLAG PC-platform note: the host MEMORYSTATUS fields are pointer-sized, so a free figure of
     // 4 GB or more wraps in the u32 the console returns. The memory checks only compare two
     // readings, so a wrapped value still reports a change.
@@ -171,6 +191,130 @@ namespace BrnResource
         MEMORYSTATUS lMemoryStatus;
         GlobalMemoryStatus(&lMemoryStatus);
         return static_cast<u32>(lMemoryStatus.dwAvailPhys);
+    }
+
+    namespace
+    {
+        // X360 backs this startup-global allocator with two XPhysicalAlloc regions and has one
+        // InitMemoryMap caller in main. The host substitutions keep the same sizes/alignment and
+        // process lifetime; the operating system reclaims these static-allocator backing blocks.
+        // No fallback size or allocator policy is added. A failed host allocation is passed to
+        // LinearMalloc::Create so its original lpBuffer assertion and post-assert stores run.
+        void* gaInitialDefaultLinearBacking[2] = { nullptr, nullptr };
+
+        const char* const KAC_DEFAULT_LINEAR_RESOURCE_NAMES[5] =
+        {
+            "main memory",
+            "disposable",
+            "physical",
+            "uninitialized",
+            "disposable uninitialized"
+        };
+
+        void LogDefaultLinearMemoryBreakdown(u32 luSize, const char* lpcName)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "  " << (luSize / 0x100000u) << "mb "
+                    << ((luSize % 0x100000u) / 0x400u) << "kb " << (luSize % 0x400u)
+                    << "b of " << lpcName << "\n";
+            }
+        }
+
+        void FireDefaultLinearAllocatorAssert(const char* lpcMessage, s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                lpcMessage,
+                "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp",
+                liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST 0x82661A60. The argument is unused; construct five typed X360 allocator lanes,
+    // then create lanes 0 and 2 over the original fixed-size allocations.
+    void DefaultLinearAllocator::Construct(u32 luPreAllocatedSize)
+    {
+        (void)luPreAllocatedSize;
+        for (s32 liType = 0; liType < 5; ++liType)
+            maAllocators[liType].Construct();
+
+        // FLAG PC-platform leaf: XPhysicalAlloc's native replacement preserves its 64 KiB
+        // alignment and exact sizes. The two blocks live for the process lifetime of the
+        // static mInitialDefaultAllocator, as do the corresponding console allocations.
+        gaInitialDefaultLinearBacking[0] = _aligned_malloc(0x800u, 0x10000u);
+        maAllocators[0].Create(gaInitialDefaultLinearBacking[0], 0x800u);
+
+        gaInitialDefaultLinearBacking[1] = _aligned_malloc(0x400000u, 0x10000u);
+        maAllocators[2].Create(gaInitialDefaultLinearBacking[1], 0x400000u);
+    }
+
+    // ARTIST 0x82664800. All five descriptor lanes are allocated from the matching
+    // LinearMalloc; the original diagnostics, allocation assertion and resource slots remain.
+    rw::Resource DefaultLinearAllocator::DoAllocate(
+        const rw::ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "-----------------------------------------\n";
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Allocating into default linear allocator:\n";
+
+        for (s32 liType = 0; liType < 5; ++liType)
+        {
+            const u32 luSize = lrDescriptor.m_baseResourceDescriptors[liType].m_size;
+            if (luSize != 0)
+                LogDefaultLinearMemoryBreakdown(luSize, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Remaining pre-allocation\n";
+        for (s32 liType = 0; liType < 5; ++liType)
+        {
+            const u32 luFree = static_cast<u32>(maAllocators[liType].GetFreeMemory());
+            if (luFree != 0)
+                LogDefaultLinearMemoryBreakdown(luFree, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+        }
+
+        rw::Resource lResource;
+        for (s32 liType = 0; liType < 5; ++liType)
+        {
+            const rw::BaseResourceDescriptor& lrLane =
+                lrDescriptor.m_baseResourceDescriptors[liType];
+            if (lrLane.m_size != 0)
+            {
+                maAllocators[liType].SetAlignment(lrLane.m_alignment);
+                lResource.m_baseResources[liType] = maAllocators[liType].Malloc(lrLane.m_size);
+                if (lResource.m_baseResources[liType] == nullptr)
+                    FireDefaultLinearAllocatorAssert("Failed to allocate memory\n", 948);
+            }
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Remaining post-allocation\n";
+        for (s32 liType = 0; liType < 5; ++liType)
+        {
+            const u32 luFree = static_cast<u32>(maAllocators[liType].GetFreeMemory());
+            if (luFree != 0)
+                LogDefaultLinearMemoryBreakdown(luFree, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "-----------------------------------------\n";
+        return lResource;
+    }
+
+    // ARTIST 0x82661CF8: this initial global allocator is monotonic and cannot free a block.
+    void DefaultLinearAllocator::DoFree(const rw::Resource& /*lrResource*/)
+    {
+        FireDefaultLinearAllocatorAssert(
+            "Should never be freeing memory from the global allocator\n", 984);
+    }
+
+    // ARTIST 0x82661D88: disposable allocation/free is not supported on this allocator.
+    void DefaultLinearAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
+    {
+        FireDefaultLinearAllocatorAssert(
+            "Should never be allocating or freeing disposable memory!!!\n", 999);
     }
 
     // Out-of-line defaulted destructor: anchors the DefaultLinearAllocator vtable in this TU so
