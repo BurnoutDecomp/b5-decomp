@@ -19,6 +19,8 @@ namespace BrnWorld
 
 class BoostManager
 {
+    friend class BoostDebugComponent;
+
 public:
     enum BoostStrategyId
     {
