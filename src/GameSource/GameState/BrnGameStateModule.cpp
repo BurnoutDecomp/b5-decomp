@@ -102,6 +102,10 @@ enum EGsmGameAction
 void GameStateModule::Construct()
 {
     CgsModule::ModuleSingleBuffered::Construct();
+    // The two embedded debug components are Constructed immediately after the module base in
+    // ARTIST 0x82380388, in this order and with the owning module pointer.
+    mResetPlayerDebugComponent.Construct(this);
+    mGameStateDebugComponent.Construct(this);
 
     if (mpOutputBuffer == 0)
     {
@@ -278,7 +282,6 @@ void GameStateModule::Construct()
     // trap paid up front -- PostWorldUpdate Appends into it and PreWorldUpdate Clears it, and
     // Clear() does NOT bind a buffer.
     mGameEventCarryQueue.Construct();
-    mResetPlayerDebugComponent.Construct(this);
 
     // ⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH HAND-OFF STACK (X360 this+284488).
     // Same never-Constructed-container trap, and this container makes it LOUD rather than latent:
@@ -355,6 +358,15 @@ void GameStateModule::Construct()
     // ClearData at the console's seat: `mr r3, r31 ; bl ClearData` @0x823807A8, the call right after
     // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
     ClearData();
+
+    // GameStateDebugComponent::OnActivate's module-owned controls: ARTIST Construct @0x82380388
+    // writes the two snap-race gates true and clears the four signature-takedown debug values.
+    mbDebugLimitSnapRaceStartConditions = true;   // X360 +0x4575F
+    mbAllowSnapRaceMode = true;                   // X360 +0x45762
+    muDebugSigTDRegionIndex = 0;                   // X360 +0x475B0
+    mbDrawCrashDebugText = false;                 // X360 +0x475B4
+    mbDrawSignatureTakedownRegionText = false;    // X360 +0x475B5
+    mbDebugMakeAllTakedownsSignature = false;     // X360 +0x475B6
 
     // The "Process events" monitor (page 5, no minimum, budget 1.0, scaled) from the console's
     // monitor block after ClearData; ProcessGameEvents brackets its walk with it.
@@ -700,8 +712,8 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // DebugComponent::Register calls (this+0x32EA0 @0x8239E6B4, this+0x32DF8 @0x8239E6C0).
         ClearData();
         mResetPlayerDebugComponent.Register();
-        // The separate GameStateDebugComponent (this+0x32DF8) remains deferred here.
-        LogPrepareStageOnce(0, "ClearData + Reset Player Car registered; GameState debug deferred");
+        mGameStateDebugComponent.Register();
+        LogPrepareStageOnce(0, "ClearData + Reset Player Car and Game State debug registered");
         // fall through
 
     case E_PREPARESTAGE_MANAGER:
