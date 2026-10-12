@@ -1,6 +1,7 @@
 #include <cstdio>
 
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"  // original unsupported EnableJobThread assertion
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -58,6 +59,14 @@ char CgsSystem::HardwareInit::macJobManagerBuffer[400 * 1024]; // 400 KB buffer 
 EA::Jobs::JobScheduler* CgsSystem::JobManager()
 {
     return &HardwareInit::mJobManager;
+}
+
+// ARTIST 0x828D6138 is an unconditional unsupported-path assertion. ReplayModule::StopPlaying
+// calls this when its original +0x5C38 guard is set; preserve that failure instead of creating
+// PC job-thread support that the X360 method never provided.
+void CgsSystem::HardwareInit::EnableJobThread()
+{
+    CGS_ASSERT(false, "Not supported on xbox\n");
 }
 
 volatile bool CgsSystem::HardwareInit::mbHardwareRequestsShutdown;
