@@ -92,7 +92,8 @@ namespace BrnReplays
         E_STREAM_STATE_IDLE      = 0,
         E_STREAM_STATE_RECORDING = 1,
         E_STREAM_STATE_PLAYING   = 2,
-        E_STREAM_STATE_COUNT     = 3,
+        E_STREAM_STATE_RESTORING = 3,
+        E_STREAM_STATE_COUNT     = 4,
     };
 
     // The per-state stream stage the overlay labels (five named stages).
@@ -246,7 +247,7 @@ namespace BrnReplays
         u8                   maPad900[0x908 - 0x900];  // @0x900
         void*                mpSmallRecordingBuffer;   // @0x908 (0x4000-byte Prepare allocation)
         void*                mpDebugMemoryResource;    // @0x910 (Prepare resource allocation)
-        u64                  muConsoleValue918;        // @0x918 (modulo operand; semantic name unresolved)
+        s64                  miConsoleValue918;        // @0x918 (signed modulo operand; semantic name unresolved)
         f32                  mfCurrentRecordingTime;   // @0x920
         s32                  miConsoleValue924;        // @0x924 (Construct stores 10; modulo divisor)
         f32                  mfHistoryStartTime;       // @0x928

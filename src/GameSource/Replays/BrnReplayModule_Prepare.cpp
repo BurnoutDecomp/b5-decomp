@@ -14,10 +14,31 @@
 #include "GameSource/Replays/BrnReplayRequestInterface.h"        // ReplayIO::RequestInterface
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"          // BaseSerialiser
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"  // AllocatorList
+#include "GameSource/Resource/BrnResourceAllocator.h"              // GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"       // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"       // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
 #include <cstdio>                                                // snprintf
+
+namespace
+{
+    // X360's inline rw::IResourceAllocator::AllocateMemoryResource: construct the
+    // five-entry descriptor, allocate through DoAllocate, and return resource zero.
+    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, u32 luSize, u32 luAlignment)
+    {
+        rw::BaseResourceDescriptors<5> lDescriptor;
+        for (u32 luEntry = 0; luEntry < 5; ++luEntry)
+        {
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_size = 0;
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+        const rw::Resource lResource = lpAllocator->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
+        return lResource.m_baseResources[0];
+    }
+}
 
 namespace BrnReplays
 {
@@ -50,11 +71,9 @@ namespace BrnReplays
     // -- i.e. every tyre mark, spark, piece of debris and Lion effect in the game was behind
     // this one allocation.
     //
-    // THE THREE MODULE-OWN BUFFERS ARE ALLOCATED, NOT SKIPPED: they are three LinearMalloc
-    // bumps and leaving them out would silently move every later allocation's address. Their
-    // CONSUMERS (the write/read stream machinery) are not reconstructed, so the pointers are
-    // announced once and not stored -- the region is reserved exactly as the console reserves
-    // it. The debug memory resource is the one piece skipped, and it says so.
+    // THE MODULE-OWN BUFFERS ARE ALLOCATED AND RETAINED IN THEIR X360 MEMBERS. The 0x20000
+    // stream-header image is consumed by the recording close path; the other two buffers and
+    // debug memory resource remain available to their respective replay stream consumers.
     // =========================================================================================
     bool ReplayModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
     {
@@ -107,17 +126,21 @@ namespace BrnReplays
 
         mpLinearMalloc->SetAlignment(16);
 
-        // The three module-own bumps, in the console's own order and sizes.
-        void* lpStreamBuffer = mpLinearMalloc->Malloc(0x80000);
-        void* lpSmallBuffer  = mpLinearMalloc->Malloc(0x4000);
-        void* lpThirdBuffer  = mpLinearMalloc->Malloc(0x20000);
+        // Original order: two linear buffers, the debug memory resource, then the
+        // 0x20000-byte serialized stream-header image.
+        mpRecordingBuffer = mpLinearMalloc->Malloc(0x80000);
+        mpSmallRecordingBuffer = mpLinearMalloc->Malloc(0x4000);
+        mpDebugMemoryResource = AllocateMemoryResource(BrnResource::GetDebugAllocator(),
+                                                       524360, 16);
+        mpFileStreamHeader = static_cast<StreamHeader*>(mpLinearMalloc->Malloc(0x20000));
         {
             char lacMsg[224];
             std::snprintf(lacMsg, sizeof(lacMsg),
-                "[replays] ReplayModule::Prepare: this=%p linear=%p region up (0x80000=%p "
-                "0x4000=%p 0x20000=%p); their stream consumers are not reconstructed\n",
+                "[replays] ReplayModule::Prepare: this=%p linear=%p buffers (0x80000=%p "
+                "0x4000=%p 0x20000=%p) debug=%p\n",
                 static_cast<void*>(this), static_cast<void*>(mpLinearMalloc),
-                lpStreamBuffer, lpSmallBuffer, lpThirdBuffer);
+                mpRecordingBuffer, mpSmallRecordingBuffer, static_cast<void*>(mpFileStreamHeader),
+                mpDebugMemoryResource);
             CgsDev::Log::WriteToLog(lacMsg);
         }
 

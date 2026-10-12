@@ -4,10 +4,15 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList
 #include "GameSource/Resource/BrnResourceAllocator.h"       // Allocators / GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"     // Lock/UnlockBuffersForIO
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"   // CgsResource::Events::OpenFileResponse
+#include "GameSource/Replays/BrnReplayModuleIO.h"            // pre-simulation input/output buffers
+#include "GameSource/Replays/BrnReplayStatusInterface.h"     // ReplayIO::StatusInterface
+#include "GameSource/Replays/Stream/BrnReplayStreamHeader.h" // StreamHeader::ChopOffTailFrames
 #include "GameSource/GameState/BrnGameEvents.h"                            // LeaveReplayEvent / E_EVENT_LEAVE_REPLAY
+#include <cstddef>  // ptrdiff_t for the serialized stream-header relative pointer
 #include <cstdio>   // snprintf
 
 // ============================================================================
@@ -95,7 +100,7 @@ namespace BrnReplays
         mpRecordingBuffer = 0;
         mpSmallRecordingBuffer = 0;
         mpDebugMemoryResource = 0;
-        muConsoleValue918 = 0;
+        miConsoleValue918 = 0;
         miConsoleValue924 = 10;
         mbConsoleFlag238 = false;
         maPad239[0] = 0;
@@ -276,6 +281,302 @@ namespace BrnReplays
             if (mapSerialisers[liSerialiser])
                 mapSerialisers[liSerialiser]->Unlock();
         }
+    }
+
+    // ARTIST 0x8264E630. Reset each live serialiser's mode, readiness/keyframe state,
+    // replay time, streaming permission, and buffer cursors. The original computes a
+    // keyframe marker from the signed qword/divisor pair at +0x918/+0x924.
+    void ReplayModule::ClearSerialisers(BaseSerialiser::EMode leMode, bool lbAllowStreaming)
+    {
+        const bool lbKeyFrame = (miConsoleValue918 % miConsoleValue924) == 0;
+        for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+        {
+            BaseSerialiser* lpSerialiser = mapSerialisers[liSerialiser];
+            if (lpSerialiser == 0)
+                continue;
+
+            lpSerialiser->mbDataReady = true;
+            lpSerialiser->meMode = leMode;
+            lpSerialiser->mbIsKeyFrame = lbKeyFrame;
+            lpSerialiser->mfTime = mfCurrentRecordingTime;
+            lpSerialiser->mbAllowStreaming = lbAllowStreaming;
+            lpSerialiser->miBufferRead = 0;
+            lpSerialiser->miBufferUsed = 0;
+        }
+    }
+
+    // ARTIST 0x826528B8 / DecFIGS declaration: stop only from the recording state,
+    // clear serialisers, close the recording stream, and invalidate the current reel.
+    void ReplayModule::StopRecording(const ReplayIO::InputBuffer_PreSim* /*lpInputBuffer*/,
+                                     ReplayIO::OutputBuffer_PreSim* /*lpOutputBuffer*/,
+                                     BrnUpdateSet /*lUpdateSet*/)
+    {
+        if (meState != E_STREAM_STATE_RECORDING)
+            CGS_ASSERT(false, "Can only stop recording from recording state\n");
+
+        ClearSerialisers(BaseSerialiser::E_MODE_IDLE, true);
+        mbConsoleFlag5C3E = false;
+        meStreamStage = E_STREAM_STAGE_CLOSING;
+        miCurrentRecordReel = -1;
+    }
+
+    // ARTIST 0x8265F228. Queue a close request for the header file, close any open
+    // replay streams, then clear the receiver queue as the console does.
+    void ReplayModule::CloseReplayFiles(ReplayIO::OutputBuffer_PreSim* lpOutputBuffer)
+    {
+        static const s32 KI_CLOSE_FILE_REQUEST = 21;
+        static const s32 KI_HEADER_FILE_EVENT_ID = 0;
+
+        CgsResource::Events::FileHandleEvent lCloseRequest;
+        lCloseRequest.FileEvent::Construct(&mGameDataReceiverQueue, KI_HEADER_FILE_EVENT_ID);
+        lCloseRequest.SetFileHandle(mHeaderFile);
+        // ARTIST posts 16 bytes for the X360 {receiver, event id, file handle}; this
+        // host's native pointer and FileHandle widths expand the typed record, so copy
+        // its complete PC representation for the same receiver to read by member name.
+        lpOutputBuffer->GetGameDataRequestInterface()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lCloseRequest),
+            KI_CLOSE_FILE_REQUEST, static_cast<s32>(sizeof(lCloseRequest)));
+
+        if (mPrimaryDiskReadStream.GetStatus() == DiskReadStream::E_STATUS_OPEN)
+            mPrimaryDiskReadStream.Close();
+        if (mGpuWriteStream.GetStatus() == GPUDiskWriteStream::KI_STATE_OPEN)
+            mGpuWriteStream.Close();
+
+        mGameDataReceiverQueue.Clear();
+    }
+
+    // ARTIST 0x8264E470. Set the status bits for the replay state, copy all six
+    // reels, then publish current reel/frame progress in the output interface.
+    void ReplayModule::SetStatusInterface(ReplayIO::StatusInterface* lpInterface)
+    {
+        u32 luFlags = lpInterface->mxStatusFlags;
+        switch (meState)
+        {
+        case E_STREAM_STATE_RECORDING:
+            luFlags = (luFlags & ~0x72u) | 0x02u;
+            if (mbConsoleFlag5C3E)
+                luFlags |= 0x04u;
+            else
+                luFlags &= ~0x04u;
+            break;
+
+        case E_STREAM_STATE_PLAYING:
+            luFlags |= 0x01u;
+            if (!mbConsoleFlag5C31)
+                luFlags |= 0x10u;
+            else
+                luFlags &= ~0x10u;
+            if (mbConsoleFlag5C3C)
+                luFlags |= 0x20u;
+            else
+                luFlags &= ~0x20u;
+            break;
+
+        case E_STREAM_STATE_RESTORING:
+            luFlags |= 0x11u;
+            if (mbConsoleFlag5C3C)
+                luFlags |= 0x20u;
+            else
+                luFlags &= ~0x20u;
+            if (mbConsoleFlag5C3D)
+                luFlags |= 0x40u;
+            else
+                luFlags &= ~0x40u;
+            luFlags &= ~0x04u;
+            break;
+
+        default:
+            break;
+        }
+        lpInterface->mxStatusFlags = luFlags;
+
+        s32 liUsedReels = 0;
+        for (s32 liReel = 0; liReel < 6; ++liReel)
+        {
+            lpInterface->SetReel(liReel, &maReels[liReel]);
+            if (maReels[liReel].mbUsed)
+                ++liUsedReels;
+        }
+        if (liUsedReels == 6)
+            lpInterface->mxStatusFlags |= 0x08u;
+
+        lpInterface->miCurrentRecordReel = miCurrentRecordReel;
+        lpInterface->miCurrentPlaybackReel = miCurrentPlaybackReel;
+        if (meState == E_STREAM_STATE_PLAYING && mpReadStream != 0)
+        {
+            s32 liFrunkPosition = miReadBlockStart - mpReadStream->miCurrentFrunkPos;
+            if (liFrunkPosition < 0)
+                liFrunkPosition += KI_MAX_FRUNKS;
+            const s32 liFramePosition = mpReadStream->miStallCount - liFrunkPosition;
+            lpInterface->mfDebugHudAlpha = static_cast<f32>(liFramePosition) * 0.016666668f;
+        }
+        else
+        {
+            lpInterface->mfDebugHudAlpha = 0.0f;
+        }
+    }
+
+    // ARTIST 0x82660430. The recording stage machine carries OpenFileResponse,
+    // serialiser-clear, rolling-history, header-write, and close-completion legs.
+    void ReplayModule::UpdateRecording_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                                              ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                                              BrnUpdateSet lUpdateSet)
+    {
+        if (mbConsoleFlag6259)
+        {
+            s32 liUsedReels = 0;
+            while (liUsedReels < 6 && maReels[liUsedReels].mbUsed)
+                ++liUsedReels;
+            if (liUsedReels == 6)
+            {
+                mfConsoleValue625C = 1.0f;
+                mbConsoleFlag6259 = false;
+            }
+        }
+
+        const CgsSystem::Time lCurrentTime =
+            lpInputBuffer->GetTimerStatusInterface()->GetSimTimerStatus()->GetTime();
+        mfCurrentRecordingTime = lCurrentTime.GetFloatVal();
+        if (mfStopRecordingTime > 0.0f)
+            mfConsoleValue625C = 1.0f;
+
+        switch (meStreamStage)
+        {
+        case E_STREAM_STAGE_CLOSED:
+            CGS_ASSERT(false,
+                       "Should never have closed streams while recording (only ever opening, open or closing\n");
+            break;
+
+        case E_STREAM_STAGE_OPENING:
+            ClearSerialisers(BaseSerialiser::E_MODE_RECORDING, true);
+            if (WaitForOpenReplayFiles())
+                meStreamStage = E_STREAM_STAGE_OPEN;
+            break;
+
+        case E_STREAM_STAGE_OPEN:
+            ClearSerialisers(BaseSerialiser::E_MODE_RECORDING, true);
+            if (mbStopRecording || mbConsoleFlag6259)
+            {
+                mWriteStream.ResetStartFrame(15.0f);
+                mfHistoryStartTime = mfCurrentRecordingTime - 15.0f;
+                mbConsoleFlag5C3E = true;
+                mfStopRecordingTime = mfHistoryStartTime + 20.0f;
+            }
+            else if (mfStopRecordingTime > 0.0f &&
+                     (mfCurrentRecordingTime > mfStopRecordingTime || mbConsoleFlag625A))
+            {
+                StopRecording(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+                if (mpFileStreamHeader->mpFrameOffsets != 0)
+                {
+                    mpFileStreamHeader->ChopOffTailFrames();
+                    const std::ptrdiff_t liFrameOffsets =
+                        reinterpret_cast<const char*>(mpFileStreamHeader->mpFrameOffsets) -
+                        reinterpret_cast<const char*>(mpFileStreamHeader);
+                    mpFileStreamHeader->mpFrameOffsets = reinterpret_cast<StreamOffset*>(liFrameOffsets);
+                }
+                mHeaderFile.Write(mpFileStreamHeader, 0, 0x20000);
+            }
+            else if (mbConsoleFlag238)
+            {
+                maReels[miCurrentRecordReel].mbUsed = false;
+                StopRecording(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+            }
+            break;
+
+        case E_STREAM_STAGE_CLOSING:
+            ClearSerialisers(BaseSerialiser::E_MODE_IDLE, true);
+            if (!mWriteStream.mbEnded)
+            {
+                mWriteStream.mHeaderMalloc.FreeAll();
+                mWriteStream.mHeaderMalloc.Destruct();
+                mWriteStream.mpStreamHeader = 0;
+                mWriteStream.mbEnded = true;
+            }
+            if (mHeaderFile.GetStatus() == CgsFileSystem::E_FILESTATE_OPEN)
+            {
+                CloseReplayFiles(lpOutputBuffer);
+                meStreamStage = E_STREAM_STAGE_ERROR;
+            }
+            break;
+
+        case E_STREAM_STAGE_ERROR:
+            ClearSerialisers(BaseSerialiser::E_MODE_IDLE, true);
+            if (mGpuWriteStream.GetStatus() != GPUDiskWriteStream::KI_STATE_OPEN &&
+                mGameDataReceiverQueue.GetLength() >= 1)
+            {
+                mGameDataReceiverQueue.Clear();
+                meState = E_STREAM_STATE_IDLE;
+                meStreamStage = E_STREAM_STAGE_CLOSED;
+            }
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    // ARTIST 0x82660E78. UpdatePlaying_PreSim and RenderDebugHUD are named callees
+    // in the X360 caller but their bodies are not present in the checked-in export set;
+    // they remain declared source gaps instead of no-op substitutes.
+    void ReplayModule::Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                                    ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                                    BrnUpdateSet lUpdateSet)
+    {
+        CgsModule::LockBuffersForIO(lpOutputBuffer, const_cast<ReplayIO::InputBuffer_PreSim*>(lpInputBuffer));
+        LockSerialisers();
+        RenderDebugHUD();
+        mDebugComponent.PreUpdateRecord();
+
+        if (!mbSerialiseActive)
+        {
+            for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+            {
+                if (mapSerialisers[liSerialiser] != 0)
+                {
+                    mapSerialisers[liSerialiser]->miBufferRead = 0;
+                    mapSerialisers[liSerialiser]->miBufferUsed = 0;
+                }
+            }
+        }
+
+        switch (meState)
+        {
+        case E_STREAM_STATE_IDLE:
+            break;
+        case E_STREAM_STATE_RECORDING:
+            UpdateRecording_PreSim(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+            break;
+        case E_STREAM_STATE_PLAYING:
+            UpdatePlaying_PreSim(lpInputBuffer, lpOutputBuffer, lUpdateSet);
+            break;
+        case E_STREAM_STATE_RESTORING:
+            for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+            {
+                BaseSerialiser* lpSerialiser = mapSerialisers[liSerialiser];
+                if (lpSerialiser != 0)
+                {
+                    lpSerialiser->SetMode(BaseSerialiser::E_MODE_RESTORING);
+                    lpSerialiser->mbDataRestored = false;
+                }
+            }
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid update state for replay module\n");
+            break;
+        }
+
+        mbStartPlaying = false;
+        mbStartRecording = false;
+        mbStopPlaying = false;
+        mbStopRecording = false;
+        mbMarkActionReplay = false;
+        mbStartActionReplay = false;
+
+        SetStatusInterface(lpOutputBuffer->GetStatusInterface());
+        mDebugComponent.PostUpdateRecord();
+        UnlockSerialisers();
+        CgsModule::UnlockBuffersForIO(lpOutputBuffer,
+                                     const_cast<ReplayIO::InputBuffer_PreSim*>(lpInputBuffer));
     }
 
 }
