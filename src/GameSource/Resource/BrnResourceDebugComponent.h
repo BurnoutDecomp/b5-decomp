@@ -9,11 +9,14 @@ namespace rw { struct IResourceAllocator; }
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnResource::DebugComponent::OnActivate @ 0x826626A8
-//   BrnResource::DebugComponent::InterpolateColours @ 0x82661410
+//   BrnResource::DebugComponent::Update              @ 0x82666F38
+//   BrnResource::DebugComponent::RenderHUD           @ 0x82662008
+//   BrnResource::DebugComponent::InterpolateColours  @ 0x82661410
 //
 // The debug component is embedded in BrnResource::GameDataModule. The resource
 // allocator statistics row and report callback follow the DecFIGS member shape;
-// their readers are being connected to the original GameDataModule memory map.
+// Their producer/reader chain uses the original GameDataModule memory map and
+// allocator registry.
 
 namespace BrnResource
 {
@@ -51,6 +54,10 @@ namespace BrnResource
         // DecFIGS preserves the two-argument typed constructor shape.
         void Construct(GameDataModule* lpModule, rw::IResourceAllocator* lpAllocator);
 
+        // DecFIGS declaration and ARTIST vtable slots for the original stats reader/HUD.
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void Update() override;
+
         // X360 0x827DD200; DecFIGS declares this accessor const.
         const char* GetName() const override { return "GameDataModule"; }
 
@@ -62,7 +69,9 @@ namespace BrnResource
         // RenderHUD to fade the resource-bar colours. lfFactor selects toward luColourT
         // (factor 1 == luColourT, factor 0 == luColour0). Each channel is rounded to
         // nearest (add 0.5, truncate). X360 0x82661410.
-        static uint32_t InterpolateColours(uint32_t luColourT, uint32_t luColour0, f32 lfFactor);
+        // DecFIGS declares a non-static RGBA-returning member; RGBA is the packed u32
+        // host representation. ARTIST 0x82661410 receives this plus its hidden result slot.
+        u32 InterpolateColours(u32 luColourT, u32 luColour0, f32 lfFactor);
 
     private:
         // ARTIST 0x826627A8 passes this address as GeneralAllocator::ReportHeap's
