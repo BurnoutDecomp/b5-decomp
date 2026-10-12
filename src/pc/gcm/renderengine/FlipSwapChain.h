@@ -2,6 +2,7 @@
 
 #include <d3d9.h>
 #include "pc/gcm/renderengine/GpuFrameTiming.h"
+#include "pc/gcm/renderengine/GpuMonitorTiming.h"
 #include "pc/gcm/renderengine/GeometryBindings.h"
 #include "pc/gcm/renderengine/ShaderBindings.h"
 #include "pc/gcm/renderengine/NvApiResourceRegistry.h"
@@ -53,6 +54,7 @@ namespace renderengine
             if(!gNvApiDepthResourcesPC.Clear())return E_FAIL;
             CgsPC::Reflections::GetCubeHistory().Release();
             GpuFrameTimingPC::DeviceReset();
+            GpuMonitorTimingPC::DeviceReset();
             GeometryBindingsPC::gCache.Invalidate();
             gPCShaderBindingCache.Invalidate();
             D3DPRESENT_PARAMETERS lDesired=mParameters;
