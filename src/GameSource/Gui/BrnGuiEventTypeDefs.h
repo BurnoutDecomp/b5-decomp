@@ -2922,17 +2922,19 @@ static_assert(__builtin_offsetof(GuiEventPrepareForModeStart, meGameModeType)   
 // Remaining reserved spans stay unnamed until their producer/consumer chain is pinned.
 // Do not assign them by DWARF order: ARTIST places win/crashed-out/timed-out at B1/B2/B3,
 // which differs from the PS3 declaration order. The named fields below cite their evidence.
-// ARTIST0x824C5BE4..0x824C5C0C: native event298 carries the sequence name and voice key.
-// DecFIGS names this sequence-start record but numbers it296; ARTIST uses298.
+// ARTIST 0x824C5BE4..0x824C5C0C builds a 32-byte channel-40 record: the 12-byte wrapper
+// header, four bytes of alignment, then this 16-byte payload at record+0x10. The X360 stores
+// the name at payload+0 and the 64-bit voice key at payload+8. DecFIGS names these fields but
+// numbers the event 296; ARTIST uses 298.
 struct GuiEventPostEventNewRivalSequenceStart : public CgsGui::GuiEvent<298>
 {
-    u32 muHeaderPadding;
     u32 mRivalUnlockName;
-    u32 muPayloadPadding;
     u64 mVoiceOver;
     GuiEventPostEventNewRivalSequenceStart()  {}
 };
-static_assert(sizeof(GuiEventPostEventNewRivalSequenceStart) == 32, "rival sequence event size");
+static_assert(sizeof(GuiEventPostEventNewRivalSequenceStart) == 16, "rival sequence payload size");
+static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventPostEventNewRivalSequenceStart, 40>) == 32,
+              "rival sequence channel-40 wrapper size");
 
 // The other platform numbers it GuiEvent<315>; console id 317. The online finishing order: the active
 // race-car index in each finish position. GuiCache::RecEvent copies the record word for
