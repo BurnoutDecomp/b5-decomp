@@ -17,9 +17,8 @@
 // screen then raises the CrashNav flow again and advances (the FSM edge goes to the game
 // room). GUI 44 (disconnected) latches the error for the popup and takes the DISCONNECT edge.
 //
-// Out-queue records are the console's own wire records, posted on channel 40 through
-// GetOutputEventQueue()->AddEvent with host sizeof sizes (the committed OutputGuiEvent
-// template does not use channel 40; see CgsGuiStateInterface.h).
+// Typed channel-40 payloads use StateInterface::OutputGuiEvent. The quick-match request
+// keeps its explicitly constructed wrapper so its record shape follows the recovered type.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickMatch.h"
 
@@ -129,35 +128,25 @@ namespace BrnGui
         };
 
         // ---- out-queue wire records ----------------------------------------------------
-        // { 1, 253, 12, <one byte> }, channel 40, 16 bytes: stop the search. The console
-        // never writes the payload byte (zero here).
+        // One-byte payload for {1, 253, 12, <one byte>}, channel 40, 16 bytes. The console
+        // never writes this payload byte; keep it unwritten and let the wrapper own its header.
         struct CustomMatchSearchStopWire : public CgsGui::GuiEvent<253>
         {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            CustomMatchSearchStopWire()
-                :  muUnwrittenPayload(0)
-            {
-            }
+            u8 muUnwrittenPayload;   // payload +0x00
         };
 
         // { 1, 533, 12, <one byte> }, channel 40, 16 bytes -- the record the screens post
         // when they hand the front end back (the pause screen and the online play screen
-        // post the same one). The console never writes the payload byte (zero here).
+        // post the same one). The console never writes the payload byte.
         struct GuiEvent533Wire : public CgsGui::GuiEvent<533>
         {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            GuiEvent533Wire()
-                :  muUnwrittenPayload(0)
-            {
-            }
+            u8 muUnwrittenPayload;   // payload +0x00
         };
 
         // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
         struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
         {
-            bool mbShowHud;   // +0x0C
+            bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
                 :  mbShowHud(lbShowHud)
@@ -168,12 +157,20 @@ namespace BrnGui
         // { 2, 251, 12, ranked, freeburn }, channel 40, 16 bytes: the quick-match request.
         typedef CgsGui::GuiEventWrapper<GuiEventNetworkQuickMatch, 40> GuiEventNetworkQuickMatchWire;
 
-        static_assert(sizeof(CustomMatchSearchStopWire) == 16, "search-stop record is 16 bytes");
-        static_assert(sizeof(GuiEvent533Wire) == 16, "id-533 record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
+        static_assert(sizeof(CustomMatchSearchStopWire) == 1, "search-stop payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<CustomMatchSearchStopWire, 40>) == 16,
+                      "search-stop wrapper is 16 bytes");
+        static_assert(sizeof(GuiEvent533Wire) == 1, "id-533 payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEvent533Wire, 40>) == 16,
+                      "id-533 wrapper is 16 bytes");
+        static_assert(sizeof(GuiEventShowHideHudWire) == 1, "show/hide-hud payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHudWire, 40>) == 16,
+                      "show/hide-hud wrapper is 16 bytes");
         static_assert(sizeof(GuiEventNetworkQuickMatchWire) == 16, "quick-match record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventNetworkSuspension, 40>) == 16,
+                      "suspension wrapper is 16 bytes");
     }
 
     // ================================================================================
@@ -197,7 +194,7 @@ namespace BrnGui
         GuiEventActivateCrashNav lDeactivateCrashNav(false);
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        const GuiEventShowHideHudWire lHideHud(false);
+        GuiEventShowHideHudWire lHideHud(false);
         mpStateInterface->OutputGuiEvent(lHideHud);
     }
 
@@ -213,7 +210,7 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
         // Stop any search still in flight.
-        const CustomMatchSearchStopWire lStop;
+        CustomMatchSearchStopWire lStop;
         mpStateInterface->OutputGuiEvent(lStop);
 
         if (mpGuiCache != 0)
@@ -256,7 +253,7 @@ namespace BrnGui
                 GuiEventActivateCrashNav lActivateCrashNav(true);
                 mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-                const GuiEvent533Wire lHandBack;
+                GuiEvent533Wire lHandBack;
                 mpStateInterface->OutputGuiEvent(lHandBack);
 
                 BrnNetHarnessPC::WitnessTag("netui", "quick-match", "in game (GUI 50) -> ADVANCE");

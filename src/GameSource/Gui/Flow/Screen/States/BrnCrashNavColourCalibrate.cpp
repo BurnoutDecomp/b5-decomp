@@ -157,8 +157,8 @@ namespace BrnGui
         // { 1, N, 12, <one payload byte> } -- 16 bytes on channel 40. The shared
         // channel-command record (BrnScreenLoading.cpp's GuiCommandEvent16, same shape).
         // NOTE the console leaves the payload byte UNWRITTEN for 514/515 (payload size 1,
-        // no `stb`); zeroed here rather than shipping stack garbage on the wire -- the
-        // same call BrnCarSelectUnlock.cpp's GuiCarSelectTickerClosedWire77 makes.
+        // no `stb`); preserve that byte in the payload object. The wrapper's trailing padding
+        // is also outside the event payload.
         // The 514/515 PAYLOAD TYPES are homed as BrnGui::GuiEventColourCalibrationScreenShow /
         // ...Hide (BrnGuiEventTypeDefs.h, DWARF-named, EMPTY payloads); this is the RECORD form
         // the console's ShowCalibrationCard @0x824CE7E8/@0x824CE7FC actually builds around them
@@ -167,8 +167,10 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandWire16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;    // +0x00
-            explicit GuiCommandWire16(u8 lu8Flag = 0)
+            u8 mu8Flag;    // payload +0x00
+
+            GuiCommandWire16() = default;
+            explicit GuiCommandWire16(u8 lu8Flag)
                 :  mu8Flag(lu8Flag)
             {}
         };
@@ -179,7 +181,7 @@ namespace BrnGui
         // (BrnGameModule::BridgeGuiToGame) reads the identical type it was written from.
         struct GuiBrightnessContrastWire20 : public CgsGui::GuiEvent<545>
         {
-            GuiOptionsBrightnessContrast mPayload;   // +0x0C
+            GuiOptionsBrightnessContrast mPayload;   // payload +0x00
             GuiBrightnessContrastWire20(s32 liBrightness, s32 liContrast)
                 
             {
@@ -187,13 +189,20 @@ namespace BrnGui
                 mPayload.mContrast   = liContrast;
             }
         };
+        typedef CgsGui::GuiEventWrapper<GuiBrightnessContrastWire20, 40>
+            GuiBrightnessContrastOutputWire;
 
-        // The 100-byte audio payload is wrapped by StateInterface::OutputGuiEvent.
-        static_assert(sizeof(GuiCommandWire16<514>) == 16, "card show/hide record is 16 bytes");
-        static_assert(sizeof(GuiBrightnessContrastWire20) == 20, "brightness/contrast record is 20 bytes");
+        // These are payload sizes; StateInterface::OutputGuiEvent owns the separate channel-40 wrapper.
+        static_assert(sizeof(GuiCommandWire16<514>) == 1, "card show/hide payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiCommandWire16<514>, 40>) == 16,
+                      "card show/hide wrapper is 16 bytes");
+        static_assert(sizeof(GuiBrightnessContrastWire20) == 8,
+                      "brightness/contrast payload is two words");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiBrightnessContrastWire20, 40>) == 20,
+                      "brightness/contrast wrapper is 20 bytes");
         static_assert(sizeof(GuiAudioTriggerEvent) == 100, "audio trigger payload is 100 bytes");
-        static_assert(offsetof(GuiBrightnessContrastWire20, mPayload) == 12,
-                      "the 545 payload sits at the record's own header offset word (12)");
+        static_assert(offsetof(GuiBrightnessContrastOutputWire, mOutEvent) == 12,
+                      "the 545 payload starts at wrapper offset 12");
 
         // The per-move menu cue. NOT a recovered function: the X360 emits this exact
         // two-call pair INLINE at both HandleControllerInput sites
@@ -204,7 +213,7 @@ namespace BrnGui
         // OutputGuiEvent builds (id 457, channel 40, 112 bytes).
         void PostMenuToggleSound(CgsGui::StateInterface* lpStateInterface)
         {
-            GuiAudioTriggerWire lAudio;
+            GuiAudioTriggerEvent lAudio;
             lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KAC_EMPTY,
                              KAC_SOUND_LABEL_MENU_TOGGLE, KAC_EMPTY);
             lpStateInterface->OutputGuiEvent(lAudio);

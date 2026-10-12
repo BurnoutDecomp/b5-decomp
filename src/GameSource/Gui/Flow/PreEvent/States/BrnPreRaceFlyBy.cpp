@@ -530,28 +530,20 @@ namespace BrnGui
 
         // id 532 -- the "pre-race fly-by entered" GUI-out notification. X360 OnEnter builds
         // { 1, 532, 12 } at 0x824C64E4..0x824C64F0 and posts a 16-byte record on channel 40
-        // (`li r6,0x10` / `li r5,0x28`). Per CgsGuiEvent.h the first header word is the
-        // PAYLOAD size, so the payload is ONE byte at +12 -- the emitter simply never
-        // writes it, and a 1-byte payload at +12 pads the record out to the 16 AddEvent is
-        // given. The house shape for a 1-byte payload is BrnGuiDemangledEventTypes.h's
+        // (`li r6,0x10` / `li r5,0x28`). The one-byte payload is separate from the wrapper
+        // header, is never written by the emitter, and pads the full record to 16 bytes. The
+        // house shape for a one-byte payload is BrnGuiDemangledEventTypes.h's
         // GuiEventShowHideBoostBar (id 214 size 1). Exactly the record BrnPausedHudState
         // posts for the same id (BrnPausedHudState.cpp:24). FLAG: consumer-derived type
         // name -- no DWARF row survives for the X360 id-532 event, and the payload byte's
         // meaning is not recovered (nothing in the image ever stores it).
         struct GuiEventPreRaceFlyByEnter : public CgsGui::GuiEvent<532>
         {
-            u8 mu8Payload;   // +0x0C -- the 1-byte payload the size word names; UNWRITTEN by the emitter
-
-            GuiEventPreRaceFlyByEnter()
-                :  mu8Payload(0)
-            {
-            }
+            u8 mu8Payload;   // +0x00 -- UNWRITTEN by the emitter
         };
-        // Host layout pin: CgsGui::GuiEvent<N> is the three header words over an empty
-        // CgsModule::Event base, so the record is 16 bytes on the host exactly as on the
-        // console -- the AddEvent size argument below is a host sizeof, never a baked 16.
-        static_assert(sizeof(GuiEventPreRaceFlyByEnter) == 16,
-                      "host record matches the X360 16-byte id-532 post");
+        static_assert(sizeof(GuiEventPreRaceFlyByEnter) == 1, "id-532 payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventPreRaceFlyByEnter, 40>) == 16,
+                      "id-532 channel-40 wrapper is 16 bytes");
     }
 
     // ================================================================================
@@ -1319,19 +1311,12 @@ namespace
     // carries its own anonymous-namespace copy, so there is no link collision.
     struct GuiEventPreRaceFlyByTimeExpired : public CgsGui::GuiEvent<163>
     {
-        u8 mu8Payload;   // +0x0C -- the 1-byte payload the size word names; UNWRITTEN by the emitter
-
-        GuiEventPreRaceFlyByTimeExpired()
-            :  mu8Payload(0)
-        {
-        }
+        u8 mu8Payload;   // +0x00 -- UNWRITTEN by the emitter
     };
 
-    // Host layout pin: CgsModule::Event is an empty base and CgsGui::GuiEvent<N> is the
-    // three header words, so the record is 16 bytes on the host exactly as on the console
-    // -- the AddEvent size argument below is a host sizeof, never the console's baked 16.
-    static_assert(sizeof(GuiEventPreRaceFlyByTimeExpired) == 16,
-                  "host record matches the X360 16-byte id-163 post");
+    static_assert(sizeof(GuiEventPreRaceFlyByTimeExpired) == 1, "id-163 payload is one byte");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventPreRaceFlyByTimeExpired, 40>) == 16,
+                  "id-163 channel-40 wrapper is 16 bytes");
 
     // The AddEvent channel the X360 passes for a GUI out-event post (`li r5, 0x28`).
     // Same channel the committed OutputGuiEvent<T> instantiations use.
@@ -1900,9 +1885,8 @@ namespace
 // `s32 i < lpProfile->GetEventCount()` would promote i to unsigned and invert that guard,
 // so each walk hoists the count into an s32 first.
 //
-// FILE-SCOPE DATA THE GATE ALREADY VERIFIED: the `sizeof(GuiEventPreRaceDescription) == 40`
-// static_assert passes, i.e. the host record really is byte-for-byte the 40-byte record
-// the X360 posts.
+// FILE-SCOPE DATA THE GATE ALREADY VERIFIED: the channel-40 wrapper of this 24-byte payload
+// is 40 bytes, matching the X360 AddEvent record.
 //
 // CORRECTIONS TO THE WAVE-J SPEC, measured from the asm (spec section 3 flagged both as
 // "READ ASM"):
@@ -1962,17 +1946,15 @@ namespace
 
     struct GuiEventPreRaceDescription : public CgsGui::GuiEvent<464>
     {
-        alignas(8) CgsID mLandmarkId;   // +16
-        s32 miDirection;                // +24
-        s32 miGameMode;                 // +28
-        s32 miTimesPlayed;              // +32
-        u8  mbEventFlag;                // +36
-        u8  mu8ProgressionRank;         // +37
+        alignas(8) CgsID mLandmarkId;   // payload +0; wrapper record +16
+        s32 miDirection;                // payload +8
+        s32 miGameMode;                 // payload +12
+        s32 miTimesPlayed;              // payload +16
+        u8  mbEventFlag;                // payload +20
+        u8  mu8ProgressionRank;         // payload +21
 
-        // Header words are DERIVED from the host record, not the console immediates:
-        // word0 == the payload byte count (X360 0x18 == 24 == 40 - 16) and word2 == the
-        // payload offset (X360 0x10 == 16). The sizeof pin below is what makes the two
-        // agree with the console record.
+        // OutputGuiEvent wraps this payload as {24, 464, 16, <alignment>, payload}; the
+        // separate wrapper owns the three header words and the 8-byte payload alignment.
         GuiEventPreRaceDescription()
             :  mLandmarkId(0)
             , miDirection(0)
@@ -1983,8 +1965,9 @@ namespace
         {
         }
     };
-    static_assert(sizeof(GuiEventPreRaceDescription) == 40,
-                  "the host record matches the X360 40-byte id-464 post");
+    static_assert(sizeof(GuiEventPreRaceDescription) == 24, "id-464 payload is 24 bytes");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventPreRaceDescription, 40>) == 40,
+                  "id-464 channel-40 wrapper is 40 bytes");
 }
 
 // -------------------------------------------------------------------------------------
@@ -2309,8 +2292,8 @@ namespace
     const s32 KI_COMPASS_DIRECTION_NONE = E_COMPASS_POINTS_COUNT;
 
 // (fold: an identical definition of GuiEventPreRaceDescription was dropped here -- this TU defines it once, above)
-    static_assert(sizeof(GuiEventPreRaceDescription) == 40,
-                  "the host record matches the X360 40-byte id-464 post");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventPreRaceDescription, 40>) == 40,
+                  "id-464 channel-40 wrapper is 40 bytes");
 }
 
 // -------------------------------------------------------------------------------

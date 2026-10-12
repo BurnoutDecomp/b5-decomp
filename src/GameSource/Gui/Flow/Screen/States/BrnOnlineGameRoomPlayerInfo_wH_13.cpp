@@ -130,8 +130,8 @@ namespace BrnGui
         typedef CgsGui::GuiEvent<463> AudioSettingsHeader;
         struct GuiEventAudioSettingsWire : public AudioSettingsHeader
         {
-            s32 miMusicVolume;   // +0x0C
-            s32 miSFXVolume;     // +0x10
+            s32 miMusicVolume;   // payload +0x00
+            s32 miSFXVolume;     // payload +0x04
 
             GuiEventAudioSettingsWire(s32 liMusicVolume, s32 liSFXVolume)
                 :  miMusicVolume(liMusicVolume)
@@ -145,7 +145,7 @@ namespace BrnGui
         typedef CgsGui::GuiEvent<474> VoipSettingsHeader;
         struct GuiEventVoipSettingsWire : public VoipSettingsHeader
         {
-            s32 miVoipVolume;    // +0x0C
+            s32 miVoipVolume;    // payload +0x00
 
             explicit GuiEventVoipSettingsWire(s32 liVoipVolume)
                 :  miVoipVolume(liVoipVolume)
@@ -164,7 +164,7 @@ namespace BrnGui
         typedef CgsGui::GuiEvent<52> LeaveOnlineGameHeader;
         struct GuiEventLeaveOnlineGameWire : public LeaveOnlineGameHeader
         {
-            u8 maPayload[1];   // +0x0C -- never written by the X360 (see above)
+            u8 maPayload[1];   // payload +0x00 -- never written by the X360 (see above)
 
             GuiEventLeaveOnlineGameWire()
 
@@ -172,14 +172,20 @@ namespace BrnGui
             }
         };
 
-        // Record-size pins. Every one of these payloads is pointer-free, so the X360's
-        // AddEvent size immediate must survive unchanged on the x64 host; if a host layout
-        // ever drifts, this is where it is caught rather than on the wire.
+        // Payload pins and their separately constructed channel-40 wrapper sizes.
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
-        static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
-        static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
-        static_assert(sizeof(GuiEventLeaveOnlineGameWire) == 16, "leave-game record is 16 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger payload is 100 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerWire, 40>) == 112,
+                      "audio trigger wrapper is 112 bytes");
+        static_assert(sizeof(GuiEventAudioSettingsWire) == 8, "audio settings payload is two words");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventAudioSettingsWire, 40>) == 20,
+                      "audio settings wrapper is 20 bytes");
+        static_assert(sizeof(GuiEventVoipSettingsWire) == 4, "voip settings payload is one word");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventVoipSettingsWire, 40>) == 16,
+                      "voip settings wrapper is 16 bytes");
+        static_assert(sizeof(GuiEventLeaveOnlineGameWire) == 1, "leave-game payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventLeaveOnlineGameWire, 40>) == 16,
+                      "leave-game wrapper is 16 bytes");
     }
 
     // ---- HandleAskToLaunchEvent @ 0x82498698 --------------------------------------

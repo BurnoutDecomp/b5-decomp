@@ -82,15 +82,14 @@ namespace BrnGui
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventRequestChallengeStatusPayload, 40>) == 16, "580 record is 16 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexture, 40>) == 20, "264 record is 20 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40>) == 16, "572 record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "191 record is 20 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "191 channel-40 wrapper is 20 bytes");
 
         // ---- the shared command sequences ---------------------------------------------
         void PostActivateCrashNav(CgsGui::StateInterface* lpStateInterface, bool lbActivate)
         {
             GuiEventActivateCrashNav lActivateCrashNav(lbActivate);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lActivateCrashNav)));
+            lpStateInterface->OutputGuiEvent(lActivateCrashNav);
         }
 
         void PostShowHideHud(CgsGui::StateInterface* lpStateInterface, bool lbShowHud)

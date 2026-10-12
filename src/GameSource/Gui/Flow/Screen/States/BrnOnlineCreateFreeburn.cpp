@@ -97,18 +97,13 @@ namespace BrnGui
         // when they hand the front end back. The console never writes the payload byte.
         struct GuiEvent533Wire : public CgsGui::GuiEvent<533>
         {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            GuiEvent533Wire()
-                :  muUnwrittenPayload(0)
-            {
-            }
+            u8 muUnwrittenPayload;   // payload +0x00; no store in the X360 emitter
         };
 
         // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
         struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
         {
-            bool mbShowHud;   // +0x0C
+            bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
                 :  mbShowHud(lbShowHud)
@@ -120,9 +115,14 @@ namespace BrnGui
         static_assert(sizeof(GuiEventNetworkCreateGameWire) == 492, "create-game record is 492 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiEvent533Wire) == 16, "id-533 record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        static_assert(sizeof(GuiEvent533Wire) == 1, "id-533 payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEvent533Wire, 40>) == 16,
+                      "id-533 wrapper is 16 bytes");
+        static_assert(sizeof(GuiEventShowHideHudWire) == 1, "show/hide-hud payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHudWire, 40>) == 16,
+                      "show/hide-hud wrapper is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
     }
 
     // ================================================================================
@@ -139,7 +139,7 @@ namespace BrnGui
         GuiEventActivateCrashNav lDeactivateCrashNav(false);
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        const GuiEventShowHideHudWire lHideHud(false);
+        GuiEventShowHideHudWire lHideHud(false);
         mpStateInterface->OutputGuiEvent(lHideHud);
     }
 
@@ -270,7 +270,7 @@ namespace BrnGui
                 GuiEventActivateCrashNav lActivateCrashNav(true);
                 mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-                const GuiEvent533Wire lHandBack;
+                GuiEvent533Wire lHandBack;
                 mpStateInterface->OutputGuiEvent(lHandBack);
             }
         }

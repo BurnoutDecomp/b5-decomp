@@ -14,7 +14,8 @@
 
 #include "types.hpp"
 #include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (empty typed event base)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"   // GuiPFXHookEvent / ...StopEvent / ...Background... / GuiPFXHookEnumeration (495..501, RECOVERED 2026-09-17)
 #include "GameSource/Gui/Events/BrnGuiEventSetBlackBars.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
@@ -224,7 +225,19 @@ namespace BrnGui
     struct GuiEventMiniMapSwitch { u8 maData[1]; s32 GetEventType() const { return 205; } };  // id 205 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventMustFixCarFirst { u8 maData[1]; s32 GetEventType() const { return 552; } };  // id 552 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventNetworkLeftGame { u8 maData[8]; s32 GetEventType() const { return 273; } };  // id 273 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiEventNetworkLobbyPlayerList : public CgsGui::GuiEvent<244> { u8 maPayload[444]; };  // id 244 size 456 (12B GuiEvent header + opaque payload)
+    // ARTIST CgsGui::GuiModule::AddGuiEvent<GuiEventNetworkLobbyPlayerList> @0x823CF4C8
+    // queues exactly 456 payload bytes. DecFIGS names the eight 56-byte player rows and count;
+    // the event base is empty and contributes no bytes to this record.
+    struct GuiEventNetworkLobbyPlayerList : public CgsGui::GuiEvent<244>
+    {
+        BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData
+            maPlayerLobbyInfo[8];            // +0x000, eight rows at 56-byte stride
+        s32 miNumberOfPlayers;                // +0x1C0
+    };  // id 244 size 456
+    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData) == 56,
+                  "lobby player row is the X360 56-byte stride");
+    static_assert(sizeof(GuiEventNetworkLobbyPlayerList) == 456,
+                  "id-244 lobby payload is the 456-byte AddGuiEvent record");
     // ⭐ 2026-08-29 (map-world wave): TYPED, and the fork retired. This used to be an opaque
     // `u8 maData[8]` here AND a second, incompatible namespace-scope definition in
     // BrnNetworkPlayerImageRenderer.h:75 -- the pre-existing ODR fork three TUs record

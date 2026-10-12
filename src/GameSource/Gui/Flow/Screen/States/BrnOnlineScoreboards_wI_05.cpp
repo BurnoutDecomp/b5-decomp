@@ -47,7 +47,7 @@ namespace BrnGui
         typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
         struct GuiEventShowHideHudWire : public ShowHideHudHeader
         {
-            bool mbShowHud;   // +0x0C
+            bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
                 :  mbShowHud(lbShowHud)
@@ -55,11 +55,12 @@ namespace BrnGui
             }
         };
 
-        // Record-size pins. Both payloads are pointer-free, so the X360's AddEvent size
-        // immediates (20 and 16) must survive unchanged on the x64 host; if a host layout
-        // ever drifts, it is caught here rather than on the wire.
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
+        // Payload sizes and their separate channel-40 wrapper sizes.
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
+        static_assert(sizeof(GuiEventShowHideHudWire) == 1, "show/hide-hud payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHudWire, 40>) == 16,
+                      "show/hide-hud wrapper is 16 bytes");
     }
 
     // ---- UpdateSetupComponents @ 0x824918C8 ----------------------------------------

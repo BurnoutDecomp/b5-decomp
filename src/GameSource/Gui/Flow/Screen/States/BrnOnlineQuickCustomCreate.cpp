@@ -14,9 +14,9 @@
 //   ProcessSelectedMenuOption           the picked row's state event
 //   ShowFriendsMenu                     the guide's friends list (sign-in first if needed)
 //
-// Out-queue records are the console's own wire records, posted on channel 40 through
-// GetOutputEventQueue()->AddEvent with host sizeof sizes. The guide calls go through the
-// PC platform layer (CgsXboxLivePC.cpp).
+// Typed channel-40 payloads use StateInterface::OutputGuiEvent. The long ticker record is
+// explicitly wrapped and queued; guide calls go through the PC platform layer
+// (CgsXboxLivePC.cpp).
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.h"
 
@@ -132,7 +132,7 @@ namespace BrnGui
         // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
         struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
         {
-            bool mbShowHud;   // +0x0C
+            bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
                 :  mbShowHud(lbShowHud)
@@ -145,8 +145,11 @@ namespace BrnGui
         // { 2, 536, 12, <two zero bytes> }, channel 40, 16 bytes.
         typedef CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, 40> GuiEventTickerClearMessagesWire;
 
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
+        static_assert(sizeof(GuiEventShowHideHudWire) == 1, "show/hide-hud payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHudWire, 40>) == 16,
+                      "show/hide-hud wrapper is 16 bytes");
         static_assert(sizeof(GuiEventTickerCustomMessageWire) == 2084, "ticker record is 2084 bytes");
         static_assert(sizeof(GuiEventTickerClearMessagesWire) == 16, "ticker-clear record is 16 bytes");
     }
@@ -169,7 +172,7 @@ namespace BrnGui
         GuiEventActivateCrashNav lDeactivateCrashNav(false);
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        const GuiEventShowHideHudWire lHideHud(false);
+        GuiEventShowHideHudWire lHideHud(false);
         mpStateInterface->OutputGuiEvent(lHideHud);
 
         mhNotifyListener = XNotifyCreateListener(KU64_NOTIFY_AREA_SYSTEM);
@@ -190,8 +193,7 @@ namespace BrnGui
         mMainMenuComponent.Clear();
 
         GuiEventTickerClearMessages lClearTicker = {};
-        const GuiEventTickerClearMessagesWire lClearTickerWire(lClearTicker);
-        mpStateInterface->OutputGuiEvent(lClearTickerWire);
+        mpStateInterface->OutputGuiEvent(lClearTicker);
 
         if (mhNotifyListener != 0)
         {

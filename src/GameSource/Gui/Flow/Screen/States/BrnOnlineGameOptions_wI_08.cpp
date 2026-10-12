@@ -29,8 +29,8 @@
 // None of the offsets are written here: the inlined GuiCache::GetOptionsDataProfile() and
 // the four OptionsDataProfile accessors are restored as real calls (inlining reversal --
 // their "lpGuiCache" asserts at BrnGuiOptionsDataProfile.h:611/632 are exactly what the
-// X360 inlined into ShowLoadOptions). The one AddEvent size is the host sizeof of the
-// record type, not the console's 24.
+// X360 inlined into ShowLoadOptions). The state and internal-state outputs use typed
+// channel wrappers, whose sizes derive from the payload and match the X360 records.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
@@ -68,32 +68,31 @@ namespace BrnGui
 
         // Id 213 == BrnGui::GuiEventShowHideSatNav (BrnGuiDemangledEventTypes.h:371), which
         // hard-collides with BrnGuiEventTypeDefs.h, so it is carried here as a file-local
-        // wire view -- the same 24-byte { 12, 213, 12, s32, f32, u8 } record
+        // 12-byte payload for the 24-byte {12, 213, 12, payload} record
         // BrnFBurnMainHudState.cpp's GuiShowHideEvent24 and BrnOnlineGameRoomPlayerInfo_wH_01
         // post. ShowLoadScreen publishes it with the trailing flag SET (X360 `stb r25(1)`),
         // where the create page publishes the same record with the flag clear.
         typedef CgsGui::GuiEvent<213> ShowHideHeader;
         struct GuiEventShowHideWire : public ShowHideHeader
         {
-            s32 miShow;      // +0x0C
-            f32 mfValue;     // +0x10
-            u8  mu8Flag;     // +0x14
-            u8  maPad[3];    // +0x15 (the record is 24 bytes on the wire)
+            s32 miShow;      // payload +0x00
+            f32 mfValue;     // payload +0x04
+            u8  mu8Flag;     // payload +0x08
 
             GuiEventShowHideWire(s32 liShow, f32 lfValue, u8 lu8Flag)
                 :  miShow(liShow)
                 , mfValue(lfValue)
                 , mu8Flag(lu8Flag)
             {
-                maPad[0] = 0;
-                maPad[1] = 0;
-                maPad[2] = 0;
             }
         };
 
-        // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
-        // immediate must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiEventShowHideWire) == 24, "show/hide record is 24 bytes");
+        // Payload and wrapper sizes are pinned separately.
+        static_assert(sizeof(GuiEventShowHideWire) == 12, "show/hide payload is 12 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideWire, 41>) == 24,
+                      "show/hide view-state wrapper is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideWire, 42>) == 24,
+                      "show/hide internal-state wrapper is 24 bytes");
     }
 
     // ---- ShowLoadScreen @ 0x8249C760 -----------------------------------------------
@@ -165,14 +164,10 @@ namespace BrnGui
 
         // The view-state pair: the same record on the view-state channel and then on the
         // internal one, with the trailing flag set (the load page's form of the record).
-        const GuiEventShowHideWire lShowHide(0, 0.0f, 1);
+        GuiEventShowHideWire lShowHide(0, 0.0f, 1);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lShowHide), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(lShowHide)));
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lShowHide), KI_CHANNEL_GUI_INTERNAL,
-            static_cast<s32>(sizeof(lShowHide)));
+        mpStateInterface->OutputViewState(lShowHide);
+        mpStateInterface->OutputInternalState(lShowHide);
     }
 
     // ---- ShowLoadOptions @ 0x8248C878 ----------------------------------------------

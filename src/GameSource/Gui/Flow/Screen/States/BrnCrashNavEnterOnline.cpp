@@ -193,22 +193,17 @@ namespace BrnGui
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
 
-        // { 1, 135, 12, <one payload byte> }, channel 40, 16 bytes. The console builds only
-        // the three header words; the payload byte it sends is never written (zero here).
+        // { 1, 135, 12, <one payload byte> }, channel 40, 16 bytes. The payload byte is
+        // never written by the console; OutputGuiEvent constructs the separate header.
         struct GuiEventReply135Wire : public CgsGui::GuiEvent<135>
         {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            GuiEventReply135Wire()
-                :  muUnwrittenPayload(0)
-            {
-            }
+            u8 muUnwrittenPayload;   // payload +0x00; no store in the X360 emitter
         };
 
         // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
         struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
         {
-            bool mbShowHud;   // +0x0C
+            bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
                 :  mbShowHud(lbShowHud)
@@ -218,9 +213,14 @@ namespace BrnGui
 
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiEventReply135Wire) == 16, "id-135 record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        static_assert(sizeof(GuiEventReply135Wire) == 1, "id-135 payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventReply135Wire, 40>) == 16,
+                      "id-135 wrapper is 16 bytes");
+        static_assert(sizeof(GuiEventShowHideHudWire) == 1, "show/hide-hud payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHudWire, 40>) == 16,
+                      "show/hide-hud wrapper is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
     }
 
     // The constructor. The console body stores the vtables of the nine by-value components
@@ -355,7 +355,7 @@ namespace BrnGui
 
             case KI_EVENT_REQUEST_134:
             {
-                const GuiEventReply135Wire lReply;
+                GuiEventReply135Wire lReply;
                 mpStateInterface->OutputGuiEvent(lReply);
                 break;
             }
@@ -395,7 +395,7 @@ namespace BrnGui
                 lDeactivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
                 mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-                const GuiEventShowHideHudWire lHideHud(false);
+                GuiEventShowHideHudWire lHideHud(false);
                 mpStateInterface->OutputGuiEvent(lHideHud);
             }
         }

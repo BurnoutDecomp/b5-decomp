@@ -1381,18 +1381,11 @@ namespace BrnGui
         // search that is in flight") comes from the call site alone, so this record is named
         // for what it does and is deliberately NOT homed as a shared type.
         //
-        // PAYLOAD BYTE: the X360 NEVER writes it -- the console record's fourth word keeps
-        // whatever the caller's stack frame held (the AddEvent size is 16, so the byte IS
-        // published). It is zero-initialised here because the host cannot reproduce an
-        // uninitialised console stack slot and must not pretend to.
+        // PAYLOAD BYTE: the X360 NEVER writes it; retain the one-byte payload separately
+        // from the channel-40 wrapper header.
         struct CustomMatchSearchStopWire : public CgsGui::GuiEvent<253>
         {
             u8 muUnwrittenPayload;   // payload +0x00 (never stored by the X360 -- see above)
-
-            CustomMatchSearchStopWire()
-                :  muUnwrittenPayload(0)
-            {
-            }
         };
 
         // OutputGuiEvent<BrnGui::GuiOverlayRequest> (instantiation @0x82436BE0): the record is
@@ -1861,11 +1854,10 @@ namespace BrnGui
             }
         };
 
-        // { 0x818, 537, 12, <the message> }, channel 40, 0x824 bytes -- all three written as
-        // host expressions.
+        // 0x818-byte payload for {0x818, 537, 12, payload}, channel 40, 0x824 bytes.
         struct GuiTickerCustomMessageWire : public CgsGui::GuiEvent<537>
         {
-            GuiTickerCustomMessagePayload mMessage;   // +0x0C
+            GuiTickerCustomMessagePayload mMessage;   // payload +0x00
 
             GuiTickerCustomMessageWire()
                 
@@ -1881,7 +1873,7 @@ namespace BrnGui
         typedef char KAC_ASSERT_TICKER_PAYLOAD_SIZE[
             sizeof(GuiTickerCustomMessagePayload) == 0x818 ? 1 : -1];
         typedef char KAC_ASSERT_TICKER_WIRE_SIZE[
-            sizeof(GuiTickerCustomMessageWire) == 0x824 ? 1 : -1];
+            sizeof(CgsGui::GuiEventWrapper<GuiTickerCustomMessageWire, 40>) == 0x824 ? 1 : -1];
     }
 
     // ---------------------------------------------------- HandleGuiCacheEvent @0x82497C50
@@ -2415,26 +2407,28 @@ namespace BrnGui
 
 // (fold: an identical definition of CustomMatchSearchStopWire was dropped here -- this TU defines it once, above)
 
-        // { 2, 536, 12, u16 0 }, channel 40, 16 bytes -- GuiEventTickerClearMessages with
-        // both bytes CLEAR (0x82497190 `stb 0 ; stb 0`). Field names per the HUD twin
+        // Two-byte payload for {2, 536, 12, u16 0}, channel 40, 16 bytes -- the two bytes are
+        // CLEAR (0x82497190 `stb 0 ; stb 0`). Field names per the HUD twin
         // (BrnRaceMainHudState_wS2.cpp GuiTickerClearWire536).
         struct GuiTickerClearWire536 : public CgsGui::GuiEvent<536>
         {
-            u8 mbForceFadeOut;            // +0x0C == 0
-            u8 mbDeleteChallengeMessages; // +0x0D == 0
-            u8 mau8Pad[2];
+            u8 mbForceFadeOut;            // payload +0x00 == 0
+            u8 mbDeleteChallengeMessages; // payload +0x01 == 0
 
             GuiTickerClearWire536()
                 :  mbForceFadeOut(0), mbDeleteChallengeMessages(0)
             {
-                mau8Pad[0] = mau8Pad[1] = 0;
             }
         };
 
         // (fold: an identical definition of GuiOverlayWaitFinishRequest was dropped here -- this TU defines it once, above)
 
-        typedef char KAC_ASSERT_STOP_WIRE_SIZE[sizeof(CustomMatchSearchStopWire) == 16 ? 1 : -1];
-        typedef char KAC_ASSERT_CLEAR_WIRE_SIZE[sizeof(GuiTickerClearWire536) == 16 ? 1 : -1];
+        typedef char KAC_ASSERT_STOP_PAYLOAD_SIZE[sizeof(CustomMatchSearchStopWire) == 1 ? 1 : -1];
+        typedef char KAC_ASSERT_STOP_WIRE_SIZE[
+            sizeof(CgsGui::GuiEventWrapper<CustomMatchSearchStopWire, 40>) == 16 ? 1 : -1];
+        typedef char KAC_ASSERT_CLEAR_PAYLOAD_SIZE[sizeof(GuiTickerClearWire536) == 2 ? 1 : -1];
+        typedef char KAC_ASSERT_CLEAR_WIRE_SIZE[
+            sizeof(CgsGui::GuiEventWrapper<GuiTickerClearWire536, 40>) == 16 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[
             sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24 ? 1 : -1];
         // The 604-byte AddOutputGuiEvent record IS the member (headerless on both sides).
@@ -2453,11 +2447,11 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
         // Stop any custom-match search still in flight.
-        const CustomMatchSearchStopWire lStop;
+        CustomMatchSearchStopWire lStop;
         mpStateInterface->OutputGuiEvent(lStop);   // X360 record size 16
 
         // ...and clear the ticker (no fade-out force, challenge messages kept).
-        const GuiTickerClearWire536 lClear;
+        GuiTickerClearWire536 lClear;
         mpStateInterface->OutputGuiEvent(lClear);  // X360 record size 16
     }
 

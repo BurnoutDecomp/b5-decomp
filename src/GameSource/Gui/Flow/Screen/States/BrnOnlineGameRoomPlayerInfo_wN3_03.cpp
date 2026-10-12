@@ -134,7 +134,10 @@ namespace BrnGui
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "overlay wait-finish record is 24 bytes");
         static_assert(sizeof(GuiAudioTriggerPayload457) == 100, "audio trigger payload is 100 bytes");
-        static_assert(sizeof(GuiEventScoreboardRequestGamercardEvent) == 28, "gamercard record is 28 bytes");
+        static_assert(sizeof(GuiEventScoreboardRequestGamercardEvent) == 16,
+                      "gamercard request payload is the 16-byte player name");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventScoreboardRequestGamercardEvent, 40>) == 28,
+                      "gamercard channel-40 wrapper is 28 bytes");
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, GuiOverlayRequest& lrRequest)
         {
