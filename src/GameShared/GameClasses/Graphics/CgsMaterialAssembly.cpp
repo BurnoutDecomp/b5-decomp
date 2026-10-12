@@ -5,6 +5,7 @@
 // Layout from the DecFIGS DWARF (CgsMaterialAssembly.h:54).
 
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
 #include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -12,6 +13,24 @@
 
 namespace CgsGraphics
 {
+    // ARTIST 827E6790 initializes TextureState::Parameters.mpTexture to null,
+    // then calls 82AD5078 for each non-null sampler state. That direct target
+    // is positively only blr; it leaves the local Parameters untouched. Keep
+    // the resulting null-query behavior without reading the state as a getter.
+    bool MaterialAssembly::UsesTexture(const renderengine::Texture* lpTexture) const
+    {
+        for (s8 liSamplerIndex = 0;
+             static_cast<s32>(liSamplerIndex) < static_cast<s32>(mi8NumInternalSamplers)
+                                                + static_cast<s32>(mi8NumExternalSamplers);
+             liSamplerIndex = static_cast<s8>(static_cast<u8>(liSamplerIndex) + 1u))
+        {
+            const renderengine::TextureState* lpState = mpaSamplers.Get()[liSamplerIndex].state.Get();
+            if (lpState != nullptr && lpTexture == nullptr)
+                return true;
+        }
+        return false;
+    }
+
     // ARTIST 827FBA00..BB90: absent constants default to zero; duration zero
     // leaves a material static. Otherwise select the original CPU shader, mark
     // every technique animated, and attach it to the serialized CPU block.

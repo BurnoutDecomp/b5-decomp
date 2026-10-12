@@ -1,6 +1,11 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"
+
+#include <cstddef>
+
+namespace renderengine { class TextureState; }
 
 // =============================================================================
 // CgsTextureScopeTable.h  (GameShared/GameClasses/Graphics/Dispatch)
@@ -39,6 +44,22 @@ namespace CgsGraphics
         E_TEXTURE_PURPOSE_ENVIRONMENT_MAP = 4,
         E_MAX_TEXTURE_PURPOSES = 7
     };
+
+    // CgsTextureScopeTable.h:69..75 (DecFIGS). Material resources retain their
+    // serialized four-byte pointer slots: ARTIST 827E6830..6844 walks 20-byte
+    // Samplers and reads state at +16. MaterialResourceType::FixUp also walks
+    // this same stride when relocating purpose and resolving ePurpose.
+    struct Sampler
+    {
+        Ptr32<const char> purpose;
+        u32 id;
+        s16 channel;
+        s16 scope;
+        E_TexturePurpose ePurpose;
+        Ptr32<renderengine::TextureState> state;
+    };
+    static_assert(sizeof(Sampler) == 20, "Sampler must retain its serialized 20-byte stride");
+    static_assert(offsetof(Sampler, state) == 16, "Sampler::state must remain at serialized byte 16");
 
     struct TexturePurposeEntry
     {
