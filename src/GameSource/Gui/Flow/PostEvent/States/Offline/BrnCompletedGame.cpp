@@ -107,7 +107,7 @@ namespace
     {
         u8 mucPad;   // +0x0C (the 1-byte empty payload; the console leaves it unwritten)
 
-        GuiEventPostEventTeardown() : CgsGui::GuiEvent<292>(1, 12), mucPad(0) {}
+        GuiEventPostEventTeardown() :  mucPad(0) {}
     };
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
@@ -999,8 +999,7 @@ void CompletedGame::HandleControllerInput(const CgsModule::Event* lpEvent, s32 l
 void CompletedGame::TriggerExitState()
 {
     GuiEventPostEventTeardown lTeardownEvent;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lTeardownEvent), KI_CHANNEL_GUI_OUT, 16);
+    mpStateInterface->OutputGuiEvent(lTeardownEvent);
 
     SendStateEvent(meCompletionType == E_COMPLETION_JUST_HIT_100_PERCENT ? "TO_CREDITS"
                                                                         : "ADVANCE");

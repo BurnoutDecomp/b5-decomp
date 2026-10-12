@@ -121,7 +121,7 @@ namespace
     {
         u8 mucPad;   // +0x0C (the 1-byte empty payload)
 
-        GuiEventRivalShutdownDisplayFinished() : CgsGui::GuiEvent<295>(1, 12), mucPad(0) {}
+        GuiEventRivalShutdownDisplayFinished() :  mucPad(0) {}
     };
     static_assert(sizeof(GuiEventRivalShutdownDisplayFinished) == 16,
                   "the console posts a 16-byte record for GUI 295 (`li r6, 0x10`)");
@@ -220,9 +220,7 @@ void OfflineRivalShutdown::OnLeave()
     meOfflineRivalShutdownState = E_OFFLINERIVALSHUTDOWNSTATE_NONE;
 
     GuiEventRivalShutdownDisplayFinished lDisplayFinished;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lDisplayFinished), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(lDisplayFinished)));
+    mpStateInterface->OutputGuiEvent(lDisplayFinished);
 
     if (mpGuiCache != 0)
     {

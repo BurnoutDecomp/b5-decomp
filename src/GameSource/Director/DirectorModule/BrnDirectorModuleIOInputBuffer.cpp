@@ -317,11 +317,11 @@ namespace DirectorIO
         return &mVehicleDriverInputInterface;
     }
 
-    const void* InputBuffer::GetHookEnumeration() const
+    const BrnGui::GuiPFXHookEnumeration* InputBuffer::GetHookEnumeration() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         CGS_ASSERT(mbHasGotHookEnumeration, "mbHasGotHookEnumeration");
-        return mHookEnumeration;
+        return &mHookEnumeration;
     }
 
     EActiveRaceCarIndex InputBuffer::GetPlayerCarIndex() const
@@ -497,10 +497,12 @@ namespace DirectorIO
         std::memcpy(mControllerInfo, lpControllerInfo, sizeof(mControllerInfo)); // 224 bytes
     }
 
-    void InputBuffer::SetHookEnumeration(const void* lpHookEnumeration)
+    void InputBuffer::SetHookEnumeration(const BrnGui::GuiPFXHookEnumeration* lpHookEnumeration)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        std::memcpy(mHookEnumeration, lpHookEnumeration, sizeof(mHookEnumeration)); // KU_HOOK_ENUMERATION_BYTES
+        // X360 copies 404 bytes; the typed host payload uses native pointers (808 bytes).
+        // Keep the byte copy so padding and unused hook slots retain the producer bytes.
+        std::memcpy(&mHookEnumeration, lpHookEnumeration, sizeof(mHookEnumeration));
         mbHasGotHookEnumeration = true;
     }
 

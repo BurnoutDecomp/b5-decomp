@@ -104,10 +104,7 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // +0x0C
 
             OnlineStatsRequestWire()
-                : CgsGui::GuiEvent<241>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(offsetof(OnlineStatsRequestWire, muUnwrittenPayload)))
-                , muUnwrittenPayload(0)
+                :  muUnwrittenPayload(0)
             {
             }
         };
@@ -257,9 +254,7 @@ namespace BrnGui
     void OnlineStats::UpdateSetupComponents()
     {
         const OnlineStatsRequestWire lRequest;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRequest)));
+        mpStateInterface->OutputGuiEvent(lRequest);
     }
 
     // ================================================================================

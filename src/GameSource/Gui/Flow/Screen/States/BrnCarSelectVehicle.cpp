@@ -76,7 +76,7 @@ namespace BrnGui
         {
             GuiTickerFlagsPayload mPayload;   // +0x0C
             GuiTickerFlagsWire409()
-                : CgsGui::GuiEvent<409>(static_cast<u32>(sizeof(GuiTickerFlagsPayload)), 12)
+                
             {
                 mPayload.mbFlagA = 1;
                 mPayload.mbFlagB = 0;
@@ -88,11 +88,9 @@ namespace BrnGui
         // shape to BrnCarSelectMain_wG_02.cpp's GuiOverlayRequestWire.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0) {}
+                 {}
         };
 
         // The one-shot activate-car-select record Update posts on its first frame:
@@ -119,8 +117,7 @@ namespace BrnGui
             u32 muAction;           // +0x0C (X360 word0: 0 == start car select)
             u32 muCarSelectType;    // +0x10 (X360 word1: GsmIO::ECarSelectType)
             GuiActivateCarSelectWire()
-                : CgsGui::GuiEvent<192>(8, 12)
-                , muAction(0)
+                :  muAction(0)
                 , muCarSelectType(0) {}
         };
 
@@ -252,8 +249,7 @@ namespace BrnGui
 
         {
             GuiTickerFlagsWire409 lTickerOn;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lTickerOn, KI_CHANNEL_GUI_OUT,
-                                                             static_cast<s32>(sizeof(lTickerOn)));
+            mpStateInterface->OutputGuiEvent(lTickerOn);
         }
 
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
@@ -319,8 +315,7 @@ namespace BrnGui
             std::memset(&lTitleTicker.mRequest, 0, sizeof(lTitleTicker.mRequest));
             *reinterpret_cast<CgsID*>(&lTitleTicker.mRequest) = CgsIDCompress("DwnldTitleUp");
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lTitleTicker, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lTitleTicker)));
+            mpStateInterface->OutputGuiEvent(lTitleTicker);
             mbTitleTickerPosted = true;
         }
     }
@@ -388,8 +383,7 @@ namespace BrnGui
             lCarSelectType.muAction        = 0;   // X360 word0 == the sign-extension, i.e. "start"
             lCarSelectType.muCarSelectType =
                 static_cast<u32>(mpGuiCache->GetCurrentCarSelectType());
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lCarSelectType, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lCarSelectType)));
+            mpStateInterface->OutputGuiEvent(lCarSelectType);
 
             mbFirstFrame = false;
         }

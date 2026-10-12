@@ -115,12 +115,10 @@ namespace BrnGui
         // payload is 8-aligned on the console, so its offset word is 16 rather than 12.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -136,15 +134,7 @@ namespace BrnGui
         // trigger. Same view as BrnOnlineGameRoomPlayerInfo_wH_08.cpp's.)
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef GuiAudioTriggerEvent GuiAudioTriggerWire;
 
         // Id 463 == BrnGui::GuiEventAudioSettings: { 8, 463, 12, the two volume words },
         // channel 40, 20 bytes. Field order is the X360 store order -- GetMusicVolume
@@ -156,9 +146,7 @@ namespace BrnGui
             s32 miSFXVolume;     // +0x10
 
             GuiEventAudioSettingsWire(s32 liMusicVolume, s32 liSFXVolume)
-                : AudioSettingsHeader(static_cast<u32>(2 * sizeof(s32)),
-                                      static_cast<u32>(sizeof(AudioSettingsHeader)))
-                , miMusicVolume(liMusicVolume)
+                :  miMusicVolume(liMusicVolume)
                 , miSFXVolume(liSFXVolume)
             {
             }
@@ -172,9 +160,7 @@ namespace BrnGui
             s32 miVoipVolume;    // +0x0C
 
             explicit GuiEventVoipSettingsWire(s32 liVoipVolume)
-                : VoipSettingsHeader(static_cast<u32>(sizeof(s32)),
-                                     static_cast<u32>(sizeof(VoipSettingsHeader)))
-                , miVoipVolume(liVoipVolume)
+                :  miVoipVolume(liVoipVolume)
             {
             }
         };
@@ -193,8 +179,7 @@ namespace BrnGui
             u8 maPayload[1];   // +0x0C -- never written by the X360 (see above)
 
             GuiEventLeaveOnlineGameWire()
-                : LeaveOnlineGameHeader(static_cast<u32>(sizeof(maPayload)),
-                                        static_cast<u32>(sizeof(LeaveOnlineGameHeader)))
+
             {
             }
         };
@@ -203,7 +188,7 @@ namespace BrnGui
         // AddEvent size immediate must survive unchanged on the x64 host; if a host layout
         // ever drifts, this is where it is caught rather than on the wire.
         static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
         static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
         static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
         static_assert(sizeof(GuiEventLeaveOnlineGameWire) == 16, "leave-game record is 16 bytes");
@@ -223,9 +208,7 @@ namespace BrnGui
         GuiOverlayRequestWire lWire;
         lWire.mRequest.Construct(KAC_OVERLAY_LAUNCH_QUESTION);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        mpStateInterface->OutputGuiEvent(lWire);
     }
 
     // ---- HandleInviteFailed @ 0x82498BA0 -------------------------------------------
@@ -264,9 +247,7 @@ namespace BrnGui
         GuiOverlayRequestWire lWire;
         lWire.mRequest.Construct(lpcOverlayId);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        mpStateInterface->OutputGuiEvent(lWire);
     }
 
     // ---- HandleOverlayComplete @ 0x824A56A0 ----------------------------------------
@@ -299,20 +280,14 @@ namespace BrnGui
 
                 GuiAudioTriggerWire lAudio;
                 lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lAudio)));
+                mpStateInterface->OutputGuiEvent(lAudio);
 
                 GuiEventAudioSettingsWire lAudioSettings(liMusicVolume, liSFXVolume);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lAudioSettings), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lAudioSettings)));
+                mpStateInterface->OutputGuiEvent(lAudioSettings);
 
                 GuiEventVoipSettingsWire lVoipSettings(
                     mpGuiCache->GetOptionsDataProfile()->GetVoipVolume());
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lVoipSettings), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lVoipSettings)));
+                mpStateInterface->OutputGuiEvent(lVoipSettings);
 
                 mSettingToggle.Unloaded();
                 mSettingToggle.Clear();   // group vtable slot 6
@@ -342,14 +317,10 @@ namespace BrnGui
             {
                 GuiOverlayRequestWire lWire;
                 lWire.mRequest.Construct(KAC_OVERLAY_LEAVING_GAME);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lWire)));
+                mpStateInterface->OutputGuiEvent(lWire);
 
                 GuiEventLeaveOnlineGameWire lLeaveGame;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lLeaveGame), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lLeaveGame)));
+                mpStateInterface->OutputGuiEvent(lLeaveGame);
 
                 BrnNetHarnessPC::WitnessTag("netui", "leave", "post 52 method=%d",
                                             lpOverlayCompleteEvent->miLeaveMethod);

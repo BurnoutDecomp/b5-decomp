@@ -50,9 +50,7 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(bool)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };

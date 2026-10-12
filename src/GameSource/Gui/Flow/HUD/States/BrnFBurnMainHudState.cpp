@@ -68,7 +68,7 @@ namespace BrnGui
         {
             u8 mu8Flag;
             u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -76,8 +76,7 @@ namespace BrnGui
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         // 20-byte GuiEvent<25> "set option" record { 8, 25, 12, reserved, 1.0f } (the
@@ -88,7 +87,7 @@ namespace BrnGui
             s32 miReserved;   // +0x0C
             f32 mfValue;      // +0x10 (1.0f)
             explicit GuiOptionEvent20(s32 liReserved)
-                : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+                :  miReserved(liReserved), mfValue(1.0f) {}
         };
 
         // (The apt movie mount/unmount goes through StateInterface::PlayAptMovie, not a
@@ -106,7 +105,7 @@ namespace BrnGui
             u8  mu8Flag;     // +0x14
             u8  maPad[3];
             GuiShowHideEvent24(s32 liShow, f32 lfValue, u8 lu8Flag)
-                : CgsGui::GuiEvent<213>(12, 12), miShow(liShow), mfValue(lfValue), mu8Flag(lu8Flag)
+                :  miShow(liShow), mfValue(lfValue), mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -114,8 +113,7 @@ namespace BrnGui
                             s32 liShow, f32 lfValue, u8 lu8Flag)
         {
             GuiShowHideEvent24 lEvent(liShow, lfValue, lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 24);
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper2(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper2), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper2))); };
         }
 
         // ---- GuiCache boundary (un-named cache far fields the X360 pokes) ----------
@@ -315,8 +313,7 @@ namespace BrnGui
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         GuiOptionEvent20 lOption(1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+        mpStateInterface->OutputViewState(lOption);
 
         // The FLAPT persistent HUD file: access pointers -> FlaptManager -> file 0 ->
         // root movie clip -> the RaceMainHUD_mc child, shown + timeline-reset.
@@ -501,10 +498,9 @@ namespace BrnGui
             {
                 u16 mu16Pad;
                 u16 mu16Flag;
-                GuiEvent536() : CgsGui::GuiEvent<536>(2, 12), mu16Pad(0), mu16Flag(256) {}
+                GuiEvent536() :  mu16Pad(0), mu16Flag(256) {}
             } lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // { 12, 204, 12, 5, 6, ... } -- the 24-byte id-204 record with the 5/6 pair.
@@ -514,10 +510,9 @@ namespace BrnGui
                 s32 miValueA;   // 5
                 s32 miValueB;   // 6
                 s32 miPad;
-                GuiEvent204() : CgsGui::GuiEvent<204>(12, 12), miValueA(5), miValueB(6), miPad(0) {}
+                GuiEvent204() :  miValueA(5), miValueB(6), miPad(0) {}
             } lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_VIEW_STATE, 24);
+            mpStateInterface->OutputViewState(lEvent);
         }
     }
 
@@ -714,10 +709,9 @@ namespace BrnGui
                 s32 miPadA;
                 s32 miPadB;
                 s32 miPadC;
-                GuiEvent327() : CgsGui::GuiEvent<327>(8, 16), miPadA(0), miPadB(0), miPadC(0) {}
+                GuiEvent327() :  miPadA(0), miPadB(0), miPadC(0) {}
             } lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 24);
+            mpStateInterface->OutputGuiEvent(lEvent);
 
             // [H2] X360 UpdateWFInit @0x8247C710: replay any rule already live in the
             // cache (the by-type flags @cache+0xAC44) into the fresh panel.
@@ -1496,8 +1490,7 @@ namespace BrnGui
             u8  mu8Show;
             u8  mau8Pad[3];
             GuiEvent204(s32 liDisplayType, s32 liModeFilter, u8 lu8Show)
-                : CgsGui::GuiEvent<204>(12, 12)
-                , miDisplayType(liDisplayType)
+                :  miDisplayType(liDisplayType)
                 , miModeFilter(liModeFilter)
                 , mu8Show(lu8Show)
             {
@@ -1506,10 +1499,8 @@ namespace BrnGui
         };
 
         GuiEvent204 lRecord(0, meSatNavEventFilter, 1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_VIEW_STATE, 24);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_INTERNAL_STATE, 24);
+        mpStateInterface->OutputViewState(lRecord);
+        mpStateInterface->OutputInternalState(lRecord);
     }
 
     void FBurnMainHudState::DisableSatNavEventsFilter()
@@ -1521,8 +1512,7 @@ namespace BrnGui
             u8  mu8Show;
             u8  mau8Pad[3];
             GuiEvent204(s32 liDisplayType, s32 liModeFilter, u8 lu8Show)
-                : CgsGui::GuiEvent<204>(12, 12)
-                , miDisplayType(liDisplayType)
+                :  miDisplayType(liDisplayType)
                 , miModeFilter(liModeFilter)
                 , mu8Show(lu8Show)
             {
@@ -1531,7 +1521,6 @@ namespace BrnGui
         };
 
         GuiEvent204 lRecord(5, 6, 0);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_VIEW_STATE, 24);
+        mpStateInterface->OutputViewState(lRecord);
     }
 }

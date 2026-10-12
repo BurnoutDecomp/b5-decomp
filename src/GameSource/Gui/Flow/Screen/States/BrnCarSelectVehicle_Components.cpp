@@ -57,7 +57,7 @@ namespace BrnGui
             u8 mbFlagA;   // +0x0C
             u8 mbFlagB;   // +0x0D
             GuiTickerFlagsWire536()
-                : CgsGui::GuiEvent<536>(2, 12), mbFlagA(1), mbFlagB(0) {}
+                :  mbFlagA(1), mbFlagB(0) {}
         };
     }
 
@@ -141,8 +141,7 @@ namespace BrnGui
         if (mpGuiCache->GetCarSelectTransitionAlreadyShown())
         {
             GuiTickerFlagsWire536 lTickerFlags;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lTickerFlags, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lTickerFlags)));
+            mpStateInterface->OutputGuiEvent(lTickerFlags);
         }
         else
         {

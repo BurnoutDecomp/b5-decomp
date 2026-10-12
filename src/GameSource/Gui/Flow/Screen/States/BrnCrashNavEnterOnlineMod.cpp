@@ -32,8 +32,7 @@ namespace
         u8 maPad[3];   // the rest of the word the console never reads (size == 1)
 
         explicit GuiEventShowHideHud(bool lbShow)
-            : CgsGui::GuiEvent<148>(static_cast<u32>(sizeof(u8)), 12)
-            , mu8Show(lbShow ? 1u : 0u)
+            :  mu8Show(lbShow ? 1u : 0u)
         {
             maPad[0] = maPad[1] = maPad[2] = 0;
         }
@@ -65,17 +64,14 @@ void CrashNavEnterOnlineFull::OnEnter()
     // with size 0x14; spelled through the committed type so the queued bytes are the same.
     {
         GuiEventActivateCrashNav lDeactivate(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivate), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+        mpStateInterface->OutputGuiEvent(lDeactivate);
     }
 
     // Hide the in-race HUD header: { 1, 148, 12 } with the payload byte clear, channel 40,
     // 16 bytes (`stb 0, 0x5C(r1)` @0x824CB128).
     {
         GuiEventShowHideHud lHide(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHide), KI_CHANNEL_GUI_OUT, 16);
+        mpStateInterface->OutputGuiEvent(lHide);
     }
 }
 

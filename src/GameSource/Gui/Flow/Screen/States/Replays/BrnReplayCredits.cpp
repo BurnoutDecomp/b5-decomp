@@ -48,7 +48,7 @@ namespace
     {
         u32 muPayload;   // +0x0C
         explicit GuiEventEnterCreditsWire(u32 luPayload)
-            : CgsGui::GuiEvent<587>(4, 12), muPayload(luPayload) {}
+            :  muPayload(luPayload) {}
     };
 
     // GuiEventLeaveCredits (console id 588): { 1, 588, 12 }, 16 bytes; the console writes no
@@ -56,7 +56,7 @@ namespace
     struct GuiEventLeaveCreditsWire : public CgsGui::GuiEvent<588>
     {
         u8 muReserved;   // +0x0C (never written by the console)
-        GuiEventLeaveCreditsWire() : CgsGui::GuiEvent<588>(1, 12), muReserved(0) {}
+        GuiEventLeaveCreditsWire() :  muReserved(0) {}
     };
 
     const char* const KAC_DETAIL_PLAYER = "REPLAY_CREDITS_DETAIL_0";
@@ -84,8 +84,7 @@ void ReplayCredits::OnEnter()
     meInternalState = E_INTERNALSTATE_LOADRESOURCES;
 
     GuiEventEnterCreditsWire lEnter(1);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        &lEnter, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lEnter)));
+    mpStateInterface->OutputGuiEvent(lEnter);
 
     CgsLanguage::LanguageManager* lpLanguageManager = mpStateInterface->GetLanguageManager();
     lpLanguageManager->AddString(KAC_DETAIL_PLAYER,
@@ -161,8 +160,7 @@ void ReplayCredits::OnEnter()
 void ReplayCredits::OnLeave()
 {
     GuiEventLeaveCreditsWire lLeave;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        &lLeave, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lLeave)));
+    mpStateInterface->OutputGuiEvent(lLeave);
 
     mpStateInterface->PlayAptMovie("", KI_CREDITS_MOVIE_LEVEL);
 

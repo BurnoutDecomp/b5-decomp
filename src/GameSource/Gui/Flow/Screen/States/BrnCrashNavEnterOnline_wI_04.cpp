@@ -79,11 +79,7 @@ namespace BrnGui
             GuiEventAnswerLoginQuestionWire(CgsGui::ELoginQuestion leLoginQuestion,
                                             bool lbAccept,
                                             bool lbAccept2)
-                : AnswerLoginQuestionHeader(
-                      static_cast<u32>(sizeof(GuiEventAnswerLoginQuestionWire)
-                                       - sizeof(AnswerLoginQuestionHeader)),
-                      static_cast<u32>(sizeof(AnswerLoginQuestionHeader)))
-                , meLoginQuestion(leLoginQuestion)
+                :  meLoginQuestion(leLoginQuestion)
                 , mbAccept(lbAccept)
                 , mbAccept2(lbAccept2)
                 , muPad12(0)

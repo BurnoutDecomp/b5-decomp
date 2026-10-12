@@ -119,12 +119,10 @@ namespace BrnGui
         // { 288, 184, 16, <pad>, the 288-byte request }, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;
             GuiOverlayRequest mRequest;
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -132,12 +130,10 @@ namespace BrnGui
         // { 8, 188, 16, <pad>, the compressed overlay id }, 24 bytes.
         struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
         {
-            u32                         muPad0C;
             GuiOverlayWaitFinishRequest mRequest;
 
             GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -169,9 +165,7 @@ namespace BrnGui
         {
             GuiOverlayWaitFinishWire lWaitFinish;
             lWaitFinish.mRequest.Construct(lpacOverlayName);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitFinish)));
+            lpStateInterface->OutputGuiEvent(lWaitFinish);
         }
 
         void PostAudioTrigger(CgsGui::StateInterface* lpStateInterface, s32 leAction,
@@ -195,9 +189,7 @@ namespace BrnGui
         {
             GuiEventScoreboardRequestGamercardEvent lRequest;
             lRequest.mPlayerName.Construct(lpcPlayerName);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRequest)));
+            lpStateInterface->OutputGuiEvent(lRequest);
         }
     }
 

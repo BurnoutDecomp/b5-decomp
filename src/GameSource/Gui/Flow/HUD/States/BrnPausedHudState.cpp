@@ -27,7 +27,7 @@ struct GuiEventPausedHudEnter : public CgsGui::GuiEvent<532>
 {
     u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size is 16)
 
-    GuiEventPausedHudEnter() : CgsGui::GuiEvent<532>(1, 12) {}
+    GuiEventPausedHudEnter()  {}
 };
 
 // The 3 observed event ids (dword_8205B060). The FLAG that stood here -- "the exports carry no
@@ -48,8 +48,7 @@ void PausedHudState::OnEnter()
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
     GuiEventPausedHudEnter lEvent;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lEvent), 40, 16);
+    mpStateInterface->OutputGuiEvent(lEvent);
 }
 
 // @ 0x82475390

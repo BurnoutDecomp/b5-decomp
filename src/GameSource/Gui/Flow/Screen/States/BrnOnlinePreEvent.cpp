@@ -84,12 +84,10 @@ namespace BrnGui
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -262,9 +260,7 @@ namespace BrnGui
                 {
                     GuiOverlayRequestWire lLostConnectionOverlay;
                     lLostConnectionOverlay.mRequest.Construct(KAC_LOST_CONNECTION_OVERLAY_ID);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lLostConnectionOverlay),
-                        KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lLostConnectionOverlay)));
+                    mpStateInterface->OutputGuiEvent(lLostConnectionOverlay);
                 }
                 break;
 

@@ -93,11 +93,7 @@ namespace BrnGui
             s32 miPresetRaceType;   // +0x0C
 
             explicit GuiEventRequestSpecificPreSetRacesWire(s32 liPresetRaceType)
-                : CgsGui::GuiEvent<193>(
-                      static_cast<u32>(sizeof(s32)),
-                      static_cast<u32>(offsetof(GuiEventRequestSpecificPreSetRacesWire,
-                                                miPresetRaceType)))
-                , miPresetRaceType(liPresetRaceType)
+                :  miPresetRaceType(liPresetRaceType)
             {
             }
         };
@@ -108,9 +104,7 @@ namespace BrnGui
             u8 maPayload[2];   // +0x0C
 
             GuiEventTickerClearMessagesWire()
-                : CgsGui::GuiEvent<536>(
-                      static_cast<u32>(sizeof(maPayload)),
-                      static_cast<u32>(offsetof(GuiEventTickerClearMessagesWire, maPayload)))
+                
             {
                 maPayload[0] = 0;
                 maPayload[1] = 0;
@@ -127,8 +121,7 @@ namespace BrnGui
             u8  maPad[3];
 
             GuiEventShowHideSatNavWire(s32 leMapType, f32 lfFadeTime, bool lbShow)
-                : CgsGui::GuiEvent<213>(12, 12)
-                , meMapType(leMapType)
+                :  meMapType(leMapType)
                 , mfFadeTime(lfFadeTime)
                 , mbShow(lbShow ? 1 : 0)
             {
@@ -325,18 +318,12 @@ namespace BrnGui
         mRouteInfoDisplay.Destruct();
 
         GuiEventTickerClearMessagesWire lClearTicker;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lClearTicker), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lClearTicker)));
+        mpStateInterface->OutputGuiEvent(lClearTicker);
 
         // Hide the sat-nav: one record on the view-state and the internal-state channels.
         GuiEventShowHideSatNavWire lHideSatNav(0, 0.0f, false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideSatNav), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(lHideSatNav)));
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideSatNav), KI_CHANNEL_INTERNAL_STATE,
-            static_cast<s32>(sizeof(lHideSatNav)));
+        mpStateInterface->OutputViewState(lHideSatNav);
+        mpStateInterface->OutputInternalState(lHideSatNav);
 
         mCreateGameToggles.Unloaded();
         mHelpBar.Destruct();
@@ -369,9 +356,7 @@ namespace BrnGui
         }
 
         GuiEventRequestSpecificPreSetRacesWire lRequest(liPresetRaceType);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRequest)));
+        mpStateInterface->OutputGuiEvent(lRequest);
     }
 
     // ================================================================================

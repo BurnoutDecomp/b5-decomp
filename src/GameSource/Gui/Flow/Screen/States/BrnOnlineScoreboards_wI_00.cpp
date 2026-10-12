@@ -81,20 +81,12 @@ namespace BrnGui
         // the identical view).
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;   // X360 `li r11, 0x1C9`
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef GuiAudioTriggerEvent GuiAudioTriggerWire;
 
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host; if a host layout ever drifts,
         // this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
     }
 
     // ---- ShowTableEmpty @ 0x82486A08 -----------------------------------------------
@@ -190,8 +182,6 @@ namespace BrnGui
         GuiAudioTriggerWire lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent(lAudio);
     }
 }

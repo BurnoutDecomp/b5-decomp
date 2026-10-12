@@ -92,17 +92,16 @@ enum GuiFlow
 };
 
 // BrnGuiAudioEvent.cpp / ARTIST @0x824F6350. The native payload is exactly
-// { component[32], action, label[32], movie[32] } (100 bytes). The committed PC
-// GuiEvent<N> carries its 12-byte queue header explicitly, making this queued
-// record 112 bytes in total.
-struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
+// { component[32], action, label[32], movie[32] } (100 bytes). The X360 event
+// id is 457; channel-40 output adds the separate GuiEventWrapper record.
+struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<457>
 {
     char macComponent[32];
     s32  meAction;
     char macLabel[32];
     char macMovie[32];
 
-    GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12), meAction(0)
+    GuiAudioTriggerEvent() :  meAction(0)
     {
         macComponent[0] = 0;
         macLabel[0] = 0;
@@ -113,12 +112,10 @@ struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
                    const char* lpLabel, const char* lpMovieName = "");
 };
 
-static_assert(sizeof(GuiAudioTriggerEvent) == 112,
-              "GuiAudioTriggerEvent is a 100-byte payload plus the 12-byte PC GuiEvent header");
+static_assert(sizeof(GuiAudioTriggerEvent) == 100,
+              "GuiAudioTriggerEvent is the 100-byte event payload");
 
-// ARTIST wire id 457 carries the same 100-byte payload without the PC
-// GuiEvent<201> header. OutputGuiEvent wraps this record with its own 12-byte
-// queue header before publication.
+// The raw 100-byte payload shape also appears in the sound bridge's id-457 path.
 struct GuiAudioTriggerWirePayload457
 {
     char macComponent[32];
@@ -863,11 +860,11 @@ struct GuiOptionsBrightnessContrastPostFxControl : public CgsModule::Event
 // screen leaves it 0).
 struct GuiEventActivateCrashNav : public CgsGui::GuiEvent<191>
 {
-    u32 muActivate;   // +0x0C payload word 0: nonzero = activate CrashNav
-    u32 muParam;      // +0x10 payload word 1 (role not recovered; posted as 0)
+    u32 muActivate;   // payload +0x00: nonzero = activate CrashNav
+    u32 muParam;      // payload +0x04 (role not recovered; posted as 0)
 
     explicit GuiEventActivateCrashNav(bool lbActivate)
-        : CgsGui::GuiEvent<191>(8, 12), muActivate(lbActivate ? 1u : 0u), muParam(0) {}
+        :  muActivate(lbActivate ? 1u : 0u), muParam(0) {}
 };
 
 // Declaration mirror of the DWARF parent (BrnGuiEventTypeDefs.h:1902). Only the nested
@@ -1034,19 +1031,15 @@ struct GuiDeveloperChallengesCompleted
 
 // ===================================================================================
 // BrnGui::GuiOverlayFullInfoRequest -- "send me the current overlay's full info"
-// (posted by BaseOverlayState::Update's WFINIT phase @0x824B2BD8: a header-only
-// record {muHeader0=1, muEventType=186, muHeader2=12} on channel 40, 16 bytes;
-// answered by the overlays director's full-info response on 187).
+// (posted by BaseOverlayState::Update's WFINIT phase @0x824B2BD8: {1,186,12} plus
+// the one-byte payload, channel 40, 16-byte wrapper; answered on event 187).
 // ===================================================================================
 struct GuiOverlayFullInfoRequest : public CgsGui::GuiEvent<186>
 {
-    // +0x0C -- pads the wire record to the X360's 16 bytes (AddEvent size 0x10
-    // @0x824B2BDC). The X360 never writes this word (the queued copy carries stack
-    // garbage past the 12-byte header), so it is deliberately left uninitialised.
-    u32 muPad0C;
-
-    GuiOverlayFullInfoRequest() : CgsGui::GuiEvent<186>(1, 12) {}
+    u8 mu8Payload;   // the X360 leaves this payload byte unwritten
 };
+static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayFullInfoRequest, 40>) == 16,
+              "event 186 uses a one-byte payload in a 16-byte record");
 
 // ===================================================================================
 // BrnGui::GuiOverlayCompleteEvent -- "this overlay finished" (posted by the running
@@ -1069,12 +1062,11 @@ struct GuiOverlayCompleteEvent : public CgsGui::GuiEvent<189>
         E_LEAVEMETHOD_COUNT  = 3,
     };
 
-    CgsID       mOverlayId;     // +0x10 (DWARF h:5846; 8-aligned past the 12-byte header,
-                                //        matching the X360 record: payload offset 16)
-    LeaveMethod meLeaveMethod;  // +0x18 (DWARF h:5847)
+    CgsID       mOverlayId;     // payload +0x00 (DWARF h:5846)
+    LeaveMethod meLeaveMethod;  // payload +0x08 (DWARF h:5847)
 
-    // Headers per the OnLeave record: payload size 16, payload offset 16.
-    GuiOverlayCompleteEvent() : CgsGui::GuiEvent<189>(16, 16) {}
+    // The payload is 16 bytes and 8-byte aligned; GuiEventWrapper places it at record +16.
+    GuiOverlayCompleteEvent()  {}
 
     // DWARF h:5859 Construct(CgsID, LeaveMethod) -- fill the payload (the string-keyed
     // h:5853 overload is its own ledger function; not attested in this slice).
@@ -2925,7 +2917,7 @@ struct GuiEventPostEventNewRivalSequenceStart : public CgsGui::GuiEvent<298>
     u32 mRivalUnlockName;
     u32 muPayloadPadding;
     u64 mVoiceOver;
-    GuiEventPostEventNewRivalSequenceStart() : CgsGui::GuiEvent<298>(16, 16) {}
+    GuiEventPostEventNewRivalSequenceStart()  {}
 };
 static_assert(sizeof(GuiEventPostEventNewRivalSequenceStart) == 32, "rival sequence event size");
 

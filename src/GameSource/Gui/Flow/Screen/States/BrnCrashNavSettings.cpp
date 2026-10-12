@@ -193,8 +193,7 @@ namespace BrnGui
         {
             u32 muSelector;   // +0x0C
             explicit GuiNetworkNewsAndTosWire266(u32 luSelector)
-                : CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>(4, 12)
-                , muSelector(luSelector)
+                :  muSelector(luSelector)
             {
             }
         };
@@ -207,8 +206,7 @@ namespace BrnGui
         {
             GuiOverlayRequest mRequest;   // +0x10
             GuiOverlayRequestWire184()
-                : CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>(
-                      static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
+                
             {
             }
         };
@@ -296,9 +294,7 @@ namespace BrnGui
         if (meState != E_STATE_MAIN)
         {
             GuiNetworkNewsAndTosWire266 lNews(KU_NEWS_TOS_PAYLOAD_SETTINGS);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lNews), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lNews)));
+            mpStateInterface->OutputGuiEvent(lNews);
         }
     }
 
@@ -426,9 +422,7 @@ namespace BrnGui
         // GuiOverlayRequest::Construct("CNSpnsrUnlkF") -> { 288, 184, 16, request }, ch 40.
         GuiOverlayRequestWire184 lWire;
         lWire.mRequest.Construct("CNSpnsrUnlkF");
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        mpStateInterface->OutputGuiEvent(lWire);
     }
 
     // ---- HandleControllerInput @0x824D90E8 -----------------------------------------

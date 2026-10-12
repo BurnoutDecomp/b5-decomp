@@ -86,9 +86,7 @@ namespace BrnGui
             bool mbEnableCarControl;   // +0x0C
 
             explicit GuiRequestCarControlChangeWire(bool lbEnableCarControl)
-                : RequestCarControlChangeHeader(static_cast<u32>(sizeof(bool)),
-                                                static_cast<u32>(sizeof(RequestCarControlChangeHeader)))
-                , mbEnableCarControl(lbEnableCarControl)
+                :  mbEnableCarControl(lbEnableCarControl)
             {
             }
         };
@@ -114,9 +112,7 @@ namespace BrnGui
             u8 muPayload;   // +0x0C (never stored by the X360; inherited value is 0)
 
             GuiScreenFlowCommandWire()
-                : ScreenFlowCommandHeader(static_cast<u32>(sizeof(u8)),
-                                          static_cast<u32>(sizeof(ScreenFlowCommandHeader)))
-                , muPayload(0)
+                :  muPayload(0)
             {
             }
         };
@@ -128,9 +124,7 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(bool)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };

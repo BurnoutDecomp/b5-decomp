@@ -135,10 +135,7 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };
@@ -170,14 +167,10 @@ namespace BrnGui
 
         // The menu owns the screen: CrashNav down, HUD hidden.
         GuiEventActivateCrashNav lDeactivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lDeactivateCrashNav)));
+        mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
         const GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));
+        mpStateInterface->OutputGuiEvent(lHideHud);
 
         mhNotifyListener = XNotifyCreateListener(KU64_NOTIFY_AREA_SYSTEM);
     }
@@ -198,9 +191,7 @@ namespace BrnGui
 
         GuiEventTickerClearMessages lClearTicker = {};
         const GuiEventTickerClearMessagesWire lClearTickerWire(lClearTicker);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lClearTickerWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lClearTickerWire)));
+        mpStateInterface->OutputGuiEvent(lClearTickerWire);
 
         if (mhNotifyListener != 0)
         {

@@ -106,7 +106,7 @@ namespace BrnGui
             u8 mu8Flag;    // +0x0C (the empty payload's byte; X360 leaves it untouched)
             u8 maPad[3];   // +0x0D
 
-            GuiCommandEvent16() : CgsGui::GuiEvent<N>(1, 12), mu8Flag(0)
+            GuiCommandEvent16() :  mu8Flag(0)
             {
                 maPad[0] = maPad[1] = maPad[2] = 0;
             }
@@ -116,9 +116,7 @@ namespace BrnGui
         void PostCommand16(CgsGui::StateInterface* lpStateInterface, s32 liChannel)
         {
             GuiCommandEvent16<N> lEvent;
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel,
-                static_cast<s32>(sizeof(lEvent)));   // X360 record size 16
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };   // X360 record size 16
         }
 
         // The two payload-less command ids this file posts. FLAG: neither id carries a
@@ -164,12 +162,10 @@ namespace BrnGui
         // expressions (sizeof / the 16-aligned payload offset), not the console immediates.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -335,9 +331,7 @@ namespace BrnGui
         GuiOverlayRequestWire lWire;
         lWire.mRequest.Construct(lpacOverlayId);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiOverlayRequestWire)));   // X360 record size 304
+        mpStateInterface->OutputGuiEvent(lWire);   // X360 record size 304
 
         BrnNetHarnessPC::WitnessTag("netui", "overlay", "show %s", lpacOverlayId);
     }

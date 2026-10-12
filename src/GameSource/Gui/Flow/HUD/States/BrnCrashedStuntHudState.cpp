@@ -155,7 +155,7 @@ bool CrashedStuntHudState::UpdateSetupState()
     struct BoostVisibility : CgsGui::GuiEvent<214>
     {
         u8 mbVisible; u8 maPad[3];
-        BoostVisibility() : CgsGui::GuiEvent<214>(1, 12), mbVisible(false), maPad{} {}
+        BoostVisibility() :  mbVisible(false), maPad{} {}
     } lBoost;
     mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
     miStartScore = mpCache->miLastStuntScore;
@@ -273,7 +273,7 @@ void CrashedStuntHudState::UpdateCrashRunningState()
     struct TallyScore : CgsGui::GuiEvent<465>
     {
         s32 miScore; f32 mfTime;
-        TallyScore(s32 liScore) : CgsGui::GuiEvent<465>(8, 12), miScore(liScore), mfTime(0.0f) {}
+        TallyScore(s32 liScore) :  miScore(liScore), mfTime(0.0f) {}
     } lTally(miCurrentScore);
     mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTally), 40, sizeof(lTally));
 }

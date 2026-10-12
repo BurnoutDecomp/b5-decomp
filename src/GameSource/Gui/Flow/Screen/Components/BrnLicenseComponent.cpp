@@ -167,12 +167,7 @@ namespace BrnGui
             s32 miPlayerIndex;   // payload +0x04 (both emit sites pass -1)
 
             GuiEventNetworkOutputPlayerTextureRecord(s32 leMode, s32 liPlayerIndex)
-                : CgsGui::GuiEvent<264>(), meMode(leMode), miPlayerIndex(liPlayerIndex)
-            {
-                const size_t luOffset = offsetof(GuiEventNetworkOutputPlayerTextureRecord, meMode);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
-            }
+                : meMode(leMode), miPlayerIndex(liPlayerIndex) {}
         };
 
         // ---- BrnGui::GuiEventNetworkPlayerImage (id 258) ---------------------------
@@ -185,12 +180,7 @@ namespace BrnGui
             s32                               miIndex;     // payload +0x08 x64 (+0x04 console)
 
             GuiEventNetworkPlayerImageRecord(const CgsNetwork::NetworkTexture* lpTexture, s32 liIndex)
-                : CgsGui::GuiEvent<258>(), mpTexture(lpTexture), miIndex(liIndex)
-            {
-                const size_t luOffset = offsetof(GuiEventNetworkPlayerImageRecord, mpTexture);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
-            }
+                : mpTexture(lpTexture), miIndex(liIndex) {}
         };
 
         // ---- the 16-byte GuiEvent<N> command record { 1, N, 12 } + one flag byte ----
@@ -199,24 +189,21 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            explicit GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(&lEvent, liChannel,
-                                                         static_cast<s32>(sizeof(lEvent)));
+            CgsGui::GuiEventWrapper<GuiCommandEvent16<N>, 40> lWrapper(lEvent);
+            { CgsGui::GuiEventWrapper<decltype(lWrapper), 40> lGuiOutputWrapper1(lWrapper); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         void PostPlayerTextureEvent(CgsGui::StateInterface* lpStateInterface, s32 leMode)
         {
             GuiEventNetworkOutputPlayerTextureRecord lRecord(leMode, -1);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_GUI_OUT,
-                                                             static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lRecord);
         }
 
 
@@ -973,8 +960,7 @@ namespace BrnGui
         if (mpProfile != 0 && mbShowingProfilePicture)
         {
             GuiEventNetworkPlayerImageRecord lRecord(mpProfile->GetPlayerLicencePicture(), 1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_VIEW_STATE,
-                                                             static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputViewState(lRecord);
         }
     }
 

@@ -133,17 +133,15 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            explicit GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
         void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            CgsGui::GuiEventWrapper<GuiCommandEvent16<N>, 40> lWrapper(lEvent);
+            { CgsGui::GuiEventWrapper<decltype(lWrapper), 40> lGuiOutputWrapper1(lWrapper); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         // ⛔ `GuiViewStateEvent20` DELETED 2026-09-06 (hud lane). It was the OnEnter
@@ -188,41 +186,28 @@ namespace BrnGui
 
             GuiEventNetworkPlayerImageWire(const CgsNetwork::NetworkTexture* lpTexture,
                                            s32 liTextureIndex)
-                : CgsGui::GuiEvent<258>(), mpTexture(lpTexture), miTextureIndex(liTextureIndex)
-            {
-                const size_t luOffset = offsetof(GuiEventNetworkPlayerImageWire, mpTexture);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
-            }
+                : mpTexture(lpTexture), miTextureIndex(liTextureIndex) {}
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0) {}
+            GuiOverlayRequest mRequest;
         };
 
         void PostOverlayRequest(CgsGui::StateInterface* lpInterface, const char* lpcOverlayId)
         {
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            lpInterface->OutputGuiEvent(lWire);
         }
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record
         // (@0x82476E98): { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes.
         struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
         {
-            u32                         muPad0C;    // +0x0C (8-aligned payload)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
-            GuiOverlayWaitFinishWire() : CgsGui::GuiEvent<188>(8, 16), muPad0C(0) {}
+            GuiOverlayWaitFinishRequest mRequest;
         };
 
         void PostOverlayWaitFinishRequest(CgsGui::StateInterface* lpInterface,
@@ -230,9 +215,7 @@ namespace BrnGui
         {
             GuiOverlayWaitFinishWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+            lpInterface->OutputGuiEvent(lWire);
         }
 
         // The OutputGuiEvent<BrnGui::GuiEventNetworkSplashEvent> wire record
@@ -241,7 +224,7 @@ namespace BrnGui
         {
             u32 muSplashState;   // +0x0C (ESplashState)
             explicit GuiNetworkSplashWire16(u32 luSplashState)
-                : CgsGui::GuiEvent<269>(4, 12), muSplashState(luSplashState) {}
+                :  muSplashState(luSplashState) {}
         };
 
         // ---- GuiCache boundary (X360 members past the committed layout tail; the
@@ -389,15 +372,11 @@ namespace BrnGui
         // two-word helper stood); OutputViewState<T> builds the identical wrapper at host
         // width, which is the whole point of using it here.
         GuiEventNetworkPlayerImageWire lViewReset(0, -1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lViewReset), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(lViewReset)));
+        mpStateInterface->OutputViewState(lViewReset);
 
         // { 8, 191, 12, 1, 0 } -- activate the CrashNav (front-end map) flow.
         GuiEventActivateCrashNav lActivateCrashNav(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
         PostCommand16<261>(mpStateInterface, KI_CHANNEL_GUI_OUT);
         PostCommand16<145>(mpStateInterface, KI_CHANNEL_GUI_OUT);
@@ -600,8 +579,7 @@ namespace BrnGui
                 lpComplete->mOverlayId == CgsIDCompress("OnSplshFreeB"))
             {
                 GuiNetworkSplashWire16 lFinished(KU_SPLASH_STATE_FINISHED);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lFinished), KI_CHANNEL_GUI_OUT, 16);
+                mpStateInterface->OutputGuiEvent(lFinished);
             }
         }
     }

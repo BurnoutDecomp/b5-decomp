@@ -1173,21 +1173,18 @@ namespace BrnGame
                     lpDirectorInput->SetFinishedOnlineEventLoading();
                     break;
 
-                case 501:   // the GUI PFX hook enumeration (a 404-byte publish). The console
-                            // memcpys all 404 bytes off the payload unconditionally; the size
-                            // guard is ours, because a short record here would read past the
-                            // queue entry (the exact class of bug that cost this project the
-                            // intro AV). BrnGui::EffectsArbitrator::EventUpdate posts it (the
-                            // reply to 500) since 2026-09-17; the record is copied WHOLE (header
-                            // included), so the director reads it back as the same struct.
+                case 501:   // The GUI PFX hook enumeration is a direct count-plus-100-pointer
+                            // payload, without the StateInterface wrapper. ARTIST queues 404
+                            // bytes; this PC producer uses the typed native-width form.
                     static_assert(sizeof(BrnGui::GuiPFXHookEnumeration) ==
                                   BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES,
-                                  "the director copies the whole 501 record");
+                                  "the director stores the typed native-width 501 payload");
                     if (liSize >= static_cast<s32>(BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES
                                                    + (reinterpret_cast<const u8*>(lpuPayload)
                                                           - reinterpret_cast<const u8*>(lpEvent))))
                     {
-                        lpDirectorInput->SetHookEnumeration(lpuPayload);
+                        lpDirectorInput->SetHookEnumeration(
+                            reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpuPayload));
                         if (getenv("BRN_PFX_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
                             *CgsDev::Log::gpDebugPrint << "[pfx-dir] 501 record (" << liSize << " bytes) -> director input\n";
                     }

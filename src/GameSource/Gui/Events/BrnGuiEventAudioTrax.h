@@ -31,6 +31,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"   // FastBitArray<128>
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"              // empty GuiEvent<459> tag
 
 namespace BrnGui
 {
@@ -50,6 +51,19 @@ namespace BrnGui
     static_assert(sizeof(GuiEventAudioTraxUpdate) == 32,
                   "OutputGuiEvent<GuiEventAudioTraxUpdate> @0x824C30A0 copies 32 bytes from "
                   "offset 0 and posts a 48-byte record");
+
+    // GUI event 459, the last-played-index payload. DecFIGS names the 16-byte
+    // FastBitArray and both trailing indices; ARTIST's channel-40 wrapper writes
+    // {24,459,16} and copies all 24 bytes from this 8-byte-aligned payload.
+    struct alignas(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459>
+    {
+        CgsContainers::FastBitArray<128> mRemainingSongs;          // +0x00
+        s32               miLastSongIndex;          // +0x10
+        s32               miLastPictureParadiseIndex; // +0x14
+    };
+
+    static_assert(sizeof(GuiEventAudioTraxLastPlayedIndexes) == 24,
+                  "event 459 payload is the 16-byte bitset and two indices");
 
     // GUI event 462 -- the trax play-order selector (the profile stores it as a 4-byte word
     // at +0x7340).

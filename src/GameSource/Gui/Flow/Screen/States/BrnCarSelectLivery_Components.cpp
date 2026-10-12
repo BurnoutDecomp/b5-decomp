@@ -71,10 +71,9 @@ namespace BrnGui
         // { 8, 411, 16, <pad>, CgsID }, channel 40, 24 bytes.
         struct GuiCarSelectTriggerWire411 : public CgsGui::GuiEvent<411>
         {
-            u32   muPad0C;    // +0x0C (the payload is 8-aligned past the header)
             CgsID mCarId;     // +0x10
             GuiCarSelectTriggerWire411()
-                : CgsGui::GuiEvent<411>(8, 16), muPad0C(0), mCarId(0) {}
+                : mCarId(0) {}
         };
 
         // The player-car-colour command SendPlayerCarColourEvent posts:
@@ -91,7 +90,7 @@ namespace BrnGui
             u32 muPaintFinishIndex;   // +0x0C (X360 word0)
             u32 muColourIndex;        // +0x10 (X360 word1)
             GuiPlayerCarColourWire416()
-                : CgsGui::GuiEvent<416>(8, 12), muPaintFinishIndex(0), muColourIndex(0) {}
+                :  muPaintFinishIndex(0), muColourIndex(0) {}
         };
 
         // The "clear the ticker" command: { 2, 536, 12, u8 1, u8 0 }, channel 40, 16 bytes.
@@ -102,7 +101,7 @@ namespace BrnGui
             u8 mbFlagA;   // +0x0C
             u8 mbFlagB;   // +0x0D
             GuiTickerFlagsWire536()
-                : CgsGui::GuiEvent<536>(2, 12), mbFlagA(1), mbFlagB(0) {}
+                :  mbFlagA(1), mbFlagB(0) {}
         };
 
         // The 0x818-byte custom ticker message, layout recovered from
@@ -138,7 +137,7 @@ namespace BrnGui
         {
             GuiTickerCustomMessagePayload mMessage;   // +0x0C
             GuiTickerCustomMessageWire()
-                : CgsGui::GuiEvent<537>(static_cast<u32>(sizeof(GuiTickerCustomMessagePayload)), 12)
+                
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
                 // Two non-zero seeds, both measured at 0x824C7D7C..0x824C7D90:
@@ -290,8 +289,7 @@ namespace BrnGui
         {
             GuiCarSelectTriggerWire411 lTrigger;
             lTrigger.mCarId = mCurrentSetupInfo.mCarId;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lTrigger, KI_CHANNEL_GUI_OUT,
-                                                              static_cast<s32>(sizeof(lTrigger)));
+            mpStateInterface->OutputGuiEvent(lTrigger);
         }
 
         UpdateMenuComponents();
@@ -317,8 +315,7 @@ namespace BrnGui
             // Clear the ticker, then post the "car needs repair" line.
             {
                 GuiTickerFlagsWire536 lTickerClear;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(&lTickerClear, KI_CHANNEL_GUI_OUT,
-                                                                  static_cast<s32>(sizeof(lTickerClear)));
+                mpStateInterface->OutputGuiEvent(lTickerClear);
             }
             {
                 char lacKey[32];
@@ -327,8 +324,7 @@ namespace BrnGui
 
                 GuiTickerCustomMessageWire lTicker;
                 lTicker.mMessage.AddString(lacKey, 2);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(&lTicker, KI_CHANNEL_GUI_OUT,
-                                                                  static_cast<s32>(sizeof(lTicker)));
+                mpStateInterface->OutputGuiEvent(lTicker);
             }
         }
 
@@ -606,8 +602,7 @@ namespace BrnGui
 
         GuiCarSelectTriggerWire411 lTrigger;
         lTrigger.mCarId = lpSetupInfo->mCarId;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lTrigger, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lTrigger)));
+        mpStateInterface->OutputGuiEvent(lTrigger);
     }
 
     // ---- SendPlayerCarColourEvent @ 0x824C87F0 -------------------------------------
@@ -620,8 +615,7 @@ namespace BrnGui
         GuiPlayerCarColourWire416 lColour;
         lColour.muPaintFinishIndex = static_cast<u32>(liPaintFinish);   // X360 word0
         lColour.muColourIndex      = static_cast<u32>(liColourIndex);   // X360 word1
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lColour, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lColour)));
+        mpStateInterface->OutputGuiEvent(lColour);
 
         SetupPaintColourToggle(liColourIndex, mColourMenuToggle.IsHighlighted());
     }

@@ -97,7 +97,7 @@ namespace
         u8   mau8Pad[3];
 
         explicit GuiEventCarbonCarSequence(bool lbEntered)
-            : CgsGui::GuiEvent<470>(1, 12), mbEntered(lbEntered)
+            :  mbEntered(lbEntered)
         {
             mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
         }
@@ -108,9 +108,7 @@ namespace
     void PostCarbonCarSequence(CgsGui::StateInterface* lpStateInterface, bool lbEntered)
     {
         GuiEventCarbonCarSequence lEvent(lbEntered);
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        lpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // The console streams the fixed prefix, the offending value and a suffix into the global

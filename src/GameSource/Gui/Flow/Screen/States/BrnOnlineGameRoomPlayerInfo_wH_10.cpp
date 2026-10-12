@@ -82,16 +82,8 @@ namespace BrnGui
         // view restores the wire words (same view as partfiles 08 and 13). The in-tree
         // StateInterface::OutputGuiEvent posts the event on a channel equal to its id,
         // which is not the console record.
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                               sizeof(CgsGui::GuiEvent<201>));
-                muEventType = 457;
-            }
-        };
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        typedef GuiAudioTriggerEvent GuiAudioTriggerWire;
+        static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
         const s32 KI_CHANNEL_AUDIO_GUI_OUT = 40;
 
         // The apt clip the pause button prompts transition through (X360 aAptTransition_1,
@@ -337,9 +329,7 @@ namespace BrnGui
             GuiAudioTriggerWire lAudioEvent;
             lAudioEvent.Construct(KI_AUDIO_ACTION_BACK, KAC_EMPTY_STRING,
                                   KAC_SOUND_GO_BACK, KAC_EMPTY_STRING);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudioEvent), KI_CHANNEL_AUDIO_GUI_OUT,
-                static_cast<s32>(sizeof(lAudioEvent)));
+            mpStateInterface->OutputGuiEvent(lAudioEvent);
             ShowPauseScreen();
             break;
         }

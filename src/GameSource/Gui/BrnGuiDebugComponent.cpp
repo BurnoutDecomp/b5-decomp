@@ -254,10 +254,9 @@ void GuiDebugComponent::TriggerPFX()
     CGS_ASSERT(std::strlen(lpcHookName) < static_cast<size_t>(KI_MAX_PFX_ID_LENGTH), "String too long: ");
     std::strncpy(lEvent.macName, lpcHookName, KI_MAX_PFX_ID_LENGTH);
 
-    // The queued record is the payload past the GuiEvent<495> header (64 bytes).
-    const s32 KI_PAYLOAD_SIZE = static_cast<s32>(sizeof(GuiPFXHookEvent) - sizeof(CgsGui::GuiEvent<495>));
-    static_assert(sizeof(GuiPFXHookEvent) - sizeof(CgsGui::GuiEvent<495>) == 64, "event 495 payload is 64 bytes");
-    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent.muGuid), 495, KI_PAYLOAD_SIZE);
+    // Event 495 is the 64-byte payload itself; the queue entry carries the id separately.
+    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent), 495,
+                         static_cast<s32>(sizeof(lEvent)));
 }
 
 // Post the payload-less event 291, then a made-up offline post-event result (event 289) to the
@@ -506,8 +505,7 @@ void GuiDebugComponent::BootupProfile()
         return;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        CgsDev::Log::gpDebugPrint->mpVTable[1](
-            CgsDev::Log::gpDebugPrint, "SaveLoad: Starting Bootup\n");
+        *CgsDev::Log::gpDebugPrint << "SaveLoad: Starting Bootup\n";
     mpGuiModule->GetProfileManager().Bootup(
         mpGuiModule->mProfileAutosaveResultHandler, true);
 }
@@ -533,8 +531,7 @@ void GuiDebugComponent::SaveProfile()
         return;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        CgsDev::Log::gpDebugPrint->mpVTable[1](
-            CgsDev::Log::gpDebugPrint, "SaveLoad: Starting Save\n");
+        *CgsDev::Log::gpDebugPrint << "SaveLoad: Starting Save\n";
     mpGuiModule->GetProfileManager().Save(mpGuiModule->mProfileAutosaveResultHandler);
 }
 
@@ -545,8 +542,7 @@ void GuiDebugComponent::LoadProfile()
         return;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        CgsDev::Log::gpDebugPrint->mpVTable[1](
-            CgsDev::Log::gpDebugPrint, "SaveLoad: Starting Load\n");
+        *CgsDev::Log::gpDebugPrint << "SaveLoad: Starting Load\n";
     mpGuiModule->GetProfileManager().Load(mpGuiModule->mProfileAutosaveResultHandler);
 }
 

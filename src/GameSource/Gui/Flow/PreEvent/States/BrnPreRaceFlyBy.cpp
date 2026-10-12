@@ -543,10 +543,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C -- the 1-byte payload the size word names; UNWRITTEN by the emitter
 
             GuiEventPreRaceFlyByEnter()
-                : CgsGui::GuiEvent<532>(
-                      static_cast<u32>(sizeof(mu8Payload)),                            // X360 word0 == 1
-                      static_cast<u32>(offsetof(GuiEventPreRaceFlyByEnter, mu8Payload))) // X360 word2 == 12
-                , mu8Payload(0)
+                :  mu8Payload(0)
             {
             }
         };
@@ -607,9 +604,7 @@ namespace BrnGui
         // Announce the fly-by entry on the GUI-out channel (X360 record size 16).
         {
             GuiEventPreRaceFlyByEnter lEnter;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEnter),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lEnter)));
+            mpStateInterface->OutputGuiEvent(lEnter);
         }
 
         // Both asserts are the committed accessor path's own (non-fatal on the X360, so the
@@ -1327,10 +1322,7 @@ namespace
         u8 mu8Payload;   // +0x0C -- the 1-byte payload the size word names; UNWRITTEN by the emitter
 
         GuiEventPreRaceFlyByTimeExpired()
-            : CgsGui::GuiEvent<163>(
-                  static_cast<u32>(sizeof(mu8Payload)),                                   // X360 word0 == 1
-                  static_cast<u32>(offsetof(GuiEventPreRaceFlyByTimeExpired, mu8Payload))) // X360 word2 == 12
-            , mu8Payload(0)
+            :  mu8Payload(0)
         {
         }
     };
@@ -1541,8 +1533,7 @@ void PreRaceFlyByState::Update()
         if (!(mfTimeRemaining > 0.0f) && !mbEndRequestSent)
         {
             GuiEventPreRaceFlyByTimeExpired lTimeExpired;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                &lTimeExpired, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lTimeExpired)));
+            mpStateInterface->OutputGuiEvent(lTimeExpired);
             mbEndRequestSent = true;
         }
     }
@@ -1983,11 +1974,7 @@ namespace
         // payload offset (X360 0x10 == 16). The sizeof pin below is what makes the two
         // agree with the console record.
         GuiEventPreRaceDescription()
-            : CgsGui::GuiEvent<464>(
-                  static_cast<u32>(sizeof(GuiEventPreRaceDescription)
-                                   - offsetof(GuiEventPreRaceDescription, mLandmarkId)),
-                  static_cast<u32>(offsetof(GuiEventPreRaceDescription, mLandmarkId)))
-            , mLandmarkId(0)
+            :  mLandmarkId(0)
             , miDirection(0)
             , miGameMode(0)
             , miTimesPlayed(0)
@@ -2117,8 +2104,7 @@ void PreRaceFlyByState::SetBurningRouteDescription()
         (lpProfileEvent->GetFlags()
          & BrnProgression::ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE) != 0;
 
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
+    mpStateInterface->OutputGuiEvent(lDescription);
 }
 
 // -------------------------------------------------------------------------------------
@@ -2186,8 +2172,7 @@ void PreRaceFlyByState::SetMarkedManDescription()
     lDescription.mbEventFlag =
         (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
 
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
+    mpStateInterface->OutputGuiEvent(lDescription);
 }
 
 // -------------------------------------------------------------------------------------
@@ -2260,8 +2245,7 @@ void PreRaceFlyByState::SetRaceDescription()
     lDescription.mbEventFlag =
         (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
 
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
+    mpStateInterface->OutputGuiEvent(lDescription);
 }
 
 }
@@ -2434,8 +2418,7 @@ void PreRaceFlyByState::SetFreestyleDescription()
     lDescription.mbEventFlag = static_cast<u8>(
         (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
 
-    mpStateInterface->GetOutputEventQueue()->AddEvent(&lDescription, KI_CHANNEL_GUI_OUT,
-                                                     static_cast<s32>(sizeof(lDescription)));
+    mpStateInterface->OutputGuiEvent(lDescription);
 }
 
 // -------------------------------------------------------------------------------
@@ -2525,7 +2508,6 @@ void PreRaceFlyByState::SetRoadRageDescription()
     lDescription.mbEventFlag = static_cast<u8>(
         (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
 
-    mpStateInterface->GetOutputEventQueue()->AddEvent(&lDescription, KI_CHANNEL_GUI_OUT,
-                                                     static_cast<s32>(sizeof(lDescription)));
+    mpStateInterface->OutputGuiEvent(lDescription);
 }
 }

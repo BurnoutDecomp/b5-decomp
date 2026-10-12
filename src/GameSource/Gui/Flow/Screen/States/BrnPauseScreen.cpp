@@ -84,7 +84,7 @@ namespace
     {
         u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size 16)
 
-        GuiEventPauseScreenClosed() : CgsGui::GuiEvent<533>(1, 12) {}
+        GuiEventPauseScreenClosed()  {}
     };
 
     // The { 1, 148, 12, flag } HUD-components command record (BrnInGame.cpp's
@@ -96,7 +96,7 @@ namespace
         u8 maPad[3];
 
         explicit GuiEventHudComponentsCommand(u8 lu8Enable)
-            : CgsGui::GuiEvent<148>(1, 12), mu8Enable(lu8Enable)
+            :  mu8Enable(lu8Enable)
         {
             maPad[0] = maPad[1] = maPad[2] = 0;
         }
@@ -106,10 +106,9 @@ namespace
     // { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes (BrnInGame.cpp's wire twin).
     struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
     {
-        u32                         muPad0C;    // +0x0C (8-aligned payload)
         GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
 
-        GuiOverlayWaitFinishWire() : CgsGui::GuiEvent<188>(8, 16), muPad0C(0) {}
+        GuiOverlayWaitFinishWire()  {}
     };
 }
 
@@ -154,22 +153,17 @@ void PauseScreen::OnEnter()
     // { 1, 148, 12, flag=0 } on the internal channel -- HUD components down (the flag=1
     // twin is InGame::OnEnter's bring-up).
     GuiEventHudComponentsCommand lHudDown(0);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lHudDown), KI_CHANNEL_GUI_INTERNAL, 16);
+    mpStateInterface->OutputInternalState(lHudDown);
 
     // { 8, 191, 12, 0, 0 } -- deactivate the CrashNav (front-end map) flow while the
     // pause menu owns the screen (HandleControllerInput re-activates it on resume).
     GuiEventActivateCrashNav lDeactivateCrashNav(false);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+    mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
     // The 24-byte 188 record: hold the flow until the leaving-game overlay fully hides.
     GuiOverlayWaitFinishWire lWaitFinish;
     lWaitFinish.mRequest.Construct("CNOnlLvgGame");
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+    mpStateInterface->OutputGuiEvent(lWaitFinish);
 
     mPauseOptions.Construct(KAC_OPTION_CPT_NAME_BASE, mpStateInterface, 1, 0, -1);
 }
@@ -302,8 +296,7 @@ void PauseScreen::HandleControllerInput(const CgsModule::Event* lpEvent)
             mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
             GuiEventPauseScreenClosed lPauseClosed;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lPauseClosed), KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lPauseClosed);
 
             SendStateEvent("GO_BACK");
         }

@@ -185,9 +185,7 @@ namespace BrnGui
             u8 maPad[3];
 
             explicit GuiEventShowHideHudWire(u8 lu8Show)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(u8)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mu8Show(lu8Show)
+                :  mu8Show(lu8Show)
             {
                 maPad[0] = maPad[1] = maPad[2] = 0;
             }

@@ -75,7 +75,7 @@ namespace BrnGui
     {
         bool mbActive;   // +0x0C (record size 16: 12-byte header + bool + 3 pad)
 
-        GuiEATraxChyronActive() : CgsGui::GuiEvent<471>(1, 12), mbActive(false) {}
+        GuiEATraxChyronActive() :  mbActive(false) {}
     };
 
     // The GuiEventOut channel id and the on-queue record size the X360 passes to
@@ -90,9 +90,7 @@ namespace BrnGui
     {
         GuiEATraxChyronActive lActiveEvent;
         lActiveEvent.mbActive = lbActive;
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActiveEvent),
-            KI_GUI_EVENT_OUT_CHANNEL, KI_CHYRON_EVENT_RECORD_SIZE);
+        lpStateInterface->OutputGuiEvent(lActiveEvent);
     }
 
     // @ 0x824249F8 -- bind the state interface, invalidate the apt clip + the three

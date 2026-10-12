@@ -116,9 +116,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C (not written by the X360)
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
+                
             {
             }
         };
@@ -132,9 +130,7 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(bool)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };
@@ -150,10 +146,7 @@ namespace BrnGui
             GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
 
             GuiOverlayWaitFinishWire()
-                : OverlayWaitFinishHeader(
-                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                      static_cast<u32>(sizeof(OverlayWaitFinishHeader) + sizeof(u32)))
-                , muPad0C(0)
+                :  muPad0C(0)
             {
             }
         };
@@ -170,9 +163,7 @@ namespace BrnGui
 
             GuiEventSoundVolumesWire(CrashNavOptionsData::EOptionsSoundVolumes leMusicVolume,
                                      CrashNavOptionsData::EOptionsSoundVolumes leSFXVolume)
-                : SoundVolumesHeader(static_cast<u32>(2 * sizeof(s32)),
-                                     static_cast<u32>(sizeof(SoundVolumesHeader)))
-                , meMusicVolume(static_cast<s32>(leMusicVolume))
+                :  meMusicVolume(static_cast<s32>(leMusicVolume))
                 , meSFXVolume(static_cast<s32>(leSFXVolume))
             {
             }
@@ -185,9 +176,7 @@ namespace BrnGui
         {
             GuiOverlayWaitFinishWire lWaitFinish;
             lWaitFinish.mRequest.Construct(lpacOverlayName);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitFinish)));   // X360 record size 24
+            lpStateInterface->OutputGuiEvent(lWaitFinish);   // X360 record size 24
         }
     }
 
@@ -291,10 +280,7 @@ namespace BrnGui
                 {
                     // The HUD goes down first whichever way the car select is reached.
                     GuiEventShowHideHudWire lHideHud(false);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lHideHud),
-                        KI_CHANNEL_GUI_INTERNAL,
-                        static_cast<s32>(sizeof(lHideHud)));   // X360 record size 16
+                    mpStateInterface->OutputInternalState(lHideHud);   // X360 record size 16
 
                     const s32 leCarSelectType =
                         reinterpret_cast<const CarSelectStartPayload*>(lpEvent)->meCarSelectType;
@@ -315,16 +301,10 @@ namespace BrnGui
 
                         // Hand the front-end map (CrashNav) flow back the screen.
                         GuiEventActivateCrashNav lActivateCrashNav(true);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav),
-                            KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lActivateCrashNav)));   // X360 record size 20
+                        mpStateInterface->OutputGuiEvent(lActivateCrashNav);   // X360 record size 20
 
                         GuiCommandWire16<533> lScreenFlowCommand;
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lScreenFlowCommand),
-                            KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lScreenFlowCommand)));  // X360 record size 16
+                        mpStateInterface->OutputGuiEvent(lScreenFlowCommand);  // X360 record size 16
                     }
                     else
                     {
@@ -349,9 +329,7 @@ namespace BrnGui
                 case KI_EVENT_INVITE_COMPLETE:
                 {
                     GuiCommandWire16<135> lCommand;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lCommand), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lCommand)));   // X360 record size 16
+                    mpStateInterface->OutputGuiEvent(lCommand);   // X360 record size 16
                     break;
                 }
 
@@ -440,10 +418,7 @@ namespace BrnGui
             if (!(mfTimeUntilNextEATrack > KF_ZERO_TIME))
             {
                 GuiCommandWire16<461> lNextTrackCommand;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNextTrackCommand),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNextTrackCommand)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lNextTrackCommand);   // X360 record size 16
             }
         }
 
@@ -546,8 +521,6 @@ namespace BrnGui
         // members in order.
         GuiEventSoundVolumesWire lSoundVolumes(mCrashNavOptionsData.meMusicVolume,
                                                mCrashNavOptionsData.meSFXVolume);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lSoundVolumes), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lSoundVolumes)));
+        mpStateInterface->OutputGuiEvent(lSoundVolumes);
     }
 }

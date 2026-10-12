@@ -22,21 +22,22 @@ namespace CgsGui
 {
     namespace
     {
-        // DecFIGS CgsGuiEventTypes.h: GuiEventStateChange derives GuiEvent<1> and
-        // carries the pending state's fixed 16-byte event name. ARTIST PostUpdate
-        // builds its header as {16, 1, 12} and queues the 28-byte record on channel 40.
+        // GuiEventStateChange is the 16-byte payload. ARTIST PostUpdate wraps it as
+        // {16, 1, 12} and queues the 28-byte channel-40 record.
         struct GuiEventStateChange : public GuiEvent<1>
         {
             char macStateChangeEvent[16];
 
-            GuiEventStateChange() : GuiEvent<1>(16, 12)
+            GuiEventStateChange() 
             {
                 macStateChangeEvent[0] = 0;
             }
         };
 
-        static_assert(sizeof(GuiEventStateChange) == 28,
-                      "GuiEventStateChange must match the ARTIST 28-byte wire record");
+        static_assert(sizeof(GuiEventStateChange) == 16,
+                      "GuiEventStateChange is the 16-byte payload");
+        static_assert(sizeof(GuiEventWrapper<GuiEventStateChange, 40>) == 28,
+                      "GuiEventStateChange wrapper is the ARTIST 28-byte record");
     }
 
     State::State()
@@ -84,8 +85,7 @@ namespace CgsGui
                              sizeof(lStateChangeEvent.macStateChangeEvent), macEvent);
             lStateChangeEvent.macStateChangeEvent[
                 sizeof(lStateChangeEvent.macStateChangeEvent) - 1] = 0;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                &lStateChangeEvent, 40, static_cast<s32>(sizeof(lStateChangeEvent)));
+            mpStateInterface->OutputGuiEvent(lStateChangeEvent);
 
             CgsFsm::Event lEvent;
             lEvent.Construct(CgsIDCompress(macEvent));

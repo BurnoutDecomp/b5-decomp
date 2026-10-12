@@ -3976,8 +3976,7 @@ namespace BrnDirector
         // request is simply "the hooks have not arrived yet".
         if (lpInput->HasGotHookEnumeration())
         {
-            const BrnGui::GuiPFXHookEnumeration* lpEnumeration =
-                reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpInput->GetHookEnumeration());
+            const BrnGui::GuiPFXHookEnumeration* lpEnumeration = lpInput->GetHookEnumeration();
             bool lbRequestEnumeration = false;
             reinterpret_cast<EffectInterface*>(maEffectInterface)->Update(
                 lpEnumeration->miHookNameCount, lpEnumeration->mapHookNames, &lbRequestEnumeration);

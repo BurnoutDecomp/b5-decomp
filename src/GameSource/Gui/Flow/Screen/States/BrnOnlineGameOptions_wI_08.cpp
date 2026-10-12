@@ -81,10 +81,7 @@ namespace BrnGui
             u8  maPad[3];    // +0x15 (the record is 24 bytes on the wire)
 
             GuiEventShowHideWire(s32 liShow, f32 lfValue, u8 lu8Flag)
-                : ShowHideHeader(static_cast<u32>(sizeof(GuiEventShowHideWire) -
-                                                  sizeof(ShowHideHeader)),
-                                 static_cast<u32>(sizeof(ShowHideHeader)))
-                , miShow(liShow)
+                :  miShow(liShow)
                 , mfValue(lfValue)
                 , mu8Flag(lu8Flag)
             {

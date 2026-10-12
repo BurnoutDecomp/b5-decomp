@@ -35,7 +35,7 @@ struct GuiEventStartFreeburnChallenge : public CgsGui::GuiEvent<575>
 {
     u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size is 16)
 
-    GuiEventStartFreeburnChallenge() : CgsGui::GuiEvent<575>(1, 12) {}
+    GuiEventStartFreeburnChallenge()  {}
 };
 
 // @ 0x824157D8
@@ -91,8 +91,7 @@ void FreeburnChallengeStartComponent::HandleButtonPress(s32 liButton)
     if (mbActive && lbBothHeld)
     {
         GuiEventStartFreeburnChallenge lEvent;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), 40, 16);
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 }
 

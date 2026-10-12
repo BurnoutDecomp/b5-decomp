@@ -77,9 +77,7 @@ namespace BrnGui
             u32 muEventID;   // +0x0C (X360 stores 0)
 
             explicit GuiEventSetInspectedEventIconWire(u32 luEventID)
-                : SetInspectedEventIconHeader(static_cast<u32>(sizeof(u32)),
-                                              static_cast<u32>(sizeof(SetInspectedEventIconHeader)))
-                , muEventID(luEventID)
+                :  muEventID(luEventID)
             {
             }
         };

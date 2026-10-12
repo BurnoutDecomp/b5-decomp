@@ -148,17 +148,7 @@ namespace BrnGui
             s32 miPlayerIndex;   // payload +0x04
 
             GuiEventNetworkOutputPlayerTextureRecord(s32 leMode, s32 liPlayerIndex)
-                : CgsGui::GuiEvent<264>(), meMode(leMode), miPlayerIndex(liPlayerIndex)
-            {
-                // The subtraction is only safe here because the two-s32 payload leaves no
-                // trailing padding, so sizeof - offsetof really is the payload byte count
-                // (X360 `li r27, 8` at 0x8249C368). Do NOT copy this form onto a record
-                // whose payload is narrower than the record's alignment -- see the two
-                // bool records below, which take the payload size directly.
-                const size_t luOffset = offsetof(GuiEventNetworkOutputPlayerTextureRecord, meMode);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
-            }
+                : meMode(leMode), miPlayerIndex(liPlayerIndex) {}
         };
 
         // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1). OnEnter drops the HUD as
@@ -178,10 +168,7 @@ namespace BrnGui
             bool mbShowHud;   // payload +0x00
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),                                 // X360 1
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))  // X360 12
-                , mbShowHud(lbShowHud)
+                :  mbShowHud(lbShowHud)
             {
             }
         };
@@ -198,11 +185,7 @@ namespace BrnGui
             // Same payload-byte-count rule as the id-148 record above (X360 word0 = 1 from
             // the shared r28, AddEvent size 16 at 0x8249C40C).
             explicit GuiRequestCarControlChangeWire(bool lbCarControlEnabled)
-                : CgsGui::GuiEvent<65>(
-                      static_cast<u32>(sizeof(bool)),                                            // X360 1
-                      static_cast<u32>(offsetof(GuiRequestCarControlChangeWire,
-                                                mbCarControlEnabled)))                           // X360 12
-                , mbCarControlEnabled(lbCarControlEnabled)
+                :  mbCarControlEnabled(lbCarControlEnabled)
             {
             }
         };
@@ -257,25 +240,17 @@ namespace BrnGui
         // ---- the four entry-time records, all on channel 40 -------------------------------
         // Start outputting the local player's gamer picture into the create-match page.
         GuiEventNetworkOutputPlayerTextureRecord lOutputPlayerTexture(1, -1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lOutputPlayerTexture), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lOutputPlayerTexture)));   // X360 record size 20
+        mpStateInterface->OutputGuiEvent(lOutputPlayerTexture);
 
         // Take the front-end map (CrashNav) down while the create-match page owns the screen.
         GuiEventActivateCrashNav lActivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lActivateCrashNav)));      // X360 record size 20
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
         GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));               // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lHideHud);
 
         GuiRequestCarControlChangeWire lDisableCarControl(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDisableCarControl), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lDisableCarControl)));     // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lDisableCarControl);
 
         // The X360 stores this LAST, after the four posts -- keep the order.
         meOptionsToLoad = E_OPTIONS_TO_LOAD_SAVED;

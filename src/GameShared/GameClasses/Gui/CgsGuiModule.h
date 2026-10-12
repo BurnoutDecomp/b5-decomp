@@ -86,9 +86,9 @@ namespace CgsGui
         //      CgsGuiModule.h:286);
         //   2. fetch the buffer's inbound queue via InputBuffer::GetGuiEvents() @0x8284F238
         //      (which asserts the write lock);
-        //   3. AddEvent(payload, T's event-type id, payload size) -- the on-queue record is
-        //      the PAYLOAD ONLY (the bytes past the 12-byte GuiEvent<N> header; the id rides
-        //      the queue entry). X360 payload sizes: Pressed/Down/Released 8, Axis 12,
+        //   3. AddEvent(payload, T's event-type id, sizeof(T)) -- the on-queue record is
+        //      the complete typed payload; GuiEvent<N> contributes no bytes and the id rides
+        //      the queue entry. X360 payload sizes: Pressed/Down/Released 8, Axis 12,
         //      ActiveUserIndex/SetLanguage 4, and a 1-byte marker for payload-less events
         //      (GuiEvent<296> and ToggleChangeCar(540) both push size 1).
         //
@@ -100,22 +100,9 @@ namespace CgsGui
         static void AddGuiEvent(T& lrEvent, CgsGuiModuleIO::InputBuffer* lpInput)
         {
             CGS_ASSERT(lpInput != 0, "Input hasn't been locked for write");
-            // GuiEvent<N> header = 3 x u32 (CgsGuiEventTypeDefs.h static_asserts pin +0x0C).
-            const s32 KI_GUI_EVENT_HEADER_SIZE = 12;
-            s32 liPayloadSize = static_cast<s32>(sizeof(T)) - KI_GUI_EVENT_HEADER_SIZE;
-            const void* lpPayload;
-            if (liPayloadSize <= 0)
-            {
-                liPayloadSize = 1;      // payload-less event: the X360 pushes a 1-byte marker
-                lpPayload     = &lrEvent;
-            }
-            else
-            {
-                lpPayload = reinterpret_cast<const char*>(&lrEvent) + KI_GUI_EVENT_HEADER_SIZE;
-            }
             lpInput->GetGuiEvents()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(lpPayload),
-                lrEvent.GetEventType(), liPayloadSize);
+                reinterpret_cast<const CgsModule::Event*>(&lrEvent),
+                lrEvent.GetEventType(), static_cast<s32>(sizeof(T)));
         }
 
     private:

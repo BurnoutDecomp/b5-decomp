@@ -88,7 +88,7 @@ namespace BrnGui
     // boundary: modelled as a GuiEvent<435> so the AddEvent size/type match the asm.
     struct GuiEventSetupDone : public CgsGui::GuiEvent<435>
     {
-        GuiEventSetupDone() : CgsGui::GuiEvent<435>(1, 12) {}
+        GuiEventSetupDone()  {}
     };
 
     // Stats apt-movie binding (UpdateLoading PlayAptMovie record).
@@ -248,8 +248,7 @@ namespace BrnGui
                 mpGuiCache = lpCache;   // X360 stw r10,0x3C(r28)
 
                 GuiEventSetupDone lSetupEvent;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lSetupEvent), 40, 16);
+                mpStateInterface->OutputGuiEvent(lSetupEvent);
 
                 lbSetupDone = true;
             }

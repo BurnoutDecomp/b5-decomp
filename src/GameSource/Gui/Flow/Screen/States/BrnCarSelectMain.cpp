@@ -73,8 +73,7 @@ namespace BrnGui
     {
         CgsID mCarId;
         explicit GuiEventTriggerCarSelect(CgsID lCarId)
-            : CgsGui::GuiEvent<415>(8, 16)
-            , mCarId(lCarId)
+            :  mCarId(lCarId)
         {
         }
     };
@@ -222,7 +221,7 @@ namespace BrnGui
             CGS_ASSERT(mCurrentSetupInfo.mCarId != 0, "Trying to select a car will null id");   // cpp:655
 
             GuiEventTriggerCarSelect lEvent(mCurrentSetupInfo.mCarId);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lEvent, 40, 24);
+            mpStateInterface->OutputGuiEvent(lEvent);
 
             if (TakeCarSelGuiDiagLine())
             {
@@ -357,7 +356,7 @@ namespace BrnGui
             u8 maPad[3];   // +0x0D (the X360 never writes these; modelled zeroed)
 
             explicit GuiCommandEvent16(u8 lu8Flag = 0)
-                : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+                :  mu8Flag(lu8Flag)
             {
                 maPad[0] = maPad[1] = maPad[2] = 0;
             }
@@ -368,9 +367,7 @@ namespace BrnGui
                            u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel,
-                static_cast<s32>(sizeof(lEvent)));   // X360 record size 16
+            { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper2(lEvent); lpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper2), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper2))); };   // X360 record size 16
         }
 
         // The junkyard "activate car select" record (@0x824C8D38): { 8, 192, 12, 4, 1 },
@@ -395,7 +392,7 @@ namespace BrnGui
             u32 muWord1;   // +0x10 -- the TYPE    (X360 stores 1 == E_CAR_SELECT_TYPE_JUNKYARD)
 
             GuiEventActivateCarSelect20(u32 luWord0, u32 luWord1)
-                : CgsGui::GuiEvent<192>(8, 12), muWord0(luWord0), muWord1(luWord1) {}
+                :  muWord0(luWord0), muWord1(luWord1) {}
         };
 
         // The always-posted accept record (@0x824C8D78): { 2, 536, 12, u8 1, u8 0 },
@@ -410,7 +407,7 @@ namespace BrnGui
             u8 maPad[2];   // +0x0E (untouched by the X360; modelled zeroed)
 
             GuiEventCarSelectAccept16(u8 lu8Byte0, u8 lu8Byte1)
-                : CgsGui::GuiEvent<536>(2, 12), mu8Byte0(lu8Byte0), mu8Byte1(lu8Byte1)
+                :  mu8Byte0(lu8Byte0), mu8Byte1(lu8Byte1)
             {
                 maPad[0] = maPad[1] = 0;
             }
@@ -555,17 +552,11 @@ namespace BrnGui
             BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD)
         {
             GuiEventActivateCarSelect20 lActivateEvent(4, 1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivateEvent),
-                KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lActivateEvent)));   // X360 record size 20
+            mpStateInterface->OutputGuiEvent(lActivateEvent);   // X360 record size 20
         }
 
         GuiEventCarSelectAccept16 lAcceptEvent(1, 0);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAcceptEvent),
-            KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAcceptEvent)));   // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lAcceptEvent);   // X360 record size 16
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "RG :: CSM : SendStateEvent( \"ACCEPT\" ) 2\n";
@@ -636,22 +627,18 @@ namespace BrnGui
         // (sizeof / alignment), NOT the console's baked 0x120 / 0x130 immediates.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
             GuiOverlayRequest mRequest;   // +0x10
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0) {}
+                 {}
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> record:
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
         struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
         {
-            u32                         muPad0C;    // +0x0C (8-aligned payload)
             GuiOverlayWaitFinishRequest mRequest;   // +0x10
             GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0) {}
+                 {}
         };
 
         // ---- the left-game reason / kick-reason vocabularies ------------------------
@@ -700,9 +687,7 @@ namespace BrnGui
             lWire.mRequest.Construct("CNOnlLchFail");
             lWire.mRequest.AddMessageParam(2, KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            mpStateInterface->OutputGuiEvent(lWire);
         }
     }
 
@@ -727,9 +712,7 @@ namespace BrnGui
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct("CNLobbyDlted");
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            mpStateInterface->OutputGuiEvent(lWire);
         }
         else if (lpPayload->miReason == KI_LEFT_GAME_REASON_KICKED)
         {
@@ -738,16 +721,12 @@ namespace BrnGui
             {
                 GuiOverlayWaitFinishWire lWaitGame;
                 lWaitGame.mRequest.Construct("CNOnlLvGmQn");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWaitGame), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+                mpStateInterface->OutputGuiEvent(lWaitGame);
             }
             {
                 GuiOverlayWaitFinishWire lWaitChat;
                 lWaitChat.mRequest.Construct("CNOnlLvChaQn");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWaitChat), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+                mpStateInterface->OutputGuiEvent(lWaitChat);
             }
 
             // cpp:780 -- SIGNED bound check (asm: blt on 0 then blt on 5). The X360 streams
@@ -762,9 +741,7 @@ namespace BrnGui
 
             // The X360 calls the out-of-line OutputGuiEvent<GuiOverlayRequest>
             // instantiation here; it queues exactly this record on channel 40.
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            mpStateInterface->OutputGuiEvent(lWire);
         }
 
         if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -1180,8 +1157,6 @@ namespace BrnGui
         lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_GAME_MODE,
                                        KPAC_MODE_STRINGS[lpLaunchingEvent->meGameMode]);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+        mpStateInterface->OutputGuiEvent(lWire);
     }
 }

@@ -130,9 +130,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C (not written by the X360)
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
+                
             {
             }
         };
@@ -190,10 +188,7 @@ namespace BrnGui
             case E_LEADERBOARD_REQUEST_STATE_GET_CATEGORIES:
             {
                 GuiCommandWire16<KI_EVENT_SCOREBOARD_REQUEST_CATEGORIES> lCategoriesRequest;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lCategoriesRequest),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lCategoriesRequest)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lCategoriesRequest);   // X360 record size 16
 
                 mTable.SetupScoreboard(0);
                 // SetLoading(true) inlined, DWARF cpp:1362
@@ -344,10 +339,7 @@ namespace BrnGui
                         // A session start was already in flight, so let the network layer run
                         // again on the way out and take the quiet exit.
                         CgsGui::GuiEventNetworkSuspension lResumeNetwork(false);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lResumeNetwork),
-                            KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lResumeNetwork)));   // X360 record size 16
+                        mpStateInterface->OutputGuiEvent(lResumeNetwork);   // X360 record size 16
 
                         mpGuiCache->SetOnlineStartPending(false);
                         SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);

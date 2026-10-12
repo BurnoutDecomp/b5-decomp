@@ -121,8 +121,7 @@ namespace BrnGui
             u8 maPad[3];
 
             explicit GuiByteEventWire(u8 lu8Value)
-                : CgsGui::GuiEvent<N>(static_cast<u32>(sizeof(u8)), 12)
-                , mu8Value(lu8Value)
+                :  mu8Value(lu8Value)
             {
                 maPad[0] = maPad[1] = maPad[2] = 0;
             }
@@ -131,12 +130,10 @@ namespace BrnGui
         // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
-            u32               muPad0C;    // +0x0C
             GuiOverlayRequest mRequest;   // +0x10
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
+                
             {
             }
         };
@@ -149,26 +146,20 @@ namespace BrnGui
         void PostByteEvent(CgsGui::StateInterface* lpStateInterface, s32 liChannel, u8 lu8Value)
         {
             GuiByteEventWire<N> lRecord(lu8Value);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), liChannel,
-                static_cast<s32>(sizeof(lRecord)));
+            { CgsGui::GuiEventWrapper<decltype(lRecord), 40> lGuiOutputWrapper1(lRecord); lpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
         }
 
         void PostActivateCrashNav(CgsGui::StateInterface* lpStateInterface, bool lbActivate)
         {
             GuiEventActivateCrashNav lRecord(lbActivate);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lRecord);
         }
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, const char* lpcOverlayId)
         {
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            lpStateInterface->OutputGuiEvent(lWire);
         }
     }
 

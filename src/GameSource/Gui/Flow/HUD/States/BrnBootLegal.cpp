@@ -124,7 +124,7 @@ namespace
     {
         u8  mu8Flag;        // +0x0C (the X360 stores a single byte then leaves the record at 16)
         u8  maPad[3];
-        GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
+        GuiCommandEvent16(u8 lu8Flag = 0) :  mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
     };
 
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a 1.0f payload word
@@ -134,7 +134,7 @@ namespace
     {
         s32 miReserved;     // +0x0C (0 in OnEnter, 1 in OnLeave's first post)
         f32 mfValue;        // +0x10 (1.0f)
-        explicit GuiOptionEvent20(s32 liReserved = 0) : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+        explicit GuiOptionEvent20(s32 liReserved = 0) :  miReserved(liReserved), mfValue(1.0f) {}
     };
 
     // 20-byte GuiEvent<18> "apt name + flag" command: header { 8, 18, 12 } then a (const char*,
@@ -146,7 +146,7 @@ namespace
         const char* mpacAptName;   // +0x0C (&unk_820046A7, the empty-name sentinel)
         s32         miFlag;        // +0x10 (1)
         explicit GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
-            : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
+            :  mpacAptName(lpacAptName), miFlag(liFlag) {}
     };
 
     // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
@@ -154,8 +154,7 @@ namespace
     void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
     {
         GuiCommandEvent16<N> lEvent(lu8Flag);
-        lpInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+        { CgsGui::GuiEventWrapper<decltype(lEvent), 40> lGuiOutputWrapper1(lEvent); lpInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGuiOutputWrapper1), liChannel, static_cast<s32>(sizeof(lGuiOutputWrapper1))); };
     }
 
     // ----------------------------------------------------------------------------------
@@ -174,7 +173,7 @@ namespace
         u8  mu8FlagB;   // +0x11
         u8  maPad[2];
         explicit MusicOnMenuStreamEvent(s32 liHash)
-            : CgsGui::GuiEvent<155>(0, 12), miHash(liHash), mu8FlagA(0), mu8FlagB(0)
+            :  miHash(liHash), mu8FlagA(0), mu8FlagB(0)
         { maPad[0] = maPad[1] = 0; }
     };
 
@@ -183,7 +182,7 @@ namespace
     {
         u8 mu8Mute;     // +0x0C (0)
         u8 maPad[3];
-        MuteDacEvent() : CgsGui::GuiEvent<200>(0, 12), mu8Mute(0) { maPad[0] = maPad[1] = maPad[2] = 0; }
+        MuteDacEvent() :  mu8Mute(0) { maPad[0] = maPad[1] = maPad[2] = 0; }
     };
 
     // BrnGui::GuiEventPlayVideo / GuiEventStopVideo -- carry a 112-byte MovieManager
@@ -191,13 +190,13 @@ namespace
     struct PlayVideoEvent : public CgsGui::GuiEvent<508>
     {
         u8 maVideoDefinition[112];
-        explicit PlayVideoEvent(const void* lpVideoDef) : CgsGui::GuiEvent<508>(0, 12)
+        explicit PlayVideoEvent(const void* lpVideoDef) 
         { for (s32 i = 0; i < 112; ++i) maVideoDefinition[i] = reinterpret_cast<const u8*>(lpVideoDef)[i]; }
     };
     struct StopVideoEvent : public CgsGui::GuiEvent<509>
     {
         u8 maVideoDefinition[112];
-        explicit StopVideoEvent(const void* lpVideoDef) : CgsGui::GuiEvent<509>(0, 12)
+        explicit StopVideoEvent(const void* lpVideoDef) 
         { for (s32 i = 0; i < 112; ++i) maVideoDefinition[i] = reinterpret_cast<const u8*>(lpVideoDef)[i]; }
     };
 
@@ -205,7 +204,7 @@ namespace
     struct SetPlayer0ControllerPortEvent : public CgsGui::GuiEvent<156>
     {
         s32 miPort;     // +0x0C
-        explicit SetPlayer0ControllerPortEvent(s32 liPort) : CgsGui::GuiEvent<156>(0, 12), miPort(liPort) {}
+        explicit SetPlayer0ControllerPortEvent(s32 liPort) :  miPort(liPort) {}
     };
 
 }   // anonymous namespace
@@ -320,8 +319,7 @@ namespace BrnGui
         PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);
         {
             GuiOptionEvent20 lOption;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+            mpStateInterface->OutputViewState(lOption);
         }
 
         // Build the five apt animator components + the title-screen menu (the X360 calls each
@@ -367,8 +365,7 @@ namespace BrnGui
         // unregister the observed events.
         {
             GuiOptionEvent20 lOption(1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+            mpStateInterface->OutputViewState(lOption);
         }
         mSelectionMenu.Clear();
         mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
@@ -381,9 +378,7 @@ namespace BrnGui
         // dispatch then reads as garbage).
         {
             GuiAptNameFlagEvent20 lOption("", 1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE,
-                static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
+            mpStateInterface->OutputViewState(lOption);
         }
 
         // Unload the legal screen's resources from the cache and clear its expected apt list.

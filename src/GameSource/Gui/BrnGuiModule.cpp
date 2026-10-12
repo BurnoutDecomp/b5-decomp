@@ -2582,8 +2582,17 @@ void GuiModule::Destruct()
 
                 case 41:   // channel 41: GuiOutViewState records -> the view input queue
                 {
+                    // Channel 41 carries the real {size,type,offset,payload} wrapper.
+                    // Use its named prefix fields; GuiEvent<N> is only a type tag.
+                    typedef CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayAptMovie, 41> GuiViewOutputRecord;
+                    const GuiViewOutputRecord* lpRecord =
+                        reinterpret_cast<const GuiViewOutputRecord*>(lpEvent);
+                    const u32 luEventType = static_cast<u32>(lpRecord->miOutEventType);
+                    const u32 luPayloadOffset = static_cast<u32>(lpRecord->miOutEventOffset);
+                    const s32 liPayloadSize = lpRecord->miOutEventSize;
+                    const u8* lpuPayload = reinterpret_cast<const u8*>(lpEvent) + luPayloadOffset;
                     const CgsGui::GuiEventPlayAptMovie* lpPlay =
-                        reinterpret_cast<const CgsGui::GuiEventPlayAptMovie*>(lpEvent);
+                        reinterpret_cast<const CgsGui::GuiEventPlayAptMovie*>(lpuPayload);
                     // [FLAG PC witness] `[hud-vis] ch41` -- lane `hud`, bug-test wave
                     // 2026-09-04. NOT IN THE X360 BINARY. The console's channel-41 arm
                     // (EventInterpreterModule::ProcessOutEvents @0x8285E1D0 case ')' ,
@@ -2600,7 +2609,7 @@ void GuiModule::Destruct()
                         static s32 saiSeen[64]  = { 0 };
                         static u32 sauType[64]  = { 0 };
                         static s32 siSeenCount  = 0;
-                        const u32 luType = lpPlay->muEventType;
+                        const u32 luType = luEventType;
                         s32 liIndex = -1;
                         for (s32 lk = 0; lk < siSeenCount; ++lk)
                             if (sauType[lk] == luType) { liIndex = lk; break; }
@@ -2616,8 +2625,7 @@ void GuiModule::Destruct()
                             // Mirrors the dispatch below exactly: 18 and 25 have their own
                             // body-rebuild arms, everything else rides the generalized
                             // forward, which needs a sane payload offset.
-                            const u32 luOffset =
-                                reinterpret_cast<const u32*>(lpEvent)[2];
+                            const u32 luOffset = luPayloadOffset;
                             const bool lbBridged =
                                 (luType == 18u || luType == 25u) ||
                                 (luOffset >= 12u &&
@@ -2628,7 +2636,7 @@ void GuiModule::Destruct()
                                 << (lbBridged ? " bridged=1\n" : " bridged=0 DROPPED\n");
                         }
                     }
-                    if (lpPlay->muEventType == 18)   // PlayAptMovie {name, level}
+                    if (luEventType == 18)   // PlayAptMovie {name, level}
                     {
                         PrepareAptRuntime();   // idempotent
 
@@ -2639,14 +2647,14 @@ void GuiModule::Destruct()
                                 reinterpret_cast<const CgsModule::Event*>(&lBody), 18,
                                 static_cast<s32>(sizeof(lBody)));
                     }
-                    else if (lpPlay->muEventType == 25)   // GuiEventClearScreenSet {mode, alpha}
+                    else if (luEventType == 25)   // GuiEventClearScreenSet {mode, alpha}
                     {
                         // The view's black-backdrop control: BootLegal enables it (alpha
                         // 1.0) under the title, BootLegal::OnLeave / BootProfile::OnEnter
                         // disable it so the save/load prompt composes over the
                         // loading-screen background (ViewModule case 25 @0x8285FCE8).
                         const CgsGui::GuiEventClearScreenSet* lpClear =
-                            reinterpret_cast<const CgsGui::GuiEventClearScreenSet*>(lpEvent);
+                            reinterpret_cast<const CgsGui::GuiEventClearScreenSet*>(lpuPayload);
                         struct { s32 miMode; f32 mfAlpha; } lBody =
                             { lpClear->meClearScreen, lpClear->mfAlpha };
                         mViewInputBuffer.GetViewStateQueue()
@@ -2704,20 +2712,10 @@ void GuiModule::Destruct()
                     // Both are HUD elements whose visibility is decided by a record this build
                     // threw away between the producer and the only consumer.
                     //
-                    // [FLAG PC size] the console passes record[0] as the payload size; this
-                    // build passes the RESIDUAL (liSize - headerOffset) instead, exactly as the
-                    // old arm did. Reason: records in this tree are a mix -- StateInterface::
-                    // OutputViewState builds its wrapper with the x64 sizeof(T), while the
-                    // hand-rolled GuiEvent<N>(size, 12) helpers still carry the X360-era size
-                    // literal in record[0] (e.g. PostCommand16<214> writes 1 for a 4-byte
-                    // aligned payload). The residual is >= record[0] in every case and every
-                    // consumer reads a typed prefix, so it is the safe superset; switch to
-                    // record[0] when the hand-rolled helpers carry host sizes.
-                    // DELETE-WHEN those helpers are host-sized.
+                    // The named wrapper fields give the payload's native size and offset;
+                    // output helpers now build that same wrapper for every typed event.
                     else
                     {
-                        const u32 luPayloadOffset =
-                            reinterpret_cast<const u32*>(lpEvent)[2];
                         // ":948" -- the console asserts the payload pointer, then posts.
                         CGS_ASSERT(luPayloadOffset >= 12u,
                                    "Invalid raw event in EventInterpreterModule::ProcessOutEvents");
@@ -2729,8 +2727,7 @@ void GuiModule::Destruct()
                             mViewInputBuffer.GetViewStateQueue()
                                 .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
                                     reinterpret_cast<const CgsModule::Event*>(lpu8Body),
-                                    static_cast<s32>(lpPlay->muEventType),
-                                    liSize - static_cast<s32>(luPayloadOffset));
+                                    static_cast<s32>(luEventType), liPayloadSize);
                         }
                     }
                     break;
