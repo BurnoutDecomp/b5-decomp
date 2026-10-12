@@ -141,6 +141,51 @@ namespace CgsSceneManager
             TestPolySoupSweptSphereCollision(lpRenderer, nullptr);
     }
 
+    // ARTIST 0x828C0E20. Extract the six inward clip planes from the renderer's
+    // row-vector view-projection matrix. rw::collision::Frustum uses the native
+    // RenderWare plane order: near, far, left, right, top, bottom.
+    void TriangleCollisionDebugComponent::UpdateViewFrustum(
+        CgsDev::Debug3DImmediateRender* lpRenderer)
+    {
+        CGS_ASSERT(lpRenderer != 0, "lpDisplay != NULL");
+
+        const rw::math::vpu::Matrix44 lViewProjection =
+            lpRenderer->GetViewProjectionMatrix();
+        const rw::math::vpu::Vector4 lColumn0(
+            lViewProjection.xAxis.x, lViewProjection.yAxis.x,
+            lViewProjection.zAxis.x, lViewProjection.wAxis.x);
+        const rw::math::vpu::Vector4 lColumn1(
+            lViewProjection.xAxis.y, lViewProjection.yAxis.y,
+            lViewProjection.zAxis.y, lViewProjection.wAxis.y);
+        const rw::math::vpu::Vector4 lColumn2(
+            lViewProjection.xAxis.z, lViewProjection.yAxis.z,
+            lViewProjection.zAxis.z, lViewProjection.wAxis.z);
+        const rw::math::vpu::Vector4 lColumn3(
+            lViewProjection.xAxis.w, lViewProjection.yAxis.w,
+            lViewProjection.zAxis.w, lViewProjection.wAxis.w);
+
+        // Clip-space inequalities are converted to dot(N, point) == D, the
+        // Plane convention consumed by rw::collision::Frustum. The stored D is
+        // therefore the negated homogeneous constant.
+        const rw::math::vpu::Vector4 laClipPlanes[6] =
+        {
+            lColumn2,
+            lColumn3 - lColumn2,
+            lColumn3 + lColumn0,
+            lColumn3 - lColumn0,
+            lColumn3 - lColumn1,
+            lColumn3 + lColumn1
+        };
+
+        for (u32 luPlane = 0; luPlane < 6; ++luPlane)
+        {
+            const rw::math::vpu::Vector4& lrClipPlane = laClipPlanes[luPlane];
+            const rw::math::vpu::Vector4 lPlane(
+                lrClipPlane.x, lrClipPlane.y, lrClipPlane.z, -lrClipPlane.w);
+            mViewFrustum.SetPlane(luPlane, rw::collision::Plane(lPlane));
+        }
+    }
+
     // ARTIST 0x828AAD50. Rebuild only when the menu-selected level count changes.
     // The 2 MiB backing store is retained for the component's lifetime; subsequent
     // rebuilds rewind the same LinearMalloc arena before carving the map.
@@ -173,8 +218,8 @@ namespace CgsSceneManager
     }
 
     // ARTIST 0x828AAE08. For each of the six planes, count vertices whose camera-relative
-    // signed distance is strictly negative. The console returns false once all three
-    // triangle vertices are behind any plane; an empty input returns true.
+    // signed distance is strictly negative. The console returns false when that count is
+    // exactly three (its callers pass three- and four-vertex polygons); an empty input returns true.
     bool TriangleCollisionDebugComponent::IsPolyVisible(
         const rw::math::vpu::Vector3* lapVertices,
         s32 liNumVertices,
