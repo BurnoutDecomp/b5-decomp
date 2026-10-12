@@ -112,6 +112,8 @@ namespace CgsResource
     // CgsResourceHeap.h:238
     class Heap
     {
+        friend class DebugPoolWindow; //ARTIST828EE608..E82C walks the original named used-node list
+
     public:
         typedef CgsContainers::IndexedLinkedListNode<HeapEntry, u16> HeapEntryNode;
         typedef CgsContainers::IndexedLinkedList<HeapEntry, u16>     HeapEntryList;

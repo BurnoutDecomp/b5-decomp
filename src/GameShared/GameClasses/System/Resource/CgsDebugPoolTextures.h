@@ -74,7 +74,12 @@ namespace CgsResource
 
     class DebugPoolTextures : public CgsDev::DebugUI::Window
     {
+        friend class DebugComponent;
     public:
+        // ARTIST raw body828DAC68, reached by ResetWindow's tail branch.
+        void Reset(const Pool* lpPool, DebugTextureRenderCallback lpCallback,
+                   void* lpUserData, EDebugSortMode leSortMode,
+                   EDebugTextureRenderMode leRenderMode);
         // CgsDebugPoolTextures.h:85 (DWARF) -- the texture-entry snapshot array capacity.
         static const s32 KI_MAX_TEXTURE_ENTRIES = 2048;
 

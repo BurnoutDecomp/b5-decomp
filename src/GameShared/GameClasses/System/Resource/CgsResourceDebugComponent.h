@@ -3,6 +3,10 @@
 
 #include "DebugSystem/Core/CgsDebugComponent.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceDebugPoolTypeList.h"  // embedded mPoolTypeList
+#include "GameShared/GameClasses/System/Resource/CgsDebugPoolWindow.h"
+#include "GameShared/GameClasses/System/Resource/CgsDebugPoolHistogram.h"
+#include "GameShared/GameClasses/System/Resource/CgsDebugPoolTextures.h"
+#include "GameShared/GameClasses/System/Resource/CgsDebugBundleFilesWindow.h"
 
 namespace CgsDev { namespace Log { struct LogFileBuffered; } }
 namespace rw { struct IResourceAllocator; }
@@ -19,7 +23,8 @@ class Pool;
 // GameDataModule, debugAllocator = Allocators::mpInternalDebugAllocator.
 struct DebugComponentParams
 {
-    void*                   mpTextureRenderCallback;
+    typedef CgsResource::DebugTextureRenderCallback DebugTextureRenderCallback;
+    DebugTextureRenderCallback mpTextureRenderCallback;
     void*                   mpTextureRenderUserData;
     rw::IResourceAllocator* mpDebugAllocator;
 };
@@ -28,10 +33,8 @@ struct DebugComponentParams
 // embeds it by value, runs Construct from its own Construct and registers it with the debug manager
 // at the end of its Prepare.
 //
-// Layout follows the class's declared member order. The console also embeds a window table
-// (mapWindows[4]) and four sub-windows ahead of maiPoolIds -- the pool window, the pool histogram,
-// the texture browser (DebugPoolTextures) and the bundle-files window -- beside mPoolTypeList; those
-// five members are not part of this class in this tree yet.
+// The original window table and all five windows are embedded in DecFIGS
+// declaration order, attested by ARTIST827E08D0 and the named consumers.
 class DebugComponent : public CgsDev::DebugComponent
 {
 public:
@@ -42,8 +45,25 @@ public:
     // Two-phase init: latch the owning module and the bring-up params, seed the type-list / sort /
     // render option tables and clear the dump and share-test flags.
     void Construct(ResourceModule* lpResourceModule, const DebugComponentParams* lpParams);
+    void Update() override;
 
 protected:
+    void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+    void OnActivate() override;
+    void InitWindows();
+    void GenerateStringList();
+    void UpdatePoolMenuItems();
+    void UpdateWindows();
+    void ResetWindow(s32 liWindow, const Pool* lpPool);
+    void DumpStats();
+    static void TriggerDefragCallback(void* lpData);
+    static void IncTextureCallback(void* lpData);
+    static void DecTextureCallback(void* lpData);
+    static void IncPageCallback(void* lpData);
+    static void DecPageCallback(void* lpData);
+    static void TriggerStatsCallback(void* lpData);
+    static void ShowBundleWindowChangeCallback(void* lpValue, void* lpData);
+
     virtual const char* GetName() const { return "Resource"; }
     virtual const char* GetPath() const;
     virtual bool        IsSimple() const { return false; }
@@ -56,13 +76,20 @@ protected:
     // also holds (looked up by id) into maiPoolShareTestResults.
     void UpdateShareTest();
 
-    DebugPoolTypeList           mPoolTypeList;
+    CgsDev::DebugUI::Window*     mapWindows[KI_MAX_VISIBLE_POOLS];
+    DebugPoolWindow             mPoolWindow;
+    DebugPoolHistogram          mPoolHistogram;
+    DebugPoolTypeList            mPoolTypeList;
+    DebugPoolTextures           mPoolTextures;
+    DebugBundleFilesWindow      mBundleFilesWindow;
     s32                         maiPoolIds[KI_MAX_VISIBLE_POOLS];
     s32                         maiPrevPoolIds[KI_MAX_VISIBLE_POOLS];
     CgsDev::DebugUI::StringList maStringList[130];
     ResourceModule*             mpResourceModule;          // console +0x523C
     s32                         miTypeListMode;            // EPoolTypeListMode
-    CgsDev::DebugUI::StringList maTypeStringList[3];
+    // Three visible modes plus the native null-name end row. ARTIST ends the
+    // three-row walk through the adjacent zero sort value at +0x5260.
+    CgsDev::DebugUI::StringList maTypeStringList[E_POOLTYPELISTMODE_COUNT + 1];
     s32                         miSortMode;                // EDebugSortMode
     CgsDev::DebugUI::StringList maSortModeStringList[8];
     s32                         miRenderMode;              // EDebugTextureRenderMode
@@ -70,7 +97,7 @@ protected:
     bool                        mbShowBundleWindow;
     bool                        mbTriggerStatsDump;
     DebugComponentParams        mParams;
-    void*                       mpTextureRenderCallback;
+    DebugComponentParams::DebugTextureRenderCallback mpTextureRenderCallback;
     s32                         miStatsDumpCount;
     s32                         miPoolShareTest0;          // console +0x52FC
     s32                         miPoolShareTest1;          // console +0x5300

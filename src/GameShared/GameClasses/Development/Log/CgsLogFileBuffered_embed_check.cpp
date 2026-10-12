@@ -1,5 +1,5 @@
 // Embed check for CgsDev::Log::LogFileBuffered @ 0x826613A8 (default ctor).
-// Constructs the stream (exercising the bodied ctor) and streams text through it.
+// Constructs the stream. Streaming requires Open() and a nonzero scratch buffer.
 #include "GameShared/GameClasses/Development/Log/CgsLogFileBuffered.h"
 
 namespace
@@ -9,8 +9,6 @@ namespace
         // Default ctor: closed, unbuffered stream.
         CgsDev::Log::LogFileBuffered lLog;
 
-        // The sink is a no-op while closed; just verify it links through operator<<.
-        lLog << "stats: " << 42 << "\n";
     }
 }
 
