@@ -11,6 +11,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
+#include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"    // original mode-pause input: IsInTakedownCamera
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"             // [FX-GS2 G10-D11] mpTakedownCache->mVehicleOutputInterface (CheckForTailingRivals' r5)
 #include "GameSource/GameState/BrnGameEvents.h"                         // [returning-player wave] E_GUI_HAS_STARTED_GAME (the case-78 trigger)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> (the carry-queue walk)
@@ -368,9 +369,110 @@ void GameStateModule::Construct()
     mbDrawSignatureTakedownRegionText = false;    // X360 +0x475B5
     mbDebugMakeAllTakedownsSignature = false;     // X360 +0x475B6
 
-    // The "Process events" monitor (page 5, no minimum, budget 1.0, scaled) from the console's
-    // monitor block after ClearData; ProcessGameEvents brackets its walk with it.
+    // ARTIST Construct's four full-vector identity stores at +0x47570.
+    mPlayerCarTransform.SetIdentity();
+
+    // ARTIST's complete monitor block: page5, no minimum, budget1, scaled.
+    miTriggersPostPM = CgsDev::PerfMonCpu::AddMonitor("Trigger Post update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miTriggersPrePM = CgsDev::PerfMonCpu::AddMonitor("Trigger Pre update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miShowTimeUpdate = CgsDev::PerfMonCpu::AddMonitor("Show Time Update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miCarSelectManagerUpdate = CgsDev::PerfMonCpu::AddMonitor("Car Select Manager Update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miGameStatePrePM = CgsDev::PerfMonCpu::AddMonitor("Pre world update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miGameStatePostPM = CgsDev::PerfMonCpu::AddMonitor("Post world update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miDetectModeStartsPM = CgsDev::PerfMonCpu::AddMonitor("Detect mode starts", CgsDev::E_PMP_5, false, 1.0f, true);
+    miRoadRulesPM = CgsDev::PerfMonCpu::AddMonitor("Road rules", CgsDev::E_PMP_5, false, 1.0f, true);
+    miDriveThrusPM = CgsDev::PerfMonCpu::AddMonitor("Drive thrus", CgsDev::E_PMP_5, false, 1.0f, true);
     miProcessEventsPM = CgsDev::PerfMonCpu::AddMonitor("Process events", CgsDev::E_PMP_5, false, 1.0f, true);
+    miTakedownPM = CgsDev::PerfMonCpu::AddMonitor("Takedown manager", CgsDev::E_PMP_5, false, 1.0f, true);
+    miEmmUpdatePM = CgsDev::PerfMonCpu::AddMonitor("EMM update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPrePM = CgsDev::PerfMonCpu::AddMonitor("Mode manager PRE", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPostPM = CgsDev::PerfMonCpu::AddMonitor("Mode manager POST", CgsDev::E_PMP_5, false, 1.0f, true);
+    miCopyingAndResettingPM = CgsDev::PerfMonCpu::AddMonitor("Copying and resetting", CgsDev::E_PMP_5, false, 1.0f, true);
+    miProcessContactsPM = CgsDev::PerfMonCpu::AddMonitor("Process contacts", CgsDev::E_PMP_5, false, 1.0f, true);
+    miStreetManagerPM = CgsDev::PerfMonCpu::AddMonitor("Street manager", CgsDev::E_PMP_5, false, 1.0f, true);
+    CGS_ASSERT(miGameStatePrePM >= 0, "miGameStatePrePM >= 0");
+    CGS_ASSERT(miGameStatePostPM >= 0, "miGameStatePostPM >= 0");
+    CGS_ASSERT(miDetectModeStartsPM >= 0, "miDetectModeStartsPM >= 0");
+    CGS_ASSERT(miRoadRulesPM >= 0, "miRoadRulesPM >= 0");
+    CGS_ASSERT(miDriveThrusPM >= 0, "miDriveThrusPM >= 0");
+    CGS_ASSERT(miProcessEventsPM >= 0, "miProcessEventsPM >= 0");
+    CGS_ASSERT(miTakedownPM >= 0, "miTakedownPM >= 0");
+    CGS_ASSERT(miEmmUpdatePM >= 0, "miEmmUpdatePM >= 0");
+    CGS_ASSERT(miModeManagerPrePM >= 0, "miModeManagerPrePM >= 0");
+    CGS_ASSERT(miModeManagerPostPM >= 0, "miModeManagerPostPM >= 0");
+    CGS_ASSERT(miCopyingAndResettingPM >= 0, "miCopyingAndResettingPM >= 0");
+    CGS_ASSERT(miStreetManagerPM >= 0, "miStreetManagerPM >= 0");
+}
+
+// ARTIST 8238EF50. Original whole owner body; the PC bring-up pump still has
+// separate extracted legs until the full PreWorldUpdate caller is recovered.
+void GameStateModule::EmmPreWorldUpdate(
+        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+        GameStateModuleIO::OutputBuffer* lpOutput,
+        const GameStateModuleIO::GameEventQueue* lpGameEvents,
+        bool lbIsOnline)
+{
+    (void)lpGameEvents;
+    CgsDev::PerfMonCpu::StartMonitor(miEmmUpdatePM);
+    const bool lbSimPaused = IsSimPaused(true, false);
+    GameStateModuleIO::GameActionQueue* const lpActions = lpOutput->GetGameActionQueue();
+
+    if (mLastActiveRaceCarInterface.IsPlayerCarActive())
+    {
+        mPlayerCarTransform = mLastActiveRaceCarInterface.GetRaceCarState(
+            GetPlayerActiveRaceCarIndex())->mTransform;
+    }
+
+    mTimerStatusInterface = *lpInput->GetTimerStatusInterface();
+    const CgsSystem::Time lSimTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
+    if (lbSimPaused)
+    {
+        mModeManager.PausedUpdate(lpOutput);
+    }
+    else
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miModeManagerPrePM);
+        // 8238F100..F154 compares takedown timer+640 with -1.0f and stacks
+        // that result as the tenth argument. It is not the sim-pause flag.
+        const bool lbTakedownPaused = mpTakedownManager->IsInTakedownCamera();
+        const EGlobalRaceCarIndex leGlobal =
+            static_cast<EGlobalRaceCarIndex>(GetPlayerGlobalRaceCarIndex());
+        const EActiveRaceCarIndex leActive = GetPlayerActiveRaceCarIndex();
+        mModeManager.PreWorldUpdate(lpOutput, lpInput, mTimerStatusInterface,
+                                   leActive, leGlobal, lbIsOnline, lpActions,
+                                   &mLastGlobalRaceCarInterface, &mLastActiveRaceCarInterface,
+                                   lbTakedownPaused);
+        CgsDev::PerfMonCpu::StopMonitor(miModeManagerPrePM);
+    }
+    if (!lbSimPaused)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miRoadRulesPM);
+        UpdateRoadRulesManager(lpOutput, lpInput->GetControllerInput());
+        CgsDev::PerfMonCpu::StopMonitor(miRoadRulesPM);
+    }
+
+    ScoringSystem* const lpScoring = mModeManager.GetScoringSystem();
+    CgsSystem::Time lElapsed(0.0f);
+    if (GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        lElapsed = lpScoring->GetRaceCarTotalTime(GetPlayerActiveRaceCarIndex(), lSimTime);
+    lpOutput->SetGameModeElapsedTime(&lElapsed);
+
+    for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
+    {
+        const CarData* const lpCar = lpScoring->GetCarData(leIndex);
+        if (lpCar != nullptr)
+            lpOutput->GetGameStateToNetworkInterface()->SetActiveRaceCarIndex(
+                lpCar->GetNetworkPlayerID(), lpCar->GetActiveRaceCarIndex());
+    }
+    if (GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && lpScoring->GetOvertakenRival(GetPlayerActiveRaceCarIndex()))
+    {
+        const EActiveRaceCarIndex lePlayer = GetPlayerActiveRaceCarIndex();
+        const u8 luPosition = static_cast<u8>(lpScoring->GetCarRacePosition(GetPlayerActiveRaceCarIndex()));
+        lpOutput->GetGameStateToGuiInterface()->AddOvertakeEvent(luPosition, lePlayer);
+    }
+    CgsDev::PerfMonCpu::StopMonitor(miEmmUpdatePM);
 }
 
 // ----------------------------------------------------------------------------

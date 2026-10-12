@@ -290,6 +290,7 @@ public:
     // ===============================================================================================
 
     // DWARF BrnModeManager.h:150 -- the ten-argument shape, verbatim.
+    void PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer); // ARTIST 82350DE0
     void PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutputBuffer,
                         const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                         const CgsSystem::TimerStatusInterface&        lrTimerStatusInterface,
