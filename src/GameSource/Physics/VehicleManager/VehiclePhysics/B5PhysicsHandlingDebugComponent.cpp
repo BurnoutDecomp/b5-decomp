@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/math/vpu/vector3_operation.h"
+#include "rw/math/vpu/vector4_operation.h"  // VecFloat splats in the original world draw
 #include "rw/math/vpu/matrix44_operation.h"
 
 #include <cstddef>   // offsetof
