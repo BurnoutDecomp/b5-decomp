@@ -40,6 +40,7 @@
 #include "GameSource/Director/BrnMainDirector.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h" // Camera behavior debug names
 #include "pc/gcm/renderengine/FrameProfile.h"
@@ -3403,11 +3404,11 @@ namespace BrnDirector
     // frame camera. The previous wave gated the whole middle on the belief that
     // BehaviourManager had no layout; it does, so the leg is transcribed.
     //
-    // ⚠️ THE REMAINING GATE inside the middle is lines 271-823 -- ~550 lines of VMX
-    // AllVehicleData debug-render work, the ICE-editor preview and the world-map safe-position
-    // search. Those paths reach un-homed aggregates and/or VMX pipelines. Live recovered work
-    // in this span includes the Event_Win(50) request (CC-16), camera interpolation controller
-    // (CC-14), and effect-hook registration cascade.
+    // ⚠️ THE REMAINING GATES inside the middle are the VMX AllVehicleData debug-render work
+    // and ICE-editor preview, which reach un-homed aggregates and/or VMX pipelines. Live
+    // recovered work in this span includes the Event_Win(50) request (CC-16), camera
+    // interpolation controller (CC-14), effect-hook registration cascade, and the registered
+    // world-map safe-position arrows below.
     //
     // The original UpdateMoments and UpdateICE call sites run before UpdateArbitrator, as on
     // the console; the arbitrator therefore sees last frame's behaviour output. The live-car
@@ -3696,8 +3697,36 @@ namespace BrnDirector
                 }
             }
 
-            // ⚠️ GATE: the rest of the ~550-line VMX / world-map remainder (lines 271-823; the
-            //   effect-hook hand-over above is live since 2026-09-17).
+            // X360 0x82274C18..0x82274E40 (Update pseudocode 659..800): Show World Map debug
+            // draws the current/next vehicle positions and, if the map finds one, the nearest safe
+            // position. Preserve each journal read because the original GetCurrent/index and
+            // GetLinearVelocityLastFrame calls each retain their own DataJournal bound asserts.
+            if (maStateFlagTail[E_FLAG_TAIL_SHOW_WORLD_MAP_DEBUG] != 0 &&
+                mVehicleTracker.GetPositionJournal().GetSize() > 1)
+            {
+                const Vector3 lCurrentPosition = mVehicleTracker.GetPositionJournal()[0];
+                const Vector3 lLastFrameVelocity = mVehicleTracker.GetLinearVelocityLastFrame();
+                Vector3 lSafePosition;
+                const bool lbHasSafePosition = lpIO->mpWorldMap->GetSafePositionNearestPointWithDisplacement(
+                    lCurrentPosition, lLastFrameVelocity, lSafePosition);
+
+                CgsDev::DebugInterface lDebugInterface;
+                CgsDev::DebugRender& lrDebugRender = lDebugInterface.GetRender();
+                if (lbHasSafePosition)
+                {
+                    const Vector3 lPredictedPosition =
+                        mVehicleTracker.GetPositionJournal()[0] + mVehicleTracker.GetLinearVelocityLastFrame();
+                    lrDebugRender.DrawArrow(lPredictedPosition, lSafePosition, 0xFF00FF00u);
+                }
+
+                const Vector3 lCurrentPositionForArrow = mVehicleTracker.GetPositionJournal()[0];
+                const Vector3 lPredictedPosition =
+                    lCurrentPositionForArrow + mVehicleTracker.GetLinearVelocityLastFrame();
+                lrDebugRender.DrawArrow(lCurrentPositionForArrow, lPredictedPosition,
+                                        lbHasSafePosition ? 0xFF00FF00u : 0xFF0000FFu);
+            }
+
+            // ⚠️ GATE: the rest of the VMX / ICE-editor remainder in MainDirector::Update.
         }
 
         // ⭐ (2026-09-24, FX-DIRECTOR2) @0x82274F6C..0x82274FE4, right before the finaliser: when the
