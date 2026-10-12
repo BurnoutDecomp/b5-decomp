@@ -17,6 +17,37 @@
 
 namespace BrnGui
 {
+    namespace
+    {
+        // ARTIST 0x8206F290 (KAC_HUD_MESSAGE_GROUP_NAMES). The table values and exact display
+        // strings come from the original four StringList records.
+        const CgsDev::DebugUI::StringList KAC_HUD_MESSAGE_GROUP_NAMES[4] = {
+            {0, "All Messages"},
+            {1, "Live Revenge"},
+            {2, "Dirty Tricks"},
+            {3, "Main Game Mode Messages"},
+        };
+    }
+
+    // ARTIST 0x82523B90: expose the selected message id as read-only, register the four-valued
+    // message-group selector, then register next/previous and timed/untimed trigger actions.
+    void GuiHudMessagesDebugComponent::OnActivate()
+    {
+        RegisterVariable(&miMessageId, "Message Id to send");
+        SetReadOnly(&miMessageId, true);
+
+        RegisterVariable(&miMessageGroup, "Group Of Messages");
+        SetRange(&miMessageGroup, 0, 3);
+        SetOptions(&miMessageGroup, KAC_HUD_MESSAGE_GROUP_NAMES);
+
+        RegisterFunction(&SelectNextMessageCallback, this, "Select the next message");
+        RegisterFunction(&TriggerMessageCallback, this, "Trigger the current message");
+        RegisterFunction(&TriggerMessageWithoutTimerCallback, this,
+                         "Trigger the current message ignoring time");
+        RegisterFunction(&SelectPreviousMessageCallback, this,
+                         "Select the previous message");
+    }
+
     // ARTIST 0x824FD540 / 0x824FD5F8. The registered user-data is the component; when its
     // controller exists, advance the selected message within the selected group.
     void GuiHudMessagesDebugComponent::SelectNextMessageCallback(void* lpUserData)
