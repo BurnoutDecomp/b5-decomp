@@ -63,6 +63,11 @@ public:
     Type X() const { return mX; }
     Type Y() const { return mY; }
     Type Z() const { return mZ; }
+    // DecFIGS vector3.h:108-110. The debug UI binds these mutable scalar lanes
+    // by address; references preserve the three-float member layout.
+    Type& X() { return mX; }
+    Type& Y() { return mY; }
+    Type& Z() { return mZ; }
     void Set(Type lX, Type lY, Type lZ) { mX = lX; mY = lY; mZ = lZ; }
     void SetZero() { mX = static_cast<Type>(0); mY = static_cast<Type>(0); mZ = static_cast<Type>(0); }
 
