@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #ifdef AddMonitor
@@ -3613,6 +3614,7 @@ namespace BrnGame
 
         const u64 luPreviousCommandGeneration = mRenderModule.GetPublishedCommandGenerationPC();
         mRenderModule.EndOfFrame(lbStalled);
+        CgsDev::PerfMonGpu::Swap(); // ARTIST823DC3F4, after renderer EndOfFrame.
         // FLAG PC-platform leaf: all draw snapshots follow the same completed
         // producer generation. An extra presentation preserves the last command
         // frame, while original control IO and trail EOF still run above.

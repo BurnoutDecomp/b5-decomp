@@ -1,10 +1,21 @@
+// D3D9 needs USER32 types before RenderWare's kernel-only Windows include.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include "pc/gcm/renderengine/GpuMonitorTiming.h"
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
+
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT + CgsDev::Assert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // StrStream (runtime assert messages)
 
-#include <Windows.h>   // QueryPerformanceFrequency / LARGE_INTEGER: the X360 read the PPC timebase,
-                       // which does not port; QPC is the PC precedent (CgsTimeUtils.cpp / the Cpu perfmon).
 #include <cstddef>     // offsetof
 #include <cstring>     // std::memset
 
@@ -15,21 +26,17 @@
 #undef AddMonitor
 #endif
 
-// CgsDev::PerfMonGpu - the GPU-side perf-monitor bodies (X360 CgsPerfMonGpuX360.cpp; the ledger path
-// carries the PS3 name, but the ARTIST image compiled the X360 variant - the assert file strings say so).
-// The frame's render spine brackets each GPU region with StartMonitor/StopMonitor and the whole frame
-// with StartProfiling/StopProfiling; ComputeValueFromTimer converts a monitor's recorded GPU tick-cost
-// into a percentage-of-refresh value the overlay draws (ReportMonitors / GetLast* in CgsPerfMonGpu.cpp).
-//
-// The X360 timed the GPU by hardware PREDICATION: SetPredication + a command-buffer callback
-// (D3DDevice::InsertCallback) latched the GPU's timestamp into a multi-buffered ring as the GPU reached
-// that marker; the CPU reads a buffer that lags a couple of frames (miCurrentReadBuffer starts at 2,
-// Swap advances it). Predicated GPU timing is an X360-D3D mechanism with no PC-D3D11 equivalent - the
-// same platform-leaf situation as the Cpu perfmon's PIX counters - so on the PC target the bracket is a
-// documented no-op that preserves the exact call shape and context values from the ARTIST asm; the ring
-// buffer is filled by the real GPU on console. The GPU-side timestamp callback (sub_828259B8) did not
-// survive as a named function and is never invoked by the PC shim, so it is an empty documented
-// placeholder rather than a guessed body.
+// ARTIST CgsPerfMonGpuX360.cpp: the ledger retains the PS3 pathname.
+// Registry, assertions, monitor state and refresh-percent conversion are the
+// original engine code. D3D9 GPU timestamps replace X360 predicated callbacks;
+// a completed packet is published at the original update-side Swap boundary.
+// Pending/invalid packets retain the last complete sample, never CPU timings.
+
+#include "pc/gcm/renderengine/device.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <mutex>
+#include <cstdlib>
+#include <cstdio>
 
 namespace CgsDev
 {
@@ -68,38 +75,65 @@ namespace CgsDev
         PerfMonGpuBuffer gBuffer;                 // X360 gValues @ 0x83018270
         f32              gfCyclesToPercent = 0.0f; // X360 flt_83018CE8: 100.0 / QPF, ticks -> percent-of-second
 
-        // The context word the X360 packed for the timing callback: op in the high 16 bits, monitor id in
-        // the low 16 (0 for the frame-level begin/end). Names inferred from the call sites; the numeric
-        // codes are from the ARTIST asm.
-        enum PerfMonGpuTimerOp
-        {
-            E_PMGTO_BEGINFRAME   = 0,
-            E_PMGTO_ENDFRAME     = 1,
-            E_PMGTO_STARTMONITOR = 2,
-            E_PMGTO_STOPMONITOR  = 3,
-        };
+        // FLAG PC-platform leaf: bridge completed GPU-query packets across the
+        // joined render/update boundary. The original callback828259B8 clears
+        // 33 costs on frame begin, stores begins in slots33..65, and accumulates
+        // end-begin in slots0..32. Native packets preserve those slot meanings.
+        std::mutex gNativeSampleMutex;
+        renderengine::GpuMonitorTimingPC::Result gNativeSample;
+        u64 guConsumedNativeFrame = 0;
 
-        // The X360 GPU-command-buffer callback (sub_828259B8): on console the GPU invokes this as it
-        // reaches the inserted marker and latches its current timestamp into gBuffer keyed by the context.
-        // Its body did not survive as a named function and the PC shim never invokes it.
-        // FLAG PC-platform leaf: unrecovered X360 GPU-timestamp callback; no-op on the PC target.
-        void PerfMonGpuTimingCallback(u32 /*luContext*/)
+        void PublishNativeGpuSample(const renderengine::GpuMonitorTimingPC::Result& lrResult)
         {
+            using namespace renderengine::GpuMonitorTimingPC;
+            {
+                std::lock_guard<std::mutex> lLock(gNativeSampleMutex);
+                if (lrResult.status == Reset ||
+                    (lrResult.status == Valid && lrResult.frame > gNativeSample.frame))
+                    gNativeSample = lrResult;
+            }
+            // FLAG PC-platform leaf: opt-in witnesses for the real query path.
+            static const bool sbTrace = std::getenv("BRN_GPU_MONITOR_TRACE") != nullptr;
+            static u32 suValidTraces = 0, suFailureTraces = 0;
+            if (!sbTrace || !CgsDev::Log::gpDebugPrint) return;
+            if (lrResult.status == Valid && (suValidTraces++ < 8 || lrResult.frame % 120 == 0))
+            {
+                CgsDev::Log::gpDebugPrint->AppendFormat(
+                    "[gpu-monitors] frame=%llu status=valid frequency=%llu used=0x%08X totalMs=%.6f",
+                    static_cast<unsigned long long>(lrResult.frame),
+                    static_cast<unsigned long long>(lrResult.frequency), lrResult.used,
+                    double(lrResult.ticks[FrameTimer]) * 1000.0 / double(lrResult.frequency));
+                for (unsigned i = 0; i < MaxMonitors; ++i)
+                    if (lrResult.used & (u32(1) << i))
+                        CgsDev::Log::gpDebugPrint->AppendFormat(" id%u=%.6f", i,
+                            double(lrResult.ticks[i]) * 1000.0 / double(lrResult.frequency));
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+            else if (lrResult.status != Pending && lrResult.status != Valid && suFailureTraces++ < 8)
+                CgsDev::Log::gpDebugPrint->AppendFormat("[gpu-monitors] frame=%llu status=%d\n",
+                    static_cast<unsigned long long>(lrResult.frame), int(lrResult.status));
         }
 
-        // The X360 timing bracket: SetPredication(0x3FFFFFFF); InsertCallback(0, sub_828259B8, context);
-        // SetPredication(0). Predicated GPU timing has no PC-D3D11 equivalent, so this is a no-op that
-        // preserves the call shape, the packed context, and the callback registration from the asm.
-        // FLAG PC-platform leaf: X360 D3DDevice predicated-timing callbacks.
+        enum PerfMonGpuTimerOp
+        {
+            E_PMGTO_BEGINFRAME = 0,
+            E_PMGTO_ENDFRAME = 1,
+            E_PMGTO_STARTMONITOR = 2,
+            E_PMGTO_STOPMONITOR = 3,
+        };
+
+        // FLAG PC-platform leaf: the original op/id command contexts feed
+        // timestamp query markers at the same points in the D3D9 command stream.
         void InsertGpuTimingMarker(PerfMonGpuTimerOp leOp, s32 liMonitorId)
         {
-            const u32 luContext = (static_cast<u32>(leOp) << 16) |
-                                  (static_cast<u32>(liMonitorId) & 0xFFFF);
-            // Register the GPU callback with the packed context, exactly as the ARTIST asm hands it to
-            // D3DDevice_InsertCallback; the PC target has no GPU command buffer to run it against.
-            void (*lpfCallback)(u32) = &PerfMonGpuTimingCallback;
-            (void)lpfCallback;
-            (void)luContext;
+            using namespace renderengine::GpuMonitorTimingPC;
+            switch (leOp)
+            {
+            case E_PMGTO_BEGINFRAME: Begin(renderengine::gDevice, PublishNativeGpuSample); break;
+            case E_PMGTO_ENDFRAME: gRecorder.End(); break;
+            case E_PMGTO_STARTMONITOR: gRecorder.Start(static_cast<unsigned>(liMonitorId)); break;
+            case E_PMGTO_STOPMONITOR: gRecorder.Stop(static_cast<unsigned>(liMonitorId)); break;
+            }
         }
 
         // Build a runtime assert message ("<prefix><monitor name>\n") and fire it through the assert
@@ -123,6 +157,8 @@ namespace CgsDev
 
     bool PerfMonGpu::Construct()
     {
+        renderengine::GpuMonitorTimingPC::DeviceReset();
+        guConsumedNativeFrame = 0;
         miMaxMonitor       = 0;
         meGameFrequency    = E_PMF_60HZ;
         mbActiveMonitor    = false;
@@ -144,7 +180,31 @@ namespace CgsDev
     void PerfMonGpu::Swap()
     {
         CGS_ASSERT(!mbProfilingRunning, "mbProfilingRunning == false");
-        gBuffer.miCurrentReadBuffer = (gBuffer.miCurrentReadBuffer + 1) % KI_NUMBUFFERS;
+        const s32 liPreviousRead = gBuffer.miCurrentReadBuffer;
+        gBuffer.miCurrentReadBuffer = (liPreviousRead + 1) % KI_NUMBUFFERS;
+        // FLAG PC-platform leaf: D3D9 completion is asynchronous. Retain the
+        // previous complete snapshot when a newer packet is still pending;
+        // do not expose an incomplete ring slot as a zero-cost GPU frame.
+        std::memcpy(gBuffer.mau64Timers[gBuffer.miCurrentReadBuffer],
+                    gBuffer.mau64Timers[liPreviousRead], sizeof(gBuffer.mau64Timers[0]));
+        std::lock_guard<std::mutex> lLock(gNativeSampleMutex);
+        if (gNativeSample.status == renderengine::GpuMonitorTimingPC::Reset)
+        {
+            std::memset(gBuffer.mau64Timers, 0, sizeof(gBuffer.mau64Timers));
+            guConsumedNativeFrame = 0;
+            gNativeSample.status = renderengine::GpuMonitorTimingPC::Pending;
+        }
+        else if (gNativeSample.status == renderengine::GpuMonitorTimingPC::Valid
+            && gNativeSample.frame > guConsumedNativeFrame)
+        {
+            gBuffer.miCurrentWriteBuffer = gBuffer.miCurrentReadBuffer;
+            std::memcpy(gBuffer.mau64Timers[gBuffer.miCurrentReadBuffer],
+                        gNativeSample.ticks, sizeof(gNativeSample.ticks));
+            // The GPU's frequency belongs to these timestamps. QPF is only
+            // the original initial factor, before the first complete sample.
+            gfCyclesToPercent = static_cast<f32>(100.0 / double(gNativeSample.frequency));
+            guConsumedNativeFrame = gNativeSample.frame;
+        }
     }
 
     void PerfMonGpu::StartProfiling()
