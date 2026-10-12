@@ -59,6 +59,9 @@ namespace CgsDev
         // render buffer here after asserting it non-null, CgsDebug3DImmediateRender.h:282).
         void SetRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpRenderBuffer) { mpRenderBuffer = lpRenderBuffer; }
 
+        // Public in DecFIGS at CgsDebug3DImmediateRender.h:138; DrawTriangleTest calls it directly.
+        void SetZTestEnable(ZTestEnable leEnable);
+
         // X360 Begin/End open/close the frame's 3D command block. RenderWorld
         // @0x8282E030 brackets buffered primitives and active components with these.
         void Begin(const rw::math::vpu::Matrix44& lrViewProjection,
@@ -154,7 +157,6 @@ namespace CgsDev
         // RenderTrafficLights as the first lane group of the renderer's view state (+0x7DB0).
     private:
         void SetProjectionMode(ProjectionMode leMode);
-        void SetZTestEnable(ZTestEnable leEnable);
         void SetDrawingMode(DrawingMode leMode);
         void BuildSphereIndices();
         void GetSphereVertices(rw::math::vpu::Vector3* lpVertexArray,
