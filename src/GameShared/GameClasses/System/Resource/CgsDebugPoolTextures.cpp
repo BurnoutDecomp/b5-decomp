@@ -92,6 +92,33 @@ namespace CgsResource
     // = 0x10 } on the stack, dispatches the allocator's resource-allocate virtual, takes the
     // main-memory base of the carved resource into mpTextureEntries (this+0x44), and asserts it.
     // ================================================================================================
+    // ARTIST828DAC68 (raw body): preserve the untouched entry byte-size
+    // and padding, and leave miTotalTextures for the original Update producer.
+    void DebugPoolTextures::Reset(const Pool* lpPool, DebugTextureRenderCallback lpCallback,
+                                  void* lpUserData, EDebugSortMode leSortMode,
+                                  EDebugTextureRenderMode leRenderMode)
+    {
+        CgsDev::DebugUI::Window::Prepare(612.0f, 512.0f, lpPool->GetName(), KX_FLAGNORMAL);
+        mpPool = lpPool;
+        mpRenderTextureCallback = lpCallback;
+        mpCallbackUserData = lpUserData;
+        meSortMode = leSortMode;
+        meRenderMode = leRenderMode;
+        mbDoFullAnalysisNextFrame = true;
+        miTextureIndex = 0;
+        muTextureEntryIndex = 0xFFFFu;
+        miNumModelsThatUseCurrentTexture = 0;
+        miNumInstancesThatUseCurrentTexture = 0;
+        for (s32 liIndex = 0; liIndex < KI_MAX_TEXTURE_ENTRIES; ++liIndex)
+        {
+            TextureEntry& lrEntry = mpTextureEntries[liIndex];
+            lrEntry.mpTexture = nullptr;
+            lrEntry.muEntryIndex = 0xFFFFu;
+            lrEntry.muInstancesThatUseTexture = 0xFFFFu;
+            lrEntry.muModelsThatUseTexture = 0xFFFFu;
+        }
+    }
+
     void DebugPoolTextures::AllocateDebugMemory(rw::IResourceAllocator* lpAllocator)
     {
         rw::ResourceDescriptor lDescriptor;
