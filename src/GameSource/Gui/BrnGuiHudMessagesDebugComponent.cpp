@@ -13,9 +13,54 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"           // BrnGui::GuiHudMessage
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"      // BrnGui::HudMessageDirector::AddMessage
 #include "SharedClasses/DataLists/BrnHudMessageController.h" // BrnResource::HudMessageController
+#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 
 namespace BrnGui
 {
+    // ARTIST 0x824FD540 / 0x824FD5F8. The registered user-data is the component; when its
+    // controller exists, advance the selected message within the selected group.
+    void GuiHudMessagesDebugComponent::SelectNextMessageCallback(void* lpUserData)
+    {
+        CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+        GuiHudMessagesDebugComponent* lpThis =
+            static_cast<GuiHudMessagesDebugComponent*>(lpUserData);
+        if (lpThis->mpMessageController)
+        {
+            lpThis->miMessageId = lpThis->mpMessageController->GetNextMessageIdInGroup(
+                lpThis->miMessageId,
+                static_cast<CgsGui::HudMessageGroups>(lpThis->miMessageGroup));
+        }
+    }
+
+    void GuiHudMessagesDebugComponent::SelectPreviousMessageCallback(void* lpUserData)
+    {
+        CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+        GuiHudMessagesDebugComponent* lpThis =
+            static_cast<GuiHudMessagesDebugComponent*>(lpUserData);
+        if (lpThis->mpMessageController)
+        {
+            lpThis->miMessageId = lpThis->mpMessageController->GetPreviousMessageIdInGroup(
+                lpThis->miMessageId,
+                static_cast<CgsGui::HudMessageGroups>(lpThis->miMessageGroup));
+        }
+    }
+
+    // ARTIST 0x82517E00 / 0x82517EA8. Both action callbacks validate their user-data, then
+    // delegate with the timer-inclusion flag observed at their call sites.
+    void GuiHudMessagesDebugComponent::TriggerMessageCallback(void* lpUserData)
+    {
+        CGS_ASSERT(lpUserData != 0,
+                   "Invalid data pointer sent to GuiHudMessagesDebugComponent::TriggerMessageCallback");
+        static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->TriggerMessage(false);
+    }
+
+    void GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback(void* lpUserData)
+    {
+        CGS_ASSERT(lpUserData != 0,
+                   "Invalid data sent to GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback");
+        static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->TriggerMessage(true);
+    }
+
     // @ 0x827DD220
     const char* GuiHudMessagesDebugComponent::GetName() const
     {
