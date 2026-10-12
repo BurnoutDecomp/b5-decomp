@@ -29,6 +29,8 @@
 
 #include "types.hpp"
 
+namespace BrnGui { struct GuiDebugComponent; }
+
 namespace CgsGui
 {
     class SystemUserProfile
@@ -93,6 +95,10 @@ namespace CgsGui
         // failure; the X360 module writes the field without an accessor, so the save/load
         // front-end is befriended rather than fabricating a setter the binary lacks.
         friend class SaveLoadSystem;
+
+        // ARTIST GuiDebugComponent profile callbacks read miState at GuiModule +949156
+        // to gate the Bootup/Autosave/Save/Load actions on E_USERSIGNINSTATE_SIGNEDIN.
+        friend struct BrnGui::GuiDebugComponent;
 
         u32       miUserIndex;       // +0x00
         u32       miState;           // +0x04 (== EUserSigninState; 1 == signed in)
