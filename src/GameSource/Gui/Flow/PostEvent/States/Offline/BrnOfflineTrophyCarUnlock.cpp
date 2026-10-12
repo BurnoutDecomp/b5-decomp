@@ -87,23 +87,24 @@ namespace
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
     // GUI 470, GuiEventCarbonCarSequence { bool mbEntered }: {1, 470, 12, entered} on channel
-    // 40, 16 bytes. OnEnter posts entered = 1, OnLeave entered = 0; the GUI->game-state bridge
+    // 40, 16 bytes. ARTIST OnEnter @0x824D3438 / OnLeave @0x824D3590 stores only the payload
+    // byte at record+12, leaving the final three wrapper bytes untouched. OnEnter posts 1,
+    // OnLeave posts 0; the GUI->game-state bridge
     // turns it into game signal 107 / 108 and the director's 100%-sequence latches.
     // FLAG: the type's home is BrnGuiEventTypeDefs.h, which does not carry it yet; it is
     // declared here until it is homed there (then this local copy goes).
     struct GuiEventCarbonCarSequence : public CgsGui::GuiEvent<470>
     {
-        bool mbEntered;    // +0x0C
-        u8   mau8Pad[3];
+        bool mbEntered;    // payload +0x00 / wrapper record +0x0C
 
         explicit GuiEventCarbonCarSequence(bool lbEntered)
             :  mbEntered(lbEntered)
         {
-            mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
         }
     };
-    static_assert(sizeof(GuiEventCarbonCarSequence) == 16,
-                  "the console posts a 16-byte record for GUI 470");
+    static_assert(sizeof(GuiEventCarbonCarSequence) == 1, "GUI 470 payload is one byte");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventCarbonCarSequence, 40>) == 16,
+                  "GUI 470 channel-40 wrapper is 16 bytes");
 
     void PostCarbonCarSequence(CgsGui::StateInterface* lpStateInterface, bool lbEntered)
     {

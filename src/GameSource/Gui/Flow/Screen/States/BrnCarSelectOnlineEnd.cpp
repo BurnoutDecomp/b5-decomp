@@ -12,8 +12,8 @@
 //   HandleLobbyPlayerList               the player table; a client follows the host's pick,
 //                                       and keeps its own if the host has dropped
 //
-// Out-queue records are the console's own wire records, posted on channel 40 through
-// GetOutputEventQueue()->AddEvent with host sizeof sizes.
+// The screen posts its typed channel-40 payloads with StateInterface::OutputGuiEvent,
+// which creates the separate record header.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectOnlineEnd.h"
 
@@ -106,8 +106,8 @@ namespace BrnGui
         // { 8, 192, 12, action, car-select type }, channel 40, 20 bytes.
         struct GuiActivateCarSelectWire : public CgsGui::GuiEvent<192>
         {
-            u32 muAction;          // +0x0C
-            u32 muCarSelectType;   // +0x10
+            u32 muAction;          // payload +0x00
+            u32 muCarSelectType;   // payload +0x04
 
             GuiActivateCarSelectWire(u32 luAction, u32 luCarSelectType)
                 :  muAction(luAction)
@@ -119,7 +119,7 @@ namespace BrnGui
         // { 8, 415, 16, <pad>, the car id }, channel 40, 24 bytes: change the local car.
         struct GuiChangeCarWire : public CgsGui::GuiEvent<415>
         {
-            CgsID mCarID;    // +0x10
+            CgsID mCarID;    // payload +0x00; wrapper payload begins at record +0x10
 
             explicit GuiChangeCarWire(CgsID lCarID)
                 : mCarID(lCarID)
@@ -127,8 +127,12 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiActivateCarSelectWire) == 20, "activate car-select record is 20 bytes");
-        static_assert(sizeof(GuiChangeCarWire) == 24, "change-car record is 24 bytes");
+        static_assert(sizeof(GuiActivateCarSelectWire) == 8, "activate car-select payload is 8 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiActivateCarSelectWire, 40>) == 20,
+                      "activate car-select wrapper is 20 bytes");
+        static_assert(sizeof(GuiChangeCarWire) == 8, "change-car payload is one CgsID");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiChangeCarWire, 40>) == 24,
+                      "change-car aligned wrapper is 24 bytes");
         static_assert(sizeof(GuiEventNetworkLobbyPlayerListPayload) >= 0x1C4,
                       "lobby roster count sits at +0x1C0");
     }
@@ -152,8 +156,8 @@ namespace BrnGui
         mOnlinePlayerList.Construct(KAC_ONLINE_PLAYER_LIST, mpStateInterface, 0);
         mHostChoosingAnimator.Construct(KAC_HOST_CHOOSING_ANIMATOR_NAME, mpStateInterface, 0);
 
-        const GuiActivateCarSelectWire lActivateCarSelect(KU_CAR_SELECT_ACTION_ONLINE_ENTER,
-                                                          KU_CAR_SELECT_TYPE_ONLINE);
+        GuiActivateCarSelectWire lActivateCarSelect(KU_CAR_SELECT_ACTION_ONLINE_ENTER,
+                                                    KU_CAR_SELECT_TYPE_ONLINE);
         mpStateInterface->OutputGuiEvent(lActivateCarSelect);
 
         meInternalState = E_INTERNALSTATE_LOADRESOURCES;
@@ -171,8 +175,8 @@ namespace BrnGui
         // clears the level.
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
-        const GuiActivateCarSelectWire lExitCarSelect(KU_CAR_SELECT_ACTION_EXIT,
-                                                      KU_CAR_SELECT_TYPE_ONLINE);
+        GuiActivateCarSelectWire lExitCarSelect(KU_CAR_SELECT_ACTION_EXIT,
+                                                KU_CAR_SELECT_TYPE_ONLINE);
         mpStateInterface->OutputGuiEvent(lExitCarSelect);
 
         meInternalState = E_INTERNALSTATE_LEFT;
@@ -386,7 +390,7 @@ namespace BrnGui
                     if (lrPlayer.mbFinalSelection)
                     {
                         CGS_ASSERT(mLastHostCarID != 0, "Trying to select a car will null id");
-                        const GuiChangeCarWire lChangeCar(mLastHostCarID);
+                        GuiChangeCarWire lChangeCar(mLastHostCarID);
                         mpStateInterface->OutputGuiEvent(lChangeCar);
                     }
                 }
@@ -399,7 +403,7 @@ namespace BrnGui
         if (lbHostDisconnected)
         {
             CGS_ASSERT(lLocalPlayerCarID != 0, "Trying to select a car will null id");
-            const GuiChangeCarWire lChangeCar(lLocalPlayerCarID);
+            GuiChangeCarWire lChangeCar(lLocalPlayerCarID);
             mpStateInterface->OutputGuiEvent(lChangeCar);
         }
 

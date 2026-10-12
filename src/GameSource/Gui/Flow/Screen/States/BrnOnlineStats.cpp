@@ -12,8 +12,8 @@
 //   UpdatePermanent                     disconnected (GUI 44) goes back
 //   HandleControllerInputPressed / HandleStatsData
 //
-// Out-queue records are the console's own wire records, posted on channel 40 through
-// GetOutputEventQueue()->AddEvent with host sizeof sizes.
+// Typed channel-40 payloads use StateInterface::OutputGuiEvent; the stats response keeps
+// its explicitly constructed wrapper because its payload has its own recovered record.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 
@@ -97,22 +97,19 @@ namespace BrnGui
         };
 
         // ---- out-queue wire records ------------------------------------------------------
-        // { 1, 241, 12, <one byte> }, channel 40, 16 bytes: the stats request. The console
+        // One-byte payload for {1, 241, 12, <one byte>}, channel 40, 16 bytes. The console
         // never writes the payload byte.
         struct OnlineStatsRequestWire : public CgsGui::GuiEvent<241>
         {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            OnlineStatsRequestWire()
-                :  muUnwrittenPayload(0)
-            {
-            }
+            u8 muUnwrittenPayload;   // payload +0x00; no store in the X360 emitter
         };
 
         // { 24, 242, 12, the six totals }, channel 40, 36 bytes.
         typedef CgsGui::GuiEventWrapper<GuiEventOnlineStatsResponse, 40> OnlineStatsResponseWire;
 
-        static_assert(sizeof(OnlineStatsRequestWire) == 16, "stats request record is 16 bytes");
+        static_assert(sizeof(OnlineStatsRequestWire) == 1, "stats request payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<OnlineStatsRequestWire, 40>) == 16,
+                      "stats request wrapper is 16 bytes");
         static_assert(sizeof(OnlineStatsResponseWire) == 36, "stats response record is 36 bytes");
     }
 
@@ -253,7 +250,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::UpdateSetupComponents()
     {
-        const OnlineStatsRequestWire lRequest;
+        OnlineStatsRequestWire lRequest;
         mpStateInterface->OutputGuiEvent(lRequest);
     }
 

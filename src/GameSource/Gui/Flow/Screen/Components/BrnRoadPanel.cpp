@@ -94,11 +94,9 @@ namespace BrnGui
     // AddEvent(si + 12, v6, 40, 16)` @0x8243A3xx / @0x8243A4xx). The committed
     // BrnGuiDemangledEventTypes.h models GuiEventSetRoadRuleScoreMode as the RAW 4-byte payload
     // (id 330) -- that spelling posts only the payload with 330 as the CHANNEL, which is not the
-    // wire record the console writes. This is the "consumers that need the exact X360 wire
-    // record build it themselves and post it through GetOutputEventQueue()->AddEvent()"
-    // accommodation the CgsGuiStateInterface.h banner names as the standing rule, so the exact
-    // record is built here. Name kept distinct from the demangled type so neither shadows the
-    // other.
+    // wire record the console writes. Keep the payload distinct from the demangled type, then
+    // pass it through StateInterface::OutputGuiEvent, which builds the canonical channel-40
+    // wrapper with the original {4,330,12,mode} header.
     // FLAG: 330 is the X360 WIRE id (which happens to match the demangled table's id here).
     // ---------------------------------------------------------------------------------
     struct GuiEventSetRoadRuleScoreModeRecord : public CgsGui::GuiEvent<330>
@@ -107,10 +105,12 @@ namespace BrnGui
             :  miScoreMode(liScoreMode)
         {
         }
-        s32 miScoreMode;   // record +0x0C
+        s32 miScoreMode;   // payload +0x00
     };
-    static_assert(sizeof(GuiEventSetRoadRuleScoreModeRecord) == 16,
-                  "the road-rule score-mode record is the 16 bytes AddEvent is given (li r6, 0x10)");
+    static_assert(sizeof(GuiEventSetRoadRuleScoreModeRecord) == 4,
+                  "the road-rule score-mode payload is one word");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventSetRoadRuleScoreModeRecord, 40>) == 16,
+                  "the road-rule score-mode channel-40 wrapper is 16 bytes");
 
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;
     static const s32 KI_SCORE_MODE_RECORD_SIZE = 16;

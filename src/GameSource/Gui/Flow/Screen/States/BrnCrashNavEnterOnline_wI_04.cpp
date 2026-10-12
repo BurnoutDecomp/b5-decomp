@@ -56,25 +56,21 @@ namespace BrnGui
         };
 
         // ---- out-queue wire records ---------------------------------------------------
-        // Both header words are HOST expressions, never the console's baked immediates:
-        // the first is the host size of the payload tail, the second the host size of the
-        // three-word GuiEvent header (12 on the X360, and 12 here too because
-        // CgsModule::Event is empty -- written as sizeof so it tracks the host layout).
+        // OutputGuiEvent receives the typed payload and constructs the separate channel-40
+        // header. GuiEvent<N> is only an event-id tag and contributes no payload bytes.
 
-        // The answer record. X360 stack-builds { 8, 48, 12 } followed by the 8 payload
-        // bytes it assembles in a scratch slot first (@0x824CAE28-0x824CAE48: stw the
-        // question at +0, stb the two answers at +4 / +5, then one ld/std pair copies the
-        // whole 8 bytes into the record) and AddEvent()s it with size 20 on channel 40.
+        // The answer payload. X360 assembles eight bytes in a scratch slot first
+        // (@0x824CAE28-0x824CAE48: stw the question at +0, stb the two answers at +4 / +5,
+        // then one ld/std pair copies the payload into the 20-byte channel-40 wrapper.
         // The DWARF name for id 48 is CgsGui::GuiEventAnswerLoginQuestion.
         typedef CgsGui::GuiEvent<48> AnswerLoginQuestionHeader;
 
         struct GuiEventAnswerLoginQuestionWire : public AnswerLoginQuestionHeader
         {
-            CgsGui::ELoginQuestion meLoginQuestion;   // +0x0C -- the question being answered
-            bool                   mbAccept;          // +0x10 -- first answer (row 0 / "yes")
-            bool                   mbAccept2;         // +0x11 -- second answer (share-info row 1)
-            u16                    muPad12;           // +0x12 -- X360 ships the scratch slot's
-                                                      //          two trailing bytes as-is; zeroed here
+            CgsGui::ELoginQuestion meLoginQuestion;   // payload +0x00 -- question being answered
+            bool                   mbAccept;          // payload +0x04 -- first answer (row 0 / "yes")
+            bool                   mbAccept2;         // payload +0x05 -- second answer (share-info row 1)
+            u16                    muUnwrittenTail;   // payload +0x06 -- scratch bytes copied as-is
 
             GuiEventAnswerLoginQuestionWire(CgsGui::ELoginQuestion leLoginQuestion,
                                             bool lbAccept,
@@ -82,30 +78,16 @@ namespace BrnGui
                 :  meLoginQuestion(leLoginQuestion)
                 , mbAccept(lbAccept)
                 , mbAccept2(lbAccept2)
-                , muPad12(0)
             {
             }
         };
 
-        // The "cancel the sign-in attempt" request. X360 stack-builds { 1, 49, 12 } and
-        // AddEvent()s it with size 16 on channel 40 (@0x824D8690-0x824D86BC), leaving the
-        // single payload byte on the stack UNWRITTEN -- so its value is whatever the frame
-        // held. It is written as 0 here (a host must not publish an indeterminate byte).
-        // The DWARF name for id 49 is CgsGui::GuiEventCancelLogin (CgsGuiEventTypeDefs.h:427,
-        // reached through GuiEventWrapper<CgsGui::GuiEvent<49>,40>); the event carries no
-        // payload of its own, which is why the payload-size word is the empty struct's 1.
-        struct GuiEventCancelLoginWire : public CgsGui::GuiEventCancelLogin
-        {
-            u8 muPayload;   // +0x0C -- X360 leaves this byte uninitialised
-
-            GuiEventCancelLoginWire()
-                : CgsGui::GuiEventCancelLogin(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEventCancelLogin)))
-                , muPayload(0)
-            {
-            }
-        };
+        static_assert(sizeof(GuiEventAnswerLoginQuestionWire) == 8,
+                      "answer-login payload is the copied 8-byte scratch record");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventAnswerLoginQuestionWire, 40>) == 20,
+                      "answer-login channel-40 wrapper is 20 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventCancelLogin, 40>) == 16,
+                      "cancel-login channel-40 wrapper is 16 bytes");
     }
 
     // ---- AnswerLoginQuestion @ 0x824CAE00 (cpp:1068) -------------------------------
@@ -121,10 +103,7 @@ namespace BrnGui
         // The question is captured into the record BEFORE it is reset below (the X360
         // reads this+0xC8 @0x824CAE28, well ahead of the `li r10, 7` store @0x824CAEA4).
         GuiEventAnswerLoginQuestionWire lAnswer(meCurrentLoginQuestion, lbAccept, lbAccept2);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAnswer),
-            KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAnswer)));      // X360 record size 20
+        mpStateInterface->OutputGuiEvent(lAnswer);
 
         mfTimeInState = 0.0f;                        // flt_82001CC0 == 0.0f
 
@@ -148,8 +127,8 @@ namespace BrnGui
         // ---- in-queue payload view ----------------------------------------------------
         // ---- out-queue wire record ----------------------------------------------------
         // The "cancel the sign-in attempt" request (CgsGui::GuiEventCancelLogin, id 49) is
-        // declared once above and reused here; both header words are HOST expressions,
-        // never the console's baked immediates.
+        // declared once above and reused here; OutputGuiEvent adds its one-byte payload to
+        // the 16-byte channel-40 wrapper.
 
     }
 
@@ -183,11 +162,8 @@ namespace BrnGui
                 // not a question, so backing out of it is ignored entirely.
                 if (meCurrentLoginQuestion != CgsGui::E_LOGIN_QUESTION_CHAT_RESTRICTION)
                 {
-                    GuiEventCancelLoginWire lCancelLogin;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lCancelLogin),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lCancelLogin)));   // X360 record size 16
+                    CgsGui::GuiEventCancelLogin lCancelLogin;
+                    mpStateInterface->OutputGuiEvent(lCancelLogin);
 
                     // Backing out of the no-agreement question is the expected way to end
                     // the session, so the disconnect it causes must not raise the popup.

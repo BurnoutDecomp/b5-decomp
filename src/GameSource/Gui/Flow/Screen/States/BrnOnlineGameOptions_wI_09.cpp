@@ -466,11 +466,10 @@ namespace BrnGui
             }
         };
 
-        // { 0x818, 537, 12, <the message> }, channel 40, 0x824 bytes -- all three written as
-        // host expressions.
+        // 0x818-byte payload for {0x818, 537, 12, payload}, channel 40, 0x824 bytes.
         struct GuiTickerCustomMessageWire : public CgsGui::GuiEvent<537>
         {
-            GuiTickerCustomMessagePayload mMessage;   // +0x0C
+            GuiTickerCustomMessagePayload mMessage;   // payload +0x00
 
             GuiTickerCustomMessageWire()
                 
@@ -485,7 +484,7 @@ namespace BrnGui
         // FLAG: id 409 carries no declared event struct anywhere in the recovered
         // declarations, so the payload shape and the role-name both come from this single
         // call site: the console stack-builds { 2, 409, 12 } + the two payload bytes { 1, 0 }
-        // and publishes 16 bytes on channel 40. The two flag names are
+        // and publishes a 16-byte wrapper on channel 40. The two flag names are
         // deliberately role-free -- nothing in the binary names them.
         struct GuiEventOnlineGameOptionsRefresh
         {
@@ -497,29 +496,24 @@ namespace BrnGui
 
         struct GuiEventOnlineGameOptionsRefreshWire : public OnlineGameOptionsRefreshHeader
         {
-            GuiEventOnlineGameOptionsRefresh mRefresh;   // +0x0C
-            u8                               maPad0E[2]; // +0x0E (record is 16 bytes)
+            GuiEventOnlineGameOptionsRefresh mRefresh;   // payload +0x00
 
             GuiEventOnlineGameOptionsRefreshWire()
-
             {
                 mRefresh.mu8FlagA = 1;
                 mRefresh.mu8FlagB = 0;
-                maPad0E[0] = 0;
-                maPad0E[1] = 0;
             }
         };
 
-        // Layout pins for the two records above: the console posts 0x824 and 0x10 bytes with
-        // payload-size words 0x818 and 2 and payload-offset words 12 and 12.
+        // Layout pins for the two payloads and their channel-40 wrappers.
         typedef char KAC_ASSERT_TICKER_PAYLOAD_SIZE[
             sizeof(GuiTickerCustomMessagePayload) == 0x818 ? 1 : -1];
         typedef char KAC_ASSERT_TICKER_WIRE_SIZE[
-            sizeof(GuiTickerCustomMessageWire) == 0x824 ? 1 : -1];
+            sizeof(CgsGui::GuiEventWrapper<GuiTickerCustomMessageWire, 40>) == 0x824 ? 1 : -1];
         typedef char KAC_ASSERT_REFRESH_PAYLOAD_SIZE[
             sizeof(GuiEventOnlineGameOptionsRefresh) == 2 ? 1 : -1];
         typedef char KAC_ASSERT_REFRESH_WIRE_SIZE[
-            sizeof(GuiEventOnlineGameOptionsRefreshWire) == 16 ? 1 : -1];
+            sizeof(CgsGui::GuiEventWrapper<GuiEventOnlineGameOptionsRefreshWire, 40>) == 16 ? 1 : -1];
     }
 
     // ------------------------------------------------------------------ HandleGuiCacheEvent

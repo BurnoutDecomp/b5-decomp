@@ -215,9 +215,8 @@ namespace BrnGui
             GuiEventActivateCrashNav lActivate(true);                      // { 8, 191, 12, 1, 0 } ch40 20
             lpStateInterface->OutputGuiEvent(lActivate);
 
-            CgsGui::GuiEvent<533> lDone(1, 12);                            // { 1, 533, 12 } ch40 16
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lDone), KI_CHANNEL_GUI_EVENT, 16);
+            CgsGui::GuiEvent<533> lDone;
+            lpStateInterface->OutputGuiEvent(lDone);                       // { 1, 533, 12 } ch40 16
         }
     }
 

@@ -24,10 +24,8 @@
 // @0x824FA0A8) having no declaration; it is now declared on the real class in
 // GameSource/Gui/SatNav/BrnGuiTracker.h and is called by name here.
 //
-// The out-queue post is written as a typed record, NOT as the console's baked immediates:
-// the payload-size and payload-offset header words are host sizeof expressions and the
-// AddEvent size argument is sizeof(the record). The X360's 1 / 12 / 16 literals are the
-// 32-bit console record sizes (BrnInGame.cpp + the sibling wave-H partfiles precedent).
+// The channel-40 post uses a typed one-byte payload through StateInterface::OutputGuiEvent,
+// which creates the separate {1, 260, 12} header and 16-byte record.
 //
 // The in-queue hands handlers the HEADER-STRIPPED payload, so the incoming cache pointer
 // is read through a file-local payload view (the DWARF types the parameter
@@ -80,30 +78,14 @@ namespace BrnGui
         // GuiEventNetworkGameOptionsRequest as GuiEvent<258>; ARTIST is the later build and
         // its literal is what the queue actually carries (the same id drift the committed
         // BrnGuiEventTypeDefs.h records for GuiNewBurnoutSkillzEvent, 526 -> 541).
-        struct GuiEventNetworkGameOptionsRequest
-        {
-        };
+        typedef CgsGui::GuiEvent<260> GuiEventNetworkGameOptionsRequest;
 
-        typedef CgsGui::GuiEvent<260> NetworkGameOptionsRequestHeader;
-
-        struct GuiEventNetworkGameOptionsRequestWire : public NetworkGameOptionsRequestHeader
-        {
-            GuiEventNetworkGameOptionsRequest mRequest;   // +0x0C (never written)
-
-            GuiEventNetworkGameOptionsRequestWire()
-
-            {
-            }
-        };
-
-        // Layout pins for the record above: the console posts a 16-byte record whose size
-        // word is 1 and whose payload offset word is 12. All three survive on the host.
+        // The typed tag is one payload byte; the separate output wrapper carries
+        // {1, 260, 12} and the complete record is 16 bytes on channel 40.
         typedef char KAC_ASSERT_REQUEST_PAYLOAD_SIZE[
             sizeof(GuiEventNetworkGameOptionsRequest) == 1 ? 1 : -1];
-        typedef char KAC_ASSERT_REQUEST_HEADER_SIZE[
-            sizeof(NetworkGameOptionsRequestHeader) == 12 ? 1 : -1];
         typedef char KAC_ASSERT_REQUEST_WIRE_SIZE[
-            sizeof(GuiEventNetworkGameOptionsRequestWire) == 16 ? 1 : -1];
+            sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkGameOptionsRequest, 40>) == 16 ? 1 : -1];
     }
 
     // ------------------------------------------------------ HandleGuiCacheEvent @0x824A3DD8
@@ -133,10 +115,8 @@ namespace BrnGui
                 ClearSplashScreenOverlay(&mOverlayCompleteEvent);
             }
 
-            GuiEventNetworkGameOptionsRequestWire lGameOptionsRequest;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lGameOptionsRequest),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lGameOptionsRequest)));
+            GuiEventNetworkGameOptionsRequest lGameOptionsRequest;
+            mpStateInterface->OutputGuiEvent(lGameOptionsRequest);
         }
 
         // ---- challenges page: refresh the select-button state -------------------------

@@ -112,19 +112,19 @@ namespace
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
     // OnLeave's second post: {1, 295, 12} on channel 40, size 16 (@0x824D30E8..0x824D3108). The
-    // one payload byte is never written by the console (its stack slot still holds the previous
-    // record's words) -- it is the sizeof of an empty event struct, not a value; zeroed here, no
-    // consumer reads it. The GUI->game-state bridge turns GUI 295 into game event 149, which is
+    // single payload byte is never written and no consumer reads it. Keep it as the payload
+    // object's unwritten byte; GuiEventWrapper supplies the separate three-word header. The
+    // GUI->game-state bridge turns GUI 295 into game event 149, which is
     // E_EVENT_RIVAL_SHUTDOWN_DISPLAY_FINSHED (DWARF BrnGameEvents.h, PS3 id 147). The record NAME
     // is ours (the X360 inlines the OutputGuiEvent and keeps no type name); the id is the image's.
     struct GuiEventRivalShutdownDisplayFinished : public CgsGui::GuiEvent<295>
     {
-        u8 mucPad;   // +0x0C (the 1-byte empty payload)
-
-        GuiEventRivalShutdownDisplayFinished() :  mucPad(0) {}
+        u8 muUnwrittenPayload;   // +0x00; no store in the X360 emitter
     };
-    static_assert(sizeof(GuiEventRivalShutdownDisplayFinished) == 16,
-                  "the console posts a 16-byte record for GUI 295 (`li r6, 0x10`)");
+    static_assert(sizeof(GuiEventRivalShutdownDisplayFinished) == 1,
+                  "GUI 295 has a one-byte payload");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventRivalShutdownDisplayFinished, 40>) == 16,
+                  "GUI 295 is posted in the 16-byte channel-40 wrapper");
 
     // The console streams the fixed prefix, the offending value and a suffix into the global
     // assert message buffer and fires unconditionally; building into a stack buffer is the

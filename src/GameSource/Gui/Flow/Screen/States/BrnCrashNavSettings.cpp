@@ -345,9 +345,8 @@ namespace BrnGui
     // response (event 142) arrives.
     void CrashNavSettings::InputSponsorProductCode()
     {
-        CgsGui::GuiEvent<KI_EVENT_KEYBOARD_REQUEST> lRequest(1, 12);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT, 16);
+        CgsGui::GuiEvent<KI_EVENT_KEYBOARD_REQUEST> lRequest;
+        mpStateInterface->OutputGuiEvent(lRequest);
 
         mpGuiKeyboard                     = 0;      // `stw r11, 0x1284`
         mKeyboardListener.mbKeyboardClosed = false; // `stb r11, 0x12A0`
@@ -461,9 +460,8 @@ namespace BrnGui
             GuiEventActivateCrashNav lActivate(true);  // <- THE UNPAUSE
             mpStateInterface->OutputGuiEvent(lActivate);
 
-            CgsGui::GuiEvent<KI_EVENT_SCREEN_CLOSED_533> lDone(1, 12);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lDone), KI_CHANNEL_GUI_OUT, 16);
+            CgsGui::GuiEvent<KI_EVENT_SCREEN_CLOSED_533> lDone;
+            mpStateInterface->OutputGuiEvent(lDone);
             break;
         }
 

@@ -112,12 +112,12 @@ namespace BrnGui
         };
 
         // ---- out-queue wire records ----------------------------------------------------
-        // { 1, N, 12, <one payload byte> }: 16 bytes. The console leaves the byte unwritten on
-        // the finish-round / leave-game / screen-closed records; zero here.
+        // One-byte payload. The console leaves the byte unwritten on the finish-round /
+        // leave-game / screen-closed records; the separate wrapper holds the three header words.
         template <s32 N>
         struct GuiByteEventWire : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Value;    // +0x00
+            u8 mu8Value;    // payload +0x00
             explicit GuiByteEventWire(u8 lu8Value)
                 :  mu8Value(lu8Value)
             {}
@@ -125,9 +125,12 @@ namespace BrnGui
 
         // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.
 
-        static_assert(sizeof(GuiByteEventWire<1>) == 16, "byte record is 16 bytes");
+        static_assert(sizeof(GuiByteEventWire<1>) == 1, "byte event payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiByteEventWire<1>, 40>) == 16,
+                      "byte event wrapper is 16 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
 
         template <s32 N>
         void PostByteEvent(CgsGui::StateInterface* lpStateInterface, s32 liChannel, u8 lu8Value)

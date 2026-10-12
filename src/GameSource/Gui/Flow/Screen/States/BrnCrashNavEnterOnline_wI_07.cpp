@@ -32,7 +32,8 @@ namespace BrnGui
         // size immediates must survive unchanged on the x64 host.
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventNetworkSuspension, 40>) == 16,
+                      "suspension wrapper is 16 bytes");
 
         const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
         const char KAC_STATE_EVENT_GO_BACK_EASY[] = "GO_BACK_EASY";
@@ -164,7 +165,8 @@ namespace BrnGui
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventNetworkSuspension, 40>) == 16,
+                      "suspension wrapper is 16 bytes");
 
         // Event 189 ("overlay complete") payload view: the compressed overlay id then how
         // the overlay was left. The X360 compares the id with a FULL 64-bit `cmpld` after
@@ -302,9 +304,13 @@ namespace BrnGui
         // size immediates must survive unchanged on the x64 host.
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHud) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventNetworkSuspension, 40>) == 16,
+                      "suspension wrapper is 16 bytes");
+        static_assert(sizeof(GuiEventShowHideHud) == 1, "show/hide-hud payload is one byte");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHud, 40>) == 16,
+                      "show/hide-hud wrapper is 16 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, 40>) == 20,
+                      "activate-crashnav wrapper is 20 bytes");
 
         // ---- in-queue payload views (the queue hands out the HEADER-STRIPPED payload,
         //      so each view starts at the first field) ---------------------------------
