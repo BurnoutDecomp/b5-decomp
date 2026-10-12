@@ -3,8 +3,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"   // GetUI().AddWindow/RemoveWindow/IsWindowAdded
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 
-#include <algorithm>   // std::max
-#include <cmath>       // std::ceil
+#include <cmath>       // VMX flush, max semantics and scalar ceil
 
 // BrnPhysics::Vehicle::GripCurveDebugWindow -- the four ledger functions homed by the Vehicle-physics
 // group. Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -13,27 +12,55 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ARTIST 825B9418 recomputes each graph from its own bound curve. Unlike
-    // the initial Prepare ranges, this update does not ceil the scaled maxima.
-    void GripCurveDebugWindow::Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent)
+    namespace
     {
-        auto Maximum = [](f32 lfA, f32 lfB)
+        f32 GripFlush(f32 lfValue)
         {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        }
+
+        // ARTIST vmaxfp: flush operands/results, propagate unordered values,
+        // and prefer positive zero when the zero signs differ.
+        f32 GripMaximum(f32 lfA, f32 lfB)
+        {
+            lfA = GripFlush(lfA);
+            lfB = GripFlush(lfB);
             if (std::isnan(lfA))
                 return lfA;
             if (std::isnan(lfB))
                 return lfB;
             if (lfA == 0.0f && lfB == 0.0f)
                 return std::signbit(lfA) && std::signbit(lfB) ? -0.0f : 0.0f;
-            return lfA > lfB ? lfA : lfB;
-        };
+            return GripFlush(lfA > lfB ? lfA : lfB);
+        }
+
+        f32 GripMultiply(f32 lfA, f32 lfB)
+        {
+            return GripFlush(GripFlush(lfA) * GripFlush(lfB));
+        }
+
+        // Prepare uses scalar fsubs/fsel/fmuls and ceil after each curve's
+        // vector maximum. Those scalar operations are not VMX-flushed.
+        f32 InitialGripRange(f32 lfLongMax, f32 lfLatMax)
+        {
+            const f32 lfDifference = lfLongMax - lfLatMax;
+            const f32 lfMaximum = lfDifference >= 0.0f ? lfLongMax : lfLatMax;
+            return static_cast<f32>(std::ceil(lfMaximum * 1.2f));
+        }
+    }
+
+    // ARTIST 825B9418 recomputes each graph from its own bound curve. Unlike
+    // the initial Prepare ranges, this update does not ceil the scaled maxima.
+    void GripCurveDebugWindow::Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent)
+    {
         GripCurveDebugGraph* lapGraphs[] = { &mLongGripCurveGraph, &mLatGripCurveGraph };
         for (GripCurveDebugGraph* lpGraph : lapGraphs)
         {
             const Vector4& lrCurve = lpGraph->GetGripCurve()->maGripVariables;
             rw::math::vpu::Vector2 lRange;
-            lRange.x = Maximum(lrCurve.x, lrCurve.y) * 1.2f;
-            lRange.y = Maximum(lrCurve.z, lrCurve.w) * 1.2f;
+            lRange.x = GripMultiply(GripMaximum(lrCurve.x, lrCurve.y), 1.2f);
+            lRange.y = GripMultiply(GripMaximum(lrCurve.z, lrCurve.w), 1.2f);
             // ARTIST vperm mask 82CDA350 is {A.x, B.y, A.x, A.x}.
             lRange.z = lRange.w = lRange.x;
             lpGraph->SetRange(lRange);
@@ -153,14 +180,11 @@ namespace Vehicle
     // (fsel(a-b,a,b) == max), scales by 1.2 and ceils.
     f32 GripCurveDebugWindow::GetSlipRatioRange()
     {
-        const Wheel::TireGripCurve* lpLong = mLongGripCurveGraph.GetGripCurve(); // *(this+0x30) -> mpGripCurve
-        const Wheel::TireGripCurve* lpLat  = mLatGripCurveGraph.GetGripCurve();  // *(this+0x70)
-
-        const f32 lfLongMax = std::max(lpLong->maGripVariables.x, lpLong->maGripVariables.y); // lanes 0,1
-        const f32 lfLatMax  = std::max(lpLat->maGripVariables.x,  lpLat->maGripVariables.y);
-        const f32 lfMax     = std::max(lfLongMax, lfLatMax);
-
-        return static_cast<f32>(std::ceil(lfMax * 1.2f));
+        const Wheel::TireGripCurve* lpLong = mLongGripCurveGraph.GetGripCurve();
+        const Wheel::TireGripCurve* lpLat = mLatGripCurveGraph.GetGripCurve();
+        const f32 lfLongMax = GripMaximum(lpLong->maGripVariables.x, lpLong->maGripVariables.y);
+        const f32 lfLatMax = GripMaximum(lpLat->maGripVariables.x, lpLat->maGripVariables.y);
+        return InitialGripRange(lfLongMax, lfLatMax);
     }
 
     // GetCoefficientRange @0x825B4C90: the Y-axis (grip-coefficient) range for the graph. Same math as
@@ -168,14 +192,11 @@ namespace Vehicle
     // packed Vector4 maGripVariables.
     f32 GripCurveDebugWindow::GetCoefficientRange()
     {
-        const Wheel::TireGripCurve* lpLong = mLongGripCurveGraph.GetGripCurve(); // *(this+0x30)
-        const Wheel::TireGripCurve* lpLat  = mLatGripCurveGraph.GetGripCurve();  // *(this+0x70)
-
-        const f32 lfLongMax = std::max(lpLong->maGripVariables.z, lpLong->maGripVariables.w); // lanes 2,3
-        const f32 lfLatMax  = std::max(lpLat->maGripVariables.z,  lpLat->maGripVariables.w);
-        const f32 lfMax     = std::max(lfLongMax, lfLatMax);
-
-        return static_cast<f32>(std::ceil(lfMax * 1.2f));
+        const Wheel::TireGripCurve* lpLong = mLongGripCurveGraph.GetGripCurve();
+        const Wheel::TireGripCurve* lpLat = mLatGripCurveGraph.GetGripCurve();
+        const f32 lfLongMax = GripMaximum(lpLong->maGripVariables.z, lpLong->maGripVariables.w);
+        const f32 lfLatMax = GripMaximum(lpLat->maGripVariables.z, lpLat->maGripVariables.w);
+        return InitialGripRange(lfLongMax, lfLatMax);
     }
 }
 }
