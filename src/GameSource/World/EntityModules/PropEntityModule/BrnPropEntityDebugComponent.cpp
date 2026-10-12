@@ -43,6 +43,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
 #include "rw/rwcore_structs.h"                                                      // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                   // Matrix44Affine operator*
+#include "pc/math/VmxFloat.h"
 
 #include <cstring>                                                                  // strlen
 #include <cmath>                                                                    // acosf (Lean angle stat)
@@ -99,6 +100,21 @@ namespace BrnWorld
             lValue.z = lfValue;
             lValue.w = lfValue;
             return lValue;
+        }
+
+        // FLAG PC-platform leaf: scalar model of vrefp and the two original
+        // Newton refinements. Exact hardware estimate bits/status are unverified.
+        inline f32 RefinedCellGridReciprocal(f32 lfValue)
+        {
+            using namespace CgsPC::VmxFloat;
+            lfValue = Flush(lfValue);
+            f32 lfEstimate = Flush(1.0f / lfValue);
+            for (u32 luStep = 0; luStep < 2; ++luStep)
+            {
+                const f32 lfError = NegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
+                lfEstimate = MultiplyAdd(lfEstimate, lfError, lfEstimate);
+            }
+            return lfEstimate;
         }
     }
 
@@ -730,61 +746,76 @@ namespace BrnWorld
                    "strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE");
     }
 
-    // @ 0x822EFF48. The 2D top-down cell-grid map centred on the player's prop zone.
-    //
-    // SCOPE NOTE: the X360 body additionally walks the player zone's loaded-cell bitset
-    // (PropCellManager / PropZoneData internals at deep manager offsets) drawing each cell as
-    // a quad -- solid via DrawSolidConvexPolygon when the cell is active, wire via
-    // DrawWirePolygon otherwise -- and rings every occupied prop cell with a marker. That walk
-    // depends on the (not-yet-reconstructed) PropCellManager cell-grid layout and the
-    // out-of-line ToCellGridScreenCoords projector, so it is summarised here. What IS pinned
-    // from the asm is reconstructed faithfully: the projection-cache setup (map scale =
-    // 1000/mfCellGridZoom, written to mMapDimensions / mScreenSize / mfAspect) the projector
-    // reads, and the player-cell origin marker (blue circle) drawn last.
+    // @ 0x822EFF48. Loaded-cell quads, the used-slot prop markers, then the
+    // player's actual position. The original indexes maProps by the used-slot
+    // bit directly; it does not multiply that index by the per-zone capacity.
     void PropEntityDebugComponent::RenderCellGrid(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
-        // map scale = 1000 / zoom (X360 fdivs flt_82009E10(=1000.0) / mfCellGridZoom @ +0x40).
         const f32 lfMapScale = 1000.0f / mfCellGridZoom;
-        mMapDimensions.x = lfMapScale;
-        mMapDimensions.y = lfMapScale;
-        mScreenSize = lpDisplay->GetVirtualScreenSize();
-        mfAspect = (mScreenSize.y != 0.0f) ? (mScreenSize.x / mScreenSize.y) : 1.0f;
+        mMapDimensions = { lfMapScale, lfMapScale, 0.0f, 0.0f };
+        const Vector2 lVirtualSize = lpDisplay->GetVirtualScreenSize();
+        mScreenSize = { lVirtualSize.x, lVirtualSize.y, 0.0f, 0.0f };
+        mfAspect = CgsPC::VmxFloat::Multiply(
+            RefinedCellGridReciprocal(mScreenSize.y), mScreenSize.x);
 
-        // The player's current cell origin is ringed with a blue marker (X360: the final
-        // DrawCircle, 5 segments, ARGB 0xFF0000FF, after projecting the player cell world
-        // position through ToCellGridScreenCoords). The player cell position is read from the
-        // owning module's player-tracking state (manager +864800), reached out-of-line.
-        //
-        // flt_820149B4 is raw word 0x40A00000 (5.0), matching ARTIST's lfs at 0x822F0550.
-        const f32 KF_PLAYER_CELL_MARKER_RADIUS = 5.0f;
-        const Vector2 lOrigin = ToCellGridScreenCoords(mpPropEntityModule->mPlayerPosition);
-        lpDisplay->DrawCircle(lOrigin, KF_PLAYER_CELL_MARKER_RADIUS, 5, 0xFF0000FFu);  // ARGB 0xFF0000FF (blue)
+        // The result is unused, but the original range assertions still run.
+        BrnPhysics::Props::PropZoneData::GetCellId(
+            mpPropEntityModule->mPlayerPosition.x, mpPropEntityModule->mPlayerPosition.z);
+
+        PropZoneManager& lrZoneManager = mpPropEntityModule->mZoneManager;
+        PropCellManager& lrCellManager = lrZoneManager.mCellManager;
+        for (s32 liCell = 0; liCell < lrCellManager.miNumLoadedCells; ++liCell)
+        {
+            const PropCellRecord lCell = lrCellManager.maCells[liCell];
+            const BrnPhysics::Props::PropCellId lId = lCell.GetId();
+            const Vector3 lCorner0 = MakeVector3(
+                static_cast<f32>(100 * lId.GetX()) - 5000.0f, 0.0f,
+                static_cast<f32>(100 * lId.GetZ()) - 5000.0f);
+            const Vector3 lCorner1 = CgsPC::VmxFloat::Add(lCorner0, MakeVector3(100.0f, 0.0f, 0.0f));
+            const Vector3 lCorner2 = CgsPC::VmxFloat::Add(lCorner1, MakeVector3(0.0f, 0.0f, 100.0f));
+            const Vector3 lCorner3 = CgsPC::VmxFloat::Add(lCorner2, MakeVector3(-100.0f, 0.0f, 0.0f));
+            const Vector2 laPoints[4] = {
+                ToCellGridScreenCoords(lCorner0), ToCellGridScreenCoords(lCorner1),
+                ToCellGridScreenCoords(lCorner2), ToCellGridScreenCoords(lCorner3)
+            };
+            if (lCell.IsActive())
+                lpDisplay->DrawSolidConvexPolygon(laPoints, 4, 0x3200FF00u);
+            else
+                lpDisplay->DrawWirePolygon(laPoints, 4, 0xFFFFFFFFu);
+        }
+
+        s32 liProp = lrZoneManager.maUsedProps.GetFirstNonZeroBit();
+        if (liProp < static_cast<s32>(KU_NUM_ZONE_SLOTS))
+        {
+            while (liProp != -1)
+            {
+                const PropEntityInstance& lrProp = lrZoneManager.maProps[liProp];
+                const u32 luColour = (lrProp.mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT)
+                    ? 0xFF0000FFu : 0xFFFFFFFFu;
+                const Vector2 lPosition = ToCellGridScreenCoords(lrProp.GetWorldTransform().Pos());
+                lpDisplay->DrawCircle(lPosition, 2.0f, 3, luColour);
+                liProp = lrZoneManager.maUsedProps.GetNextNonZeroBit(liProp);
+            }
+        }
+        const Vector2 lPlayer = ToCellGridScreenCoords(mpPropEntityModule->mPlayerPosition);
+        lpDisplay->DrawCircle(lPlayer, 5.0f, 5, 0xFF0000FFu);
     }
 
     // @ 0x822DC3D8. Translate into player-relative XZ space, shift the map by
     // half its world dimensions, normalise, then scale to the current virtual screen.
     Vector2 PropEntityDebugComponent::ToCellGridScreenCoords(Vector3 lWorldPosition)
     {
-        const Vector3 lPlayerRelative = {
-            lWorldPosition.x - mpPropEntityModule->mPlayerPosition.x,
-            lWorldPosition.y - mpPropEntityModule->mPlayerPosition.y,
-            lWorldPosition.z - mpPropEntityModule->mPlayerPosition.z,
-            0.0f
-        };
-
-        Vector2 lScreenPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
-        if (mMapDimensions.x != 0.0f)
-        {
-            lScreenPosition.x =
-                ((lPlayerRelative.x + mMapDimensions.x * 0.5f) / mMapDimensions.x) *
-                mScreenSize.x;
-        }
-        if (mMapDimensions.y != 0.0f)
-        {
-            lScreenPosition.y =
-                ((lPlayerRelative.z + mMapDimensions.y * 0.5f) / mMapDimensions.y) *
-                mScreenSize.y;
-        }
+        const Vector3 lRelative = CgsPC::VmxFloat::Subtract(
+            lWorldPosition, mpPropEntityModule->mPlayerPosition);
+        // Raw vperm mask82CDA450 selects {x,z,x,x}; later inserts only replace
+        // lanes0/1. Preserve the two otherwise unused output lanes as well.
+        Vector2 lScreenPosition = { lRelative.x, lRelative.z, lRelative.x, lRelative.x };
+        lScreenPosition.x = CgsPC::VmxFloat::MultiplyAdd(mMapDimensions.x, 0.5f, lScreenPosition.x);
+        lScreenPosition.y = CgsPC::VmxFloat::MultiplyAdd(mMapDimensions.y, 0.5f, lScreenPosition.y);
+        lScreenPosition.x = CgsPC::VmxFloat::Multiply(lScreenPosition.x, RefinedCellGridReciprocal(mMapDimensions.x));
+        lScreenPosition.y = CgsPC::VmxFloat::Multiply(lScreenPosition.y, RefinedCellGridReciprocal(mMapDimensions.y));
+        lScreenPosition.x = CgsPC::VmxFloat::Multiply(lScreenPosition.x, mScreenSize.x);
+        lScreenPosition.y = CgsPC::VmxFloat::Multiply(lScreenPosition.y, mScreenSize.y);
         return lScreenPosition;
     }
 

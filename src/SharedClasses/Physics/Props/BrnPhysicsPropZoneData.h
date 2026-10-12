@@ -112,12 +112,10 @@ namespace Props
 
         // BrnPhysicsPropZoneData.h:216 -- map a world XZ position to its owning grid cell.
         // X360 @ 0x822BB2D0: range-asserts X/Z then computes (cellX, cellZ).
-        // CONST-QUALIFIED 2026-08-12 (prop-spawn wave): the DWARF renders this without
-        // a trailing const, but PropZoneManager::LoadProp -- whose own DWARF signature
-        // takes `const PropZoneData *` -- calls it on that const pointer, so the shipped
-        // declaration must be const (the body is pure: four range tripwires and two
-        // divisions, no member touched). Widening only; every existing caller still binds.
-        PropCellId GetCellId(f32 lfX, f32 lfZ) const;
+        // ARTIST takes hidden result r3 and floats f1/f2, with no implicit this.
+        // DecFIGS names the overload without const; object-call syntax at other
+        // callers does not imply an instance member. No zone data is accessed.
+        static PropCellId GetCellId(f32 lfX, f32 lfZ);
 
         // ADDITIVE GROW (PropZoneManager::LoadZone group): the three trivial header-inline
         // getters LoadZone (0x822FC168) reads off the streamed record. The X360 LoadZone
