@@ -897,25 +897,15 @@ namespace BrnGui
     // scalar run, so it is host-stable and worth pinning.
     static_assert(sizeof(GuiEventNetworkCustomMatchResults) == 604,
                   "GuiEventNetworkCustomMatchResults is the 604-byte AddOutputGuiEvent record");
-    // id 252, record 24 bytes: { 12, 252, 12 } + a 12-byte payload. MEASURED at
-    // OutputGuiEvent<GuiEventNetworkCustomMatchSearch> @0x82493BE8, which stack-builds
-    // v4 = { 12, 252, 12 }, copies THREE words out of the caller's object into v4[3..5] and
-    // calls AddEvent(queue, v4, 40, 24). The old bare GuiEvent<252> posted an EMPTY payload
-    // where the console copies 12 bytes.
+    // The payload is 12 bytes. OutputGuiEvent<GuiEventNetworkCustomMatchSearch> @0x82493BE8
+    // builds the distinct { 12, 252, 12 } channel-40 wrapper, copies the three payload words,
+    // and calls AddEvent(queue, wrapper, 40, 24). GuiEvent<252> is the empty typed event base;
+    // the three wrapper words do not live in this payload.
     // Field names and types are DWARF-attested (DecFIGS BrnGuiEventTypeDefs.h:3164,
     // members :3165-:3168).
     // FLAG (id delta): DecFIGS derives this type from GuiEvent<250>; the X360 id is 252.
-    // WIRE NOTE -- this is a CHANNEL-40 type, so it takes the BAKED-HEADER encoding, unlike
-    // the wrapped channel-41/42 types (GuiEventShowHideSatNav below, which is deliberately
-    // raw). Per the FLAG in CgsGuiStateInterface.h, the committed OutputGuiEvent<T> body
-    // direct-passes the event (it does NOT build a GuiEventWrapper), while OutputViewState /
-    // OutputInternalState do build one. So a channel-40 payload has to fold the wrapper's
-    // three header words into itself through the CgsGui::GuiEvent<252> base, and the record
-    // is published with AddEvent(&event, /*channel*/ 40, sizeof(event)) == 24 -- byte-for-byte
-    // the console record. On the console the type is the 12-byte payload only.
-    // OnlineCustomMatch::mLastSearchParams IS this type (12 bytes on the console, 24 on the
-    // host -- harmless, every access is by name). If OutputGuiEvent<T> is ever rebuilt to
-    // emit the real wrapper header, this base must come back off or the header ships twice.
+    // The output wrapper is a separate GuiEventWrapper<T,40>. This event also serves as
+    // OnlineCustomMatch::mLastSearchParams, so keep its members as the original 12-byte payload.
     struct GuiEventNetworkCustomMatchSearch : public CgsGui::GuiEvent<252>
     {
         s32  meGameMode;              // payload +0x00 -- DWARF type BrnNetwork::ESearchGameModes,
@@ -932,9 +922,11 @@ namespace BrnGui
         GuiEventNetworkCustomMatchSearch()
             :  meGameMode(0), meSearchOpponentTypes(0), mbRanked(false), mbFreeburn(false)
         { maPad[0] = 0; maPad[1] = 0; }
-    };  // id 252, record 24 bytes
-    static_assert(sizeof(GuiEventNetworkCustomMatchSearch) == 24,
-                  "GuiEventNetworkCustomMatchSearch is the 24-byte OutputGuiEvent record");
+    };  // id 252, payload 12 bytes
+    static_assert(sizeof(GuiEventNetworkCustomMatchSearch) == 12,
+                  "GuiEventNetworkCustomMatchSearch is the 12-byte payload copied by OutputGuiEvent");
+    static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkCustomMatchSearch, 40>) == 24,
+                  "channel-40 OutputGuiEvent wrapper is the 24-byte record");
     struct GuiEventNetworkLeavingGameFailed { u8 maData[1]; s32 GetEventType() const { return 275; } };  // id 275 size 1
     // News / terms-of-service download requests and results. The network state manager
     // starts the news (0) or TOS (1) download and releases both on RELEASE (6).
