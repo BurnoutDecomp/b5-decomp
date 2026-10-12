@@ -5,6 +5,9 @@
 
 namespace CgsResource
 {
+    const s32 KI_NUMHISTOGRAMCOUNTS = 15;
+    extern const s32 KAI_HISTOGRAMCOUNTS[KI_NUMHISTOGRAMCOUNTS];
+
     class Pool;
 
     // ARTIST component+0x3F8..0x47F; mSaved's real descriptor
@@ -24,7 +27,7 @@ namespace CgsResource
         const Pool* mpPool;
         s32 miMaxResources;
         s32 miLoadedResources;
-        s32 mauValues[16];
+        s32 mauValues[KI_NUMHISTOGRAMCOUNTS + 1];
         Entry::ResourceDescriptor mSaved;
     };
 }
