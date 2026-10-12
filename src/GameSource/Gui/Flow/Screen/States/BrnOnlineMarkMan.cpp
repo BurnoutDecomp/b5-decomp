@@ -78,12 +78,6 @@ namespace
 
     // The overlay request as the out-queue carries it: the GuiEvent<184> header sized to the
     // request, a pad word, then the request itself.
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-    {
-        GuiOverlayRequest mRequest;   // +0x10
-        GuiOverlayRequestWire()
-             {}
-    };
 
     void PostOnlineScreenAdvance(CgsGui::StateInterface* lpStateInterface)
     {
@@ -343,8 +337,8 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
             {
                 if (mpGuiCache != 0 && mpGuiCache->IsOnline())
                 {
-                    GuiOverlayRequestWire lWire;
-                    lWire.mRequest.Construct("OnLostConn");
+                    GuiOverlayRequest lWire;
+                    lWire.Construct("OnLostConn");
                     mpStateInterface->OutputGuiEvent(lWire);
 
                     PostOnlineScreenAdvance(mpStateInterface);

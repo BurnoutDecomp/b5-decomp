@@ -149,15 +149,6 @@ namespace BrnGui
         // <pad>, the 288-byte request }, channel 40, 304 bytes (identical shape to
         // BrnInGame.cpp's / BrnCarSelectMain_wG_02.cpp's; the payload is 8-aligned, so the
         // payload-offset word is 16, not 12).
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1); ShowSettingsScreen posts
         // it with the flag clear. Same wire view as BrnOnlineGameRoomPlayerInfo_wH_07.cpp.
@@ -177,7 +168,7 @@ namespace BrnGui
         static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
         static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide hud record is 16 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate crashnav record is 20 bytes");
     }
 
@@ -313,8 +304,8 @@ namespace BrnGui
             case KI_ACTION_BACK:
                 if (mbSettingsChanged)
                 {
-                    GuiOverlayRequestWire lWire;
-                    lWire.mRequest.Construct(KAC_OVERLAY_CANCEL_CONFIRM);
+                    GuiOverlayRequest lWire;
+                    lWire.Construct(KAC_OVERLAY_CANCEL_CONFIRM);
 
                     mpStateInterface->OutputGuiEvent(lWire);
                 }

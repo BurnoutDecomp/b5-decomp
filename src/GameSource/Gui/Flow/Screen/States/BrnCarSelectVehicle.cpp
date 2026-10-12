@@ -85,13 +85,7 @@ namespace BrnGui
 
         // The 304-byte overlay/ticker request OnEnter posts for the "DwnldTitleUp" title
         // ticker: { 288, 184, 16, <pad>, the 288-byte request }, channel 40. Identical
-        // shape to BrnCarSelectMain_wG_02.cpp's GuiOverlayRequestWire.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                 {}
-        };
+        // shape to BrnCarSelectMain_wG_02.cpp's GuiOverlayRequest.
 
         // The one-shot activate-car-select record Update posts on its first frame:
         // { 8, 192, 12, u32 action, u32 carSelectType }, channel 40, 20 bytes.
@@ -310,10 +304,10 @@ namespace BrnGui
 
         if (!mbTitleTickerPosted)
         {
-            GuiOverlayRequestWire lTitleTicker;
+            GuiOverlayRequest lTitleTicker;
             // The X360 zero-fills the 288-byte payload and writes only its leading id word.
-            std::memset(&lTitleTicker.mRequest, 0, sizeof(lTitleTicker.mRequest));
-            *reinterpret_cast<CgsID*>(&lTitleTicker.mRequest) = CgsIDCompress("DwnldTitleUp");
+            std::memset(&lTitleTicker, 0, sizeof(lTitleTicker));
+            lTitleTicker.mOverlayID = CgsIDCompress("DwnldTitleUp");
 
             mpStateInterface->OutputGuiEvent(lTitleTicker);
             mbTitleTickerPosted = true;

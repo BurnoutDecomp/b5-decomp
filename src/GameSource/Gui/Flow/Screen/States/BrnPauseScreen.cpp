@@ -95,12 +95,7 @@ namespace
 
     // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record (@0x82476E98):
     // { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes (BrnInGame.cpp's wire twin).
-    struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-    {
-        GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
 
-        GuiOverlayWaitFinishWire()  {}
-    };
 }
 
 // ---- statics (the DWARF cpp:26-51 block; values read from the decrypted XEX) ----------
@@ -152,8 +147,8 @@ void PauseScreen::OnEnter()
     mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
     // The 24-byte 188 record: hold the flow until the leaving-game overlay fully hides.
-    GuiOverlayWaitFinishWire lWaitFinish;
-    lWaitFinish.mRequest.Construct("CNOnlLvgGame");
+    GuiOverlayWaitFinishRequest lWaitFinish;
+    lWaitFinish.Construct("CNOnlLvgGame");
     mpStateInterface->OutputGuiEvent(lWaitFinish);
 
     mPauseOptions.Construct(KAC_OPTION_CPT_NAME_BASE, mpStateInterface, 1, 0, -1);

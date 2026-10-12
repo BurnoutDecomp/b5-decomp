@@ -156,15 +156,7 @@ namespace BrnGui
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes -- the same
         // record BrnInGame.cpp's PostOverlayRequest builds. The two header words are HOST
         // expressions (sizeof / the 16-aligned payload offset), not the console immediates.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
 
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
     }
 
     // ---- PerformPauseOption @0x824A5F70 -------------------------------------------
@@ -324,8 +316,8 @@ namespace BrnGui
         // The X360 constructs the request into a scratch stack slot and memcpy's the 288
         // bytes into the wire record (the inlined OutputGuiEvent<GuiOverlayRequest> copy);
         // constructed in place here, the same way BrnInGame.cpp posts its overlays.
-        GuiOverlayRequestWire lWire;
-        lWire.mRequest.Construct(lpacOverlayId);
+        GuiOverlayRequest lWire;
+        lWire.Construct(lpacOverlayId);
 
         mpStateInterface->OutputGuiEvent(lWire);   // X360 record size 304
 

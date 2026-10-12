@@ -68,12 +68,6 @@ namespace
     };
 
     // OutputGuiEvent<GuiOverlayRequest>: { 288, 184, 16, <pad>, request }, 304 bytes.
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-    {
-        GuiOverlayRequest mRequest;   // +0x10
-        GuiOverlayRequestWire()
-             {}
-    };
 
     void PostClearScreen(CgsGui::StateInterface* lpStateInterface, s32 liChannel,
                          CgsGui::GuiEventClearScreenSet::EClearScreen leClearScreen)
@@ -134,8 +128,8 @@ void ReplayOptions::OnEnter()
     // Back from an export: confirm it.
     if (mpGuiCache->mbReplayExporting)
     {
-        GuiOverlayRequestWire lOverlay;
-        lOverlay.mRequest.Construct("ReplayExOK");
+        GuiOverlayRequest lOverlay;
+        lOverlay.Construct("ReplayExOK");
         PostOut(mpStateInterface, lOverlay);
         mpGuiCache->mbReplayExporting = false;
     }

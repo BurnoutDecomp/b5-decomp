@@ -82,17 +82,8 @@ namespace BrnGui
 
         // ---- out-queue wire records ------------------------------------------------------
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
 
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
-
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
     }
 
     // ================================================================================
@@ -258,8 +249,8 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 if (mpGuiCache->IsOnline())
                 {
-                    GuiOverlayRequestWire lLostConnectionOverlay;
-                    lLostConnectionOverlay.mRequest.Construct(KAC_LOST_CONNECTION_OVERLAY_ID);
+                    GuiOverlayRequest lLostConnectionOverlay;
+                    lLostConnectionOverlay.Construct(KAC_LOST_CONNECTION_OVERLAY_ID);
                     mpStateInterface->OutputGuiEvent(lLostConnectionOverlay);
                 }
                 break;

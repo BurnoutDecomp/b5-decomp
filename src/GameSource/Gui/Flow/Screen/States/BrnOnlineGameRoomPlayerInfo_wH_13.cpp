@@ -41,12 +41,9 @@
 //                                                   channel 40, 304 bytes
 //   OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> @0x82436890 -> { 100, 457, 12, payload },
 //                                                   channel 40, 112 bytes
-// The committed CgsGuiStateInterface.h OutputGuiEvent template posts the bare payload
-// under channel == GetEventType() instead, which is NOT that record, so each site below
-// builds the attested record and posts it through GetOutputEventQueue()->AddEvent() --
-// the accommodation BrnCarSelectMain_wG_02.cpp and BrnOnlineGameRoomPlayerInfo_wH_08.cpp
-// already make. Every size word is a HOST sizeof expression, never the console's baked
-// 0x120 / 0x130 / 0x64 / 0x70 immediates.
+// The typed CgsGuiStateInterface.h OutputGuiEvent template builds the attested wrapper
+// record directly from each payload. Every size word is a HOST sizeof expression, never
+// the console's baked 0x120 / 0x130 / 0x64 / 0x70 immediates.
 //
 // HEADER CLASH. BrnGuiEventTypeDefs.h (pulled in by the class header via BrnGuiCache.h,
 // and needed here for GuiOverlayRequest / GuiAudioTriggerEvent) hard-collides with
@@ -113,17 +110,8 @@ namespace BrnGui
         // The record OutputGuiEvent<BrnGui::GuiOverlayRequest> @0x82436BE0 builds:
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes. The
         // payload is 8-aligned on the console, so its offset word is 16 rather than 12.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
 
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
-
-        // The record OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> @0x82436890 builds:
+// The record OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> @0x82436890 builds:
         // { 100, 457, 12, the 100-byte payload }, channel 40, 112 bytes. The committed PC
         // GuiAudioTriggerEvent already carries that 12-byte queue header in front of its
         // 100-byte payload, so the event object IS the record -- but its GuiEvent<201>
@@ -187,7 +175,7 @@ namespace BrnGui
         // Record-size pins. Every one of these payloads is pointer-free, so the X360's
         // AddEvent size immediate must survive unchanged on the x64 host; if a host layout
         // ever drifts, this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(GuiAudioTriggerWire) == 100, "audio trigger record is 112 bytes");
         static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
         static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
@@ -205,8 +193,8 @@ namespace BrnGui
         // The X360 constructs the request in a scratch stack slot and memcpy's it into the
         // record (the inlined OutputGuiEvent<GuiOverlayRequest> copy); constructed in
         // place here.
-        GuiOverlayRequestWire lWire;
-        lWire.mRequest.Construct(KAC_OVERLAY_LAUNCH_QUESTION);
+        GuiOverlayRequest lWire;
+        lWire.Construct(KAC_OVERLAY_LAUNCH_QUESTION);
 
         mpStateInterface->OutputGuiEvent(lWire);
     }
@@ -244,8 +232,8 @@ namespace BrnGui
             return;
         }
 
-        GuiOverlayRequestWire lWire;
-        lWire.mRequest.Construct(lpcOverlayId);
+        GuiOverlayRequest lWire;
+        lWire.Construct(lpcOverlayId);
 
         mpStateInterface->OutputGuiEvent(lWire);
     }
@@ -315,8 +303,8 @@ namespace BrnGui
         {
             if (lpOverlayCompleteEvent->miLeaveMethod == KI_LEAVE_METHOD_CONFIRMED)
             {
-                GuiOverlayRequestWire lWire;
-                lWire.mRequest.Construct(KAC_OVERLAY_LEAVING_GAME);
+                GuiOverlayRequest lWire;
+                lWire.Construct(KAC_OVERLAY_LEAVING_GAME);
                 mpStateInterface->OutputGuiEvent(lWire);
 
                 GuiEventLeaveOnlineGameWire lLeaveGame;

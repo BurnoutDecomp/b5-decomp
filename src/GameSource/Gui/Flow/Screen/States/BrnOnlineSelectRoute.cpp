@@ -25,12 +25,7 @@ namespace
 
     // The overlay request as the out-queue carries it: the GuiEvent<184> header sized to the
     // request, a pad word, then the request itself (304 bytes on the console).
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-    {
-        GuiOverlayRequest mRequest;   // +0x10
-        GuiOverlayRequestWire()
-             {}
-    };
+
 }
 
     // the route screen and the shared online frame.
@@ -62,10 +57,10 @@ namespace
         mpStateInterface->GetLanguageManager()->FormatAndAddText(
             "ONLINE_ROUTE_MINIMUM_DISTANCE", lacDistance, CgsLanguage::LanguageManager::E_FORMAT_SMALL_DISTANCE);
 
-        GuiOverlayRequestWire lWire;
-        lWire.mRequest.Construct("OnRouteShort");
-        lWire.mRequest.AddMessageParam(2, "ONLINE_ROUTE_DISTANCE");
-        lWire.mRequest.AddMessageParam(2, "ONLINE_ROUTE_MINIMUM_DISTANCE");
+        GuiOverlayRequest lWire;
+        lWire.Construct("OnRouteShort");
+        lWire.AddMessageParam(2, "ONLINE_ROUTE_DISTANCE");
+        lWire.AddMessageParam(2, "ONLINE_ROUTE_MINIMUM_DISTANCE");
         mpStateInterface->OutputGuiEvent(lWire);
     }
 }

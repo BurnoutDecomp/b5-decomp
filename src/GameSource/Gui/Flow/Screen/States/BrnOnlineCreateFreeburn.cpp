@@ -13,9 +13,8 @@
 //   HandleInGameFailedEvent        GUI 51: back out
 //   HandleControllerInput          the screen takes no input (only the null-event assert)
 //
-// Out-queue records are the console's own wire records, posted on channel 40 through
-// GetOutputEventQueue()->AddEvent with host sizeof sizes (the committed OutputGuiEvent
-// template does not use channel 40; see CgsGuiStateInterface.h). The sat-nav record goes
+// Out-queue records use the channel-40 GuiEventWrapper path with host sizeof sizes
+// (CgsGuiStateInterface.h). The sat-nav record goes
 // through OutputViewState / OutputInternalState, which build the console's wrapped records.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.h"
@@ -91,27 +90,8 @@ namespace BrnGui
         typedef CgsGui::GuiEventWrapper<GuiEventNetworkCreateGame, 40> GuiEventNetworkCreateGameWire;
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;   // +0x10
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-            explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                
-            {
-                mRequest.Construct(lpcOverlayName);
-            }
-        };
 
         // { 1, 533, 12, <one byte> }, channel 40, 16 bytes -- the record the screens post
         // when they hand the front end back. The console never writes the payload byte.
@@ -138,8 +118,8 @@ namespace BrnGui
 
         static_assert(sizeof(GuiEventNetworkCreateGame) == 480, "create-game payload is 480 bytes");
         static_assert(sizeof(GuiEventNetworkCreateGameWire) == 492, "create-game record is 492 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "wait-finish record is 24 bytes");
         static_assert(sizeof(GuiEvent533Wire) == 16, "id-533 record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
         static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
@@ -272,8 +252,8 @@ namespace BrnGui
                 BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "post 256 mode=%d ranked=%d",
                                             lCreateGame.meGameMode, lCreateGame.mbRanked ? 1 : 0);
 
-                GuiOverlayRequestWire lEnterGameOverlay;
-                lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
+                GuiOverlayRequest lEnterGameOverlay;
+                lEnterGameOverlay.Construct(KAC_ENTER_GAME_OVERLAY_ID);
                 mpStateInterface->OutputGuiEvent(lEnterGameOverlay);
 
                 meSubState = E_SUBSTATE_WAIT_IN_GAME;
@@ -338,7 +318,8 @@ namespace BrnGui
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent");
         CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
 
-        const GuiOverlayWaitFinishWire lWaitEnterGame(KAC_ENTER_GAME_OVERLAY_ID);
+        GuiOverlayWaitFinishRequest lWaitEnterGame;
+        lWaitEnterGame.Construct(KAC_ENTER_GAME_OVERLAY_ID);
         mpStateInterface->OutputGuiEvent(lWaitEnterGame);
 
         BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "in game (GUI 50) -> ADVANCE");

@@ -117,26 +117,8 @@ namespace BrnGui
 
         // ---- out-queue wire records -------------------------------------------------
         // { 288, 184, 16, <pad>, the 288-byte request }, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;
-
-            GuiOverlayRequestWire()
-                
-            {
-            }
-        };
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;
-
-            GuiOverlayWaitFinishWire()
-                
-            {
-            }
-        };
 
         // The audio trigger's wire payload (the 100-byte body under id 457; see
         // BrnOnlineGameRoomPlayerInfo_wN3_02.cpp for why it is re-boxed).
@@ -149,22 +131,20 @@ namespace BrnGui
             s32 GetEventType() const { return 457; }
         };
 
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "overlay wait-finish record is 24 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304, "overlay request record is 304 bytes");
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24, "overlay wait-finish record is 24 bytes");
         static_assert(sizeof(GuiAudioTriggerPayload457) == 100, "audio trigger payload is 100 bytes");
         static_assert(sizeof(GuiEventScoreboardRequestGamercardEvent) == 28, "gamercard record is 28 bytes");
 
-        void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, GuiOverlayRequestWire& lrWire)
+        void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, GuiOverlayRequest& lrRequest)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrWire)));
+            lpStateInterface->OutputGuiEvent(lrRequest);
         }
 
         void PostOverlayWaitFinish(CgsGui::StateInterface* lpStateInterface, const char* lpacOverlayName)
         {
-            GuiOverlayWaitFinishWire lWaitFinish;
-            lWaitFinish.mRequest.Construct(lpacOverlayName);
+            GuiOverlayWaitFinishRequest lWaitFinish;
+            lWaitFinish.Construct(lpacOverlayName);
             lpStateInterface->OutputGuiEvent(lWaitFinish);
         }
 
@@ -218,10 +198,10 @@ namespace BrnGui
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-        GuiOverlayRequestWire lWire;
+        GuiOverlayRequest lWire;
         if (mpGuiCache != 0 && mpGuiCache->IsLocalPlayerHost())
         {
-            lWire.mRequest.Construct(KAC_OVERLAY_HOST_LAUNCHING);
+            lWire.Construct(KAC_OVERLAY_HOST_LAUNCHING);
         }
         else
         {
@@ -229,12 +209,12 @@ namespace BrnGui
                 mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
             CGS_ASSERT(lpPlayerStatusData != 0, "lpPlayerStatusData");
 
-            lWire.mRequest.Construct(KAC_OVERLAY_PEER_LAUNCHING);
-            lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,
+            lWire.Construct(KAC_OVERLAY_PEER_LAUNCHING);
+            lWire.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,
                                            lpPlayerStatusData->mPlayerName.GetPlayerName());
         }
 
-        lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_GAME_MODE,
+        lWire.AddMessageParam(KU_LAUNCH_PARAM_GAME_MODE,
                                        KPAC_MODE_STRINGS[lpLaunchingEvent->meGameMode]);
 
         PostOverlayRequest(mpStateInterface, lWire);
@@ -262,8 +242,8 @@ namespace BrnGui
             static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType));
         CGS_ASSERT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL");
 
-        GuiOverlayRequestWire lWire;
-        lWire.mRequest.Construct(lpcSplashScreenID);
+        GuiOverlayRequest lWire;
+        lWire.Construct(lpcSplashScreenID);
         PostOverlayRequest(mpStateInterface, lWire);
 
         mbShowSplashScreen = false;

@@ -199,14 +199,9 @@ namespace BrnGui
             explicit GuiShowHideHudWire(bool lbShow) : mu8Show(lbShow ? 1 : 0) {}
         };
 
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;
-        };
-
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiShowHideHudWire, KI_CHANNEL_GUI_OUT>) == 16,
                       "show/hide hud record is 16 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequestWire, KI_CHANNEL_GUI_OUT>) == 304,
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, KI_CHANNEL_GUI_OUT>) == 304,
                       "overlay request record is 304 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventActivateCrashNav, KI_CHANNEL_GUI_OUT>) == 20,
                       "activate-crashnav record is 20 bytes");
@@ -252,8 +247,8 @@ namespace BrnGui
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, const char* lpcOverlayId)
         {
-            GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(lpcOverlayId);
+            GuiOverlayRequest lWire;
+            lWire.Construct(lpcOverlayId);
             PostRecord(lpStateInterface, lWire);
         }
 

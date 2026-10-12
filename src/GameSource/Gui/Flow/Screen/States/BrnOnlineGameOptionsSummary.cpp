@@ -186,22 +186,8 @@ namespace BrnGui
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
-        {
-            GuiOverlayRequest mRequest;
-        };
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
-
-            explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                
-            {
-                mRequest.Construct(lpcOverlayName);
-            }
-        };
 
         typedef CgsGui::GuiEventWrapper<GuiEventNetworkCreateGame, 40> GuiEventNetworkCreateGameWire;
         typedef CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, 40> GuiEventNetworkGameParamsWire;
@@ -215,9 +201,9 @@ namespace BrnGui
                       "autosave record is 16 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40>) == 112,
                       "audio trigger record is 112 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequestWire, 40>) == 304,
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayRequest, 40>) == 304,
                       "overlay request record is 304 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishWire, 40>) == 24,
+        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, 40>) == 24,
                       "wait-finish record is 24 bytes");
         static_assert(sizeof(GuiEventNetworkCreateGameWire) == 492, "create-game record is 492 bytes");
         static_assert(sizeof(GuiEventNetworkGameParamsWire) == 492, "game-params record is 492 bytes");
@@ -604,8 +590,8 @@ namespace BrnGui
             lCreateGame.SetFromGameParams(lpParams);
             PostWire(mpStateInterface, GuiEventNetworkCreateGameWire(lCreateGame));
 
-            GuiOverlayRequestWire lEnterGameOverlay;
-            lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
+            GuiOverlayRequest lEnterGameOverlay;
+            lEnterGameOverlay.Construct(KAC_ENTER_GAME_OVERLAY_ID);
             PostPayload(mpStateInterface, lEnterGameOverlay);
         }
         else
@@ -646,7 +632,9 @@ namespace BrnGui
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
         CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
 
-        PostPayload(mpStateInterface, GuiOverlayWaitFinishWire(KAC_ENTER_GAME_OVERLAY_ID));
+        GuiOverlayWaitFinishRequest lWaitFinish;
+        lWaitFinish.Construct(KAC_ENTER_GAME_OVERLAY_ID);
+        PostPayload(mpStateInterface, lWaitFinish);
         SendStateEvent(KAC_ADVANCE_EVENT);
         PostPayload(mpStateInterface, GuiCommandWire16<175>());
     }
@@ -823,8 +811,8 @@ namespace BrnGui
         case E_GAMEINPUTACTIONS_GUI_SELECT:
             if (liHighlightedSlot < lpProfile->GetNumCreatedOnlineGameOptions())
             {
-                GuiOverlayRequestWire lOverwriteQuestion;
-                lOverwriteQuestion.mRequest.Construct(KAC_OVERWRITE_QUESTION_OVERLAY_ID);
+                GuiOverlayRequest lOverwriteQuestion;
+                lOverwriteQuestion.Construct(KAC_OVERWRITE_QUESTION_OVERLAY_ID);
                 PostPayload(mpStateInterface, lOverwriteQuestion);
             }
             else

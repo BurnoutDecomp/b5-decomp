@@ -79,25 +79,14 @@ namespace BrnGui
         // publishes 24 bytes on channel 40. Same wire the wave-H game-room screen posts
         // (BrnOnlineGameRoomPlayerInfo_wH_00.cpp), re-declared here because the two screens
         // are separate translation units.
-        typedef CgsGui::GuiEvent<188> OverlayWaitFinishHeader;
-        struct GuiOverlayWaitFinishWire : public OverlayWaitFinishHeader
-        {
-            u32                         muPad0C;    // +0x0C (payload alignment pad)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
-
-            GuiOverlayWaitFinishWire()
-                :  muPad0C(0)
-            {
-            }
-        };
 
         // Publish the id-188 record for one overlay name -- Construct the request straight
         // onto the wire record, then queue it (the X360 does exactly this inline).
         void PostOverlayWaitFinish(CgsGui::StateInterface* lpStateInterface,
                                    const char* lpacOverlayName)
         {
-            GuiOverlayWaitFinishWire lWaitFinish;
-            lWaitFinish.mRequest.Construct(lpacOverlayName);
+            GuiOverlayWaitFinishRequest lWaitFinish;
+            lWaitFinish.Construct(lpacOverlayName);
             lpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
                 static_cast<s32>(sizeof(lWaitFinish)));   // X360 record size 24
