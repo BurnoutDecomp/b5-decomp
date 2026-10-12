@@ -42,13 +42,14 @@ namespace CgsResource
 
     // The option tables are filled from the shared mode-name tables: the type-list modes in the
     // order Detailed, Summary, Raw; the sort and render modes in enum order and
-    // closed by a {0, null} row. The type-mode table has exactly three entries;
-    // its shared option-reader termination remains an open source edge.
+    // closed by a {0, null} row. ARTIST's three type-mode rows terminate through
+    // the adjacent zero at +0x5260; the widened native table owns an end row.
     // The original window table holds the four embedded pool
     // windows; the texture browser allocates its entries from the debug allocator.
     void DebugComponent::Construct(ResourceModule* lpResourceModule, const DebugComponentParams* lpParams)
     {
-        CgsDev::DebugComponent::Construct();
+        // ARTIST 828F6E40 calls the positively empty folded helper 8284CB38.
+        // Preserve its lack of active/link stores in this two-phase operation.
 
         mpResourceModule = lpResourceModule;
         mParams = *lpParams;
@@ -65,6 +66,7 @@ namespace CgsResource
         maTypeStringList[1].mpcName = KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_ARTIST];
         maTypeStringList[2].miValue = E_POOLTYPELISTMODE_RAW;
         maTypeStringList[2].mpcName = KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_RAW];
+        maTypeStringList[E_POOLTYPELISTMODE_COUNT] = {0, nullptr};
 
         miSortMode = E_DEBUGSORTMODE_NONE;
         for (s32 liMode = 0; liMode < E_DEBUGSORTMODE_COUNT; ++liMode)

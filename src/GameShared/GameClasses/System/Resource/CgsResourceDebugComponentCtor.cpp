@@ -15,8 +15,9 @@
 //   * stw  off_820CE014, 0x4DE8(this)   -- install an embedded debug sub-component's vtable (+0x4DE8)
 //
 // MODELLED HERE (semantic parity, NOT byte-matched): the component's own polymorphic construction
-// (the +0 vtable is compiler-emitted from this class's vtable) chains the CgsDev::DebugComponent
-// base, then the embedded DebugPoolTypeList member (mPoolTypeList at +0x480) is default-constructed
+// (the +0 vtable is compiler-emitted from this class's vtable) selects the Resource-only native
+// base constructor that leaves active/link data untouched, then the embedded DebugPoolTypeList
+// member (mPoolTypeList at +0x480) is default-constructed
 // -- which the X360 DebugPoolTypeList ctor seeds to its empty-but-initialised {0,1}-couple state.
 //
 // All five original windows are now named embedded objects. Their C++ construction
@@ -27,6 +28,7 @@ namespace CgsResource
 {
 
 DebugComponent::DebugComponent()
+    : CgsDev::DebugComponent(CgsDev::DebugComponent::ResourceConstructorTag{})
 {
     // Original by-value window and descriptor construction runs before this body.
 }

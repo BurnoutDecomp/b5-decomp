@@ -87,7 +87,9 @@ protected:
     CgsDev::DebugUI::StringList maStringList[130];
     ResourceModule*             mpResourceModule;          // console +0x523C
     s32                         miTypeListMode;            // EPoolTypeListMode
-    CgsDev::DebugUI::StringList maTypeStringList[3];
+    // Three visible modes plus the native null-name end row. ARTIST ends the
+    // three-row walk through the adjacent zero sort value at +0x5260.
+    CgsDev::DebugUI::StringList maTypeStringList[E_POOLTYPELISTMODE_COUNT + 1];
     s32                         miSortMode;                // EDebugSortMode
     CgsDev::DebugUI::StringList maSortModeStringList[8];
     s32                         miRenderMode;              // EDebugTextureRenderMode
