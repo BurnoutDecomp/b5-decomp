@@ -10,6 +10,8 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"       // Moment (owner identity + GetName)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"      // Behaviour::GetDebugParametersName / GetName
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"        // CollisionPolicy / CollisionPolicySharedInfo (the scene-query pair)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
 #include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
@@ -1041,12 +1043,28 @@ namespace Camera
             CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(luHelper),
                        "!mBehaviourNeedsPreparingFlags.IsBitSet(luCurrentHelperIndex)");  // .cpp:270
 
+            // ⚠️ REMAINING GATE: the independent behaviour-printer/ValidityAccount readout at
+            // 0x82251D00..0x82251EB0, which precedes the per-helper Update call on X360.
             if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(luHelper))
             {
                 mBehaviourHelperPool[lHelper].Update(lrSharedInfo);
             }
 
-            // ⚠️ GATE (3-debug): the per-behaviour debug readout (see the banner).
+            // ARTIST 0x82252170..0x82252234. The registered display-all flag draws each
+            // live helper camera's axes and name at Camera::mSubject (+0x40), whether or not
+            // this helper was updated in the current paused frame.
+            if (mbDebugDisplayAllCameras)
+            {
+                const BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
+                char lacDebugFullName[64];
+                lrHelper.GetDebugFullName(lacDebugFullName);
+
+                CgsDev::DebugInterface lDebugInterface;
+                const Camera& lrCamera = lrHelper.GetCamera();
+                lDebugInterface.Get2dRender().DrawAxis(lrCamera.GetTransform());
+                lDebugInterface.Get2dRender().DrawText(lrCamera.mSubject, lacDebugFullName,
+                                                       16.0f, 0xFFFFFFFFu);
+            }
         }
 
         // ⚠️ GATE (4): the attached tweaker's Update/Render tail (see the banner).
@@ -1107,9 +1125,8 @@ namespace Camera
     // Their one caller each: MainDirector::UpdateCameraBehavioursPreScene (0x82255834, straight
     // after UpdateAllBehaviours) and ::UpdateCameraBehavioursPostScene (0x8224FF30, before the
     // collision-pass behaviour update).
-    // ⚠️ GATE (debug): ProcessSceneQueryResults' per-helper debug readout (the helper's full name
-    //   + DrawAxis/DrawText under manager +0x163C4, 0x8221F748..0x8221F840) is not reproduced -- the
-    //   same debug-display gate UpdateAllBehaviours carries.
+    // The registered display-all flag is checked after the pause-filtered scene-query pass, just
+    // as in the X360 body: all active helper cameras still draw when paused.
     // Added 2026-09-25 (FX-DIRECTOR2).
     // ------------------------------------------------------------------------
     void BehaviourManager::GenerateSceneQueries(bool lbPaused, const CollisionPolicySharedInfo& lrSharedInfo,
@@ -1135,6 +1152,21 @@ namespace Camera
             const BehaviourHelperIndex lHelper = mBehaviourHelperIndexArray[luEntry];
             if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(static_cast<u32>(static_cast<s32>(lHelper))))
                 mBehaviourHelperPool[lHelper].ProcessSceneQueryResults(lrSharedInfo);
+
+            // ARTIST 0x8221F748..0x8221F800. This display is outside the pause-filtered
+            // ProcessSceneQueryResults call and uses the same transform/subject pair as UpdateAllBehaviours.
+            if (mbDebugDisplayAllCameras)
+            {
+                const BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
+                char lacDebugFullName[64];
+                lrHelper.GetDebugFullName(lacDebugFullName);
+
+                CgsDev::DebugInterface lDebugInterface;
+                const Camera& lrCamera = lrHelper.GetCamera();
+                lDebugInterface.Get2dRender().DrawAxis(lrCamera.GetTransform());
+                lDebugInterface.Get2dRender().DrawText(lrCamera.mSubject, lacDebugFullName,
+                                                       16.0f, 0xFFFFFFFFu);
+            }
         }
     }
 
