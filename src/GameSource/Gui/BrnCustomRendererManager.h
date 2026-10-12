@@ -70,6 +70,7 @@ namespace CgsGraphics
 
 namespace BrnGui
 {
+struct SatNavDebugComponent;
 
 // BrnCustomRenderer.h:88 (DWARF) -- index of the manager's renderer-component array. The
 // order matches the construction order in Construct() and the component-pointer slots
@@ -134,6 +135,9 @@ public:
     virtual CustomRendererManager* SetReplaySerialiser(void* lpReplaySerialiser);      // 0x82445648
 
 private:
+    // The ARTIST SatNav debug callback updates the embedded slot-1 renderer directly.
+    friend struct SatNavDebugComponent;
+
     // RecvEvent's case-213 sub-routine (the SatNav/MainMap/CrashNav map-toggle path).
     void RecvEvent_Event213(const CgsModule::Event* lpEvent);
 
