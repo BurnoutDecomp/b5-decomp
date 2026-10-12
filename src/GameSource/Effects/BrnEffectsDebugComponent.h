@@ -127,6 +127,10 @@ namespace BrnEffects
         virtual void        OnActivate();
 
     private:
+        // HandleQADebugTests @0x82291700 reads mbQAEnabled directly (EffectsModule +0x2C34C,
+        // component +0x1C); retain the original owner access without adding a public method.
+        friend class EffectsModule;
+
         // Sub-menu builders called from OnActivate.
         void SetupLionMenu();   // X360 0x82278EC8
         void SetupBoostMenu();  // X360 0x82279010
