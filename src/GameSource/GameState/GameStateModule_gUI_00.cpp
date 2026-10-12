@@ -698,11 +698,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
                 SendSetUpAllDriveThrusMessage(mpOutputBuffer->GetGameActionQueue());
             }
         }
-        // [!] D3's DetectModeStarts carries a THIRD argument the console does not: the
-        // module's cached game timestep at +292284, whose producer (PreWorldUpdate's own
-        // timer leg) is not reconstructed -- see its declaration. Fed the same game-timer
-        // product every other leg in this function uses.
-        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer, lfGameTimestep);
+        // The original two-argument arm reads the sim latch set above.
+        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer);
 
         // â­ [D4] THE HARNESS START INJECTION (NOT IN THE X360 BINARY). Runs immediately after
         // DetectModeStarts, inside the same read-lock bracket, because it stands in for exactly

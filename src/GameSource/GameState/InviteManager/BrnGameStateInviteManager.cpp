@@ -47,6 +47,12 @@ namespace BrnGameState
         return &mGameEventQueue;
     }
 
+    // ARTIST PreWorldUpdate 823A5644..823A565C inlines the state != COUNT test.
+    bool GameStateInviteManager::IsInviteInProgress()
+    {
+        return meInviteState != E_INVITE_STATE_COUNT;
+    }
+
     // ------------------------------------------------------------------------
     // File-scope constants (DWARF BrnGameStateInviteManager.cpp:27-42).
     // ------------------------------------------------------------------------

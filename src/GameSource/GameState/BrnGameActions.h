@@ -122,6 +122,7 @@ enum EGameActionType
     E_ACTION_UNLOCKED_LIVERY_RESPONSE   = 183,   // debug info 175; size 72, case 82
     E_ACTION_CAR_SELECTION_RESPONSE     = 184,   // debug info 176; size 1072, case 88
     E_ACTION_SET_LOADING_STATE          = 191,   // debug info 183; size 1, ProcessStreamingCompleteEvent / FinishStreaming
+    E_ACTION_WAIT_FOR_STREAMING         = 192,   // ARTIST823A58F4; DecFIGS184 (+8), empty size1
     E_ACTION_ONLINE_PLAYER_REMOVED      = 220,   // DWARF 212 (+8 X360); size 8   BAND
     // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 221 -> 229, and this is
     // the FIFTH id of the same species as the four the closure round was chartered to settle. It
@@ -1077,6 +1078,11 @@ enum EGameActionType
 
 template <EGameActionType T>
 struct GameAction { };
+
+// DecFIGS BrnGameActions.h:3189. ARTIST 823A58F0..823A5900 copies the
+// empty record's one object-representation byte without assigning it a value.
+struct WaitForStreamingAction : public GameAction<E_ACTION_WAIT_FOR_STREAMING> {};
+static_assert(sizeof(WaitForStreamingAction) == 1, "empty streaming action is one byte");
 
 // ARTIST PreWorldUpdate @823A5328 publishes pointer/pointer/bool as action193.
 // DecFIGS BrnGameActions.h attests these field names and pointee qualifiers.
