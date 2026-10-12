@@ -31,13 +31,17 @@
 //   * HandlePrepareForModeAction() -- the event-entry push (PRE_INTRO + meEventType)
 //
 // DECLARATION-ONLY + FLAGGED (in the header): UpdateICE / UpdateAttribSys /
-// UpdateCameraBehaviours* / UpdateDebug* / ProcessNewVehicleEvents /
-// CalcTrafficLightSpace / DebugDisplayCurrentCamera.
+// UpdateCameraBehaviours* / ProcessNewVehicleEvents / CalcTrafficLightSpace.
+// UpdateDebugPrinters, UpdateDebugInfo, and DebugDisplayCurrentCamera are bodied below.
 // Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends on un-dumped
 // rodata.
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h" // Camera behavior debug names
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // Camera::CollisionPolicySharedInfo (the scene-query pair)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                  // BrnGui::GuiPFXHookEnumeration (the 501 record PostGuiUpdate consumes)
@@ -70,6 +74,7 @@
 #include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"   // JunctionLogicBox::GetNumLights / GetLight (CalcTrafficLightSpace)
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"         // ConsoleVpu::Dot3 -- vmsum3fp128, rule 1 (CalcTrafficLightSpace)
 
+#include <cmath>     // std::fmaf (the outlined camera-name position)
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 #include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
@@ -3420,6 +3425,99 @@ namespace BrnDirector
     //
     // DELETE-WHEN: per item above, as each aggregate is homed.
     // ------------------------------------------------------------------------
+    // X360 0x82208FC8. Rebuild the three director debug-printer layouts from the current
+    // screen Metrics. ARTIST writes the main printer at +0x337B0, then the behaviour and
+    // moment printers at +0x3378C and +0x33768; only the eight DebugPrinterInfo words are
+    // refreshed, so the independently registered mbEnabled flags remain untouched.
+    void MainDirector::UpdateDebugPrinters()
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        const CgsDev::DebugUI::Metrics& lrMetrics = lDebugInterface.GetUI().GetMetrics();
+
+        DebugPrinter::DebugPrinterInfo lInfo;
+        lInfo.mfSize           = 16.0f;
+        lInfo.mfLineSize       = 17.6f;
+        lInfo.mfX              = lrMetrics.mfScreenWidth * 0.1f;
+        lInfo.mfY              = lrMetrics.mfScreenHeight * 0.1f;
+        lInfo.muColour         = 0xFFFFFFFFu;
+        lInfo.muActiveColour   = 0xFF00FF00u;
+        lInfo.muInactiveColour = 0xFF0000FFu;
+        lInfo.mJustification   = CgsDev::DebugRender::E_JUSTIFY_LEFT;
+
+        reinterpret_cast<DebugPrinter*>(maDebugPrinterMain)->SetDebugPrinterInfo(lInfo);
+
+        const f32 lfOneThird = 1.0f / 3.0f;
+        lInfo.mfX = lrMetrics.mfScreenWidth * lfOneThird;
+        reinterpret_cast<DebugPrinter*>(maDebugPrinterB)->SetDebugPrinterInfo(lInfo);
+
+        lInfo.mfX = (lrMetrics.mfScreenWidth * 2.0f) * lfOneThird;
+        reinterpret_cast<DebugPrinter*>(maDebugPrinterA)->SetDebugPrinterInfo(lInfo);
+    }
+
+    // X360 0x82209128. Snapshot the finalized camera fields consumed by the Camera debug page.
+    // The DecFIGS declaration is void UpdateDebugInfo(const Camera&); the X360 prologue and
+    // field loads confirm this is the frame Camera, not the director IO bundle.
+    void MainDirector::UpdateDebugInfo(const Camera::Camera& lrCamera)
+    {
+        mCameraDebugInfo.mfAspectRatio = lrCamera.mfAspectRatio;
+        mCameraDebugInfo.mfFOV         = lrCamera.mfFOV;
+        mCameraDebugInfo.mfX           = lrCamera.mTransform.wAxis.x;
+        mCameraDebugInfo.mfY           = lrCamera.mTransform.wAxis.y;
+        mCameraDebugInfo.mfZ           = lrCamera.mTransform.wAxis.z;
+        mCameraDebugInfo.mfNearClip    = lrCamera.GetNearClipDistance();
+        mCameraDebugInfo.mAt           = lrCamera.mTransform.zAxis;
+    }
+
+    // X360 0x821F6740. Draw the current behavior name in the three-pass outlined style used
+    // by the original debug overlay. The first gate is Arbitrator+0x301 (MainDirector+0x130C1);
+    // the other two are the registered Show Debug Camera Names and Show All Camera Names flags.
+    void MainDirector::DebugDisplayCurrentCamera(const Camera::Camera& lrCamera)
+    {
+        if (!(mArbitrator.mbCycleNormalCamSelector && mbShowDebugCameraNames) && !mbShowAllCameraNames)
+        {
+            return;
+        }
+
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
+        const CgsDev::DebugUI::Metrics& lrMetrics = lDebugInterface.GetUI().GetMetrics();
+
+        char lacMessage[64];
+        const Camera::Behaviour* lpBehaviour = lrCamera.mpDebugInfoBehaviour;
+        if (lpBehaviour != 0)
+        {
+            const char* lpcDebugName = lpBehaviour->GetDebugParametersName();
+            if (lpcDebugName != 0)
+            {
+                CgsCore::SPrintf(lacMessage, sizeof(lacMessage), "%s", lpcDebugName);
+            }
+            else
+            {
+                CgsCore::SPrintf(lacMessage, sizeof(lacMessage), "%s", lpBehaviour->GetName());
+            }
+        }
+        else
+        {
+            CgsCore::SPrintf(lacMessage, sizeof(lacMessage), "Unknown");
+        }
+
+        const f32 lfX = std::fmaf(-0.1f, lrMetrics.mfScreenWidth, lrMetrics.mfScreenWidth);
+        const f32 lfY = lrMetrics.mfScreenHeight * 0.125f;
+        Vector2 lv2Position = { lfX, lfY, 0.0f, 0.0f };
+        lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                     16.0f, 0xFF000000u);
+
+        lv2Position.x = lfX + 2.0f;
+        lv2Position.y = lfY + 2.0f;
+        lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                     16.0f, 0xFF000000u);
+
+        lv2Position.x = lfX + 1.0f;
+        lv2Position.y = lfY + 1.0f;
+        lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                     16.0f, 0xFFFFFFFFu);
+    }
+
     void MainDirector::Update(const DirectorInputOutput* lpIO)
     {
         // The frame camera is a STACK local on the console too (v211) -- built fresh every
@@ -3436,7 +3534,8 @@ namespace BrnDirector
         }
         else
         {
-            // ⚠️ GATE: UpdateDebugPrinters / the debug byte / DebugLog::Print+Update.
+            UpdateDebugPrinters();
+            // ⚠️ GATE: the debug byte / DebugLog::Print+Update.
 
             // ⭐ @0x8224FD30 -- the pass that dispatches every live behaviour's Update. It is
             // REAL now (partially: see the body's FLAG list), which is what lets
@@ -3823,6 +3922,9 @@ namespace BrnDirector
                 ->GetSimTimerRequests()
                 ->SetTimestepMultiplier(lfClampedTimeScale);
         }
+
+        UpdateDebugInfo(lCamera);
+        DebugDisplayCurrentCamera(lCamera);
 
         // ⭐ X360 line 878 -- BehaviourManager::PrepareBehaviours(&mBehaviourManager,
         // lpIO->mpResourceManager). UNCONDITIONAL (outside the live-player-car branch above),
