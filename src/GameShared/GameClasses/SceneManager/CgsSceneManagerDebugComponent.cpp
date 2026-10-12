@@ -12,17 +12,11 @@
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"                                     // rw::collision::Volume
 #include "rw/rwcore_structs.h"                                                               // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                            // TransformPoint / operator*
+#include "pc/math/VmxFloat.h"
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
 #include <cmath>
 #include <cstring>
-
-// These are the exact 32-bit timer entry points used by the X360 function. The shared timer
-// header currently publishes GetSystemTimeMS; its implementation owns these two named wrappers.
-namespace CgsSystem
-{
-    u32 GetSystemTimerBaseTime();
-    u32 GetSystemTimerFrequency();
-}
 
 // CgsSceneManager::SceneManagerDebugComponent -- GetName, DrawPrimitives and the collision-volume
 // draw it drives.
@@ -196,7 +190,7 @@ namespace CgsSceneManager
         CgsGeometric::Triangle4::Mask4 lIntersectMask;
 
         CgsDev::PerfMonCpu::StartMonitor(siTriangleTestPerfMon);
-        const u32 luStartTime = CgsSystem::GetSystemTimerBaseTime();
+        const u64 luStartTime = CgsSystem::GetSystemTimerBaseTime64();
         for (s32 liTest = 0; liTest < miTestsToExecute; ++liTest)
         {
             lIntersectMask = CgsGeometric::IntersectTriangle4SweptSphere(
@@ -206,9 +200,9 @@ namespace CgsSceneManager
                 laContactNormals[2], laTriangleNormals[2], laSphereContactPoints[2], laTriangleContactPoints[2],
                 laContactNormals[3], laTriangleNormals[3], laSphereContactPoints[3], laTriangleContactPoints[3]);
         }
-        const u32 luElapsedTicks = CgsSystem::GetSystemTimerBaseTime() - luStartTime;
-        const u32 luTimerFrequency = CgsSystem::GetSystemTimerFrequency();
-        const u64 luElapsedScaled = static_cast<u64>(luElapsedTicks) * 3200000000ULL;
+        const u64 luElapsedTicks = CgsSystem::GetSystemTimerBaseTime64() - luStartTime;
+        const u64 luTimerFrequency = CgsSystem::GetSystemTimerFrequency64();
+        const u64 luElapsedScaled = luElapsedTicks * 3200000000ULL;
         const u64 luTotalCycles = luElapsedScaled / luTimerFrequency;
         miTotalCycles = static_cast<s32>(static_cast<u32>(luTotalCycles));
         miCyclesPerCall = miTotalCycles / miTestsToExecute;
@@ -226,7 +220,8 @@ namespace CgsSceneManager
 
         if (mbDrawPadding)
         {
-            lpRender->DrawSphere(lSphereWorldPosition, mfPadding,
+            lpRender->DrawSphere(lSphereWorldPosition,
+                CgsPC::VmxFloat::Add(lSpherePositionAndRadius.w, mfPadding),
                 rw::RGBA(0x00u, 0xFFu, 0xFFu, 0x63u)); // ARTIST r5 = 0x63FFFF00
         }
 
@@ -325,40 +320,28 @@ namespace CgsSceneManager
                                                           Vector3 lVertex0, Vector3 lVertex1,
                                                           Vector3 lVertex2, rw::RGBA lColour)
     {
-        const f32 lfEdge0X = lVertex0.x - lVertex1.x;
-        const f32 lfEdge0Y = lVertex0.y - lVertex1.y;
-        const f32 lfEdge0Z = lVertex0.z - lVertex1.z;
-        const f32 lfEdge1X = lVertex0.x - lVertex2.x;
-        const f32 lfEdge1Y = lVertex0.y - lVertex2.y;
-        const f32 lfEdge1Z = lVertex0.z - lVertex2.z;
-
-        f32 lfNormalX = lfEdge0Y * lfEdge1Z - lfEdge0Z * lfEdge1Y;
-        f32 lfNormalY = lfEdge0Z * lfEdge1X - lfEdge0X * lfEdge1Z;
-        f32 lfNormalZ = lfEdge0X * lfEdge1Y - lfEdge0Y * lfEdge1X;
-        const f32 lfInverseLength = 1.0f / std::sqrt(
-            lfNormalX * lfNormalX + lfNormalY * lfNormalY + lfNormalZ * lfNormalZ);
-        lfNormalX *= lfInverseLength;
-        lfNormalY *= lfInverseLength;
-        lfNormalZ *= lfInverseLength;
-
-        const f32 lfOffset = 0.04f;
-        lVertex0.x += lfNormalX * lfOffset;
-        lVertex0.y += lfNormalY * lfOffset;
-        lVertex0.z += lfNormalZ * lfOffset;
-        lVertex1.x += lfNormalX * lfOffset;
-        lVertex1.y += lfNormalY * lfOffset;
-        lVertex1.z += lfNormalZ * lfOffset;
-        lVertex2.x += lfNormalX * lfOffset;
-        lVertex2.y += lfNormalY * lfOffset;
-        lVertex2.z += lfNormalZ * lfOffset;
+        namespace vmx = CgsPC::VmxFloat;
+        const Vector3 lEdge0 = vmx::Subtract(lVertex0, lVertex1);
+        const Vector3 lEdge1 = vmx::Subtract(lVertex0, lVertex2);
+        // 828ABA84..94: rounded product, fused negative subtract, then YZXW.
+        const Vector3 lCross = {
+            vmx::NegativeMultiplySubtract(lEdge0.z, lEdge1.y, vmx::Multiply(lEdge0.y, lEdge1.z)),
+            vmx::NegativeMultiplySubtract(lEdge0.x, lEdge1.z, vmx::Multiply(lEdge0.z, lEdge1.x)),
+            vmx::NegativeMultiplySubtract(lEdge0.y, lEdge1.x, vmx::Multiply(lEdge0.x, lEdge1.y)),
+            vmx::NegativeMultiplySubtract(lEdge0.w, lEdge1.w, vmx::Multiply(lEdge0.w, lEdge1.w)) };
+        // This site has ONE unconditional refinement, unlike the two-step magnitudes.
+        const Vector3 lNormal = vmx::Normalize3Unconditional(lCross, 1);
+        lVertex0 = vmx::MultiplyAdd(lNormal, 0.04f, lVertex0);
+        lVertex1 = vmx::MultiplyAdd(lNormal, 0.04f, lVertex1);
+        lVertex2 = vmx::MultiplyAdd(lNormal, 0.04f, lVertex2);
 
         lpRender->DrawHollowTriangle(lVertex0, lVertex1, lVertex2,
             rw::RGBA(0xFFu, 0xFFu, 0xFFu, 0xFFu));
         lpRender->DrawSolidTriangle(lVertex0, lVertex1, lVertex2, lColour);
     }
 
-    // @ X360 0x828ABF48. Translate the three triangle corners by lTranslation. A hit draws a
-    // red filled outline; a miss draws white and marks both contact points with the target's
+    // @ X360 0x828ABF48. Translate the three triangle corners by lTranslation. A miss draws a
+    // blue filled outline; a hit draws white and marks both contact points with the target's
     // three 0.1-unit axis ticks.
     void SceneManagerDebugComponent::DrawTriangle(CgsDev::Debug3DImmediateRender* lpRender,
                                                     Vector3 lTranslation, Vector3 lVertex0,
@@ -380,7 +363,7 @@ namespace CgsSceneManager
         lVertex2.z += lTranslation.z;
         lVertex2.w += lTranslation.w;
 
-        if (lHitMask.GetBool())
+        if (!lHitMask.GetBool())
         {
             // The ARTIST immediate is 0xFFFF0000; RGBA packs (a<<24)|(b<<16)|(g<<8)|r.
             lpRender->DrawQuad(lVertex0, lVertex0, lVertex1, lVertex2,

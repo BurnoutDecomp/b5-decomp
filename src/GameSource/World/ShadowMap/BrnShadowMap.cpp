@@ -1,4 +1,5 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
+#include "pc/math/VmxFloat.h"
 #include "pc/gcm/renderengine/GraphicsSettings.h"
 #include "pc/gcm/renderengine/ShadowQuality.h"
 #include "pc/gcm/renderengine/shadows/SceneSettingsDebug.h"
@@ -1930,11 +1931,11 @@ namespace BrnWorld
         }
 
         // ARTIST DebugRender transforms the three +/-20 axis pairs, then a
-        // four-corner plane at sourceDepth + 0.01 through mLightToWorld. The
-        // 0.01f word is 0x3C23D70A at X360 0x82F30E28.
+        // four-corner plane through mLightToWorld. TSM uses local Z=0;
+        // bounding-box mode supplies its source depth plus 0.01f.
         void DrawShadowDebugMatrixGuides(CgsDev::DebugRender& lrRender,
                                          const Matrix44& lrLightToWorld,
-                                         f32 lfSourceDepth)
+                                         f32 lfPlaneZ)
         {
             const CgsDev::RGBA lAxisColour = static_cast<CgsDev::RGBA>(0xFF804040u);
             const CgsDev::RGBA lPlaneColour = static_cast<CgsDev::RGBA>(0xFF804080u);
@@ -1954,7 +1955,6 @@ namespace BrnWorld
                                   lAxisColour);
             }
 
-            const f32 lfPlaneZ = lfSourceDepth + 0.01f;
             const Vector4 KAA_PLANE_CORNERS[4] =
             {
                 { -1.0f, -1.0f, lfPlaneZ, -1.0f },
@@ -2903,8 +2903,8 @@ namespace BrnWorld
         const CgsDev::RGBA lGreen = static_cast<CgsDev::RGBA>(0xFF00FF00u);
         const CgsDev::RGBA lEyeColour = static_cast<CgsDev::RGBA>(0xFFFF0000u);
         const CgsDev::RGBA lMidPointColour = static_cast<CgsDev::RGBA>(0xFFFF00FFu);
-        const CgsDev::RGBA lSilhouetteAColour = static_cast<CgsDev::RGBA>(0xFF808000u);
-        const CgsDev::RGBA lSilhouetteBColour = static_cast<CgsDev::RGBA>(0xFF800080u);
+        const CgsDev::RGBA lSilhouetteColour = static_cast<CgsDev::RGBA>(0xFF808000u);
+        const CgsDev::RGBA lPerpendicularColour = static_cast<CgsDev::RGBA>(0xFF800080u);
         const ShadowMapType leDebugType = maShadowMapTypes[luIndex];
 
         if (leDebugType == E_SHADOWMAP_TYPE_TSM)
@@ -2937,13 +2937,18 @@ namespace BrnWorld
 
             lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mSilhouetteAWorld),
                              ToShadowDebugVector3(lrDebugInfo.mSilhouetteADirWorld),
-                             lSilhouetteAColour);
+                             lSilhouetteColour);
+            lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mMaxPointWorld),
+                             ToShadowDebugVector3(lrDebugInfo.mMaxPerpWorld),
+                             lPerpendicularColour);
             lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mSilhouetteBWorld),
                              ToShadowDebugVector3(lrDebugInfo.mSilhouetteBDirWorld),
-                             lSilhouetteBColour);
+                             lSilhouetteColour);
+            lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mMinPointWorld),
+                             ToShadowDebugVector3(lrDebugInfo.mMinPerpWorld),
+                             lPerpendicularColour);
 
-            DrawShadowDebugMatrixGuides(lRender, lrDebugInfo.mLightToWorld,
-                                        lrDebugInfo.mLightToWorld.zAxis.z);
+            DrawShadowDebugMatrixGuides(lRender, lrDebugInfo.mLightToWorld, 0.0f);
         }
         else if (leDebugType == E_SHADOWMAP_TYPE_BOUNDINGBOX)
         {
@@ -2976,14 +2981,14 @@ namespace BrnWorld
             {
                 lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mSideLineStart[luLine]),
                                  ToShadowDebugVector3(lrDebugInfo.mSideLineEnd[luLine]),
-                                 lSilhouetteAColour);
+                                 lSilhouetteColour);
                 lRender.DrawLine(ToShadowDebugVector3(lrDebugInfo.mBaseLineStart[luLine]),
                                  ToShadowDebugVector3(lrDebugInfo.mBaseLineEnd[luLine]),
-                                 lSilhouetteBColour);
+                                 lPerpendicularColour);
             }
 
             DrawShadowDebugMatrixGuides(lRender, lrDebugInfo.mLightToWorld,
-                                        lrDebugInfo.mZOffset.z);
+                                        CgsPC::VmxFloat::Add(lrDebugInfo.mZOffset.z, 0.01f));
 
             char lacAspectText[31];
             CgsCore::SPrintf(lacAspectText, 31, "AR : %.2f", lrDebugInfo.mfAspectRatio);

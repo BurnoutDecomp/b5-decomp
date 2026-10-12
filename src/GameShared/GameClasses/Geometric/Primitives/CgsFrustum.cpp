@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"
+#include "pc/math/VmxFloat.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::CameraRwFrustum (SetFromRwFrustum source)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -630,11 +631,9 @@ namespace CgsGeometric
                         }
 
                         const rw::collision::Plane& lrPlane = laPlanes[luOtherPlane];
-                        const f32 lfSignedDistance =
-                              (lrPlane.x * lIntersection.x
-                             + lrPlane.y * lIntersection.y)
-                             + lrPlane.z * lIntersection.z
-                             - lrPlane.w;
+                        const Vector3 lPlaneNormal = { lrPlane.x, lrPlane.y, lrPlane.z, 0.0f };
+                        const f32 lfSignedDistance = CgsPC::VmxFloat::Subtract(
+                            CgsPC::VmxFloat::Dot3(lPlaneNormal, lIntersection), lrPlane.w);
 
                         if (-0.001f > lfSignedDistance)
                         {
