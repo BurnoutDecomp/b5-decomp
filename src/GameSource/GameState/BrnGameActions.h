@@ -30,6 +30,7 @@
 
 namespace CgsNetwork { class NetworkTexture; }             // DXTDecodeImageAction (held by pointer only)
 namespace BrnNetwork { struct LocalEventScoreUploadData; }  // NonUploadedModeScoresAction (held by pointer only)
+namespace BrnProgression { class Profile; struct ProgressionData; }
 namespace BrnGameState { struct StreetManager; }             // RoadRulesChallengeScoresAction (held by pointer only)
 
 namespace BrnResource
@@ -561,6 +562,7 @@ enum EGameActionType
     //             KI_GAME_ACTION_PROP_SMASH_REPORT).
     //   DWARF     BrnGameActions.h:196 E_ACTION_LOAD_PROFILE == 186 and :201
     //             E_ACTION_PROP_SMASH_PROGRESSION == 191.
+    E_ACTION_PROGRESSION_PROFILE_DATA   = 193,   // ARTIST PreWorldUpdate; DWARF185 (+8), console payload12
     E_ACTION_LOAD_PROFILE               = 194,   // DWARF 186 (+8 X360); size 1    PINNED (producer + consumer)
     E_ACTION_PROP_SMASH_PROGRESSION     = 199,   // DWARF 191 (+8 X360); size 4 (a pointer on the console)
 
@@ -1075,6 +1077,18 @@ enum EGameActionType
 
 template <EGameActionType T>
 struct GameAction { };
+
+// ARTIST PreWorldUpdate @823A5328 publishes pointer/pointer/bool as action193.
+// DecFIGS BrnGameActions.h attests these field names and pointee qualifiers.
+// The queue must copy sizeof(the host record), rather than the console's12 bytes.
+struct ProgressionProfileDataAction : public GameAction<E_ACTION_PROGRESSION_PROFILE_DATA>
+{
+    BrnProgression::Profile* mpProgressionProfile;
+    const BrnProgression::ProgressionData* mpProgressionData;
+    bool mbAreRoadRulesAvailable;
+};
+static_assert(sizeof(ProgressionProfileDataAction) == (sizeof(void*) == 8 ? 24 : 12),
+              "profile-data action retains both native-width pointers and the availability byte");
 
 // DWARF BrnGameActions.h: empty action; ARTIST case42 posts size1.
 struct PlayerCrashEndingSoonAction : public GameAction<E_ACTION_PLAYER_CRASH_ENDING_SOON> {};

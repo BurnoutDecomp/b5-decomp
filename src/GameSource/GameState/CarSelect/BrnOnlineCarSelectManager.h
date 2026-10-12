@@ -88,7 +88,7 @@ struct OnlineCarSelectManager
     // const ControllerInput*, float32_t). The online timer event, timeout handoff,
     // state-specific car-change step and showability byte are all emitted here.
     void Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
-                const ControllerInput* lpControllerInput,
+                const GameStateModuleIO::ControllerInput* lpControllerInput,
                 f32 lfFrameDelta);
     void RequestChangeCar(GameStateModuleIO::GameActionQueue* lpActionQueue, const CgsID& lCardId);
     void SubmitFinalCarSelection(GameStateModuleIO::GameActionQueue* lpActionQueue);
