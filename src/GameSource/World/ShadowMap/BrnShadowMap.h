@@ -144,13 +144,10 @@ namespace BrnWorld
         bool                 GetRenderTrafficNearOnly() const;             // BrnShadowMap.h:153
         bool                 GetRenderPropsNearOnly() const;               // BrnShadowMap.h:156
 
-        // BrnShadowMap.h:161, X360 0x827C1BB8. Debug-render the shadow-map frustums/
-        // trapezoids/cameras for a given map index.
-        // FLAG (assert-trap body in the .cpp, 2026-07-27): a ~1650-line immediate-mode-
-        //   renderer VMX pipeline (line-list building from gTsmDebugRenderInfo /
-        //   gBoundingBoxDebugRenderInfo); the rules forbid paraphrasing it. Reached ONLY
-        //   when a per-map maTsmBBInfo[i].mbDebugRender debug toggle is set (Construct
-        //   defaults all three false), so the trap is dormant on the shipping path.
+        // BrnShadowMap.h:161, X360 0x827C1BB8. Publish the selected TSM or bounding-box
+        // cascade's original frustum, edge, axis, plane, and aspect-ratio debug draws.
+        // The per-map maTsmBBInfo[i].mbDebugRender setting gates the caller; Construct
+        // defaults all three false.
         void DebugRender(u32 luIndex) const;
 
         const CgsGeometric::Frustum& GetFrustum(u32 luIndex) const;        // BrnShadowMap.h:165
