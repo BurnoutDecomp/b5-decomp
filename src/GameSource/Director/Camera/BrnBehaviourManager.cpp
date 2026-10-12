@@ -1011,7 +1011,6 @@ namespace Camera
                                                DebugPrinter& lrDebugPrinter)
     {
         (void)lbArg;
-        (void)lrDebugPrinter;
         const auto& player = lrSharedInfo.mPlayerInfo.mRaceCarState;
         mTempCameraBoostResponder.Update(player.mfTimeBoosting > 0.0f && player.mfSpeedMPH > 100.0f,
             lrSharedInfo.mTimestep.Get(Timestep::E_WORLD));
@@ -1040,11 +1039,27 @@ namespace Camera
             const BehaviourHelperIndex lHelper = mBehaviourHelperIndexArray[luEntry];
             const u32 luHelper = static_cast<u32>(static_cast<s32>(lHelper));
 
+            // X360 0x82251D00..0x82251EB0. Print the helper's full name and 16-byte pool
+            // size in behaviour-debug-printer colors, then append its current validity reasons.
+            const BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
+            char lacDebugFullName[64];
+            const char* lpcDebugFullName = lrHelper.GetDebugFullName(lacDebugFullName);
+            char lacBehaviourDisplayName[64];
+            CgsCore::SPrintf(lacBehaviourDisplayName, sizeof(lacBehaviourDisplayName), "%s:%i",
+                             lpcDebugFullName, lrHelper.GetBehaviourSize());
+
+            const Behaviour* const lpBehaviour = lrHelper.GetBehaviour();
+            const bool lbActive = lpBehaviour->CanSwitchToMeNow() && !lpBehaviour->HasFailed() &&
+                                  lrHelper.GetCamera().GetState().IsFlagSet(CameraState::E_FLAG_VALID);
+            if (lbActive)
+                lrDebugPrinter.PrintActive(lacBehaviourDisplayName);
+            else
+                lrDebugPrinter.PrintInactive(lacBehaviourDisplayName);
+            lrHelper.GetCamera().GetValidityAccount().Print(lrDebugPrinter);
+
             CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(luHelper),
                        "!mBehaviourNeedsPreparingFlags.IsBitSet(luCurrentHelperIndex)");  // .cpp:270
 
-            // ⚠️ REMAINING GATE: the independent behaviour-printer/ValidityAccount readout at
-            // 0x82251D00..0x82251EB0, which precedes the per-helper Update call on X360.
             if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(luHelper))
             {
                 mBehaviourHelperPool[lHelper].Update(lrSharedInfo);
