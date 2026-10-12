@@ -11,6 +11,8 @@
 #include "SharedClasses/World/BrnEnvironmentDictionary.h"
 #include "SharedClasses/World/BrnEnvironmentUtil.h"
 
+#include "rw/math/vpu/vector3_operation.h"
+
 #include <cmath>
 
 namespace BrnWorld
@@ -23,6 +25,50 @@ namespace
     const f32 KF_SUN_ELEVATION_ZERO_SECONDS = 23400.0f;
     const f32 KF_RADIANS_PER_SECOND_OF_DAY = 0.000072722054f;
     const f32 KF_JUNKYARD_MAX_VERTICAL = 0.98900002f;
+
+    f32 JunkyardFlush(f32 lfValue)
+    {
+        return std::fpclassify(lfValue) == FP_SUBNORMAL
+            ? std::copysign(0.0f, lfValue) : lfValue;
+    }
+
+    f32 JunkyardMultiply(f32 lfA, f32 lfB)
+    {
+        return JunkyardFlush(JunkyardFlush(lfA) * JunkyardFlush(lfB));
+    }
+
+    f32 JunkyardMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+    {
+        return JunkyardFlush(std::fmaf(JunkyardFlush(lfA), JunkyardFlush(lfC), JunkyardFlush(lfB)));
+    }
+
+    f32 JunkyardNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+    {
+        const f32 lfDifference = JunkyardMultiplyAdd(lfA, lfC, -JunkyardFlush(lfB));
+        return lfDifference != lfDifference ? lfDifference : -lfDifference;
+    }
+
+    // ARTIST 827C7804..783C: both refinements run unconditionally and the
+    // resulting scale multiplies all four lanes. No zero-vector fallback.
+    // FLAG (numeric model): rounded rsqrt seed and canonical scalar dot3;
+    // hardware estimate bits, NaN payloads and floating status remain unverified.
+    Vector3 NormalizeJunkyardKeyLightDirection(Vector3 lDirection)
+    {
+        lDirection = {JunkyardFlush(lDirection.x), JunkyardFlush(lDirection.y),
+                      JunkyardFlush(lDirection.z), JunkyardFlush(lDirection.w)};
+        const f32 lfLengthSquared = JunkyardFlush(rw::math::vpu::MagnitudeSquared(lDirection));
+        f32 lfEstimate = JunkyardFlush(static_cast<f32>(
+            1.0 / std::sqrt(static_cast<double>(lfLengthSquared))));
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const f32 lfSquare = JunkyardMultiply(lfEstimate, lfEstimate);
+            const f32 lfHalf = JunkyardMultiply(lfEstimate, 0.5f);
+            const f32 lfResidual = JunkyardNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
+            lfEstimate = JunkyardMultiplyAdd(lfHalf, lfResidual, lfEstimate);
+        }
+        return {JunkyardMultiply(lDirection.x, lfEstimate), JunkyardMultiply(lDirection.y, lfEstimate),
+                JunkyardMultiply(lDirection.z, lfEstimate), JunkyardMultiply(lDirection.w, lfEstimate)};
+    }
 
     f32 ClockToSeconds(u32 luHours, u32 luMinutes, u32 luSeconds)
     {
@@ -226,8 +272,9 @@ void DebugComponent::DebugToManager()
     CloudsData& lrClouds = lrManager.mClouds;
 
     lrManager.mfTimeOfDay = ClockToSeconds(muTimeOfDay_HH, muTimeOfDay_MM, muTimeOfDay_SS);
-    lrManager.mfTimeOfDayDelta = lrManager.mfTimeOfDayDelta <= 0.0f
-                               ? -mfTimeOfDayDelta : mfTimeOfDayDelta;
+    // ARTIST branches only for a positive old delta; unordered values negate.
+    lrManager.mfTimeOfDayDelta = lrManager.mfTimeOfDayDelta > 0.0f
+                               ? mfTimeOfDayDelta : -mfTimeOfDayDelta;
     lrManager.mfCloudDelta = mfCloudDelta;
 
     lrScattering.mv3SkyTopColour[0] = mfSkyTopColour_r;
@@ -448,19 +495,13 @@ void DebugComponent::Update()
 
     if (mbOverrideJunkyardKeyLightDirection)
     {
-        const f32 lfX = mafJunkyardKeyLightDirection[0];
-        const f32 lfY = mafJunkyardKeyLightDirection[1];
-        const f32 lfZ = mafJunkyardKeyLightDirection[2];
-        const f32 lfInvLength = 1.0f / std::sqrt(lfX * lfX + lfY * lfY + lfZ * lfZ);
-
-        mpEnvironmentManager->mOverrideKeyLightDirection.x = lfX * lfInvLength;
-        mpEnvironmentManager->mOverrideKeyLightDirection.y = lfY * lfInvLength;
-        mpEnvironmentManager->mOverrideKeyLightDirection.z = lfZ * lfInvLength;
+        const Vector3 lDirection = {mafJunkyardKeyLightDirection[0], mafJunkyardKeyLightDirection[1],
+                                    mafJunkyardKeyLightDirection[2], 0.0f};
+        mpEnvironmentManager->mOverrideKeyLightDirection = NormalizeJunkyardKeyLightDirection(lDirection);
         if (mpEnvironmentManager->mOverrideKeyLightDirection.y > KF_JUNKYARD_MAX_VERTICAL)
             mpEnvironmentManager->mOverrideKeyLightDirection.y = KF_JUNKYARD_MAX_VERTICAL;
         if (mpEnvironmentManager->mOverrideKeyLightDirection.y < -KF_JUNKYARD_MAX_VERTICAL)
             mpEnvironmentManager->mOverrideKeyLightDirection.y = -KF_JUNKYARD_MAX_VERTICAL;
-        mpEnvironmentManager->mOverrideKeyLightDirection.w = 0.0f;
     }
 
     if (mbCalculateJunkyardKeyLightDirectionFromTime)
