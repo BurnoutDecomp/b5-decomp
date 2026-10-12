@@ -292,7 +292,7 @@ void OnlineCarSelectManager::StartWaitForOnline(GameStateModuleIO::GameActionQue
 // wait-for-online state on the original timeout gates, advance the one active car-change
 // state, then publish whether another car may be shown.
 void OnlineCarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
-                                   const ControllerInput* /*lpControllerInput*/,
+                                   const GameStateModuleIO::ControllerInput* /*lpControllerInput*/,
                                    f32 lfFrameDelta)
 {
     if (!mbIsInOnlineCarSelect)
