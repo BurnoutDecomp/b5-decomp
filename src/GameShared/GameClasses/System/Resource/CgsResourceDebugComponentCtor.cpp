@@ -19,20 +19,16 @@
 // base, then the embedded DebugPoolTypeList member (mPoolTypeList at +0x480) is default-constructed
 // -- which the X360 DebugPoolTypeList ctor seeds to its empty-but-initialised {0,1}-couple state.
 //
-// PARTIAL (flagged): the four sub-object vtable installs at +0x1C / +0x3F8 / +0x4D94 / +0x4DE8 and
-// the three {0,1} running-total seeds in the +0x3F8 sub-object belong to FURTHER embedded debug
-// sub-components whose own struct layouts are not modeled in this home. Reproducing those stores by
-// name would require committing those sub-components' types (a layout keystone); accessing them by
-// raw offset is forbidden, and fabricating their fields would be dishonest. They are documented
-// here and left to be store-reproduced when those sub-component types are reconstructed.
+// All five original windows are now named embedded objects. Their C++ construction
+// installs the corresponding vtables. DebugPoolHistogram::mSaved supplies the
+// three real {size=0,alignment=1} descriptor constructors. Window's own constructor
+// leaves its data untouched, as in this original store sequence.
 namespace CgsResource
 {
 
 DebugComponent::DebugComponent()
 {
-    // Base + embedded-member construction (vtable installs + mPoolTypeList seeding) run implicitly:
-    // the CgsDev::DebugComponent base ctor and the DebugPoolTypeList member ctor are invoked by the
-    // C++ object-construction sequence. No further by-name field stores are modelled (see header).
+    // Original by-value window and descriptor construction runs before this body.
 }
 
 }

@@ -33,17 +33,10 @@ namespace CgsDev
 {
     namespace DebugUI
     {
-        Window::Window()
-            : mpcCaption(0)
-            , mxFlags(KX_FLAGNORMAL)
-            , mfTransparency(0.0f)
-            , mfX(0.0f)
-            , mfY(0.0f)
-            , mfWidth(0.0f)
-            , mfHeight(0.0f)
-            , mpDebugLinkedListNext(0)
-        {
-        }
+        // ARTIST resource-window constructors827E08D0/827DF8E8 install
+        // their vtables without initializing Window's data. Prepare supplies
+        // the caption, flags, rectangle, transparency and list link later.
+        Window::Window() {}
 
         // X360 0x8282E4F0. Place the window (cascade unless KX_FLAGNOCASCADE), store the caption /
         // flags / size, clear the transparency and the list link, then widen the window to its

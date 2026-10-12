@@ -18,15 +18,19 @@ namespace CgsResource
 
     // The option tables are filled from the shared mode-name tables: the type-list modes in the
     // order Detailed, Summary, Raw; the sort and render modes in enum order, each closed by a
-    // {0, null} row. The console then points the window table at its four sub-windows and has the
-    // texture browser allocate its entry array from mParams.mpDebugAllocator; neither step has a
-    // counterpart here because those sub-windows are not members of this class (see the header).
+    // {0, null} row. The original window table holds the four embedded pool
+    // windows; the texture browser allocates its entries from the debug allocator.
     void DebugComponent::Construct(ResourceModule* lpResourceModule, const DebugComponentParams* lpParams)
     {
         CgsDev::DebugComponent::Construct();
 
         mpResourceModule = lpResourceModule;
         mParams = *lpParams;
+
+        mapWindows[0] = &mPoolWindow;
+        mapWindows[1] = &mPoolHistogram;
+        mapWindows[2] = &mPoolTypeList;
+        mapWindows[3] = &mPoolTextures;
 
         miTypeListMode = E_POOLTYPELISTMODE_ARTIST;
         maTypeStringList[0].miValue = E_POOLTYPELISTMODE_PROGRAMMER;
@@ -58,6 +62,7 @@ namespace CgsResource
         miStatsDumpCount        = 0;
         mbPoolShareTestVisible  = false;
         mbShowBundleLoaderQueue = false;
+        mPoolTextures.AllocateDebugMemory(mParams.mpDebugAllocator);
     }
 
     const char* DebugComponent::GetPath() const
