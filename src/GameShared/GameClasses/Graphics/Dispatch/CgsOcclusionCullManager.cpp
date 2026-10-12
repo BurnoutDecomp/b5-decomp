@@ -23,9 +23,22 @@ extern "C" void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* lpDevice,
                                                u32 luMinVertexIndex,
                                                u32 luNumVertices);
 
-// CgsOcclusionCullManager.cpp - the hardware-occlusion-query manager's per-mesh
-// conditional-render bracket and the trivial-accept path.
+extern "C"
+{
+    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice,
+                                   u32 luStreamNumber,
+                                   const void* lpStreamData,
+                                   u32 luOffsetInBytes,
+                                   u32 luStride,
+                                   u32 luFlags);
+    void D3DDevice_SetIndices(IDirect3DDevice9* lpDevice, void* lpIndexData);
+}
+
+// CgsOcclusionCullManager.cpp - the hardware-occlusion-query manager's query
+// bracket, conditional-render path, and trivial-accept handling.
 //
+//   BeginQueries                      @ 0x827F25F0
+//   EndQueries                        @ 0x827EDF50
 //   BeginMeshConditionalRender         @ 0x827E8F18
 //   EndMeshConditionalRender           @ 0x827E9020
 //   TrivialAcceptOccludeeBoundingBox   @ 0x827E9130
@@ -234,6 +247,49 @@ namespace CgsGraphics
                    "((uint32_t)mpQueryList->mpBoxToClipMatrices) % 128 == 0");
         CGS_ASSERT((reinterpret_cast<usize>(mpQueryList->mpuTrivialAcceptBits) & 0x7Fu) == 0u,
                    "((uint32_t)mpQueryList->mpuTrivialAcceptBits ) % 128 == 0");
+    }
+
+    // CgsGraphics::OcclusionCullManager::BeginQueries @ 0x827F25F0.
+    void OcclusionCullManager::BeginQueries()
+    {
+        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_NONE,
+                   "meOcclusionMode == OCCLUSIONMODE_NONE");
+        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+
+        miNextQueryIndex = 0;
+        miOccludeeIndex = 0;
+        meOcclusionMode = OCCLUSIONMODE_QUERY;
+
+        if (mbImmediateMode)
+        {
+            if (mbOcclusionCheapShader)
+                mpOccludeeIm3dZOnly->BeginRendering();
+            else
+                mpOccludeeIm3d->BeginRendering();
+            return;
+        }
+
+        mpOccludeeIm3dZOnly->BeginRendering();
+        shadow::Device::SetVertexDescriptor(
+            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
+        shadow::Device::FlushVertexProgramState();
+        D3DDevice_SetStreamSource(gpD3DDevice, 0u, mpVertexBuffer, 0u, 0u, 1u);
+        D3DDevice_SetIndices(gpD3DDevice, mpIndexBuffer);
+    }
+
+    // CgsGraphics::OcclusionCullManager::EndQueries @ 0x827EDF50.
+    void OcclusionCullManager::EndQueries()
+    {
+        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_QUERY,
+                   "meOcclusionMode == OCCLUSIONMODE_QUERY");
+        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+
+        meOcclusionMode = OCCLUSIONMODE_NONE;
+        if (mbImmediateMode && !mbOcclusionCheapShader)
+            mpOccludeeIm3d->EndRendering();
+        else
+            mpOccludeeIm3dZOnly->EndRendering();
+        shadow::Device::ResetShadowing();
     }
 
     // X360 0x827E91A8. When conditional rendering is enabled, the render mode

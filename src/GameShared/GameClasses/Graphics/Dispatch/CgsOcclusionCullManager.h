@@ -84,6 +84,8 @@ namespace CgsGraphics
                        Im3dZOnly* lpOccludeeIm3dZOnly,
                        rw::IResourceAllocator* lpAllocator,
                        u32 luQueryListSize);
+        void BeginQueries();
+        void EndQueries();
 
         // X360 0x827E8F18: assert RENDER mode + enabled + not already rendering a
         // mesh, mark rendering, then begin a predicated draw on the current
