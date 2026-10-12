@@ -81,8 +81,10 @@ namespace
     template <typename TWire>
     void PostOut(CgsGui::StateInterface* lpStateInterface, TWire& lrWire)
     {
+        CgsGui::GuiEventWrapper<TWire, 40> lOutputRecord(lrWire);
         lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lrWire, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lrWire)));
+            reinterpret_cast<const CgsModule::Event*>(&lOutputRecord), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lOutputRecord)));
     }
 }
 
