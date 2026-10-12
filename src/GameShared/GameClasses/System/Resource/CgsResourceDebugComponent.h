@@ -45,11 +45,16 @@ public:
     // Two-phase init: latch the owning module and the bring-up params, seed the type-list / sort /
     // render option tables and clear the dump and share-test flags.
     void Construct(ResourceModule* lpResourceModule, const DebugComponentParams* lpParams);
+    void Update() override;
 
 protected:
     void OnActivate() override;
     void InitWindows();
     void GenerateStringList();
+    void UpdatePoolMenuItems();
+    void UpdateWindows();
+    void ResetWindow(s32 liWindow, const Pool* lpPool);
+    void DumpStats();
     static void TriggerDefragCallback(void* lpData);
     static void IncTextureCallback(void* lpData);
     static void DecTextureCallback(void* lpData);

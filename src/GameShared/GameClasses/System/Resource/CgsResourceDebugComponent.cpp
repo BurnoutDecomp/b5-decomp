@@ -144,6 +144,82 @@ namespace CgsResource
         RegisterVariable(&mbShowBundleLoaderQueue, "Show bundle loader queue");
     }
 
+    // ARTIST828E38D0..828E3930, including its initial option-table refresh.
+    void DebugComponent::UpdatePoolMenuItems()
+    {
+        GenerateStringList();
+        PoolModule& lrPools = mpResourceModule->GetPoolModule();
+        for (s32 liWindow = 0; liWindow < KI_MAX_VISIBLE_POOLS; ++liWindow)
+        {
+            if (maiPoolIds[liWindow] != -1 && lrPools.GetPoolIndex(maiPoolIds[liWindow]) < 0)
+                maiPoolIds[liWindow] = -1;
+        }
+    }
+
+    // ARTIST828EE4C0: an out-of-range window selector returns without a reset.
+    void DebugComponent::ResetWindow(s32 liWindow, const Pool* lpPool)
+    {
+        switch (liWindow)
+        {
+        case 0:
+            mPoolWindow.Reset(lpPool);
+            break;
+        case 1:
+            mPoolHistogram.Reset(lpPool);
+            break;
+        case 2:
+            mPoolTypeList.Reset(lpPool, &mpResourceModule->GetPoolModule(),
+                                static_cast<EPoolTypeListMode>(miTypeListMode));
+            break;
+        case 3:
+            mPoolTextures.Reset(lpPool, mParams.mpTextureRenderCallback,
+                                mParams.mpTextureRenderUserData,
+                                static_cast<EDebugSortMode>(miSortMode),
+                                static_cast<EDebugTextureRenderMode>(miRenderMode));
+            break;
+        }
+    }
+
+    // ARTIST828F7178. Add a newly selected window before resetting it, and
+    // copy each current selector to its previous slot after handling changes.
+    void DebugComponent::UpdateWindows()
+    {
+        mPoolTypeList.SetMode(static_cast<EPoolTypeListMode>(miTypeListMode));
+        mPoolTextures.meSortMode = static_cast<EDebugSortMode>(miSortMode);
+        mPoolTextures.meRenderMode = static_cast<EDebugTextureRenderMode>(miRenderMode);
+        for (s32 liWindow = 0; liWindow < KI_MAX_VISIBLE_POOLS; ++liWindow)
+        {
+            if (maiPoolIds[liWindow] != maiPrevPoolIds[liWindow])
+            {
+                if (maiPoolIds[liWindow] == -1)
+                    GetUI().RemoveWindow(mapWindows[liWindow]);
+                else
+                {
+                    if (maiPrevPoolIds[liWindow] == -1)
+                        GetUI().AddWindow(mapWindows[liWindow]);
+                    PoolModule& lrPools = mpResourceModule->GetPoolModule();
+                    const s32 liPoolIndex = lrPools.GetPoolIndex(maiPoolIds[liWindow]);
+                    ResetWindow(liWindow, &lrPools.GetPoolByIndex(liPoolIndex));
+                }
+            }
+            maiPrevPoolIds[liWindow] = maiPoolIds[liWindow];
+        }
+    }
+
+    void DebugComponent::Update()
+    {
+        // ARTIST828FF00C calls the positively empty ICF body8284CB38.
+        UpdatePoolMenuItems();
+        UpdateWindows();
+        if (mbTriggerStatsDump)
+        {
+            mbTriggerStatsDump = false;
+            DumpStats();
+        }
+        if (mbPoolShareTestVisible)
+            UpdateShareTest();
+    }
+
     void DebugComponent::TriggerDefragCallback(void* /*lpData*/)
     {
         sbTriggerDefrag = true; //ARTIST828D9918; original latch, consumer unresolved
