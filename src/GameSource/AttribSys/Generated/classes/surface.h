@@ -52,6 +52,9 @@ namespace Gen
         // [FLAG PC bring-up, additive host helper] the resolved collection's key, so the
         // [skid-bind] probe can name WHICH surface collection each element resolved to.
         using Instance::GetCollection;
+        // ARTIST WorldEntityModule::GetSurface822BB1E4 changes this generated
+        // instance directly; private inheritance requires the original reexport.
+        using Instance::Change;
 
         // DecFIGS surface.h:89/:96; Breaker ReadSurfaceProperties addresses the
         // PhysicsSurface and GameplaySurface RefSpecs at layout +0x40/+0x58.

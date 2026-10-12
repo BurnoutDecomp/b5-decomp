@@ -103,6 +103,28 @@ static f32 GetMaximumScale( const Matrix44Affine& lrTransform )
     return VmxFloat::Magnitude3(lMaximum);
 }
 
+// ARTIST822BB150; DecFIGS BrnWorldEntityModule.h:632. The Surfaces element
+// is a 24-byte RefSpec; ld8 reads its full collection key, not the low word.
+void WorldEntityModule::GetSurface(u8 luSurfaceId, Attrib::Gen::surface* lpOutSurface) const
+{
+    if (lpOutSurface == nullptr)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpOutSurface != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\EntityModules/WorldEntityModule/BrnWorldEntityModule.h",
+            634);
+        CgsDev::Assert::EndAssert();
+    }
+    const Attrib::RefSpec* lpRef =
+        static_cast<const Attrib::RefSpec*>(mSurfaceList.Surfaces(luSurfaceId));
+    if (lpRef == nullptr)
+        lpRef = static_cast<const Attrib::RefSpec*>(Attrib::DefaultDataArea(0x18u));
+    Attrib::Collection* lpCollection = Attrib::FindCollectionWithDefault(
+        0x68428A3C7836CF50ull, lpRef->GetCollectionKey());
+    lpOutSurface->Change(lpCollection);
+}
+
 // =============================================================================
 // Construct  @ 0x82302398
 // =============================================================================

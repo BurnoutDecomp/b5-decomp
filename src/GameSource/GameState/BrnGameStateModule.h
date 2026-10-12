@@ -1177,7 +1177,13 @@ public:
     // X360 read at GameStateModule+0xAB70 (43888). The currently-loaded track's trigger data (the
     // landmark / generic-region table the teleport-location menu is built from). The X360 reaches
     // it through the embedded resource pointer at this offset; de-inlined to a named accessor.
-    BrnTrigger::TriggerData* GetTrackTriggerData();
+    // ARTIST8236C060..70: module+42320 (mTriggerQueryManager) +1568
+    // (its TriggerData ResourcePtr) is the same +0xAB70 read. This existing
+    // port accessor exposes the canonical typed owner to its read-only callers.
+    const BrnTrigger::TriggerData* GetTrackTriggerData() const
+    {
+        return mTriggerQueryManager.GetTriggerData();
+    }
 
     // X360 read at GameStateModule+0x3C090 (245904). The world district map (sampled to label each
     // teleport region with its county/district name).
