@@ -434,10 +434,10 @@ void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTextur
     const f32 lfBottom = (lrPosition.y + lrSize.y) * KF_LOGICAL_HEIGHT;
 
     const CgsGraphics::RGBA8 lColour = {
-        static_cast<u8>((luColour >> 24) & 0xFFu),
-        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>(luColour & 0xFFu),
         static_cast<u8>((luColour >> 8) & 0xFFu),
-        static_cast<u8>(luColour & 0xFFu)
+        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>((luColour >> 24) & 0xFFu)
     };
     CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
     laVertices[0].mv2Pos = { lfLeft, lfTop };
@@ -5065,6 +5065,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         return;
     }
 
+    // ARTIST 8240C0EC..8240C0F8 publishes renderer+0xC430 before loading
+    // commands, dispatch conversion, shadow draws and environment-map draws.
+    suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
+
     // Forward the dispatch buffer's loading-screen command into the renderer - the X360
     // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)),
     // the `lwzx r4, r26, 0x9990` at 0x8240C17C). The command is one-shot: the manager's
@@ -5975,9 +5979,6 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         }
 
         lRenderStage.Next(RENDER_WORLD);
-        // ARTIST Render @0x8240C0F8 publishes renderer+0xC430 immediately before the draw passes;
-        // DrawRenderableMesh::InterpretOcclusionQuery reads the corresponding global threshold.
-        suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
         lRenderStage.Next(RENDER_PARTICLES);
 
