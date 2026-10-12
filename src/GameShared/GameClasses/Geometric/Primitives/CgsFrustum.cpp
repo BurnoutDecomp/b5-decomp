@@ -85,14 +85,13 @@ namespace CgsGeometric
 
         inline Vector3 AddFrustumDebugVectors(const Vector3& lrA, const Vector3& lrB)
         {
-            return MakeFrustumDebugVector(lrA.x + lrB.x, lrA.y + lrB.y,
-                                          lrA.z + lrB.z, lrA.w + lrB.w);
+            return MakeFrustumDebugVector(CgsPC::VmxFloat::Add(lrA.x, lrB.x), CgsPC::VmxFloat::Add(lrA.y, lrB.y),
+                                          CgsPC::VmxFloat::Add(lrA.z, lrB.z), CgsPC::VmxFloat::Add(lrA.w, lrB.w));
         }
 
         inline Vector3 ScaleFrustumDebugVector(const Vector3& lrVector, f32 lfScale)
         {
-            return MakeFrustumDebugVector(lrVector.x * lfScale, lrVector.y * lfScale,
-                                          lrVector.z * lfScale, lrVector.w * lfScale);
+            return CgsPC::VmxFloat::Multiply(lrVector, lfScale);
         }
 
         // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
@@ -107,8 +106,8 @@ namespace CgsGeometric
         inline Vector3 AddFrustumDebugPlane(const Vector3& lrPoint,
                                             const rw::collision::Plane& lrPlane)
         {
-            return MakeFrustumDebugVector(lrPoint.x + lrPlane.x, lrPoint.y + lrPlane.y,
-                                          lrPoint.z + lrPlane.z, lrPoint.w + lrPlane.w);
+            return MakeFrustumDebugVector(CgsPC::VmxFloat::Add(lrPoint.x, lrPlane.x), CgsPC::VmxFloat::Add(lrPoint.y, lrPlane.y),
+                                          CgsPC::VmxFloat::Add(lrPoint.z, lrPlane.z), CgsPC::VmxFloat::Add(lrPoint.w, lrPlane.w));
         }
 
         // The 8 stored lanes are a struct-of-arrays: maSwizzledPlanes[batch + comp]
