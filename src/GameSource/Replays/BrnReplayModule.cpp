@@ -105,7 +105,7 @@ namespace BrnReplays
         mpDebugMemoryResource = 0;
         miConsoleValue918 = 0;
         miConsoleValue924 = 10;
-        mbConsoleFlag238 = false;
+        miConsoleValue238 = 0;
         maPad239[0] = 0;
         maPad239[1] = 0;
         maPad239[2] = 0;
@@ -519,7 +519,7 @@ namespace BrnReplays
                 }
                 mHeaderFile.Write(mpFileStreamHeader, 0, 0x20000);
             }
-            else if (mbConsoleFlag238)
+            else if (miConsoleValue238 != 0)
             {
                 maReels[miCurrentRecordReel].mbUsed = false;
                 StopRecording(lpInputBuffer, lpOutputBuffer, lUpdateSet);
@@ -628,6 +628,48 @@ namespace BrnReplays
                 lbAllReady = false;
         }
         mbConsoleFlag5C31 = lbAllReady;
+    }
+
+    // ARTIST 0x8265F0F8. Wait for the previous serialise job, gather every occupied
+    // serialiser buffer, append a frunk when at least one has data, then advance the
+    // original frame index and 60 Hz recording time.
+    void ReplayModule::UpdateRecording_PostSim(const ReplayIO::InputBuffer_PostSim* /*lpInputBuffer*/,
+                                               ReplayIO::OutputBuffer_PostSim* /*lpOutputBuffer*/,
+                                               BrnUpdateSet /*lUpdateSet*/)
+    {
+        if (meStreamStage != E_STREAM_STAGE_OPENING && meStreamStage != E_STREAM_STAGE_OPEN)
+            return;
+
+        WaitForSerialiseJobs();
+
+        const bool lbIsKeyFrame = (miConsoleValue918 % miConsoleValue924) == 0;
+        FrunkSerialiserEntry laEntries[KI_NUM_SERIALISERS];
+        void* lapBuffers[KI_NUM_SERIALISERS];
+        s32 liNumEntries = 0;
+        for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+        {
+            BaseSerialiser* lpSerialiser = mapSerialisers[liSerialiser];
+            if (lpSerialiser != 0 && lpSerialiser->miBufferUsed > 0)
+            {
+                laEntries[liNumEntries].miId = static_cast<s32>(lpSerialiser->GetId());
+                laEntries[liNumEntries].miSize = lpSerialiser->miBufferUsed;
+                lapBuffers[liNumEntries] = lpSerialiser->mpBuffer;
+                ++liNumEntries;
+            }
+        }
+
+        if (liNumEntries > 0)
+        {
+            mWriteStream.AddFrunk(static_cast<s32>(miConsoleValue918),
+                                  mfCurrentRecordingTime,
+                                  laEntries,
+                                  lapBuffers,
+                                  liNumEntries,
+                                  lbIsKeyFrame);
+        }
+
+        ++miConsoleValue918;
+        mfCurrentRecordingTime += 0.016666668f;
     }
 
     // ARTIST 0x826608A8. Read the replay header, stream its frunks, and drive the

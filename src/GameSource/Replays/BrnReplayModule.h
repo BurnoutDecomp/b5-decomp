@@ -198,6 +198,9 @@ namespace BrnReplays
         void UpdatePlaying_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
                                    ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
                                    BrnUpdateSet lUpdateSet);
+        void UpdateRecording_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                     ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                     BrnUpdateSet lUpdateSet);
         void UpdatePlaying_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
                                   ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
                                   BrnUpdateSet lUpdateSet);
@@ -235,8 +238,7 @@ namespace BrnReplays
         u32                  muConsoleValue22C;        // @0x22C (Construct stores 2; meaning unresolved)
         EStreamState         meState;                 // @0x230
         EStreamStage         meStreamStage;           // @0x234
-        bool                 mbConsoleFlag238;        // @0x238 (cleared by Construct; read by recording path)
-        u8                   maPad239[0x23C - 0x239]; // @0x239..0x23B
+        s32                  miConsoleValue238;       // @0x238 (PostSim event 525 stores the full mode word)
         GameEventQueue       mGameEventCache;          // @0x23C..@0x84C (; ctor marks it unconstructed)
         BaseSerialiser*      mapSerialisers[KI_NUM_SERIALISERS]; // @0x84C..@0x874 (11 ptrs)
         // @0x878 (2168): the module's LINEAR allocator -- ReplayModule::Prepare @0x82652768
@@ -319,7 +321,7 @@ namespace BrnReplays
         bool                 mbConsoleFlag5C32;          // UpdatePlaying_PreSim read-block gate
         u8                   maPad5C33[0x5C38 - 0x5C33];
         bool                 mbConsoleFlag5C38;          // StopPlaying tests before EnableJobThread
-        u8                   maPad5C39[1];
+        bool                 mbConsoleFlag5C39;          // set from replay-play event; role unresolved
         bool                 mbConsoleFlag5C3A;          // UpdatePlaying_PreSim sets on stop request
         bool                 mbConsoleFlag5C3B;          // Construct clears
         bool                 mbConsoleFlag5C3C;          // Construct clears; SetStatusInterface reads
