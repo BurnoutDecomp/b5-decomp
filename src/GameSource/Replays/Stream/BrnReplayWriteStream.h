@@ -21,6 +21,8 @@
 
 namespace BrnReplays
 {
+    class ReplayModule;
+
     // The record-side disk sink. Reached BY POINTER only (mpStream is neither read nor
     // reset by the bodied functions in this slice), so an incomplete type suffices; the
     // full WriteStream TU owns its concrete home.
@@ -28,6 +30,10 @@ namespace BrnReplays
 
     class WriteStream
     {
+        // ReplayModule owns this stream inline and the ARTIST constructor/recording
+        // state machine initialize its original subfields directly.
+        friend class ReplayModule;
+
     public:
         // ResetStream @ 0x8264D100. Free every header allocation, carve a fresh
         // StreamHeader, stamp the "REPLAY " magic, and clear the per-recording
