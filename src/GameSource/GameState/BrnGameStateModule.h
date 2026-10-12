@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                         // CgsID (CarSelect player-car-change grows)
+#include "BrnCommonTypes.h"                                         // CgsID and RenderWare math aliases
+#include "SDKs/EATech/include/rw/math/vpu/matrix44.h"                // complete Matrix44Affine member type
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
 #include "SharedClasses/BrnSharedConstants.h"                       // BrnUpdateSet (PostWorldUpdate)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
@@ -1498,6 +1499,10 @@ private:
     // Street/road display state, held by value as in the original. The AI snapshot
     // is copied during PostWorldUpdate before the next street-tracking update.
     StreetManager                            mStreetManager;
+    // DecFIGS BrnGameStateModule.h:870; ARTIST RenderNextLandmarkInfo reads zAxis/wAxis at
+    // this+0x47590/+0x475A0. The matrix starts immediately after StreetManager
+    // (X360 +0x456C8, sizeof 0x1E08), at +0x47570.
+    Matrix44Affine                            mPlayerCarTransform;
     RoadRulesManager                         mRoadRulesManager;
     BrnAI::AIModuleIO::AICarOutputInterface    mLastAICarOutputInterface;
 

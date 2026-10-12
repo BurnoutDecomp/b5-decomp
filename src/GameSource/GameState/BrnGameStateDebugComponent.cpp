@@ -1,14 +1,25 @@
 #include "GameSource/GameState/BrnGameStateDebugComponent.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
 #include "GameSource/GameState/Offences/BrnStuntManager.h"
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "SharedClasses/World/BrnWorldRegion.h"
+#include "SharedClasses/Trigger/BrnLandmark.h"
+#include "SharedClasses/Trigger/BrnRegion.h"
+#include "SharedClasses/Trigger/BrnTriggerBase.h"
+#include "SharedClasses/Trigger/BrnTriggerData.h"
+
+#include <cmath>
 
 namespace BrnGameState
 {
@@ -302,6 +313,264 @@ namespace
                                    16.0f, 0xFFFFFFFFu);
             }
         }
+    }
+
+    // X360 0x82376D68. Render the mode timer/takedown readouts, then the two opt-in debug panels.
+    void GameStateDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        if (mbDrawMiscInfo)
+        {
+            ModeManager* lpModeManager = mpGameStateModule->GetModeManager();
+            ScoringSystem* lpScoringSystem = lpModeManager->GetScoringSystem();
+            const CgsSystem::Time lCurrentTime =
+                lpModeManager->mTimerStatusInterface.GetSimTimerStatus()->GetTime();
+
+            if (lpScoringSystem->HasModeTimeExpired(lCurrentTime))
+            {
+                lpRender->DrawText("Come in number 5, your time is up!",
+                                   120.0f, 80.0f, 20.0f, 0xFF0000FFu);
+            }
+            else if (lpScoringSystem->IsTimeLimitActive())
+            {
+                const CgsSystem::Time lTimeRemaining =
+                    lpScoringSystem->GetModeTimeRemaining(lCurrentTime);
+                const s32 liRemainingSeconds = lTimeRemaining.GetSeconds();
+                CgsCore::SPrintf(macScoreText, KI_SCORE_TEXT_LENGTH,
+                                 "Time remaining %d.%d",
+                                 liRemainingSeconds / 60, liRemainingSeconds % 60);
+                lpRender->DrawText(macScoreText, 120.0f, 80.0f, 20.0f, 0xFF0000FFu);
+            }
+
+            if (lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_ROAD_RAGE)
+            {
+                const RoadRageModeScoring* lpRoadRageScoring =
+                    lpScoringSystem->GetRoadRageScoring();
+                CgsCore::SPrintf(macScoreText, KI_SCORE_TEXT_LENGTH,
+                                 "Takedowns %d of %d",
+                                 lpRoadRageScoring->GetNumTakedownsAchieved(),
+                                 lpRoadRageScoring->GetTargetNumTakedowns());
+                lpRender->DrawText(macScoreText, 120.0f, 50.0f, 20.0f, 0xFF0000FFu);
+            }
+        }
+
+        if (mbShowUpComingRoadRules)
+        {
+            DrawUpcomingRoads(lpRender);
+        }
+        if (mbDrawStuntBreakdown)
+        {
+            DrawStuntBreakdown(lpRender);
+        }
+    }
+
+    // X360 0x8236C840. The player-car crash byte comes from the last active-race-car interface;
+    // its inline IsPlayerCarCrashing() reproduces the interface sentinel and state-array read.
+    // The streaming wait and both component flags gate the automatic DebugInterface acquisition.
+    void GameStateDebugComponent::RenderLandmarkDebug() const
+    {
+        const bool lbPlayerCarIsCrashing =
+            mpGameStateModule->mLastActiveRaceCarInterface.IsPlayerCarCrashing();
+        if (lbPlayerCarIsCrashing || mpGameStateModule->mbWaitingForStreaming ||
+            (!mbDebugThisLandmark && !mbDebugNextLandmark))
+        {
+            return;
+        }
+
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
+        const CgsDev::DebugUI::Metrics& lrMetrics = lDebugInterface.GetUI().GetMetrics();
+        if (mbDebugThisLandmark)
+        {
+            RenderCurrentLandmarkInfo(lrRender, lrMetrics);
+        }
+        if (mbDebugNextLandmark)
+        {
+            RenderNextLandmarkInfo(lrRender, lrMetrics);
+        }
+    }
+
+    // X360 0x8236C040. The 0xFFFF and 0xFFFE sentinels display None/Multi; otherwise the
+    // landmark's design index and the current region's 32-bit ID are shown.
+    void GameStateDebugComponent::RenderCurrentLandmarkInfo(
+        CgsDev::DebugRender& lrRender,
+        const CgsDev::DebugUI::Metrics& lrMetrics) const
+    {
+        const s32 liRegionIndex =
+            static_cast<s32>(mpGameStateModule->GetModeManager()->GetPlayerCurrentLandmark());
+        const BrnTrigger::TriggerData* lpTriggerData = mpGameStateModule->GetTrackTriggerData();
+        char lacLandmarkText[KI_LANDMARK_TEXT_LENGTH];
+        CgsCore::StrCpy(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH, "Landmark: ");
+
+        if (liRegionIndex == -1)
+        {
+            CgsCore::StrCat(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH, "None");
+        }
+        else if (liRegionIndex == -2)
+        {
+            CgsCore::StrCat(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH, "Multi");
+        }
+        else
+        {
+            const BrnTrigger::Landmark* lpLandmark =
+                lpTriggerData->GetLandmarkFromRegionIndex(liRegionIndex);
+            CgsCore::SPrintf(lacLandmarkText + 10, KI_LANDMARK_TEXT_LENGTH - 10,
+                             "%d", static_cast<s32>(lpLandmark->GetDesignIndex()));
+        }
+
+        const Vector2 lv2Position = { lrMetrics.mfScreenWidth - 30.0f, 145.0f, 0.0f, 0.0f };
+        lrRender.Draw2DTextJustified(lacLandmarkText, lv2Position,
+                                     CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                     18.0f, 0xFF0080FFu);
+        if (liRegionIndex != -1 && liRegionIndex != -2)
+        {
+            CgsCore::SPrintf(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH,
+                             "ID: %d", liRegionIndex);
+            const Vector2 lv2RegionIndexPosition =
+                { lrMetrics.mfScreenWidth - 30.0f, 165.0f, 0.0f, 0.0f };
+            lrRender.Draw2DTextJustified(lacLandmarkText, lv2RegionIndexPosition,
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                         18.0f, 0xFF0080FFu);
+
+            const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(liRegionIndex);
+            CgsCore::SPrintf(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH,
+                             "CGSID: %u", static_cast<u32>(lpRegion->GetId()));
+            const Vector2 lv2RegionIdPosition =
+                { lrMetrics.mfScreenWidth - 30.0f, 185.0f, 0.0f, 0.0f };
+            lrRender.Draw2DTextJustified(lacLandmarkText, lv2RegionIdPosition,
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                         18.0f, 0xFF0080FFu);
+        }
+    }
+
+    // X360 0x8236C3B0. The next landmark is a region-table index in ModeManager's published
+    // mode route. ARTIST uses zAxis/wAxis from mPlayerCarTransform and a signed xAxis dot product
+    // to place a 60-pixel arrow around (screenWidth-80, 60); its 30-pixel half-length is exact.
+    void GameStateDebugComponent::RenderNextLandmarkInfo(
+        CgsDev::DebugRender& lrRender,
+        const CgsDev::DebugUI::Metrics& lrMetrics) const
+    {
+        ModeManager* lpModeManager = mpGameStateModule->GetModeManager();
+        if (lpModeManager->GetCurrentGameMode() == nullptr)
+        {
+            return;
+        }
+
+        const EGlobalRaceCarIndex lePlayerGlobalRaceCarIndex =
+            static_cast<EGlobalRaceCarIndex>(mpGameStateModule->GetPlayerGlobalRaceCarIndex());
+        const s32 liNextLandmarkIndex =
+            lpModeManager->GetNextLandmarkIndex(lePlayerGlobalRaceCarIndex);
+        const u32 luNumLandmarks = lpModeManager->muNumLandmarks;
+        if (luNumLandmarks == 0 || static_cast<u32>(liNextLandmarkIndex) >= luNumLandmarks)
+        {
+            return;
+        }
+
+        const s32 liLandmarkRegionIndex = static_cast<s16>(
+            lpModeManager->maLandmarkIndices[liNextLandmarkIndex]);
+        const BrnTrigger::TriggerData* lpTriggerData = mpGameStateModule->GetTrackTriggerData();
+        if (mbDebugThisLandmark)
+        {
+            const BrnTrigger::Landmark* lpLabelLandmark =
+                lpTriggerData->GetLandmarkFromRegionIndex(liLandmarkRegionIndex);
+            char lacLandmarkText[336];
+            CgsCore::SPrintf(lacLandmarkText, 256, "Next LM: %d (%u/%u)",
+                             static_cast<s32>(lpLabelLandmark->GetDesignIndex()),
+                             static_cast<u32>(liNextLandmarkIndex + 1), luNumLandmarks);
+            const Vector2 lv2LabelPosition =
+                { lrMetrics.mfScreenWidth - 30.0f, 125.0f, 0.0f, 0.0f };
+            lrRender.Draw2DTextJustified(lacLandmarkText, lv2LabelPosition,
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                         18.0f, 0xFF0080FFu);
+        }
+
+        const BrnTrigger::Landmark* lpLandmark =
+            lpTriggerData->GetLandmarkFromRegionIndex(liLandmarkRegionIndex);
+        const Matrix44Affine& lrPlayerCarTransform = mpGameStateModule->mPlayerCarTransform;
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetPosition();
+        const f32 lfDeltaX = lv3LandmarkPosition.x - lrPlayerCarTransform.wAxis.x;
+        const f32 lfDeltaY = lv3LandmarkPosition.y - lrPlayerCarTransform.wAxis.y;
+        const f32 lfDeltaZ = lv3LandmarkPosition.z - lrPlayerCarTransform.wAxis.z;
+        const f32 lfDistance = std::sqrt(lfDeltaX * lfDeltaX +
+                                         lfDeltaY * lfDeltaY +
+                                         lfDeltaZ * lfDeltaZ);
+
+        // ARTIST normalizes the transform's zAxis and the target displacement, then clamps their
+        // dot product to [-1,1] before XMVectorACos. Its VMX zero-vector selection leaves a zero
+        // direction at zero instead of dividing it by zero.
+        f32 lfForwardLength = std::sqrt(lrPlayerCarTransform.zAxis.x * lrPlayerCarTransform.zAxis.x +
+                                        lrPlayerCarTransform.zAxis.y * lrPlayerCarTransform.zAxis.y +
+                                        lrPlayerCarTransform.zAxis.z * lrPlayerCarTransform.zAxis.z);
+        f32 lfForwardX = 0.0f;
+        f32 lfForwardY = 0.0f;
+        f32 lfForwardZ = 0.0f;
+        if (lfForwardLength != 0.0f)
+        {
+            const f32 lfInverseLength = 1.0f / lfForwardLength;
+            lfForwardX = lrPlayerCarTransform.zAxis.x * lfInverseLength;
+            lfForwardY = lrPlayerCarTransform.zAxis.y * lfInverseLength;
+            lfForwardZ = lrPlayerCarTransform.zAxis.z * lfInverseLength;
+        }
+
+        f32 lfDirectionX = 0.0f;
+        f32 lfDirectionY = 0.0f;
+        f32 lfDirectionZ = 0.0f;
+        if (lfDistance != 0.0f)
+        {
+            const f32 lfInverseDistance = 1.0f / lfDistance;
+            lfDirectionX = lfDeltaX * lfInverseDistance;
+            lfDirectionY = lfDeltaY * lfInverseDistance;
+            lfDirectionZ = lfDeltaZ * lfInverseDistance;
+        }
+
+        f32 lfForwardDot = lfForwardX * lfDirectionX +
+                           lfForwardY * lfDirectionY +
+                           lfForwardZ * lfDirectionZ;
+        if (lfForwardDot < -1.0f)
+        {
+            lfForwardDot = -1.0f;
+        }
+        else if (lfForwardDot > 1.0f)
+        {
+            lfForwardDot = 1.0f;
+        }
+
+        f32 lfRelativeAngle = std::acos(lfForwardDot);
+        const f32 lfRightDot = lrPlayerCarTransform.xAxis.x * lfDirectionX +
+                               lrPlayerCarTransform.xAxis.y * lfDirectionY +
+                               lrPlayerCarTransform.xAxis.z * lfDirectionZ;
+        if (lfRightDot < 0.0f)
+        {
+            lfRelativeAngle = -lfRelativeAngle;
+        }
+
+        const Vector2 lv2ArrowCentre =
+            { lrMetrics.mfScreenWidth - 80.0f, 60.0f, 0.0f, 0.0f };
+        const f32 lfArrowHalfX = std::sin(lfRelativeAngle) * 30.0f;
+        const f32 lfArrowHalfY = std::cos(lfRelativeAngle) * 30.0f;
+        const Vector2 lv2ArrowTail =
+        {
+            lv2ArrowCentre.x - lfArrowHalfX,
+            lv2ArrowCentre.y + lfArrowHalfY,
+            0.0f, 0.0f
+        };
+        const Vector2 lv2ArrowTip =
+        {
+            lv2ArrowCentre.x + lfArrowHalfX,
+            lv2ArrowCentre.y - lfArrowHalfY,
+            0.0f, 0.0f
+        };
+        lrRender.Draw2DArrow(lv2ArrowTail, lv2ArrowTip, 0xFF00FFFFu);
+
+        char lacDistanceText[336];
+        const char* lpcDistancePrefix =
+            static_cast<u32>(liNextLandmarkIndex) == luNumLandmarks ? "Finish" : "Next";
+        CgsCore::SPrintf(lacDistanceText, 256, "%s: %d M", lpcDistancePrefix,
+                         static_cast<s32>(lfDistance));
+        const Vector2 lv2DistancePosition =
+            { lrMetrics.mfScreenWidth - 50.0f, 105.0f, 0.0f, 0.0f };
+        lrRender.Draw2DTextJustified(lacDistanceText, lv2DistancePosition,
+                                     CgsDev::DebugRender::E_JUSTIFY_CENTRE,
+                                     18.0f, 0xFF0080FFu);
     }
 
 }
