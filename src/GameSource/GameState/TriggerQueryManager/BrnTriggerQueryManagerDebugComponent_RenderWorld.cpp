@@ -189,7 +189,8 @@ namespace BrnGameState
                                 const s32 liActiveIndex =
                                     mpTriggerQueryManager->maActiveTriggers.FindFirstInstanceOf(
                                         luRegionIndex);
-                                if (static_cast<u32>(liActiveIndex) <
+                                // ARTIST82365250 skips dark gray on an active-list hit.
+                                if (static_cast<u32>(liActiveIndex) >=
                                     mpTriggerQueryManager->maActiveTriggers.GetLength())
                                 {
                                     lColour = rw::RGBA(64, 64, 64, 255);
