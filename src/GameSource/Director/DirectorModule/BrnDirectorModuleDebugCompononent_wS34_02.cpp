@@ -93,6 +93,7 @@ void DebugComponent::OnActivate()
     RegisterVariable(&reinterpret_cast<DebugPrinter*>(lrMainDirector.maDebugPrinterB)->mbEnabled,
                      "Debug Ouput", "Enable Moment Debug Output");
     RegisterVariable(&mbShowCameraPos, "Debug Ouput", "Draw camera pos");
+    RegisterVariable(&lrMainDirector.mbShowAllCameraNames, "Debug Ouput", "Show all camera names");
     RegisterVariable(&lrMainDirector.mbShowDebugCameraNames, "Debug Ouput", "Show debug camera names");
     RegisterVariable(&lrMainDirector.maStateFlagTail[MainDirector::E_FLAG_TAIL_SHOW_WORLD_MAP_DEBUG],
                      "Debug Ouput", "Show World Map debug");
