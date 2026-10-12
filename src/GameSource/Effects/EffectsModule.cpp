@@ -1554,13 +1554,13 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
         SkidGateExit("mDebugComponent.BypassAllVFXProcessing()");
         return;
     }
-    // +0x2C351 -- the "dump running lion effects" latch: consumed, and the step skipped.
+    // ARTIST 0x8229EC60..0x8229EC8C computes this+0x2C351 using addis/addi, reads the
+    // "Dump running Lion effects" latch, clears it when set, and returns before either IO lock.
     if (mDebugComponent.ConsumeDumpRunningLionEffects())
     {
         SkidGateExit("mDebugComponent.ConsumeDumpRunningLionEffects()");
         return;
     }
-
     lpOutputBuffer->LockForWrite();
     lpOutputBuffer->GetReplayRequestInterface()->RegisterSerialiser(&mEffectsSerialiser);
     lpInputBuffer->LockForRead();

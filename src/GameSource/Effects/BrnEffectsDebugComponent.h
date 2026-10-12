@@ -103,9 +103,9 @@ namespace BrnEffects
         // The per-system enable bytes EffectsModule::Update @0x8229EC28 copies into the
         // particle module every step (asm 0x8229EF2C-0x8229EFC0: component +0x11/+0x12/
         // +0x13/+0x16/+0x17/+0x19 -> ParticleModule +0x23130..+0x23135), the bypass byte
-        // (+0x10) its first branch tests, the dump latch (+0x21) it consumes, and the
-        // enable byte (+0x1D) HandleQADebugTests @0x82291700 tests for restart-rate reset.
-        // QAEnabled exposes the separate QA-effect gate at +0x1C. Additive (2026-09-02).
+        // (+0x10) its first branch tests, the dump latch (+0x21) Update consumes and clears,
+        // and the enable byte (+0x1D) HandleQADebugTests @0x82291700 tests for restart-rate
+        // reset. QAEnabled exposes the separate QA-effect gate at +0x1C. Additive (2026-09-02).
         bool BypassAllVFXProcessing() const      { return mbBypassAllVFXProcessing; }
         bool SparksEnabled() const               { return mbSparksEnabled; }
         bool TrailsEnabled() const               { return mbTrailsEnabled; }
@@ -115,14 +115,14 @@ namespace BrnEffects
         bool UseZFade() const                    { return mbUseZFade; }
         bool IsEnabled() const                   { return mbEnabled; }
         bool QAEnabled() const                   { return mbQAEnabled; }
-        // Update: `if (mbDumpRunningLionEffects) { mbDumpRunningLionEffects = 0; return; }`.
+        // Update @0x8229EC28: when set, clear the registered latch and skip this whole step
+        // before the input/output locks. No dump routine call is present in that path.
         bool ConsumeDumpRunningLionEffects()
         {
             const bool lbSet = mbDumpRunningLionEffects;
             mbDumpRunningLionEffects = false;
             return lbSet;
         }
-
     protected:
         // X360 0x82278EB8 / 0x8228F3E8 (DebugComponent virtual overrides).
         virtual const char* GetName() const;
