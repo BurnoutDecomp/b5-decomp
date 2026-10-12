@@ -463,7 +463,7 @@ void RaceCarEntityModuleDebugComponent::RenderTailgateCones(CgsDev::Debug3DImmed
     (void)lPlayerPosition;
     (void)lpPlayerState;
 
-    const rw::RGBA lConeColour(0x32, 0xB4, 0x00, 0x50);
+    const rw::RGBA lConeColour(0x00, 0xB4, 0x32, 0x50); // ARTIST packed word 0x5032B400
 
     for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0; leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
     {

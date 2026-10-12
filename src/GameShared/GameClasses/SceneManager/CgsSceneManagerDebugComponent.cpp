@@ -357,8 +357,8 @@ namespace CgsSceneManager
         lpRender->DrawSolidTriangle(lVertex0, lVertex1, lVertex2, lColour);
     }
 
-    // @ X360 0x828ABF48. Translate the three triangle corners by lTranslation. A hit draws a
-    // red filled outline; a miss draws white and marks both contact points with the target's
+    // @ X360 0x828ABF48. Translate the three triangle corners by lTranslation. A miss draws a
+    // blue filled outline; a hit draws white and marks both contact points with the target's
     // three 0.1-unit axis ticks.
     void SceneManagerDebugComponent::DrawTriangle(CgsDev::Debug3DImmediateRender* lpRender,
                                                     Vector3 lTranslation, Vector3 lVertex0,
@@ -380,7 +380,7 @@ namespace CgsSceneManager
         lVertex2.z += lTranslation.z;
         lVertex2.w += lTranslation.w;
 
-        if (lHitMask.GetBool())
+        if (!lHitMask.GetBool())
         {
             // The ARTIST immediate is 0xFFFF0000; RGBA packs (a<<24)|(b<<16)|(g<<8)|r.
             lpRender->DrawQuad(lVertex0, lVertex0, lVertex1, lVertex2,
