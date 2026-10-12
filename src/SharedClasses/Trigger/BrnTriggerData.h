@@ -6,6 +6,8 @@
 #include <cstdint>            // uintptr_t (relocation delta)
 #include <cstddef>            // offsetof (host layout static_asserts)
 #include "SharedClasses/Trigger/BrnKillzone.h"   // complete BrnTrigger::Killzone (GetKillzone 16B stride)
+#include "SharedClasses/Trigger/BrnRoamingLocation.h" // unchecked array indexing needs the complete element
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"
 
 // Owning header for BrnTrigger::TriggerData — the track-trigger resource payload.
 //
