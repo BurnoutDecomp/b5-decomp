@@ -1,3 +1,5 @@
+#include "SharedClasses/Trigger/BrnRoamingLocation.h" // BrnTriggerData inline accessors need the complete type
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"    // BrnTriggerData inline accessors need the complete type
 #include "GameSource/Game/BrnAutoTestManager.h"
 #include "GameSource/Game/BrnGameModule.hpp"                                   // GetMainGameModule / GetGameTimer / GetGameDataModule
 #include "GameSource/Resource/BrnGameDataModule.h"                             // GameDataModule::DebugReportPools
