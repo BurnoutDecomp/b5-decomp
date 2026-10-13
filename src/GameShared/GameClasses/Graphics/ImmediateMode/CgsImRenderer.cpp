@@ -359,8 +359,7 @@ renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAlloca
     lParameters.muHeight = 4;                              // +0x0C
     lParameters.muDepth = 1;                               // +0x10
     lParameters.muNumLevels = 1;                           // +0x14
-    // Preserve the raw X360 format word. The PC Texture API stores a D3D9 format here, and this
-    // backend has no attested conversion for 0x18280086.
+    // Preserve the raw X360 word; texture.cpp maps this exact code to D3DFMT_A8R8G8B8 at D3D9 allocation.
     lParameters.miFormat = 0x18280086;                     // +0x18
     // +0x1C (muReserved1) is not written by ARTIST; leave this field untouched.
 
