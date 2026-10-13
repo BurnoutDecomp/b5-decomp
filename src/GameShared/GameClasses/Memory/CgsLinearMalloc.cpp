@@ -7,6 +7,10 @@
 
 namespace CgsMemory
 {
+    // ARTIST 0x8305F500 and 0x8305F50C: canonical zero-initialized class storage.
+    RwMemoryFunctions LinearMalloc::mCachedMemoryFuncs = {};
+    LinearMalloc* LinearMalloc::mpActiveRWAllocator = nullptr;
+
     // ARTIST 0x828690E0. mpLastAlloc is not part of this reset.
     void LinearMalloc::Construct()
     {
@@ -80,14 +84,22 @@ namespace CgsMemory
         mnNextAddress = mnStartAddress;
     }
 
+    // ARTIST 0x828691C8. Stop restores the table before owned backing is released.
     void LinearMalloc::Destruct()
     {
-        mbCreated = false;
-        mpAlloc = nullptr;
+        if (mpActiveRWAllocator == this)
+            StopRWAllocation();
+
+        if (mpAlloc != nullptr)
+        {
+            ::rwMemoryFunctions.rwfree(mpAlloc);
+            mpAlloc = nullptr;
+        }
+
         mnStartAddress = 0;
         mnEndAddress = 0;
         mnNextAddress = 0;
-        mpLastAlloc = nullptr;
+        mbCreated = false;
     }
 
     void LinearMalloc::SetAlignment(size_t lnAlignment)
@@ -116,7 +128,20 @@ namespace CgsMemory
     {
     }
 
+    // ARTIST 0x82866C38. Assertion continuation still restores the cached table.
     void LinearMalloc::StopRWAllocation()
     {
+        if (mpActiveRWAllocator != this)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "IsRWAllocator()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                245);
+            CgsDev::Assert::EndAssert();
+        }
+
+        mpActiveRWAllocator = nullptr;
+        ::rwMemoryFunctions = mCachedMemoryFuncs;
     }
 }
