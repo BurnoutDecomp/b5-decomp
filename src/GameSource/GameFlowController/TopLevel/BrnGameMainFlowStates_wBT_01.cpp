@@ -10,10 +10,10 @@
 
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 
-#include <new>                                                         // placement new (the allocator's in-block construction)
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc::Malloc
+#include "SharedClasses/Trigger/BrnRoamingLocation.h"                  // BrnTriggerData needs complete record types
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"
 #include "GameSource/Game/BrnGameModule.hpp"                           // BrnGame::GetMainGameModule / GetInputModule
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                   // GameDataIO::OutputBuffer::GetAllocatorList
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // AllocatorList::GetHeapAllocator
@@ -26,14 +26,7 @@ const uint32_t KU_INPUT_MODULE_MEMORY_SIZE      = 0x2000;
 const uint32_t KU_INPUT_MODULE_MEMORY_ALIGNMENT = 0x10;
 const s32      KI_INPUT_MODULE_HEAP_BANK        = 0x26;
 
-// FLAG PC-platform: on the console the allocator object is constructed at the head of its own
-// block, inside the 2616-byte reserve GetResourceDescriptor adds to lane 0 (its constructor
-// starts the main heap past that reserve). The host allocator wraps two native EA
-// GeneralAllocators and is wider than that reserve, so the object is constructed in this
-// static storage instead; the block, its reserve and the heap the allocator adopts are the
-// console's.
-alignas(rw::core::GeneralResourceAllocator)
-u8 sauInputModuleAllocatorStorage[sizeof(rw::core::GeneralResourceAllocator)];
+// The canonical descriptor includes the real native allocator-object reserve.
 }
 
 // Console body, in order:
@@ -73,10 +66,8 @@ bool LoadingScriptedState::LoadControllerModule(BrnResource::GameDataIO::InputBu
             lpGUIAllocator->Malloc(static_cast<s32>(lExtended.m_baseResourceDescriptors[0].m_size),
                                    static_cast<s32>(lExtended.m_baseResourceDescriptors[0].m_alignment));
 
-        *lppInputModuleAllocator =
-            (lResource.m_baseResources[0] != 0)
-                ? new (sauInputModuleAllocatorStorage) rw::core::GeneralResourceAllocator(lResource, lDescriptor)
-                : 0;
+        // ARTIST 0x823C6A78 calls the canonical placement API, including its null path.
+        *lppInputModuleAllocator = rw::core::GeneralResourceAllocator::Initialize(lResource, lDescriptor);
     }
 
     return BrnGame::GetMainGameModule()->GetInputModule().Prepare(*lppInputModuleAllocator);
