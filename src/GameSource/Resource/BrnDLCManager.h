@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (base of DLCDebugComponent)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"                 // DLC monitor completion queue
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceAsyncOp.h"               // version-file Open/Read/Close state machine
-#include "SDKs/EATech/eathread/eathread_thread.h"                                   // EA::Thread::Thread (monitor owner)
+#include "eathread/eathread_thread.h"                                               // canonical EA::Thread::Thread (monitor owner)
 
 namespace CgsDev { struct Debug2DImmediateRender; }
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }
