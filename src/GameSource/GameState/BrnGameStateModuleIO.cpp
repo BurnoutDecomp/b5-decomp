@@ -244,6 +244,14 @@ const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameSt
     return &mControllerToGameStateInterface;
 }
 
+// ARTIST 823B8EC0..823B8F60, original BrnGameStateModuleIO.h:144.
+// The assertion continues to the same canonical interface on failure.
+ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mControllerToGameStateInterface;
+}
+
 // =====================  PostWorldInputBuffer  =====================
 
 // The console's CreateIOBuffer<PostWorldInputBuffer> runs this on every buffer it stages. In
