@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG culling wave] CgsDev::Log::gpDebugPrint
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / rw::Resource / rw::ResourceDescriptor
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                                    // SceneManagerIO::InputBuffer_Update / OutputBuffer / OutCoarseQueryResult
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestQuery.h"                  // SceneManagerIO::InEventLineTest
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManagerIO.h"  // SpatialPartitionIO::InputBuffer_Update / OutputBuffer
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h" // LooseOctree (the frustum-test entry points)
 
@@ -2737,7 +2738,7 @@ namespace CgsSceneManager
         // (the two 16-byte scratch blocks the dispatcher seeds are four s32 / four pointers).
         const s32 KI_COARSE_FRUSTUM_QUERY_SEATS = 4;
 
-        // The tail both coarse handlers share, written out once: publish one finished coarse
+        // The common tail all implemented coarse handlers share, written out once: publish one finished coarse
         // batch as a single variable-size event on the scene output's results queue. The
         // broad phase answers in entity pool INDICES, so each is resolved to its public id on
         // the way out; the event is three header words plus one id per result, which is the
@@ -2949,7 +2950,11 @@ namespace CgsSceneManager
             switch (liId)
             {
             case 0:
-                ProcessCoarseLineTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
+                // The variable queue exposes a generic Event pointer; ARTIST's record is the
+                // DecFIGS InEventLineTest payload.
+                ProcessCoarseLineTest(lpSpatialPartitionOutputBuffer,
+                                      *reinterpret_cast<const SceneManagerIO::InEventLineTest*>(lpEvent),
+                                      lpSceneOutputBuffer);
                 break;
             case 1:
                 ProcessCoarseSphereTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
@@ -3720,17 +3725,38 @@ namespace CgsSceneManager
     }
 
     // =========================================================================================
-    // THE THREE COARSE HANDLERS WITHOUT A PRODUCER -- LOUD TRAPS.
-    //
-    // The coarse queue's remaining record kinds (line, volume, plain frustum) come from the
-    // entity modules' SceneQueryInterface coarse tests, which this build does not post. A trap
-    // here is the FIRST thing a producer would hit -- which is the point: never a quiet "no
-    // result" for a query somebody asked. The fine handlers that follow are all bodies.
+    // ProcessCoarseLineTest @0x828C6D78. The handler has a complete ARTIST body even though
+    // this build has no mounted producer for the generic coarse-line record.
     // =========================================================================================
-    void SceneManagerModule::ProcessCoarseLineTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
+    void SceneManagerModule::ProcessCoarseLineTest(
+        SpatialPartitionIO::OutputBuffer*       lpSpatialPartitionOutputBuffer,
+        const SceneManagerIO::InEventLineTest&  lrQuery,
+        SceneManagerIO::OutputBuffer*           lpSceneOutputBuffer)
     {
-        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseLineTest @0x828C6D78 is not reconstructed");
+        CGS_ASSERT((lrQuery.mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported\n");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        mSpatialPartitionManager.GetSpatialPartition()->LineTest(
+            lrQuery.mx32EntityTypeFlags, lrQuery.mLineStart, lrQuery.mLineEnd,
+            lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lrQuery.mQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
     }
+
+    // =========================================================================================
+    // The remaining coarse Volume and Frustum consumers still have explicit traps. This build
+    // has no mounted producer for those records; retain the trap until each body is recovered
+    // from its own ARTIST evidence.
+    // =========================================================================================
     void SceneManagerModule::ProcessCoarseVolumeTest(const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer*)
     {
         CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseVolumeTest @0x828C62C0 is not reconstructed");
