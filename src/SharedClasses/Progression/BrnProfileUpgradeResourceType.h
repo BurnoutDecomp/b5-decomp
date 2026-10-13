@@ -32,6 +32,7 @@ namespace BrnProgression
 class ProfileUpgradeResourceType : public CgsResource::Type
 {
 public:
+    uint32_t GetTypeID() const override;
     // X360 0x8267D870. The serialised descriptor is a single main-memory block: entry[0] =
     // { m_size = (elementCount + 1) * 8, m_alignment = 16 } (elementCount = *(u32*)lpResource),
     // the remaining four entries = { m_size = 0, m_alignment = 1 }.

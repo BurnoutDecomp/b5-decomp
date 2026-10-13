@@ -14,6 +14,7 @@ namespace CgsResource
     class RwMaterialCRC32ResourceType : public Type
     {
     public:
+        uint32_t GetTypeID() const override;
         virtual ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const;
     };
 }

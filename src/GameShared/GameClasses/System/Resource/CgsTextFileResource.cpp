@@ -10,6 +10,12 @@
 
 namespace CgsResource
 {
+    // ARTIST vtable 0x820A0C30 slot zero folds to 0x826D7F68: return 3.
+    uint32_t TextFileResourceType::GetTypeID() const
+    {
+        return 3;
+    }
+
     ResourceDescriptor TextFileResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         const u32 luSize = *reinterpret_cast<const u32*>(lpResource) + 5u;

@@ -12,6 +12,12 @@
 namespace BrnProgression
 {
 
+// ARTIST 0x82676B98; registration vtable 0x820A1B78 slot zero.
+uint32_t ProfileUpgradeResourceType::GetTypeID() const
+{
+    return 0x10021;
+}
+
 // Serialised profile-upgrade record header. The X360 fixup/descriptor bodies only touch the two
 // leading u32s: muElementCount at +0 and a self-relative table offset (relocated in place to an
 // absolute pointer by FixUp) at +4. Documented serialised-payload raw-offset view of the on-disk

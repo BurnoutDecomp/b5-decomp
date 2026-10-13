@@ -8,6 +8,7 @@ namespace CgsResource
 class TextFileResourceType : public Type
 {
 public:
+    uint32_t GetTypeID() const override;
     ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
 };
 }
