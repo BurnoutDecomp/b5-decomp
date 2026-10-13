@@ -6,6 +6,7 @@
 #include "rw/rwcore_general_alloc.h"                  // static GeneralResourceAllocator storage APIs
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>
+#include <intrin.h>                          // native CPU trap for the original PPC divide guards
 
 // CgsMemory::MemoryModule -- see the header. This pass reconstructs the two pure stage-machine lifecycle
 // bodies (Prepare 0x8286BF18 / Release 0x82866FF0); both are faithful ports of the X360 (single call
@@ -277,7 +278,7 @@ namespace CgsMemory
             break;
         case MemoryIO::E_EVENT_TYPE_CREATE_ALLOCATOR:            ProcessCreateAllocatorRequest(lpRequest, lpOutput);        break;
         case MemoryIO::E_EVENT_TYPE_DESTROY_ALLOCATOR:           ProcessDestroyAllocatorRequest(lpRequest, lpOutput);       break;
-        case MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE:             ProcessCreateResourceRequest(lpRequest, lpOutput);         break;
+        case MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE:             ProcessCreateResourceRequestNativePC(lpRequest, lpOutput); break;
         default:                                                 CGS_ASSERT(false, "Unhandled memory request type");       break;
         }
     }
@@ -573,15 +574,88 @@ namespace CgsMemory
         lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lResponse.GetEventType(),
                                                      static_cast<s32>(sizeof(lResponse)));
     }
-    // @ 0x8286CDB8 - create a multi-type resource bank (the backing memory for a resource Pool) and reply
-    // with the new bank's per-type data pointers. For every memory type in the request's resource
-    // descriptor: round the requested size up to the parent bank's block granule (block size in 1KB units
-    // -> <<10) and compute the block count; build a one bank Params covering all types; CreateBank; then
-    // gather the created bank's GetData(type) into the response's rw::Resource. This is the async/message-
-    // driven equivalent of the synchronous GameDataModule pool-bank carve (CreatePoolBank); the sizing +
-    // field accessors are faithful to the X360. The canonical request and native rw allocator
-    // descriptor both carry five lanes, matching the original reader traversal.
-    void MemoryModule::ProcessCreateResourceRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    // ARTIST 0x8286CDB8. Unactivated original raw-resource handler. Bank accessors
+    // own parent/index assertions; the original does not synthesize parent error results here.
+    void MemoryModule::ProcessCreateResourceRequest(
+        const MemoryIO::CreateResourceRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    {
+        const rw::ResourceDescriptor lCapacity = *lpRequest->GetDescriptor();
+        rw::Resource lBacking;
+        MemoryBank::Params lParams = {};
+        std::strncpy(lParams.macName, lpRequest->GetBankName(), MemoryBank::KI_NAME_SIZE);
+        lParams.macName[MemoryBank::KI_NAME_SIZE - 1] = 0;
+        lParams.mnBankId = lpRequest->GetBankId();
+        lParams.mnParentBankId = lpRequest->GetParentBankId();
+        lParams.mbIsLeaf = true;
+
+        MemoryIO::CreateResourceResponse lResponse;
+        lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        s32 liType = 0;
+        for (; liType < MemoryBank::KI_NUM_TYPES; ++liType)
+        {
+            const MemoryBank* const lpParent = GetBank(
+                GetBankIndexFromId(static_cast<u32>(lParams.mnParentBankId)));
+            const u32 luGranule = static_cast<u32>(lpParent->GetBlockSize(liType)) << 10;
+            const rw::BaseResourceDescriptor& lrCapacity = lCapacity.m_baseResourceDescriptors[liType];
+            const u32 luSize = lrCapacity.m_size;
+            if (luSize != 0)
+            {
+                if (luGranule < lrCapacity.m_alignment)
+                    break;
+
+                const u32 luDividend = luSize - 1u;
+                // FLAG PC-platform leaf: PPC twi raises a CPU trap at these predicates;
+                // the native target uses a debugger break without adding an engine assertion.
+                if (luGranule == 0) // 8286CF44: twi TO=6, unsigned <= 0
+                    __debugbreak();
+                const s32 liQuotient = static_cast<s32>(luDividend) / static_cast<s32>(luGranule);
+                const u32 luRotatedDividend = (luDividend << 1) | (luDividend >> 31);
+                const u32 luBankSize = (static_cast<u32>(liQuotient) + 1u) * luGranule;
+                lParams.mauBankSize[liType] = luBankSize;
+                const u32 luDivisionCheck = luGranule & ~(luRotatedDividend - 1u);
+                const s32 liWasted = static_cast<s32>(luBankSize - luSize);
+                if (luDivisionCheck == 0xFFFFFFFFu) // 8286CF68: twi TO=5, unsigned >= -1
+                    __debugbreak();
+                if (liWasted >= 1024 && (CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "WARNING : You are waisting " << liWasted
+                        << " bytes when requesting a resource of size " << static_cast<s32>(luSize)
+                        << " due to the parent bank size being " << luGranule << "\n";
+                }
+                if (luGranule == 0) // 8286D00C: second unsigned divide guard
+                    __debugbreak();
+                lParams.mauBankBlocks[liType] = luBankSize / luGranule;
+            }
+            else
+            {
+                lParams.mauBankSize[liType] = 0;
+                lParams.mauBankBlocks[liType] = 0;
+            }
+        }
+
+        MemoryIO::ResultCodes leResult = MemoryIO::E_RESULT_INVALID_ALIGNMENT;
+        if (liType == MemoryBank::KI_NUM_TYPES)
+        {
+            leResult = static_cast<MemoryIO::ResultCodes>(CreateBank(&lParams));
+            if (leResult == MemoryIO::E_RESULT_OK)
+            {
+                for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
+                {
+                    MemoryBank* const lpBank = GetBank(
+                        GetBankIndexFromId(static_cast<u32>(lParams.mnBankId)));
+                    lBacking.m_baseResources[li] = lpBank->GetData(li);
+                }
+            }
+        }
+        lResponse.SetResult(leResult);
+        lResponse.SetResource(&lBacking, &lCapacity);
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
+                                                     static_cast<s32>(sizeof(lResponse)));
+    }
+
+    // FLAG PC-platform adapter: preserve the active parent's validation/error
+    // behavior and raw bank transport. ProcessMemoryRequest continues to select this provider.
+    void MemoryModule::ProcessCreateResourceRequestNativePC(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
     {
         const MemoryIO::CreateResourceRequest* lpReq = static_cast<const MemoryIO::CreateResourceRequest*>(lpRequest);
         MemoryIO::CreateResourceResponse lResponse;
