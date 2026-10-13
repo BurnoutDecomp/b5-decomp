@@ -111,7 +111,7 @@ namespace BrnResource
                 lCapacity.m_baseResourceDescriptors[0].m_size      = KN_GAMEDATA_GENERAL_SIZE;
                 lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
 
-                s_GameDataGeneralAllocator.Initialize(lResource, lCapacity);
+                s_GameDataGeneralAllocator.AdoptMemory(lResource, lCapacity);
             }
             s_bGameDataGeneralInit = true;
         }
@@ -426,7 +426,7 @@ namespace BrnResource
                 (luLane == 0) ? KU_GLOBAL_GRAPHICS_ARENA_BYTES : 0u;
             lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 16u : 1u;
         }
-        sGlobalGraphicsAllocator.Initialize(lHeapResource, lHeapCapacity);
+        sGlobalGraphicsAllocator.AdoptMemory(lHeapResource, lHeapCapacity);
 
         sbGlobalGraphicsReady = true;
         return &sGlobalGraphicsAllocator;

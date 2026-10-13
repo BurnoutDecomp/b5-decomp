@@ -205,6 +205,8 @@ RW_SIZE_ASSERT(rw::IResourceAllocator_vtbl, 56);
 
 // ARTIST shows real public derivation and overrides the DoAllocate/DoFree slots.
 struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x64 host
+    LinearResourceAllocator() = default;
+    LinearResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     ::rw::Resource m_heapResource;  // +8
     ::rw::ResourceDescriptor m_heapCapacity;  // +48
     ::rw::ResourceDescriptor m_currentUsage;  // +88
@@ -212,15 +214,14 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     uint32_t m_numAllocations;  // +168
     uint8_t _pad0[4];  // +172
 
-    // [PC-LEAF] reconstructed methods (bodies in renderware/src/rwcore_alloc.cpp). Non-virtual
-    // (the resource code holds the concrete LinearResourceAllocator*, e.g. via AllocatorList), so
-    // A linear (bump) allocator over the five Paradise resource pools:
-    // each pool [m_heapResource[t], +m_heapCapacity[t].m_size) is sub-allocated by bumping
-    // m_currentUsage[t]. Frees happen en masse (re-Initialize). Faithful to the X360 semantics
-    // (LinearResourceAllocator::GetResourceDescriptor 0x..., Initialize, DoAllocate); the bump math
-    // uses the same five-lane bump semantics with host-width pointers.
+    // ARTIST 0x82BBCD90 / 0x82BBCE30 reserve the aligned allocator object in lane
+    // zero, then placement-construct it with the adjusted heap bases and original
+    // capacity. Host storage is derived from this type, rather than the original 148 bytes.
     static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn);
-    void  Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
+    static LinearResourceAllocator* Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
+    // FLAG PC-platform leaf: an existing native object adopts exactly these pools,
+    // without an in-pool object reserve. Native lazy arenas use this separate API.
+    void AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
     void  Free(void* lpBlock);
     const Resource& GetLinearHeapBase() const;

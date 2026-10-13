@@ -19,25 +19,28 @@ namespace core
     struct GeneralResourceAllocator : ::rw::IResourceAllocator
     {
         GeneralResourceAllocator();
-        // Adopts the resource regions immediately (X360 ctor @0x82BC0AA8: same math as Initialize()
-        // below, just invoked in-place during construction rather than after).
+        // The resource includes the object reserve returned by GetResourceDescriptor.
+        // ARTIST 0x82BC0AA8 starts the main heap after that reserve, keeping the
+        // requested capacity intact. The host reserve follows sizeof/alignof this type.
         GeneralResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
         ~GeneralResourceAllocator() override;
 
-        // Compute the heap descriptor required to back a usage descriptor: the X360 asm
-        // (GetResourceDescriptor @0x82BC0E28) copies the input 5-entry descriptor through, then
-        // accumulates a synthetic entry-0 requirement of { size = round_up(m_alignment, 2616),
-        // alignment = m_alignment } via the committed rw::BaseResourceDescriptors<5>::operator+=
-        // (2616 = the EA::Allocator::GeneralAllocator in-heap bookkeeping overhead the X360 reserves
-        // out of the front of the adopted core). Entries 1..4 of the synthetic operand are the
-        // additive identity { size = 0, alignment = 1 } so they pass through unchanged.
+        // ARTIST 0x82BC0E28 adds the aligned allocator-object reserve to lane zero.
+        // The original object's 2616 bytes widen with its real native EA heap members;
+        // a console byte count cannot reserve storage for this host object.
         static ::rw::BaseResourceDescriptors<5>* GetResourceDescriptor(::rw::BaseResourceDescriptors<5>* lpOut, const ::rw::BaseResourceDescriptors<5>* lpIn);
 
-        // Adopt the resource regions: main heap over [resource[0], +capacity[0]); physical heap over
-        // [resource[2], +capacity[2]) if that capacity is non-zero (X360 ctor math @0x82BC0AA8).
-        void  Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
-        // Allocate luSize bytes (luAlignment-aligned) for pool luType (graphics pools route to the
-        // physical heap when present; everything else to the main heap).
+        // ARTIST 0x82BC0E00: placement-construct at resource lane zero, or return null.
+        // Backing must satisfy GetResourceDescriptor(capacity), including object alignment.
+        static GeneralResourceAllocator* Initialize(const Resource& lrResource,
+                                                     const ResourceDescriptor& lrCapacity);
+
+        // FLAG PC-platform leaf: adopt exactly the supplied heap extents into an
+        // already-existing native object. There is no in-region object/header reserve.
+        void AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
+
+        // Only lane two belongs to the physical heap. Disposable lanes one/four
+        // use the main heap with the original allocation flag set.
         void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
         void  Free(void* lpBlock);
 
@@ -45,8 +48,8 @@ namespace core
         // base (the GUI modules store GeneralResourceAllocator as an IResourceAllocator*
         // and dispatch DoAllocate: the boost-bar/billboard vertex carves, the texture-state
         // resource carves...). The X360 body walks all five descriptor entries,
-        // carving each non-empty pool from the matching heap (index 2 through
-        // m_physicalAllocator, the rest through m_mainAllocator).
+        // carving lanes 0/1/3/4 from the main heap before lane 2 from the physical
+        // heap. Any failure frees the partial resource and returns all-null lanes.
         // DoFree @0x82BC0DA8 performs the inverse operation in reverse lane order: lane 2 is
         // returned to m_physicalAllocator and all other populated lanes to m_mainAllocator.
         ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,

@@ -142,9 +142,9 @@ namespace CgsResource
         rw::Resource lFileSystemResource = lpAllocator->DoAllocate(lExtendedDescriptor, 0);
 
         // The X360 stores the persistent allocator pointer at this+360492. Its
-        // host wrapper is kept in the ResourceModule owner because the widened
-        // GeneralResourceAllocator exceeds the native in-block reserve.
-        mFileSystemAllocatorStorage.Initialize(lFileSystemResource, lFileSystemCapacity);
+        // native object is kept in the ResourceModule owner and adopts the
+        // requested capacity directly; the separately carved object reserve is unused.
+        mFileSystemAllocatorStorage.AdoptMemory(lFileSystemResource, lFileSystemCapacity);
         mpFileSystemAllocator = &mFileSystemAllocatorStorage;
 
         mFileSystem.Construct(mpFileSystemAllocator, lpDebugAllocator,

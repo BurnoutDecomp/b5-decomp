@@ -872,9 +872,9 @@ namespace BrnResource
                                           << lrDef.mpcName << "\n";
                 continue;
             }
-            // (LinearResourceAllocator::GetResourceDescriptor is the identity - a linear
-            // allocator keeps its bookkeeping in its own object - so the carve == the capacity.)
-            s_aRWLinearAllocators[li].Initialize(lRes, lCapacity);
+            // This native object lives outside its pools. Adopt exactly the carved
+            // capacities; the original static Initialize instead reserves an in-pool object.
+            s_aRWLinearAllocators[li].AdoptMemory(lRes, lCapacity);
 
             mapGeneratedRWLinearAllocators[li]              = &s_aRWLinearAllocators[li];
             mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
@@ -885,8 +885,8 @@ namespace BrnResource
 
         // ---- type-12 records: rw general resource allocators (EA GeneralAllocator pair). The
         //      X360 service sizes the carve via GetResourceDescriptor (lane 0 grows by the
-        //      in-heap bookkeeping overhead, rounded to the lane alignment) then Initializes
-        //      with the ORIGINAL capacity - mirrored here; the drain's case 12 stores the
+        //      in-heap bookkeeping overhead, rounded to the lane alignment) then adopts
+        //      the ORIGINAL capacity in the separate native object - mirrored here; the drain's case 12 stores the
         //      returned pointer. -----------------------------------------------------------
         for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS && li < 5; ++li)
         {
@@ -925,7 +925,7 @@ namespace BrnResource
                                           << lrDef.mpcName << "\n";
                 continue;
             }
-            s_aRWGeneralAllocators[li].Initialize(lRes, lCapacity);
+            s_aRWGeneralAllocators[li].AdoptMemory(lRes, lCapacity);
 
             mapGeneratedRWGeneralAllocators[li]             = &s_aRWGeneralAllocators[li];
             mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
