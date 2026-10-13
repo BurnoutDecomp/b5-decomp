@@ -114,23 +114,43 @@ namespace CgsResource
         }
     }
 
-    // ARTIST829055B0: construct the modules over the supplied resource allocator.
-    // FileSystem uses its existing native device-manager adapter.
-    void ResourceModule::Construct(const void* lpInitOptions, void* lpAllocator)
+    // ARTIST829055B0: carve the file-system allocator's backing resource through
+    // the supplied allocator, retain the allocator wrapper with this owner, then
+    // pass the original options through to the embedded FileSystem.
+    void ResourceModule::Construct(InitOptions* lpInitOptions,
+                                  rw::IResourceAllocator* lpAllocator,
+                                  rw::IResourceAllocator* lpDebugAllocator)
     {
         if (lpInitOptions == 0 || lpAllocator == 0)
             return;
-        const InitOptions* lpOptions = static_cast<const InitOptions*>(lpInitOptions);
-        rw::IResourceAllocator* lpRwAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
 
         mMemoryModule.Construct(
-            const_cast<CgsMemory::MemoryModule::InitOptions*>(&lpOptions->mMemoryInitOptions),
-            lpRwAllocator);
-        mFileSystem.Construct();
-        mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
-        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpRwAllocator,
-                                      lpOptions->mDebugParams.mpDebugAllocator);
-        mDebugComponent.Construct(this, &lpOptions->mDebugParams);
+            &lpInitOptions->mMemoryInitOptions, lpAllocator);
+        mBundleLoaderModule.Construct(&lpInitOptions->mLoaderInitOptions, lpAllocator,
+                                      lpDebugAllocator);
+        mPoolModule.Construct(&lpInitOptions->mPoolInitOptions, lpAllocator);
+        mDebugComponent.Construct(this, &lpInitOptions->mDebugParams);
+
+        const u32 KU_FILE_SYSTEM_ALLOCATOR_SIZE = 0x160000;
+        rw::ResourceDescriptor lFileSystemCapacity;
+        lFileSystemCapacity.m_baseResourceDescriptors[0].m_size = KU_FILE_SYSTEM_ALLOCATOR_SIZE;
+        lFileSystemCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+
+        rw::ResourceDescriptor lExtendedDescriptor;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(
+            &lExtendedDescriptor, &lFileSystemCapacity);
+        rw::Resource lFileSystemResource = lpAllocator->DoAllocate(lExtendedDescriptor, 0);
+
+        // The X360 stores the persistent allocator pointer at this+360492. Its
+        // host wrapper is kept in the ResourceModule owner because the widened
+        // GeneralResourceAllocator exceeds the native in-block reserve.
+        mFileSystemAllocatorStorage.Initialize(lFileSystemResource, lFileSystemCapacity);
+        mpFileSystemAllocator = &mFileSystemAllocatorStorage;
+
+        mFileSystem.Construct(mpFileSystemAllocator, lpDebugAllocator,
+                              lpInitOptions->macFileSearchPath,
+                              lpInitOptions->mpDiskLayout,
+                              lpInitOptions->mpcDiskCacheDrive);
     }
     // ARTIST828EC6B0, with retirement of native pending-response allocations.
     void ResourceModule::Destruct()

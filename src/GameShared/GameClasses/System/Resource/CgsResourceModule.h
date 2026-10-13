@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator
+#include "rw/rwcore_general_alloc.h"                                  // persistent file-system allocator
 #include "GameShared/GameClasses/System/Resource/CgsResourceDebugComponent.h"  // embedded mDebugComponent + DebugComponentParams
 
 // CgsResource::ResourceModule - the resource-streaming engine: the container module that owns
@@ -22,12 +23,10 @@
 // shuttles. The ctor embeds (by value, in order): BundleLoaderModule @a1+160, PoolModule
 // @a1+45280, MemoryModule @a1+72032, CgsFileSystem::FileSystem @a1+72204, DebugComponent @a1+84806.
 //
-// DEFER STATUS: this pass reconstructs the lifecycle ORCHESTRATION spine - Prepare (0x828F4140)
-// and Release (0x82906570), the resumable stage machines that bring the four sub-modules up (base
-// -> Memory -> FileSystem -> Bundle -> Pool + register debug) and tear them down in reverse. They
-// are rw-INDEPENDENT (they only chain the embedded modules' own Prepare/Release). Construct
-// (allocates everything through the rw allocator), Update and the request shuttles are DEFERRED
-// (rw allocator middleware) as inert marked stubs.
+// STATUS: Prepare/Release retain their resumable lifecycle stages. Construct now retains the
+// ARTIST file-system GeneralResourceAllocator for the ResourceModule lifetime and passes it into
+// the embedded FileSystem/PatchManager owner; the host stores that widened allocator wrapper in
+// this ResourceModule because it exceeds the console reserve added by GetResourceDescriptor.
 namespace CgsResource
 {
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
@@ -89,12 +88,14 @@ namespace CgsResource
         ResourceModule()
         {
             mbIsNewModule = true;
+            mpFileSystemAllocator = nullptr;
             mPendingFileResponses.Construct(
                 maPendingFileResponses, maiPendingFileResponseFreeIndices,
                 static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
         }
 
-        void Construct(const void* lpInitOptions, void* lpAllocator);  // deferred
+        void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+                       rw::IResourceAllocator* lpDebugAllocator);  // 0x829055B0
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
@@ -135,12 +136,8 @@ namespace CgsResource
         // assert + return false; @0x828D8310 / @0x828D83A0). The four real file-system adders
         // (AddAddPatchRequest @0x828FD5C8 / AddCloseFileRequest @0x828F3EE0 /
         // AddRegisterMemFileRequest @0x828EC600 / AddUnregisterMemFileRequest @0x828EC660) are
-        // PARTIAL: they need a cross-TU dependency web (FileSystem::{Lock,Unlock,Close,
-        // Register,Unregister}Internal + GetPatchManager, PatchManager::AddPatch, FileSystemAlloc,
-        // CgsContainers::IndexedPool8<PendingFileResponse,16>, and the FileEvent/FileHandleEvent/
-        // CloseFileRequest/RegisterMemFileRequest/UnregisterMemFileRequest event structs) that is
-        // not yet homed, so they are intentionally NOT declared/bodied here (left to a later wave
-        // to grow coherently, same disposition as wave44's blocked BinaryFileResource members).
+        // PARTIAL: the four real file-system adders still need their own file-handle/memory-file
+        // dependency web and remain deferred.
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
         bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
         bool AddOpenReadStreamRequest(const Events::OpenReadStreamRequest* lpRequest);     // @0x829070B0
@@ -156,6 +153,11 @@ namespace CgsResource
         CgsMemory::MemoryModule   mMemoryModule;        // +0x46580 (a1+72032)
         CgsFileSystem::FileSystem mFileSystem;          // +0x4684C (a1+72204)
         DebugComponent            mDebugComponent;      // +0x52D18 (a1+84806)
+        rw::core::GeneralResourceAllocator* mpFileSystemAllocator; // :206, X360 this+360492
+        // FLAG PC-platform leaf: the X360 places this wrapper at the start of its resource block.
+        // The widened host wrapper exceeds the 2616-byte allocator reserve, so this owning module
+        // keeps the wrapper object while it adopts the same allocated resource/capacity.
+        rw::core::GeneralResourceAllocator mFileSystemAllocatorStorage;
         PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         CgsContainers::IndexedPool<PendingFileResponse,
