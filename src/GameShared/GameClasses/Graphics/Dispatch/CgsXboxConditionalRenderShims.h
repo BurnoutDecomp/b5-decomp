@@ -8,10 +8,12 @@
 // call sites need are declared so the reconstructed bodies compile and link
 // store-for-store against the same calls the X360 image makes.
 //
-// HONEST PLACEHOLDER: external platform APIs, NOT reconstructed here. On a non-X360
-// build they resolve to the platform shim layer; the declarations alone are what the
-// compile gate exercises. The device pointer is the same global the X360 image reads
-// from off_83271608 (renderengine::gpD3DDevice).
+// PC native D3D9 query-provider bodies live in pc/gcm/renderengine/XenonD3D9Shims.cpp.
+// Renderer/Dispatcher activation remains off on the PC path, and ARTIST evidence does not
+// establish whether Xenos draws on a zero or nonzero survey result. These declarations retain
+// the console call ABI; the host provider is a platform substitution, not recovered polarity.
+// The device pointer is the same global the X360 image reads from off_83271608
+// (renderengine::gpD3DDevice).
 
 namespace CgsGraphics
 {

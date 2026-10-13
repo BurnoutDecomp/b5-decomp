@@ -13,6 +13,11 @@
 // back before drawing; if rollback also fails, the main loop waits for recovery.
 namespace renderengine
 {
+    // The D3D9 query objects are invalidated/rebound with the device reset. The provider owns
+    // its IDirect3DQuery9 references in XenonD3D9Shims.cpp; queries are recreated lazily.
+    void OcclusionQueryProviderPCInvalidate(IDirect3DDevice9* lpDevice);
+    void OcclusionQueryProviderPCResume(IDirect3DDevice9* lpDevice);
+
     template<class DeviceType> class BasicFlipSwapChainPC
     {
         DeviceType* mpDevice = nullptr;
@@ -60,18 +65,23 @@ namespace renderengine
             D3DPRESENT_PARAMETERS lDesired=mParameters;
             lDesired.BackBufferWidth=luWidth;lDesired.BackBufferHeight=luHeight;lDesired.PresentationInterval=luInterval;
             D3DPRESENT_PARAMETERS lRequest=lDesired; // ResetEx overwrites size/count fields.
+            OcclusionQueryProviderPCInvalidate(mpDevice);
             const HRESULT lResult=mpDevice->ResetEx(&lRequest,nullptr);
             ++muGeneration;
             if(SUCCEEDED(lResult))
             {
                 mParameters=lDesired;mbLost=false;muFailedWidth=muFailedHeight=0;
+                OcclusionQueryProviderPCResume(mpDevice);
                 return S_OK;
             }
             mbLost=true;
             lRequest=mParameters;
+            // The fallback is a distinct ResetEx attempt; discard any state again before it.
+            OcclusionQueryProviderPCInvalidate(mpDevice);
             if(SUCCEEDED(mpDevice->ResetEx(&lRequest,nullptr)))
             {
                 mbLost=false;muFailedWidth=luWidth;muFailedHeight=luHeight;
+                OcclusionQueryProviderPCResume(mpDevice);
             }
             return lResult;
         }
