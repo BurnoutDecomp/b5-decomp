@@ -1,23 +1,19 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameSource/Resource/BrnMemoryMapData.h"  // MemoryMapImageInitializer
-#include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
 #include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include <new>   // std::nothrow (the GlobalGraphics arena carve)
 #include <malloc.h>   // _aligned_malloc (DefaultLinearAllocator PC backing)
 #include <Windows.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
+#include <cstring>
 
-// BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
-// the heap the whole GameData resource system (ConstructResourceModule -> ResourceModule::Construct)
-// carves its module/bank memory from, and the one ICE::ICEMemory::Construct allocates its debug pool
-// from.
-//
-// [PC-LEAF, consistent with the allocator-layer decision]: on X360 this is
-// Allocators::mGlobalDebugAllocator - an rw allocator over a memory region the boot path reserves;
-// here it is a big malloc-backed region with an EA::Allocator::GeneralAllocator over it. The backing
-// block is allocated lazily on first use; mpInternalDebugAllocator is published non-null at static
-// init (it points at the allocator object) so the ICE null-check passes regardless of init order.
+// Existing platform owner: GameShared/GameClasses/System/PC/CgsXboxPlatformPC.cpp.
+extern "C" void* XPhysicalAlloc(unsigned long luSize, unsigned long luPhysicalAddress,
+                                unsigned long luAlignment, unsigned long luProtect);
+
+// ARTIST owns one internal allocator pointer and one public named wrapper per global.
+// Native lazy backing uses these same roles until the recovered Construct is activated.
 namespace BrnResource
 {
     namespace
@@ -28,32 +24,8 @@ namespace BrnResource
         // (another ~266 MB) -- so this is sized to hold the bank backing + a full fallback at once.
         const size_t KN_DEBUG_HEAP_SIZE = 768u * 1024u * 1024u;
 
-        EA::Allocator::GeneralAllocator s_DebugGeneralAllocator;   // ctor -> Init (empty) at static init
-        HeapResourceAllocator           s_DebugResourceAllocator;
+        rw::core::GeneralResourceAllocator sNativeDebugAllocator;
         bool                            s_bDebugHeapBacked = false;
-
-        // Lazily reserve + adopt the backing block (avoids the reservation at static init).
-        //
-        // FLAG PC-platform leaf: the block MUST live below 4 GB. Everything the resource
-        // system touches is carved from this one root -- the MemoryModule root banks and
-        // all 27 pools (so every bnd2 resource payload and its in-place FixUp), plus all
-        // 24 memory-map allocators (so the AttribSys package heap: every Attrib::Alloc,
-        // the schema.vlt/.bin blobs and the Attrib vault's PtrN pointer fixups). The
-        // shipped serialised format stores those pointers in FOUR-BYTE slots, read back
-        // with the committed PointerFromU32 idiom; on the 32-bit X360 that is free, on
-        // x64 it only round-trips when the pointee is under 4 GB. The plain CRT malloc
-        // this used to be handed out ~0x21e_00000000 on Windows x64, so the first fixed-up
-        // slot dereference faulted (strlen on Attrib's truncated typenames pointer).
-        // See GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h.
-        void EnsureDebugHeapBacked()
-        {
-            if (s_bDebugHeapBacked)
-                return;
-            void* lpBlock = CgsMemory::LowMemory::Reserve(KN_DEBUG_HEAP_SIZE);
-            if (lpBlock)
-                s_DebugGeneralAllocator.AddCore(lpBlock, KN_DEBUG_HEAP_SIZE);
-            s_bDebugHeapBacked = true;
-        }
 
         MEMORYSTATUSEX GetHostMemoryStatusPC()
         {
@@ -65,17 +37,57 @@ namespace BrnResource
         }
     }
 
-    // Published non-null at static init; points at the root HeapResourceAllocator (which IS-A
-    // rw::IResourceAllocator) so the resource-module Construct chain can carve memory through its
-    // virtual DoAllocate. The backing 64 MB block is adopted lazily on first Allocate. (ICE null-checks
-    // this; the resource modules cast it to rw::IResourceAllocator* and call DoAllocate.)
-    void* Allocators::mpInternalDebugAllocator = static_cast<rw::IResourceAllocator*>(&s_DebugResourceAllocator);
+    // FLAG PC-platform leaf: the existing native debug heap object is available
+    // before its low-memory backing is reserved. This is an internal General pointer,
+    // never an alias for the public Heap wrapper. Construct later replaces it normally.
+    rw::core::GeneralResourceAllocator* Allocators::mpInternalDebugAllocator = &sNativeDebugAllocator;
     DefaultLinearAllocator Allocators::mInitialDefaultAllocator;
+    rw::Resource Allocators::mGlobalSystemMemory;
+    rw::ResourceDescriptor Allocators::mGlobalSystemMemoryDescriptor;
+    rw::core::GeneralResourceAllocator* Allocators::mpInternalGlobalSystemAllocator = nullptr;
+    HeapResourceAllocator Allocators::mGlobalSystemAllocator;
+    rw::Resource Allocators::mGlobalDebugMemory;
+    rw::ResourceDescriptor Allocators::mGlobalDebugMemoryDescriptor;
+    HeapResourceAllocator Allocators::mGlobalDebugAllocator;
+    rw::Resource Allocators::mGlobalGraphicsMemory;
+    rw::ResourceDescriptor Allocators::mGlobalGraphicsMemoryDescriptor;
+    rw::LinearResourceAllocator* Allocators::mpInternalGraphicsAllocator = nullptr;
+    LinearResourceAllocator Allocators::mGlobalGraphicsAllocator;
+    rw::Resource Allocators::mGlobalResourceMemory;
+    rw::ResourceDescriptor Allocators::mGlobalResourceMemoryDescriptor;
+    rw::LinearResourceAllocator* Allocators::mpInternalResourceAllocator = nullptr;
+    LinearResourceAllocator Allocators::mGlobalResourceAllocator;
+    HeapResourceAllocator Allocators::mRuntimeAllocator;
+    LinearResourceAllocator Allocators::mGlobalMemFileAllocator;
+
+    void Allocators::EnsureNativeDebugBacking()
+    {
+        if (mpInternalDebugAllocator != &sNativeDebugAllocator)
+            return;
+        if (!s_bDebugHeapBacked)
+        {
+            // FLAG PC-platform leaf: preserve the approved 768 MiB low-4GB arena.
+            // Four-byte serialized pointers require its low addresses. This native
+            // object lives separately, so AdoptMemory must not skip an in-arena header.
+            rw::Resource lBacking;
+            lBacking.m_baseResources[0] = CgsMemory::LowMemory::Reserve(KN_DEBUG_HEAP_SIZE);
+            rw::ResourceDescriptor lCapacity;
+            lCapacity.m_baseResourceDescriptors[0].m_size =
+                lBacking.m_baseResources[0] ? static_cast<u32>(KN_DEBUG_HEAP_SIZE) : 0u;
+            lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+            sNativeDebugAllocator.AdoptMemory(lBacking, lCapacity);
+            s_bDebugHeapBacked = lBacking.m_baseResources[0] != nullptr;
+        }
+        // Native bring-up keeps its existing quiet debug heap. The recovered
+        // engine constructor supplies the original print level two instead.
+        mGlobalDebugAllocator.Construct(mpInternalDebugAllocator, "GlobalDebug", 0);
+    }
 
     HeapResourceAllocator* GetDebugAllocator()
     {
-        EnsureDebugHeapBacked();
-        return &s_DebugResourceAllocator;
+        Allocators::EnsureNativeDebugBacking();
+        CGS_ASSERT(Allocators::mpInternalDebugAllocator, "Allocators::mpInternalDebugAllocator");
+        return &Allocators::mGlobalDebugAllocator;
     }
 
     namespace
@@ -93,8 +105,8 @@ namespace BrnResource
     {
         if (!s_bGameDataGeneralInit)
         {
-            EnsureDebugHeapBacked();
-            void* lpRegion = s_DebugGeneralAllocator.MallocAligned(KN_GAMEDATA_GENERAL_SIZE, 16);
+            (void)GetDebugAllocator();
+            void* lpRegion = Allocators::mpInternalDebugAllocator->Alloc(0, KN_GAMEDATA_GENERAL_SIZE, 16);
             if (lpRegion)
             {
                 rw::Resource lResource;
@@ -112,8 +124,11 @@ namespace BrnResource
                 lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
 
                 s_GameDataGeneralAllocator.AdoptMemory(lResource, lCapacity);
+                s_bGameDataGeneralInit = true;
             }
-            s_bGameDataGeneralInit = true;
+            else
+                s_GameDataGeneralAllocator.m_mainAllocator.SetOption(
+                    EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
         }
         return &s_GameDataGeneralAllocator;
     }
@@ -219,17 +234,17 @@ namespace BrnResource
             "disposable uninitialized"
         };
 
-        void LogDefaultLinearMemoryBreakdown(u32 luSize, const char* lpcName)
+        void LogAllocatorMemoryBreakdown(u32 luSize, const char* lpcName, const char* lpcPrefix = "  ")
         {
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
-                *CgsDev::Log::gpDebugPrint << "  " << (luSize / 0x100000u) << "mb "
+                *CgsDev::Log::gpDebugPrint << lpcPrefix << (luSize / 0x100000u) << "mb "
                     << ((luSize % 0x100000u) / 0x400u) << "kb " << (luSize % 0x400u)
                     << "b of " << lpcName << "\n";
             }
         }
 
-        void FireDefaultLinearAllocatorAssert(const char* lpcMessage, s32 liLine)
+        void FireResourceAllocatorAssert(const char* lpcMessage, s32 liLine)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
@@ -270,15 +285,15 @@ namespace BrnResource
         {
             const size_t luUsage = maAllocators[liType].GetUsage();
             if (luUsage != 0)
-                LogDefaultLinearMemoryBreakdown(
+                LogAllocatorMemoryBreakdown(
                     static_cast<u32>(luUsage), KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
         }
 
         if (maAllocators[0].GetUsage() > 0x800u)
-            FireDefaultLinearAllocatorAssert("Renderware over budget in main memory\n", 825);
+            FireResourceAllocatorAssert("Renderware over budget in main memory\n", 825);
 
         if (maAllocators[2].GetUsage() > 0x400000u)
-            FireDefaultLinearAllocatorAssert("Renderware over budget in physical memory\n", 826);
+            FireResourceAllocatorAssert("Renderware over budget in physical memory\n", 826);
     }
 
     // ARTIST 0x82664800. All five descriptor lanes are allocated from the matching
@@ -295,7 +310,7 @@ namespace BrnResource
         {
             const u32 luSize = lrDescriptor.m_baseResourceDescriptors[liType].m_size;
             if (luSize != 0)
-                LogDefaultLinearMemoryBreakdown(luSize, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+                LogAllocatorMemoryBreakdown(luSize, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
         }
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -304,7 +319,7 @@ namespace BrnResource
         {
             const u32 luFree = static_cast<u32>(maAllocators[liType].GetFreeMemory());
             if (luFree != 0)
-                LogDefaultLinearMemoryBreakdown(luFree, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+                LogAllocatorMemoryBreakdown(luFree, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
         }
 
         rw::Resource lResource;
@@ -317,7 +332,7 @@ namespace BrnResource
                 maAllocators[liType].SetAlignment(lrLane.m_alignment);
                 lResource.m_baseResources[liType] = maAllocators[liType].Malloc(lrLane.m_size);
                 if (lResource.m_baseResources[liType] == nullptr)
-                    FireDefaultLinearAllocatorAssert("Failed to allocate memory\n", 948);
+                    FireResourceAllocatorAssert("Failed to allocate memory\n", 948);
             }
         }
 
@@ -327,7 +342,7 @@ namespace BrnResource
         {
             const u32 luFree = static_cast<u32>(maAllocators[liType].GetFreeMemory());
             if (luFree != 0)
-                LogDefaultLinearMemoryBreakdown(luFree, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+                LogAllocatorMemoryBreakdown(luFree, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
         }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "-----------------------------------------\n";
@@ -337,14 +352,14 @@ namespace BrnResource
     // ARTIST 0x82661CF8: this initial global allocator is monotonic and cannot free a block.
     void DefaultLinearAllocator::DoFree(const rw::Resource& /*lrResource*/)
     {
-        FireDefaultLinearAllocatorAssert(
+        FireResourceAllocatorAssert(
             "Should never be freeing memory from the global allocator\n", 984);
     }
 
     // ARTIST 0x82661D88: disposable allocation/free is not supported on this allocator.
     void DefaultLinearAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
     {
-        FireDefaultLinearAllocatorAssert(
+        FireResourceAllocatorAssert(
             "Should never be allocating or freeing disposable memory!!!\n", 999);
     }
 
@@ -354,81 +369,344 @@ namespace BrnResource
     // base) -- the X360 thunk just rewrites the vptr and conditionally operator-deletes.
     DefaultLinearAllocator::~DefaultLinearAllocator() = default;
 
-    // rw::IResourceAllocator virtual entry point -> forward to Allocate.
-    rw::Resource HeapResourceAllocator::DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName)
-    {
-        return Allocate(lDescriptor, lpcName);
-    }
-
-    // Carve a resource matching lDescriptor from the root debug heap. The returned rw::Resource's
-    // m_baseResources[0] is the memory block (the X360 DoAllocate fills the per-pool base pointers;
-    // PC leaf serves pool 0 from the general heap).
-    rw::Resource HeapResourceAllocator::Allocate(const rw::ResourceDescriptor& lDescriptor, const char* /*lpcName*/)
-    {
-        EnsureDebugHeapBacked();
-        rw::Resource lResource;
-        for (uint32_t lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-            lResource.m_baseResources[lu] = 0;
-
-        const uint32_t luSize  = lDescriptor.m_baseResourceDescriptors[0].m_size;
-        uint32_t       luAlign = lDescriptor.m_baseResourceDescriptors[0].m_alignment;
-        if (luAlign < 16)
-            luAlign = 16;
-        if (luSize)
-            lResource.m_baseResources[0] = s_DebugGeneralAllocator.MallocAligned(luSize, luAlign);
-        return lResource;
-    }
-
-    // =====================================================================================
-    // GetGlobalGraphicsAllocator -- the process-wide "GlobalGraphics" linear resource
-    // allocator (X360 object @ dword_82F2C814). ADDITIVE 2026-09-02 (tyre-mark wave):
-    // BrnResourceAllocator.h has declared it since the shadow wave, BrnRendererMemory.cpp's
-    // banner has called it out as "declaration-only, defined nowhere" ever since, and the
-    // effects link is the first consumer that cannot proceed without it (LNK2019, measured).
-    //
-    // ⚠ FLAG PC-platform leaf. The console builds this object in
-    // Allocators::ConstructGlobalGraphicsMemory @0x82666B70 over an XPhysicalAlloc'd region --
-    // physically contiguous, GPU-visible memory sized from the X360 memory map
-    // (Allocators::InitMemoryMap @0x82664728). Neither exists on the host and neither is
-    // reconstructed. What every CALLER needs is the abstract rw::IResourceAllocator contract
-    // (DoAllocate hands back a lane-0 block), so this supplies exactly that over one host heap
-    // block -- the SAME shape BrnRendererModule.cpp's `sWorldDispatchAllocator` already uses for
-    // the sky dome's buffers. A platform substitution, not a stand-in for game logic.
-    //
-    // WHO TAKES IT: ParticleModule::Prepare @0x8229BEA0 hands `off_82F2C814` to all five
-    // contained Im3d renderers; the one that matters for the tyre mark, Im3dSkidsRenderer::
-    // Construct @0x82295150, allocates the skid vertex/pixel ProgramBuffers through it (456 +
-    // 228 bytes of microcode plus their headers). 256 KB leaves room for the rest of that family
-    // as it lands; the arena is carved lazily, so a build that never touches effects pays nothing.
-    // =====================================================================================
     namespace
     {
-        rw::LinearResourceAllocator sGlobalGraphicsAllocator;
-        bool                        sbGlobalGraphicsReady = false;
-        const uint32_t              KU_GLOBAL_GRAPHICS_ARENA_BYTES = 256u * 1024u;
+        void AssertSupportedDescriptor(const rw::ResourceDescriptor& lrDescriptor, s32 liFirstLine)
+        {
+            if (lrDescriptor.m_baseResourceDescriptors[3].m_size != 0)
+                FireResourceAllocatorAssert("We don't support unitialized memory\n", liFirstLine);
+            if (lrDescriptor.m_baseResourceDescriptors[4].m_size != 0)
+                FireResourceAllocatorAssert("We don't support disposable unitialized memory\n", liFirstLine + 1);
+            if (lrDescriptor.m_baseResourceDescriptors[1].m_size != 0)
+                FireResourceAllocatorAssert("We don't support disposable memory\n", liFirstLine + 2);
+        }
+
+        void AssertSupportedResource(const rw::Resource& lrResource, s32 liFirstLine)
+        {
+            if (lrResource.m_baseResources[3] != nullptr)
+                FireResourceAllocatorAssert("We don't support unitialized memory\n", liFirstLine);
+            if (lrResource.m_baseResources[4] != nullptr)
+                FireResourceAllocatorAssert("We don't support disposable unitialized memory\n", liFirstLine + 1);
+            if (lrResource.m_baseResources[1] != nullptr)
+                FireResourceAllocatorAssert("We don't support disposable memory\n", liFirstLine + 2);
+        }
+
+        void LogAllocatorName(const char* lpcName)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                if (lpcName)
+                    *CgsDev::Log::gpDebugPrint << "Executing allocations into " << lpcName << "\n";
+                else
+                    *CgsDev::Log::gpDebugPrint << "Executing allocations: \n";
+            }
+        }
+
+        void AssertResourceAllocated(const char* lpcType, s32 liLine)
+        {
+            char lacMessage[256];
+            CgsDev::StrStream lStream(lacMessage, sizeof(lacMessage));
+            lStream << "Failed to allocate memory type " << lpcType << "\n";
+            FireResourceAllocatorAssert(lacMessage, liLine);
+        }
+    }
+
+    HeapResourceAllocator::HeapResourceAllocator()
+        : mpGeneralAllocator(nullptr), mpcName(nullptr), miPrintLevel(0)
+    {
+    }
+
+    // The three stores in ARTIST 0x82666A54 / 0x82666B58 / 0x82666E48.
+    void HeapResourceAllocator::Construct(rw::core::GeneralResourceAllocator* lpAllocator,
+                                          const char* lpcName, s32 liPrintLevel)
+    {
+        mpGeneralAllocator = lpAllocator;
+        mpcName = lpcName;
+        miPrintLevel = liPrintLevel;
+    }
+
+    rw::Resource HeapResourceAllocator::Allocate(const rw::ResourceDescriptor& lrDescriptor,
+                                                const char* lpcName)
+    {
+        return DoAllocate(lrDescriptor, lpcName);
+    }
+
+    // ARTIST 0x82664BF0. The public wrapper validates supported lanes and delegates
+    // ownership to its internal General allocator, including the physical lane.
+    rw::Resource HeapResourceAllocator::DoAllocate(const rw::ResourceDescriptor& lrDescriptor,
+                                                   const char* lpcName)
+    {
+        if (this == &Allocators::mGlobalDebugAllocator)
+            Allocators::EnsureNativeDebugBacking();
+        AssertSupportedDescriptor(lrDescriptor, 1101);
+        if (mpGeneralAllocator == nullptr)
+            FireResourceAllocatorAssert("General allocator not set\n", 1113);
+        if (miPrintLevel > 0 && miPrintLevel <= 2)
+        {
+            LogAllocatorName(mpcName);
+            for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+                if (lrDescriptor.m_baseResourceDescriptors[luLane].m_size != 0)
+                    LogAllocatorMemoryBreakdown(lrDescriptor.m_baseResourceDescriptors[luLane].m_size,
+                                                KAC_DEFAULT_LINEAR_RESOURCE_NAMES[luLane]);
+        }
+        rw::Resource lResult = mpGeneralAllocator->DoAllocate(lrDescriptor, lpcName);
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+            if (lrDescriptor.m_baseResourceDescriptors[luLane].m_size != 0
+                && lResult.m_baseResources[luLane] == nullptr)
+                AssertResourceAllocated(KAC_DEFAULT_LINEAR_RESOURCE_NAMES[luLane], 1153);
+        return lResult;
+    }
+
+    // ARTIST 0x82664FD8.
+    void HeapResourceAllocator::DoFree(const rw::Resource& lrResource)
+    {
+        AssertSupportedResource(lrResource, 1180);
+        if (mpGeneralAllocator == nullptr)
+            FireResourceAllocatorAssert("General allocator not set\n", 1192);
+        mpGeneralAllocator->DoFree(lrResource);
+    }
+
+    // ARTIST 0x82661E18.
+    void HeapResourceAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
+    {
+        if (mpGeneralAllocator == nullptr)
+            FireResourceAllocatorAssert("General allocator not set\n", 1209);
+        FireResourceAllocatorAssert("Should never be allocating or freeing disposable memory!!!\n", 1210);
+    }
+
+    LinearResourceAllocator::LinearResourceAllocator()
+        : mpLinearAllocator(nullptr), mpcName(nullptr)
+    {
+    }
+
+    // The two stores in ARTIST 0x82666C48 / 0x82666D38 / 0x82666F18.
+    void LinearResourceAllocator::Construct(rw::LinearResourceAllocator* lpAllocator, const char* lpcName)
+    {
+        mpLinearAllocator = lpAllocator;
+        mpcName = lpcName;
+    }
+
+    // ARTIST 0x826651C0.
+    rw::Resource LinearResourceAllocator::DoAllocate(const rw::ResourceDescriptor& lrDescriptor,
+                                                     const char* lpcName)
+    {
+        AssertSupportedDescriptor(lrDescriptor, 1293);
+        if (mpLinearAllocator == nullptr)
+            FireResourceAllocatorAssert("General allocator not set\n", 1305);
+        const rw::ResourceDescriptor lCapacity = mpLinearAllocator->GetCapacity();
+        const rw::ResourceDescriptor lUsage = mpLinearAllocator->GetCurrentUsage();
+        LogAllocatorName(mpcName);
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            const u32 luSize = lrDescriptor.m_baseResourceDescriptors[luLane].m_size;
+            if (luSize != 0)
+            {
+                LogAllocatorMemoryBreakdown(luSize, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[luLane], "Size:  ");
+                LogAllocatorMemoryBreakdown(lCapacity.m_baseResourceDescriptors[luLane].m_size
+                    - lUsage.m_baseResourceDescriptors[luLane].m_size,
+                    KAC_DEFAULT_LINEAR_RESOURCE_NAMES[luLane], "Free:  ");
+            }
+        }
+        rw::Resource lResult = mpLinearAllocator->DoAllocate(lrDescriptor, lpcName);
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            if (lrDescriptor.m_baseResourceDescriptors[luLane].m_size == 0)
+                continue;
+            if (lResult.m_baseResources[luLane] == nullptr)
+                AssertResourceAllocated(KAC_DEFAULT_LINEAR_RESOURCE_NAMES[luLane], 1355);
+            const u32 luAlignment = lrDescriptor.m_baseResourceDescriptors[luLane].m_alignment;
+            if (reinterpret_cast<uintptr_t>(lResult.m_baseResources[luLane]) % luAlignment != 0)
+            {
+                char lacMessage[256];
+                CgsDev::StrStream lStream(lacMessage, sizeof(lacMessage));
+                lStream << "Allocated memory is not aligned to " << luAlignment << "bytes\n";
+                FireResourceAllocatorAssert(lacMessage, 1358);
+            }
+        }
+        return lResult;
+    }
+
+    // ARTIST 0x82665708.
+    void LinearResourceAllocator::DoFree(const rw::Resource& lrResource)
+    {
+        AssertSupportedResource(lrResource, 1385);
+        if (mpLinearAllocator == nullptr)
+            FireResourceAllocatorAssert("General allocator not set\n", 1397);
+        mpLinearAllocator->DoFree(lrResource);
+    }
+
+    // ARTIST 0x82661F10.
+    void LinearResourceAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
+    {
+        if (mpLinearAllocator == nullptr)
+            FireResourceAllocatorAssert("General allocator not set\n", 1414);
+        FireResourceAllocatorAssert("Should never be allocating or freeing disposable memory!!!\n", 1415);
+    }
+
+    namespace
+    {
+        rw::LinearResourceAllocator sNativeGraphicsAllocator;
+        const u32 KU_GLOBAL_GRAPHICS_ARENA_BYTES = 256u * 1024u;
     }
 
     rw::IResourceAllocator* Allocators::GetGlobalGraphicsAllocator()
     {
-        if (sbGlobalGraphicsReady)
-            return &sGlobalGraphicsAllocator;
-
-        void* lpHeap = ::operator new(KU_GLOBAL_GRAPHICS_ARENA_BYTES, std::nothrow);
-        if (lpHeap == 0)
-            return 0;
-
-        rw::Resource           lHeapResource;
-        rw::ResourceDescriptor lHeapCapacity;
-        for (uint32_t luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        if (mpInternalGraphicsAllocator == nullptr)
         {
-            lHeapResource.m_baseResources[luLane] = (luLane == 0) ? lpHeap : 0;
-            lHeapCapacity.m_baseResourceDescriptors[luLane].m_size =
-                (luLane == 0) ? KU_GLOBAL_GRAPHICS_ARENA_BYTES : 0u;
-            lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 16u : 1u;
+            // FLAG PC-platform leaf: preserve the existing lazy 256 KiB CPU arena.
+            // Its object lives outside the pool. This establishes no GPU/DMA equivalence.
+            void* lpHeap = ::operator new(KU_GLOBAL_GRAPHICS_ARENA_BYTES, std::nothrow);
+            if (lpHeap == nullptr)
+                return nullptr;
+            rw::Resource lResource;
+            lResource.m_baseResources[0] = lpHeap;
+            rw::ResourceDescriptor lCapacity;
+            lCapacity.m_baseResourceDescriptors[0].m_size = KU_GLOBAL_GRAPHICS_ARENA_BYTES;
+            lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+            sNativeGraphicsAllocator.AdoptMemory(lResource, lCapacity);
+            mpInternalGraphicsAllocator = &sNativeGraphicsAllocator;
+            mGlobalGraphicsAllocator.Construct(mpInternalGraphicsAllocator, "GlobalGraphics");
         }
-        sGlobalGraphicsAllocator.AdoptMemory(lHeapResource, lHeapCapacity);
+        return &mGlobalGraphicsAllocator;
+    }
 
-        sbGlobalGraphicsReady = true;
-        return &sGlobalGraphicsAllocator;
+    // ARTIST 0x826647B0 fills every populated allocation, including its object reserve.
+    void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor)
+    {
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+            if (lrResource.m_baseResources[luLane] != nullptr)
+                std::memset(lrResource.m_baseResources[luLane], 0xCD,
+                            lrDescriptor.m_baseResourceDescriptors[luLane].m_size);
+    }
+
+    // ARTIST 0x82666990. Descriptor capacity excludes the placement-object reserve.
+    void Allocators::ConstructGlobalSystemMemory()
+    {
+        mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[0].m_size = 0x1B04000;
+        mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0;
+        mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        rw::ResourceDescriptor lExtended;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lExtended, &mGlobalSystemMemoryDescriptor);
+        mGlobalSystemMemory.m_baseResources[0] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[0].m_size, ~0ul, 0x10000, 0x20000004);
+        ClearResource(mGlobalSystemMemory, lExtended);
+        mpInternalGlobalSystemAllocator =
+            rw::core::GeneralResourceAllocator::Initialize(mGlobalSystemMemory, mGlobalSystemMemoryDescriptor);
+        mGlobalSystemAllocator.Construct(mpInternalGlobalSystemAllocator, "GlobalSystem", 1);
+    }
+
+    // ARTIST 0x82666A80. Physical lane two uses the distinct 0x20000404 protection flags.
+    void Allocators::ConstructGlobalDebugMemory()
+    {
+        mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[0].m_size = 0x1240000;
+        mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0x100000;
+        mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        rw::ResourceDescriptor lExtended;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lExtended, &mGlobalDebugMemoryDescriptor);
+        mGlobalDebugMemory.m_baseResources[0] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[0].m_size, ~0ul, 0x10000, 0x20000004);
+        mGlobalDebugMemory.m_baseResources[2] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[2].m_size, ~0ul, 0x10000, 0x20000404);
+        ClearResource(mGlobalDebugMemory, lExtended);
+        mpInternalDebugAllocator =
+            rw::core::GeneralResourceAllocator::Initialize(mGlobalDebugMemory, mGlobalDebugMemoryDescriptor);
+        mGlobalDebugAllocator.Construct(mpInternalDebugAllocator, "GlobalDebug", 2);
+    }
+
+    // ARTIST 0x82666B70.
+    void Allocators::ConstructGlobalGraphicsMemory()
+    {
+        mGlobalGraphicsMemoryDescriptor.m_baseResourceDescriptors[0].m_size = 0x640000;
+        mGlobalGraphicsMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x1000;
+        mGlobalGraphicsMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0x1D00000;
+        mGlobalGraphicsMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x1000;
+        rw::ResourceDescriptor lExtended;
+        rw::LinearResourceAllocator::GetResourceDescriptor(&lExtended, &mGlobalGraphicsMemoryDescriptor);
+        mGlobalGraphicsMemory.m_baseResources[0] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[0].m_size, ~0ul, 0x1000, 0x20000004);
+        mGlobalGraphicsMemory.m_baseResources[2] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[2].m_size, ~0ul, 0x1000, 0x20000404);
+        ClearResource(mGlobalGraphicsMemory, lExtended);
+        mpInternalGraphicsAllocator =
+            rw::LinearResourceAllocator::Initialize(mGlobalGraphicsMemory, mGlobalGraphicsMemoryDescriptor);
+        mGlobalGraphicsAllocator.Construct(mpInternalGraphicsAllocator, "GlobalGraphics");
+    }
+
+    // ARTIST 0x82666C58. The map's first Root Bank Params contributes lanes zero/two.
+    // The descriptors align at 64 KiB, while these backing allocations align at 128 KiB.
+    void Allocators::ConstructGlobalResourceMemory(const CgsMemory::MemoryBank::Params* lpParams)
+    {
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_size = lpParams->mauBankSize[0] + 0xFC0000;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_size = lpParams->mauBankSize[2] + 0x200000;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        rw::ResourceDescriptor lExtended;
+        rw::LinearResourceAllocator::GetResourceDescriptor(&lExtended, &mGlobalResourceMemoryDescriptor);
+        mGlobalResourceMemory.m_baseResources[0] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[0].m_size, ~0ul, 0x20000, 0x20000004);
+        mGlobalResourceMemory.m_baseResources[2] =
+            XPhysicalAlloc(lExtended.m_baseResourceDescriptors[2].m_size, ~0ul, 0x20000, 0x20000004);
+        ClearResource(mGlobalResourceMemory, lExtended);
+        mpInternalResourceAllocator =
+            rw::LinearResourceAllocator::Initialize(mGlobalResourceMemory, mGlobalResourceMemoryDescriptor);
+        mGlobalResourceAllocator.Construct(mpInternalResourceAllocator, "GlobalResource");
+    }
+
+    // ARTIST 0x82666D48. Runtime is owned by GlobalSystem; MemFile has its own
+    // two physical backing allocations. No extra internal-pointer alias is introduced.
+    void Allocators::ConstructChildAllocators()
+    {
+        rw::ResourceDescriptor lRuntimeCapacity;
+        lRuntimeCapacity.m_baseResourceDescriptors[0].m_size = 0x1B00000;
+        lRuntimeCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+        if (mpInternalGlobalSystemAllocator == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Allocators::mpInternalGlobalSystemAllocator",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\BrnResourceAllocator.h", 362);
+            CgsDev::Assert::EndAssert();
+        }
+        rw::ResourceDescriptor lRuntimeExtended;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lRuntimeExtended, &lRuntimeCapacity);
+        rw::Resource lRuntimeMemory = mGlobalSystemAllocator.DoAllocate(lRuntimeExtended, nullptr);
+        ClearResource(lRuntimeMemory, lRuntimeExtended);
+        mRuntimeAllocator.Construct(
+            rw::core::GeneralResourceAllocator::Initialize(lRuntimeMemory, lRuntimeCapacity), "Runtime", 1);
+
+        rw::ResourceDescriptor lMemFileCapacity;
+        lMemFileCapacity.m_baseResourceDescriptors[0].m_size = 0x20000;
+        lMemFileCapacity.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        lMemFileCapacity.m_baseResourceDescriptors[2].m_size = 0x300000;
+        lMemFileCapacity.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        rw::ResourceDescriptor lMemFileExtended;
+        rw::LinearResourceAllocator::GetResourceDescriptor(&lMemFileExtended, &lMemFileCapacity);
+        rw::Resource lMemFileMemory;
+        lMemFileMemory.m_baseResources[0] =
+            XPhysicalAlloc(lMemFileExtended.m_baseResourceDescriptors[0].m_size, ~0ul, 0x10000, 0x20000004);
+        lMemFileMemory.m_baseResources[2] =
+            XPhysicalAlloc(lMemFileExtended.m_baseResourceDescriptors[2].m_size, ~0ul, 0x10000, 0x20000004);
+        // Unlike the other globals, this helper does not call ClearResource for MemFile.
+        mGlobalMemFileAllocator.Construct(
+            rw::LinearResourceAllocator::Initialize(lMemFileMemory, lMemFileCapacity), nullptr);
+    }
+
+    // ARTIST 0x8266AED8. This recovered engine sequence remains uninvoked by the
+    // native startup adapter. The existing XPhysicalAlloc host leaf supplies aligned
+    // CPU memory only; it does not establish the original graphics/GPU/DMA contract.
+    void Allocators::Construct()
+    {
+        PrintConsoleMemory("Pre-allocators construction");
+        mInitialDefaultAllocator.CheckRenderwareBudget();
+        const CgsMemory::MemoryBank::Params* const lpRootParams =
+            MemoryMapImageInitializer::GetMemoryMap().GetBinaryMemoryMapBank()->GetParams();
+        ConstructGlobalSystemMemory();
+        ConstructGlobalDebugMemory();
+        ConstructGlobalGraphicsMemory();
+        ConstructGlobalResourceMemory(lpRootParams);
+        ConstructChildAllocators();
+        rw::ResourceAllocatorRegistry::SetDefaultAllocator(&mGlobalSystemAllocator);
+        PrintConsoleMemory("Post-allocators construction");
     }
 }

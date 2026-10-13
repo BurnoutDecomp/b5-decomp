@@ -1,7 +1,7 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
-#include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
+#include "GameSource/Resource/BrnResourceAllocator.h"        // GetDebugAllocator
 #include "rw/rwcore_structs.h"                                // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "rw/rwcore_general_alloc.h"                          // rw::core::GeneralResourceAllocator (CreateAllocators)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [5b trace] (Construct runs at runtime, gpDebugPrint ready)
@@ -337,7 +337,7 @@ namespace BrnResource
         s_bPoolsCreated = true;
 
         rw::IResourceAllocator* lpAllocator =
-            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
+            GetDebugAllocator();
         if (lpAllocator == 0)
             return true;
         CgsResource::PoolModule&  lrPoolModule   = mResourceModule.GetPoolModule();
@@ -730,7 +730,7 @@ namespace BrnResource
         s_bAllocatorsCreated = true;
 
         rw::IResourceAllocator* lpAllocator =
-            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
+            GetDebugAllocator();
         if (lpAllocator == 0)
             return true;
 
@@ -1748,7 +1748,7 @@ namespace BrnResource
         // ignores them; the type-list + defrag/heap params land with the PoolModule back half + the full
         // RegisterResourceTypes).
         rw::IResourceAllocator* lpAllocator =
-            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
+            GetDebugAllocator();
         if (lpAllocator == 0)
             return;
 
