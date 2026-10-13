@@ -65,8 +65,103 @@ namespace renderengine
         return sbCapsValid;
     }
 
-    // D3DDevice_SetTexture reapplies the cached Xenos MaxMipLevel request to the
-    // incoming texture, without replaying the other sampler fields.
+    inline DWORD XenonFilterCapsForTextureTypePC(D3DRESOURCETYPE leTextureType,
+                                                  bool lbHaveCaps,
+                                                  const D3DCAPS9& lCaps)
+    {
+        if (!lbHaveCaps)
+            return 0u;
+        if (leTextureType == D3DRTYPE_VOLUMETEXTURE)
+            return lCaps.VolumeTextureFilterCaps;
+        if (leTextureType == D3DRTYPE_CUBETEXTURE)
+            return lCaps.CubeTextureFilterCaps;
+        return lCaps.TextureFilterCaps;
+    }
+
+    inline void ApplyXenonMinMagFiltersPC(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                           const u8* lpBlock, bool lbHaveCaps,
+                                           DWORD luFilterCaps)
+    {
+        DWORD luMinFilter = 0;
+        if (XenonMinMagFilterToD3D9(lpBlock[0x12], &luMinFilter))
+        {
+            if (luMinFilter == D3DTEXF_ANISOTROPIC &&
+                (!lbHaveCaps || (luFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) == 0u))
+                luMinFilter = D3DTEXF_LINEAR;
+            PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER, luMinFilter);
+        }
+
+        DWORD luMagFilter = 0;
+        if (XenonMinMagFilterToD3D9(lpBlock[0x14], &luMagFilter))
+        {
+            if (luMagFilter == D3DTEXF_ANISOTROPIC &&
+                (!lbHaveCaps || (luFilterCaps & D3DPTFILTERCAPS_MAGFANISOTROPIC) == 0u))
+                luMagFilter = D3DTEXF_LINEAR;
+            PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER, luMagFilter);
+        }
+    }
+
+    inline void ApplyXenonMaxAnisotropyPC(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                          const u8* lpBlock, bool lbHaveCaps,
+                                          DWORD luFilterCaps, const D3DCAPS9& lCaps)
+    {
+        // The engine field is a requested anisotropy count; D3D9 uses a count
+        // too, but the XDK table that encodes the Xenos register is not copied.
+        // Clamp the native request to the bound texture type's real device cap.
+        DWORD luMaxAnisotropy = 1u;
+        if (lbHaveCaps &&
+            (luFilterCaps & (D3DPTFILTERCAPS_MINFANISOTROPIC | D3DPTFILTERCAPS_MAGFANISOTROPIC)) != 0u &&
+            lCaps.MaxAnisotropy > 1u)
+        {
+            luMaxAnisotropy = lpBlock[0x17];
+            if (luMaxAnisotropy < 1u)
+                luMaxAnisotropy = 1u;
+            if (luMaxAnisotropy > lCaps.MaxAnisotropy)
+                luMaxAnisotropy = lCaps.MaxAnisotropy;
+        }
+        PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, luMaxAnisotropy);
+    }
+
+    inline void ApplyXenonTextureDependentFilterFieldsPC(
+        IDirect3DDevice9* lpDevice, u32 luUnit, const u8* lpBlock,
+        D3DRESOURCETYPE leTextureType, bool lbHaveCaps, const D3DCAPS9& lCaps,
+        bool lbApplyMinMagFilters, bool lbApplyMaxAnisotropy)
+    {
+        const DWORD luFilterCaps =
+            XenonFilterCapsForTextureTypePC(leTextureType, lbHaveCaps, lCaps);
+        if (lbApplyMinMagFilters)
+            ApplyXenonMinMagFiltersPC(lpDevice, luUnit, lpBlock, lbHaveCaps, luFilterCaps);
+        if (lbApplyMaxAnisotropy)
+            ApplyXenonMaxAnisotropyPC(lpDevice, luUnit, lpBlock, lbHaveCaps,
+                                      luFilterCaps, lCaps);
+    }
+
+    inline void ReapplyXenonTextureDependentFilterFieldsPC(
+        IDirect3DDevice9* lpDevice, u32 luUnit, const void* lpSamplerBlock)
+    {
+        if (lpDevice == nullptr || lpSamplerBlock == nullptr || luUnit >= 16u)
+            return;
+
+        IDirect3DBaseTexture9* lpTexture = nullptr;
+        const HRESULT lhrGetTexture = lpDevice->GetTexture(luUnit, &lpTexture);
+        if (FAILED(lhrGetTexture) || lpTexture == nullptr)
+        {
+            if (lpTexture != nullptr)
+                lpTexture->Release();
+            return;
+        }
+
+        D3DCAPS9 lCaps = {};
+        const bool lbHaveCaps = QuerySamplerCapsPC(lpDevice, &lCaps);
+        ApplyXenonTextureDependentFilterFieldsPC(
+            lpDevice, luUnit, static_cast<const u8*>(lpSamplerBlock),
+            lpTexture->GetType(), lbHaveCaps, lCaps, true, true);
+        lpTexture->Release();
+    }
+
+    // D3DDevice_SetTexture reapplies the independent cached Xenos MaxMipLevel
+    // request to the incoming texture. Type-dependent filter fields are handled
+    // separately from the raw request cache.
     inline void ApplyXenonMaxMipRequestPC(IDirect3DDevice9* lpDevice, u32 luUnit,
                                          u32 luRequest)
     {
@@ -98,7 +193,8 @@ namespace renderengine
     // sampler block. The original MaxMipLevel setter writes max(texture-header
     // bits 26..29, request) to Xenos bits 26..29, while caching the raw request.
     // D3D9 exposes a zero-based MAXMIPLEVEL index, so this PC leaf clamps the
-    // request to the bound chain and replays only that request after a new bind.
+    // request to the bound chain. The bind hook replays the independent cached
+    // raw request after the filter-only type-dependent realization.
     // The Xenos header-derived bound is not separately available.
     // The separate Xenos MinMipLevel field, Z-filter controls, AnisotropyBias,
     // border-enable bit, and remaining packed register bits have no pinned
@@ -124,16 +220,6 @@ namespace renderengine
 
         D3DCAPS9 lCaps = {};
         const bool lbHaveCaps = QuerySamplerCapsPC(lpDevice, &lCaps);
-        DWORD luFilterCaps = 0;
-        if (lbHaveCaps)
-        {
-            if (leTextureType == D3DRTYPE_VOLUMETEXTURE)
-                luFilterCaps = lCaps.VolumeTextureFilterCaps;
-            else if (leTextureType == D3DRTYPE_CUBETEXTURE)
-                luFilterCaps = lCaps.CubeTextureFilterCaps;
-            else
-                luFilterCaps = lCaps.TextureFilterCaps;
-        }
 
         DWORD luAddress = 0;
         if (XenonAddressToD3D9(lpBlock[0x08], &luAddress))
@@ -143,43 +229,17 @@ namespace renderengine
         if (XenonAddressToD3D9(lpBlock[0x0A], &luAddress))
             PCSetSamplerState(lpDevice, luUnit, D3DSAMP_ADDRESSW, luAddress);
 
-        DWORD luMinFilter = 0;
-        if (XenonMinMagFilterToD3D9(lpBlock[0x12], &luMinFilter))
-        {
-            if (luMinFilter == D3DTEXF_ANISOTROPIC &&
-                (!lbHaveCaps || (luFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) == 0u))
-                luMinFilter = D3DTEXF_LINEAR;
-            PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER, luMinFilter);
-        }
-
-        DWORD luMagFilter = 0;
-        if (XenonMinMagFilterToD3D9(lpBlock[0x14], &luMagFilter))
-        {
-            if (luMagFilter == D3DTEXF_ANISOTROPIC &&
-                (!lbHaveCaps || (luFilterCaps & D3DPTFILTERCAPS_MAGFANISOTROPIC) == 0u))
-                luMagFilter = D3DTEXF_LINEAR;
-            PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAGFILTER, luMagFilter);
-        }
+        ApplyXenonTextureDependentFilterFieldsPC(
+            lpDevice, luUnit, lpBlock, leTextureType, lbHaveCaps, lCaps,
+            true, false);
 
         DWORD luMipFilter = 0;
         if (XenonMipFilterToD3D9(lpBlock[0x0C], &luMipFilter))
             PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MIPFILTER, luMipFilter);
 
-        // The engine field is a requested anisotropy count; D3D9 uses a count
-        // too, but the XDK table that encodes the Xenos register is not copied.
-        // Clamp the native request to the bound texture type's real device cap.
-        DWORD luMaxAnisotropy = 1u;
-        if (lbHaveCaps &&
-            (luFilterCaps & (D3DPTFILTERCAPS_MINFANISOTROPIC | D3DPTFILTERCAPS_MAGFANISOTROPIC)) != 0u &&
-            lCaps.MaxAnisotropy > 1u)
-        {
-            luMaxAnisotropy = lpBlock[0x17];
-            if (luMaxAnisotropy < 1u)
-                luMaxAnisotropy = 1u;
-            if (luMaxAnisotropy > lCaps.MaxAnisotropy)
-                luMaxAnisotropy = lCaps.MaxAnisotropy;
-        }
-        PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, luMaxAnisotropy);
+        ApplyXenonTextureDependentFilterFieldsPC(
+            lpDevice, luUnit, lpBlock, leTextureType, lbHaveCaps, lCaps,
+            false, true);
 
         // MipMapLodBias is a float in Xenos state +0x00 and D3D9 accepts its
         // float bit pattern through the DWORD-valued SetSamplerState interface.
