@@ -1137,15 +1137,11 @@ namespace
     //     object and memcpy's the leading sampler words out of the params), so the two members are
     //     dead storage on this backend either way. The OUTPUT -- mpEnvMapTextureState -- is the
     //     tree's own member, so there is no parallel global and no split brain.
-    //  2. THE SAMPLER WORDS DO NOT REACH D3D9 THROUGH THIS OBJECT. shadow::Device::SetState(const
-    //     TextureState*, u32) applies them through SetSamplerStateLowLevel, which is the documented
-    //     no-op on this backend (XenonD3D9Shims.cpp, the banner over ApplyVolumeSamplerState). The
-    //     tree's answer for the two earlier cases was to key the state off WHAT WAS BOUND inside
-    //     D3DDevice_SetTexture -- a volume texture gets LINEAR/CLAMP, a raw-depth texture gets
-    //     POINT/CLAMP -- and a CUBE texture is the third case of the same shape. That arm is a
-    //     CROSS-GROUP REQUEST to cubeleaf (it also fixes the 234 shipped world cube rasters), and it
-    //     is why this function does NOT declare a new leaf entry point: the seam already exists.
-    //     Until that arm lands, unit 13 keeps whatever filter it last held.
+    //  2. THIS STATEFUL BIND APPLIES THE D3D9-SUPPORTED WORDS. shadow::Device::SetState(const
+    //     TextureState*, u32) reaches SetSamplerStateLowLevel, whose native translator now applies
+    //     the supported sampler fields. The resource-type sampler hooks are fallbacks for
+    //     resource-only binds with no current TextureState block; they do not replace this cube
+    //     stateful bind. Unsupported sampler semantics remain a separate parity gap.
     //
     // Built through the REAL TextureState so that the whole-unit shadow key
     // (shadow::Device::mapTextureState[13]) is what the console's own bind writes -- Render
@@ -5337,10 +5333,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             // FLAG PC-platform leaf: the SAMPLER half of the console's bind. sub_8227D158
             // installs a renderengine::TextureState (filter + address + comparison) alongside
             // the resource; shadow::Device::SetResource is the resource-only entry point, and
-            // it CACHES -- once the texture pointer stops changing it makes no D3D call at all,
-            // so a sampler state set inside it would be applied once and then never refreshed.
-            // Applying it here, unconditionally, every frame is the honest stand-in until
-            // Construct's TextureState pair lands. See ShadowPass.h.
+            // it CACHES -- once the texture pointer stops changing it makes no D3D call at all.
+            // This guarded helper is called every frame as the fallback while the matching
+            // TextureState pair is absent; a current sampler block remains authoritative.
+            // See ShadowPass.h.
             renderengine::ShadowSampler_ApplyState(15u);
         }
 #endif
@@ -5372,10 +5368,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // so unit 14 was feeding the crack the blobby-shadow blob instead of the crack map.
         //
         // The bind stays GATED on the pointer exactly as the console gates it, and it goes
-        // through shadow::Device::SetResource for the same reason s15 above does: this build
-        // has no TextureState objects yet (Construct's Initialize pair needs the resource
-        // allocator), so the resource-only entry point plus an explicit sampler apply is the
-        // honest stand-in. The sampler half is NOT optional here -- the vertex program tiles
+        // through shadow::Device::SetResource for the same reason s15 above does: this PC path
+        // currently binds only the resource here, so the guarded sampler helper supplies its
+        // fallback only when no TextureState block is current. The sampler half is NOT optional
+        // here -- the vertex program tiles
         // the crack UVs (`mad o7, v3.xyxy, c160, c159` with per-pane offsets in [-0.9, +0.9]),
         // so a CLAMPed unit would smear one texel across a whole pane.
         if (mpGlassFractureTexture != 0)

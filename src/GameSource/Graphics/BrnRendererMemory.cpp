@@ -1486,9 +1486,9 @@ bool BrnRendererMemory::PCBringUpParticleCompositeChainReady() const
 //      also makes the console's transform load and gOffsetXYZ/gRightUp dead.
 //  (2) mpBlitTextureState is not built. The source render target already owns a depth TextureState
 //      over the very texture the console's per-call state would wrap (PostFxRenderTarget.cpp
-//      builds it from mDepthTarget's hi-Z-else-depth texture), and on this backend a TextureState's
-//      sampler words are stored, not applied -- so a second object over the same raster would
-//      differ in nothing and would have to be carved every frame.
+//      builds it from mDepthTarget's hi-Z-else-depth texture), and BlitDepth binds that existing
+//      owner below. The PC low-level translator applies its supported sampler fields, so there is
+//      no need to create a second state object over the same raster on each call.
 //  (3) D3DDevice_SetTexture forces POINT/CLAMP on any unit that receives a raw-depth texture
 //      (ApplyRawDepthSamplerState), which is what a depth fetch must have and what the console's
 //      own CreateStates writes (mag = min = 0). Nothing extra is installed here.
@@ -1635,6 +1635,7 @@ void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTar
     // NOT bound -- see the deviation note above; binding the scene there while it is the render
     // target is the undefined case this whole re-association exists to avoid.
     shadow::Device::SetState(lpOverlayState, KU_BLIT_OVERLAY_SAMPLER_UNIT);
+    // Keep this guarded fallback after the stateful bind; it leaves the overlay block intact.
     renderengine::PostFxSourceSampler_ApplyState(KU_BLIT_OVERLAY_SAMPLER_UNIT,
                                                  KU_BLIT_SAMPLER_FILTER_LINEAR, 1u);
     shadow::Device::SetVertexDescriptor(gpBlitVertexDescriptor);

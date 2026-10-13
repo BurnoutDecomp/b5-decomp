@@ -180,7 +180,8 @@ namespace Native
     //   3. the rasteriser out of the shared state library (cull BACK).
     //   4. the depth-stencil out of the same library (Z test on, Z WRITE ON, LESSEQUAL) --
     //      debris is solid geometry, unlike the sparks and the sky.
-    //   5. the library's linear/clamp sampler on unit 0, through the shadow cache.
+    //   5. the original linear/clamp sampler on unit 0; this PC path uses its guarded fallback
+    //      only when no current TextureState block owns that unit.
     //   6. four constant pushes, in this order: the view-projection, the eye, the NEGATED
     //      light direction, the light colour.
     //
@@ -220,6 +221,7 @@ namespace Native
         mpRenderer->SetState(reinterpret_cast<const CgsGraphics::BlendState*>(mpBlendState));
         ImDeviceSetRasterizerState(gpImDebrisRasterizerState);       // dword_83010F44
         ImDeviceSetDepthStencilState(gpImDebrisDepthStencilState);   // dword_83010F48
+        // Guarded PC fallback; an installed TextureState block remains authoritative.
         renderengine::LionParticleSampler_ApplyState(0);             // dword_83010F60 on unit 0
 
         mpRenderer->SetViewProjection(lViewProjection);

@@ -121,8 +121,9 @@ namespace
 
 namespace renderengine
 {
-    // FLAG PC-platform leaf: realize the original colour-target sampler; the
-    // native low-level TextureState setter does not apply its packed words.
+    // FLAG PC-platform leaf: retain a colour-target fallback for units without
+    // a current TextureState block; the low-level translator applies its
+    // supported fields and this helper leaves that block intact.
     void PostFxBloomSampler_ApplyState(u32 luUnit);
 
     // ---- THE SIX PC PROGRAM IMAGES ---------------------------------------------------------------

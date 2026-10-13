@@ -140,14 +140,13 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
     D3DDevice_SetStreamSource(gpD3DDevice, 0, apVertexBuffer, 0, 0, 1);
     shadow::Device::SetState(gpLionParticleSamplerState, 0);
 
-    // FLAG PC-platform leaf, paired 1:1 with the call above and DELETE-WHEN it works.
-    // gpLionParticleSamplerState is null on this backend AND shadow::Device's sampler setter bottoms
-    // out in the documented no-op SetSamplerStateLowLevel, so that call binds nothing twice over and
-    // the pass runs on whatever sampler words the previous pass left on unit 0 (measured by the
-    // [lionbind] probe: ADDRESSU/V = WRAP, the world path's non-cube default). The console's state is
-    // not a mystery -- it is ImRendererBase::ConstructOnceOnly's
-    // ConstructSamplerState(alloc, 1, 0, 2, 2), i.e. min/mag LINEAR, mip NONE, address U/V CLAMP --
-    // and this installs exactly those words. See the banner on LionParticleSampler_ApplyState.
+    // FLAG PC-platform leaf: gpLionParticleSamplerState is null on this pass, so its shadow bind
+    // supplies no sampler block. SetSamplerStateLowLevel now translates supported non-null blocks;
+    // it is not a no-op. The helper below remains a guarded fallback and writes only when no current
+    // TextureState block owns unit 0. The earlier [lionbind] capture saw ADDRESSU/V = WRAP before
+    // this fallback was wired. The console's state is ImRendererBase::ConstructOnceOnly's
+    // ConstructSamplerState(alloc, 1, 0, 2, 2): min/mag LINEAR, mip NONE, address U/V CLAMP. The
+    // fallback supplies those supported fields without claiming every native sampler semantic.
     renderengine::LionParticleSampler_ApplyState(0);
 
     mpRenderer->BeginRendering(afWhiteLevel, abEnableZFade, afNearPlane, afFarPlane,
