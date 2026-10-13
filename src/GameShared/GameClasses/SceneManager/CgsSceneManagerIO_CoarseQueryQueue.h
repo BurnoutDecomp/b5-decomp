@@ -19,8 +19,10 @@
 // test enqueue helpers; it carries NO extra data members (DWARF
 // CgsSceneManagerIO_CoarseQuery.h:90), so sizeof matches the base queue.
 //
-// EVENT-TYPE IDS (the queue's record ids) -- the X360 FrustumTestVp emitter passes
-// type 4; the others follow the DWARF event-class ordering.
+// EVENT-TYPE IDS (the queue's record ids) -- ARTIST's dispatcher at 0x828CDB80
+// routes 2 to VolumeTest, 3 to FrustumTest, and 4 to FrustumTestVp. The live
+// SphereTest emitter passes 1 at 0x8274795C. DecFIGS supplies the record shapes,
+// but does not override these X360-attested ids.
 // ===========================================================================
 
 namespace CgsSceneManager
@@ -34,10 +36,10 @@ namespace SceneManagerIO
     // Coarse-query event record ids (CgsSceneManagerIO_CoarseQuery.h enum).
     enum ECoarseQueryEvent
     {
-        E_IN_EVENT_SPHERE_TEST     = 1,
-        E_IN_EVENT_FRUSTUM_TEST    = 2,
-        E_IN_EVENT_FRUSTUM_TEST_VP = 4,   // X360 0x82746770: `li r5, 4`
-        E_IN_EVENT_VOLUME_TEST     = 8,
+        E_IN_EVENT_SPHERE_TEST     = 1, // X360 0x827478C8: `li r5, 1`
+        E_IN_EVENT_VOLUME_TEST     = 2, // X360 dispatcher case 2 -> ProcessCoarseVolumeTest
+        E_IN_EVENT_FRUSTUM_TEST    = 3, // X360 dispatcher case 3 -> ProcessCoarseFrustumTest
+        E_IN_EVENT_FRUSTUM_TEST_VP = 4, // X360 emitters pass 4; see 0x82746770
     };
 
     // The view-projection frustum-test event. X360 layout (asm @ 0x82746770; the

@@ -2920,12 +2920,10 @@ namespace CgsSceneManager
     // The coarse getter is re-fetched for GetNextEvent every iteration (the console calls
     // SceneManagerIO::InputBuffer_Query::GetCoarseQueryQueue again at 0x828CDC98).
     //
-    // ⚠️ The case numbers are the console's raw jump-table indices. The tree's
-    // SceneManagerIO::ECoarseQueryEvent (CgsSceneManagerIO_CoarseQueryQueue.h) spells only
-    // E_IN_EVENT_FRUSTUM_TEST_VP == 4 from an attested `li r5, 4`; its SPHERE == 1 agrees with
-    // case 1, but its FRUSTUM == 2 and VOLUME == 8 CONTRADICT this switch (2 dispatches to the
-    // VOLUME test, 3 to the frustum test). The switch is the authority; the literals stay
-    // literals until that enum is re-attested from its producers.
+    // The case numbers are the console's raw jump-table indices. They pin the plain
+    // VOLUME == 2 and FRUSTUM == 3 ids; the live emitters pin SPHERE == 1 and
+    // FRUSTUM_VP == 4. The queue header records those same ids. No ARTIST producer/use
+    // attests plain VolumeTest or FrustumTest enqueue methods, so those APIs stay absent.
     // =========================================================================================
     void SceneManagerModule::ProcessCoarseSpatialPartitionQueries(
         const SceneManagerIO::InputBuffer_Query*  lpSceneInputBuffer,
