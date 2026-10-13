@@ -423,6 +423,9 @@ namespace GameStateModuleIO
         // interface (console this+0x2BE8). Readers: AchievementManagerX360::Update,
         // RichPresenceManagerBase::Update, TrainingManager::Update, GameStateModule::PreWorldUpdate.
         const ControllerToGameStateInterface* GetControllerToGameStateInterface() const;
+        // ARTIST 823B8EC0, original h:144: write-checked access to the same
+        // interface for BridgeControllerToGameState's result queues and port.
+        ControllerToGameStateInterface* GetControllerToGameStateInterface();
 
         // ---- this TU's 5 functions ----
         // X360 0x8231CE28 (read-lock; "Not locked for reading", line 133) -- read-side accessor for
