@@ -121,9 +121,9 @@ namespace Allocator
         {
             const void*  mpCore;
             const void*  mpBlock;
-            unsigned int mnBlockSize;
+            size_t       mnBlockSize;
             void*        mpData;
-            unsigned int mnDataSize;
+            size_t       mnDataSize;
             char         mBlockType;
             bool         mbMemoryMapped;
         };
@@ -167,10 +167,12 @@ namespace Allocator
             unsigned long long mData[32];
         };
 
+        // Opaque native report state, not a serialized console image. Keep the
+        // recovered named fields; storage sizes and array indices use host size_t.
         struct Snapshot
         {
             int          mnMagicNumber;
-            unsigned int mnSizeOfThis;
+            size_t       mnSizeOfThis;
             int          mnBlockTypeFlags;
             bool         mbUserAllocated;
             bool         mbReport;
@@ -178,8 +180,8 @@ namespace Allocator
             CoreBlock*   mpCurrentCoreBlock;
             Chunk*       mpCurrentChunk;
             Chunk*       mpCurrentMChunk;
-            unsigned int mnBlockInfoCount;
-            unsigned int mnBlockInfoIndex;
+            size_t       mnBlockInfoCount;
+            size_t       mnBlockInfoIndex;
             BlockInfo    mBlockInfo[1];
         };
 
