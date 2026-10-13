@@ -112,6 +112,10 @@ extern "C" void* SetSamplerStateLowLevel(void* lpState, u32 luSamplerId, bool lb
 // the shim TU owns the D3D9 objects (shader cache, vertex-declaration cache, draw stash).
 namespace renderengine
 {
+    // Clear the PC translator's current-state association when the engine shadow resets.
+    // The separately cached raw MaxMip request remains available to the bind shim.
+    void InvalidateSamplerStateSnapshotPC();
+
     // Bind the FLAGGED fallback world shader (compiled once at first use); returns false when the
     // device/compiler is unavailable (the draw is skipped rather than issued undefined).
     bool WorldFallbackShader_Bind();
@@ -306,6 +310,7 @@ namespace shadow
     // @0x82276970: clear the whole shadow cache.
     void Device::ResetShadowing()
     {
+        renderengine::InvalidateSamplerStateSnapshotPC();
         mpStreamArray = nullptr;
         mpIndexStreamArray = nullptr;
         mpVertexDescriptor = nullptr;
