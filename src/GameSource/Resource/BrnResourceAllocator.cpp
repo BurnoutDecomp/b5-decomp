@@ -90,6 +90,12 @@ namespace BrnResource
         return &Allocators::mGlobalDebugAllocator;
     }
 
+    LinearResourceAllocator* GetResourceAllocator()
+    {
+        CGS_ASSERT(Allocators::mpInternalResourceAllocator, "Allocators::mpInternalResourceAllocator");
+        return &Allocators::mGlobalResourceAllocator;
+    }
+
     namespace
     {
         // The single GameData general allocator (allocator-gate leaf). 64 MB carved from the debug

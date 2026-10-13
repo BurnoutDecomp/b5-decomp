@@ -65,7 +65,9 @@ namespace CgsMemory
             u32             muMaxBanks;
             u32             muHighestId;
             u32             muMaxBlocks;
-            RootResourceSet maResourceSets[6];
+            // ARTIST InitOptions occupies 72 bytes: three u32s and five
+            // 12-byte root sets. DecFIGS's sixth lane belongs to the PS3 build.
+            RootResourceSet maResourceSets[MemoryBank::KI_NUM_TYPES];
 
             InitOptions();
         };
@@ -154,7 +156,7 @@ namespace CgsMemory
         u32                    muFirstFreeBlock;
         u32                    muNumFreeBlocks;
         CgsMemory::LinearMalloc mScratchSpace;     // bump allocator over the backing region
-        RootResourceSet        maRootSets[6];
+        RootResourceSet        maRootSets[MemoryBank::KI_NUM_TYPES];
         DebugComponentMemory   mDebugComponentMemory;
     };
 }

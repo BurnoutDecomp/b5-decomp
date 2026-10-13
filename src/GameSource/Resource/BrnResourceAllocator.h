@@ -104,6 +104,9 @@ inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
 // Returns the one public GlobalDebug wrapper; the internal pointer is a distinct
 // GeneralResourceAllocator. The native getter lazily adopts its existing low-memory arena.
 HeapResourceAllocator* GetDebugAllocator();
+// The original public GlobalResource wrapper has no native lazy backing. Its
+// internal Linear allocator must have been supplied by Allocators::Construct.
+LinearResourceAllocator* GetResourceAllocator();
 
 // The GameData general resource allocator the loading-screen module loads carve from (SoundModule
 // etc.). [PC-LEAF / allocator gate] The X360 builds one allocator per bank in GameDataModule::
@@ -143,6 +146,7 @@ public:
 
 private:
     friend HeapResourceAllocator* GetDebugAllocator();
+    friend LinearResourceAllocator* GetResourceAllocator();
     friend class HeapResourceAllocator;
 
     static void EnsureNativeDebugBacking();
