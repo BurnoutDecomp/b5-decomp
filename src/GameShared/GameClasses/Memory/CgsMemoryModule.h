@@ -39,6 +39,7 @@ namespace CgsMemory
         struct CreateLinearAllocatorRequest;
         struct CreateGeneralAllocatorRequest;
         struct CreateResourceRequest;
+        struct CreateAllocatorRequest;
     }
 
     class MemoryModule : public CgsModule::ModuleSingleBuffered
@@ -147,7 +148,9 @@ namespace CgsMemory
         void ProcessDestroyBankRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessCreateLinearAllocatorRequest(const MemoryIO::CreateLinearAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessCreateGeneralAllocatorRequest(const MemoryIO::CreateGeneralAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
-        void ProcessCreateAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
+        // ARTIST 0x8286D9F0; unactivated original wrapper/bank contract.
+        void ProcessCreateAllocatorRequest(const MemoryIO::CreateAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
+        void ProcessCreateAllocatorRequestNativePC(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessDestroyAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         // ARTIST 0x8286CDB8; unactivated original arithmetic/provider contract.
         void ProcessCreateResourceRequest(const MemoryIO::CreateResourceRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
