@@ -1872,7 +1872,7 @@ namespace BrnResource
         // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
         // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
         // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
-        mAllocatorList.Construct();
+        mAllocatorList.ConstructNativePC();
 
         // FLAG PC-platform leaf: retain the existing native provider and budgets.
         // The recovered ConstructResourceModule path remains uninvoked until its
