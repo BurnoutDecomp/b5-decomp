@@ -41,7 +41,16 @@
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
-namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); extern u32 guDiagImBatches; extern u32 guDiagImFullBlack; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 counters
+namespace renderengine
+{
+    extern u32 guPresentCount;
+    u32 FrameDumpEvery();
+    extern u32 guDiagImBatches;
+    extern u32 guDiagImFullBlack;
+    extern bool gbDiagLastPresentBlack;
+    void ApplySamplerStateBlockPC(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                  const void* lpSamplerBlock);
+}   // [DIAG] issue #30 counters
 // [boost-bar 2026-08-25] The GUI additive-blend IDENTITY (CgsBillboardRenderer.cpp's
 // dword_83010F24 sentinel). Declared locally instead of including the Gui header -- this
 // graphics-layer TU must not depend on the Gui tree; the dispatch's SET_STATE_BLEND case
@@ -1485,7 +1494,10 @@ namespace CgsGraphics
                     static_cast<const ImCommandSetStateTexture*>(lpCommand);
                 const renderengine::TextureState* lpState = lpSet->mpTextureState;
                 renderengine::Texture* lpTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
-                lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                const HRESULT lhrTexture =
+                    lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                if (SUCCEEDED(lhrTexture) && lpState != nullptr)
+                    renderengine::ApplySamplerStateBlockPC(lpDevice, 0u, lpState);
                 lpTraceBoundTexture = lpTexture;   // [diag]
                 if (CxformTraceEnabled()) DumpBoundTextureOnce(lpTexture);
                 // Texture present: modulate by vertex colour. (CgsIm2d.cpp's SetState(TextureState*).)
