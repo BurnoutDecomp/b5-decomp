@@ -38,6 +38,7 @@ namespace CgsMemory
         struct MemoryRequest;
         struct CreateLinearAllocatorRequest;
         struct CreateGeneralAllocatorRequest;
+        struct CreateResourceRequest;
     }
 
     class MemoryModule : public CgsModule::ModuleSingleBuffered
@@ -148,7 +149,9 @@ namespace CgsMemory
         void ProcessCreateGeneralAllocatorRequest(const MemoryIO::CreateGeneralAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessCreateAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessDestroyAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
-        void ProcessCreateResourceRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
+        // ARTIST 0x8286CDB8; unactivated original arithmetic/provider contract.
+        void ProcessCreateResourceRequest(const MemoryIO::CreateResourceRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
+        void ProcessCreateResourceRequestNativePC(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
 
         // ---- members (DWARF order; x64-laid-out, not the X360 32-bit offsets) ----
         EPrepareStage          mePrepareStage;
