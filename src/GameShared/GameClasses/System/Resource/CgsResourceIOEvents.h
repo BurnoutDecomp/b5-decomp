@@ -48,29 +48,20 @@ namespace Events
     };
 
     // CgsResourceIOEvents.h -- the request to register a live-update patch for an already-loaded
-    // bundle. Recovered from CgsResource::Events::AddPatchRequest::Construct @ 0x82661200 (called
-    // by BrnResource::GameDataModule::Prepare). The ctor stores two leading 32-bit fields, copies
-    // a NUL-terminated path into an inline 256-byte buffer (asserting length < 256 via the inlined
-    // CgsStringUtils.h:65 bounded-copy helper -- "String <name> is too long. Buffer size = 256"),
-    // then stores a trailing 32-bit field. Field offsets are X360-store-confirmed:
-    //   +0   miField0     (Construct arg a2)            stw r4, 0(r27)
-    //   +4   miField4     (Construct arg a3)            stw r5, 4(r27)
-    //   +8   macFileName[256] (NUL-terminated path)     stbx loop into r27+8, buffer size 256
-    //   +264 miField264   (Construct arg a5)            stw r7, 0x108(r27)
-    // The two leading fields and the trailing field are typed s32 (the only attestation is their
-    // 32-bit store width + register-passed int args); they are named by offset pending a richer
-    // DWARF/caller signature.
+    // bundle. Recovered from CgsResource::Events::AddPatchRequest::Construct @ 0x82661200 and
+    // its GameDataModule::Prepare caller. The X360 fields are receiver queue, event id, a
+    // NUL-terminated 256-byte path, and version. The x64 host widens the receiver pointer, and
+    // the event payload size follows this typed host layout.
     struct AddPatchRequest : public Event
     {
-        s32  miField0;            // +0    (arg a2)
-        s32  miField4;            // +4    (arg a3)
-        char macFileName[256];    // +8    NUL-terminated patch bundle path
-        s32  miField264;          // +264  (arg a5)
+        CgsModule::BaseEventReceiverQueue* mpUser; // X360 +0, native pointer width on host
+        s32 miEventId;                            // X360 +4
+        char macFileName[256];                    // X360 +8, NUL-terminated patch bundle path
+        s32 miVersion;                             // X360 +264
 
-        // X360 0x82661200. Initialise the request in place: store the two leading fields, copy the
-        // NUL-terminated path into macFileName (bounded by the 256-byte buffer), then store the
-        // trailing field. Returns this (the X360 ctor-style Construct returns its `result`).
-        AddPatchRequest* Construct(s32 liField0, s32 liField4, const char* lpcFileName, s32 liField264);
+        // X360 0x82661200. Store the receiver and event id, copy the path, then store version.
+        AddPatchRequest* Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId,
+                                   const char* lpcFileName, s32 liVersion);
     };
 
     struct LoadBundleResponse : public BundleLoaderEvent

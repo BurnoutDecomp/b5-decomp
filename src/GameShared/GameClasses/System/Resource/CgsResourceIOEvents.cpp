@@ -52,18 +52,19 @@ BundleLoaderEvent& BundleLoaderEvent::SetFileName(const char* pcFileName)
 
 // CgsResource::Events::AddPatchRequest::Construct @ 0x82661200
 //
-// Initialise the patch request in place. The X360 build stores the two leading 32-bit fields,
-// then inlines the CgsStringUtils.h:65 bounded string-copy helper to copy the NUL-terminated
-// path into macFileName (asserting the measured length < 256, the buffer size), then stores the
-// trailing 32-bit field. Returns `this` (the X360 Construct returns its incoming `result`).
+// Initialise the patch request in place. The X360 stores the receiver and event id, then inlines
+// the CgsStringUtils.h:65 bounded string-copy helper for macFileName, then stores the version.
+// The host keeps the receiver as a native pointer so the response can target its queue.
+// Returns `this` (the X360 Construct returns its incoming `result`).
 //
 // Note the X360 copy is UNCONDITIONAL on a non-null source (the path is always provided by the
 // GameDataModule::Prepare call site): the helper measures the length for the assert, then byte-
 // copies the source including its NUL terminator into macFileName.
-AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const char* lpcFileName, s32 liField264)
+AddPatchRequest* AddPatchRequest::Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId,
+                                             const char* lpcFileName, s32 liVersion)
 {
-    miField0 = liField0;
-    miField4 = liField4;
+    mpUser = lpUser;
+    miEventId = liEventId;
 
     // Inlined CgsStringUtils.h:65 bounded copy -- measure source length for the bounds assert.
     const char* pcScan = lpcFileName;
@@ -85,7 +86,7 @@ AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const ch
     }
     while (lcChar != '\0');
 
-    miField264 = liField264;
+    miVersion = liVersion;
 
     return this;
 }
