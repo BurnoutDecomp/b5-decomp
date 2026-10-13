@@ -30,7 +30,6 @@
 // this ResourceModule because it exceeds the console reserve added by GetResourceDescriptor.
 namespace CgsResource
 {
-    struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
     namespace ResourceIO { struct InputBuffer; struct OutputBuffer; } // request input / status output
     // The write-stream request event types (deprecated adders take these by pointer only).
@@ -84,7 +83,7 @@ namespace CgsResource
             CgsMemory::MemoryModule::InitOptions  mMemoryInitOptions;       // :150
             BundleLoaderModule::InitOptions       mLoaderInitOptions;       // :151
             PoolModule::InitOptions               mPoolInitOptions;         // :152
-            DiskLayout*                           mpDiskLayout;             // :153
+            CgsFileSystem::DiskLayout*             mpDiskLayout;             // :153, canonical FileSystem owner type
             DebugComponentParams                  mDebugParams;             // :155
             char                                  macFileSearchPath[1024];  // :157
             const char*                           mpcDiskCacheDrive;        // :158
