@@ -41,21 +41,21 @@ namespace renderengine
         u32 muAddressU;
         u32 muAddressV;
         u32 muAddressW;
-        u32 muBias;
-        u32 muMaxLevel;
-        u32 muMinLevel;
-        u32 muMagFilterZ;  // +0x18 -> runtime +0x15 -> MagFilterZ
-        u32 muMagFilter;
-        u32 muMinMipLevel; // +0x20 -> runtime +0x19 -> MinMipLevel
-        u32 muMipFilter;
-        u32 muConvolution;
-        u32 muColor;
-        u32 muRemap;
+        u32 muMagFilter;              // +0x0C -> runtime +0x14
+        u32 muMinFilter;              // +0x10 -> runtime +0x12
+        u32 muMipFilter;              // +0x14 -> runtime +0x0C
+        u32 muMagFilterZ;             // +0x18 -> runtime +0x15
+        u32 muMinFilterZ;             // +0x1C -> runtime +0x13
+        u32 muMinMipLevel;            // +0x20 -> runtime +0x19
+        u32 muMaxMipLevel;            // +0x24 -> runtime +0x18
+        u32 muMaxAnisotropy;          // +0x28 -> runtime +0x17
+        f32 mfMipMapLodBias;          // +0x2C -> runtime +0x00
+        f32 mfAnisotropyBias;         // +0x30 -> runtime +0x04
         u32 muDepthTextureFunction;
         u32 muGamma;
         u32 muState17;
         u8  mbState15;
-        u8  mbState22;
+        u8  mbSeparateZFilterEnable;
         u8  mbState16;
         u8  mbState11Zero;
         u8  mbState26;
@@ -306,8 +306,8 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
 // ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::ConstructSamplerState  @ 0x827ED538
 // The four caller arguments are carried into the sampler block at offsets +0x0C, +0x10, +0x14 and
-// +0x00/+0x04 exactly as ARTIST stores them. The +0x18/+0x20 names follow ARTIST's Initialize-to-
-// SetSamplerStateLowLevel consumer chain; other legacy parameter names remain unchanged.
+// +0x00/+0x04 exactly as ARTIST stores them. Parameter names here follow the attested
+// Initialize -> SetSamplerStateLowLevel -> XDK setter chain.
 // ---------------------------------------------------------------------------------------------------
 const SamplerState* ImRendererBase::ConstructSamplerState(
     rw::IResourceAllocator* lpAllocator, u32 luArg2, u32 luArg3, u32 luArg4, u32 luArg5)
@@ -317,21 +317,21 @@ const SamplerState* ImRendererBase::ConstructSamplerState(
     lParameters.muAddressU = luArg4;          // +0x00 = a4
     lParameters.muAddressV = luArg5;          // +0x04 = a5
     lParameters.muAddressW = 0;               // +0x08
-    lParameters.muBias = luArg2;              // +0x0C = a2
-    lParameters.muMaxLevel = luArg2;           // +0x10 = a2
-    lParameters.muMinLevel = luArg3;           // +0x14 = a3
+    lParameters.muMagFilter = luArg2;          // +0x0C = a2
+    lParameters.muMinFilter = luArg2;          // +0x10 = a2
+    lParameters.muMipFilter = luArg3;          // +0x14 = a3
     lParameters.muMagFilterZ = 0;              // +0x18 = ARTIST v7[6]
-    lParameters.muMagFilter = 0;               // +0x1C
+    lParameters.muMinFilterZ = 0;              // +0x1C
     lParameters.muMinMipLevel = 13;            // +0x20 = ARTIST v7[8]
-    lParameters.muMipFilter = 0;               // +0x24
-    lParameters.muConvolution = 1;             // +0x28
-    lParameters.muColor = 0;                   // +0x2C
-    lParameters.muRemap = 0;                   // +0x30
+    lParameters.muMaxMipLevel = 0;             // +0x24
+    lParameters.muMaxAnisotropy = 1;            // +0x28
+    lParameters.mfMipMapLodBias = 0.0f;         // +0x2C
+    lParameters.mfAnisotropyBias = 0.0f;        // +0x30
     lParameters.muDepthTextureFunction = 0;    // +0x34
     lParameters.muGamma = 0;                   // +0x38
     lParameters.muState17 = 0;                 // +0x3C
     lParameters.mbState15 = 0;                 // +0x40
-    lParameters.mbState22 = 0;                 // +0x41
+    lParameters.mbSeparateZFilterEnable = 0;    // +0x41
     lParameters.mbState16 = 0;                 // +0x42
     lParameters.mbState11Zero = 1;             // +0x43
     lParameters.mbState26 = 1;                 // +0x44
