@@ -287,7 +287,10 @@ void SceneManagerModule::Construct()
     // TriangleCacheManager::mbDEBUGForceAllDirty member at +0x50, later bound by the page.
     mTriangleCacheManager.mbDEBUGForceAllDirty = false;
 
-    mpTriangleCacheCollisionGenerator = nullptr;   // X360 [+0x3A84D0] <- 0
+    // ARTIST 0x828D09A0 inlines this manager's initialization here: clear its three
+    // scalar/pointer fields, construct the spatial map, then bind the debug component.
+    // Prepare later registers that component and constructs mSpacialAllocator.
+    mTriangleCollisionManager.Construct();
 
     // The two "total CG setup" timers are registered unconditionally each Construct
     // (the X360 stores the handle straight into the member; not the lazy si* pattern).
@@ -354,8 +357,8 @@ void SceneManagerModule::Construct()
     RegisterPerfMonOnce(siProcessTriCollisionLineTestNearestsPerfMon, "       TriCollLTNs", 17, 15.0f, 0,
                         "siProcessTriCollisionLineTestNearestsPerfMon >= 0");
 
-    // Mark the module "new" (base flag at [+4]) and clear the per-frame cached
-    // collision-generator pointer (X360 [+0x3A84D0] <- 0).
+    // ARTIST 0x828D13CC..0x828D13D0 marks the module "new" then clears the per-frame
+    // cached collision-generator pointer (X360 [+0x3A84D0] <- 0).
     mbIsNewModule = true;
     mpTriangleCacheCollisionGenerator = nullptr;
 }
