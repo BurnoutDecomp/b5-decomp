@@ -27,6 +27,8 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h" // canonical shared render states
 // Original 76-type registration uses each canonical concrete class.
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
 #include "GameShared/GameClasses/RenderWare/PS3/CgsRwVertexDescResourceTypePS3.h"
@@ -1982,13 +1984,53 @@ namespace BrnResource
         ++miNumTypes;
     }
 
-    void GameDataModule::TextureRenderCallback(renderengine::Texture* /*lpTexture*/,
-        Vector2 /*lvPosition*/, Vector2 /*lvSize*/, void* /*lpUser*/, bool /*lbBegin*/, bool /*lbEnd*/)
+    // ARTIST 0x82664598: the const input's read lock protects publication of
+    // its borrowed debug render buffer. The original does not reset it afterward.
+    void GameDataModule::RenderDebug(const GameDataIO::InputBuffer* lpInputBuffer)
     {
-        // FLAG trap-stub: ARTIST 0x8266ACC8's texture-browser draw path and its
-        // immediate-mode state dependencies are not reconstructed in this owner.
-        __debugbreak();
-        std::abort();
+        lpInputBuffer->LockForRead();
+        mpDebug2dRenderBuffer = lpInputBuffer->GetIm2dDebugRenderBuffer();
+        lpInputBuffer->UnlockForRead();
+    }
+
+    // ARTIST 0x8266ACC8. The second flag is unused; the first starts a batch's
+    // transform/state setup, including when its texture argument is null.
+    void GameDataModule::TextureRenderCallback(renderengine::Texture* lpTexture,
+        Vector2 lvPosition, Vector2 lvSize, void* lpUser, bool lbBegin, bool /*lbEnd*/)
+    {
+        GameDataModule* const lpModule = static_cast<GameDataModule*>(lpUser);
+        CgsGraphics::Im2dRenderBuffer* const lpRenderBuffer = lpModule->mpDebug2dRenderBuffer;
+        if (lpRenderBuffer == nullptr)
+            return;
+
+        // ARTIST 0x82FFACFC has only this callback's read/write xrefs. Its
+        // process-lifetime cache is not reset by a module lifecycle operation.
+        static renderengine::Texture* slpLastTexture = nullptr;
+        if (slpLastTexture != lpTexture && lpTexture != nullptr)
+            slpLastTexture = lpTexture;
+
+        if (lbBegin)
+        {
+            lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetDefault());
+            lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+            lpRenderBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
+            lpRenderBuffer->SetState(CgsGui::gpBillboardDepthStencilState);
+        }
+
+        if (lpTexture != nullptr)
+        {
+            const f32 lfRight = lvPosition.x + lvSize.x;
+            const f32 lfBottom = lvPosition.y + lvSize.y;
+            const CgsGraphics::Basic2dColouredTexturedVertex laVertices[4] =
+            {
+                { { lvPosition.x, lvPosition.y }, { 255, 255, 255, 255 }, { 0.0f, 0.0f } },
+                { { lvPosition.x, lfBottom },     { 255, 255, 255, 255 }, { 0.0f, 1.0f } },
+                { { lfRight, lvPosition.y },      { 255, 255, 255, 255 }, { 1.0f, 0.0f } },
+                { { lfRight, lfBottom },          { 255, 255, 255, 255 }, { 1.0f, 1.0f } }
+            };
+            lpRenderBuffer->SetTexture(lpTexture);
+            lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
+        }
     }
 
     // ARTIST 0x8266D570. Original provider path, intentionally uninvoked by

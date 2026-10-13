@@ -23,6 +23,7 @@
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace CgsMemory { struct MemoryMap; }
+namespace CgsGraphics { struct Im2dRenderBuffer; }
 namespace renderengine { class Texture; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsModule { struct IOBufferStack; }
@@ -142,6 +143,8 @@ namespace BrnResource
         // FLAG PC-platform adapter: callers on the current host still have only the persistent
         // two-buffer call. It maps the original 0/1 enum to the existing bool stall convention.
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
+
+        void RenderDebug(const GameDataIO::InputBuffer* lpInputBuffer); // ARTIST 0x82664598
 
     private:
         void ConstructResourceModule(); // ARTIST 0x8266D570; unactivated original provider path
@@ -574,6 +577,9 @@ namespace BrnResource
         // to ChallengeList::AddListResource, and ProcessGetFreeburnChallengeListRequest
         // @0x82666728 replies with `this + 0x70000 + 0xFD0` -- the same object.
         BrnResource::ChallengeList     mChallengeList;
+        // ARTIST this+475832 / DecFIGS :427. Borrowed from the locked GameData
+        // input by RenderDebug and consumed by TextureRenderCallback.
+        CgsGraphics::Im2dRenderBuffer*  mpDebug2dRenderBuffer;
         // X360 a1[139] / a1[140] / a1[141] / a1[142] -- the four data-table prepares' own stage
         // words (each Prepare* helper owns one; a1[139] is PrepareFreeburnChallengeList's, X360
         // offset 0x22C -- `lwz r11, 0x22C(r30)` at its switch head; a1[141] is PrepareICEList's,

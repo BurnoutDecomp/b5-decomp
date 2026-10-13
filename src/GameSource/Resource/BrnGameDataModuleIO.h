@@ -8,9 +8,8 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h" // ResourceIO::FileSystemStatusInterface
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // CgsAttribSys::AttribSysIO::AttribSysRequestInterface<N> (mAttribSysRequestInterface)
-// CgsGraphics::Im2dRenderBuffer is a typedef (== CgsGraphics::Im2d), not a struct, so its canonical
-// home header is included rather than forward-declared (a `struct Im2dRenderBuffer;` fwd-decl would
-// clash with the typedef). InputBuffer::mpDebug2dRenderBuffer is pointer-only.
+// CgsGraphics::Im2dRenderBuffer is the canonical command recorder, distinct from
+// the Im2d renderer. InputBuffer borrows its pointer through the shared header.
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }   // OutputBuffer::GetAllocator return type
@@ -73,8 +72,8 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 // FileSystemStatusInterface at +9 (getter 0x823B16E0 returns this+9; Prepare/Update call its setter).
 // Preserve them as separate fields; do not alias the live-update byte to filesystem status.
 //
-// FLAG (MINIMAL SLICE / additive header): lifecycle methods (Construct/Prepare/Release/Destruct/Clear) and
-// the Im2d setter-getters beyond what the reconstructed accessors need are DEFERRED. Semantic parity (real
+// FLAG (MINIMAL SLICE / additive header): lifecycle methods (Construct/Prepare/Release/Destruct/Clear)
+// remain DEFERRED. Semantic parity (real
 // DWARF names/types/order for the declared members), NOT a byte-exact object on the 64-bit host. GROW
 // additively; do NOT fork.
 namespace BrnResource
@@ -135,6 +134,10 @@ namespace GameDataIO
         // already write-locked while the renderer's debug buffer is published.
         void SetIm2dDebugRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer)
         { mpDebug2dRenderBuffer = lpBuffer; }
+
+        // DecFIGS h:119; inlined member read in ARTIST RenderDebug 0x826645D0.
+        CgsGraphics::Im2dRenderBuffer* GetIm2dDebugRenderBuffer() const
+        { return mpDebug2dRenderBuffer; }
 
     private:
         // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
