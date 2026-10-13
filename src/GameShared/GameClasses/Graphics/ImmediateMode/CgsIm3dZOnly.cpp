@@ -255,21 +255,10 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
-    // The live vertex-program shadow cache (X360 dword_8301095C). One per module, not per renderer.
-    static renderengine::ProgramBuffer* spgLastVertexProgram = nullptr;
-
-    renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == lpVertexProgram)
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-        lbChanged = true;
-    }
+    // ARTIST compares dword_8301095C in the shared shadow device. BeginRendering
+    // resets this same cache; a second TU-local cache would survive that reset.
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program]));
 
     if (lbChanged)
     {
