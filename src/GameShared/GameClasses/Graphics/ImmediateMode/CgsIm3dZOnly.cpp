@@ -178,12 +178,11 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const u32* lauPixelProgramSize,
                               s8 li8NumberPrograms)
 {
-    // Build the shared render-state library exactly once (module-static guard byte_83010F95).
-    static bool sbStateLibraryConstructed = false;
-    if (!sbStateLibraryConstructed)
+    // Build the shared render-state library once using the shared ARTIST guard byte_83010F95.
+    if (!mgbStateLibraryConstructed)
     {
         ConstructOnceOnly(lpAllocator);
-        sbStateLibraryConstructed = true;
+        mgbStateLibraryConstructed = true;
     }
 
     // Build the position-only vertex descriptor (the X360 inlines PositionOnlyVertex::
