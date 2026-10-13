@@ -126,8 +126,12 @@ def main():
     skipped = []
     if "SKIP_RESET_RECOVERY:" in run.stdout:
         skipped.append("ResetEx recovery")
-    if "SUBCASE_UNAVAILABLE:" in run.stdout:
-        skipped.append("safe HRESULT failure witness")
+    if "SUBCASE_UNAVAILABLE: native failed-HRESULT draw witness" in run.stdout:
+        skipped.append("native failed-HRESULT draw witness")
+    if "SUBCASE_UNAVAILABLE: injected Finish(false) seam" in run.stdout:
+        skipped.append("injected Finish(false) seam")
+    if "SUBCASE_UNAVAILABLE:" in run.stdout and not skipped:
+        skipped.append("native query subcase")
     if skipped:
         print(f"{TAG}: PARTIAL ({checks}/{checks} checks); unavailable: {', '.join(skipped)}")
         retain("partial: " + ", ".join(skipped))
