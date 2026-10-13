@@ -228,4 +228,99 @@ namespace CgsContainers
         Entry* mpEntries;      // +8  caller-owned slot array
         Key    miInvalidKey;   // +16 empty-slot sentinel (all-ones)
     };
+
+    // ARTIST's CgsLinearSOAHashTable<int,int> instantiation used by
+    // CgsFileSystem::PatchManager is a split-array table, unlike the entry-array
+    // instantiations above. Its X360 object is four words:
+    //   [0] length, [1] invalid-key sentinel, [2] key array, [3] value array.
+    // Construct allocates one 0x4000-byte key array and one 0x4000-byte value
+    // array for 4096 signed 32-bit slots. ARTIST AddEntry/FindEntry at
+    // 0x828DF260/0x828DF3E0 confirm the field words, unsigned modulo/probe order,
+    // and value-pointer return. Keep this specialization isolated so the existing
+    // DecFIGS-backed entry-array tables retain their canonical layout.
+    template <>
+    class LinearHashTable<s32, s32>
+    {
+    public:
+        void Initialize(s32* lpKeys, s32* lpValues, u32 luLength)
+        {
+            miLength     = luLength;
+            miInvalidKey = static_cast<s32>(-1);
+            mpKeys       = lpKeys;
+            mpValues     = lpValues;
+            Clear();
+        }
+
+        void Clear()
+        {
+            for (u32 luIndex = 0; luIndex < miLength; ++luIndex)
+                mpKeys[luIndex] = miInvalidKey;
+        }
+
+        // ARTIST @0x828DF3E0. Keys are hashed as unsigned 32-bit values, then
+        // linearly probed from key % length, wrapping at the table end. An empty
+        // key terminates the search; return the parallel value slot on a match.
+        s32* FindEntry(s32 liKey)
+        {
+            const u32 luKey = static_cast<u32>(liKey);
+            const u32 luStart = luKey % miLength;
+
+            for (u32 luIndex = luStart; luIndex < miLength; ++luIndex)
+            {
+                const s32 liEntryKey = mpKeys[luIndex];
+                if (static_cast<u32>(liEntryKey) == luKey)
+                    return &mpValues[luIndex];
+                if (liEntryKey == miInvalidKey)
+                    return nullptr;
+            }
+            for (u32 luIndex = 0; luIndex < luStart; ++luIndex)
+            {
+                const s32 liEntryKey = mpKeys[luIndex];
+                if (static_cast<u32>(liEntryKey) == luKey)
+                    return &mpValues[luIndex];
+                if (liEntryKey == miInvalidKey)
+                    return nullptr;
+            }
+            return nullptr;
+        }
+
+        // ARTIST @0x828DF260. The caller checks FindEntry first; this body
+        // chooses the first empty slot in the same wrapped probe order, stores
+        // the key and optionally copies the initial value, then returns its slot.
+        s32* AddEntry(s32 liKey, const s32* lpInitialValue)
+        {
+            CGS_ASSERT(liKey != miInvalidKey,
+                       "Can not add entry with invalid key value to table\n");
+
+            const u32 luKey = static_cast<u32>(liKey);
+            const u32 luStart = luKey % miLength;
+            for (u32 luIndex = luStart; luIndex < miLength; ++luIndex)
+            {
+                if (mpKeys[luIndex] == miInvalidKey)
+                {
+                    mpKeys[luIndex] = liKey;
+                    if (lpInitialValue)
+                        mpValues[luIndex] = *lpInitialValue;
+                    return &mpValues[luIndex];
+                }
+            }
+            for (u32 luIndex = 0; luIndex < luStart; ++luIndex)
+            {
+                if (mpKeys[luIndex] == miInvalidKey)
+                {
+                    mpKeys[luIndex] = liKey;
+                    if (lpInitialValue)
+                        mpValues[luIndex] = *lpInitialValue;
+                    return &mpValues[luIndex];
+                }
+            }
+            return nullptr;
+        }
+
+    private:
+        u32  miLength;       // +0
+        s32  miInvalidKey;   // +4
+        s32* mpKeys;          // +8 on X360
+        s32* mpValues;        // +12 on X360
+    };
 }

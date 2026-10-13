@@ -38,19 +38,25 @@ namespace CgsFileSystem
         mpAllocator         = lpAllocator;
         muCurrentPatchIndex = 0;
 
-        // The X360 carves the map's entry array from the allocator (a 16384-byte, 16-aligned
-        // descriptor[0] request) and binds the LinearHashTable<s32,s32> to it with length 0x1000.
-        // The length 0x1000 is the grounded immediate (Construct r6 = 0x1000); the entry storage is
-        // sized for KU_PATCH_FILE_MAP_SIZE slots.
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size =
-            KU_PATCH_FILE_MAP_SIZE * sizeof(CgsContainers::LinearHashEntry<s32, s32>);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        rw::Resource lResource = mpAllocator->DoAllocate(lDescriptor, 0);
+        // ARTIST makes two independent lane-zero allocations, each {0x4000,16},
+        // then initializes CgsLinearSOAHashTable<int,int> with the key array first,
+        // the value array second and length 0x1000. Keep both blocks owned by the
+        // allocator retained in mpAllocator for the manager's lifetime.
+        rw::ResourceDescriptor lKeyDescriptor;
+        lKeyDescriptor.m_baseResourceDescriptors[0].m_size =
+            KU_PATCH_FILE_MAP_SIZE * sizeof(s32);
+        lKeyDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        rw::Resource lKeyResource = mpAllocator->DoAllocate(lKeyDescriptor, 0);
 
-        CgsContainers::LinearHashEntry<s32, s32>* lpEntries =
-            static_cast<CgsContainers::LinearHashEntry<s32, s32>*>(lResource.m_baseResources[0]);
-        mPatchFileMap.Initialize(lpEntries, KU_PATCH_FILE_MAP_SIZE);
+        rw::ResourceDescriptor lValueDescriptor;
+        lValueDescriptor.m_baseResourceDescriptors[0].m_size =
+            KU_PATCH_FILE_MAP_SIZE * sizeof(s32);
+        lValueDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        rw::Resource lValueResource = mpAllocator->DoAllocate(lValueDescriptor, 0);
+
+        s32* lpKeys = static_cast<s32*>(lKeyResource.m_baseResources[0]);
+        s32* lpValues = static_cast<s32*>(lValueResource.m_baseResources[0]);
+        mPatchFileMap.Initialize(lpKeys, lpValues, KU_PATCH_FILE_MAP_SIZE);
 
         mbPatching     = false;
         gpPatchManager = this;
