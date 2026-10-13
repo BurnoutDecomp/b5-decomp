@@ -50,8 +50,8 @@ namespace CgsModule { struct Event; }                                        // 
 // routing), the request dispatchers (ProcessGameDataEvent 0x826744F0, ProcessLoadGameDataEvent
 // 0x82671EA0, ProcessGetGameDataEvent 0x82672268, GetGameDataEventSlot 0x826664A0) and the FOUR
 // world handlers (GetWorldUnit 0x826705D0, LoadPVS 0x8266F9C0, LoadSurfaceList 0x8266F718,
-// LoadPropInstances 0x8266F178). The rw-allocator-gated stages (CreateBanks/CreatePools/
-// CreateAllocators) are inert/bring-up stand-ins; DLC enumeration has a hard trap boundary, the
+// LoadPropInstances 0x8266F178). CreateBanks submits the original typed bank requests and waits
+// for their replies; CreatePools/CreateAllocators retain native bring-up adapters. DLC enumeration has a hard trap boundary, the
 // ResourceModule host status writer and four-argument GameData Prepare output tail remain partial,
 // and AttribSys / HUD / popup prepares, Destruct and non-world ProcessXxxRequest handlers are DEFERRED. The
 // ProcessInternal*Response completion routing (0x82672630 / 0x826736D8 / 0x8266E3F0 /
@@ -142,8 +142,10 @@ namespace BrnResource
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
 
     private:
-        // rw-allocator-gated bring-up steps (deferred stubs report success).
-        bool CreateBanks(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DA28
+        // Memory-map bring-up: original queued bank creation, followed by the
+        // current native pool/allocator adapters.
+        bool CreateBanks(CgsModule::IOBufferStack* lpInputStack,
+                         CgsModule::IOBufferStack* lpOutputStack);       // 0x8266DA28
         bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
         bool CreateAllocators(void* lpInputBuffer, void* lpOutputBuffer);  // 0x8266DD00
         CgsResource::ResourceModule::EUpdateResult UpdateResourceModule(
@@ -495,6 +497,9 @@ namespace BrnResource
         rw::LinearResourceAllocator*        mapGeneratedRWLinearAllocators[5];
         rw::core::GeneralResourceAllocator* mapGeneratedRWGeneralAllocators[5];
         CgsMemory::LinearMalloc             mAudioStreamAllocator;
+        // X360 a1+439288 (dword 109822), DecFIGS :405. CreateBanks publishes
+        // these outstanding requests and clears the count after all replies arrive.
+        s32                                 miNumBankCreationRequests;
         // X360 a1+439304 (dword 109826): outstanding allocator-create requests published to
         // the ResourceModule; the drain zeroes it once every response has been stored.
         s32                                 miNumAllocatorCreationRequests;
