@@ -1,3 +1,5 @@
+#include "SharedClasses/Trigger/BrnRoamingLocation.h" // BrnTriggerData inline accessors need the complete type
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"    // BrnTriggerData inline accessors need the complete type
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #ifdef AddMonitor
@@ -775,8 +777,8 @@ namespace BrnGame
             case E_PREPARESTAGE_THREADS:
                 mePrepareStage = E_PREPARESTAGE_THREADS;
                 mThreadLayout.Begin(this, mCpuMonitors.miUT_Resource,
-                                    mCpuMonitors.miUT_AllThreadSyncs,
-                                    mCpuMonitors.miUT_UpdateWaitForDispatch);
+                                    mCpuMonitors.miUT_ThreadSync,
+                                    mCpuMonitors.miUT_WaitOnDispatch);
                 mThreadLayout.SetFrameRate(CgsSystem::E_FRAMERATE_60HZ);
                 mThreadLayout.SetResourcePercentageOfFrame(50);
                 // The original store is DispatchThreadInputBuffer::meLoadingScreenCommand
@@ -6048,7 +6050,9 @@ namespace BrnGame
                 EA::Thread::ThreadParameters lParameters;
                 lParameters.mnPriority = 0;
                 lParameters.mnProcessor = 2;
-                lParameters.mbSuspended = false;
+                // ARTIST's Thread::Begin never reads ThreadParameters::mbSuspended and always
+                // calls ResumeThread after initialization. Host EAThread omits a start-paused
+                // field, so its default immediate start matches the original behavior.
                 lParameters.mpName = "DispatchThread";
                 void* const lpUserIndex = reinterpret_cast<void*>(static_cast<size_t>(luUserIndex));
                 mErrorThread.Begin(DiskErrorThreadProcPC, lpUserIndex, &lParameters,
