@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"             // Pool::InitOptions (CreatePools)
 #include "GameShared/GameClasses/Memory/CgsMemoryBank.h"                        // MemoryBank::Params (CreatePoolBank)
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"                    // MemoryIO Input/OutputBuffer (async pump)
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"                    // typed ResourceIO stack lifetime
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"       // SendCreatePoolMemoryRequest / DoCreatePoolRequest
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"             // PoolIO::OutputBuffer (request transport)
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"         // ResourceIO::InputBuffer (CreatePool request input)
@@ -31,10 +32,10 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator (schema blob carve)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator::Malloc
 
-// BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
-// lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
-// bring-up (CreateBanks/CreatePools/CreateAllocators), the DLC/AttribSys/HUD/popup prepare
-// stages, Construct, Update, Destruct and the ProcessXxxRequest handlers are DEFERRED.
+// BrnResource::GameDataModule - see the header. This lane restores the manager owner call,
+// stages 16-18 AddPatch producer/wait, and the UpdateResourceModule output-buffer wrapper.
+// The native DLC enumeration producer, ResourceModule filesystem-status writer, full four-arg
+// GameData Prepare/Update surface, and unrelated allocator/backend stages remain incomplete.
 #include "pc/gcm/renderengine/FrameProfile.h"
 
 namespace BrnResource
@@ -47,13 +48,41 @@ namespace BrnResource
         mbIsNewModule = true;
     }
 
-    // @ 0x82673F38 - resumable bring-up: base module, then the ResourceModule (memory/pool/
-    // bundle/filesystem), then carve banks/pools/allocators. Re-enters at the current stage if
-    // a sub-step is not yet ready. (The X360 then runs DLC stages 16-18+ and the AttribSys/HUD/
-    // popup prepares - DEFERRED here; the machine completes after the allocator stage.)
-    bool GameDataModule::Prepare(void* lpInputBuffer, void* lpOutputBuffer)
+    // @ 0x82673F38 - resumable bring-up: base module, ResourceModule, banks/pools/allocators,
+    // DLC patch registration (stages 16-18), then AttribSys and the remaining game-data tables.
+    // Re-enters at the current stage while an asynchronous operation or package reply is pending.
+    bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack,
+                                 CgsModule::IOBufferStack* lpOutputStack)
     {
         mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
+        mFileSystemStatus.Construct(); // X360 0x82673F38: Construct(this + 475952) on every Prepare entry
+
+        // X360 creates one ResourceIO input carve per AddPatchRequest, then clears the receiver,
+        // unlocks, pumps ResourceModule, and destroys the carve. Keep that order and host-width
+        // event size while retaining the original typed request.
+        const auto lSubmitDLCAddPatchRequest = [this, lpInputStack, lpOutputStack]()
+        {
+            CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
+                lpInputStack, "Resource");
+            lResourceInput->LockForWrite();
+
+            // The original call reads the package version before fetching the package again for
+            // its path, then constructs, queues, clears the reply receiver, unlocks, and pumps.
+            const s32 liVersion = mDLCManager.GetPackage(miDLCManagerPackageIndex)->miVersion;
+            BrnResource::DLCManager::DLCPackage* lpPackage =
+                mDLCManager.GetPackage(miDLCManagerPackageIndex);
+            CgsResource::Events::AddPatchRequest lRequest;
+            lRequest.Construct(&mReceiverQueue, miDLCManagerPackageIndex,
+                               lpPackage->mPath, liVersion);
+            lResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                25 /* AddPatchRequest */, static_cast<s32>(sizeof(lRequest)));
+
+            mReceiverQueue.Clear();
+            lResourceInput->UnlockForWrite();
+            UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
+        };
+
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
@@ -74,20 +103,62 @@ namespace BrnResource
             // fall through
         case E_PREPARE_BANKS:
             mePrepareStage = E_PREPARE_BANKS;
-            if (!CreateBanks(lpInputBuffer, lpOutputBuffer))
+            if (!CreateBanks(lpInputStack, lpOutputStack))
                 return false;
             // fall through
         case E_PREPARE_POOLS:
             mePrepareStage = E_PREPARE_POOLS;
-            if (!CreatePools(lpInputBuffer, lpOutputBuffer))
+            if (!CreatePools(lpInputStack, lpOutputStack))
                 return false;
             // fall through
         case E_PREPARE_ALLOCATORS:
             mePrepareStage = E_PREPARE_ALLOCATORS;
-            if (!CreateAllocators(lpInputBuffer, lpOutputBuffer))
+            if (!CreateAllocators(lpInputStack, lpOutputStack))
                 return false;
-            // (X360: DLC stages 16-18 run between the allocators and stage 6 - deferred)
             // fall through
+        case E_PREPARE_DLC_MANAGER:
+            mePrepareStage = E_PREPARE_DLC_MANAGER;
+            if (!mDLCManager.Prepare(&mAllocatorList))
+                return false;
+            miDLCManagerPackageIndex = 0;
+            mePrepareStage = E_PREPARE_DLC_ADD_PATCH_REQUEST;
+            // fall through
+        case E_PREPARE_DLC_ADD_PATCH_REQUEST:
+        {
+            mePrepareStage = E_PREPARE_DLC_ADD_PATCH_REQUEST;
+            if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+                lSubmitDLCAddPatchRequest();
+            mePrepareStage = E_PREPARE_DLC_WAIT_PATCH_REPLY;
+            // fall through
+        }
+        case E_PREPARE_DLC_WAIT_PATCH_REPLY:
+        {
+            mePrepareStage = E_PREPARE_DLC_WAIT_PATCH_REPLY;
+            while (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+            {
+                if (mReceiverQueue.GetCount() == 0)
+                {
+                    // ARTIST stage 18 pumps the resource module again while the patch reply is
+                    // pending. Without this call the asynchronous patch consumer cannot advance.
+                    CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
+                        lpInputStack, "Resource");
+                    UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
+                    return false;
+                }
+
+                ++miDLCManagerPackageIndex;
+                if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+                {
+                    mePrepareStage = E_PREPARE_DLC_ADD_PATCH_REQUEST;
+                    lSubmitDLCAddPatchRequest();
+                    mePrepareStage = E_PREPARE_DLC_WAIT_PATCH_REPLY;
+                }
+            }
+            // The X360 posts this reply only after PatchManager clears its pending flag. The
+            // host ResourceModule patch consumer remains unverified; never synthesize a reply.
+            mePrepareStage = E_PREPARE_ATTRIBSYS;
+            // fall through
+        }
         case E_PREPARE_ATTRIBSYS:
         {
             mePrepareStage = E_PREPARE_ATTRIBSYS;
@@ -180,6 +251,33 @@ namespace BrnResource
             CGS_ASSERT(false, "Invalid stage");
             return false;
         }
+    }
+
+    // ARTIST 0x826663B0. Create the typed ResourceIO output carve, run the embedded resource
+    // pump, copy its disk-status byte to the canonical GameDataModule member under the output
+    // read lock, then let IOHelper destroy the carve at scope exit. The partial ResourceModule
+    // host body currently leaves this status at OutputBuffer::Construct's default false.
+    CgsResource::ResourceModule::EUpdateResult GameDataModule::UpdateResourceModule(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        const CgsResource::ResourceIO::InputBuffer* lpResourceInput)
+    {
+        // The lane's ResourceModule::Update is still a PC adapter over typed IO buffers and
+        // internally uses static scratch buffers; lpInputStack is retained for the original
+        // caller ABI but is not consumed by that partial host pump.
+        (void)lpInputStack;
+        CgsModule::IOHelper<CgsResource::ResourceIO::OutputBuffer> lResourceOutput(
+            lpOutputStack, "ResourceOutput");
+        CgsResource::ResourceIO::OutputBuffer* lpResourceOutput = lResourceOutput;
+
+        const CgsResource::ResourceModule::EUpdateResult leResult = mResourceModule.Update(
+            const_cast<CgsResource::ResourceIO::InputBuffer*>(lpResourceInput), lpResourceOutput);
+
+        lpResourceOutput->LockForRead();
+        mFileSystemStatus = *static_cast<const CgsResource::ResourceIO::OutputBuffer&>(
+            *lpResourceOutput).GetFileSystemStatusInterface();
+        lpResourceOutput->UnlockForRead();
+        return leResult;
     }
 
     // ---- DEFERRED (rw allocator middleware + game-data subsystems) --------------------
