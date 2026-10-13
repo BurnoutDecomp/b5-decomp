@@ -61,7 +61,10 @@ namespace BrnResource
             mePrepareStage = E_PREPARE_BASE;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
                 return false;
-            // (X360 also Registers two debug components here - deferred)
+            // X360 0x8267402C-0x82674040 registers these embedded pages in this
+            // order after the base Prepare succeeds.
+            mDebugComponent.Register();
+            mDLCDebugComponent.Register();
             // fall through
         case E_PREPARE_RESOURCE:
             mePrepareStage = E_PREPARE_RESOURCE;
@@ -1749,8 +1752,17 @@ namespace BrnResource
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: root type0="
                                   << (s32)(u32)(size_t)lType0.m_baseResources[0]
                                   << " -> ResourceModule::Construct\n";
+        // X360 ConstructResourceModule stores the already-fixed ARTIST map pointer.
+        mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
         mResourceModule.Construct(&s_InitOptions, lpAllocator);
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";
+
+        // X360 constructs the embedded Resource debug page after the module's
+        // resource system is ready, then constructs the adjacent DLC page.
+        // The separate DLCManager service construction remains outside this
+        // component seam.
+        mDebugComponent.Construct(this, lpAllocator);
+        mDLCDebugComponent.Construct();
     }
     bool GameDataModule::Release() { return true; }
     void GameDataModule::Destruct() {}

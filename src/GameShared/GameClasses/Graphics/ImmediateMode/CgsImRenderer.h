@@ -24,6 +24,8 @@ namespace rw { struct IResourceAllocator; }
 
 namespace CgsGraphics
 {
+    struct OcclusionCullManager;
+
     class BlendState;
     class DepthStencilState;
     class RasterizerState;
@@ -138,6 +140,10 @@ namespace CgsGraphics
     template <typename V>
     struct ImRenderer : public ImRendererBase
     {
+        // OcclusionCullManager::Construct records this existing position-only descriptor for its
+        // query-box vertex upload; the relationship adds no renderer storage or cache state.
+        friend struct OcclusionCullManager;
+
         void BeginRendering();
         // X360-attested signed-char overload (DWARF CgsImRenderer.h attests BOTH `void BeginRendering();`
         // and `void BeginRendering(signed char);` on the ImRenderer<V> template). Bodied per vertex type

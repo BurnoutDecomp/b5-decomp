@@ -7,6 +7,8 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstdint>
+#include "GameShared/GameClasses/Memory/MemoryMap/CgsMemoryMap.h"
 
 namespace BrnResource
 {
@@ -117,7 +119,1331 @@ namespace BrnResource
         { 9, "Playback", 4, {0x13BC00,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
         { 24, "Rwac", 4, {0x35C000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
         { 25, "Logic", 4, {0x3BC00,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
-        { 31, "2D Immediate Heap", 8, {0x3FC000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 31, "2D Immediate Heap", 8, {0x3FC000,0x0,0x0,0x0,0x0}, {16,1,4096,1,1} },
     };
     static const s32 KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS = 4;
+
+    // Native typed data initializer for the complete ARTIST memory-map image. This is a
+    // PC data-initialization mechanism, not a recovered engine API. InitMemoryMap obtains
+    // this single image, fixes it once, and GameData/statistics readers use its typed rows.
+    struct MemoryMapImageInitializer
+    {
+        struct Image
+        {
+            CgsMemory::MemoryMap map;
+            CgsMemory::MemoryMapBank maBanks[16];
+            CgsMemory::MemoryMapPool maPools[27];
+            CgsMemory::MemoryMapRawResource maRawResources[1];
+            CgsMemory::MemoryMapLinearAllocator maLinearAllocators[7];
+            CgsMemory::MemoryMapHeapAllocator maHeapAllocators[8];
+            CgsMemory::MemoryMapRWLinearAllocator maRWLinearAllocators[4];
+            CgsMemory::MemoryMapRWGeneralAllocator maRWGeneralAllocators[4];
+        };
+
+        static Image& GetImage()
+        {
+            static Image lImage = {};
+            static const bool lbInitialized = (Initialize(lImage), true);
+            (void)lbInitialized;
+            return lImage;
+        }
+
+        static CgsMemory::MemoryMap& GetMemoryMap() { return GetImage().map; }
+
+    private:
+        static std::uintptr_t OffsetFromMap(const Image& lrImage, const void* lpAddress)
+        {
+            return reinterpret_cast<std::uintptr_t>(lpAddress) -
+                   reinterpret_cast<std::uintptr_t>(&lrImage.map);
+        }
+
+        static void CopyFixedName(char* lpDestination, u32 luCapacity, const char* lpcSource)
+        {
+            u32 luIndex = 0;
+            for (; luIndex < luCapacity && lpcSource[luIndex] != 0; ++luIndex)
+                lpDestination[luIndex] = lpcSource[luIndex];
+            for (; luIndex < luCapacity; ++luIndex)
+                lpDestination[luIndex] = 0;
+        }
+
+        static void Initialize(Image& lrImage)
+        {
+            CgsMemory::MemoryMap& lrMap = lrImage.map;
+            lrMap.miVersion = 0;
+            lrMap.miPlatform = 0;
+            lrMap.muNumBanks = 16;
+            lrMap.muNumPools = 27;
+            lrMap.muNumRawResources = 1;
+            lrMap.muNumLinearAllocators = 7;
+            lrMap.muNumHeapAllocators = 8;
+            lrMap.muNumRWLinearAllocators = 4;
+            lrMap.muNumRWGeneralAllocators = 4;
+
+            // These are native-layout-relative table addresses; FixUp adds the same image base once.
+            lrMap.mpBanks = reinterpret_cast<CgsMemory::MemoryMapBank*>(OffsetFromMap(lrImage, &lrImage.maBanks[0]));
+            lrMap.mpPools = reinterpret_cast<CgsMemory::MemoryMapPool*>(OffsetFromMap(lrImage, &lrImage.maPools[0]));
+            lrMap.mpRawResources = reinterpret_cast<CgsMemory::MemoryMapRawResource*>(OffsetFromMap(lrImage, &lrImage.maRawResources[0]));
+            lrMap.mpLinearAllocators = reinterpret_cast<CgsMemory::MemoryMapLinearAllocator*>(OffsetFromMap(lrImage, &lrImage.maLinearAllocators[0]));
+            lrMap.mpHeapAllocators = reinterpret_cast<CgsMemory::MemoryMapHeapAllocator*>(OffsetFromMap(lrImage, &lrImage.maHeapAllocators[0]));
+            lrMap.mpRWLinearAllocators = reinterpret_cast<CgsMemory::MemoryMapRWLinearAllocator*>(OffsetFromMap(lrImage, &lrImage.maRWLinearAllocators[0]));
+            lrMap.mpRWGeneralAllocators = reinterpret_cast<CgsMemory::MemoryMapRWGeneralAllocator*>(OffsetFromMap(lrImage, &lrImage.maRWGeneralAllocators[0]));
+
+            // CgsMemory::MemoryBank::Params rows; the five size/block lanes and flags are raw ARTIST data.
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[0].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Root Bank");
+                lrParams.mnParentBankId = -1;
+                lrParams.mnBankId = 0;
+                const u32 lauSizes[5] = {117440512, 0, 212860928, 0, 0};
+                const u32 lauBlocks[5] = {896, 1, 1624, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[1].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "OpenWorld");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 1;
+                const u32 lauSizes[5] = {37224448, 0, 90308608, 0, 0};
+                const u32 lauBlocks[5] = {284, 1, 689, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[2].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Physics");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 2;
+                const u32 lauSizes[5] = {11927552, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {91, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[3].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Cars");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 3;
+                const u32 lauSizes[5] = {6291456, 0, 89653248, 0, 0};
+                const u32 lauBlocks[5] = {96, 1, 684, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[4].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Sound");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 4;
+                const u32 lauSizes[5] = {22675456, 0, 131072, 0, 0};
+                const u32 lauBlocks[5] = {173, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[5].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "GUI");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 5;
+                const u32 lauSizes[5] = {9306112, 0, 18350080, 0, 0};
+                const u32 lauBlocks[5] = {568, 1, 140, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[6].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "GameData");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 6;
+                const u32 lauSizes[5] = {6946816, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {53, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[7].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Misc");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 8;
+                const u32 lauSizes[5] = {4194304, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {128, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[8].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "AttribSys");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 10;
+                const u32 lauSizes[5] = {1310720, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {80, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[9].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Network");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 26;
+                const u32 lauSizes[5] = {7864320, 0, 2097152, 0, 0};
+                const u32 lauBlocks[5] = {120, 1, 16, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[10].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Cameras");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 29;
+                const u32 lauSizes[5] = {524288, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {128, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[11].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "VFX");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 33;
+                const u32 lauSizes[5] = {4063232, 0, 7995392, 0, 0};
+                const u32 lauBlocks[5] = {31, 1, 61, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[12].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Global Textures");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 35;
+                const u32 lauSizes[5] = {2097152, 0, 3670016, 0, 0};
+                const u32 lauBlocks[5] = {16, 1, 28, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[13].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Replays");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 47;
+                const u32 lauSizes[5] = {2097152, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {16, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[14].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Player Physics");
+                lrParams.mnParentBankId = 2;
+                lrParams.mnBankId = 50;
+                const u32 lauSizes[5] = {786432, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {8, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+            {
+                CgsMemory::MemoryBank::Params& lrParams = lrImage.maBanks[15].mBankParams;
+                CopyFixedName(lrParams.macName, sizeof(lrParams.macName), "Massive");
+                lrParams.mnParentBankId = 0;
+                lrParams.mnBankId = 62;
+                const u32 lauSizes[5] = {131072, 0, 0, 0, 0};
+                const u32 lauBlocks[5] = {1, 1, 0, 1, 1};
+                for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+                {
+                    lrParams.mauBankSize[liType] = lauSizes[liType];
+                    lrParams.mauBankBlocks[liType] = lauBlocks[liType];
+                }
+                lrParams.mbIsLeaf = false;
+                lrParams.mbAllowFragmentation = true;
+            }
+
+            // CgsResource::Events::CreatePoolRequest rows, including all sixteen dependency ids.
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[0].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 0;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Fonts");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 64;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {103088, 2097152, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {32, 32, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 7;
+                lrRequest.miParentBankId = 5;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[1].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 1;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 300;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {983040, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {300, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 11;
+                lrRequest.miParentBankId = 2;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[2].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 2;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "OpenWorldPhy");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 1000;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {24379392, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {1000, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 12;
+                lrRequest.miParentBankId = 1;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[3].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 5;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "GameData");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 500;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {6845120, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {500, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 15;
+                lrRequest.miParentBankId = 6;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[4].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 6;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Sound");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 1024;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {17360896, 0, 0};
+                const u32 lauAlignments[3] = {64, 1, 1};
+                const u32 lauMaxResources[3] = {1024, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 16;
+                lrRequest.miParentBankId = 4;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[5].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 7;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "AttribSysPool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 100;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {235520, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {100, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 17;
+                lrRequest.miParentBankId = 10;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[6].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 8;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Gui_Persistent_Apt_Pool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 180;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {3578608, 8519680, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {180, 64, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 18;
+                lrRequest.miParentBankId = 5;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[7].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 9;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Apt_Streaming_Data");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 128;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {595904, 4194304, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {128, 48, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 28;
+                lrRequest.miParentBankId = 5;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[8].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 10;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Global Textures");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 500;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {1981440, 3670016, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {500, 500, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 36;
+                lrRequest.miParentBankId = 35;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[9].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 3;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "OpenWorldGr");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 8500;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {10215424, 90308608, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {8500, 6000, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 1;
+                const s32 laiDependencyIds[16] = {10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 13;
+                lrRequest.miParentBankId = 1;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[10].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 11;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Gui_Lang_Fsm_Data_Pool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 64;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {511680, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {64, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 37;
+                lrRequest.miParentBankId = 5;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[11].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 12;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Gui_Sat_Nav_Textures");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 256;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {17344, 3538944, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {64, 128, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 39;
+                lrRequest.miParentBankId = 5;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[12].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 13;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "VFX Pool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 120;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {358400, 3670016, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {120, 75, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 1;
+                const s32 laiDependencyIds[16] = {10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 40;
+                lrRequest.miParentBankId = 33;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[13].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 14;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "ICE Pool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 150;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {168496, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {150, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 43;
+                lrRequest.miParentBankId = 29;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[14].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 16;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Environment");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 100;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {501760, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {100, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 1;
+                const s32 laiDependencyIds[16] = {10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 46;
+                lrRequest.miParentBankId = 1;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[15].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 17;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car0 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 51;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[16].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 18;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car1 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 52;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[17].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 19;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car2 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 53;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[18].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 20;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car3 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 54;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[19].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 21;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car4 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 55;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[20].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 22;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car5 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 56;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[21].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 23;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car6 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 57;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[22].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 24;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car7 Physics");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {97280, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {5, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 58;
+                lrRequest.miParentBankId = 50;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[23].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 25;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "CarSharedPool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 100;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {39936, 4456448, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {100, 100, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 1;
+                const s32 laiDependencyIds[16] = {10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 59;
+                lrRequest.miParentBankId = 3;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[24].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 4;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "CarPool");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 3500;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {2097152, 43515904, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {3500, 3500, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 2;
+                const s32 laiDependencyIds[16] = {10, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 14;
+                lrRequest.miParentBankId = 3;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[25].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 15;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Traffic");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 5000;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {2193408, 41680896, 0};
+                const u32 lauAlignments[3] = {16, 4096, 1};
+                const u32 lauMaxResources[3] = {5000, 5000, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 2;
+                const s32 laiDependencyIds[16] = {10, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 45;
+                lrRequest.miParentBankId = 3;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+            {
+                CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[26].mRequest;
+                lrRequest.mpUser = nullptr;
+                lrRequest.miEventId = -1;
+                lrRequest.miPoolId = 26;
+                CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Freeburn Challenges");
+                lrRequest.miDeletionDelayFrames = 3;
+                lrRequest.muMaxResources = 20;
+                lrRequest.muMaxImports = 0;
+                const u32 lauSizes[3] = {258048, 0, 0};
+                const u32 lauAlignments[3] = {16, 1, 1};
+                const u32 lauMaxResources[3] = {20, 0, 0};
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrRequest.mDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                    lrRequest.mauMaxResources[liType] = lauMaxResources[liType];
+                }
+                lrRequest.miNumDependencies = 0;
+                const s32 laiDependencyIds[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                for (s32 liDependency = 0; liDependency < 16; ++liDependency)
+                    lrRequest.maiDependencyIds[liDependency] = laiDependencyIds[liDependency];
+                lrRequest.miBankId = 64;
+                lrRequest.miParentBankId = 26;
+                lrRequest.mbAllowDefragmentation = false;
+            }
+
+            // The five typed allocator families use the original request event constructors and data.
+            {
+                CgsMemory::MemoryIO::CreateResourceRequest& lrRequest = lrImage.maRawResources[0].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Ice");
+                lrRequest.SetBankId(34);
+                lrRequest.SetParentBankId(29);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {262144, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[0].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("AttribSysLinAlloc");
+                lrRequest.SetBankId(22);
+                lrRequest.SetParentBankId(10);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(278528);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[1].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Behaviours");
+                lrRequest.SetBankId(30);
+                lrRequest.SetParentBankId(29);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(65536);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[2].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Gui_State_Allocator");
+                lrRequest.SetBankId(44);
+                lrRequest.SetParentBankId(5);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(983040);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[3].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Replays Allocator");
+                lrRequest.SetBankId(48);
+                lrRequest.SetParentBankId(47);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(2097152);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[4].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("SP Allocator");
+                lrRequest.SetBankId(61);
+                lrRequest.SetParentBankId(2);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(4296704);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[5].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Mugshots");
+                lrRequest.SetBankId(65);
+                lrRequest.SetParentBankId(5);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(1048576);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[6].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("FLAPT_Allocator");
+                lrRequest.SetBankId(66);
+                lrRequest.SetParentBankId(5);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(921600);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[0].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("AttrSysHeap");
+                lrRequest.SetBankId(19);
+                lrRequest.SetParentBankId(10);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(606208);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[1].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("GameTalkAlloc");
+                lrRequest.SetBankId(20);
+                lrRequest.SetParentBankId(10);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(147456);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[2].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("EAStl");
+                lrRequest.SetBankId(21);
+                lrRequest.SetParentBankId(10);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(16384);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[3].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Network Memory");
+                lrRequest.SetBankId(27);
+                lrRequest.SetParentBankId(26);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(7274496);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[4].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Apt_Heap_Allocator");
+                lrRequest.SetBankId(32);
+                lrRequest.SetParentBankId(5);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(851968);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[5].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Gui_FSM_Lang_Alloc");
+                lrRequest.SetBankId(38);
+                lrRequest.SetParentBankId(5);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(524288);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[6].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("VFX Heap");
+                lrRequest.SetBankId(41);
+                lrRequest.SetParentBankId(33);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(3407872);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[7].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Massive Heap");
+                lrRequest.SetBankId(63);
+                lrRequest.SetParentBankId(62);
+                lrRequest.SetResourceType(0);
+                lrRequest.SetSize(131072);
+                lrRequest.SetHeapAllocator(nullptr);
+                lrRequest.SetLinearAllocator(nullptr);
+            }
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[0].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("PhysicsAlloc");
+                lrRequest.SetBankId(23);
+                lrRequest.SetParentBankId(2);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {4118528, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[1].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Network Image Allocator");
+                lrRequest.SetBankId(42);
+                lrRequest.SetParentBankId(26);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {262144, 0, 2097152, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 128, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[2].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Scene Manager");
+                lrRequest.SetBankId(49);
+                lrRequest.SetParentBankId(2);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {1550336, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[3].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("VFX Graphics Allocator");
+                lrRequest.SetBankId(60);
+                lrRequest.SetParentBankId(33);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {245760, 0, 4194304, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 128, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[0].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Playback");
+                lrRequest.SetBankId(9);
+                lrRequest.SetParentBankId(4);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {1293312, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[1].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Rwac");
+                lrRequest.SetBankId(24);
+                lrRequest.SetParentBankId(4);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {3522560, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[2].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("Logic");
+                lrRequest.SetBankId(25);
+                lrRequest.SetParentBankId(4);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {244736, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[3].mRequest;
+                lrRequest.Construct(nullptr, 0);
+                lrRequest.SetBankName("2D Immediate Heap");
+                lrRequest.SetBankId(31);
+                lrRequest.SetParentBankId(8);
+                rw::ResourceDescriptor lrDescriptor;
+                const u32 lauSizes[5] = {4177920, 0, 0, 0, 0};
+                const u32 lauAlignments[5] = {16, 1, 4096, 1, 1};
+                for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
+                {
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
+                    lrDescriptor.m_baseResourceDescriptors[liType].m_alignment = lauAlignments[liType];
+                }
+                lrRequest.SetDescriptor(&lrDescriptor);
+            }
+        }
+    };
 }

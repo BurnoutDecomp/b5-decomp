@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Containers/CgsReadOnlyObjectCache.h"
 
 namespace CgsMemory { class LinearMalloc; }   // BuildSpacialPartition allocator (by pointer)
+namespace CgsSceneManager { class TriangleCollisionDebugComponent; }
 
 namespace CgsGeometric
 {
@@ -30,6 +31,10 @@ namespace CgsGeometric
     struct PolygonSoupListSpatialMap
     {
         static const s32 KI_MAX_LEVELS = 8;
+
+        // ARTIST TriangleCollisionDebugComponent::OnActivate reads miNumLevels directly
+        // through its owning TriangleCollisionManager (+0x5C from the spatial-map base).
+        friend class CgsSceneManager::TriangleCollisionDebugComponent;
 
     private:
         CgsResource::ResourceHandle* mpaPolySoupListHandles; // result[0]    handle array (one per soup list)
