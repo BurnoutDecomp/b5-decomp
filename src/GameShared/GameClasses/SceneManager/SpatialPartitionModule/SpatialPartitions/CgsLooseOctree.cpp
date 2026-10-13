@@ -27,6 +27,7 @@
 //   LooseOctree::StartFrustumTestJobs           @ 0x828B23E0
 //   LooseOctree::WaitForFrustumTestJobResults   @ 0x828B2558
 //   LooseOctree::FrustumTestVp                  @ 0x828CA7F8
+//   LooseOctree::FrustumTest                    @ 0x828D0270
 //   LooseOctree::FrustumTestVpRecursive         @ 0x828BDC38
 //   LooseOctree::TrivialAcceptRecursive         @ 0x828B1B50
 //   LooseOctree::FrustumTestEntities            @ 0x828B1CA0
@@ -1678,6 +1679,34 @@ namespace CgsSceneManager
             mabFrustumJobActive[luJob]                = false;
             lrJobData.mQueryInfo.muNumQueries         = 0;
         }
+    }
+
+    // ===========================================================================
+    // FrustumTest @ 0x828D0270 -- the synchronous coarse frustum query.
+    //
+    // ARTIST copies the 128-byte frustum, initializes the flags/result/node-count tail of its
+    // recursive parameter block, walks from root node zero, then returns whether the caller's
+    // batch recorded any attempted results. The mounted FrustumTestVpRecursive walker has the
+    // same tree, leaf, and trivial-accept flow as ARTIST FrustumTestRecursive @0x828CA9D0; its
+    // FrustumTestParams keeps the named host representation and caches the same eight planes.
+    // ===========================================================================
+    bool LooseOctree::FrustumTest(u32 lx32EntityTypeMask,
+                                  const CgsGeometric::Frustum& lrFrustum,
+                                  CoarseQueryResultBuffer<16384>* lpResultBuffer)
+    {
+        CgsGeometric::Frustum lFrustum = lrFrustum;
+
+        FrustumTestParams lParams;
+        lParams.mpFrustum          = &lFrustum;
+        lParams.mx32EntityTypeMask = lx32EntityTypeMask;
+        lParams.mpResultBuffer     = lpResultBuffer;
+        lParams.mpJobResultBuffer  = 0;
+        lParams.muNumNodesVisited  = 0;
+        lParams.CachePlanes();
+
+        FrustumTestVpRecursive(0, &lParams);
+
+        return lpResultBuffer->GetNumResultsAttempted() > 0;
     }
 
     // ===========================================================================

@@ -121,6 +121,7 @@ namespace CgsSceneManager
         // slot  3  Release()
         // slot  5  SphereTest(entityTypeFlags, centre, radius, resultBufferOut)
         // slot  6  LineTest(entityTypeFlags, lineStart, lineEnd, resultBufferOut)
+        // slot  7  FrustumTest(entityTypeFlags, frustum, resultBufferOut)
         // slot  9  FrustumTestVp(entityTypeFlags, frustum, viewProjection, resultBufferOut)
         // slot 10  Update()
         // slot 11  SetEntityPosition(id, position)
@@ -139,10 +140,9 @@ namespace CgsSceneManager
         //   @0x828D3EA0 (`lwz r11,0x280(this) ; lwz r10,0(r11) ; lwz r11,0x18(r10) ; bctrl` with
         //   r4 = mx32EntityTypeFlags, r5 = the coarse result buffer, v1/v2 = start/end). DWARF
         //   CgsSpatialPartition.h:221: `virtual bool LineTest(EntityTypeFlags, Vector3, Vector3,
-        //   CoarseQueryResultBufferDefault*)`. DebugRender (slot 4) sits before it and
-        //   FrustumTest / VolumeTest (slots 7/8) after it; DebugRender and FrustumTest are still
-        //   undeclared here (no mounted caller yet) -- add them IN THAT ORDER when one lands. Host
-        //   vtable order is not load-bearing (named virtual calls).
+        //   CoarseQueryResultBufferDefault*)`. DebugRender (slot 4) remains unmounted; the
+        //   FrustumTest and VolumeTest declarations occupy the next two source slots. Host vtable
+        //   order is not load-bearing (named virtual calls).
         //
         // slot  5  SphereTest(entityTypeFlags, centre, radius, resultBufferOut)
         //   ADDED 2026-09-11, dispatched by SceneManagerModule::ProcessCoarseSphereTest. The
@@ -152,6 +152,11 @@ namespace CgsSceneManager
                                 CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                               CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
+        // slot  7  FrustumTest(entityTypeFlags, frustum, resultBufferOut)
+        //   ARTIST 0x828D0270 calls this as vtable+0x1C from the coarse-frustum consumer.
+        //   DecFIGS CgsSpatialPartition.h:228 gives the Frustum-reference shape.
+        virtual bool FrustumTest(u32 lx32EntityTypeFlags, const CgsGeometric::Frustum& lrFrustum,
+                                 CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         // slot  8  VolumeTest(entityTypeFlags, volume, transform, resultBufferOut)
         //   ADDED 2026-09-25 (crash parity FX-FOLLOWUPS). X360 vtbl+0x20; DWARF CgsLooseOctree.h:284
         //   `virtual bool VolumeTest(EntityTypeFlags, const VolRef::Volume*, const Matrix44Affine*,
