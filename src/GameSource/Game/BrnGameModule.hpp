@@ -388,6 +388,20 @@ namespace BrnGame
             E_GAMEUPDATESTAGE_RELEASE = 2,
         };
 
+        // h:198 / ARTIST 0x823DB848. The outer module Prepare ladder initializes hardware,
+        // module base, GameData, renderer, massive memory, then the thread layout.
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_HARDWARE = 1,
+            E_PREPARESTAGE_MANAGER = 2,
+            E_PREPARESTAGE_GAMEDATAMODULE = 3,
+            E_PREPARESTAGE_RENDERMODULE = 4,
+            E_PREPARESTAGE_HARDWAREMEMORY = 5,
+            E_PREPARESTAGE_THREADS = 6,
+            E_PREPARESTAGE_DONE = 7,
+        };
+
         // h:456 - the resumable GamePrepare() stage machine (X360 gm+10094164). The
         // stage VALUES are the X360 switch labels of 0x823EFBD0: 0/1 queue the three
         // one-time LoadBundle requests, 2 waits for all three completions and posts the
@@ -418,6 +432,15 @@ namespace BrnGame
         ~BrnGameModule();
 
         void Construct() override;   // @ BrnGameModule.cpp:155 - construct the owned modules
+
+        // X360 @0x823DB848 / DecFIGS h:656. Five explicit stack arguments in r4-r8:
+        // UpdateInput, UpdateOutput, ResourceInput, ResourceOutput, Dispatch. The current PC
+        // bootstrap keeps its separate EnginePrepare/GamePrepare adapter and does not call this.
+        virtual bool Prepare(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                             CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                             CgsModule::IOBufferStack* lpResourceInputBufferStack,
+                             CgsModule::IOBufferStack* lpResourceOutputBufferStack,
+                             CgsModule::IOBufferStack* lpDispatchInputBufferStack);
 
         // @ BrnGameModule.cpp:1047 - tear down the owned modules + the module base. Overrides
         // CgsModule::Module::Destruct. Destructs all 11 engine modules (in the X360's destruct
@@ -1049,7 +1072,10 @@ namespace BrnGame
         BrnNetwork::BrnNetworkModule  mNetworkModule;                // h:368
         CgsModule::IOBufferStack* mpUpdateInputBufferStack;          // h:373
         CgsModule::IOBufferStack* mpUpdateOutputBufferStack;         // h:374
-        // [h:375-379: resource buffer stacks + gamedata module buffers - omitted]
+        CgsModule::IOBufferStack* mpResourceInputBufferStack;        // h:375
+        CgsModule::IOBufferStack* mpResourceOutputBufferStack;       // h:376
+        BrnResource::GameDataIO::InputBuffer* mpGameDataModuleInputBuffer;   // h:378
+        BrnResource::GameDataIO::OutputBuffer* mpGameDataModuleOutputBuffer; // h:379
         BrnGame::BrnCpuMonitors mCpuMonitors;                        // h:384
         CgsDev::DebugManager    mDebugManager;                       // h:387
         // h:388 -- the DEBUG FONT handle, X360 gm+0x99F150 (10482000). GamePrepare's id-5
@@ -1057,7 +1083,8 @@ namespace BrnGame
         // and then hands THIS OBJECT to DebugManager::SetDebugFont, so it has to outlive the
         // pass -- it is the module's member on the console for exactly that reason.
         CgsResource::SafeResourceHandle<CgsResource::Font> mDebugFont;   // h:388 (gm+0x99F150)
-        // [h:389-404: map-file reader, juice, mbHasGameTerminated - omitted]
+        // [h:389-403: map-file reader, juice and update-trace state - omitted]
+        bool mbHasGameTerminated;                                    // h:404
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
         // [h:407-410: disk-error/controller/game-start/over flags - omitted]
@@ -1068,7 +1095,9 @@ namespace BrnGame
         bool mbWorldStreamingRequestedStall;                          // h:415
         bool mbStreamingStalled;                                     // h:416
         bool mbIsLoadingScreenVisible;                               // h:417
-        // [h:418-453: loading allocator, input-bind state, gui-flow, prepare stages - omitted]
+        // [h:418-452: loading allocator, input-bind state, and remaining gui-flow state - omitted]
+        bool mbRequestResumePreparingWorld;                          // h:453
+        EPrepareStage mePrepareStage;                                 // h:454 (X360 gm+10094156)
         EReleaseStage    meReleaseStage;                             // h:455 (Release() stage machine)
         EGamePrepareStage meGamePrepareStage;                        // h:456 (X360 gm+10094164)
         // [h:457: meGameReleaseStage - omitted]

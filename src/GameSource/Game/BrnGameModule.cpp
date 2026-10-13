@@ -201,17 +201,19 @@ namespace BrnGame
         // X360 step 1: the module base (resets the prepare/release stages + constructs the two
         // DataBuffers -- flag/pointer init only).
         CgsModule::ModuleSingleBuffered::Construct();
+        mePrepareStage = E_PREPARESTAGE_START;  // ARTIST Construct @0x823C9EA8, gm+10094156
 
         // [gated] X360 steps 2-3: CheckClassSizes, then the game-state field seeds at
-        // +10094156..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
-        // flag = 0) -- those words fall in this layout's omitted member ranges.
+        // +10094160..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
+        // flag = 0) -- the other words fall in this layout's omitted member ranges.
 
         // Per-frame IO buffer stacks the update spine + the scripted module loads allocate their
         // per-frame IO buffers on. [PC stand-in] On the X360 these five stacks are OWNED BY main()
         // (0x827E60D8) -- UpdateInput/UpdateOutput 0x780000, ResourceInput 0x40000, ResourceOutput
         // 0x20000, Dispatch 0x18000 bytes, align 128, carved from the boot allocator -- and handed
-        // to BrnGameModule::Prepare (vtable +64, 0x823DB848), which stores them at +10055424..
-        // Until that Prepare + the allocator layer land, two fixed scratch blocks stand in.
+        // to BrnGameModule::Prepare (0x823DB848), which stores the five arguments at the attested
+        // members. The current PC bootstrap still uses fixed scratch blocks because its separate
+        // EnginePrepare/GamePrepare adapter does not call this native five-stack method.
         static CgsModule::IOBufferStack sUpdateInputStack;
         static CgsModule::IOBufferStack sUpdateOutputStack;
         // FLAG PC-platform leaf: sizing. The DOCUMENTED X360 value is 0x780000 each (main()
@@ -239,9 +241,9 @@ namespace BrnGame
 
         // The dispatch-thread input pair (X360: DispatchThreadInputBufferManager::Construct
         // @0x823CBCE0 from Prepare @0x823DB848, on the dedicated Dispatch stack main() carves
-        // -- 0x18000 bytes, see the stack note above). [PC stand-in placement: constructed
-        // here with the other stack scaffolding until the real Prepare stage-machine lands;
-        // the stack size is the documented console value.]
+        // -- 0x18000 bytes, see the stack note above). [PC adapter placement: constructed here
+        // because the current PC bootstrap does not call the native Prepare method; the native
+        // path constructs this pair from its fifth caller stack argument.]
         static CgsModule::IOBufferStack sDispatchStack;
         static u8 saDispatchMem[0x18000];
         sDispatchStack.Construct("Dispatch");
@@ -678,6 +680,152 @@ namespace BrnGame
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
         mbCarSelectionPublished = false;
+    }
+
+    // @ 0x823DB848 -- the outer module-prepare ladder. The five explicit stack parameters are
+    // r4-r8 in the native entry: update input, update output, resource input, resource output,
+    // then dispatch. The PC EnginePrepare/GamePrepare path remains a separately flagged adapter
+    // and does not call this native caller contract.
+    bool BrnGameModule::Prepare(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                CgsModule::IOBufferStack* lpResourceInputBufferStack,
+                                CgsModule::IOBufferStack* lpResourceOutputBufferStack,
+                                CgsModule::IOBufferStack* lpDispatchInputBufferStack)
+    {
+        for (;;)
+        {
+            switch (mePrepareStage)
+            {
+            case E_PREPARESTAGE_START:
+                mbHasGameTerminated = false;
+                mePrepareStage = E_PREPARESTAGE_HARDWARE;
+                continue;
+
+            case E_PREPARESTAGE_HARDWARE:
+                mePrepareStage = E_PREPARESTAGE_HARDWARE;
+                if (!mHardware.Prepare())
+                    return false; // Native failure returns before the disk-status tail (stage < 3).
+                mAutoTestManager.Init(this);
+                mePrepareStage = E_PREPARESTAGE_MANAGER;
+                continue;
+
+            case E_PREPARESTAGE_MANAGER:
+                mePrepareStage = E_PREPARESTAGE_MANAGER;
+                if (!CgsModule::ModuleSingleBuffered::Prepare())
+                    return false; // Native failure returns before the disk-status tail (stage < 3).
+
+                // These are five separate caller-owned stacks. The first two drive per-frame
+                // module IO; the next two own the persistent GameData buffers/resource pump; the
+                // final Dispatch stack owns the double-buffered render input pair.
+                mpResourceInputBufferStack = lpResourceInputBufferStack;
+                mpUpdateInputBufferStack = lpUpdateInputBufferStack;
+                mpUpdateOutputBufferStack = lpUpdateOutputBufferStack;
+                mpResourceOutputBufferStack = lpResourceOutputBufferStack;
+                lpResourceInputBufferStack->CreateIOBuffer<BrnResource::GameDataIO::InputBuffer>(
+                    &mpGameDataModuleInputBuffer, "GameData");
+                lpResourceOutputBufferStack->CreateIOBuffer<BrnResource::GameDataIO::OutputBuffer>(
+                    &mpGameDataModuleOutputBuffer, "GameData");
+                mDispatchThreadInputBufferManager.Construct(lpDispatchInputBufferStack);
+                mePrepareStage = E_PREPARESTAGE_GAMEDATAMODULE;
+                continue;
+
+            case E_PREPARESTAGE_GAMEDATAMODULE:
+                mePrepareStage = E_PREPARESTAGE_GAMEDATAMODULE;
+                if (!mGameDataModule.Prepare(mpResourceInputBufferStack,
+                                             mpResourceOutputBufferStack,
+                                             mpGameDataModuleInputBuffer,
+                                             mpGameDataModuleOutputBuffer))
+                    goto PrepareFailure;
+                mePrepareStage = E_PREPARESTAGE_RENDERMODULE;
+                continue;
+
+            case E_PREPARESTAGE_RENDERMODULE:
+            {
+                mePrepareStage = E_PREPARESTAGE_RENDERMODULE;
+                mpGameDataModuleOutputBuffer->LockForRead();
+                const BrnResource::GameDataIO::AllocatorList* const lpAllocatorList =
+                    mpGameDataModuleOutputBuffer->GetAllocatorList();
+                const bool lbRendererPrepared = mRenderModule.Prepare(lpAllocatorList);
+                mpGameDataModuleOutputBuffer->UnlockForRead();
+                if (!lbRendererPrepared)
+                    goto PrepareFailure;
+
+                // FLAG PC-platform leaf: Xenon releases its D3D device owner word here. The host
+                // creates D3D9/9Ex with D3DCREATE_MULTITHREADED (src/pc/gcm/renderengine/device.cpp),
+                // and D3D9 has no matching explicit owner-word transfer operation.
+                mePrepareStage = E_PREPARESTAGE_HARDWAREMEMORY;
+                continue;
+            }
+
+            case E_PREPARESTAGE_HARDWAREMEMORY:
+            {
+                mePrepareStage = E_PREPARESTAGE_HARDWAREMEMORY;
+                mpGameDataModuleOutputBuffer->LockForRead();
+                const BrnResource::GameDataIO::AllocatorList* const lpAllocatorList =
+                    mpGameDataModuleOutputBuffer->GetAllocatorList();
+                const bool lbMassiveMemoryPrepared =
+                    mHardware.PrepareMassiveMemory(lpAllocatorList);
+                mpGameDataModuleOutputBuffer->UnlockForRead();
+                if (!lbMassiveMemoryPrepared)
+                    goto PrepareFailure;
+                mePrepareStage = E_PREPARESTAGE_THREADS;
+                continue;
+            }
+
+            case E_PREPARESTAGE_THREADS:
+                mePrepareStage = E_PREPARESTAGE_THREADS;
+                mThreadLayout.Begin(this, mCpuMonitors.miUT_Resource,
+                                    mCpuMonitors.miUT_AllThreadSyncs,
+                                    mCpuMonitors.miUT_UpdateWaitForDispatch);
+                mThreadLayout.SetFrameRate(CgsSystem::E_FRAMERATE_60HZ);
+                mThreadLayout.SetResourcePercentageOfFrame(50);
+                // The original store is DispatchThreadInputBuffer::meLoadingScreenCommand
+                // (+0x9990) on the manager's write buffer, E_LSC_SHOW (=1).
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreen();
+                if (!mFrameRateManager.Prepare())
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "mFrameRateManager.Prepare()",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp",
+                        788);
+                    CgsDev::Assert::EndAssert();
+                }
+                // ARTIST falls directly from THREADS to its final registration block without
+                // storing the DONE enum value.
+                goto PrepareComplete;
+
+            case E_PREPARESTAGE_DONE:
+                goto PrepareComplete;
+
+            default:
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp",
+                    808);
+                CgsDev::Assert::EndAssert();
+                goto PrepareFailure;
+            }
+        }
+
+    PrepareComplete:
+        // The context overload passes &entry->mpContext to this callback, matching the native
+        // BrnGameModule** second parameter while retaining the exact handler address.
+        EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+            EA::GameTalk::GameTalkManager::GetInstance(),
+            reinterpret_cast<void (*)(EA::GameTalk::GameTalkMessage*, void*)>(
+                &BrnGameModule::RenderMetricsMessageHandler),
+            "Camera", this);
+        mePrepareStage = E_PREPARESTAGE_START;
+        meReleaseStage = E_RELEASESTAGE_START;
+        mbRequestResumePreparingWorld = false;
+        return true;
+
+    PrepareFailure:
+        if (mePrepareStage >= E_PREPARESTAGE_GAMEDATAMODULE)
+            CheckDiskError(mpGameDataModuleOutputBuffer);
+        return false;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -3648,8 +3796,8 @@ namespace BrnGame
     //
     //     mbResourceUpdateBusy = ( (*(*(this + 6243520) + 68))(   // GameDataModule::Update
     //                                  this + 6243520,
-    //                                  *(this + 10053832),        // mpUpdateInputBufferStack
-    //                                  *(this + 10053836),        // mpUpdateOutputBufferStack
+    //                                  *(this + 10053832),        // mpResourceInputBufferStack
+    //                                  *(this + 10053836),        // mpResourceOutputBufferStack
     //                                  *(this + 10053840),        // the GameData INPUT buffer
     //                                  *(this + 10053844) )       // the GameData OUTPUT buffer
     //                            == 1 );
@@ -3657,8 +3805,8 @@ namespace BrnGame
     //
     // (the thread's `this` is the game module + 1600 -- hence the `a1 - 1600` in the
     // CheckDiskError call and the 1600-byte-shifted member offsets; add it back and the four
-    // arguments are exactly gm+10055432/36/40/44, i.e. the two update IO buffer stacks and THE
-    // SAME GameData input/output pair BrnGameModule::Prepare stage 3 created and every
+    // arguments are exactly gm+10055432/36/40/44, i.e. the ResourceInput/ResourceOutput stacks and
+    // THE SAME GameData input/output pair BrnGameModule::Prepare stage 2 created and every
     // LoadXxxModule / GamePrepare / LoadingScriptedState brackets. There is no second pair and
     // no hand-off: the console synchronises the two threads purely with the IOBuffer
     // read/write locks.)
