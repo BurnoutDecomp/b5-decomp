@@ -54,8 +54,8 @@ namespace CgsModule { struct Event; }                                        // 
 // 0x82671EA0, ProcessGetGameDataEvent 0x82672268, GetGameDataEventSlot 0x826664A0) and the FOUR
 // world handlers (GetWorldUnit 0x826705D0, LoadPVS 0x8266F9C0, LoadSurfaceList 0x8266F718,
 // LoadPropInstances 0x8266F178). CreateBanks submits the original typed bank requests and waits
-// for their replies. CreateAllocators has an unactivated original queued path; Prepare retains
-// its NativePC provider, and CreatePools retains its native adapter. DLC enumeration has a hard trap boundary, the
+// for their replies. CreatePools and CreateAllocators have unactivated original queued paths;
+// Prepare retains their NativePC providers. DLC enumeration has a hard trap boundary, the
 // ResourceModule host status writer and four-argument GameData Prepare output tail remain partial,
 // and AttribSys / HUD / popup prepares, Destruct and non-world ProcessXxxRequest handlers are DEFERRED. The
 // ProcessInternal*Response completion routing (0x82672630 / 0x826736D8 / 0x8266E3F0 /
@@ -155,11 +155,13 @@ namespace BrnResource
         static void TextureRenderCallback(renderengine::Texture* lpTexture, Vector2 lvPosition,
                                           Vector2 lvSize, void* lpUser, bool lbBegin, bool lbEnd);
 
-        // Memory-map bring-up: original queued bank creation, followed by the
-        // current native pool/allocator adapters.
+        // Memory-map bring-up: original queued producers. Prepare currently
+        // selects the native pool/allocator providers while their receivers remain partial.
         bool CreateBanks(CgsModule::IOBufferStack* lpInputStack,
                          CgsModule::IOBufferStack* lpOutputStack);       // 0x8266DA28
-        bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
+        bool CreatePools(CgsModule::IOBufferStack* lpInputStack,
+                         CgsModule::IOBufferStack* lpOutputStack);       // ARTIST 0x8266DB88; unactivated
+        bool CreatePoolsNativePC(void* lpInputBuffer, void* lpOutputBuffer);
         bool CreateAllocators(CgsModule::IOBufferStack* lpInputStack,
                               CgsModule::IOBufferStack* lpOutputStack); // ARTIST 0x8266DD00; unactivated
         bool CreateAllocatorsNativePC(void* lpInputBuffer, void* lpOutputBuffer);
@@ -522,6 +524,9 @@ namespace BrnResource
         // X360 a1+439288 (dword 109822), DecFIGS :405. CreateBanks publishes
         // these outstanding requests and clears the count after all replies arrive.
         s32                                 miNumBankCreationRequests;
+        // X360 a1+439296, DecFIGS :407. CreatePools waits for this exact number
+        // of receiver records, then clears the queue and resets the count.
+        s32                                 miNumPoolCreationRequests;
         // X360 a1+439304 (dword 109826): outstanding allocator-create requests published to
         // the ResourceModule; the drain zeroes it once every response has been stored.
         s32                                 miNumAllocatorCreationRequests;

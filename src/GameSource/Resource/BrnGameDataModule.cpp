@@ -219,7 +219,7 @@ namespace BrnResource
             // fall through
         case E_PREPARE_POOLS:
             mePrepareStage = E_PREPARE_POOLS;
-            if (!CreatePools(lpInputStack, lpOutputStack))
+            if (!CreatePoolsNativePC(lpInputStack, lpOutputStack))
                 return lReturnFailure();
             // fall through
         case E_PREPARE_ALLOCATORS:
@@ -453,15 +453,50 @@ namespace BrnResource
         return false;
     }
 
-    // @ 0x8266DB88 - create the game's resource pools. The X360 iterates the binary memory map
-    // (unk_82F2A788) and sends a CreatePoolRequest per pool through the async dispatch
-    // (DoCreatePoolRequest -> SendCreatePoolMemoryRequest -> MemoryModule alloc -> CreatePool). Here we
-    // drive the SAME pool set directly from the extracted memory-map table (BrnMemoryMapData.h, generated
-    // from progress/memory_map_artist.yaml): per pool, allocate its per-type backing memory from the root
-    // debug allocator and PoolModule::CreatePool it. [marked deviation: the faithful async memory-request
-    // dispatch is deferred; the pool data + Pool::InitPool are faithful.] Runs once (the Prepare stage
-    // re-enters until done).
-    bool GameDataModule::CreatePools(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
+    // ARTIST 0x8266DB88. Unactivated original queued producer. The current
+    // pool-module dispatcher consumes the separate native request below.
+    bool GameDataModule::CreatePools(CgsModule::IOBufferStack* lpInputStack,
+                                     CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = nullptr;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+
+        if (miNumPoolCreationRequests == 0)
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequestQueue;
+            lRequestQueue.Construct();
+            const s32 liNumPools = mpMemoryMap->GetNumPools();
+            for (s32 liIndex = 0; liIndex < liNumPools; ++liIndex)
+            {
+                CgsResource::Events::CreatePoolRequest lRequest =
+                    *mpMemoryMap->GetPool(liIndex)->GetRequest();
+                if (lRequest.miPoolId == 3 || lRequest.miPoolId == 4 || lRequest.miPoolId == 15)
+                    lRequest.mbAllowDefragmentation = true;
+                lRequest.mpUser = &mReceiverQueue;
+                lRequest.miEventId = miNumPoolCreationRequests++;
+                lRequestQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                                       0, static_cast<s32>(sizeof(lRequest)));
+            }
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequestQueue);
+            lpResourceInput->UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetCount() == miNumPoolCreationRequests)
+        {
+            miNumPoolCreationRequests = 0;
+            mReceiverQueue.Clear();
+            // ARTIST returns before destroying this call's input-buffer carve.
+            return true;
+        }
+
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // FLAG PC-platform adapter: active synchronous provider and native pool
+    // sizing. Prepare retains this path until the original pool receiver is recovered.
+    bool GameDataModule::CreatePoolsNativePC(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
     {
         static bool s_bPoolsCreated = false;
         if (s_bPoolsCreated)
@@ -1932,6 +1967,8 @@ namespace BrnResource
 
         // ARTIST 0x82671BF4 stores zero at this+439288 before bank requests begin.
         miNumBankCreationRequests = 0;
+        // ARTIST 0x82671C14 resets the counter used by the queued pool producer.
+        miNumPoolCreationRequests = 0;
         // ARTIST 0x82671C28 resets the same canonical counter used by 0x8266DD00.
         miNumAllocatorCreationRequests = 0;
 
