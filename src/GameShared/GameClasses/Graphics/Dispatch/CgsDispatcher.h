@@ -188,6 +188,10 @@ public:
     s32 DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
                           DispatchObjectContext* lpContext,
                           u32 luFirst, s32 liCount);
+    // @ 0x827EE9D8 -- query each DRAWRENDERABLEMESH packet in the requested
+    // sorted-key range; returns the next index when another range remains, or -1.
+    s32 DispatchAllMeshOcclusionQueries(const DispatchPacketInterpreter* lpInterpreter,
+                                        s32 liFirst, s32 liCount);
     // @ 0x827F7660 -- walk the sorted records and interpret every Z-only command.
     void DispatchAllMeshesZOnly(DispatchPacketInterpreter* lpInterpreter,
                                 DispatchObjectContext* lpContext);

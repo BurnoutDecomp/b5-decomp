@@ -1408,6 +1408,46 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
 }
 
 // =============================================================================
+// CgsGraphics::DispatchList::DispatchAllMeshOcclusionQueries @ 0x827EE9D8
+//
+// Walk the sorted key records for the requested range, issuing the occlusion
+// interpreter for each DRAWRENDERABLEMESH packet. A negative count runs through
+// the list; a non-negative count returns the next index when more records remain.
+// =============================================================================
+s32 DispatchList::DispatchAllMeshOcclusionQueries(
+    const DispatchPacketInterpreter* lpInterpreter, s32 liFirst, s32 liCount)
+{
+    // The X360 resets the shared technique/material and program shadows at the
+    // start of this walk, just as it does for DispatchAllMeshes.
+    spLastTechnique    = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
+    suLastTechniqueAux = ~uintptr_t(0);
+    shadow::Device::ResetProgramShadows();
+
+    const u32 luFirst = static_cast<u32>(liFirst);
+    u32 luEnd = muCount;
+    if (liCount >= 0)
+    {
+        const u32 luRequestedEnd = luFirst + static_cast<u32>(liCount);
+        if (luRequestedEnd < luEnd)
+            luEnd = luRequestedEnd;
+    }
+
+    for (u32 luIndex = luFirst; luIndex < luEnd; ++luIndex)
+    {
+        CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
+        u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
+        CGS_ASSERT(lpPacket != 0, "pPacket");
+        CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
+                   "pCommand->GetCommandID() == DRAWRENDERABLEMESH");
+
+        DrawRenderableMesh::InterpretOcclusionQuery(
+            reinterpret_cast<DispatchCommand*>(lpPacket), lpInterpreter->GetTime());
+    }
+
+    return luEnd != muCount ? static_cast<s32>(luEnd) : -1;
+}
+
+// =============================================================================
 // CgsGraphics::DispatchList::DispatchAllMeshesZOnly  @ 0x827F7660
 // Walk the sorted records and interpret every Z-only command. The Z-only
 // interpreter itself (@0x827F5AC8, the shadow-map GPU path) is still a loud
