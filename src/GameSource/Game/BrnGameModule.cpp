@@ -8,6 +8,7 @@
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
@@ -296,9 +297,9 @@ namespace BrnGame
             // and small-caster controls in addition to the original UI pools.
             lParams.miVariablePoolSize         += 128;
             lParams.miVariableMetadataPoolSize += 256;
-            // [FLAG] mpRwAllocator stays null: Allocators::mpInternalDebugAllocator is the
-            // absent allocator layer (F-P0-1), and the debug pools' backing still comes from
-            // the global heap, which ignores it.
+            // ARTIST823C9FC8 supplies the public GlobalDebug allocator wrapper.
+            // It is separate from the temporary default used during memory-map setup.
+            lParams.mpRwAllocator = BrnResource::GetDebugAllocator();
             mDebugManager.Construct(&lParams);
         }
 
