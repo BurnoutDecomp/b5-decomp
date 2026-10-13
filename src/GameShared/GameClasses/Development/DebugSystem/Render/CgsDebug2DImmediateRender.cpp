@@ -440,8 +440,7 @@ namespace CgsDev
         DrawText(lacValue, lfX, lfY, lfScale, lColour);
     }
 
-    // DecFIGS CgsDebug2DImmediateRender::DrawDataSize. ARTIST's Resource HUD
-    // calls this typed renderer method for each of the six size/usage columns.
+    // ARTIST 0x82824140..0x82824248 (export hole); DecFIGS h:126.
     void Debug2DImmediateRender::DrawDataSize(s32 liBytes, f32 lfX, f32 lfY,
                                                f32 lfScale, RGBA lColour)
     {
@@ -463,7 +462,8 @@ namespace CgsDev
                              liMegabytes, liKilobytes, liRemainder);
         }
 
-        DrawText(lacSize, lfX, lfY, lfScale, lColour);
+        const Vector2 lv2Position = {lfX, lfY, 0.0f, 0.0f};
+        DrawText(lacSize, lv2Position, lfScale, lColour, false);
     }
 
     Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
