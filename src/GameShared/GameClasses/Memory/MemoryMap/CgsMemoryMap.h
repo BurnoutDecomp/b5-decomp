@@ -135,6 +135,10 @@ namespace CgsMemory
         s32 GetVersion() const;
         s32 GetPlatform() const;
         const MemoryMapBank* GetBank(s32 liIndex) const;
+        // Inlined-data reconstruction seam for Allocators::Construct: ARTIST loads
+        // KAC_BINARY_MEMORY_MAP from the relocated mpBanks field, which is the first
+        // (reserved root) row. GetBank() deliberately skips that row for public indices.
+        const MemoryMapBank* GetBinaryMemoryMapBank() const { return mpBanks; }
         s32 GetNumBanks() const;
         const MemoryMapPool* GetPool(s32 liIndex) const;
         const MemoryMapPool* GetPool(const char* lpcName) const;
