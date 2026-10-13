@@ -1,3 +1,5 @@
+#include "SharedClasses/Trigger/BrnRoamingLocation.h" // complete types for BrnTriggerData inline accessors
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"
 #include "GameSource/Resource/BrnGameDataModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
