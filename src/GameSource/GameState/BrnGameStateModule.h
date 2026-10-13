@@ -252,28 +252,16 @@ public:
     void Construct() override;
     void Destruct()  override;
 
-    // ------------------------------------------------------------------------
-    // ⭐ X360 0x8239E578 -- the module's FIRST-pass prepare (vtable +64). DWARF
-    // BrnGameStateModule.h:510: `virtual bool Prepare(GameStateModuleIO::OutputBuffer*,
-    // IOBufferStack*, const AllocatorList*)`. Its ONE caller is
-    // BrnGameModule::GamePrepare @0x823EFBD0 stage 4, which pumps it until it returns true and
-    // forwards the requests it stages onto the output buffer's resource-request interface into
-    // the frame's GameData input (AppendRequestInterface<3072>).
-    //
-    // ⭐ THIS is where TRIGGERS.DAT is loaded (stage 3, E_PREPARESTAGE_LOAD_TRIGGER_DATA ->
-    // TriggerQueryManager::Prepare @0x82398218). Nothing on PC ran it before 2026-08-01, which
-    // is why `[WorldMap] LOADED -- traffic=1 trigger=0 ai=0` and why every consumer of
-    // `mpTriggerQueryManager->GetTriggerData()` (the junkyard spawn-location walk above all)
-    // was looking at a null resource pointer.
-    //
-    // ⚠️ SLICE: stage 3 is REAL; the other 24 stages log once and advance (each one names its
-    // X360 call at the body). See the body for the full deferral list.
-    //
-    // NOTE: this hides the base `ModuleSingleBuffered::Prepare()` -- exactly as the console's
-    // own override does. Stage 1 calls the base explicitly.
+    // Original ARTIST 0x8239E578 declaration; the complete preparation body is
+    // recovered with its typed providers before activation. Native startup explicitly
+    // calls the existing PC adapter below.
     bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                  CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+
+    bool PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                         CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                         const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
     // ------------------------------------------------------------------------
     // ⭐ X360 0x8239ED10 -- the module's SECOND-pass prepare. Its ONE caller is
