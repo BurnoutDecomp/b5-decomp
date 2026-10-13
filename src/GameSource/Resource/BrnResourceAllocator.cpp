@@ -258,6 +258,29 @@ namespace BrnResource
         maAllocators[2].Create(gaInitialDefaultLinearBacking[1], 0x400000u);
     }
 
+    // ARTIST 0x82661AF0; DecFIGS confirms the public void() member shape. The console
+    // checks the five X360 lanes in order, then asserts when main or physical usage exceeds
+    // the fixed startup budgets. The raw console stride is 0x1c; this uses the typed array.
+    void DefaultLinearAllocator::CheckRenderwareBudget()
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+            *CgsDev::Log::gpDebugPrint << "Render budget used:\n";
+
+        for (s32 liType = 0; liType < 5; ++liType)
+        {
+            const size_t luUsage = maAllocators[liType].GetUsage();
+            if (luUsage != 0)
+                LogDefaultLinearMemoryBreakdown(
+                    static_cast<u32>(luUsage), KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liType]);
+        }
+
+        if (maAllocators[0].GetUsage() > 0x800u)
+            FireDefaultLinearAllocatorAssert("Renderware over budget in main memory\n", 825);
+
+        if (maAllocators[2].GetUsage() > 0x400000u)
+            FireDefaultLinearAllocatorAssert("Renderware over budget in physical memory\n", 826);
+    }
+
     // ARTIST 0x82664800. All five descriptor lanes are allocated from the matching
     // LinearMalloc; the original diagnostics, allocation assertion and resource slots remain.
     rw::Resource DefaultLinearAllocator::DoAllocate(
