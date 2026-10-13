@@ -1445,4 +1445,5 @@ namespace BrnResource
                 lrRequest.SetDescriptor(&lrDescriptor);
             }
         }
+    };
 }
