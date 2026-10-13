@@ -377,7 +377,7 @@ namespace CgsMemory
             {
                 for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
                 {
-                    const MemoryBank* const lpBank = GetBank(
+                    MemoryBank* const lpBank = GetBank(
                         GetBankIndexFromId(static_cast<u32>(lParams.mnBankId)));
                     lBacking.m_baseResources[li] = lpBank->GetData(li);
                 }
@@ -460,7 +460,7 @@ namespace CgsMemory
             {
                 for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
                 {
-                    const MemoryBank* const lpBank = GetBank(
+                    MemoryBank* const lpBank = GetBank(
                         GetBankIndexFromId(static_cast<u32>(lParams.mnBankId)));
                     lBacking.m_baseResources[li] = lpBank->GetData(li);
                 }
