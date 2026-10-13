@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                            // Vector2 (texture debug callback ABI)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"          // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"        // mResourceModule (the streaming engine)
@@ -22,6 +23,7 @@
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace CgsMemory { struct MemoryMap; }
+namespace renderengine { class Texture; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsModule { struct IOBufferStack; }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
@@ -142,6 +144,12 @@ namespace BrnResource
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
 
     private:
+        void ConstructResourceModule(); // ARTIST 0x8266D570; unactivated original provider path
+        void ConstructResourceModuleNativePC(rw::IResourceAllocator* lpAllocator);
+        void RegisterResourceTypes(rw::IResourceAllocator* lpAllocator); // ARTIST 0x82667EA8
+        static void TextureRenderCallback(renderengine::Texture* lpTexture, Vector2 lvPosition,
+                                          Vector2 lvSize, void* lpUser, bool lbBegin, bool lbEnd);
+
         // Memory-map bring-up: original queued bank creation, followed by the
         // current native pool/allocator adapters.
         bool CreateBanks(CgsModule::IOBufferStack* lpInputStack,
@@ -480,6 +488,11 @@ namespace BrnResource
         // buffer with 16-byte alignment (`*(a1+363112)=0x8000; *(a1+363116)=16`), i.e. the
         // EventReceiverQueue<32768,16> instantiation.
         CgsModule::EventReceiverQueue<32768, 16> mReceiverQueue;
+        // ARTIST this+396936..398984; DecFIGS :357-358. Both construction paths
+        // publish this one canonical type list to the PoolModule.
+        static const s32 KI_MAX_GAME_RESOURCE_TYPES = 256;
+        CgsResource::PoolModule::InitOptions::GSResourceType maTypes[KI_MAX_GAME_RESOURCE_TYPES];
+        s32 miNumTypes;
         // X360 a1+426400: the bank->allocator registry published to the OutputBuffer each
         // Update (SetAllocatorList). Populated by CreateAllocators; Construct resets it
         // (the inline `map[0..66] = -1` loop == AllocatorList::Construct).

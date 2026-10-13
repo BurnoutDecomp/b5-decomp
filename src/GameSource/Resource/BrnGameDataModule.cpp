@@ -1,6 +1,7 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"     // original file-search path
 #include "GameSource/Resource/BrnResourceAllocator.h"        // GetDebugAllocator
 #include "rw/rwcore_structs.h"                                // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "rw/rwcore_general_alloc.h"                          // rw::core::GeneralResourceAllocator (CreateAllocators)
@@ -1778,19 +1779,134 @@ namespace BrnResource
         // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
         mAllocatorList.Construct();
 
-        // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the
-        // X360 ConstructResourceModule (0x8266D570): it now builds the real CgsResource::ResourceModule::
-        // InitOptions composite (memory + pool + bundle-loader option blocks) instead of a bare
-        // MemoryModule InitOptions, carves the root region from the debug allocator, and constructs the
-        // ResourceModule. The MemoryModule block is fully populated (so MemoryModule carves its bank/block
-        // tables, as before); the Pool/BundleLoader blocks are minimal for now (PoolModule front half
-        // ignores them; the type-list + defrag/heap params land with the PoolModule back half + the full
-        // RegisterResourceTypes).
+        // FLAG PC-platform leaf: retain the existing native provider and budgets.
+        // The recovered ConstructResourceModule path remains uninvoked until its
+        // GlobalResource provider and original type/backend dependencies are available.
         rw::IResourceAllocator* lpAllocator =
             GetDebugAllocator();
         if (lpAllocator == 0)
             return;
 
+        ConstructResourceModuleNativePC(lpAllocator);
+
+        // X360 constructs the embedded Resource debug page after the module's
+        // resource system is ready. The canonical manager is then constructed at its
+        // original owner call site before the adjacent DLC page; this initializes the
+        // feature-availability table that the page's debug variables point into.
+        mDebugComponent.Construct(this, lpAllocator);
+        mDLCManager.Construct();
+        mDLCDebugComponent.Construct();
+    }
+    void GameDataModule::RegisterResourceTypes(rw::IResourceAllocator* /*lpAllocator*/)
+    {
+        // FLAG trap-stub: ARTIST 0x82667EA8 constructs its original resource Type
+        // objects and fills maTypes/miNumTypes. The native singleton registry
+        // bridge is a separate provider, not a reconstruction of this producer.
+        __debugbreak();
+        std::abort();
+    }
+
+    void GameDataModule::TextureRenderCallback(renderengine::Texture* /*lpTexture*/,
+        Vector2 /*lvPosition*/, Vector2 /*lvSize*/, void* /*lpUser*/, bool /*lbBegin*/, bool /*lbEnd*/)
+    {
+        // FLAG trap-stub: ARTIST 0x8266ACC8's texture-browser draw path and its
+        // immediate-mode state dependencies are not reconstructed in this owner.
+        __debugbreak();
+        std::abort();
+    }
+
+    // ARTIST 0x8266D570. Original provider path, intentionally uninvoked by
+    // Construct's current native adapter. All root/defrag/audio resources come
+    // from the one public GlobalResource wrapper; Debug uses its own public wrapper.
+    void GameDataModule::ConstructResourceModule()
+    {
+        mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
+        CgsResource::ResourceModule::InitOptions lOptions;
+        std::memset(&lOptions, 0, sizeof(lOptions));
+        const CgsMemory::MemoryBank::Params* const lpRootParams =
+            mpMemoryMap->GetBinaryMemoryMapBank()->GetParams();
+        rw::IResourceAllocator* const lpResourceAllocator = GetResourceAllocator();
+        RegisterResourceTypes(lpResourceAllocator);
+
+        lOptions.mDebugParams.mpTextureRenderCallback =
+            reinterpret_cast<void*>(&GameDataModule::TextureRenderCallback);
+        lOptions.mDebugParams.mpTextureRenderUserData = this;
+        CgsResource::BundleLoaderModule::InitOptions& lrLoader = lOptions.mLoaderInitOptions;
+        lrLoader.miBundleHeaderBufferSize = 0x80000;
+        lrLoader.miDebugDataBufferSize = 0x200000;
+        lrLoader.miStreamBufferSize = 0x400000;
+        lrLoader.miMaxBundles = 512;
+        lrLoader.miMaxResourcesPerBundle = 10240;
+        lrLoader.mbForceUpperCaseFileNames = true;
+
+        CgsResource::PoolModule::InitOptions& lrPool = lOptions.mPoolInitOptions;
+        lrPool.muDebugBufferSize = 0x800000;
+        lOptions.mDebugParams.mpDebugAllocator = GetDebugAllocator();
+        CgsMemory::MemoryModule::InitOptions& lrMemory = lOptions.mMemoryInitOptions;
+        lrMemory.muMaxBanks = 128;
+        lrMemory.muHighestId = 1024;
+        lrMemory.muMaxBlocks = 30000;
+        lrPool.miMaxResourceToDefrag = 768;
+        lrPool.mpGameSpecificTypes = maTypes;
+        lrPool.miNumGameSpecificTypes = miNumTypes;
+
+        rw::ResourceDescriptor lRootDescriptor;
+        lRootDescriptor.m_baseResourceDescriptors[0].m_size = lpRootParams->mauBankSize[0];
+        lRootDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        lRootDescriptor.m_baseResourceDescriptors[2].m_size = lpRootParams->mauBankSize[2];
+        lRootDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        const rw::Resource lRootMemory = lpResourceAllocator->DoAllocate(lRootDescriptor, nullptr);
+        lrMemory.maResourceSets[0].mpDataStart = lRootMemory.m_baseResources[0];
+        lrMemory.maResourceSets[0].muDataSize = lpRootParams->mauBankSize[0];
+        lrMemory.maResourceSets[0].muNumBlocks = static_cast<u16>(lpRootParams->mauBankBlocks[0]);
+        lrMemory.maResourceSets[2].mpDataStart = lRootMemory.m_baseResources[2];
+        lrMemory.maResourceSets[2].muDataSize = lpRootParams->mauBankSize[2];
+        lrMemory.maResourceSets[2].muNumBlocks = static_cast<u16>(lpRootParams->mauBankBlocks[2]);
+
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[0].m_size = 0x100000;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[2].m_size = 0x200000;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[2].m_alignment = 128;
+        lrPool.mDefragBufferResource = lpResourceAllocator->DoAllocate(lrPool.mDefragBufferDescriptor, nullptr);
+
+        // This is the original inline StrCpy contract: assert the full source
+        // length, then copy the terminating zero as well. Do not silently truncate.
+        const char* const lpcDirectory = CgsSystem::HardwareInit::GetFOPENDirectory();
+        const size_t luDirectoryLength = std::strlen(lpcDirectory);
+        if (luDirectoryLength >= sizeof(lOptions.macFileSearchPath))
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStream(lacMessage, sizeof(lacMessage));
+            lStream << "String " << lpcDirectory << " is too long. Buffer size = "
+                << static_cast<u32>(sizeof(lOptions.macFileSearchPath))
+                << ", string length = " << static_cast<u32>(luDirectoryLength) << "\n";
+            CgsDev::Assert::FireAssert(lacMessage,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            CgsDev::Assert::EndAssert();
+        }
+        std::strcpy(lOptions.macFileSearchPath, lpcDirectory);
+        mResourceModule.Construct(&lOptions, lpResourceAllocator, GetDebugAllocator());
+
+        rw::ResourceDescriptor lAudioDescriptor;
+        lAudioDescriptor.m_baseResourceDescriptors[0].m_size = 0xC0000;
+        lAudioDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        void* const lpAudioMemory = lpResourceAllocator->DoAllocate(lAudioDescriptor, nullptr).m_baseResources[0];
+        if (lpAudioMemory == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Failed to allocate audio buffer\n",
+                "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 2210);
+            CgsDev::Assert::EndAssert();
+        }
+        mAudioStreamAllocator.Create(lpAudioMemory, 0xC0000);
+    }
+
+    // FLAG PC-platform leaf: the prior inline native adapter, with its approved
+    // 160 MiB/224 MiB roots on lanes zero/one and existing registry bridge. It
+    // supplies no original GlobalResource lane-two provider.
+    void GameDataModule::ConstructResourceModuleNativePC(rw::IResourceAllocator* lpAllocator)
+    {
         static CgsResource::ResourceModule::InitOptions s_InitOptions;   // outlives Construct (module keeps the region)
         CgsMemory::MemoryModule::InitOptions& lrMem = s_InitOptions.mMemoryInitOptions;
         lrMem.muMaxBanks  = 128;
@@ -1863,24 +1979,24 @@ namespace BrnResource
         // EnvironmentManager::StreamIn the moment the scripted world load was restored to its console
         // position (F3). The console registers every handler it owns; so do we now.
         CgsResource::RegisterAllResourceTypes();
-        enum { KI_MAX_GAME_TYPES = CgsResource::TypeRegistry::KU_MAX_REGISTERED_RESOURCE_TYPES };
-        static CgsResource::PoolModule::InitOptions::GSResourceType s_aGameTypes[KI_MAX_GAME_TYPES];
-        s32 lNumGameTypes = 0;
+        static_assert(KI_MAX_GAME_RESOURCE_TYPES == CgsResource::TypeRegistry::KU_MAX_REGISTERED_RESOURCE_TYPES,
+                      "Native type-list capacity must match the canonical game owner");
+        miNumTypes = 0;
         {
             const u32 luRegistered = CgsResource::TypeRegistry::GetCount();
-            for (u32 lu = 0; lu < luRegistered && lNumGameTypes < KI_MAX_GAME_TYPES; ++lu)
+            for (u32 lu = 0; lu < luRegistered && miNumTypes < KI_MAX_GAME_RESOURCE_TYPES; ++lu)
             {
                 const CgsResource::Type* lpType = CgsResource::TypeRegistry::GetByIndex(lu);
                 if (lpType == 0)
                     continue;
-                s_aGameTypes[lNumGameTypes].mpType = lpType;
+                maTypes[miNumTypes].mpType = lpType;
                 // The name column is the console's parallel string table; it is debug-only.
-                s_aGameTypes[lNumGameTypes].mpcName = CgsResource::TypeRegistry::GetNameByIndex(lu);
-                ++lNumGameTypes;
+                maTypes[miNumTypes].mpcName = CgsResource::TypeRegistry::GetNameByIndex(lu);
+                ++miNumTypes;
             }
         }
-        s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = s_aGameTypes;
-        s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = lNumGameTypes;
+        s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = maTypes;
+        s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = miNumTypes;
 
         // ARTIST8266D5DC..D61C: reusable loader buffers and table capacities.
         // The former synchronous adapter never consumed these option fields.
@@ -1915,7 +2031,7 @@ namespace BrnResource
         }
         s_InitOptions.mDebugParams.mpDebugAllocator           = lpAllocator;
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: registered "
-                                  << (s32)lNumGameTypes << " resource types into the pool registry\n";
+                                  << (s32)miNumTypes << " resource types into the pool registry\n";
 
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: root type0="
                                   << (s32)(u32)(size_t)lType0.m_baseResources[0]
@@ -1928,14 +2044,8 @@ namespace BrnResource
                                   s_InitOptions.mDebugParams.mpDebugAllocator);
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";
 
-        // X360 constructs the embedded Resource debug page after the module's
-        // resource system is ready. The canonical manager is then constructed at its
-        // original owner call site before the adjacent DLC page; this initializes the
-        // feature-availability table that the page's debug variables point into.
-        mDebugComponent.Construct(this, lpAllocator);
-        mDLCManager.Construct();
-        mDLCDebugComponent.Construct();
     }
+
     bool GameDataModule::Release() { return true; }
     void GameDataModule::Destruct() {}
 
