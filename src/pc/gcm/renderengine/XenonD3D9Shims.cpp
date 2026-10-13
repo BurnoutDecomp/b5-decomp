@@ -45,6 +45,7 @@
 #include "pc/gcm/renderengine/Instancing.h"
 #include "pc/gcm/renderengine/LionDrawDiagPC.h"
 #include "pc/gcm/renderengine/FrameProfile.h"
+#include "pc/gcm/renderengine/OcclusionQueryProviderPC.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h" // [diag] BrnDiag::LogBoundSurfaces (homed in this TU)
