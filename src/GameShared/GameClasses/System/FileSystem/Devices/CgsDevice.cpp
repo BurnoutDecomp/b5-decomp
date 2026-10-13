@@ -32,16 +32,16 @@ namespace Thread
 namespace CgsFileSystem
 {
     // @0x828D65F0
-    int Device::CallErrorCallback(int liError)
+    bool Device::CallErrorCallback(EDeviceErrors leError)
     {
-        int liResult = 0;
+        bool lbResult = false;
         if (mpfErrorCallback)
-            liResult = mpfErrorCallback(liError);
+            lbResult = mpfErrorCallback(leError);
 
-        // Yield 5ms before the failing caller retries (asm stores 5 and passes &it).
+        // Yield 5ms after callback delivery (asm stores 5 and passes &it).
         u32 luSleepMs = 5;
         EA::Thread::ThreadSleep(&luSleepMs);
-        return liResult;
+        return lbResult;
     }
 
     // ---- base "Not implemented" defaults for the worker-dispatched op interface --------
