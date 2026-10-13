@@ -16,6 +16,7 @@
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Resource/BrnResourceAllocator.h"  // Allocators::InitMemoryMap
+#include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
@@ -274,11 +275,19 @@ void EnginePrepare()
 
     // [FLAG] ARTIST main prints PrintConsoleMemory("Game startup memory usage") at 0x827E6198;
     // that print remains absent. Restore the following original memory-map initialization call.
+    rw::IResourceAllocator* const lpSystemAllocatorPC =
+        rw::ResourceAllocatorRegistry::GetDefaultAllocator();
     BrnResource::Allocators::InitMemoryMap();
 
     // Create the D3D9 device on the window opened by InitializeHardware, then construct
     // the game's modules (the renderer module builds the loading-screen renderer).
     renderengine::Device::Start();
+
+    // FLAG PC-platform leaf: the existing native boot adapter uses RenderWare's
+    // five-lane host system provider. Restore it at ARTIST's post-device allocator
+    // handoff; InitMemoryMap's 2KiB scratch allocator must not remain the default.
+    // The full Allocators::Construct/global-system-bank engine path is still gated.
+    rw::ResourceAllocatorRegistry::SetDefaultAllocator(lpSystemAllocatorPC);
 
     gGameModule.Construct();
 }
