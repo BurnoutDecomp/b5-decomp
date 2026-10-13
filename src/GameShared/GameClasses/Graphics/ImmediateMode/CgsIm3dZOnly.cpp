@@ -19,6 +19,7 @@
 // "is pixel program" flag (1) come straight from the immediates -- none are fabricated.
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsPositionOnlyVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -26,6 +27,16 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+
+// The native D3D9 program pair generated from the exact TUB position-only sources
+// (tools/nushaders/Source/Executable/24.fx and 25.fx).
+namespace renderengine
+{
+    extern const u8  gauIm3dZOnlyVertexProgramPC[];
+    extern const u32 guIm3dZOnlyVertexProgramPCSize;
+    extern const u8  gauIm3dZOnlyPixelProgramPC[];
+    extern const u32 guIm3dZOnlyPixelProgramPCSize;
+}
 
 namespace CgsGraphics
 {
@@ -342,5 +353,51 @@ template s8 ImRenderer<PositionOnlyVertex>::AddProgram(
 template bool ImRenderer<PositionOnlyVertex>::SetProgram(s8);
 template void ImRenderer<PositionOnlyVertex>::EndRendering();
 template void* ImRenderer<PositionOnlyVertex>::SetTransform(const void*);
+
+// ARTIST Im3dZOnly::Construct @ 0x827FCCB8. The X360 embeds one program pair
+// (0x820D4A90/280 B VS, 0x820D4BA8/156 B PS); the host uses the corresponding
+// D3D9 platform-4 pair in Im3dProgramsPC.cpp, compiled from the exact TUB source.
+//
+// The original body stores the identity transform, calls the typed base
+// constructor with one pair, asserts slot zero's vertex program, and resolves
+// "worldViewProj" into the first shader-state handle.
+void Im3dZOnly::Construct(rw::IResourceAllocator* lpAllocator)
+{
+    static const f32 KAF_IDENTITY[16] =
+    {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
+    {
+        mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
+    }
+
+    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dZOnlyVertexProgramPC };
+    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dZOnlyPixelProgramPC };
+    const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dZOnlyVertexProgramPCSize };
+    const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dZOnlyPixelProgramPCSize };
+    const s8    KI8_PROGRAMS_BUILT        = 1;
+    ImRenderer<PositionOnlyVertex>::Construct(
+        lpAllocator,
+        lapVertexProgramBinary, lauVertexProgramSize,
+        lapPixelProgramBinary,  lauPixelProgramSize,
+        KI8_PROGRAMS_BUILT);
+
+    renderengine::ProgramBufferData* const lpVertexProgram =
+        reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
+    CGS_ASSERT(lpVertexProgram != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    // Keep the original assertion; avoid a null ProgramBuffer dereference if host
+    // allocation/adoption fails with assertions disabled.
+    if (lpVertexProgram == nullptr)
+    {
+        return;
+    }
+    renderengine::ProgramBuffer::GetVariableHandleByName(
+        lpVertexProgram, reinterpret_cast<const u8*>("worldViewProj"),
+        reinterpret_cast<renderengine::ProgramVariableHandle*>(&maShaderStateBlocks[0]));
+}
 
 } // namespace CgsGraphics
