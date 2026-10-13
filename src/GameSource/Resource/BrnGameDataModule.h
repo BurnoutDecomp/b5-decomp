@@ -147,6 +147,7 @@ namespace BrnResource
         void ConstructResourceModule(); // ARTIST 0x8266D570; unactivated original provider path
         void ConstructResourceModuleNativePC(rw::IResourceAllocator* lpAllocator);
         void RegisterResourceTypes(rw::IResourceAllocator* lpAllocator); // ARTIST 0x82667EA8
+        void RegisterResourceType(CgsResource::Type* lpType, const char* lpcName);
         static void TextureRenderCallback(renderengine::Texture* lpTexture, Vector2 lvPosition,
                                           Vector2 lvSize, void* lpUser, bool lbBegin, bool lbEnd);
 
