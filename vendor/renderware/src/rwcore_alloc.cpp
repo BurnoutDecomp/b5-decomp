@@ -1,11 +1,45 @@
 #include "rw/rwcore_structs.h"
 #include "rw/rwcore_general_alloc.h"
+#include "rw/core/memory/memoryfunctions.h"
+#include <cstdlib>
 #include <cstring>
 #include <malloc.h>
 #include <new>
 #if defined(D_PLATFORM_X360)
 #include <xtl.h>
 #endif
+
+// ARTIST 0x82F91A10: one global object, initially pointing at the lazy CRT entries.
+RwMemoryFunctions rwMemoryFunctions = {
+    RwMallocMemStub, RwReallocMemStub, RwFreeMemStub
+};
+
+// ARTIST 0x82BBC728. Every lazy entry installs the complete three-slot CRT table.
+void* RwMallocMemStub(std::size_t lnSize)
+{
+    rwMemoryFunctions.rwmalloc = std::malloc;
+    rwMemoryFunctions.rwrealloc = std::realloc;
+    rwMemoryFunctions.rwfree = std::free;
+    return rwMemoryFunctions.rwmalloc(lnSize);
+}
+
+// ARTIST 0x82BBC760. The pointer and size are both preserved for realloc.
+void* RwReallocMemStub(void* lpMemory, std::size_t lnSize)
+{
+    rwMemoryFunctions.rwmalloc = std::malloc;
+    rwMemoryFunctions.rwrealloc = std::realloc;
+    rwMemoryFunctions.rwfree = std::free;
+    return rwMemoryFunctions.rwrealloc(lpMemory, lnSize);
+}
+
+// ARTIST 0x82BBC798. Release uses the unaligned CRT free operation.
+void RwFreeMemStub(void* lpMemory)
+{
+    rwMemoryFunctions.rwmalloc = std::malloc;
+    rwMemoryFunctions.rwrealloc = std::realloc;
+    rwMemoryFunctions.rwfree = std::free;
+    std::free(lpMemory);
+}
 
 // rw::LinearResourceAllocator - the resource-memory linear (bump) allocator the game-data
 // resource system carves module/bank memory through. [PC-LEAF, user-approved 2026-06-20]:
