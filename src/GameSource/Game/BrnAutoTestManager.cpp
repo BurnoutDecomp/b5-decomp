@@ -41,6 +41,26 @@ namespace BrnGame
         const s32 KI_GAMESTATE_PATH_LENGTH = 1024;
     }
 
+    // @ 0x823C0438 -- initialize the embedded test manager when BrnGameModule's hardware
+    // prepare phase succeeds. The stores, stream order, action count, and LoadScripts call
+    // follow the X360 body; the surrounding Prepare caller ignores this routine's result.
+    void AutoTestManager::Init(BrnGame::BrnGameModule* lpGameModule)
+    {
+        mpGameModule = lpGameModule;
+        miFramesSinceLastGameStateSave = 0;
+        miNumScriptsLoaded = 0;
+        mpLuaHandle = nullptr;
+        meScriptState = eScriptLoading;
+        mbControlPad = true;
+        mAutoTestLogChannel.SetChannel(
+            static_cast<CgsDev::Log::LogChannelOutput::EUserChannel>(0));
+        mAutoTestLog.AddStream(&mAutoTestLogFile);
+        mAutoTestLog.AddStream(&mAutoTestLogChannel);
+        for (s32 liAction = 0; liAction < 61; ++liAction)
+            maActions[liAction] = 0.0f;
+        LoadScripts();
+    }
+
     bool AutoTestManager::IsInGame()
     {
         return BrnGame::GetMainGameModule()->GuiAcceptsControllerInput() && mnCurrentGuiPage == KN_IN_GAME_GUI_PAGE;
