@@ -36,6 +36,17 @@ namespace
         return lfValue;
     }
 
+    // Preserve the original packed word while constructing the canonical rw::RGBA.
+    // RwRGBA.cpp packs (alpha << 24) | (blue << 16) | (green << 8) | red.
+    rw::RGBA RwRGBAFromPackedWord(u32 luPackedColour)
+    {
+        return rw::RGBA(
+            static_cast<u8>(luPackedColour & 0xFFu),
+            static_cast<u8>((luPackedColour >> 8u) & 0xFFu),
+            static_cast<u8>((luPackedColour >> 16u) & 0xFFu),
+            static_cast<u8>((luPackedColour >> 24u) & 0xFFu));
+    }
+
     // C++ form of the packed-vertex expansion performed by ARTIST sub_828AF0D0.
     // The PC world-support porter stores these 16-bit lanes in host byte order;
     // the named GetVertex accessor supplies the record and its original bounds assert.
@@ -50,10 +61,10 @@ namespace
         const u32 luX = static_cast<u32>(lrSoup.miPosX) + static_cast<u32>(lau16Packed[0]);
         const u32 luY = static_cast<u32>(lrSoup.miPosY) + static_cast<u32>(lau16Packed[1]);
         const u32 luZ = static_cast<u32>(lrSoup.miPosZ) + static_cast<u32>(lau16Packed[2]);
-        lpOut->Set(static_cast<f32>(static_cast<s32>(luX)) * lrSoup.mfScale,
-                   static_cast<f32>(static_cast<s32>(luY)) * lrSoup.mfScale,
-                   static_cast<f32>(static_cast<s32>(luZ)) * lrSoup.mfScale);
-        lpOut->mV.mafLane[3] = 0.0f;
+        lpOut->x = static_cast<f32>(static_cast<s32>(luX)) * lrSoup.mfScale;
+        lpOut->y = static_cast<f32>(static_cast<s32>(luY)) * lrSoup.mfScale;
+        lpOut->z = static_cast<f32>(static_cast<s32>(luZ)) * lrSoup.mfScale;
+        lpOut->w = 0.0f;
         return lpOut;
     }
 
@@ -99,20 +110,29 @@ namespace
         const f32 lfAxisDotNormal = lrAxis.x * lrNormal.x
                                   + lrAxis.y * lrNormal.y
                                   + lrAxis.z * lrNormal.z;
-        const Vector3 lvAxisCrossNormal(
-            std::fma(lrAxis.y, lrNormal.z, -lrAxis.z * lrNormal.y),
-            std::fma(lrAxis.z, lrNormal.x, -lrAxis.x * lrNormal.z),
-            std::fma(lrAxis.x, lrNormal.y, -lrAxis.y * lrNormal.x));
+        Vector3 lvAxisCrossNormal;
+        lvAxisCrossNormal.x =
+            std::fma(lrAxis.y, lrNormal.z, -lrAxis.z * lrNormal.y);
+        lvAxisCrossNormal.y =
+            std::fma(lrAxis.z, lrNormal.x, -lrAxis.x * lrNormal.z);
+        lvAxisCrossNormal.z =
+            std::fma(lrAxis.x, lrNormal.y, -lrAxis.y * lrNormal.x);
         const f32 lfAxisTerm = lfAxisDotNormal * (1.0f - lfCosine);
-        const Vector3 lvRotated(
-            std::fma(lrNormal.x, lfCosine,
-                     std::fma(lvAxisCrossNormal.x, lfSine, lrAxis.x * lfAxisTerm)),
-            std::fma(lrNormal.y, lfCosine,
-                     std::fma(lvAxisCrossNormal.y, lfSine, lrAxis.y * lfAxisTerm)),
-            std::fma(lrNormal.z, lfCosine,
-                     std::fma(lvAxisCrossNormal.z, lfSine, lrAxis.z * lfAxisTerm)));
-        Vector3 lvResult(lvRotated);
-        lvResult.mV.mafLane[3] = 0.0f;
+        Vector3 lvRotated;
+        lvRotated.x = std::fma(lrNormal.x, lfCosine,
+                               std::fma(lvAxisCrossNormal.x, lfSine,
+                                        lrAxis.x * lfAxisTerm));
+        lvRotated.y = std::fma(lrNormal.y, lfCosine,
+                               std::fma(lvAxisCrossNormal.y, lfSine,
+                                        lrAxis.y * lfAxisTerm));
+        lvRotated.z = std::fma(lrNormal.z, lfCosine,
+                               std::fma(lvAxisCrossNormal.z, lfSine,
+                                        lrAxis.z * lfAxisTerm));
+        Vector3 lvResult;
+        lvResult.x = lvRotated.x;
+        lvResult.y = lvRotated.y;
+        lvResult.z = lvRotated.z;
+        lvResult.w = 0.0f;
         return lvResult;
     }
 
@@ -296,37 +316,58 @@ namespace CgsSceneManager
 
         const rw::math::vpu::Matrix44 lViewProjection =
             lpRenderer->GetViewProjectionMatrix();
-        const rw::math::vpu::Vector4 lColumn0(
-            lViewProjection.xAxis.x, lViewProjection.yAxis.x,
-            lViewProjection.zAxis.x, lViewProjection.wAxis.x);
-        const rw::math::vpu::Vector4 lColumn1(
-            lViewProjection.xAxis.y, lViewProjection.yAxis.y,
-            lViewProjection.zAxis.y, lViewProjection.wAxis.y);
-        const rw::math::vpu::Vector4 lColumn2(
-            lViewProjection.xAxis.z, lViewProjection.yAxis.z,
-            lViewProjection.zAxis.z, lViewProjection.wAxis.z);
-        const rw::math::vpu::Vector4 lColumn3(
-            lViewProjection.xAxis.w, lViewProjection.yAxis.w,
-            lViewProjection.zAxis.w, lViewProjection.wAxis.w);
+        rw::math::vpu::Vector4 lColumn0;
+        lColumn0.x = lViewProjection.xAxis.x;
+        lColumn0.y = lViewProjection.yAxis.x;
+        lColumn0.z = lViewProjection.zAxis.x;
+        lColumn0.w = lViewProjection.wAxis.x;
+        rw::math::vpu::Vector4 lColumn1;
+        lColumn1.x = lViewProjection.xAxis.y;
+        lColumn1.y = lViewProjection.yAxis.y;
+        lColumn1.z = lViewProjection.zAxis.y;
+        lColumn1.w = lViewProjection.wAxis.y;
+        rw::math::vpu::Vector4 lColumn2;
+        lColumn2.x = lViewProjection.xAxis.z;
+        lColumn2.y = lViewProjection.yAxis.z;
+        lColumn2.z = lViewProjection.zAxis.z;
+        lColumn2.w = lViewProjection.wAxis.z;
+        rw::math::vpu::Vector4 lColumn3;
+        lColumn3.x = lViewProjection.xAxis.w;
+        lColumn3.y = lViewProjection.yAxis.w;
+        lColumn3.z = lViewProjection.zAxis.w;
+        lColumn3.w = lViewProjection.wAxis.w;
 
         // Clip-space inequalities are converted to dot(N, point) == D, the
         // Plane convention consumed by rw::collision::Frustum. The stored D is
         // therefore the negated homogeneous constant.
-        const rw::math::vpu::Vector4 laClipPlanes[6] =
-        {
-            lColumn2,
-            lColumn3 - lColumn2,
-            lColumn3 + lColumn0,
-            lColumn3 - lColumn0,
-            lColumn3 - lColumn1,
-            lColumn3 + lColumn1
-        };
+        rw::math::vpu::Vector4 laClipPlanes[6];
+        laClipPlanes[0] = lColumn2;
+        laClipPlanes[1].x = lColumn3.x - lColumn2.x;
+        laClipPlanes[1].y = lColumn3.y - lColumn2.y;
+        laClipPlanes[1].z = lColumn3.z - lColumn2.z;
+        laClipPlanes[1].w = lColumn3.w - lColumn2.w;
+        laClipPlanes[2].x = lColumn3.x + lColumn0.x;
+        laClipPlanes[2].y = lColumn3.y + lColumn0.y;
+        laClipPlanes[2].z = lColumn3.z + lColumn0.z;
+        laClipPlanes[2].w = lColumn3.w + lColumn0.w;
+        laClipPlanes[3].x = lColumn3.x - lColumn0.x;
+        laClipPlanes[3].y = lColumn3.y - lColumn0.y;
+        laClipPlanes[3].z = lColumn3.z - lColumn0.z;
+        laClipPlanes[3].w = lColumn3.w - lColumn0.w;
+        laClipPlanes[4].x = lColumn3.x - lColumn1.x;
+        laClipPlanes[4].y = lColumn3.y - lColumn1.y;
+        laClipPlanes[4].z = lColumn3.z - lColumn1.z;
+        laClipPlanes[4].w = lColumn3.w - lColumn1.w;
+        laClipPlanes[5].x = lColumn3.x + lColumn1.x;
+        laClipPlanes[5].y = lColumn3.y + lColumn1.y;
+        laClipPlanes[5].z = lColumn3.z + lColumn1.z;
+        laClipPlanes[5].w = lColumn3.w + lColumn1.w;
 
         for (u32 luPlane = 0; luPlane < 6; ++luPlane)
         {
             const rw::math::vpu::Vector4& lrClipPlane = laClipPlanes[luPlane];
-            const rw::math::vpu::Vector4 lPlane(
-                lrClipPlane.x, lrClipPlane.y, lrClipPlane.z, -lrClipPlane.w);
+            rw::math::vpu::Vector4 lPlane = lrClipPlane;
+            lPlane.w = -lrClipPlane.w;
             mViewFrustum.SetPlane(luPlane, rw::collision::Plane(lPlane));
         }
     }
@@ -352,7 +393,11 @@ namespace CgsSceneManager
             mpTriCollisionManager->GetPolySoupListSpacialMap();
         const s32 liNumPolySoupLists = lpSpatialMap->GetNumPolySoupLists();
         const rw::math::vpu::Vector3 lvCameraPosition = lpRenderer->GetCameraPosition();
-        const rw::math::vpu::Vector4 lvCameraPoint(lvCameraPosition.GetVector());
+        rw::math::vpu::Vector4 lvCameraPoint;
+        lvCameraPoint.x = lvCameraPosition.x;
+        lvCameraPoint.y = lvCameraPosition.y;
+        lvCameraPoint.z = lvCameraPosition.z;
+        lvCameraPoint.w = lvCameraPosition.w;
 
         for (s32 liSoupList = 0; liSoupList < liNumPolySoupLists; ++liSoupList)
         {
@@ -360,14 +405,14 @@ namespace CgsSceneManager
                 lpSpatialMap->GetPolySoupList(liSoupList);
 
             CgsGeometric::AxisAlignedBox lSoupListBounds;
-            lSoupListBounds.mMin.Set(lpSoupList->mOverallAabb[0],
-                                     lpSoupList->mOverallAabb[1],
-                                     lpSoupList->mOverallAabb[2],
-                                     lpSoupList->mOverallAabb[3]);
-            lSoupListBounds.mMax.Set(lpSoupList->mOverallAabb[4],
-                                     lpSoupList->mOverallAabb[5],
-                                     lpSoupList->mOverallAabb[6],
-                                     lpSoupList->mOverallAabb[7]);
+            lSoupListBounds.mMin.x = lpSoupList->mOverallAabb[0];
+            lSoupListBounds.mMin.y = lpSoupList->mOverallAabb[1];
+            lSoupListBounds.mMin.z = lpSoupList->mOverallAabb[2];
+            lSoupListBounds.mMin.w = lpSoupList->mOverallAabb[3];
+            lSoupListBounds.mMax.x = lpSoupList->mOverallAabb[4];
+            lSoupListBounds.mMax.y = lpSoupList->mOverallAabb[5];
+            lSoupListBounds.mMax.z = lpSoupList->mOverallAabb[6];
+            lSoupListBounds.mMax.w = lpSoupList->mOverallAabb[7];
             if (!lSoupListBounds.ContainsPoint(lvCameraPoint))
                 continue;
 
@@ -409,11 +454,19 @@ namespace CgsSceneManager
 
                 if (mbDrawSoupAabbs)
                 {
-                    const rw::math::vpu::Vector3 lvMin(lSoupBounds.mMin.GetVector());
-                    const rw::math::vpu::Vector3 lvMax(lSoupBounds.mMax.GetVector());
+                    rw::math::vpu::Vector3 lvMin;
+                    lvMin.x = lSoupBounds.mMin.x;
+                    lvMin.y = lSoupBounds.mMin.y;
+                    lvMin.z = lSoupBounds.mMin.z;
+                    lvMin.w = lSoupBounds.mMin.w;
+                    rw::math::vpu::Vector3 lvMax;
+                    lvMax.x = lSoupBounds.mMax.x;
+                    lvMax.y = lSoupBounds.mMax.y;
+                    lvMax.z = lSoupBounds.mMax.z;
+                    lvMax.w = lSoupBounds.mMax.w;
                     const u32 luColour = KAU_SOUP_COLOURS[static_cast<u32>(liSoup) % 16u]
                                        | 0xFF000000u;
-                    lpRenderer->DrawBox(lvMin, lvMax, static_cast<rw::RGBA>(luColour));
+                    lpRenderer->DrawBox(lvMin, lvMax, RwRGBAFromPackedWord(luColour));
                 }
             }
         }
@@ -454,10 +507,10 @@ namespace CgsSceneManager
         const f32 lfEdge12X = lrVertex2.x - lrVertex1.x;
         const f32 lfEdge12Y = lrVertex2.y - lrVertex1.y;
         const f32 lfEdge12Z = lrVertex2.z - lrVertex1.z;
-        rw::math::vpu::Vector3 lPolyNormal(
-            std::fma(lfEdge01Y, lfEdge12Z, -lfEdge01Z * lfEdge12Y),
-            std::fma(lfEdge01Z, lfEdge12X, -lfEdge01X * lfEdge12Z),
-            std::fma(lfEdge01X, lfEdge12Y, -lfEdge01Y * lfEdge12X));
+        rw::math::vpu::Vector3 lPolyNormal;
+        lPolyNormal.x = std::fma(lfEdge01Y, lfEdge12Z, -lfEdge01Z * lfEdge12Y);
+        lPolyNormal.y = std::fma(lfEdge01Z, lfEdge12X, -lfEdge01X * lfEdge12Z);
+        lPolyNormal.z = std::fma(lfEdge01X, lfEdge12Y, -lfEdge01Y * lfEdge12X);
         const f32 lfNormalLength = std::sqrt(
             lPolyNormal.x * lPolyNormal.x +
             lPolyNormal.y * lPolyNormal.y +
@@ -466,9 +519,12 @@ namespace CgsSceneManager
         lPolyNormal.x *= lfInvNormalLength;
         lPolyNormal.y *= lfInvNormalLength;
         lPolyNormal.z *= lfInvNormalLength;
-        lPolyNormal.mV.mafLane[3] = 0.0f;
+        lPolyNormal.w = 0.0f;
 
-        rw::math::vpu::Vector3 lAveragePoint(0.0f, 0.0f, 0.0f);
+        rw::math::vpu::Vector3 lAveragePoint;
+        lAveragePoint.x = 0.0f;
+        lAveragePoint.y = 0.0f;
+        lAveragePoint.z = 0.0f;
         for (s32 liVertex = 0; liVertex < liNumVertices; ++liVertex)
         {
             lAveragePoint.x += laPolyPoints[liVertex].x;
@@ -479,7 +535,7 @@ namespace CgsSceneManager
         lAveragePoint.x *= lfInverseVertexCount;
         lAveragePoint.y *= lfInverseVertexCount;
         lAveragePoint.z *= lfInverseVertexCount;
-        lAveragePoint.mV.mafLane[3] = 0.0f;
+        lAveragePoint.w = 0.0f;
 
         const rw::math::vpu::Vector3 lvCameraPosition = lpRenderer->GetCameraPosition();
         const f32 lfCameraDx = lvCameraPosition.x - lAveragePoint.x;
@@ -515,22 +571,24 @@ namespace CgsSceneManager
                                        : KAU_TRI_EDGE_END[liEdge];
             const rw::math::vpu::Vector3& lrPointA = laPolyPoints[luStart];
             const rw::math::vpu::Vector3& lrPointB = laPolyPoints[luEnd];
-            const rw::math::vpu::Vector3 lvEdge(lrPointB.x - lrPointA.x,
-                                                 lrPointB.y - lrPointA.y,
-                                                 lrPointB.z - lrPointA.z);
+            rw::math::vpu::Vector3 lvEdge;
+            lvEdge.x = lrPointB.x - lrPointA.x;
+            lvEdge.y = lrPointB.y - lrPointA.y;
+            lvEdge.z = lrPointB.z - lrPointA.z;
             const f32 lfEdgeLength = std::sqrt(
                 lvEdge.x * lvEdge.x + lvEdge.y * lvEdge.y + lvEdge.z * lvEdge.z);
             const f32 lfInverseEdgeLength = 1.0f / lfEdgeLength;
-            rw::math::vpu::Vector3 lAxis(lvEdge.x * lfInverseEdgeLength,
-                                         lvEdge.y * lfInverseEdgeLength,
-                                         lvEdge.z * lfInverseEdgeLength);
-            lAxis.mV.mafLane[3] = 0.0f;
+            rw::math::vpu::Vector3 lAxis;
+            lAxis.x = lvEdge.x * lfInverseEdgeLength;
+            lAxis.y = lvEdge.y * lfInverseEdgeLength;
+            lAxis.z = lvEdge.z * lfInverseEdgeLength;
+            lAxis.w = 0.0f;
 
-            rw::math::vpu::Vector3 lEdgeCentre(
-                (lrPointA.x + lrPointB.x) * 0.5f,
-                (lrPointA.y + lrPointB.y) * 0.5f,
-                (lrPointA.z + lrPointB.z) * 0.5f);
-            lEdgeCentre.mV.mafLane[3] = 0.0f;
+            rw::math::vpu::Vector3 lEdgeCentre;
+            lEdgeCentre.x = (lrPointA.x + lrPointB.x) * 0.5f;
+            lEdgeCentre.y = (lrPointA.y + lrPointB.y) * 0.5f;
+            lEdgeCentre.z = (lrPointA.z + lrPointB.z) * 0.5f;
+            lEdgeCentre.w = 0.0f;
             const f32 lfEdgeCosine = static_cast<f32>(
                 lpPoly->GetEdgeCosineUncompressed(static_cast<u32>(liEdge)));
             const f32 lfEdgeAngle = XboxMath::XMVectorACos(lfEdgeCosine);
@@ -540,14 +598,14 @@ namespace CgsSceneManager
             const rw::math::vpu::Vector3 lRenderEdgeCos =
                 RotateTriangleDebugNormal(lPolyNormal, lAxis, lfSine, lfCosine);
             const rw::math::vpu::Vector3 lPointA = lEdgeCentre;
-            rw::math::vpu::Vector3 lPointB(
-                lEdgeCentre.x + lRenderEdgeCos.x,
-                lEdgeCentre.y + lRenderEdgeCos.y,
-                lEdgeCentre.z + lRenderEdgeCos.z);
-            lPointB.mV.mafLane[3] = 0.0f;
+            rw::math::vpu::Vector3 lPointB;
+            lPointB.x = lEdgeCentre.x + lRenderEdgeCos.x;
+            lPointB.y = lEdgeCentre.y + lRenderEdgeCos.y;
+            lPointB.z = lEdgeCentre.z + lRenderEdgeCos.z;
+            lPointB.w = 0.0f;
             const u32 luColour = lbIsQuad ? KAU_QUAD_EDGE_COLOURS[liEdge]
                                            : 0xFF0000FFu;
-            lpRenderer->DrawLine(lPointA, lPointB, static_cast<rw::RGBA>(luColour));
+            lpRenderer->DrawLine(lPointA, lPointB, RwRGBAFromPackedWord(luColour));
         }
     }
 
@@ -577,14 +635,14 @@ namespace CgsSceneManager
             }
         };
         lpRenderer->DrawSphere(lvSphereCentre, mfSphereRad,
-                               static_cast<rw::RGBA>(0xFFFFFFFFu));
+                               RwRGBAFromPackedWord(0xFFFFFFFFu));
 
         const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap =
             mpTriCollisionManager->GetPolySoupListSpacialMap();
         const s32 liNumPolySoupLists = lpSpatialMap->GetNumPolySoupLists();
         const f32 KF_SPHERECONTACTPADDING = 5.0f; // flt_820F2718
         const f32 KF_TRIANGLEOFFSET = 0.02f;       // flt_82005574
-        const rw::math::vpu::VecFloat lvSphereContactPadding{
+        const VecFloat lvSphereContactPadding{
             KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING,
             KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING
         };
@@ -652,7 +710,7 @@ namespace CgsSceneManager
                             lpRenderer->DrawLine(
                                 laTriangleContactPoints[liLane].GetVector3(),
                                 laSphereContactPoints[liLane].GetVector3(),
-                                static_cast<rw::RGBA>(0xFF0000FFu));
+                                RwRGBAFromPackedWord(0xFF0000FFu));
                         }
                     }
 
@@ -702,7 +760,7 @@ namespace CgsSceneManager
                                      lAOSTriangle.mVertex2.w)
                         };
                         lpRenderer->DrawSolidTriangle(
-                            lvV0, lvV1, lvV2, static_cast<rw::RGBA>(0x64FFFFFFu));
+                            lvV0, lvV1, lvV2, RwRGBAFromPackedWord(0x64FFFFFFu));
                     }
                 }
             }
@@ -725,34 +783,39 @@ namespace CgsSceneManager
             mBoxPos.Z() += 10.0f; // flt_82004A20
         }
 
-        rw::math::vpu::Vector3 lvBoxPosition(mBoxPos.X(), mBoxPos.Y(), mBoxPos.Z());
+        rw::math::vpu::Vector3 lvBoxPosition;
+        lvBoxPosition.x = mBoxPos.X();
+        lvBoxPosition.y = mBoxPos.Y();
+        lvBoxPosition.z = mBoxPos.Z();
         lvBoxPosition.w = 0.0f;
-        rw::math::vpu::Vector3 lvBoxAngles(mBoxOrientation.X(),
-                                           mBoxOrientation.Y(),
-                                           mBoxOrientation.Z());
+        rw::math::vpu::Vector3 lvBoxAngles;
+        lvBoxAngles.x = mBoxOrientation.X();
+        lvBoxAngles.y = mBoxOrientation.Y();
+        lvBoxAngles.z = mBoxOrientation.Z();
         lvBoxAngles.w = 0.0f;
         rw::math::vpu::Matrix44Affine lTransform =
             Matrix44AffineFromEulerXYZ(lvBoxAngles);
         lTransform.wAxis = lvBoxPosition;
 
-        rw::math::vpu::Vector3 lvBoxHalfSize(mBoxSize.X() * 0.5f,
-                                              mBoxSize.Y() * 0.5f,
-                                              mBoxSize.Z() * 0.5f);
+        rw::math::vpu::Vector3 lvBoxHalfSize;
+        lvBoxHalfSize.x = mBoxSize.X() * 0.5f;
+        lvBoxHalfSize.y = mBoxSize.Y() * 0.5f;
+        lvBoxHalfSize.z = mBoxSize.Z() * 0.5f;
         lvBoxHalfSize.w = 0.0f;
         CgsGeometric::Box lBox;
         lBox.Set(lTransform, lvBoxHalfSize,
                  rw::math::vpu::Vector4{0.0f, 0.0f, 0.0f, 0.0f});
 
-        const rw::math::vpu::Vector3 lvLocalMin(-lvBoxHalfSize.x,
-                                                 -lvBoxHalfSize.y,
-                                                 -lvBoxHalfSize.z);
-        const rw::math::vpu::Vector3 lvLocalMax(lvBoxHalfSize.x,
-                                                 lvBoxHalfSize.y,
-                                                 lvBoxHalfSize.z);
+        const rw::math::vpu::Vector3 lvLocalMin{
+            -lvBoxHalfSize.x, -lvBoxHalfSize.y, -lvBoxHalfSize.z, 0.0f
+        };
+        const rw::math::vpu::Vector3 lvLocalMax{
+            lvBoxHalfSize.x, lvBoxHalfSize.y, lvBoxHalfSize.z, 0.0f
+        };
         lpRenderer->DrawBox(lvLocalMin, lvLocalMax, lTransform,
-                            static_cast<rw::RGBA>(0xFFFFFFFFu));
+                            RwRGBAFromPackedWord(0xFFFFFFFFu));
         lpRenderer->DrawSolidBox(lvLocalMin, lvLocalMax, lTransform,
-                                 static_cast<rw::RGBA>(0x1EFFFFFFu));
+                                 RwRGBAFromPackedWord(0x1EFFFFFFu));
         lpRenderer->DrawAxis(lTransform);
 
         // The console uses half of the largest authored dimension for both the
@@ -849,12 +912,12 @@ namespace CgsSceneManager
                     lAOSTriangle.mVertex0,
                     lAOSTriangle.mVertex1,
                     lAOSTriangle.mVertex2,
-                    static_cast<rw::RGBA>(0x320000FFu));
+                    RwRGBAFromPackedWord(0x320000FFu));
                 lpRenderer->DrawHollowTriangle(
                     lAOSTriangle.mVertex0,
                     lAOSTriangle.mVertex1,
                     lAOSTriangle.mVertex2,
-                    static_cast<rw::RGBA>(0xFF000000u));
+                    RwRGBAFromPackedWord(0xFF000000u));
 
                 CgsGeometric::Triangle lTriangle;
                 lTriangle.Set(lAOSTriangle.mVertex0,
@@ -886,25 +949,28 @@ namespace CgsSceneManager
                 {
                     lpRenderer->DrawPoint(
                         laTrianglePoints[liContact],
-                        static_cast<rw::RGBA>(0xFF00FFFFu));
+                        RwRGBAFromPackedWord(0xFF00FFFFu));
                     lpRenderer->DrawPoint(
                         laContactPoints[liContact],
-                        static_cast<rw::RGBA>(0xFFFF00FFu));
+                        RwRGBAFromPackedWord(0xFFFF00FFu));
                     lpRenderer->DrawLine(
                         laTrianglePoints[liContact],
                         laContactPoints[liContact],
-                        static_cast<rw::RGBA>(0xFFFFFFFFu));
+                        RwRGBAFromPackedWord(0xFFFFFFFFu));
 
-                    rw::math::vpu::Vector3 lvNormalEnd(
-                        laTrianglePoints[liContact].x + laTriangleNormals[liContact].x,
-                        laTrianglePoints[liContact].y + laTriangleNormals[liContact].y,
-                        laTrianglePoints[liContact].z + laTriangleNormals[liContact].z);
+                    rw::math::vpu::Vector3 lvNormalEnd;
+                    lvNormalEnd.x =
+                        laTrianglePoints[liContact].x + laTriangleNormals[liContact].x;
+                    lvNormalEnd.y =
+                        laTrianglePoints[liContact].y + laTriangleNormals[liContact].y;
+                    lvNormalEnd.z =
+                        laTrianglePoints[liContact].z + laTriangleNormals[liContact].z;
                     lvNormalEnd.w =
                         laTrianglePoints[liContact].w + laTriangleNormals[liContact].w;
                     lpRenderer->DrawArrow(
                         laTrianglePoints[liContact],
                         lvNormalEnd,
-                        static_cast<rw::RGBA>(0xFF0000FFu));
+                        RwRGBAFromPackedWord(0xFF0000FFu));
                 }
             }
         }
@@ -941,7 +1007,7 @@ namespace CgsSceneManager
         {
             lp2DRenderer->DrawText("Testing polygon soup swept sphere collision",
                                    50.0f, 50.0f, 12.0f,
-                                   static_cast<rw::RGBA>(0xFFFFFFFFu));
+                                   0xFFFFFFFFu);
         }
 
         const rw::math::vpu::Vector3 lvStartPosition{
@@ -1014,7 +1080,7 @@ namespace CgsSceneManager
         if (lp3DRenderer)
         {
             lp3DRenderer->DrawSphere(lvStartPosition, mSweptSphereSize,
-                                     static_cast<rw::RGBA>(0xFFFF0000u));
+                                     RwRGBAFromPackedWord(0xFFFF0000u));
             const rw::math::vpu::Vector3 lvSweepEnd{
                 lvStartPosition.x + lvVelocity.x,
                 lvStartPosition.y + lvVelocity.y,
@@ -1022,7 +1088,7 @@ namespace CgsSceneManager
                 0.0f
             };
             lp3DRenderer->DrawArrow(lvStartPosition, lvSweepEnd,
-                                    static_cast<rw::RGBA>(0xFFFF00FFu));
+                                    RwRGBAFromPackedWord(0xFFFF00FFu));
         }
 
         // RunQuery mutates the map's result buffer; the X360 stores this manager as
@@ -1086,10 +1152,10 @@ namespace CgsSceneManager
                 {
                     lp3DRenderer->DrawSolidTriangle(
                         lAOSTriangle.mVertex0, lAOSTriangle.mVertex1, lAOSTriangle.mVertex2,
-                        static_cast<rw::RGBA>(0x320000FFu));
+                        RwRGBAFromPackedWord(0x320000FFu));
                     lp3DRenderer->DrawHollowTriangle(
                         lAOSTriangle.mVertex0, lAOSTriangle.mVertex1, lAOSTriangle.mVertex2,
-                        static_cast<rw::RGBA>(0xFF000000u));
+                        RwRGBAFromPackedWord(0xFF000000u));
                 }
 
                 CgsGeometric::Triangle lTriangle;
@@ -1115,12 +1181,12 @@ namespace CgsSceneManager
                     lSphereContactPoint.z, lSphereContactPoint.w
                 };
                 lp3DRenderer->DrawPoint(
-                    lvTriangleContactPoint, static_cast<rw::RGBA>(0xFF00FFFFu));
+                    lvTriangleContactPoint, RwRGBAFromPackedWord(0xFF00FFFFu));
                 lp3DRenderer->DrawPoint(
-                    lvSphereContactPoint, static_cast<rw::RGBA>(0xFFFF00FFu));
+                    lvSphereContactPoint, RwRGBAFromPackedWord(0xFFFF00FFu));
                 lp3DRenderer->DrawLine(
                     lvTriangleContactPoint, lvSphereContactPoint,
-                    static_cast<rw::RGBA>(0xFFFFFFFFu));
+                    RwRGBAFromPackedWord(0xFFFFFFFFu));
 
                 const rw::math::vpu::Vector3 lvArrowEnd{
                     lvTriangleContactPoint.x + lContactNormal.x,
@@ -1130,7 +1196,7 @@ namespace CgsSceneManager
                 };
                 lp3DRenderer->DrawArrow(
                     lvTriangleContactPoint, lvArrowEnd,
-                    static_cast<rw::RGBA>(0xFF0000FFu));
+                    RwRGBAFromPackedWord(0xFF0000FFu));
             }
         }
     }
