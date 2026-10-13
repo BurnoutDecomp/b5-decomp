@@ -5,6 +5,11 @@
 // OperationPool + per-device worker thread) is the faithful X360 engine — these methods run ON
 // the device's worker thread and perform the actual byte transfer. DeviceHandle is the native-
 // width opaque Win32 HANDLE itself; the table below exists only for validation and shutdown.
+// The ARTIST-attested Open/Read/Seek/Close failures invoke the registered callback, yield 5ms,
+// then block indefinitely if it returns false. The current RWDiskErrorHandler latches the disk
+// error and returns false. A direct Open path-not-found therefore can stall this worker; PC
+// optional-asset probe compatibility remains unverified. Local invalid-token and slot-exhaustion
+// paths below remain separate from those native I/O failure sites.
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -62,7 +67,9 @@ namespace CgsFileSystem
         if (lhFile == INVALID_HANDLE_VALUE)
         {
             if (lppOutHandle) *lppOutHandle = nullptr;
-            return -1;
+            if (!CallErrorCallback(E_DEVICEERROR_OPEN))
+                Sleep(static_cast<DWORD>(-1));
+            return -2;
         }
 
         mapHandles[liSlot] = lhFile;
@@ -75,7 +82,12 @@ namespace CgsFileSystem
         HANDLE lhFile = HandleFor(lpHandle);
         if (lhFile != INVALID_HANDLE_VALUE)
         {
-            CloseHandle(lhFile);
+            if (!CloseHandle(lhFile))
+            {
+                if (!CallErrorCallback(E_DEVICEERROR_CLOSE))
+                    Sleep(static_cast<DWORD>(-1));
+                return -2;
+            }
             for (int liIndex = 0; liIndex < KI_MAX_OPEN_FILES; ++liIndex)
                 if (mapHandles[liIndex] == lpHandle)
                 {
@@ -99,7 +111,13 @@ namespace CgsFileSystem
         DWORD ldwRead = 0;
         const BOOL lbOk = ReadFile(lhFile, lpBuffer, luSize, &ldwRead, NULL);
         if (lpuOutResult) *lpuOutResult = static_cast<u32>(ldwRead);
-        return lbOk ? 0 : -1;
+        if (!lbOk)
+        {
+            if (!CallErrorCallback(E_DEVICEERROR_READ))
+                Sleep(static_cast<DWORD>(-1));
+            return -2;
+        }
+        return 0;
     }
 
     int DevicePhysicalPC::Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize,
@@ -146,7 +164,9 @@ namespace CgsFileSystem
         if (!SetFilePointerEx(lhFile, lPos, &lNew, FILE_BEGIN))
         {
             if (lpu64OutPosition) *lpu64OutPosition = 0;
-            return -1;
+            if (!CallErrorCallback(E_DEVICEERROR_SEEK))
+                Sleep(static_cast<DWORD>(-1));
+            return -2;
         }
         if (lpu64OutPosition) *lpu64OutPosition = static_cast<u64>(lNew.QuadPart);
         return 0;
