@@ -149,7 +149,7 @@ namespace BrnResource
         case E_PREPARE_DLC_WAIT_PATCH_REPLY:
         {
             mePrepareStage = E_PREPARE_DLC_WAIT_PATCH_REPLY;
-            while (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+            if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
             {
                 if (mReceiverQueue.GetCount() == 0)
                 {
@@ -164,9 +164,10 @@ namespace BrnResource
                 ++miDLCManagerPackageIndex;
                 if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
                 {
+                    // ARTIST 0x8267422C stores stage 17 and branches to the false/status tail.
+                    // Submit the next package only when Prepare re-enters stage 17.
                     mePrepareStage = E_PREPARE_DLC_ADD_PATCH_REQUEST;
-                    lSubmitDLCAddPatchRequest();
-                    mePrepareStage = E_PREPARE_DLC_WAIT_PATCH_REPLY;
+                    return lReturnFailure();
                 }
             }
             // The X360 posts this reply only after PatchManager clears its pending flag. The
