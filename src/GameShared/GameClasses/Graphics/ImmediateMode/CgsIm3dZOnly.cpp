@@ -124,6 +124,24 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
 
+    // Adopt the canonical D3D9 platform-4 images when supplied by the PC caller.
+    // They are compiled from the TUB ZOnly source pair, not the console Xenos blobs.
+    // A non-PC image still follows the original console route below.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
+
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
     // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
