@@ -268,6 +268,9 @@ namespace CgsSceneManager
         // registered by Construct @0x828CA18C). Bodied in CgsLooseOctree.cpp (folded from _wSQ1).
         virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                               CoarseQueryResultBuffer<16384>* lpResultBufferOut);
+        // @ 0x828D0270 -- synchronous coarse frustum query.
+        virtual bool FrustumTest(u32 lx32EntityTypeFlags, const CgsGeometric::Frustum& lrFrustum,
+                                 CoarseQueryResultBuffer<16384>* lpResultBufferOut);
         // @ 0x828CA910 -- slot 8. Builds the VolumeTestRecursiveFuncParams block, brackets
         // VolumeTestRecursive from the root with the "Octree Volume Test" CPU monitor
         // (_miVolumeTestPerfMon, X360 dword_82F33F40) and reports whether the query attempted any result.
