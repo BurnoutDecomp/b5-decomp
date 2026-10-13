@@ -86,6 +86,8 @@ namespace CgsDev
         // Text + bar/value helpers: declared for the full API; bodies are the text/font follow-on.
         void DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCheckScreen);
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
+        // ARTIST 0x82824140: signed MB/KB/byte formatting, unchecked text draw.
+        void DrawDataSize(s32 liBytes, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax,
                                RGBA lForeColour, RGBA lBackColour);
         void DrawTextWithBackground(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale,
@@ -94,10 +96,6 @@ namespace CgsDev
         // X360 @0x82824098: sprintf the integer value as "%d" and draw it as text at (x,y). Used by the
         // debug HUDs to print a labelled numeric read-out next to a name. Body lives in this TU.
         void DrawValue(s32 liValue, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
-
-        // DecFIGS CgsDebug2DImmediateRender.h:126. Format a byte count as
-        // "MB, KB, B", "KB, B", or "B", then draw it at the supplied position.
-        void DrawDataSize(s32 liBytes, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
 
         // Width (in virtual-screen units) the given text would occupy at the given scale; used by
         // label/value layout code to position a value just after its label. Body is the text/font
