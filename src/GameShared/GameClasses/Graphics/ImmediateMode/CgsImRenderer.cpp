@@ -320,9 +320,9 @@ const SamplerState* ImRendererBase::ConstructSamplerState(
     lParameters.muBias = luArg2;              // +0x0C = a2
     lParameters.muMaxLevel = luArg2;           // +0x10 = a2
     lParameters.muMinLevel = luArg3;           // +0x14 = a3
-    lParameters.muMaxAnisotropy = 13;          // +0x18
+    lParameters.muMaxAnisotropy = 0;           // +0x18 = ARTIST v7[6]
     lParameters.muMagFilter = 0;               // +0x1C
-    lParameters.muMinFilter = 0;               // +0x20
+    lParameters.muMinFilter = 13;              // +0x20 = ARTIST v7[8]
     lParameters.muMipFilter = 0;               // +0x24
     lParameters.muConvolution = 1;             // +0x28
     lParameters.muColor = 0;                   // +0x2C
