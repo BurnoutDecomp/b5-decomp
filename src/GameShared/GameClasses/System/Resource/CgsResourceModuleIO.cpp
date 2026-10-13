@@ -56,6 +56,13 @@ namespace CgsResource
             return mbDiskErrorOccured;
         }
 
+        // DecFIGS CgsResourceModuleIO.h:53. ResourceModule::Update writes this
+        // byte while the owning OutputBuffer is write-locked.
+        void FileSystemStatusInterface::SetDiskErrorOccured(bool lbDiskErrorOccured)
+        {
+            mbDiskErrorOccured = lbDiskErrorOccured;
+        }
+
         // -------- OutputBuffer::Construct @ 0x828EC978 --------
         // Construct the IOBuffer base (sets the eStatusConstructed status bit @ +0), then
         // construct the embedded FileSystemStatusInterface @ +1 (clears its disk-error flag).

@@ -255,8 +255,9 @@ namespace BrnResource
 
     // ARTIST 0x826663B0. Create the typed ResourceIO output carve, run the embedded resource
     // pump, copy its disk-status byte to the canonical GameDataModule member under the output
-    // read lock, then let IOHelper destroy the carve at scope exit. The partial ResourceModule
-    // host body currently leaves this status at OutputBuffer::Construct's default false.
+    // read lock, then let IOHelper destroy the carve at scope exit. ResourceModule::Update now
+    // writes the attested latch; current DevicePhysicalPC failures still bypass callback delivery,
+    // so the producer side remains unverified on this host path.
     CgsResource::ResourceModule::EUpdateResult GameDataModule::UpdateResourceModule(
         CgsModule::IOBufferStack* lpInputStack,
         CgsModule::IOBufferStack* lpOutputStack,
