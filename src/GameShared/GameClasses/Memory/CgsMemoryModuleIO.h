@@ -287,16 +287,16 @@ namespace MemoryIO
         rw::LinearResourceAllocator* mpAllocator;
     };
 
-    // Reply to a CreateLinearAllocatorRequest (DWARF :706): the created rw allocator.
+    // ARTIST 0x8286D53C copies a 20-byte response: the 16-byte console
+    // MemoryResponse and one allocator pointer. DecFIGS h:641 names mpAllocator.
     struct CreateLinearAllocatorResponse : public MemoryResponse
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RW_LINEAR_ALLOCATOR); }
-        void SetLinearAllocator(rw::LinearResourceAllocator* lpA)        { mpLinearAllocator = lpA; }
-        void SetGeneralAllocator(rw::core::GeneralResourceAllocator* lpA) { mpGeneralAllocator = lpA; }
+        void GetAllocator(rw::LinearResourceAllocator** lppAllocator) const { *lppAllocator = mpAllocator; }
+        void SetAllocator(rw::LinearResourceAllocator* lpAllocator) { mpAllocator = lpAllocator; }
     private:
-        rw::LinearResourceAllocator*        mpLinearAllocator;
-        rw::core::GeneralResourceAllocator* mpGeneralAllocator;
+        rw::LinearResourceAllocator* mpAllocator;
     };
 
     // Reply to a CreateGeneralAllocatorRequest (DWARF :724).
