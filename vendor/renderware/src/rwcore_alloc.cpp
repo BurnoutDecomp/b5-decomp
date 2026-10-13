@@ -254,40 +254,58 @@ namespace rw
         m_numAllocations = 0;
     }
 
-    // Bump luSize bytes (luAlignment-aligned) out of pool luType; null if the pool is exhausted.
+    // FLAG PC-platform leaf: native lane convenience API, absent from the ARTIST
+    // symbol family. Delegate to the same resource transaction as the game wrapper.
     void* LinearResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)
     {
-        if (luType >= KU_RESOURCE_LANE_COUNT || m_heapResource.m_baseResources[luType] == 0)
-            return 0;
-        if (luAlignment < 1)
-            luAlignment = 1;
-
-        BaseResourceDescriptor& lrUsage = m_currentUsage.m_baseResourceDescriptors[luType];
-        const uint32_t luCapacity = m_heapCapacity.m_baseResourceDescriptors[luType].m_size;
-        const uint32_t luOffset   = (lrUsage.m_size + luAlignment - 1) & ~(luAlignment - 1);
-
-        m_paddingUsed.m_baseResourceDescriptors[luType].m_size += (luOffset - lrUsage.m_size);
-        if (luOffset + luSize > luCapacity)
-            return 0;   // pool exhausted
-
-        void* lpBlock = static_cast<char*>(m_heapResource.m_baseResources[luType]) + luOffset;
-        lrUsage.m_size = luOffset + luSize;
-        ++m_numAllocations;
-        return lpBlock;
+        if (luType >= KU_RESOURCE_LANE_COUNT)
+            return nullptr;
+        ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[luType].m_size = luSize;
+        lDescriptor.m_baseResourceDescriptors[luType].m_alignment = luAlignment;
+        return DoAllocate(lDescriptor, nullptr).m_baseResources[luType];
     }
 
-    // The virtual DoAllocate slot satisfies each resource lane by bumping the
-    // matching pool. A lane that cannot be satisfied yields a null base resource (the rw
-    // convention the consumers' null-checks key on); zero-size lanes are null too.
+    // ARTIST 0x82BBCF50, with five-lane padding differences from 0x82B63FF8 and
+    // descriptor accumulation from 0x8268D9F8. Align absolute cursors, validate the
+    // complete proposed usage, then commit once. Failure changes no allocator state.
     Resource LinearResourceAllocator::DoAllocate(const ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
     {
         Resource lResult;
-        for (uint32_t luType = 0; luType < KU_RESOURCE_LANE_COUNT; ++luType)
+        ResourceDescriptor lPadding;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
         {
-            const BaseResourceDescriptor& lrLane = lrDescriptor.m_baseResourceDescriptors[luType];
-            lResult.m_baseResources[luType] =
-                (lrLane.m_size != 0) ? Alloc(luType, lrLane.m_size, lrLane.m_alignment) : 0;
+            const uintptr_t luCursor = reinterpret_cast<uintptr_t>(m_heapResource.m_baseResources[luLane])
+                + m_currentUsage.m_baseResourceDescriptors[luLane].m_size;
+            const uint32_t luAlignment = lrDescriptor.m_baseResourceDescriptors[luLane].m_alignment;
+            uintptr_t luAlignedCursor = luCursor;
+            if (luAlignment > 1)
+            {
+                const uintptr_t luMask = luAlignment - 1u;
+                luAlignedCursor = (luCursor + luMask) & ~luMask;
+            }
+            lResult.m_baseResources[luLane] = reinterpret_cast<void*>(luAlignedCursor);
+            lPadding.m_baseResourceDescriptors[luLane].m_size =
+                static_cast<uint32_t>(luAlignedCursor - luCursor);
         }
+
+        ResourceDescriptor lProposedUsage = m_currentUsage;
+        lProposedUsage += lPadding;
+        lProposedUsage += lrDescriptor;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            if (lProposedUsage.m_baseResourceDescriptors[luLane].m_size
+                > m_heapCapacity.m_baseResourceDescriptors[luLane].m_size)
+                return Resource();
+
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            if (lrDescriptor.m_baseResourceDescriptors[luLane].m_size == 0)
+                lResult.m_baseResources[luLane] = nullptr;
+        m_currentUsage += lPadding;
+        m_currentUsage += lrDescriptor;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            m_currentUsage.m_baseResourceDescriptors[luLane].m_alignment = 1;
+        m_paddingUsed += lPadding;
+        ++m_numAllocations;
         return lResult;
     }
 

@@ -222,6 +222,7 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     // FLAG PC-platform leaf: an existing native object adopts exactly these pools,
     // without an in-pool object reserve. Native lazy arenas use this separate API.
     void AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
+    // Native lane convenience entry; delegates to the same DoAllocate transaction.
     void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
     void  Free(void* lpBlock);
     const Resource& GetLinearHeapBase() const;
@@ -232,7 +233,8 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     // -- the override the PDB vtable dump above proves): carve one Resource matching the
     // descriptor by bumping each per-type pool. Consumers that only hold the abstract
     // IResourceAllocator* (TriangleCacheManager::Prepare's "CachedObjectSlots" carve) reach
-    // the linear pools through this. Body in renderware/src/rwcore_alloc.cpp.
+    // the linear pools through this. ARTIST 0x82BBCF50 validates all five proposed
+    // lane extents before committing usage, padding and one resource allocation count.
     virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
     virtual void DoFree(const ::rw::Resource& lrResource) override;
 };
