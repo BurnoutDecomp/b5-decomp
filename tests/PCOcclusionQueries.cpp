@@ -373,114 +373,44 @@ namespace
         return lbAllowed;
     }
 
-    struct FailedSubmissionWitness
+    struct InjectedSubmissionFailureResult
     {
-        bool mbWitnessAvailable = false;
-        bool mbProviderToken = false;
-        bool mbFailedDraw = false;
+        bool mbHasSubmissionToken = false;
         bool mbAllowed = true;
-        HRESULT mhrDraw = E_FAIL;
     };
 
-    void RestoreVertexInput(IDirect3DDevice9* lpDevice, DWORD luSavedFvf,
-                            IDirect3DVertexDeclaration9* lpSavedDeclaration)
+    InjectedSubmissionFailureResult RunInjectedSubmissionFailure(
+        IDirect3DDevice9* lpDevice, u32 luIdentifier)
     {
-        HRESULT lResult = S_OK;
-        if (luSavedFvf != 0)
-            lResult = lpDevice->SetFVF(luSavedFvf);
-        else if (lpSavedDeclaration != nullptr)
-            lResult = lpDevice->SetVertexDeclaration(lpSavedDeclaration);
-        Check(SUCCEEDED(lResult), "original D3D9 vertex input state restored");
-    }
-
-    FailedSubmissionWitness RunMissingVertexInputFailure(
-        IDirect3DDevice9* lpDevice, u32 luIdentifier, const TestVertex* lpVertices)
-    {
-        FailedSubmissionWitness lWitness;
-        DWORD luSavedFvf = 0;
-        IDirect3DVertexDeclaration9* lpSavedDeclaration = nullptr;
-        const HRESULT lGetFvf = lpDevice->GetFVF(&luSavedFvf);
-        const HRESULT lGetDeclaration = lpDevice->GetVertexDeclaration(&lpSavedDeclaration);
-        if (FAILED(lGetFvf) || FAILED(lGetDeclaration))
-        {
-            if (lpSavedDeclaration != nullptr)
-                lpSavedDeclaration->Release();
-            std::printf("SUBCASE_UNAVAILABLE: could not read vertex input state (FVF 0x%08X, decl 0x%08X)\n",
-                        static_cast<unsigned>(lGetFvf), static_cast<unsigned>(lGetDeclaration));
-            return lWitness;
-        }
-
-        Step("attempting documented no-FVF/no-declaration precondition with valid CPU spans");
-        const HRESULT lClearDeclaration = lpDevice->SetVertexDeclaration(nullptr);
-        const HRESULT lClearFvf = lpDevice->SetFVF(0);
-        DWORD luCurrentFvf = 0;
-        IDirect3DVertexDeclaration9* lpCurrentDeclaration = nullptr;
-        const HRESULT lReadFvf = lpDevice->GetFVF(&luCurrentFvf);
-        const HRESULT lReadDeclaration = lpDevice->GetVertexDeclaration(&lpCurrentDeclaration);
-        const bool lbNoVertexInput = SUCCEEDED(lReadFvf) && SUCCEEDED(lReadDeclaration)
-            && luCurrentFvf == 0 && lpCurrentDeclaration == nullptr;
-        if (lpCurrentDeclaration != nullptr)
-            lpCurrentDeclaration->Release();
-        if (!lbNoVertexInput)
-        {
-            RestoreVertexInput(lpDevice, luSavedFvf, lpSavedDeclaration);
-            if (lpSavedDeclaration != nullptr)
-                lpSavedDeclaration->Release();
-            std::printf("SUBCASE_UNAVAILABLE: driver did not expose an absent FVF/declaration "
-                        "(SetVertexDeclaration hr=0x%08X, SetFVF hr=0x%08X, GetFVF hr=0x%08X, "
-                        "GetVertexDeclaration hr=0x%08X, current FVF=0x%08X, current decl=%p)\n",
-                        static_cast<unsigned>(lClearDeclaration), static_cast<unsigned>(lClearFvf),
-                        static_cast<unsigned>(lReadFvf), static_cast<unsigned>(lReadDeclaration),
-                        static_cast<unsigned>(luCurrentFvf), static_cast<void*>(lpCurrentDeclaration));
-            return lWitness;
-        }
-
-        static const WORD lauValidIndices[3] = {0, 1, 2};
+        InjectedSubmissionFailureResult lResult;
         if (!BeginSurveyScene(lpDevice))
         {
-            RestoreVertexInput(lpDevice, luSavedFvf, lpSavedDeclaration);
-            if (lpSavedDeclaration != nullptr)
-                lpSavedDeclaration->Release();
-            std::printf("SUBCASE_UNAVAILABLE: could not begin a native scene for missing-input draw\n");
-            return lWitness;
+            std::printf("SUBCASE_UNAVAILABLE: injected Finish(false) seam could not begin a native scene\n");
+            return lResult;
         }
 
         renderengine::OcclusionQueryProviderPCBeginSurvey(lpDevice, luIdentifier);
         const renderengine::OcclusionSurveySubmissionTokenPC luToken =
             renderengine::OcclusionQueryProviderPCBeginSurveySubmission();
-        lWitness.mbProviderToken = luToken != 0;
-        Step("issuing indexed draw with valid spans and verified absent vertex input");
-        lWitness.mhrDraw = lpDevice->DrawIndexedPrimitiveUP(
-            D3DPT_TRIANGLELIST, 0, 3, 1, lauValidIndices, D3DFMT_INDEX16,
-            lpVertices, sizeof(TestVertex));
-        lWitness.mbFailedDraw = FAILED(lWitness.mhrDraw);
-        renderengine::OcclusionQueryProviderPCFinishSurveySubmission(
-            luToken, SUCCEEDED(lWitness.mhrDraw));
-        renderengine::OcclusionQueryProviderPCEndSurvey();
-        EndSurveyScene(lpDevice);
-
-        if (lWitness.mbFailedDraw)
+        lResult.mbHasSubmissionToken = luToken != 0;
+        if (lResult.mbHasSubmissionToken)
         {
-            renderengine::OcclusionQueryProviderPCBeginConditional(lpDevice, luIdentifier);
-            lWitness.mbAllowed = renderengine::OcclusionQueryProviderPCShouldDraw(lpDevice);
-            renderengine::OcclusionQueryProviderPCEndConditional();
-            lWitness.mbWitnessAvailable = true;
+            // This explicitly injects the producer's rejected-submission result at the
+            // provider seam. It issues no draw and is not a native D3D9 HRESULT witness.
+            Step("injecting Finish(false) at the provider submission seam; no draw issued");
+            renderengine::OcclusionQueryProviderPCFinishSurveySubmission(luToken, false);
         }
         else
         {
-            // The driver accepted the draw, so this is not a failed-submission witness. Do not
-            // turn a successful result into a synthetic failure or an asserted zero count.
-            renderengine::OcclusionQueryProviderPCBeginConditional(lpDevice, luIdentifier);
-            (void)renderengine::OcclusionQueryProviderPCShouldDraw(lpDevice);
-            renderengine::OcclusionQueryProviderPCEndConditional();
-            std::printf("SUBCASE_UNAVAILABLE: D3D9 accepted the draw without vertex input "
-                        "(HRESULT 0x%08X)\n", static_cast<unsigned>(lWitness.mhrDraw));
+            std::printf("SUBCASE_UNAVAILABLE: injected Finish(false) seam received no valid query token\n");
         }
 
-        RestoreVertexInput(lpDevice, luSavedFvf, lpSavedDeclaration);
-        if (lpSavedDeclaration != nullptr)
-            lpSavedDeclaration->Release();
-        return lWitness;
+        renderengine::OcclusionQueryProviderPCEndSurvey();
+        EndSurveyScene(lpDevice);
+        renderengine::OcclusionQueryProviderPCBeginConditional(lpDevice, luIdentifier);
+        lResult.mbAllowed = renderengine::OcclusionQueryProviderPCShouldDraw(lpDevice);
+        renderengine::OcclusionQueryProviderPCEndConditional();
+        return lResult;
     }
 
     void TestProvider(NativeContext& lrContext, DWORD luEmptyQuerySamples)
@@ -502,19 +432,16 @@ namespace
         Check(RunNoSubmissionSurvey(lpDevice, 0u),
               "a begun and ended survey with no indexed submission fails open");
 
-        Step("safe failed-draw subcase");
-        const FailedSubmissionWitness lFailed =
-            RunMissingVertexInputFailure(lpDevice, 1u, laVisible);
-        if (lFailed.mbWitnessAvailable)
+        Step("injected provider failed-submission seam");
+        const InjectedSubmissionFailureResult lInjectedFailure =
+            RunInjectedSubmissionFailure(lpDevice, 1u);
+        if (lInjectedFailure.mbHasSubmissionToken)
         {
-            Check(lFailed.mbProviderToken, "failed-draw survey opened a real provider query");
-            Check(lFailed.mbFailedDraw, "D3D9 rejected a draw with valid spans and no vertex input");
-            Check(lFailed.mbAllowed, "a failed indexed submission cannot suppress the later mesh");
+            Check(lInjectedFailure.mbAllowed,
+                  "Finish(false) at the provider seam fails open without publishing empty-query zero");
         }
-        else
-        {
-            std::printf("SUBCASE_UNAVAILABLE: no documented HRESULT failure witness was available\n");
-        }
+        std::printf("SUBCASE_UNAVAILABLE: native failed-HRESULT draw witness is unavailable; "
+                    "the missing-vertex-input attempt faults inside D3D9 before returning, so no draw was issued\n");
 
         Step("zero-primitive survey");
         const TriangleResult lZero = RunTriangleSurvey(lpDevice, 2u, laVisible, 0u,
