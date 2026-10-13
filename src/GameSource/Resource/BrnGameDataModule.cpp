@@ -50,12 +50,27 @@ namespace BrnResource
 
     // @ 0x82673F38 - resumable bring-up: base module, ResourceModule, banks/pools/allocators,
     // DLC patch registration (stages 16-18), then AttribSys and the remaining game-data tables.
-    // Re-enters at the current stage while an asynchronous operation or package reply is pending.
+    // Native ABI: input stack, output stack, const GameData input, GameData output. ARTIST does
+    // not read the third explicit argument (GameData input); its output tails are reproduced here.
     bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack,
-                                 CgsModule::IOBufferStack* lpOutputStack)
+                                 CgsModule::IOBufferStack* lpOutputStack,
+                                 const GameDataIO::InputBuffer* lpInputBuffer,
+                                 GameDataIO::OutputBuffer* lpOutputBuffer)
     {
+        (void)lpInputBuffer;
         mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         mFileSystemStatus.Construct(); // X360 0x82673F38: Construct(this + 475952) on every Prepare entry
+
+        const auto lReturnFailure = [this, lpOutputBuffer]()
+        {
+            if (lpOutputBuffer != 0)
+            {
+                lpOutputBuffer->LockForWrite();
+                lpOutputBuffer->SetFileSystemStatusInterface(&mFileSystemStatus);
+                lpOutputBuffer->UnlockForWrite();
+            }
+            return false;
+        };
 
         // X360 creates one ResourceIO input carve per AddPatchRequest, then clears the receiver,
         // unlocks, pumps ResourceModule, and destroys the carve. Keep that order and host-width
@@ -89,7 +104,7 @@ namespace BrnResource
         case E_PREPARE_BASE:
             mePrepareStage = E_PREPARE_BASE;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
-                return false;
+                return lReturnFailure();
             // X360 0x8267402C-0x82674040 registers these embedded pages in this
             // order after the base Prepare succeeds.
             mDebugComponent.Register();
@@ -98,28 +113,28 @@ namespace BrnResource
         case E_PREPARE_RESOURCE:
             mePrepareStage = E_PREPARE_RESOURCE;
             if (!mResourceModule.Prepare())
-                return false;
+                return lReturnFailure();
             mReceiverQueue.Clear();
             // fall through
         case E_PREPARE_BANKS:
             mePrepareStage = E_PREPARE_BANKS;
             if (!CreateBanks(lpInputStack, lpOutputStack))
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_POOLS:
             mePrepareStage = E_PREPARE_POOLS;
             if (!CreatePools(lpInputStack, lpOutputStack))
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_ALLOCATORS:
             mePrepareStage = E_PREPARE_ALLOCATORS;
             if (!CreateAllocators(lpInputStack, lpOutputStack))
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_DLC_MANAGER:
             mePrepareStage = E_PREPARE_DLC_MANAGER;
             if (!mDLCManager.Prepare(&mAllocatorList))
-                return false;
+                return lReturnFailure();
             miDLCManagerPackageIndex = 0;
             mePrepareStage = E_PREPARE_DLC_ADD_PATCH_REQUEST;
             // fall through
@@ -143,7 +158,7 @@ namespace BrnResource
                     CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
                         lpInputStack, "Resource");
                     UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
-                    return false;
+                    return lReturnFailure();
                 }
 
                 ++miDLCManagerPackageIndex;
@@ -174,7 +189,7 @@ namespace BrnResource
             CgsMemory::LinearMalloc* lpLinearAlloc  = mAllocatorList.GetLinearAllocator(22);
             if (!mAttribSysModule.Prepare(lpLinearAlloc, lpAttribHeap, lpGameTalkHeap,
                                           lpEastlHeap, 80))
-                return false;
+                return lReturnFailure();
 
             // The schema registration ([FLAG PC boot gate] inside the helper: the exe-baked
             // schema blobs are big-endian and not yet ported, so the PC helper logs and
@@ -192,7 +207,7 @@ namespace BrnResource
                     s_AttribPrepareInput.UnlockForWrite();
                 }
                 if (!PrepareAttribSysSchemaResource(&s_AttribPrepareInput))
-                    return false;   // still registering -- re-enter next frame
+                    return lReturnFailure();   // still registering -- re-enter next frame
             }
             // fall through
         }
@@ -201,7 +216,7 @@ namespace BrnResource
             // module prepare stay deferred between ATTRIBSYS and here.)
             mePrepareStage = E_PREPARE_VEHICLE_LIST;
             if (!PrepareVehicleList())
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_CHALLENGE_LIST:
             // [challenge-list wave 2026-08-27] X360 stage 10 (LABEL_27):
@@ -213,19 +228,19 @@ namespace BrnResource
             // "E_WORLDDATACONTROLLERSTATE_READY <= meState" in live play near an event junction.
             mePrepareStage = E_PREPARE_CHALLENGE_LIST;
             if (!PrepareFreeburnChallengeList())
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_ICE_LIST:
             // X360 stage 11 (LABEL_28): PrepareICEList.
             mePrepareStage = E_PREPARE_ICE_LIST;
             if (!PrepareICEList())
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_WHEEL_LIST:
             // X360 stage 12 (LABEL_30): PrepareWheelList.
             mePrepareStage = E_PREPARE_WHEEL_LIST;
             if (!PrepareWheelList())
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_HUD_MESSAGES:
             // [gateui r3] X360 stage 13: PrepareHudMessages @0x8266C8E0 -- "HudMessages.hm"
@@ -233,7 +248,7 @@ namespace BrnResource
             // gives GuiCache::mpHudMessageController something to point at.
             mePrepareStage = E_PREPARE_HUD_MESSAGES;
             if (!PrepareHudMessages())
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_POPUPS:
             // Stage 14: PreparePopups -- "Popups.pup" into pool 11, then acquire +
@@ -241,16 +256,30 @@ namespace BrnResource
             // controller (and so the overlays director) a table to resolve overlays against.
             mePrepareStage = E_PREPARE_POPUPS;
             if (!PreparePopups())
-                return false;
+                return lReturnFailure();
             // fall through
         case E_PREPARE_DONE:
             meReleaseStage = E_PREPARE_START;
             mePrepareStage = E_PREPARE_DONE;
+            if (lpOutputBuffer != 0)
+            {
+                lpOutputBuffer->LockForWrite();
+                lpOutputBuffer->SetAllocatorList(&mAllocatorList);
+                lpOutputBuffer->UnlockForWrite();
+            }
             return true;
         default:
             CGS_ASSERT(false, "Invalid stage");
-            return false;
+            return lReturnFailure();
         }
+    }
+
+    // FLAG PC-platform adapter: the current loading flow supplies stacks but not the persistent
+    // GameData IO buffers. Keep that call site distinct from ARTIST's four-argument method.
+    bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack,
+                                 CgsModule::IOBufferStack* lpOutputStack)
+    {
+        return Prepare(lpInputStack, lpOutputStack, 0, 0);
     }
 
     // ARTIST 0x826663B0. Create the typed ResourceIO output carve, run the embedded resource
@@ -1982,40 +2011,57 @@ namespace BrnResource
         const char* const KPC_WHEEL_FILE_FORMAT            = "Wheels/%s_%s.bndl";
     }
 
-    // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
-    // (raw CgsResource requests forward verbatim into the embedded ResourceModule's input;
-    // GameData-level requests route through ProcessGameDataEvent), the drained-input clear,
-    // the output allocator-list publish and the ResourceModule pump. DEFERRED stages are
-    // marked inline (each with its X360 anchor) -- their subsystems are not committed yet.
-    bool GameDataModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    // @ 0x82674670 -- the per-frame pump. ARTIST/DecFIGS ABI: update input stack, update output
+    // stack, const GameData input, GameData output; return 0=OK or 1=REQUIRE_STALL. The host
+    // two-buffer overload below is a separate adapter for current call sites.
+    GameDataModule::EUpdateResult GameDataModule::Update(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        const GameDataIO::InputBuffer* lpInputBuffer,
+        GameDataIO::OutputBuffer* lpOutputBuffer)
     {
-        GameDataIO::InputBuffer*  lpInput  = static_cast<GameDataIO::InputBuffer*>(lpInputBuffer);
-        GameDataIO::OutputBuffer* lpOutput = static_cast<GameDataIO::OutputBuffer*>(lpOutputBuffer);
+        const GameDataIO::InputBuffer* lpInput = lpInputBuffer;
+        GameDataIO::InputBuffer* lpInputWrite = const_cast<GameDataIO::InputBuffer*>(lpInput);
+        GameDataIO::OutputBuffer* lpOutput = lpOutputBuffer;
+        const bool lbHasNativeStacks = lpInputStack != 0 && lpOutputStack != 0;
 
         // [deferred] dev slot-usage dump toggles (byte_82FFAD00/01 -> AllocatorList::
         // DebugDumpStats + the "Slot <n> is used" walk over the event-slot free list).
         // [deferred] CgsGameTalk::GameTalk::Update (X360 a1+399624; module not committed).
 
-        // The per-frame CgsResource input the pump publishes into. The X360 carves it from
-        // the CgsModule::IOBufferStack (CreateIOBuffer<ResourceIO::InputBuffer>("Resource"));
-        // [marked deviation] the IOBufferStack is deferred, so the module reuses one
-        // function-local static buffer, exactly like the committed CreatePools bring-up path.
-        static CgsResource::ResourceIO::InputBuffer s_ResourceInput;
-        static bool s_bResourceInputConstructed = false;
-        if (!s_bResourceInputConstructed) { s_ResourceInput.Construct(); s_bResourceInputConstructed = true; }
-
-        // The per-frame AttribSys module input. The X360 carves it from the IOBufferStack
-        // (CreateIOBuffer<AttribSysIO::InputBuffer>("Attrib")); [marked deviation] same
-        // one-static-buffer pattern as the ResourceIO input below.
-        static CgsAttribSys::AttribSysIO::InputBuffer s_AttribInput;
-        static bool s_bAttribInputConstructed = false;
-        if (!s_bAttribInputConstructed)
+        // ARTIST creates the Resource and Attrib inputs on the update input stack and destroys
+        // them in reverse order after publishing status. The existing two-buffer PC adapter has
+        // no stacks, so only that path retains serialized static scratch buffers.
+        static CgsResource::ResourceIO::InputBuffer s_ResourceInputPC;
+        static bool s_bResourceInputPCConstructed = false;
+        static CgsAttribSys::AttribSysIO::InputBuffer s_AttribInputPC;
+        static bool s_bAttribInputPCConstructed = false;
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput = 0;
+        if (lbHasNativeStacks)
         {
-            s_bAttribInputConstructed = true;
-            s_AttribInput.CgsModule::IOBuffer::Construct();
-            s_AttribInput.LockForWrite();
-            s_AttribInput.GetVaultRequestInterface()->mRequestQueue.Construct();
-            s_AttribInput.UnlockForWrite();
+            CGS_ASSERT(lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource"),
+                "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");
+            CGS_ASSERT(lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib"),
+                "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");
+        }
+        else
+        {
+            if (!s_bResourceInputPCConstructed)
+            {
+                s_ResourceInputPC.Construct();
+                s_bResourceInputPCConstructed = true;
+            }
+            if (!s_bAttribInputPCConstructed)
+            {
+                s_bAttribInputPCConstructed = true;
+                s_AttribInputPC.CgsModule::IOBuffer::Construct();
+                s_AttribInputPC.LockForWrite();
+                s_AttribInputPC.GetVaultRequestInterface()->mRequestQueue.Construct();
+                s_AttribInputPC.UnlockForWrite();
+            }
+            lpResourceInput = &s_ResourceInputPC;
+            lpAttribInput = &s_AttribInputPC;
         }
 
         if (lpOutput != 0)
@@ -2028,12 +2074,14 @@ namespace BrnResource
             // SetAllocatorList(out, &mAllocatorList), then the LiveUpdateIO status copy
             // (SetLiveUpdateStatus from the LiveUpdate output).
             //
-            // [FLAG] we Construct the WHOLE output buffer where the console constructs only
-            // that one member -- wider than the console, and it stays that way until the
-            // OutputBuffer's filesystem-status member is homed. The LiveUpdate module is
-            // deferred (F-P7-4); the allocator-list publish is the live part.
+            // ARTIST constructs only the status member at +9, clears the pointer at +4, and
+            // publishes the allocator list while the buffer is write-locked. Preserve the
+            // separate live-update byte at +8; its producer remains deferred (F-P7-4).
             lpOutput->LockForWrite();
-            lpOutput->Construct();
+            CgsResource::ResourceIO::FileSystemStatusInterface lInitialStatus;
+            lInitialStatus.Construct();
+            lpOutput->SetFileSystemStatusInterface(&lInitialStatus);
+            lpOutput->SetAllocatorList(0);
             lpOutput->SetAllocatorList(&mAllocatorList);
             lpOutput->UnlockForWrite();
         }
@@ -2041,7 +2089,7 @@ namespace BrnResource
         if (lpInput != 0)
             lpInput->LockForRead();
 
-        s_ResourceInput.LockForWrite();
+        lpResourceInput->LockForWrite();
 
         // [deferred] LiveUpdateIO::OutputBuffer request append (X360 Append<512,16> of the
         // live-update output's request queue into the resource input; module not committed).
@@ -2066,30 +2114,30 @@ namespace BrnResource
             while (lpEvent != 0)
             {
                 if (liType >= 26)
-                    ProcessGameDataEvent(&s_ResourceInput, lpEvent, liType);
+                    ProcessGameDataEvent(lpResourceInput, lpEvent, liType);
                 else
-                    s_ResourceInput.GetResourceQueue()->AddEvent(lpEvent, liType, liSize);
+                    lpResourceInput->GetResourceQueue()->AddEvent(lpEvent, liType, liSize);
 
                 liType = lpRequestInterface->mRequestQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
             }
             // X360 (0x82674670, still under the input read lock): bulk-append the GameData
             // input's AttribSys request queue into the module input ("Attrib") --
             // AttribSysIO::InputBuffer::AppendRequestInterface<32768> @0x82671948.
-            s_AttribInput.LockForWrite();
-            s_AttribInput.AppendRequestInterface<
+            lpAttribInput->LockForWrite();
+            lpAttribInput->AppendRequestInterface<
                 GameDataIO::InputBuffer::kiAttribSysRequestInterfaceQueueSize>(
                     lpInputRead->GetAttribSysRequestInterface());
-            s_AttribInput.UnlockForWrite();
+            lpAttribInput->UnlockForWrite();
 
             lpInput->UnlockForRead();
 
             // X360: re-lock the input for write and clear the drained request state (the
             // 32768-byte request queue, the AttribSys request queue @a4+8197 and the debug
             // Im2d pointer @a4[16393]). The Im2d member is deferred with its subsystem.
-            lpInput->LockForWrite();
-            lpInput->GetRequestInterface()->mRequestQueue.Clear();
-            lpInput->GetAttribSysRequestInterface()->mRequestQueue.Clear();
-            lpInput->UnlockForWrite();
+            lpInputWrite->LockForWrite();
+            lpInputWrite->GetRequestInterface()->mRequestQueue.Clear();
+            lpInputWrite->GetAttribSysRequestInterface()->mRequestQueue.Clear();
+            lpInputWrite->UnlockForWrite();
         }
 
         // ---- internal response drain (X360 0x82674670, the type 2/3/4/7/8 switch) -------
@@ -2106,23 +2154,23 @@ namespace BrnResource
                 switch (liType)
                 {
                 case 2:
-                    ProcessInternalLoadBundleResponse(&s_ResourceInput,
+                    ProcessInternalLoadBundleResponse(lpResourceInput,
                         reinterpret_cast<const CgsResource::Events::LoadBundleResponse*>(lpEvent));
                     break;
                 case 3:
-                    ProcessInternalUnloadResponse(&s_ResourceInput,
+                    ProcessInternalUnloadResponse(lpResourceInput,
                         reinterpret_cast<const CgsResource::Events::UnloadBundleResponse*>(lpEvent));
                     break;
                 case 4:
-                    ProcessInternalAcquireResponse(&s_ResourceInput,
+                    ProcessInternalAcquireResponse(lpResourceInput,
                         reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent),
-                        &s_AttribInput);
+                        lpAttribInput);
                     break;
                 case 7:
-                    ProcessInternalInvalidateResponse(&s_ResourceInput, lpEvent);
+                    ProcessInternalInvalidateResponse(lpResourceInput, lpEvent);
                     break;
                 case 8:
-                    ProcessInternalValidateResponse(&s_ResourceInput, lpEvent);
+                    ProcessInternalValidateResponse(lpResourceInput, lpEvent);
                     break;
                 default:
                     CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1904
@@ -2135,7 +2183,7 @@ namespace BrnResource
             mReceiverQueue.Clear();
         }
 
-        s_ResourceInput.UnlockForWrite();
+        lpResourceInput->UnlockForWrite();
 
         // ---- the AttribSys module pump (X360 0x82674670: `(*(module vtbl+68))(module,
         // attribIn)` right after the resource-input unlock) + the attrib reply receiver
@@ -2144,13 +2192,16 @@ namespace BrnResource
         // themselves (the X360 passes it unlocked here too). ------------------------------
         {
             renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_ATTRIB);
-            mAttribSysModule.Update(&s_AttribInput);
+            mAttribSysModule.Update(lpAttribInput);
         }
-        // [PC placement] the X360 destroys the per-frame "Attrib" carve at the end of
+        // [PC adapter only] the X360 destroys the per-frame "Attrib" carve at the end of
         // Update; the persistent static must drop the drained requests itself.
-        s_AttribInput.LockForWrite();
-        s_AttribInput.GetVaultRequestInterface()->mRequestQueue.Clear();
-        s_AttribInput.UnlockForWrite();
+        if (!lbHasNativeStacks)
+        {
+            lpAttribInput->LockForWrite();
+            lpAttribInput->GetVaultRequestInterface()->mRequestQueue.Clear();
+            lpAttribInput->UnlockForWrite();
+        }
         {
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
@@ -2158,9 +2209,9 @@ namespace BrnResource
             while (lpEvent != 0)
             {
                 if (liType == 3)
-                    ProcessAttribSysRegisterVaultResponse(&s_ResourceInput, lpEvent);
+                    ProcessAttribSysRegisterVaultResponse(lpResourceInput, lpEvent);
                 else if (liType == 5)
-                    ProcessUnregisterVehicleAttribsResponse(&s_ResourceInput, lpEvent);
+                    ProcessUnregisterVehicleAttribsResponse(lpResourceInput, lpEvent);
                 else
                     CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1946
                 liType = mAttribSysReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -2168,15 +2219,58 @@ namespace BrnResource
             mAttribSysReceiverQueue.Clear();   // X360 ring-rewind, same as mReceiverQueue
         }
 
-        // Pump the embedded streaming engine with the requests published above. The X360
-        // wraps this in UpdateResourceModule @0x826663B0, which also carves a ResourceIO::
-        // OutputBuffer from the IOBufferStack and copies the filesystem status out
-        // (a1+475952) -- both deferred with their consumers.
-        const bool lbResult = mResourceModule.Update(&s_ResourceInput, 0);
+        // Pump the streaming engine, copy its producer status to the module owner, and publish
+        // the typed status into the caller's GameData output under its write lock. The native
+        // path uses the original two stacks; the host two-argument adapter uses static scratch
+        // buffers but still reads the real ResourceModule output rather than synthesizing status.
+        CgsResource::ResourceModule::EUpdateResult leResourceResult;
+        if (lbHasNativeStacks)
+        {
+            leResourceResult = UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        }
+        else
+        {
+            static CgsResource::ResourceIO::OutputBuffer s_ResourceOutputPC;
+            static bool s_bResourceOutputPCConstructed = false;
+            if (!s_bResourceOutputPCConstructed)
+            {
+                s_ResourceOutputPC.Construct();
+                s_bResourceOutputPCConstructed = true;
+            }
+            leResourceResult = mResourceModule.Update(lpResourceInput, &s_ResourceOutputPC);
+            s_ResourceOutputPC.LockForRead();
+            mFileSystemStatus = *static_cast<const CgsResource::ResourceIO::OutputBuffer&>(
+                s_ResourceOutputPC).GetFileSystemStatusInterface();
+            s_ResourceOutputPC.UnlockForRead();
+        }
 
-        // [deferred] final output publish of the filesystem status interface (X360
-        // SetFileSystemStatusInterface(out, a1+475952); member not committed).
-        return lbResult;
+        if (lpOutput != 0)
+        {
+            lpOutput->LockForWrite();
+            lpOutput->SetFileSystemStatusInterface(&mFileSystemStatus);
+            lpOutput->UnlockForWrite();
+        }
+
+        if (lbHasNativeStacks)
+        {
+            CGS_ASSERT(lpInputStack->DestroyIOBuffer(&lpAttribInput),
+                "mpStack->DestroyIOBuffer( &mpBuffer )");
+            CGS_ASSERT(lpInputStack->DestroyIOBuffer(&lpResourceInput),
+                "mpStack->DestroyIOBuffer( &mpBuffer )");
+        }
+
+        return leResourceResult == CgsResource::ResourceModule::E_RESULT_REQUIRE_STALL
+            ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
+    }
+
+    // FLAG PC-platform adapter: current callers pass only the persistent GameData payloads.
+    // The exact stack ABI above remains the native entry point; this returns true only for the
+    // attested REQUIRE_STALL value 1.
+    bool GameDataModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    {
+        return Update(0, 0,
+            static_cast<const GameDataIO::InputBuffer*>(lpInputBuffer),
+            static_cast<GameDataIO::OutputBuffer*>(lpOutputBuffer)) == E_RESULT_REQUIRE_STALL;
     }
 
     // @ 0x826744F0 -- route one queued GameData-level event by its queue type id.

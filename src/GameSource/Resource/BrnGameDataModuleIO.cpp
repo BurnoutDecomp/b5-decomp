@@ -9,6 +9,8 @@
 //   OutputBuffer::SetAllocatorList()                       @ 0x826640E0               ->  mpAllocatorList
 //   OutputBuffer::GetLiveUpdateStatus()                    @ 0x823B1638               -> &mbLiveUpdateStatus
 //   OutputBuffer::SetLiveUpdateStatus()                    @ 0x82663E30               ->  mbLiveUpdateStatus
+//   OutputBuffer::GetFileSystemStatusInterface()           @ 0x823B16E0               -> &mFileSystemStatusInterface (+9)
+//   OutputBuffer::SetFileSystemStatusInterface()           @ 0x82663EE0               ->  mFileSystemStatusInterface (+9)
 // Each tests the inherited CgsModule::IOBuffer read/write-lock bit (bit 4 read / bit 3 write) via
 // IsBufferLockedFor{Reading,Writing}() and then reads/writes the named member. See the AttribSys/
 // OutputBuffer FLAGs in the header (opaque AttribSys storage; the +4 pointer layout fix).
@@ -108,6 +110,24 @@ namespace GameDataIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         mbLiveUpdateStatus = *lpStatus;
+    }
+
+    // @ 0x823B16E0 -- read-locked accessor. ARTIST returns this+9; DecFIGS h:178 names the typed
+    // FileSystemStatusInterface member at that address. CheckDiskError holds the buffer read lock.
+    const CgsResource::ResourceIO::FileSystemStatusInterface*
+    OutputBuffer::GetFileSystemStatusInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mFileSystemStatusInterface;
+    }
+
+    // @ 0x82663EE0 -- write-locked setter called by GameDataModule::Prepare's failure tail and
+    // GameDataModule::Update's status tail. Preserve the typed one-byte disk-error payload.
+    void OutputBuffer::SetFileSystemStatusInterface(
+        const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mFileSystemStatusInterface.SetDiskErrorOccured(lpStatus->GetDiskErrorOccured());
     }
 
     // -------- explicit instantiations: InputBuffer::AppendRequestInterface<N> --------

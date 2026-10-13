@@ -61,7 +61,12 @@ namespace CgsModule { struct Event; }                                        // 
 // The many embedded subsystems beyond ResourceModule are added with their own passes.
 namespace BrnResource
 {
-    namespace GameDataIO { struct GameDataAssetEvent; }   // dispatcher/handler param (by pointer)
+    namespace GameDataIO
+    {
+        struct GameDataAssetEvent;   // dispatcher/handler param (by pointer)
+        struct InputBuffer;
+        struct OutputBuffer;
+    }
 
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
@@ -71,6 +76,11 @@ namespace BrnResource
 
     public:
         void DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfCallback, void* lpUserData);
+        enum EUpdateResult
+        {
+            E_RESULT_OK = 0,
+            E_RESULT_REQUIRE_STALL = 1
+        };
         enum EPrepareStage
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,
@@ -108,16 +118,27 @@ namespace BrnResource
 
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
+        // ARTIST 0x82673F38 / DecFIGS h:370. The fourth argument is unused in the X360 body;
+        // OutputBuffer receives the allocator list on success and filesystem status on failure.
+        virtual bool Prepare(CgsModule::IOBufferStack* lpInputStack,
+                             CgsModule::IOBufferStack* lpOutputStack,
+                             const GameDataIO::InputBuffer* lpInputBuffer,
+                             GameDataIO::OutputBuffer* lpOutputBuffer);
+        // FLAG PC-platform adapter: current loading flow does not own/pass the two GameData IO buffers.
         bool Prepare(CgsModule::IOBufferStack* lpInputStack,
-                     CgsModule::IOBufferStack* lpOutputStack);      // 0x82673F38; local lane carries the two stack args
+                     CgsModule::IOBufferStack* lpOutputStack);
         bool Release();                               // deferred
         void Destruct();                              // deferred
 
-        // @ 0x82674670 -- the per-frame pump: drain the GameDataIO::InputBuffer request
-        // interface (raw CgsResource requests forward into the embedded ResourceModule input;
-        // GameData-level requests route through ProcessGameDataEvent), then run the
-        // ResourceModule. lpInputBuffer/lpOutputBuffer are the module's GameDataIO
-        // InputBuffer/OutputBuffer (see the .cpp for the reconstructed slice + deferrals).
+        // ARTIST 0x82674670 / DecFIGS h:380. The return values are 0=OK and 1=REQUIRE_STALL.
+        // The two IO stacks own the temporary ResourceIO/AttribSys buffers; the typed GameData
+        // buffers are the caller's persistent per-frame payloads.
+        virtual EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack,
+                                     CgsModule::IOBufferStack* lpOutputStack,
+                                     const GameDataIO::InputBuffer* lpInputBuffer,
+                                     GameDataIO::OutputBuffer* lpOutputBuffer);
+        // FLAG PC-platform adapter: callers on the current host still have only the persistent
+        // two-buffer call. It maps the original 0/1 enum to the existing bool stall convention.
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
 
     private:
