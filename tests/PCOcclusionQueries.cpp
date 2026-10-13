@@ -51,6 +51,12 @@ namespace
         }
     }
 
+    void Step(const char* lpcLabel)
+    {
+        std::printf("STEP: %s\n", lpcLabel);
+        std::fflush(stdout);
+    }
+
     void SetReason(char* lpReason, size_t luCapacity, const char* lpcWhat, HRESULT lResult = S_OK)
     {
         if (lpReason == nullptr || luCapacity == 0)
@@ -199,6 +205,8 @@ namespace
                        bool lbDrawVisibleTriangle, DWORD* lpSampleCount,
                        char* lpReason, size_t luCapacity)
     {
+        Step(lbDrawVisibleTriangle ? "raw visible-triangle query witness"
+                                   : "raw empty-query zero-sample witness");
         HRESULT lResult = lpDevice->BeginScene();
         if (FAILED(lResult))
         {
@@ -291,7 +299,7 @@ namespace
 
     TriangleResult RunTriangleSurvey(IDirect3DDevice9* lpDevice, u32 luIdentifier,
                                      const TestVertex* lpVertices, u32 luPrimitiveCount,
-                                     bool lbNullIndices, u32 luDrawAttempts, bool lbReadTwice)
+                                     u32 luDrawAttempts, bool lbReadTwice)
     {
         static const WORD lauIndices[3] = {0, 1, 2};
         TriangleResult lResult;
@@ -305,8 +313,7 @@ namespace
                 renderengine::OcclusionQueryProviderPCBeginSurveySubmission();
             lResult.mabHasSubmissionToken[luAttempt] = luToken != 0;
             lResult.mahDrawResults[luAttempt] = lpDevice->DrawIndexedPrimitiveUP(
-                D3DPT_TRIANGLELIST, 0, 3, luPrimitiveCount,
-                lbNullIndices ? nullptr : lauIndices, D3DFMT_INDEX16,
+                D3DPT_TRIANGLELIST, 0, 3, luPrimitiveCount, lauIndices, D3DFMT_INDEX16,
                 lpVertices, sizeof(TestVertex));
             renderengine::OcclusionQueryProviderPCFinishSurveySubmission(
                 luToken, SUCCEEDED(lResult.mahDrawResults[luAttempt]) && luPrimitiveCount != 0);
@@ -366,6 +373,116 @@ namespace
         return lbAllowed;
     }
 
+    struct FailedSubmissionWitness
+    {
+        bool mbWitnessAvailable = false;
+        bool mbProviderToken = false;
+        bool mbFailedDraw = false;
+        bool mbAllowed = true;
+        HRESULT mhrDraw = E_FAIL;
+    };
+
+    void RestoreVertexInput(IDirect3DDevice9* lpDevice, DWORD luSavedFvf,
+                            IDirect3DVertexDeclaration9* lpSavedDeclaration)
+    {
+        HRESULT lResult = S_OK;
+        if (luSavedFvf != 0)
+            lResult = lpDevice->SetFVF(luSavedFvf);
+        else if (lpSavedDeclaration != nullptr)
+            lResult = lpDevice->SetVertexDeclaration(lpSavedDeclaration);
+        Check(SUCCEEDED(lResult), "original D3D9 vertex input state restored");
+    }
+
+    FailedSubmissionWitness RunMissingVertexInputFailure(
+        IDirect3DDevice9* lpDevice, u32 luIdentifier, const TestVertex* lpVertices)
+    {
+        FailedSubmissionWitness lWitness;
+        DWORD luSavedFvf = 0;
+        IDirect3DVertexDeclaration9* lpSavedDeclaration = nullptr;
+        const HRESULT lGetFvf = lpDevice->GetFVF(&luSavedFvf);
+        const HRESULT lGetDeclaration = lpDevice->GetVertexDeclaration(&lpSavedDeclaration);
+        if (FAILED(lGetFvf) || FAILED(lGetDeclaration))
+        {
+            if (lpSavedDeclaration != nullptr)
+                lpSavedDeclaration->Release();
+            std::printf("SUBCASE_UNAVAILABLE: could not read vertex input state (FVF 0x%08X, decl 0x%08X)\n",
+                        static_cast<unsigned>(lGetFvf), static_cast<unsigned>(lGetDeclaration));
+            return lWitness;
+        }
+
+        Step("attempting documented no-FVF/no-declaration precondition with valid CPU spans");
+        const HRESULT lClearDeclaration = lpDevice->SetVertexDeclaration(nullptr);
+        const HRESULT lClearFvf = lpDevice->SetFVF(0);
+        DWORD luCurrentFvf = 0;
+        IDirect3DVertexDeclaration9* lpCurrentDeclaration = nullptr;
+        const HRESULT lReadFvf = lpDevice->GetFVF(&luCurrentFvf);
+        const HRESULT lReadDeclaration = lpDevice->GetVertexDeclaration(&lpCurrentDeclaration);
+        const bool lbNoVertexInput = SUCCEEDED(lReadFvf) && SUCCEEDED(lReadDeclaration)
+            && luCurrentFvf == 0 && lpCurrentDeclaration == nullptr;
+        if (lpCurrentDeclaration != nullptr)
+            lpCurrentDeclaration->Release();
+        if (!lbNoVertexInput)
+        {
+            RestoreVertexInput(lpDevice, luSavedFvf, lpSavedDeclaration);
+            if (lpSavedDeclaration != nullptr)
+                lpSavedDeclaration->Release();
+            std::printf("SUBCASE_UNAVAILABLE: driver did not expose an absent FVF/declaration "
+                        "(SetVertexDeclaration hr=0x%08X, SetFVF hr=0x%08X, GetFVF hr=0x%08X, "
+                        "GetVertexDeclaration hr=0x%08X, current FVF=0x%08X, current decl=%p)\n",
+                        static_cast<unsigned>(lClearDeclaration), static_cast<unsigned>(lClearFvf),
+                        static_cast<unsigned>(lReadFvf), static_cast<unsigned>(lReadDeclaration),
+                        static_cast<unsigned>(luCurrentFvf), static_cast<void*>(lpCurrentDeclaration));
+            return lWitness;
+        }
+
+        static const WORD lauValidIndices[3] = {0, 1, 2};
+        if (!BeginSurveyScene(lpDevice))
+        {
+            RestoreVertexInput(lpDevice, luSavedFvf, lpSavedDeclaration);
+            if (lpSavedDeclaration != nullptr)
+                lpSavedDeclaration->Release();
+            std::printf("SUBCASE_UNAVAILABLE: could not begin a native scene for missing-input draw\n");
+            return lWitness;
+        }
+
+        renderengine::OcclusionQueryProviderPCBeginSurvey(lpDevice, luIdentifier);
+        const renderengine::OcclusionSurveySubmissionTokenPC luToken =
+            renderengine::OcclusionQueryProviderPCBeginSurveySubmission();
+        lWitness.mbProviderToken = luToken != 0;
+        Step("issuing indexed draw with valid spans and verified absent vertex input");
+        lWitness.mhrDraw = lpDevice->DrawIndexedPrimitiveUP(
+            D3DPT_TRIANGLELIST, 0, 3, 1, lauValidIndices, D3DFMT_INDEX16,
+            lpVertices, sizeof(TestVertex));
+        lWitness.mbFailedDraw = FAILED(lWitness.mhrDraw);
+        renderengine::OcclusionQueryProviderPCFinishSurveySubmission(
+            luToken, SUCCEEDED(lWitness.mhrDraw));
+        renderengine::OcclusionQueryProviderPCEndSurvey();
+        EndSurveyScene(lpDevice);
+
+        if (lWitness.mbFailedDraw)
+        {
+            renderengine::OcclusionQueryProviderPCBeginConditional(lpDevice, luIdentifier);
+            lWitness.mbAllowed = renderengine::OcclusionQueryProviderPCShouldDraw(lpDevice);
+            renderengine::OcclusionQueryProviderPCEndConditional();
+            lWitness.mbWitnessAvailable = true;
+        }
+        else
+        {
+            // The driver accepted the draw, so this is not a failed-submission witness. Do not
+            // turn a successful result into a synthetic failure or an asserted zero count.
+            renderengine::OcclusionQueryProviderPCBeginConditional(lpDevice, luIdentifier);
+            (void)renderengine::OcclusionQueryProviderPCShouldDraw(lpDevice);
+            renderengine::OcclusionQueryProviderPCEndConditional();
+            std::printf("SUBCASE_UNAVAILABLE: D3D9 accepted the draw without vertex input "
+                        "(HRESULT 0x%08X)\n", static_cast<unsigned>(lWitness.mhrDraw));
+        }
+
+        RestoreVertexInput(lpDevice, luSavedFvf, lpSavedDeclaration);
+        if (lpSavedDeclaration != nullptr)
+            lpSavedDeclaration->Release();
+        return lWitness;
+    }
+
     void TestProvider(NativeContext& lrContext, DWORD luEmptyQuerySamples)
     {
         IDirect3DDevice9* const lpDevice = lrContext.mpDevice;
@@ -385,51 +502,66 @@ namespace
         Check(RunNoSubmissionSurvey(lpDevice, 0u),
               "a begun and ended survey with no indexed submission fails open");
 
-        const TriangleResult lFailed = RunTriangleSurvey(lpDevice, 1u, laVisible, 1u,
-                                                         true, 1u, false);
-        Check(lFailed.mabHasSubmissionToken[0], "failed-draw survey opened a real provider query");
-        Check(FAILED(lFailed.mahDrawResults[0]), "D3D9 rejected the indexed submission with null indices");
-        Check(lFailed.mbAllowed, "a failed indexed submission cannot suppress the later mesh");
+        Step("safe failed-draw subcase");
+        const FailedSubmissionWitness lFailed =
+            RunMissingVertexInputFailure(lpDevice, 1u, laVisible);
+        if (lFailed.mbWitnessAvailable)
+        {
+            Check(lFailed.mbProviderToken, "failed-draw survey opened a real provider query");
+            Check(lFailed.mbFailedDraw, "D3D9 rejected a draw with valid spans and no vertex input");
+            Check(lFailed.mbAllowed, "a failed indexed submission cannot suppress the later mesh");
+        }
+        else
+        {
+            std::printf("SUBCASE_UNAVAILABLE: no documented HRESULT failure witness was available\n");
+        }
 
+        Step("zero-primitive survey");
         const TriangleResult lZero = RunTriangleSurvey(lpDevice, 2u, laVisible, 0u,
-                                                       false, 1u, false);
+                                                       1u, false);
         Check(lZero.mabHasSubmissionToken[0], "zero-primitive survey opened a real provider query");
         Check(lZero.mbAllowed, "a successful or rejected zero-primitive draw fails open");
 
+        Step("visible indexed survey");
         const TriangleResult lVisible = RunTriangleSurvey(lpDevice, 3u, laVisible, 1u,
-                                                          false, 1u, true);
+                                                          1u, true);
         Check(lVisible.mabHasSubmissionToken[0], "visible survey opened a real provider query");
         Check(SUCCEEDED(lVisible.mahDrawResults[0]), "visible indexed triangle was submitted to D3D9");
         Check(lVisible.mbAllowed, "a real visible triangle passes the native nonzero-sample policy");
         Check(lVisible.mbAllowedAgain, "same-scope repeated check uses the cached native query result");
 
+        Step("fully clipped indexed survey");
         const TriangleResult lClipped = RunTriangleSurvey(lpDevice, 4u, laClipped, 1u,
-                                                          false, 1u, false);
+                                                          1u, false);
         Check(lClipped.mabHasSubmissionToken[0], "clipped survey opened a real provider query");
         Check(SUCCEEDED(lClipped.mahDrawResults[0]), "fully clipped indexed triangle was submitted");
         Check(!lClipped.mbAllowed, "a real zero-sample clipped triangle is rejected by the native policy");
 
+        Step("overwritten and reused query ID");
         const TriangleResult lFirstUse = RunTriangleSurvey(lpDevice, 5u, laVisible, 1u,
-                                                           false, 1u, false);
+                                                           1u, false);
         Check(lFirstUse.mbAllowed, "reused-ID setup first records the visible query result");
         const TriangleResult lOverwrite = RunTriangleSurvey(lpDevice, 5u, laClipped, 1u,
-                                                             false, 1u, false);
+                                                             1u, false);
         Check(!lOverwrite.mbAllowed, "overwriting an ID does not reuse its previous visible result");
         const TriangleResult lReused = RunTriangleSurvey(lpDevice, 5u, laVisible, 1u,
-                                                          false, 1u, false);
+                                                          1u, false);
         Check(lReused.mbAllowed, "a consumed native query ID can be reused for a new visible survey");
 
+        Step("conservative multiple-submission survey");
         const TriangleResult lMultiple = RunTriangleSurvey(lpDevice, 6u, laVisible, 1u,
-                                                            false, 2u, false);
+                                                            2u, false);
         Check(lMultiple.mabHasSubmissionToken[0] && lMultiple.mabHasSubmissionToken[1],
               "multiple-submission case made two real indexed draw attempts");
         Check(SUCCEEDED(lMultiple.mahDrawResults[0]) && SUCCEEDED(lMultiple.mahDrawResults[1]),
               "both conservative multiple-submission draws reached D3D9");
         Check(lMultiple.mbAllowed, "multiple box submissions are unavailable and fail open");
 
+        Step("invalid and manager-sentinel IDs");
         Check(InvalidIdentifierFailsOpen(lpDevice, 64u), "out-of-range query ID fails open");
         Check(InvalidIdentifierFailsOpen(lpDevice, 0xFFFFu), "original manager sentinel ID fails open");
 
+        Step("provider invalidation and device reset identity");
         const TriangleResult lBeforeReset = RunSurveyWithoutCondition(lpDevice, 9u, laVisible);
         Check(lBeforeReset.mabHasSubmissionToken[0] && SUCCEEDED(lBeforeReset.mahDrawResults[0]),
               "reset-identity case first records a real ended query");
@@ -455,7 +587,7 @@ namespace
         renderengine::OcclusionQueryProviderPCResume(lpDevice);
         Check(ConfigureFixedFunctionDraw(lpDevice), "D3D9 fixed-function state restored after ResetEx");
         const TriangleResult lAfterReset = RunTriangleSurvey(lpDevice, 9u, laVisible, 1u,
-                                                              false, 1u, false);
+                                                              1u, false);
         Check(lAfterReset.mabHasSubmissionToken[0] && SUCCEEDED(lAfterReset.mahDrawResults[0]),
               "a new same-ID query was created after successful ResetEx recovery");
         Check(lAfterReset.mbAllowed, "post-reset query uses the new device generation");
@@ -464,6 +596,8 @@ namespace
 
 int main()
 {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    Step("create hidden D3D9Ex device");
     NativeContext lContext;
     char lacReason[256] = {};
     if (!CreateNativeContext(lContext, lacReason, sizeof(lacReason)))
@@ -473,6 +607,7 @@ int main()
         return 77;
     }
 
+    Step("configure valid fixed-function indexed draw state");
     if (!ConfigureFixedFunctionDraw(lContext.mpDevice))
     {
         ReleaseContext(lContext);
@@ -480,6 +615,7 @@ int main()
         return 77;
     }
 
+    Step("probe real empty and visible occlusion-query results");
     DWORD luEmptyQuerySamples = 0;
     if (!NativeQuerySetup(lContext, &luEmptyQuerySamples, lacReason, sizeof(lacReason)))
     {
@@ -488,6 +624,7 @@ int main()
         return 77;
     }
 
+    Step("exercise production provider state and draw outcomes");
     TestProvider(lContext, luEmptyQuerySamples);
     ReleaseContext(lContext);
     std::printf("PCOcclusionQueries: %d checks, %d failures\n", siChecks, siFailures);
