@@ -4,8 +4,8 @@
 // CgsGraphics::ImRenderBuffer<V> - method bodies, faithfully decompiled from the
 // PS3 External ELF dossiers for the <Basic2dColouredTexturedVertex> instantiation
 // (addresses noted per-method). See CgsImRenderBufferTemplate.h for the layout /
-// source map. The buffer is reconstructed x64-native; the only platform leaf is
-// the GPU dispatch (a separate Dispatch path), which is // FLAG'd below, NOT here.
+// source map. Native CPU backing in Prepare and the separate GPU Dispatch path
+// are explicitly marked PC-platform leaves below.
 //
 // The PS3 originals interleave a `dcbz` (data-cache block zero) before each command
 // append to pre-warm the cache line being written. That is a pure micro-opt with no
@@ -108,8 +108,12 @@ namespace CgsGraphics
         const u32 luCommandAllocBytes = luCommandBufferSizeBytes + 128u;
         const u32 luVertexAllocBytes  = luVertexBufferSizeBytes + 128u;
 
-        // Helper mirroring the PS3 descriptor build + allocator call. The descriptor
-        // is {size, alignment=128} in entry 0 (the PS3 body fills entry 1 = 128 too).
+        // FLAG PC-platform leaf: these are CPU command/vertex staging streams. The
+        // native renderer supplies main-only WorldDispatch backing and every stream
+        // consumer reads lane zero; D3D buffers are created by the separate upload
+        // path. PS3's second backing lane is not a PC disposable/debug allocation.
+        // Request only the actual CPU storage, retaining the size, alignment and
+        // cache-line guard band. RW still rejects unsupported multi-lane requests.
         rw::Resource laResources[4] = {};
         u32 luResourceCount = 0;
         auto lAllocate = [lpAllocator, &laResources, &luResourceCount](u32 luBytes) -> u8*
@@ -117,12 +121,6 @@ namespace CgsGraphics
             rw::ResourceDescriptor lDescriptor;
             lDescriptor.m_baseResourceDescriptors[0].m_size      = luBytes;
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = 128u;
-            lDescriptor.m_baseResourceDescriptors[1].m_size      = luBytes;
-            lDescriptor.m_baseResourceDescriptors[1].m_alignment = 128u;
-            lDescriptor.m_baseResourceDescriptors[2].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
-            lDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
             rw::Resource& lResource = laResources[luResourceCount++];
             lResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
             return static_cast<u8*>(lResource.m_baseResources[0]);
