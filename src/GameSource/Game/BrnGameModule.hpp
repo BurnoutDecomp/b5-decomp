@@ -892,6 +892,17 @@ namespace BrnGame
                                    CgsModule::IOBufferStack* lpOutputBufferStack,
                                    CgsInput::InputIO::OutputBuffer* lpInputModuleOutput);
 
+        // ARTIST 823EE0E8: original per-step input staging and whole owner update.
+        // Native startup still uses the separately named persistent-buffer pump.
+        void DoUpdate_GameStatePreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
+                                       CgsModule::IOBufferStack* lpOutputBufferStack,
+                                       const CgsInput::InputIO::OutputBuffer* lpInputModuleOutput,
+                                       const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput,
+                                       BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+                                       BrnUpdateSet lUpdateSet);
+        void DoUpdate_GameStatePreWorldNativePC(
+            BrnGameMainFlowController::EMainGameFlowState leState);
+
         // ---- the network legs of the per-frame cascade and their bridges ------------------------
         // DoUpdate_NetworkPreSim (called by DoUpdate): perf monitors; carve a
         // PreSimulationInputBuffer "NetworkPreSim" off the INPUT stack; under the W(pre-sim input) +
