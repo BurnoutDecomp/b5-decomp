@@ -81,6 +81,8 @@ namespace BrnResource
                 if (mDLCMonitorThread.GetStatus(nullptr) == EA::Thread::Thread::kStatusRunning)
                     return false;
 
+                mbDLCMonitorThreadStarted = false;
+
                 // The monitor thread's completed count is producer-owned; the producer body
                 // is not reconstructed in this lane. Preserve the original indexed path and
                 // per-record defaults without claiming that an empty monitor result is valid.
@@ -230,7 +232,7 @@ namespace BrnResource
                 if (miCurrentPackage < muPackageCount)
                 {
                     mePrepareStage = E_PREPARE_OPEN_VERSION;
-                    continue;
+                    return false;
                 }
                 mePrepareStage = E_PREPARE_DONE;
                 return true;
