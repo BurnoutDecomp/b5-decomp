@@ -331,9 +331,13 @@ public:
 
         void Construct()
         {
-            s32* lpMonitor = &miScreenClear;
-            for (u32 luIndex = 0; luIndex < sizeof(BrnGpuMonitors) / sizeof(s32); ++luIndex)
-                lpMonitor[luIndex] = 0;
+            // ARTIST8240AD28..AD7C initializes each monitor ID to -1.
+            miScreenClear = miShadowmap = miSky = miEnvironmentMap = -1;
+            miWorldOpaque = miWorldTransparent = miCarOpaque = miCarTransparent = -1;
+            miResolveMSAAFromEDRAM = miDownsampleMSAAAndCompParticles = -1;
+            miSunCoronaVisibilityTest = miFullResParticles = miQuarterResParticles = -1;
+            miCoronas = miPostFX = miIm3dAndRacePositions = miMenusAndHud = -1;
+            miDebug3d = miDebug2d = miPreZ = -1;
         }
     };
 
