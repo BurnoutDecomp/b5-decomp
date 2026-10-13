@@ -17,7 +17,7 @@
 #include "SharedClasses/DataLists/BrnHudMessageController.h"                 // [gateui r3] mHudMessageController (X360 a1+416080 == 0x65950)
 #include "SharedClasses/DataLists/BrnPopupController.h"                      // mPopupController (console +0x65974)
 #include "GameSource/Resource/BrnResourceDebugComponent.h"                   // embedded GameData debug component
-#include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC debug component
+#include "GameSource/Resource/BrnDLCManager.h"                               // DLC manager + embedded DLC debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace CgsMemory { struct MemoryMap; }
@@ -544,8 +544,13 @@ namespace BrnResource
         BrnResource::PopupController   mPopupController;
         // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
         s32                            miPopupsPrepareStage;
-        // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
-        //  message / popup controllers and the game-data tables are added with their own passes.)
+        // X360 a1+475960 -- the runtime package manager and owner of the file-scope
+        // DLCFeatureAvailability table. GameDataModule::Construct calls it before the
+        // adjacent DLCDebugComponent; Prepare stage 16 passes it this module's AllocatorList.
+        BrnResource::DLCManager       mDLCManager;
+        // X360 GameDataModule::Prepare @0x82673F38 uses this as the per-package
+        // AddPatchRequest event id/index at stage 17 and advances it at stage 18.
+        s32                            miDLCManagerPackageIndex;
     };
 }
 

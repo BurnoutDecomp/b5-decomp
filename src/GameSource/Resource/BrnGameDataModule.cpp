@@ -1761,10 +1761,11 @@ namespace BrnResource
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";
 
         // X360 constructs the embedded Resource debug page after the module's
-        // resource system is ready, then constructs the adjacent DLC page.
-        // The separate DLCManager service construction remains outside this
-        // component seam.
+        // resource system is ready. The canonical manager is then constructed at its
+        // original owner call site before the adjacent DLC page; this initializes the
+        // feature-availability table that the page's debug variables point into.
         mDebugComponent.Construct(this, lpAllocator);
+        mDLCManager.Construct();
         mDLCDebugComponent.Construct();
     }
     bool GameDataModule::Release() { return true; }
