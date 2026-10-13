@@ -311,15 +311,51 @@ namespace BrnResource
         return leResult;
     }
 
-    // ---- DEFERRED (rw allocator middleware + game-data subsystems) --------------------
-    // CreateBanks (0x8266DA28) / CreatePools (0x8266DB88) / CreateAllocators (0x8266DD00) carve the
-    // resource banks/pools/allocators out of the GameData heap through the rw::IResourceAllocator
-    // (the rwcore allocator layer). Inert stubs that report success so the Prepare stage machine
-    // advances; reconstruct with that allocator layer. Construct (0x82671B90) builds the embedded
-    // subsystems; Update pumps the ResourceModule and services the game-data query handlers
-    // (ProcessGetVehicle/Wheel/Traffic/WorldUnit/PVS/... - 30+ handlers); Destruct (0x82664508)
-    // tears it down. All inert until the loading-machine case 8 drives this module.
-    bool GameDataModule::CreateBanks(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
+    // ARTIST 0x8266DA28. Submit the map's non-root banks once, then pump until
+    // every request has a reply. Completion is a receiver-count test; this body
+    // does not inspect individual response result codes in the original build.
+    bool GameDataModule::CreateBanks(CgsModule::IOBufferStack* lpInputStack,
+                                     CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = nullptr;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+
+        if (miNumBankCreationRequests != 0)
+        {
+            if (mReceiverQueue.GetCount() == miNumBankCreationRequests)
+            {
+                miNumBankCreationRequests = 0;
+                mReceiverQueue.Clear();
+                // ARTIST 0x8266DB68..0x8266DB80 returns directly here. This
+                // completion path does not destroy the just-created IO buffer.
+                return true;
+            }
+        }
+        else
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequestQueue;
+            lRequestQueue.Construct();
+            const s32 liBankCount = mpMemoryMap->GetNumBanks();
+            for (s32 liIndex = 0; liIndex < liBankCount; ++liIndex)
+            {
+                const CgsMemory::MemoryMapBank* const lpBank = mpMemoryMap->GetBank(liIndex);
+                CgsMemory::MemoryIO::CreateBankRequest lRequest;
+                lRequest.Construct(&mReceiverQueue, miNumBankCreationRequests++);
+                lRequest.SetParams(lpBank->GetParams());
+                // The original payload is 96 bytes; the native queue copies
+                // the same typed request with its widened receiver pointer.
+                lRequestQueue.AddEvent(&lRequest, 9 /* CreateBankRequest */,
+                                       static_cast<s32>(sizeof(lRequest)));
+            }
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequestQueue);
+            lpResourceInput->UnlockForWrite();
+        }
+
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
 
     // @ 0x8266DB88 - create the game's resource pools. The X360 iterates the binary memory map
     // (unk_82F2A788) and sends a CreatePoolRequest per pool through the async dispatch
@@ -706,7 +742,7 @@ namespace BrnResource
     // mapGeneratedRW{Linear,General}Allocators AND the AllocatorList rows, case 14 has nothing to
     // store (the embedded objects were constructed in place). [marked deviation, CreatePools
     // precedent: the request/response round-trip through the ResourceModule + the per-allocator
-    // leaf-bank carve (CreateBanks' bank tree is not stood up on PC) are deferred - the same
+    // leaf-bank carve are deferred (CreateBanks submits the bank tree separately) - the same
     // memory-map records (BrnMemoryMapData.h allocator tables, dumped from unk_82F2A788) are
     // driven synchronously here, backing memory comes from the root debug allocator, and the
     // registry/embedded-object stores are the faithful part.] Runs once (the Prepare stage
@@ -1681,6 +1717,9 @@ namespace BrnResource
         // X360 0x82671B90 first runs the module base's Construct (stage/DataBuffer reset; it
         // clears mbIsNewModule, which is re-raised below).
         CgsModule::ModuleSingleBuffered::Construct();
+
+        // ARTIST 0x82671BF4 stores zero at this+439288 before bank requests begin.
+        miNumBankCreationRequests = 0;
 
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
 
