@@ -14,15 +14,22 @@ namespace BrnResource
 {
     namespace GameDataIO
     {
-        // [inferred] The X360 AllocatorList::Construct is inlined into GameDataModule::CreateAllocators
-        // (no standalone body in the export). Its job is to start every bank "unassigned" (map = -1, so
-        // the Get* asserts fire if a bank is used before CreateAllocators registers it) and null every
-        // allocator/resource pointer. CreateAllocators then fills the slots as it builds each allocator.
+        // Inlined in ARTIST GameDataModule::Construct: 67 invalid bank slots,
+        // followed by the null audio pointer. Pointer rows are filled by the producer.
         void AllocatorList::Construct()
         {
             for (s32 li = 0; li < KI_NUM_BANKS; ++li)
+                maiAllocatorMap[li] = -1;
+            mpAudioStreamAllocator = nullptr;
+        }
+
+        // FLAG PC-platform adapter: retain the existing native type/pointer
+        // clearing over the full ARTIST capacities, including unpopulated spares.
+        void AllocatorList::ConstructNativePC()
+        {
+            Construct();
+            for (s32 li = 0; li < KI_NUM_BANKS; ++li)
             {
-                maiAllocatorMap[li]  = -1;
                 maeAllocatorType[li] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
             }
             for (s32 li = 0; li < 2; ++li)
@@ -30,9 +37,9 @@ namespace BrnResource
                 mapRawResources[li]           = 0;
                 mapRawResourceDescriptors[li] = 0;
             }
-            for (s32 li = 0; li < 7; ++li)
-                mapLinearAllocators[li] = 0;
             for (s32 li = 0; li < 8; ++li)
+                mapLinearAllocators[li] = 0;
+            for (s32 li = 0; li < 9; ++li)
                 mapHeapAllocators[li] = 0;
             for (s32 li = 0; li < 5; ++li)
             {

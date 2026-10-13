@@ -509,8 +509,10 @@ namespace BrnResource
         //      point into these; CreateAllocators fills both. -------------------------------
         rw::Resource                        maGeneratedRawResources[2];
         rw::ResourceDescriptor              maGeneratedRawResourceDescriptors[2];
-        CgsMemory::LinearMalloc             maGeneratedLinearAllocators[7];
-        CgsMemory::HeapMalloc               maGeneratedHeapAllocators[8];
+        // ARTIST storage spans eight LinearMallocs and nine HeapMallocs;
+        // the binary map populates seven/eight. DecFIGS uses smaller capacities.
+        CgsMemory::LinearMalloc             maGeneratedLinearAllocators[8];
+        CgsMemory::HeapMalloc               maGeneratedHeapAllocators[9];
         rw::LinearResourceAllocator*        mapGeneratedRWLinearAllocators[5];
         rw::core::GeneralResourceAllocator* mapGeneratedRWGeneralAllocators[5];
         CgsMemory::LinearMalloc             mAudioStreamAllocator;

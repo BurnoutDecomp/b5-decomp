@@ -31,7 +31,8 @@ namespace rw
 // GetRawResource 0x8252ADF8, GetRawResourceDescriptor 0x8252AFD0, GetRWLinearResourceAllocator
 // 0x822775B8, GetRWGeneralResourceAllocator 0x823F3F98. Each resolves
 // `mapXxx[ maiAllocatorMap[bankId] ]` after asserting `maeAllocatorType[bankId] == <type>`. The
-// array sizes (2/2/7/8/5/5) match the GameDataModule's maGenerated*Allocators members.
+// ARTIST capacities (2/2/8/9/5/5) include one spare per populated allocator family;
+// the binary map supplies 1/7/8/4/4 records. DecFIGS's Linear/Heap capacities are 7/8.
 // [x64: pointers are 8 bytes, so byte offsets differ from the X360's 32-bit layout -- members are
 // accessed by name, not by offset.]
 namespace BrnResource
@@ -54,6 +55,8 @@ namespace BrnResource
             enum { KI_MAX_BANK_ID = 0x42, KI_NUM_BANKS = 0x43 };
 
             void Construct();
+            // Existing native bring-up also seeds types and clears pointer rows.
+            void ConstructNativePC();
 
             rw::Resource*                       GetRawResource(s32 liBankId) const;
             rw::ResourceDescriptor*             GetRawResourceDescriptor(s32 liBankId) const;
@@ -87,8 +90,8 @@ namespace BrnResource
             CgsMemory::MemoryMap::EAllocatorType maeAllocatorType[KI_NUM_BANKS];  // bank id -> allocator type
             rw::Resource*                        mapRawResources[2];
             rw::ResourceDescriptor*              mapRawResourceDescriptors[2];
-            CgsMemory::LinearMalloc*             mapLinearAllocators[7];
-            CgsMemory::HeapMalloc*               mapHeapAllocators[8];
+            CgsMemory::LinearMalloc*             mapLinearAllocators[8];
+            CgsMemory::HeapMalloc*               mapHeapAllocators[9];
             rw::LinearResourceAllocator*         mapRWLinearAllocators[5];
             rw::core::GeneralResourceAllocator*  mapRWGeneralAllocators[5];
             CgsMemory::LinearMalloc*             mpAudioStreamAllocator;
