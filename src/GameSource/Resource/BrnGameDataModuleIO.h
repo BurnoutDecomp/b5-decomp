@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // BrnResource::GameDataIO::RequestInterface<N>
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h" // ResourceIO::FileSystemStatusInterface
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // CgsAttribSys::AttribSysIO::AttribSysRequestInterface<N> (mAttribSysRequestInterface)
 // CgsGraphics::Im2dRenderBuffer is a typedef (== CgsGraphics::Im2d), not a struct, so its canonical
 // home header is included rather than forward-declared (a `struct Im2dRenderBuffer;` fwd-decl would
@@ -32,8 +33,9 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 //         SetIm2dDebugRenderBuffer() (h:116) / GetIm2dDebugRenderBuffer() (h:119) ...
 //   };
 //   struct OutputBuffer : public IOBuffer {
-//     const AllocatorList*  mpAllocatorList;     // h:184  (POINTER, verified against the X360 asm)
-//     u8                    mbLiveUpdateStatus;  // h:189 storage  (X360 = 1 status byte)
+//     const AllocatorList*  mpAllocatorList;             // h:184, X360 this+4
+//     u8                    mbLiveUpdateStatus;          // X360 this+8
+//     FileSystemStatusInterface mFileSystemStatusInterface; // h:189, X360 this+9
 //     ... Construct/Prepare/Release/Destruct/Clear, GetAllocatorList() const (h:167) /
 //         SetAllocatorList() (h:171), GetLiveUpdateStatus() / SetLiveUpdateStatus() ...
 //   };
@@ -47,6 +49,8 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 //   OutputBuffer::SetAllocatorList()                   @ 0x826640E0  (write, h:171)  ->  this+4
 //   OutputBuffer::GetLiveUpdateStatus()                @ 0x823B1638  (read)          -> &(this+8)
 //   OutputBuffer::SetLiveUpdateStatus()                @ 0x82663E30  (write)         ->  this+8
+//   OutputBuffer::GetFileSystemStatusInterface()       @ 0x823B16E0  (read)          -> &(this+9)
+//   OutputBuffer::SetFileSystemStatusInterface()       @ 0x82663EE0  (write, Prepare/Update publisher)
 // The +32788 (0x8014) == base(1, padded to 4) + sizeof(RequestInterface<32768>) (32784 = 32768 payload +
 // 16-byte VEQ header), so mAttribSysRequestInterface lands at this+4+32784 = this+32788, matching both
 // AttribSys accessors' `return a1 + 32788`.
@@ -61,13 +65,13 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 // AttribSys module input each frame (AttribSysIO::InputBuffer::AppendRequestInterface<32768>
 // @ 0x82671948), and LoadWorldModule bulk-appends the world output's <2048> attrib queue into it.
 //
-// OUTPUTBUFFER LAYOUT FIX (verified this batch): the +4 member is a POINTER, not an embedded list.
+// OUTPUTBUFFER LAYOUT (ARTIST plus DecFIGS): the +4 member is a POINTER, not an embedded list.
 // GetAllocatorList() const @ 0x823B18D8 emits `lwz r3,4(r28)` (LOAD a pointer VALUE); SetAllocatorList
 // @ 0x826640E0 emits `stw r27,4(r28)` (STORE a pointer). An embedded member would compile to
 // `addi r3,r28,4` (compute an address). So mpAllocatorList is `const AllocatorList*` @+4, matching the
-// DecFIGS DWARF (h:184). The +8 slot: the X360 symbols are Get/SetLiveUpdateStatus and the asm reads/
-// writes a SINGLE BYTE there; the PS3 DWARF drifted it into FileSystemStatusInterface (h:189) with
-// Get/SetFileSystemStatusInterface -- we follow the X360 asm+symbols (authoritative for the X360 ledger).
+// DecFIGS DWARF (h:184). ARTIST has both status fields: the live-update byte at +8 and the
+// FileSystemStatusInterface at +9 (getter 0x823B16E0 returns this+9; Prepare/Update call its setter).
+// Preserve them as separate fields; do not alias the live-update byte to filesystem status.
 //
 // FLAG (MINIMAL SLICE / additive header): lifecycle methods (Construct/Prepare/Release/Destruct/Clear) and
 // the Im2d setter-getters beyond what the reconstructed accessors need are DEFERRED. Semantic parity (real
@@ -159,18 +163,24 @@ namespace GameDataIO
 
     // BrnResource::GameDataIO::OutputBuffer : public IOBuffer -- the GameData module's per-frame output
     // payload. DWARF home BrnGameDataModuleIO.h:142. It carries a POINTER to the AllocatorList (the
-    // bank->allocator registry that GameDataModule::CreateAllocators populates) plus a 1-byte live-update
-    // status. The loading-screen module loads read the module's RW general allocator through
+    // bank->allocator registry that GameDataModule::CreateAllocators populates), a live-update byte,
+    // and the filesystem status consumed by BrnGameModule::CheckDiskError. The loading-screen module loads read the module's RW general allocator through
     // OutputBuffer::GetAllocator (e.g. LoadSoundModule @0x823E75A8: passes GetAllocatorList() to
     // RootSoundModule::Prepare). Faithful X360 layout (LAYOUT FIX, see header note):
     //   IOBuffer base         (this+0, 4-byte FlagSet8 status)
     //   const AllocatorList*  mpAllocatorList     (this+4, DWARF h:184 -- POINTER, not embedded)
-    //   u8                    mbLiveUpdateStatus  (this+8, DWARF h:189 storage; X360 = 1 status byte)
+    //   u8                    mbLiveUpdateStatus  (this+8, X360 Get/SetLiveUpdateStatus)
+    //   FileSystemStatusInterface mFileSystemStatusInterface (this+9, DecFIGS h:189)
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        // DWARF h:147 -- clears the pointer/status members (the old embedded-list Construct was the
-        // superseded structural approximation).
-        void Construct() { mpAllocatorList = 0; mbLiveUpdateStatus = 0; }
+        // ARTIST 0x82666908 sets the base constructed flag, constructs the status at +9, and clears
+        // the allocator pointer at +4. It does not store to the live-update byte at +8.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mFileSystemStatusInterface.Construct();
+            mpAllocatorList = 0;
+        }
 
         // Return the module's RW general resource allocator. X360: OutputBuffer::GetAllocator(this)
         // returns the GameData general allocator the module loads construct from; pinned to the single
@@ -190,19 +200,23 @@ namespace GameDataIO
         void SetAllocatorList(const AllocatorList* lpAllocatorList);
 
         // @ 0x823B1638 -- read-locked accessor; returns the address of the 1-byte live-update status
-        // (asm `addi r3,r28,8`; IDA return type unsigned __int8*). X360 symbol GetLive[UpdateStatus];
-        // PS3 DWARF drift = GetFileSystemStatusInterface (h:178).
+        // (asm `addi r3,r28,8`; IDA return type unsigned __int8*). This is independent of filesystem status.
         u8* GetLiveUpdateStatus();
 
         // @ 0x82663E30 -- write-locked mutator; copies one status byte in
-        // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus; PS3 DWARF drift =
-        // SetFileSystemStatusInterface (h:179).
+        // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus.
         void SetLiveUpdateStatus(const u8* lpStatus);
+
+        // DecFIGS h:178/179; ARTIST getter 0x823B16E0 returns this+9, and GameData Prepare/Update
+        // publish their module-owned filesystem status through the setter at 0x82663EE0.
+        const CgsResource::ResourceIO::FileSystemStatusInterface* GetFileSystemStatusInterface() const;
+        void SetFileSystemStatusInterface(
+            const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus);
 
     private:
         const AllocatorList* mpAllocatorList;    // DWARF h:184 -- this+4 (POINTER, not embedded)
-        u8                   mbLiveUpdateStatus; // DWARF h:189 storage -- this+8 (X360: 1 status byte)
-        // FileSystemStatusInterface follows in the PS3 DWARF; on X360 the +8 slot is a status byte.
+        u8                   mbLiveUpdateStatus; // X360 this+8
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatusInterface; // h:189, X360 this+9
     };
 }
 }
