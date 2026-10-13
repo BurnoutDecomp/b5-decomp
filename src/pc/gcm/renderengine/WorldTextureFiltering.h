@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "pc/gcm/renderengine/GraphicsSettings.h"
 #include "pc/gcm/renderengine/SamplerStateCache.h"
 
 #include <cstring>
@@ -78,14 +79,42 @@ namespace renderengine
         return lCaps.TextureFilterCaps;
     }
 
+    // FLAG PC-platform leaf: optional anisotropic minification enhancement.
+    // The default setting leaves the authored block unchanged. An explicit
+    // request only promotes a LINEAR minifier on 2D textures when the adapter
+    // supports native MIN anisotropy; it does not override point, unknown, or
+    // authored anisotropic filter choices. MAXANISOTROPY is shared with MAG,
+    // so an anisotropic or unknown authored MAG request keeps the block policy.
+    // This host quality override is opt-in and is not an ARTIST default.
+    inline DWORD OptionalLinearMinAnisotropyPC(
+        const u8* lpBlock, D3DRESOURCETYPE leTextureType, bool lbHaveCaps,
+        const D3DCAPS9& lCaps)
+    {
+        if (leTextureType != D3DRTYPE_TEXTURE || lpBlock[0x12] != 1u ||
+            (lpBlock[0x14] != 0u && lpBlock[0x14] != 1u) || !lbHaveCaps ||
+            (lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) == 0u ||
+            lCaps.MaxAnisotropy <= 1u)
+            return 0u;
+
+        const s32 liRequested = GetGraphicsSettingsPC().miAnisotropicFiltering;
+        if (liRequested <= 1)
+            return 0u;
+        const DWORD luRequested = static_cast<DWORD>(liRequested);
+        return (luRequested < lCaps.MaxAnisotropy)
+            ? luRequested : static_cast<DWORD>(lCaps.MaxAnisotropy);
+    }
+
     inline void ApplyXenonMinMagFiltersPC(IDirect3DDevice9* lpDevice, u32 luUnit,
                                            const u8* lpBlock, bool lbHaveCaps,
-                                           DWORD luFilterCaps)
+                                           DWORD luFilterCaps,
+                                           DWORD luOptionalMinAnisotropy)
     {
         DWORD luMinFilter = 0;
         if (XenonMinMagFilterToD3D9(lpBlock[0x12], &luMinFilter))
         {
-            if (luMinFilter == D3DTEXF_ANISOTROPIC &&
+            if (luOptionalMinAnisotropy > 1u)
+                luMinFilter = D3DTEXF_ANISOTROPIC;
+            else if (luMinFilter == D3DTEXF_ANISOTROPIC &&
                 (!lbHaveCaps || (luFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) == 0u))
                 luMinFilter = D3DTEXF_LINEAR;
             PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MINFILTER, luMinFilter);
@@ -103,7 +132,8 @@ namespace renderengine
 
     inline void ApplyXenonMaxAnisotropyPC(IDirect3DDevice9* lpDevice, u32 luUnit,
                                           const u8* lpBlock, bool lbHaveCaps,
-                                          DWORD luFilterCaps, const D3DCAPS9& lCaps)
+                                          DWORD luFilterCaps, const D3DCAPS9& lCaps,
+                                          DWORD luOptionalMinAnisotropy)
     {
         // The engine field is a requested anisotropy count; D3D9 uses a count
         // too, but the XDK table that encodes the Xenos register is not copied.
@@ -119,6 +149,10 @@ namespace renderengine
             if (luMaxAnisotropy > lCaps.MaxAnisotropy)
                 luMaxAnisotropy = lCaps.MaxAnisotropy;
         }
+        // The optional request is a floor for the linear-minifier enhancement;
+        // it never reduces the authored block's supported anisotropy count.
+        if (luOptionalMinAnisotropy > luMaxAnisotropy)
+            luMaxAnisotropy = luOptionalMinAnisotropy;
         PCSetSamplerState(lpDevice, luUnit, D3DSAMP_MAXANISOTROPY, luMaxAnisotropy);
     }
 
@@ -129,11 +163,14 @@ namespace renderengine
     {
         const DWORD luFilterCaps =
             XenonFilterCapsForTextureTypePC(leTextureType, lbHaveCaps, lCaps);
+        const DWORD luOptionalMinAnisotropy =
+            OptionalLinearMinAnisotropyPC(lpBlock, leTextureType, lbHaveCaps, lCaps);
         if (lbApplyMinMagFilters)
-            ApplyXenonMinMagFiltersPC(lpDevice, luUnit, lpBlock, lbHaveCaps, luFilterCaps);
+            ApplyXenonMinMagFiltersPC(lpDevice, luUnit, lpBlock, lbHaveCaps,
+                                      luFilterCaps, luOptionalMinAnisotropy);
         if (lbApplyMaxAnisotropy)
             ApplyXenonMaxAnisotropyPC(lpDevice, luUnit, lpBlock, lbHaveCaps,
-                                      luFilterCaps, lCaps);
+                                      luFilterCaps, lCaps, luOptionalMinAnisotropy);
     }
 
     inline void ReapplyXenonTextureDependentFilterFieldsPC(
