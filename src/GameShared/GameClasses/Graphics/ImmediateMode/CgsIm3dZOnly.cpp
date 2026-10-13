@@ -7,6 +7,7 @@
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::Construct     @ 0x827F89A8
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::AddProgram    @ 0x827EFAB0
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::SetProgram    @ 0x827DBE58
+//   CgsGraphics::ImRenderer<PositionOnlyVertex>::BeginRendering@ 0x827EF450 (export hole)
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::EndRendering  @ 0x827EB0F0
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::SetTransform  @ 0x827EB160
 //
@@ -26,6 +27,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 
 namespace CgsGraphics
 {
@@ -279,10 +281,29 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
 }
 
 // ---------------------------------------------------------------------------------------------------
+// ImRenderer<PositionOnlyVertex>::BeginRendering  @ 0x827EF450
+// Default-program entry point recovered from the original image's 248-byte export hole.
+// ---------------------------------------------------------------------------------------------------
+template <typename V>
+void ImRenderer<V>::BeginRendering()
+{
+    // ARTIST 827EF450..827EF548: claim the renderer, reset the shared shadow,
+    // select slot zero, then bind its programs and the position-only descriptor.
+    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0] != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    mgpActiveRenderer = static_cast<ImRendererBase*>(this);
+    shadow::Device::ResetShadowing();
+    mi8CurrentProgram = 0;
+    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
+    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
+    shadow::Device::SetVertexDescriptor(
+        reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
+}
+
+// ---------------------------------------------------------------------------------------------------
 // ImRenderer<PositionOnlyVertex>::EndRendering  @ 0x827EB0F0
-// Assert this renderer is the active one, then clear the active-renderer module static. (The X360
-// compares mgpActiveRenderer against `this + 4` -- the ImRendererBase subobject pointer past this
-// renderer's vptr; `this` when null stays null.)
+// Assert this renderer is active, then clear the shared active-renderer pointer.
 // ---------------------------------------------------------------------------------------------------
 template <typename V>
 void ImRenderer<V>::EndRendering()
@@ -330,17 +351,16 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
     return lpResult;
 }
 
-// Emit the five X360-attested ImRenderer<PositionOnlyVertex> member bodies (the Im3dZOnly path).
+// Emit the six X360-attested ImRenderer<PositionOnlyVertex> member bodies (the Im3dZOnly path).
 // We instantiate the members INDIVIDUALLY rather than `template struct ImRenderer<PositionOnlyVertex>`
-// because the rest of the template's API (BeginRendering / Render / RenderStart / RenderEnd) is the PC
-// 2D fold whose bodies live in CgsIm2d.cpp and is NOT attested by the X360 ARTIST for this TU -- a
-// whole-struct explicit instantiation would force fabricated bodies for them. (This is the wave-30
-// BasicColouredVertex lesson: instantiate only what this TU owns.)
+// so this TU emits only the individually recovered members. The default-program BeginRendering
+// above is a real ARTIST body omitted from the JSON export set; it does not use the PC 2D fold.
 template void ImRenderer<PositionOnlyVertex>::Construct(
     rw::IResourceAllocator*, const void* const*, const u32*, const void* const*, const u32*, s8);
 template s8 ImRenderer<PositionOnlyVertex>::AddProgram(
     rw::IResourceAllocator*, const void*, u32, const void*, u32);
 template bool ImRenderer<PositionOnlyVertex>::SetProgram(s8);
+template void ImRenderer<PositionOnlyVertex>::BeginRendering();
 template void ImRenderer<PositionOnlyVertex>::EndRendering();
 template void* ImRenderer<PositionOnlyVertex>::SetTransform(const void*);
 
