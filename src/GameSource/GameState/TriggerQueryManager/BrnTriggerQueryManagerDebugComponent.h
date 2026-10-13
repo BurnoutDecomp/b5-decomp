@@ -38,8 +38,8 @@ namespace BrnGameState
 
         // X360 0x82364E10. Draw every selected trigger region / roaming & spawn location / start
         // position into the 3D debug renderer, gated by the per-feature render flags. Declared here
-        // because the X360 ledger attests it on this class (it is the class's overridden vtable slot);
-        // its heavy VMX body is reconstructed in a follow-on wave.
+        // as the class's overridden vtable slot; the body is in
+        // BrnTriggerQueryManagerDebugComponent_RenderWorld.cpp.
         virtual void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender);
 
         // X360 attests a Destruct on this class (DWARF cpp:112); the X360 inlines it and it is not in

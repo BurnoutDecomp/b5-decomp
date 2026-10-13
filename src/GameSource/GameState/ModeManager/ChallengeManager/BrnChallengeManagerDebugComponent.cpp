@@ -6,14 +6,16 @@
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // BrnGameState::AchievementManagerBase::OnFreeburnChallengeComplete
 #include "SharedClasses/DataLists/ChallengeList.h"                                    // BrnResource::ChallengeList / ChallengeListEntry
 #include "SharedClasses/DataLists/ChallengeListEntry.h"                               // BrnResource::ChallengeListEntry::GetChallengeID
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CgsDev::Assert
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                           // streamed FastBitArray assertion
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. The freeburn challenge-manager debug menu. Three
-// functions are bodied here (the X360 ledger attests exactly these for this TU):
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. The freeburn challenge-manager debug menu. Four
+// functions are bodied here:
 //   * GetName              (0x823171E0) -- the menu label.
 //   * OnActivate           (0x8233EA18) -- registers the two "make all challenges N-player" toggles,
 //                                          the challenge-index selector (ranged 0..count-1), and the
 //                                          "Start Challenge" / "Complete all challenges" actions.
+//   * StartChallenge      (0x82817350, ICF-shared) -- sets only the component's pending byte.
 //   * CompleteAllChallenges(0x82335010) -- the "Complete all challenges" action body.
 //
 // The X360 issues the menu registrations through the (unnamed) CgsDev::DebugComponent registration
@@ -59,7 +61,15 @@ namespace BrnGameState
     void ChallengeManagerDebugComponent::CompleteAllChallenges(void* lpContext)
     {
         ChallengeManagerDebugComponent* lpDebugComponent = static_cast<ChallengeManagerDebugComponent*>(lpContext);
-        CGS_ASSERT(lpDebugComponent != nullptr, "lpDebugComponent");
+        if (lpDebugComponent == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpDebugComponent",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/ChallengeManager/BrnChallengeManagerDebugComponent.cpp",
+                148);
+            CgsDev::Assert::EndAssert();
+        }
 
         ChallengeManager* lpManager = lpDebugComponent->mpChallengeManager;
 
@@ -82,8 +92,25 @@ namespace BrnGameState
                 lpProgression->GetAchievementManager()->OnFreeburnChallengeComplete(luCompletedCount);
             }
 
-            // Mark this challenge index complete in the local completion bit store (the inlined
-            // FastBitArray<2000>::SetBit, max bits == KI_MAX_PROFILE_CHALLENGES).
+            // ARTIST inlines FastBitArray<2000>::SetBit here, including its non-gating range assert
+            // (the container's shared C++ SetBit body does not carry this caller-side check).
+            if (liIndex >= 2000)
+            {
+                // BeginAssert precedes the local stream construction in the X360 call sequence.
+                CgsDev::Assert::BeginAssert();
+
+                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lMessage(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lMessage << "Index " << liIndex << " is out of range (max bits: " << 2000 << ")\n";
+
+                CgsDev::Assert::FireAssert(
+                    lMessage.GetBuffer(),
+                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
+                    431);
+                CgsDev::Assert::EndAssert();
+            }
+
+            // The X360 continues into the bit store after FireAssert/EndAssert.
             lpManager->GetLocalChallengeCompletionData().SetBit(static_cast<u32>(liIndex));
         }
 

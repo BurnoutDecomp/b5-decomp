@@ -184,8 +184,15 @@ void ICEMoviePlaylist::InsertMovieBefore(s32 liDesiredZeroBasedIndex, const IceM
 // ----------------------------------------------------------------------------
 s32 ICEMoviePlaylist::GetMovieCount() const
 {
-    CGS_ASSERT(mMoviePoolIndicies.GetCount() != -1,
-               "Array used before Construct/Clear was called");
+    if (mMoviePoolIndicies.GetCount() == -1)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "Array used before Construct/Clear was called",
+            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
+            336);
+        CgsDev::Assert::EndAssert();
+    }
     return mMoviePoolIndicies.GetCount();
 }
 

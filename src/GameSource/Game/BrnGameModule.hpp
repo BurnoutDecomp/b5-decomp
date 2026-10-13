@@ -1302,6 +1302,15 @@ namespace BrnGame
         // mHardware.HasGameBeenRebootedDueToInvite(), HasGameBeenSoftRebooted reads
         // mHardware.mPad94.
         BrnHW::System360HW mHardware;    // @ +10097088 (0x9A11C0); mPad94 @ +10097236 (0x9A1254)
+
+        // Appended typed storage for two ARTIST Construct debug-menu bools. Their visible
+        // captions and guest addresses are attested; these local names are descriptive storage
+        // homes while original declaration names and direct consumers remain unresolved. Keeping
+        // them at the class tail preserves existing host member offsets; no guest offset access
+        // or UI effect is implied.
+        bool mbForceShutdown;   // X360 gm+0x9A0B9B, "Force shutdown"
+        bool mbTakeScreenShots; // X360 gm+0x9A12B4, "Take screen shots"
+
     };
 
     // operator++(EReleaseStage&, int) @ 0x823A8AD8 (X360 ARTIST), defined in BrnGameModule.cpp.

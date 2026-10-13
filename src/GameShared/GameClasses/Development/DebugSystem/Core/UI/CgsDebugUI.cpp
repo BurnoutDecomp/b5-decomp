@@ -39,12 +39,10 @@ namespace CgsDev
         ScriptInterface& DebugUI::GetScriptInterface() { return mScriptInterface; }
         CommandWindow&   DebugUI::GetCommandWindow()   { return mCommandWindow; }
 
-        // X360 CgsDebugUI.cpp:101 (bounded). Construct the three managers (each sizes its pools from
-        // the construct parameters), reset the window stack + cascade/visibility scalars, and clear the
-        // 2D renderer pointer (DebugManager::ConstructRenderer wires it via Set2DRenderer). The X360
-        // also lays out the palette/metrics defaults, builds the console / error-window / script /
-        // command sub-windows, and registers a built-in UI-visibility variable; those ride on the
-        // deferred heavy members and are the UI follow-on (none is needed for the perfmon HUD to draw).
+        // X360 0x8282FA50. Copy the default palette/metrics, seed the cascade position, construct the
+        // controller and managers, initialize the console/script/command members, then register the
+        // built-in Text Size variable. ScriptInterface::Construct and CommandWindow::Construct retain
+        // the typed effects of the X360's inlined alias/binding loops and tail stores.
         void DebugUI::Construct(const DebugManagerConstructParameters* lpParameters)
         {
             mPalette = Palette::DEFAULT;

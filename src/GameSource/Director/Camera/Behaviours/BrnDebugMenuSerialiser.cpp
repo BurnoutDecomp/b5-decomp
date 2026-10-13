@@ -46,7 +46,14 @@ void DebugMenuSerialiser::Process(const char* lpcName, T& lrValue)
     else if (meMode == E_MODE_REMOVE_FROM_MENU)
         mpDebugComponent->UnregisterVariable(&lrValue);
     else
-        CGS_ASSERT(false, "unhandled case");
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "unhandled case",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
+            283);
+        CgsDev::Assert::EndAssert();
+    }
 }
 
 template void DebugMenuSerialiser::Process<float>(const char* lpcName, float& lrValue);

@@ -18,7 +18,19 @@ from fxgs_common import Tree, extract, compile_and_run, report, body_or_empty
 SCORING_CPP = "src/GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp"
 SCORING_H = "src/GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
 BODIES = ["    void CrashModeScoring::ClearData()"]
-NUMERIC_CHECKS = 26
+BASE_CPP = "src/GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.cpp"
+BASE_BODIES = [
+    "    DebugComponent::DebugComponent()",
+    "    void        DebugComponent::Update()",
+    "    void        DebugComponent::RenderWorld(",
+    "    void        DebugComponent::RenderHUD(",
+    "    const char* DebugComponent::GetName() const",
+    "    const char* DebugComponent::GetPath() const",
+    "    bool        DebugComponent::IsSimple() const",
+    "    void        DebugComponent::OnActivate()",
+    "    void        DebugComponent::OnRegister()",
+]
+NUMERIC_CHECKS = 27
 
 
 def wiring(tree):
@@ -38,7 +50,12 @@ def numeric(tree):
     if missing:
         print("NUMERIC: cannot build -- production bodies absent: " + ", ".join(missing))
         return None
-    inc = "namespace BrnGameState {\n" + "\n".join(texts) + "\n}\n"
+    base, base_missing = extract(tree, BASE_CPP, BASE_BODIES)
+    if base_missing:
+        print("NUMERIC: cannot build -- debug base bodies absent: " + ", ".join(base_missing))
+        return None
+    inc = ("namespace CgsDev {\n" + "\n".join(base) + "\n}\n"
+           + "namespace BrnGameState {\n" + "\n".join(texts) + "\n}\n")
     return compile_and_run(Path(__file__).with_name("FxGsCrashScoring.cpp"), "crash_scoring_methods.inc",
                            inc, "FxGsCrashScoring", shadow={SCORING_H: tree.read(SCORING_H)})
 

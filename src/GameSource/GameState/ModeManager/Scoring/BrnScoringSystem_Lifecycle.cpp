@@ -85,17 +85,12 @@ ScoringSystem::ScoringSystem()
 // burnout-skillz tally (every record cleared, every parallel id slot freed to INVALID).
 void ScoringSystem::Construct(StuntModeScoring::AchievementManager* lpAchievementManager)
 {
-    // [!] FIX 2026-08-29 (event-finish round) -- THE INLINED CrashModeScoring::Construct WAS LOST.
-    // This line is not new console behaviour; it is behaviour this reconstruction had dropped.
-    // The X360 body folds CrashModeScoring::Construct in at 0x82338040..0x82338090 -- fifteen
-    // stores that attach the crash scorer's two FixedRingBuffers to their inline storage -- and
-    // only THEN does `bl CrashModeScoring::ClearData` at 0x82338094. The banner above already
-    // described this as "the crash scorer clears"; that reading kept the call and lost the span.
-    // Consequence, measured: mRecentlyHitPropSet.mpData stayed NULL, so the first prop contact in
-    // any mode crashed DealWithHitProp's Push at rva 0x2BA4AF (run scratch/flow_run/evtfin_meas1,
-    // 55.7 s into an offline Stunt Run). ClearData cannot cover for it -- RingBuffer::Clear only
-    // resets the position words. Full asm transcription + the two named omissions are at the
-    // Construct body in BrnCrashModeScoring.cpp.
+    // The X360 body folds CrashModeScoring::Construct in at 0x82338040..0x82338090: it wires the
+    // embedded debug component, attaches both FixedRingBuffers to inline storage, clears the
+    // recent-crash count, and clears the infinite-crash flag before calling ClearData at 0x82338094.
+    // The earlier source omitted the two component stores; all named stores are now represented in
+    // CrashModeScoring::Construct. The original ring attachment matters because RingBuffer::Clear
+    // only resets position words and does not initialize mpData or miMaxLength.
     mCrashModeScoring.Construct();
     mCrashModeScoring.ClearData();
     mStuntModeScoring.Construct(lpAchievementManager);
@@ -123,16 +118,15 @@ void ScoringSystem::Construct(StuntModeScoring::AchievementManager* lpAchievemen
     meCurrentMedalAchieved = E_CURRENT_MEDAL_TARGET_TIME_NONE;
 }
 
-// X360 0x8232A430. Allocate-time prepare: ready the stunt sub-scorer, then prepare each of the
-// eight per-car records against the network heap allocator. Always returns true on the X360.
+// X360 0x8232A430. Register the crash debug component, ready both stunt sub-scorers, then prepare
+// each of the eight per-car records against the network heap allocator. Always returns true.
 bool ScoringSystem::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc)
 {
+    mCrashModeScoring.mCrashScoreDebugComponent.Register(); // X360 0x8232A444: first Prepare operation
     mStuntModeScoring.Prepare();
     // [FX-GS 2026-09-23, crash-parity G10-D8] the online stunt scorer's Prepare -- 0x8232A460..0x8232A470
     // `lwz r11,0x2620(r31) ; addi r3,r31,0x2620 ; lwz r11,4(r11) ; bctrl` (slot 1 =
     // StuntModeScoringOnline::Prepare 0x82338B50), right after the offline scorer's (0x8232A45C).
-    // [X] still not made: the crash scorer's DebugComponent::Register (0x8232A444..0x8232A448,
-    // `addi r3,r31,0x20`) -- that sub-object is the opaque maCrashScoreDebugComponent on this build.
     mOnlineStuntModeScoring.Prepare();
 
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
