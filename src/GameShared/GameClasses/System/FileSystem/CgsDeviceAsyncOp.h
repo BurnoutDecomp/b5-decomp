@@ -2,6 +2,7 @@
 #define CGS_DEVICE_ASYNC_OP_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // CgsFileSystem::Handle, GetDeviceManager, DeviceManager async ops
 #include "eathread/eathread_semaphore.h"                                // EA::Thread::Semaphore
 
@@ -26,11 +27,30 @@ namespace CgsFileSystem
         // Block until the in-flight operation completes (asserts one is in flight), then clear it.
         void Wait();   // @ 0x828DE338
 
-        // Results of the last completed operation (trivial inline accessors; inlined at the X360
-        // call sites).
-        u64    GetLastOperationSize()   const { return muSize; }
-        Handle GetLastOperationHandle() const { return mHandle; }
-        s32    GetLastOperationResult() const { return miResult; }
+        // X360 0x828DE3E8. The completion semaphore has a posted permit when the operation is done.
+        bool IsDone()
+        {
+            CGS_ASSERT(mbOperating, "No operation\n");
+            return mSemaphore.GetCount() > 0;
+        }
+
+        // DecFIGS CgsDeviceAsyncOp.h declaration shape; the handle/result accessors assert that
+        // the caller waited for the current operation before reading the completion fields.
+        u64 GetLastOperationSize() { return muSize; }
+
+        // X360 0x826610A8 (raw bytes pinned in the DLC lane evidence packet).
+        Handle GetLastOperationHandle()
+        {
+            CGS_ASSERT(!mbOperating, "Last operation has not been waited before\n");
+            return mHandle;
+        }
+
+        // X360 0x82661160. The asm asserts before loading +0x18.
+        s32 GetLastOperationResult()
+        {
+            CGS_ASSERT(!mbOperating, "Last operation has not been waited before\n");
+            return miResult;
+        }
 
     private:
         // The device worker's completion continuation: record the op outcome and wake Wait().
