@@ -745,7 +745,7 @@ namespace BrnResource
             }
             // (LinearResourceAllocator::GetResourceDescriptor is the identity - a linear
             // allocator keeps its bookkeeping in its own object - so the carve == the capacity.)
-            s_aRWLinearAllocators[li].Initialize(lRes, lCapacity);
+            s_aRWLinearAllocators[li].AdoptMemory(lRes, lCapacity);
 
             mapGeneratedRWLinearAllocators[li]              = &s_aRWLinearAllocators[li];
             mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
@@ -796,7 +796,7 @@ namespace BrnResource
                                           << lrDef.mpcName << "\n";
                 continue;
             }
-            s_aRWGeneralAllocators[li].Initialize(lRes, lCapacity);
+            s_aRWGeneralAllocators[li].AdoptMemory(lRes, lCapacity);
 
             mapGeneratedRWGeneralAllocators[li]             = &s_aRWGeneralAllocators[li];
             mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
