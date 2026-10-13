@@ -276,7 +276,7 @@ namespace CgsMemory
         case MemoryIO::E_EVENT_TYPE_CREATE_RW_GENERAL_ALLOCATOR:
             ProcessCreateGeneralAllocatorRequest(static_cast<const MemoryIO::CreateGeneralAllocatorRequest*>(lpRequest), lpOutput);
             break;
-        case MemoryIO::E_EVENT_TYPE_CREATE_ALLOCATOR:            ProcessCreateAllocatorRequest(lpRequest, lpOutput);        break;
+        case MemoryIO::E_EVENT_TYPE_CREATE_ALLOCATOR:            ProcessCreateAllocatorRequestNativePC(lpRequest, lpOutput); break;
         case MemoryIO::E_EVENT_TYPE_DESTROY_ALLOCATOR:           ProcessDestroyAllocatorRequest(lpRequest, lpOutput);       break;
         case MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE:             ProcessCreateResourceRequestNativePC(lpRequest, lpOutput); break;
         default:                                                 CGS_ASSERT(false, "Unhandled memory request type");       break;
@@ -472,10 +472,107 @@ namespace CgsMemory
         lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
                                                      static_cast<s32>(sizeof(lResponse)));
     }
-    // @ 0x8286D9F0 - create a bank sized for the caller's allocator, then construct that (caller-supplied)
-    // heap or linear allocator over the new bank's memory. Does NOT touch the AllocatorList (the caller owns
-    // the allocator object). Field accessors + the round-up-to-parent-granule sizing are from the X360.
-    void MemoryModule::ProcessCreateAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    // ARTIST 0x8286D9F0. Unactivated original wrapper request. The bank owns
+    // backing storage; the request supplies the already existing heap/linear object.
+    void MemoryModule::ProcessCreateAllocatorRequest(
+        const MemoryIO::CreateAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    {
+        MemoryIO::CreateAllocatorResponse lResponse;
+        lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        const s32 liParentId = lpRequest->GetParentBankId();
+
+        MemoryIO::ResultCodes leResult;
+        if (liParentId < 0 || liParentId >= static_cast<s32>(muMaxBanks))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Bank Id or Parent bank Id is out of range\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", 764);
+            CgsDev::Assert::EndAssert();
+            leResult = MemoryIO::E_RESULT_BANK_OUT_OF_RANGE;
+        }
+        else if (GetBankIndexFromId(static_cast<u32>(liParentId)) == MemoryBank::KU_INVALID_BANK)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Parent bank does not exist\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", 770);
+            CgsDev::Assert::EndAssert();
+            leResult = MemoryIO::E_RESULT_BANK_ID_NOT_FOUND;
+        }
+        else
+        {
+            const s32 liType = lpRequest->GetResourceType();
+            const MemoryBank* const lpParent = GetBank(
+                GetBankIndexFromId(static_cast<u32>(lpRequest->GetParentBankId())));
+            const u32 luGranule = static_cast<u32>(lpParent->GetBlockSize(liType)) << 10;
+            MemoryBank::Params lParams = {};
+            const u32 luDividend = static_cast<u32>(lpRequest->GetSize()) - 1u;
+            // FLAG PC-platform leaf: preserve the PPC divide-guard predicates
+            // with native CPU debugger breaks, without new engine assertions/results.
+            if (luGranule == 0) // 8286DAE8: twi TO=6, unsigned <= 0
+                __debugbreak();
+            const s32 liQuotient = static_cast<s32>(luDividend) / static_cast<s32>(luGranule);
+            const u32 luRotatedDividend = (luDividend << 1) | (luDividend >> 31);
+            const u32 luRoundedSize = (static_cast<u32>(liQuotient) + 1u) * luGranule;
+            if ((luGranule & ~(luRotatedDividend - 1u)) == 0xFFFFFFFFu) // 8286DB10: TO=5
+                __debugbreak();
+            if (static_cast<s32>(luRoundedSize) >= 0x04000000)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Allocators larger than or equal to 64mb or not currently supported\n",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", 780);
+                CgsDev::Assert::EndAssert();
+            }
+
+            std::strncpy(lParams.macName, lpRequest->GetBankName(), MemoryBank::KI_NAME_SIZE);
+            const u32 luBankDividend = static_cast<u32>(lpRequest->GetSize()) - 1u;
+            const s32 liBankType = lpRequest->GetResourceType();
+            lParams.macName[MemoryBank::KI_NAME_SIZE - 1] = 0;
+            const s32 liBankQuotient = static_cast<s32>(luBankDividend) / static_cast<s32>(luGranule);
+            lParams.mauBankSize[liBankType] = (static_cast<u32>(liBankQuotient) + 1u) * luGranule;
+            lParams.mauBankBlocks[liBankType] = 1;
+            lParams.mnBankId = lpRequest->GetBankId();
+            lParams.mbIsLeaf = true;
+            const u32 luRotatedBankDividend = (luBankDividend << 1) | (luBankDividend >> 31);
+            const s32 liBankParentId = lpRequest->GetParentBankId();
+            if (luGranule == 0) // 8286DBC0: repeated guard after the second signed division
+                __debugbreak();
+            if ((luGranule & ~(luRotatedBankDividend - 1u)) == 0xFFFFFFFFu) // 8286DBC8: TO=5
+                __debugbreak();
+            lParams.mnParentBankId = liBankParentId;
+            leResult = static_cast<MemoryIO::ResultCodes>(CreateBank(&lParams));
+            if (leResult == MemoryIO::E_RESULT_OK)
+            {
+                const s32 liBackingType = lpRequest->GetResourceType();
+                MemoryBank* const lpBank = GetBank(
+                    GetBankIndexFromId(static_cast<u32>(lpRequest->GetBankId())));
+                void* const lpData = lpBank->GetData(liBackingType);
+                if (CgsMemory::HeapMalloc* const lpHeap = lpRequest->GetHeapAllocator())
+                    lpHeap->Construct(lpData, lpRequest->GetSize());
+                else if (CgsMemory::LinearMalloc* const lpLinear = lpRequest->GetLinearAllocator())
+                {
+                    // ARTIST inlines Construct here. Existing LinearMalloc provider
+                    // ownership writes are a separately tracked native boundary.
+                    lpLinear->Construct();
+                    lpLinear->Create(lpData, static_cast<size_t>(static_cast<u32>(lpRequest->GetSize())));
+                }
+                else
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Allocator is not set\n",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", 813);
+                    CgsDev::Assert::EndAssert();
+                    leResult = MemoryIO::E_RESULT_ALLOCATOR_NOT_SET;
+                }
+            }
+        }
+        lResponse.SetResult(leResult);
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
+                                                     static_cast<s32>(sizeof(lResponse)));
+    }
+
+    // FLAG PC-platform adapter: retain the active native wrapper/bank behavior
+    // until its original LinearMalloc provider and queued caller chain are reconciled.
+    void MemoryModule::ProcessCreateAllocatorRequestNativePC(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
     {
         const MemoryIO::CreateAllocatorRequest* lpReq = static_cast<const MemoryIO::CreateAllocatorRequest*>(lpRequest);
         MemoryIO::CreateAllocatorResponse lResponse;
