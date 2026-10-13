@@ -11,7 +11,7 @@
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 #include "vendor/renderware/collision/Frustum.hpp" // rw::collision::Frustum: six Plane lanes
 
-namespace CgsDev { struct Debug3DImmediateRender; }
+namespace CgsDev { struct Debug3DImmediateRender; struct Debug2DImmediateRender; }
 namespace CgsGeometric { struct PolygonSoup; }
 
 namespace CgsSceneManager
@@ -48,8 +48,11 @@ namespace CgsSceneManager
         // ARTIST 0x828CAE88: run the enabled collision-debug passes in original order.
         void RenderWorld(CgsDev::Debug3DImmediateRender* lpRenderer) override;
 
+        // ARTIST 0x828BF8C0: dispatch swept-sphere statistics to the live 2D renderer.
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer) override;
+
         // ARTIST 0x828AAF18: add one callback to the four-slot static registry.
-        bool RegisterDrawCollisionPolyCallback(
+        static bool RegisterDrawCollisionPolyCallback(
             DrawCollisionPolyCallbackData::DrawCollisionPolyCallback* lpfCallback,
             void* lpUserData);
 
