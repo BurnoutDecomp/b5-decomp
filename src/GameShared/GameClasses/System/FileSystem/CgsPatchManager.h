@@ -52,10 +52,10 @@ namespace CgsFileSystem
         // 0x1000 as the table length).
         static const u32 KU_PATCH_FILE_MAP_SIZE = 4096;
 
-        // @0x828F0980 (boot trace). Stash the resource allocator, zero the current-patch index, bring
-        // up the path-hash map (length 0x1000) over allocator-supplied entry storage, clear the
+        // @0x828F0980 (boot trace). Stash the resource allocator, zero the current-patch index, make
+        // separate allocator-backed key/value arrays for the 4096-slot split table, clear the
         // "patching" flag and publish the singleton instance pointer. `lpAllocator` is the object the
-        // X360 stores at +0 and whose virtual Alloc carves the map's entry array (and, later, the
+        // X360 stores at +0 and whose virtual DoAllocate carves both arrays (and, later, the
         // directory-search thread's scratch).
         void Construct(rw::IResourceAllocator* lpAllocator);
 
@@ -94,7 +94,7 @@ namespace CgsFileSystem
         rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    entry storage
         PatchEntry                           maPatches[KU_MAX_PATCHES];     // +4    (4)    32 * 68
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
-        CgsContainers::LinearHashTable<s32, s32> mPatchFileMap;             // +0x888 (2184)
+        CgsContainers::LinearHashTable<s32, s32> mPatchFileMap;             // +0x888 (2184), 16 bytes on X360
         bool                                 mbPatching;                    // +0x898 (2200)
         s32                                  miSearchHandleCount;           // +0x89C (2204) scan result
         EA::Thread::Thread                   mDirSearchThread;              // +0x8A0 (2208)
