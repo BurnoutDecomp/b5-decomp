@@ -17,6 +17,13 @@ if args.source_rev:
 else:
     sources = [common.REPO / provider]
     generated = None
+# IOStackLinearMalloc's live virtual Destruct now references the canonical RW
+# table. Link its actual owner and dependencies rather than a fixture alias.
+sources += [common.REPO / relative for relative in (
+    'vendor/renderware/src/rwcore_alloc.cpp',
+    'vendor/renderware/src/rw/BaseResourceDescriptor.cpp',
+    'vendor/coreallocator/source/icoreallocator_interface.cpp',
+    'vendor/PPMalloc/src/EAGeneralAllocator.cpp')]
 numeric = common.compile_and_run(Path(__file__).with_name('PCLinearMallocBorrowed.cpp'),
     'unused.inc', '', 'PCLinearMallocBorrowed', extra_sources=sources,
     extra_files=generated)
