@@ -230,9 +230,9 @@ namespace CgsGeometric
 //
 // The X360 body computes the six segment/box-face candidates with vrefp plus
 // three reciprocal refinements, checks each candidate against the segment and
-// the inclusive box slabs, then places the first two distinct valid boundary
-// points in its two Vector3 slots. Candidate order is max-X/Y/Z followed by
-// min-X/Y/Z; a segment wholly inside the box produces no points. This scalar
+// the other two inclusive box slabs, then places the first two valid face
+// candidates in its two Vector3 slots. Candidate order is max-X, min-X, max-Y,
+// min-Y, max-Z, min-Z; equal points on different faces remain separate. This scalar
 // lowering retains that order, comparison inclusivity, and fused point eval.
 // ============================================================================
 
@@ -308,8 +308,8 @@ namespace CgsGeometric
         Vector3 laCandidates[6];
         bool lbCandidateValid[6] = { false, false, false, false, false, false };
 
-        // The raw vector stream builds the three maximum-face candidates
-        // before the three minimum-face candidates. For a zero direction lane
+        // Selection follows the original alternating maximum/minimum faces.
+        // For a zero direction lane
         // the refined reciprocal becomes NaN and both segment comparisons fail.
         for (s32 liAxis = 0; liAxis < 3; ++liAxis)
         {
@@ -323,12 +323,17 @@ namespace CgsGeometric
                     continue;
                 }
 
-                const s32 liCandidate = (liSide == 0) ? liAxis : liAxis + 3;
+                const s32 liCandidate = liAxis * 2 + liSide;
                 const Vector3 lPoint = PointAt(lfParam);
-                const bool lbInside =
-                    (lPoint.x >= lBox.mMin.x) && !(lPoint.x > lBox.mMax.x)
-                 && (lPoint.y >= lBox.mMin.y) && !(lPoint.y > lBox.mMax.y)
-                 && (lPoint.z >= lBox.mMin.z) && !(lPoint.z > lBox.mMax.z);
+                const f32 lafPoint[3] = { lPoint.x, lPoint.y, lPoint.z };
+                bool lbInside = true;
+                for (s32 liOtherAxis = 0; liOtherAxis < 3; ++liOtherAxis)
+                {
+                    if (liOtherAxis != liAxis)
+                        lbInside = lbInside
+                            && (lafPoint[liOtherAxis] >= lafMin[liOtherAxis])
+                            && !(lafPoint[liOtherAxis] > lafMax[liOtherAxis]);
+                }
                 if (lbInside)
                 {
                     laCandidates[liCandidate] = lPoint;
@@ -349,25 +354,9 @@ namespace CgsGeometric
                 continue;
             }
 
-            const Vector3& lrCandidate = laCandidates[liCandidate];
-            bool lbDuplicate = false;
-            for (s32 liPrevious = 0; liPrevious < liStored; ++liPrevious)
-            {
-                const Vector3& lrPrevious = lpaDest[liPrevious];
-                if (lrCandidate.x == lrPrevious.x
-                    && lrCandidate.y == lrPrevious.y
-                    && lrCandidate.z == lrPrevious.z)
-                {
-                    lbDuplicate = true;
-                    break;
-                }
-            }
-            if (!lbDuplicate)
-            {
-                lpaDest[liStored] = lrCandidate;
-                lpaDestValid[liStored] = MakeMask(true);
-                ++liStored;
-            }
+            lpaDest[liStored] = laCandidates[liCandidate];
+            lpaDestValid[liStored] = MakeMask(true);
+            ++liStored;
         }
     }
 
@@ -431,7 +420,7 @@ namespace CgsGeometric
             laBoxVertices[static_cast<std::size_t>(liCorner)].mPosition = lrPosition;
             laBoxVertices[static_cast<std::size_t>(liCorner)].mPlaneOffset = MakeSplat(lfPlaneOffset);
             laBoxVertices[static_cast<std::size_t>(liCorner)].mPlaneOffsetFromTriangle =
-                MakeSplat(lfPlaneOffset - lTriangleData.mPlaneOffset.x);
+                MakeSplat(lTriangleData.mPlaneOffset.x - lfPlaneOffset);
         }
 
         // BoxVertexData stack slots from the X360 caller, in call order.

@@ -70,36 +70,9 @@ namespace
 
     void SinCosTriangleDebugAngle(f32 lfAngle, f32& rfSine, f32& rfCosine)
     {
-        // The coefficients are the original 0x82000BD0/0x82000C00 Taylor tables
-        // used by DrawPolySoupPoly's inline axis-angle transform.
-        static const u32 KAU_SIN_COEFFICIENT_BITS[12] =
-        {
-            0x3F800000u, 0xBE2AAAABu, 0x3C088889u, 0xB9500D01u,
-            0x3638EF1Du, 0xB2D7322Bu, 0x2F309231u, 0xAB573F9Fu,
-            0x274A963Cu, 0xA317A4DAu, 0x1EB8DC78u, 0x9A3B0DA1u
-        };
-        static const u32 KAU_COS_COEFFICIENT_BITS[12] =
-        {
-            0x3F800000u, 0xBF000000u, 0x3D2AAAABu, 0xBAB60B61u,
-            0x37D00D01u, 0xB493F27Eu, 0x310F76C8u, 0xAD49CBA5u,
-            0x29573F9Fu, 0xA53413C3u, 0x20F2A15Du, 0x9C8671CBu
-        };
-
-        const f32 lfAngleSquared = lfAngle * lfAngle;
-        f32 lfSinPolynomial = FloatFromTriangleDebugBits(KAU_SIN_COEFFICIENT_BITS[11]);
-        f32 lfCosPolynomial = FloatFromTriangleDebugBits(KAU_COS_COEFFICIENT_BITS[11]);
-        for (s32 liCoefficient = 10; liCoefficient >= 0; --liCoefficient)
-        {
-            lfSinPolynomial = std::fma(
-                lfSinPolynomial, lfAngleSquared,
-                FloatFromTriangleDebugBits(KAU_SIN_COEFFICIENT_BITS[liCoefficient]));
-            lfCosPolynomial = std::fma(
-                lfCosPolynomial, lfAngleSquared,
-                FloatFromTriangleDebugBits(KAU_COS_COEFFICIENT_BITS[liCoefficient]));
-        }
-
-        rfSine = lfAngle * lfSinPolynomial;
-        rfCosine = lfCosPolynomial;
+        // ARTIST 0x828B40B0/0x828B4404: range reduction, rounded powers,
+        // then the original ascending FMA chain from the shared XDK helper.
+        XboxMath::XMVectorSinCos(&rfSine, &rfCosine, lfAngle);
     }
 
     Vector3 RotateTriangleDebugNormal(const Vector3& lrNormal,
@@ -237,9 +210,7 @@ namespace CgsSceneManager
         miSphereTestResultCount = 0;
 
         mbTestLine = false;
-        mbNeedToInitLinePosition = true;
-        mLineStartPosition.SetZero();
-        mLineEndPosition.SetZero();
+        mbNeedToInitLinePosition = false;
 
         mbTestBox = false;
         mbNeedToInitBoxPos = true;
@@ -264,7 +235,6 @@ namespace CgsSceneManager
         miNumLevels = 1;
         miLastNumLevels = 0;
         miMemUse = 0;
-        miNumListsSearched = 0;
 
         const CgsDev::PerfMonCpuPage lePage = CgsDev::E_PMP_4;
         miSphereTestPerfMon = CgsDev::PerfMonCpu::AddMonitor(
@@ -306,6 +276,15 @@ namespace CgsSceneManager
             TestPolySoupSweptSphereCollision(lpRenderer, nullptr);
     }
 
+    // ARTIST 0x828BF8C0. The world pass supplies a null 2D renderer; this
+    // separate HUD route supplies the live renderer for swept-sphere text.
+    void TriangleCollisionDebugComponent::RenderHUD(
+        CgsDev::Debug2DImmediateRender* lpRenderer)
+    {
+        if (mbTestSweptSphere)
+            TestPolySoupSweptSphereCollision(nullptr, lpRenderer);
+    }
+
     // ARTIST 0x828C0E20. Extract the six inward clip planes from the renderer's
     // row-vector view-projection matrix. rw::collision::Frustum uses the native
     // RenderWare plane order: near, far, left, right, top, bottom.
@@ -337,9 +316,8 @@ namespace CgsSceneManager
         lColumn3.z = lViewProjection.zAxis.w;
         lColumn3.w = lViewProjection.wAxis.w;
 
-        // Clip-space inequalities are converted to dot(N, point) == D, the
-        // Plane convention consumed by rw::collision::Frustum. The stored D is
-        // therefore the negated homogeneous constant.
+        // ARTIST stores each extracted xyzw column combination unchanged,
+        // including its homogeneous W lane; it does not negate the offset.
         rw::math::vpu::Vector4 laClipPlanes[6];
         laClipPlanes[0] = lColumn2;
         laClipPlanes[1].x = lColumn3.x - lColumn2.x;
@@ -365,10 +343,7 @@ namespace CgsSceneManager
 
         for (u32 luPlane = 0; luPlane < 6; ++luPlane)
         {
-            const rw::math::vpu::Vector4& lrClipPlane = laClipPlanes[luPlane];
-            rw::math::vpu::Vector4 lPlane = lrClipPlane;
-            lPlane.w = -lrClipPlane.w;
-            mViewFrustum.SetPlane(luPlane, rw::collision::Plane(lPlane));
+            mViewFrustum.SetPlane(luPlane, rw::collision::Plane(laClipPlanes[luPlane]));
         }
     }
 
@@ -560,7 +535,7 @@ namespace CgsSceneManager
         static const u8 KAU_TRI_EDGE_END[3]    = { 1, 2, 0 };
         static const u32 KAU_QUAD_EDGE_COLOURS[4] =
         {
-            0xFFFFFFFFu, 0xFF000000u, 0xFFFF0000u, 0xFF00FF00u
+            0xFFFFFFFFu, 0xFF00FF00u, 0xFFFF0000u, 0xFF000000u
         };
         const s32 liNumEdges = lbIsQuad ? 4 : 3;
         for (s32 liEdge = 0; liEdge < liNumEdges; ++liEdge)
@@ -640,7 +615,8 @@ namespace CgsSceneManager
         const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap =
             mpTriCollisionManager->GetPolySoupListSpacialMap();
         const s32 liNumPolySoupLists = lpSpatialMap->GetNumPolySoupLists();
-        const f32 KF_SPHERECONTACTPADDING = 5.0f; // flt_820F2718
+        const f32 KF_EXTRACTIONRADIUS = 5.0f;    // flt_820F2718
+        const f32 KF_SPHERECONTACTPADDING = 1.0f; // 0x828BFB08..0x828BFB1C
         const f32 KF_TRIANGLEOFFSET = 0.02f;       // flt_82005574
         const VecFloat lvSphereContactPadding{
             KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING,
@@ -677,9 +653,13 @@ namespace CgsSceneManager
                 const CgsGeometric::PolygonSoup& lrPolySoup = *lpapPolySoups[liPolySoup];
 
                 CgsGeometric::Triangle4 laTriangle4s[1024];
+                // ARTIST temporarily writes 5.0 into sphere W for extraction,
+                // then restores the selected radius before the contact tests.
+                CgsGeometric::Sphere lExtractionSphere = lSphere;
+                lExtractionSphere.mPositionRadius.w = KF_EXTRACTIONRADIUS;
                 const s32 liNumTriangle4s =
                     CgsGeometric::ExtractTriangle4ListIntersectingSphere(
-                        lrPolySoup, lSphere, laTriangle4s, 0x400, nullptr);
+                        lrPolySoup, lExtractionSphere, laTriangle4s, 0x400, nullptr);
                 for (s32 liTriangle4 = 0; liTriangle4 < liNumTriangle4s; ++liTriangle4)
                 {
                     rw::math::vpu::Vector3 laContactNormals[4];
@@ -1232,9 +1212,9 @@ namespace CgsSceneManager
         miMemUse = static_cast<s32>(mMalloc.GetUsage());
     }
 
-    // ARTIST 0x828AAE08. For each of the six planes, count vertices whose camera-relative
-    // signed distance is strictly negative. The console returns false when that count is
-    // exactly three (its callers pass three- and four-vertex polygons); an empty input returns true.
+    // ARTIST 0x828AAE08 repeats the first stored plane six times; the plane
+    // address never advances. Preserve that original behavior and its exactly
+    // three-negative-vertices rejection, including for four-vertex polygons.
     bool TriangleCollisionDebugComponent::IsPolyVisible(
         const rw::math::vpu::Vector3* lapVertices,
         s32 liNumVertices,
@@ -1247,7 +1227,7 @@ namespace CgsSceneManager
         const rw::collision::Frustum& lrFrustum = mViewFrustum;
         for (u32 luPlane = 0; luPlane < 6; ++luPlane)
         {
-            const rw::collision::Plane& lrPlane = lrFrustum.GetPlane(luPlane);
+            const rw::collision::Plane& lrPlane = lrFrustum.GetPlane(0);
             const f32 lfNormalLength = std::sqrt(
                 lrPlane.x * lrPlane.x + lrPlane.y * lrPlane.y + lrPlane.z * lrPlane.z);
             const f32 lfInverseNormalLength = 1.0f / lfNormalLength;
