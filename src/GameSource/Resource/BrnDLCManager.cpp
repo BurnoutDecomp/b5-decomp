@@ -14,8 +14,8 @@
 //   BrnResource::DLCFeatureAvailability::GetPackMask           @ 0x82661628
 //   BrnResource::DLCFeatureAvailability::SetPackAvailabilityState @ 0x826616A0
 //
-// The full DLCManager / DLCDebugComponent bodies that share this translation unit
-// land when those TUs are reconstructed -- add them here then.
+// The manager constructor owns feature-state initialization. Package preparation
+// and monitor startup remain outside this constructor-only native adoption.
 
 // The shared debug-HUD text helper (a global function, bodied in CgsDebug2DImmediateRender.cpp).
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -23,6 +23,21 @@ int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText
 
 namespace BrnResource
 {
+    // ARTIST 0x826659E8: initialize the one shared table before the receiver queue
+    // and manager state. No package discovery or monitor startup occurs here.
+    void DLCManager::Construct()
+    {
+        g_DLCFeatureAvailability.Construct();
+        mMonitorReceiverQueue.Construct();
+
+        mePrepareStage = E_PREPARE_START;
+        meReleaseStage = E_RELEASE_START;
+        muPackageCount = 0;
+        miCurrentPackage = 0;
+        mbDLCMonitorThreadStarted = false;
+        muMonitorPackageCount = 0;
+    }
+
     // Never called -- pins the asm-attested member offsets of DLCFeatureAvailability.
     void DLCFeatureAvailability::_AssertLayout()
     {
@@ -335,7 +350,8 @@ namespace BrnResource
         muPackageCount = liNewCount;                 // stw r11, 0x620(r31)
 
         // miCurrentPackage < newCount -> another package remains to check (stage 3); else done (9).
-        meVersionCheckStage = (miCurrentPackage < liNewCount) ? 3 : 9;   // cmpw r10,r11 / li 3 / blt / li 9
+        mePrepareStage = (miCurrentPackage < liNewCount)
+            ? E_PREPARE_OPEN_VERSION : E_PREPARE_DONE;   // original stages 3 / 9
 
         return 0;   // r3 is leaked from the asm and unused; method is effectively void.
     }
