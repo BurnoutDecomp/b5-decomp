@@ -578,7 +578,7 @@ namespace
             lHeapCapacity.m_baseResourceDescriptors[luLane].m_size      = (luLane == 0) ? luHeapBytes : 0u;
             lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 128u : 1u;
         }
-        sWorldDispatchAllocator.Initialize(lHeapResource, lHeapCapacity);
+        sWorldDispatchAllocator.AdoptMemory(lHeapResource, lHeapCapacity);
         sbWorldDispatchAllocatorReady = true;
         return true;
     }
