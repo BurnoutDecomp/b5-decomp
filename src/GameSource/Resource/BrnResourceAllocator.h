@@ -55,6 +55,7 @@ class DefaultLinearAllocator : public rw::IResourceAllocator
 {
 public:
     void Construct(u32 luPreAllocatedSize);
+    void CheckRenderwareBudget();
     ~DefaultLinearAllocator() override;
 
 protected:
