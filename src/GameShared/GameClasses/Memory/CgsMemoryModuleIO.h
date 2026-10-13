@@ -267,16 +267,20 @@ namespace MemoryIO
         }
     };
 
-    // Reply to a CreateResourceRequest (DWARF :685): the created resource + its allocator.
+    // ARTIST 0x8286D11C queues 76 console bytes: MemoryResponse, five base
+    // pointers and ten descriptor words. DecFIGS h:608-609 attests only these fields.
     struct CreateResourceResponse : public MemoryResponse
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         {
             MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RESOURCE);
             for (s32 lt = 0; lt < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lt) mResource.m_baseResources[lt] = 0;   // null on failure paths
-            mpAllocator = 0;
         }
-        void SetAllocator(rw::LinearResourceAllocator* lpA) { mpAllocator = lpA; }
+        void GetResource(rw::Resource* lpResource, rw::ResourceDescriptor* lpDescriptor) const
+        { *lpResource = mResource; *lpDescriptor = mDescriptor; }
+        void SetResource(const rw::Resource* lpResource, const rw::ResourceDescriptor* lpDescriptor)
+        { mResource = *lpResource; mDescriptor = *lpDescriptor; }
+        // Existing native producer/pool accessors use the same canonical fields.
         void SetDescriptor(const rw::ResourceDescriptor* lpD) { mDescriptor = *lpD; }
         void SetResourceData(s32 liType, void* lpData)    { mResource.m_baseResources[liType] = lpData; }
         const rw::Resource&           GetResource() const   { return mResource; }
@@ -284,8 +288,10 @@ namespace MemoryIO
     private:
         rw::Resource                 mResource;
         rw::ResourceDescriptor       mDescriptor;
-        rw::LinearResourceAllocator* mpAllocator;
     };
+    static_assert(sizeof(CreateResourceResponse) == sizeof(MemoryResponse)
+        + sizeof(rw::Resource) + sizeof(rw::ResourceDescriptor),
+        "Raw resource response contains only its canonical resource and descriptor");
 
     // ARTIST 0x8286D53C copies a 20-byte response: the 16-byte console
     // MemoryResponse and one allocator pointer. DecFIGS h:641 names mpAllocator.
@@ -304,6 +310,7 @@ namespace MemoryIO
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RW_GENERAL_ALLOCATOR); }
+        void GetAllocator(rw::core::GeneralResourceAllocator** lppAllocator) const { *lppAllocator = mpAllocator; }
         void SetAllocator(rw::core::GeneralResourceAllocator* lpA) { mpAllocator = lpA; }
     private:
         rw::core::GeneralResourceAllocator* mpAllocator;
