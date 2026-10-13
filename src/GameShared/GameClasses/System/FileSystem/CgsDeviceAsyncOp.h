@@ -15,7 +15,7 @@ namespace CgsFileSystem
 {
     struct AsyncOp
     {
-        AsyncOp();   // @ 0x828DE2F8
+        AsyncOp();   // @ 0x828DE2F8; provider in mounted Devices/CgsDeviceAsyncOp.cpp
 
         // Issue an async operation; each asserts no prior op is still in flight, latches mbOperating,
         // and hands the op to the device manager with CompletionCallback / this as the continuation.
@@ -30,7 +30,9 @@ namespace CgsFileSystem
         // call sites).
         u64    GetLastOperationSize()   const { return muSize; }
         Handle GetLastOperationHandle() const { return mHandle; }
-        s32    GetLastOperationResult() const { return miResult; }
+        // ARTIST 0x82661160 and DWARF :93: non-const, with the outstanding-op
+        // assertion before loading the result. Defined by the same mounted provider.
+        s32    GetLastOperationResult();
 
     private:
         // The device worker's completion continuation: record the op outcome and wake Wait().

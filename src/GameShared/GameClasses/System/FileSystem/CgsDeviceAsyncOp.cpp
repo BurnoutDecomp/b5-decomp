@@ -1,10 +1,11 @@
 // Bodies for the one-shot async file operation, reconstructed from BURNOUT_X360_ARTIST.XEX:
-//   AsyncOp            @ 0x828DE2F8
 //   Open               @ 0x828F2300
 //   Read               @ 0x828F23D8
 //   Close              @ 0x828F24C0
 //   Wait               @ 0x828DE338
 //   CompletionCallback @ 0x828DE4A0
+// Constructor 0x828DE2F8 and result getter 0x82661160 are provided by the mounted
+// Devices/CgsDeviceAsyncOp.cpp over the same canonical complete declaration.
 //
 // Each issue routes through CgsFileSystem::GetDeviceManager() and registers CompletionCallback +
 // this as the continuation; the device worker thread runs the op and posts the semaphore that Wait()
@@ -16,14 +17,6 @@
 
 namespace CgsFileSystem
 {
-    // @ 0x828DE2F8. The semaphore starts at count 0 (Wait blocks until the first completion Post);
-    // no operation is in flight yet.
-    AsyncOp::AsyncOp()
-        : mSemaphore(0)
-        , mbOperating(false)
-    {
-    }
-
     // @ 0x828F2300.
     void AsyncOp::Open(const char* lpcFileName, u32 luFlags, s32 liPriority)
     {
