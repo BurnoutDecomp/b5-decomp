@@ -60,6 +60,22 @@ namespace Allocator
         static_assert(offsetof(GeneralAllocator, mpBinArray) <
                       offsetof(GeneralAllocator, mpTopChunk),
                       "regular bins precede the top chunk");
+
+        // DecFIGS BlockInfo declares native size_t fields; copying the console's u32
+        // size slots would move the callback's later members on x64.
+        static_assert(sizeof(BlockInfo::mnBlockSize) == sizeof(size_t),
+                      "BlockInfo.mnBlockSize is size_t");
+        static_assert(sizeof(BlockInfo::mnDataSize) == sizeof(size_t),
+                      "BlockInfo.mnDataSize is size_t");
+        static_assert(offsetof(BlockInfo, mpCore) < offsetof(BlockInfo, mpBlock) &&
+                      offsetof(BlockInfo, mpBlock) < offsetof(BlockInfo, mnBlockSize) &&
+                      offsetof(BlockInfo, mnBlockSize) < offsetof(BlockInfo, mpData) &&
+                      offsetof(BlockInfo, mpData) < offsetof(BlockInfo, mnDataSize) &&
+                      offsetof(BlockInfo, mnDataSize) < offsetof(BlockInfo, mBlockType) &&
+                      offsetof(BlockInfo, mBlockType) < offsetof(BlockInfo, mbMemoryMapped),
+                      "BlockInfo callback member order follows DecFIGS");
+        static_assert(sizeof(Snapshot) <= sizeof(SnapshotImage),
+                      "SnapshotImage holds a native dynamic report context");
     }
 
     // @ 0x82B4EDC8 / 0x82B4DC98 - default sinks (the real X360 versions route to the platform
@@ -200,8 +216,111 @@ namespace Allocator
             u32 mnSize;     // total block size incl this header (multiple of 16)
             u32 mbFree;     // 1 = free
             u32 mnMagic;    // KU_PC_MAGIC
-            u32 mnPad;
+            u32 mnPad;      // report-owned allocations use bit 4 as the internal marker
         };
+
+        static_assert(sizeof(PcBlock) == KU_PC_ALIGN, "PC block header matches the allocation engine");
+
+        enum
+        {
+            kReportAllocated = 2,
+            kReportFree = 4,
+            kReportCore = 8,
+            kReportInternal = 16,
+            kPcBlockInternal = 4,
+            kSnapshotMagic = 0x534E4150,
+            kSnapshotSpareRecords = 4
+        };
+
+        // FLAG PC-platform leaf: the approved PC engine uses PcBlock, not ARTIST's
+        // dlmalloc Chunk/fence/core lists. Read its actual boundary tags without
+        // changing allocation/free behavior or maintaining a second allocation list.
+        bool PcBlockIsValid(const PcBlock* pBlock, const char* pCoreEnd)
+        {
+            const char* const pBlockAddress = reinterpret_cast<const char*>(pBlock);
+            const size_t nRemaining = static_cast<size_t>(pCoreEnd - pBlockAddress);
+            return nRemaining >= sizeof(PcBlock) && pBlock->mnMagic == KU_PC_MAGIC &&
+                   pBlock->mnSize >= sizeof(PcBlock) &&
+                   (pBlock->mnSize & (KU_PC_ALIGN - 1)) == 0 &&
+                   pBlock->mnSize <= nRemaining;
+        }
+
+        bool PcBlockIsInternal(const PcBlock* pBlock)
+        {
+            return !pBlock->mbFree && (pBlock->mnPad & kPcBlockInternal) != 0;
+        }
+
+        bool PcBlockMatchesReport(const PcBlock* pBlock, int nBlockTypeFlags)
+        {
+            // ARTIST ChunkMatchesBlockType @82B4D9C0 suppresses internal chunks
+            // unless bit 16 is included; allocation/free selection still uses bits 2/4.
+            return (!PcBlockIsInternal(pBlock) || (nBlockTypeFlags & kReportInternal)) &&
+                   (nBlockTypeFlags & (pBlock->mbFree ? kReportFree : kReportAllocated));
+        }
+
+        void PcGetBlockInfo(const PcBlock* pBlock, GeneralAllocator::BlockInfo* pBlockInfo,
+                            const void* pCore)
+        {
+            pBlockInfo->mpCore = pCore;
+            pBlockInfo->mpBlock = pBlock;
+            pBlockInfo->mnBlockSize = pBlock->mnSize;
+            pBlockInfo->mpData = const_cast<char*>(reinterpret_cast<const char*>(pBlock)) + sizeof(PcBlock);
+            pBlockInfo->mnDataSize = pBlock->mnSize - sizeof(PcBlock);
+            pBlockInfo->mBlockType = static_cast<char>(pBlock->mbFree ? kReportFree :
+                (PcBlockIsInternal(pBlock) ? kReportInternal : kReportAllocated));
+            pBlockInfo->mbMemoryMapped = false;
+        }
+
+        bool PcCaptureReport(const GeneralAllocator::CoreBlock& coreBlock, int nBlockTypeFlags,
+                             GeneralAllocator::BlockInfo* pBlockInfo, size_t nCapacity,
+                             size_t& nBlockInfoCount)
+        {
+            nBlockInfoCount = 0;
+            if (!coreBlock.mpCore || !coreBlock.mnSize)
+                return true;
+
+            // Copied ARTIST snapshots emit the core record before its chunks.
+            // Dynamic ReportNext emits chunks only, even when bit 8 was requested.
+            if (nBlockTypeFlags & kReportCore)
+            {
+                if (pBlockInfo)
+                {
+                    if (!nCapacity)
+                        return false;
+                    pBlockInfo->mpCore = coreBlock.mpCore;
+                    pBlockInfo->mpBlock = coreBlock.mpCore;
+                    pBlockInfo->mnBlockSize = coreBlock.mnSize;
+                    pBlockInfo->mpData = 0;
+                    pBlockInfo->mnDataSize = 0;
+                    pBlockInfo->mBlockType = kReportCore;
+                    pBlockInfo->mbMemoryMapped = false;
+                }
+                ++nBlockInfoCount;
+            }
+
+            if (nBlockTypeFlags & (kReportAllocated | kReportFree))
+            {
+                const char* const pCoreEnd = coreBlock.mpCore + coreBlock.mnSize;
+                for (const char* pCursor = coreBlock.mpCore; pCursor < pCoreEnd; )
+                {
+                    const PcBlock* const pBlock = reinterpret_cast<const PcBlock*>(pCursor);
+                    if (!PcBlockIsValid(pBlock, pCoreEnd))
+                        return false;
+                    if (PcBlockMatchesReport(pBlock, nBlockTypeFlags))
+                    {
+                        if (pBlockInfo)
+                        {
+                            if (nBlockInfoCount >= nCapacity)
+                                return false;
+                            PcGetBlockInfo(pBlock, pBlockInfo + nBlockInfoCount, coreBlock.mpCore);
+                        }
+                        ++nBlockInfoCount;
+                    }
+                    pCursor += pBlock->mnSize;
+                }
+            }
+            return true;
+        }
 
         inline u32 PcRoundUp(u32 lu, u32 luAlign) { return (lu + luAlign - 1) & ~(luAlign - 1); }
 
@@ -367,6 +486,202 @@ namespace Allocator
             }
             lpCur = lpNext;
         }
+    }
+
+    // FLAG PC-platform leaf: the approved boundary-tag engine's Free is the
+    // internal free operation too; no second allocator or bookkeeping is introduced.
+    void GeneralAllocator::FreeInternal(void* pData)
+    {
+        Free(pData);
+    }
+
+    // @82B511B0 - lock while constructing a dynamic iterator or a two-pass copy.
+    // FLAG PC-platform leaf: enumerate actual PcBlock tags in the adopted PC core.
+    // ARTIST's 8-byte Chunk data header / free-list links / fenceposts do not exist
+    // in this engine. PcGetBlockInfo reports its real 16-byte header and capacity;
+    // all pointers and storage extents are native, never console byte offsets.
+    void* GeneralAllocator::TakeSnapshot(int nBlockTypeFlags, bool bMakeCopy,
+                                         void* pStorage, size_t nStorageSize)
+    {
+        PPMAutoMutex lock(mpMutex);
+        size_t nBlockInfoCapacity = 0;
+        if (bMakeCopy)
+        {
+            if (mnMaxFastBinChunkSize & 1)
+                ClearFastBins();
+            if (!PcCaptureReport(mHeadCoreBlock, nBlockTypeFlags, 0, 0, nBlockInfoCapacity))
+                return 0;
+            // The snapshot allocation itself can split a free block. ARTIST adds
+            // four records between its count and fill passes for that change.
+            if (nBlockInfoCapacity > (static_cast<size_t>(-1) - sizeof(Snapshot)) /
+                                     sizeof(BlockInfo) - kSnapshotSpareRecords)
+                return 0;
+            nBlockInfoCapacity += kSnapshotSpareRecords;
+        }
+
+        const size_t nSnapshotSize = sizeof(Snapshot) + nBlockInfoCapacity * sizeof(BlockInfo);
+        if (pStorage && nStorageSize < nSnapshotSize)
+            pStorage = 0;
+        // PcBlock's actual span is u32. Do not let its existing size conversion
+        // wrap a snapshot request that cannot be represented by the PC engine.
+        if (!pStorage && nSnapshotSize > static_cast<u32>(-1) - KU_PC_ALIGN * 2)
+            return 0;
+        Snapshot* const pSnapshot = static_cast<Snapshot*>(pStorage ? pStorage :
+            MallocInternal(nSnapshotSize, static_cast<int>(0x80000000u)));
+        if (!pSnapshot)
+            return 0;
+
+        if (!pStorage)
+        {
+            PcBlock* const pBlock = reinterpret_cast<PcBlock*>(
+                reinterpret_cast<char*>(pSnapshot) - sizeof(PcBlock));
+            pBlock->mnPad |= kPcBlockInternal;
+        }
+        memset(pSnapshot, 0, nSnapshotSize);
+        pSnapshot->mnMagicNumber = kSnapshotMagic;
+        pSnapshot->mnSizeOfThis = nSnapshotSize;
+        pSnapshot->mnBlockTypeFlags = nBlockTypeFlags;
+        pSnapshot->mbUserAllocated = pStorage != 0;
+        pSnapshot->mbDynamic = !bMakeCopy;
+
+        if (bMakeCopy)
+        {
+            pSnapshot->mnBlockInfoCount = nBlockInfoCapacity;
+            if (nBlockInfoCapacity != kSnapshotSpareRecords)
+            {
+                if (!PcCaptureReport(mHeadCoreBlock, nBlockTypeFlags, pSnapshot->mBlockInfo,
+                                     nBlockInfoCapacity, pSnapshot->mnBlockInfoCount))
+                {
+                    FreeSnapshot(pSnapshot);
+                    return 0;
+                }
+            }
+        }
+        else
+        {
+            // The approved PC engine owns one core directly in mHeadCoreBlock;
+            // its console circular lists and mmap list remain unused.
+            pSnapshot->mpCurrentCoreBlock = mHeadCoreBlock.mpCore ? &mHeadCoreBlock : 0;
+        }
+        return pSnapshot;
+    }
+
+    // FreeSnapshot / ReportBegin / ReportEnd are inlined in ARTIST ReportHeap
+    // @82B51848 and TraceAllocatedMemory @82B516F0. DecFIGS pins their API shape.
+    void GeneralAllocator::FreeSnapshot(void* pSnapshot)
+    {
+        Snapshot* const pSnapshotData = static_cast<Snapshot*>(pSnapshot);
+        if (pSnapshotData && pSnapshotData->mnMagicNumber == kSnapshotMagic &&
+            !pSnapshotData->mbUserAllocated)
+            FreeInternal(pSnapshotData);
+    }
+
+    const void* GeneralAllocator::ReportBegin(void* pSnapshot, int nBlockTypeFlags,
+                                             bool bMakeCopy, void* pStorage, size_t nStorageSize)
+    {
+        Snapshot* const pReport = static_cast<Snapshot*>(pSnapshot ? pSnapshot :
+            TakeSnapshot(nBlockTypeFlags, bMakeCopy, pStorage, nStorageSize));
+        if (pReport)
+            pReport->mbReport = pSnapshot == 0;
+        return pReport;
+    }
+
+    // @82B4F3A8 - reject invalid contexts, intersect masks for a live walk, and
+    // advance the copied-record index before returning a matching record.
+    // FLAG PC-platform leaf: the live cursor carries an opaque PcBlock address
+    // in mpCurrentChunk; it is converted back before any metadata is read.
+    const GeneralAllocator::BlockInfo* GeneralAllocator::ReportNext(const void* pContext,
+                                                                    int nBlockTypeFlags)
+    {
+        Snapshot* const pSnapshot = const_cast<Snapshot*>(static_cast<const Snapshot*>(pContext));
+        if (!pSnapshot || pSnapshot->mnMagicNumber != kSnapshotMagic)
+            return 0;
+
+        if (!pSnapshot->mbDynamic)
+        {
+            while (pSnapshot->mnBlockInfoIndex < pSnapshot->mnBlockInfoCount)
+            {
+                const BlockInfo* const pBlockInfo =
+                    pSnapshot->mBlockInfo + pSnapshot->mnBlockInfoIndex++;
+                if (pBlockInfo->mBlockType & nBlockTypeFlags)
+                    return pBlockInfo;
+            }
+            return 0;
+        }
+
+        CoreBlock* const pCoreBlock = pSnapshot->mpCurrentCoreBlock;
+        if (!pCoreBlock || !pCoreBlock->mpCore || !pCoreBlock->mnSize)
+            return 0;
+        const char* const pCoreEnd = pCoreBlock->mpCore + pCoreBlock->mnSize;
+        const char* pCursor = pCoreBlock->mpCore;
+        if (pSnapshot->mpCurrentChunk)
+        {
+            const PcBlock* const pPrevious = reinterpret_cast<const PcBlock*>(pSnapshot->mpCurrentChunk);
+            pCursor = reinterpret_cast<const char*>(pPrevious);
+            if (pCursor < pCoreBlock->mpCore || pCursor >= pCoreEnd ||
+                !PcBlockIsValid(pPrevious, pCoreEnd))
+            {
+                pSnapshot->mpCurrentCoreBlock = 0;
+                return 0;
+            }
+            pCursor += pPrevious->mnSize;
+        }
+
+        const int nEffectiveFlags = pSnapshot->mnBlockTypeFlags & nBlockTypeFlags;
+        while (pCursor < pCoreEnd)
+        {
+            const PcBlock* const pBlock = reinterpret_cast<const PcBlock*>(pCursor);
+            if (!PcBlockIsValid(pBlock, pCoreEnd))
+                break;
+            pSnapshot->mpCurrentChunk = reinterpret_cast<Chunk*>(const_cast<PcBlock*>(pBlock));
+            if (PcBlockMatchesReport(pBlock, nEffectiveFlags))
+            {
+                PcGetBlockInfo(pBlock, pSnapshot->mBlockInfo, pCoreBlock->mpCore);
+                return pSnapshot->mBlockInfo;
+            }
+            pCursor += pBlock->mnSize;
+        }
+        pSnapshot->mpCurrentCoreBlock = 0;
+        pSnapshot->mpCurrentChunk = 0;
+        return 0;
+    }
+
+    void GeneralAllocator::ReportEnd(const void* pContext)
+    {
+        Snapshot* const pSnapshot = const_cast<Snapshot*>(static_cast<const Snapshot*>(pContext));
+        if (pSnapshot && pSnapshot->mnMagicNumber == kSnapshotMagic)
+        {
+            if (pSnapshot->mbReport)
+                FreeSnapshot(pSnapshot);
+            else
+                pSnapshot->mnBlockInfoIndex = 0;
+        }
+    }
+
+    // @82B51848 - success for an empty valid report; false for a null callback,
+    // snapshot allocation failure, or a callback that stops the report. ARTIST
+    // advances ReportNext once even after a false callback, then ends the report.
+    bool GeneralAllocator::ReportHeap(bool (*pReportFunction)(const BlockInfo*, void*),
+                                      void* pContext, int nBlockTypeFlags, bool bMakeCopy,
+                                      void* pStorage, size_t nStorageSize)
+    {
+        if (!pReportFunction)
+            return false;
+        const void* const pReport = ReportBegin(0, nBlockTypeFlags, bMakeCopy, pStorage, nStorageSize);
+        if (!pReport)
+            return false;
+
+        bool bContinue = true;
+        const BlockInfo* pBlockInfo = ReportNext(pReport, nBlockTypeFlags);
+        while (pBlockInfo)
+        {
+            bContinue = pReportFunction(pBlockInfo, pContext);
+            pBlockInfo = ReportNext(pReport, nBlockTypeFlags);
+            if (!bContinue)
+                break;
+        }
+        ReportEnd(pReport);
+        return bContinue;
     }
 
     // True if pData is inside the adopted core block.
