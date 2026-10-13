@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"          // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"        // mResourceModule (the streaming engine)
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"      // typed GameData filesystem-status owner
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"                // mGameDataEventSlotPool
 #include "GameSource/Resource/BrnGameDataEventSlot.h"                        // GameDataEventSlot (pool element)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"           // GameDataIO::AllocatorList (mAllocatorList)
@@ -22,6 +23,7 @@
 
 namespace CgsMemory { struct MemoryMap; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
+namespace CgsModule { struct IOBufferStack; }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
                                            struct AcquireResourceResponse; } } // response params (by pointer)
@@ -41,15 +43,17 @@ namespace CgsModule { struct Event; }                                        // 
 // @a1+640, CgsAttribSys::AttribSysModule @a1+399000, 9x EA::Allocator::GeneralAllocator @a1+427416
 // (stride 1312), the DLCManager + per-type IndexedLinkLists + HUD/popup controllers, etc.
 //
-// DEFER STATUS: reconstructed so far -- the rw-INDEPENDENT lifecycle spine (Prepare's base ->
-// ResourceModule::Prepare core, 0x82673F38 stages 1-2) and, THIS BATCH, the world-request service
+// STATUS: reconstructed so far -- the rw-INDEPENDENT lifecycle spine (Prepare's base ->
+// ResourceModule::Prepare core, 0x82673F38 stages 1-2), the source-level DLC owner/Construct and
+// AddPatch stages 16-18 with its UpdateResourceModule output carve, and the world-request service
 // path: the Update request pump (0x82674670, the GameDataIO input drain -> ProcessGameDataEvent
 // routing), the request dispatchers (ProcessGameDataEvent 0x826744F0, ProcessLoadGameDataEvent
 // 0x82671EA0, ProcessGetGameDataEvent 0x82672268, GetGameDataEventSlot 0x826664A0) and the FOUR
 // world handlers (GetWorldUnit 0x826705D0, LoadPVS 0x8266F9C0, LoadSurfaceList 0x8266F718,
 // LoadPropInstances 0x8266F178). The rw-allocator-gated stages (CreateBanks/CreatePools/
-// CreateAllocators) are inert/bring-up stand-ins; the DLC / AttribSys / HUD / popup prepare
-// stages, Destruct and the non-world ProcessXxxRequest handlers are DEFERRED. The
+// CreateAllocators) are inert/bring-up stand-ins; DLC enumeration has a hard trap boundary, the
+// ResourceModule host status writer and four-argument GameData Prepare output tail remain partial,
+// and AttribSys / HUD / popup prepares, Destruct and non-world ProcessXxxRequest handlers are DEFERRED. The
 // ProcessInternal*Response completion routing (0x82672630 / 0x826736D8 / 0x8266E3F0 /
 // 0x8266E5D8 / 0x8266E858) + the world GET acquire builders (GetPVS 0x82670880,
 // GetSurfaceList 0x8266FBF8, GetPropInstances 0x8266FB68) are now REAL; the AttribSys
@@ -89,7 +93,10 @@ namespace BrnResource
             E_PREPARE_HUD_MESSAGES = 13,
             // Stage 14, PreparePopups -- the overlay popup table ("Popups.pup") the overlays
             // director resolves every overlay request against.
-            E_PREPARE_POPUPS       = 14
+            E_PREPARE_POPUPS       = 14,
+            E_PREPARE_DLC_MANAGER = 16,
+            E_PREPARE_DLC_ADD_PATCH_REQUEST = 17,
+            E_PREPARE_DLC_WAIT_PATCH_REPLY = 18
         };
 
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
@@ -101,7 +108,8 @@ namespace BrnResource
 
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
-        bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
+        bool Prepare(CgsModule::IOBufferStack* lpInputStack,
+                     CgsModule::IOBufferStack* lpOutputStack);      // 0x82673F38; local lane carries the two stack args
         bool Release();                               // deferred
         void Destruct();                              // deferred
 
@@ -117,6 +125,10 @@ namespace BrnResource
         bool CreateBanks(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DA28
         bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
         bool CreateAllocators(void* lpInputBuffer, void* lpOutputBuffer);  // 0x8266DD00
+        CgsResource::ResourceModule::EUpdateResult UpdateResourceModule(
+            CgsModule::IOBufferStack* lpInputStack,
+            CgsModule::IOBufferStack* lpOutputStack,
+            const CgsResource::ResourceIO::InputBuffer* lpResourceInput);    // 0x826663B0
 
         // ---- GameData request dispatch (X360 addresses on each body) --------------------
         // Route one queued GameData-level event by its queue type id (26 load / 39 unload /
@@ -544,6 +556,9 @@ namespace BrnResource
         BrnResource::PopupController   mPopupController;
         // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
         s32                            miPopupsPrepareStage;
+        // DecFIGS BrnGameDataModule.h:457; ARTIST UpdateResourceModule copies the
+        // ResourceIO output status byte into this owner at X360 +475952.
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatus;
         // X360 a1+475960 -- the runtime package manager and owner of the file-scope
         // DLCFeatureAvailability table. GameDataModule::Construct calls it before the
         // adjacent DLCDebugComponent; Prepare stage 16 passes it this module's AllocatorList.
