@@ -15,6 +15,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimer.h"               // CgsSystem::Timer (the game/sim pair, h:466-467)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"// CgsSystem::TimerStatusInterface (h:468)
 #include "GameSource/Game/BrnGlobalCpuMonitors.h"                        // BrnGame::BrnCpuMonitors
+#include "GameSource/Game/BrnAutoTestManager.h"                          // BrnGame::AutoTestManager (X360 member h:182)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h" // GameMainFlowController + flow states
 #include "SharedClasses/BrnSharedConstants.h"                            // BrnUpdateSet
 #include "GameSource/Game/X360/BrnSystemHWX360.h"                        // BrnHW::System360HW (embedded hardware, by value)
@@ -1033,6 +1034,7 @@ namespace BrnGame
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
         // ---- the 11 engine modules (real names/types/order; all derive from the module base) --
+        BrnGame::AutoTestManager mAutoTestManager;                        // DecFIGS h:182; Prepare @0x823DB848 uses game+0x648
         BrnRendererModule mRenderModule;                             // h:356
         WorldModule mWorldModule;                                    // h:357
         BrnResource::GameDataModule mGameDataModule;                 // h:358
