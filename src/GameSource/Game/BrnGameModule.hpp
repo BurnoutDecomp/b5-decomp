@@ -997,6 +997,12 @@ namespace BrnGame
         // X360 0x823A8B38 -- disk-error worker thread body: raise the system dirty-disc
         // error UI for dwUserIndex; never returns. Static (a thread proc; no `this`).
         static void DiskErrorThreadProc(unsigned long dwUserIndex);
+        // EAThread's host callback takes intptr_t(void*); this PC adapter preserves the
+        // original 32-bit user-index payload before entering the X360-shaped thread body.
+        static intptr_t DiskErrorThreadProcPC(void* lpUserIndex);
+        // X360 0x823BC798 -- read GameData's filesystem-status payload and start the dirty-disc
+        // thread once. The caller passes the same OutputBuffer produced by GameDataModule.
+        void CheckDiskError(const BrnResource::GameDataIO::OutputBuffer* lpOutputBuffer);
 
         // X360 0x823C0268 -- return the embedded hardware object (the launch/soft-reboot
         // data block). The X360 forms this + 0x9A11C0 == &mHardware.
@@ -1301,6 +1307,9 @@ namespace BrnGame
         // returns &mHardware, HasGameBeenRebootedDueToInvite forwards to
         // mHardware.HasGameBeenRebootedDueToInvite(), HasGameBeenSoftRebooted reads
         // mHardware.mPad94.
+        // DecFIGS BrnGameModule.h:532 / ARTIST CheckDiskError this+10097084. The console's
+        // error-thread object immediately precedes the hardware block at +10097088.
+        EA::Thread::Thread mErrorThread;
         BrnHW::System360HW mHardware;    // @ +10097088 (0x9A11C0); mPad94 @ +10097236 (0x9A1254)
 
         // Appended typed storage for two ARTIST Construct debug-menu bools. Their visible

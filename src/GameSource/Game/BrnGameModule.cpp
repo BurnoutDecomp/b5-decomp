@@ -92,6 +92,8 @@ namespace BrnGame
     //                    to a shared global when its other readers are reconstructed.
     static bool         _lbForceAssert = false;
     static volatile s32 sbSimUpdateComplete = 0;
+    // ARTIST byte_82FAE988: one-shot guard set after the dirty-disc Thread::Begin call.
+    static bool         s_bDiskErrorThreadStarted = false;
     bool                sbShowStreamStallMessage = false; // byte_82FAE28A
     // Mutable UI latch from ARTIST byte_82FAE28C. Its original symbol and startup writer are
     // unresolved; findinit finds only the BridgeGuiToGame read/clear sites.
@@ -3491,9 +3493,8 @@ namespace BrnGame
             // buffers is created on this build (see DoDispatch's banner), so the world frame
             // allocator stays the invented 512 KiB static in BrnGameMainFlowStates.cpp until
             // that pair is real. Tracked as boot-audit F-P2-4.
-            // [FLAG] CheckDiskError @0x823BC798 reads the GameData output's filesystem-status
-            // interface, a documented deferral in BrnGameDataModuleIO.h. The byte it would
-            // act on is the one published just below, so nothing is lost but the thread spawn.
+            // CheckDiskError @0x823BC798 reads the GameData output's filesystem-status
+            // interface after the resource update below; the PC system-UI leaf remains a no-op.
             // ⭐ THE RENDERER PAIR + THE ALLOCATOR LATCH, landed 2026-08-17 (boot audit
             // F-P2-4). @0x823F023C-2F4: create the RendererIO pair off the two update stacks,
             // run BrnRendererModule::Update through them, then read the reusable
@@ -3540,6 +3541,7 @@ namespace BrnGame
                 mbPrepareResourceRequestedPC = true;
             else
                 mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+            CheckDiskError(lpGameDataOutput);
         }
 
         return lbDone;
@@ -3672,9 +3674,8 @@ namespace BrnGame
     // this sub-step's requests are staged and their IO locks released). Same work, same
     // buffers, same order -- serialised instead of concurrent.
     //
-    // [deferred] CheckDiskError: the console's dirty-disc watch reads the GameData output's
-    // filesystem-status interface, which is not reconstructed (the output buffer's status
-    // member is a documented deferral in BrnGameDataModuleIO.h).
+    // The GameData output status reader is restored; the current PC platform leaf does not
+    // present the Xbox dirty-disc system UI.
     // ============================================================================================
     // FLAG PC-platform leaf: publish the offline junkyard response at the existing
     // GUI subscription boundary. The filter is ARTIST GetListOfPlayerSelectableVehicles
@@ -3796,8 +3797,12 @@ namespace BrnGame
                 if (lbPrepareRequest)
                 {
                     renderengine::FrameProfile::Scope lResourceProfile(renderengine::FrameProfile::UPDATE, renderengine::FrameProfile::UPDATE_RESOURCE);
-                    mGameDataModule.Update(BrnGameMainFlowController::GetScriptedLoadGameDataInput(),
-                                          BrnGameMainFlowController::GetScriptedLoadGameDataOutput());
+                    BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
+                        BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+                    BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+                        BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+                    mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+                    CheckDiskError(lpGameDataOutput);
                 }
                 return;
             }
@@ -3933,6 +3938,7 @@ namespace BrnGame
         // streamer had not caught up. The value is "the resource pump is still busy" --
         // Update returning 1 -- and it is republished every pass, not latched.
         mbStalled = mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+        CheckDiskError(lpGameDataOutput);
     }
 
     // @ BrnGameModule.cpp:1221 - the render/dispatch thread body. The threaded D3D
@@ -5872,12 +5878,49 @@ namespace BrnGame
             lpThis->mbStopStepping = true;
     }
 
-    // @ X360 0x823A8B38 - the disk-error worker thread body. Raises the system dirty-disc
-    // error UI for the given user and never returns (the console holds on the error UI).
-    // Tail-calls straight into the XDK entry point.
+    // @ X360 0x823A8B38 - the disk-error worker thread body. The console XDK call holds on the
+    // dirty-disc error UI; the PC implementation returns success without displaying a UI.
     void BrnGameModule::DiskErrorThreadProc(unsigned long dwUserIndex)
     {
         XShowDirtyDiscErrorUI(dwUserIndex);
+    }
+
+    // @ 0x823BC798 -- consume the filesystem-status byte published by GameDataModule. The
+    // ARTIST reader holds the GameData output read lock through the one-shot thread start.
+    void BrnGameModule::CheckDiskError(
+        const BrnResource::GameDataIO::OutputBuffer* lpOutputBuffer)
+    {
+        lpOutputBuffer->LockForRead();
+        if (lpOutputBuffer->GetFileSystemStatusInterface()->GetDiskErrorOccured())
+        {
+            const unsigned long luUserIndex = miInputModuleState != 0
+                ? static_cast<unsigned long>(miPlayer0ControllerPort) : 0UL;
+            if (!s_bDiskErrorThreadStarted)
+            {
+                EA::Thread::ThreadParameters lParameters;
+                lParameters.mnPriority = 0;
+                lParameters.mnProcessor = 2;
+                lParameters.mbSuspended = false;
+                lParameters.mpName = "DispatchThread";
+                void* const lpUserIndex = reinterpret_cast<void*>(static_cast<size_t>(luUserIndex));
+                mErrorThread.Begin(DiskErrorThreadProcPC, lpUserIndex, &lParameters,
+                    EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
+                // ARTIST sets byte_82FAE988 even if Begin does not report a usable thread id.
+                s_bDiskErrorThreadStarted = true;
+            }
+        }
+        lpOutputBuffer->UnlockForRead();
+    }
+
+    // FLAG PC-platform callback adapter: the original X360 callback consumes a DWORD user index,
+    // while host EAThread invokes intptr_t(void*). The PC XShowDirtyDiscErrorUI leaf returns
+    // success without displaying a system UI, so this adapter does not establish UI parity.
+    intptr_t BrnGameModule::DiskErrorThreadProcPC(void* lpUserIndex)
+    {
+        const unsigned long luUserIndex = static_cast<unsigned long>(
+            reinterpret_cast<size_t>(lpUserIndex));
+        DiskErrorThreadProc(luUserIndex);
+        return 0;
     }
 
     // @ X360 0x823C0268 - return the embedded hardware object (the launch/soft-reboot data
