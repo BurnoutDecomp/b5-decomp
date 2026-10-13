@@ -16,6 +16,31 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>   // CreateFileA / ReadFile / WriteFile / SetFilePointerEx / GetFileSizeEx / CloseHandle
+#include <string>
+
+namespace
+{
+    // ARTIST writes a 256-byte name followed by a 32-bit type at +0x100.
+    struct PCDirectoryEntry
+    {
+        char macName[256];
+        s32  miType;
+    };
+
+    void CopyDirectoryEntry(const WIN32_FIND_DATAA& lFindData, PCDirectoryEntry& lEntry)
+    {
+        u32 luNameLength = 0;
+        while (lFindData.cFileName[luNameLength])
+            ++luNameLength;
+        CGS_ASSERT(luNameLength < sizeof(lEntry.macName),
+                   "String is too long. Buffer size = 256\n");
+
+        for (u32 luIndex = 0; luIndex < luNameLength; ++luIndex)
+            lEntry.macName[luIndex] = lFindData.cFileName[luIndex];
+        lEntry.macName[luNameLength] = '\0';
+        lEntry.miType = ((lFindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) + 1;
+    }
+}
 
 namespace CgsFileSystem
 {
@@ -169,6 +194,81 @@ namespace CgsFileSystem
             return -2;
         }
         if (lpu64OutPosition) *lpu64OutPosition = static_cast<u64>(lNew.QuadPart);
+        return 0;
+    }
+
+    // FLAG PC-platform leaf: ARTIST's PhysicalX360Device uses the same Win32 find sequence,
+    // but stores its search HANDLE inside the console's shared handle-pool record and translates
+    // the console drive path. This host device follows its existing Open convention: it passes
+    // the caller's PC path through and returns the native find HANDLE as the opaque token. It does
+    // not translate XContent roots or discover DLC packages.
+    int DevicePhysicalPC::OpenDirectory(const char* lpcPath, void* lpEntryBuffer,
+                                        u32 luMaxEntries, u32* lpuOutCount,
+                                        Handle::DeviceHandle* lppOutHandle)
+    {
+        CGS_ASSERT(lpEntryBuffer && lpuOutCount && luMaxEntries >= 1,
+                   "Must supply a buffer for at least 1 entry\n");
+
+        std::string lacSearchPath(lpcPath);
+        lacSearchPath += "\\*.*";
+
+        PCDirectoryEntry* lpEntries = static_cast<PCDirectoryEntry*>(lpEntryBuffer);
+        s32 liCount = 0;
+        WIN32_FIND_DATAA lFindData;
+        HANDLE lhFind = FindFirstFileA(lacSearchPath.c_str(), &lFindData);
+        if (lhFind != INVALID_HANDLE_VALUE)
+        {
+            CopyDirectoryEntry(lFindData, lpEntries[0]);
+            liCount = 1;
+            while (liCount < static_cast<s32>(luMaxEntries) &&
+                   FindNextFileA(lhFind, &lFindData))
+            {
+                CopyDirectoryEntry(lFindData, lpEntries[liCount]);
+                ++liCount;
+            }
+        }
+
+        // ARTIST returns success and count zero when FindFirstFileA cannot open the search.
+        // Preserve the invalid token so ReadDirectory/CloseDirectory follow their native empty
+        // handle paths without turning an ordinary missing-directory probe into a disk error.
+        *lppOutHandle = lhFind;
+        *lpuOutCount = static_cast<u32>(liCount);
+        return 0;
+    }
+
+    int DevicePhysicalPC::CloseDirectory(Handle::DeviceHandle lpHandle)
+    {
+        HANDLE lhFind = static_cast<HANDLE>(lpHandle);
+        if (lhFind == INVALID_HANDLE_VALUE || FindClose(lhFind))
+            return 0;
+
+        // ARTIST reports only a real close failure through the registered CLOSE callback.
+        if (!CallErrorCallback(E_DEVICEERROR_CLOSE))
+            Sleep(static_cast<DWORD>(-1));
+        return -2;
+    }
+
+    int DevicePhysicalPC::ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer,
+                                        u32 luMaxEntries, u32* lpuOutCount)
+    {
+        CGS_ASSERT(lpEntryBuffer && luMaxEntries && lpuOutCount, "Invalid params\n");
+
+        PCDirectoryEntry* lpEntries = static_cast<PCDirectoryEntry*>(lpEntryBuffer);
+        HANDLE lhFind = static_cast<HANDLE>(lpHandle);
+        s32 liCount = 0;
+        if (lhFind != INVALID_HANDLE_VALUE && luMaxEntries > 0)
+        {
+            WIN32_FIND_DATAA lFindData;
+            while (liCount < static_cast<s32>(luMaxEntries) &&
+                   FindNextFileA(lhFind, &lFindData))
+            {
+                CopyDirectoryEntry(lFindData, lpEntries[liCount]);
+                ++liCount;
+            }
+        }
+
+        // ARTIST treats FindNextFileA failure, including end-of-directory, as a successful page.
+        *lpuOutCount = static_cast<u32>(liCount);
         return 0;
     }
 
