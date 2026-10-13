@@ -102,8 +102,11 @@ namespace CgsResource
                 static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
         }
 
-        void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
-                       rw::IResourceAllocator* lpDebugAllocator);  // 0x829055B0
+        // DecFIGS declares these in Construct/Prepare/Release/Destruct order.
+        // ARTIST 0x8266D944 dispatches this overload virtually; native calls use
+        // the canonical names rather than console vtable byte offsets.
+        virtual void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator);  // 0x829055B0
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
