@@ -1,6 +1,7 @@
 #pragma once
 
 #include <d3d9.h>
+#include "pc/gcm/renderengine/OcclusionQueryProviderPC.h"
 #include "pc/gcm/renderengine/GpuFrameTiming.h"
 #include "pc/gcm/renderengine/GeometryBindings.h"
 #include "pc/gcm/renderengine/ShaderBindings.h"
@@ -12,12 +13,7 @@
 // back before drawing; if rollback also fails, the main loop waits for recovery.
 namespace renderengine
 {
-    // The D3D9 query objects are invalidated/rebound with the device reset. The provider owns
-    // its IDirect3DQuery9 references in XenonD3D9Shims.cpp; queries are recreated lazily.
-    void OcclusionQueryProviderPCInvalidate(IDirect3DDevice9* lpDevice);
-    void OcclusionQueryProviderPCResume(IDirect3DDevice9* lpDevice);
-
-    template<class DeviceType> class BasicFlipSwapChainPC
+    template<class DeviceType, class LifecyclePolicy> class BasicFlipSwapChainPC
     {
         DeviceType* mpDevice = nullptr;
         D3DPRESENT_PARAMETERS mParameters = {};
@@ -63,23 +59,23 @@ namespace renderengine
             D3DPRESENT_PARAMETERS lDesired=mParameters;
             lDesired.BackBufferWidth=luWidth;lDesired.BackBufferHeight=luHeight;lDesired.PresentationInterval=luInterval;
             D3DPRESENT_PARAMETERS lRequest=lDesired; // ResetEx overwrites size/count fields.
-            OcclusionQueryProviderPCInvalidate(mpDevice);
+            LifecyclePolicy::Invalidate(mpDevice);
             const HRESULT lResult=mpDevice->ResetEx(&lRequest,nullptr);
             ++muGeneration;
             if(SUCCEEDED(lResult))
             {
                 mParameters=lDesired;mbLost=false;muFailedWidth=muFailedHeight=0;
-                OcclusionQueryProviderPCResume(mpDevice);
+                LifecyclePolicy::Resume(mpDevice);
                 return S_OK;
             }
             mbLost=true;
             lRequest=mParameters;
             // The fallback is a distinct ResetEx attempt; discard any state again before it.
-            OcclusionQueryProviderPCInvalidate(mpDevice);
+            LifecyclePolicy::Invalidate(mpDevice);
             if(SUCCEEDED(mpDevice->ResetEx(&lRequest,nullptr)))
             {
                 mbLost=false;muFailedWidth=luWidth;muFailedHeight=luHeight;
-                OcclusionQueryProviderPCResume(mpDevice);
+                LifecyclePolicy::Resume(mpDevice);
             }
             return lResult;
         }
@@ -93,5 +89,5 @@ namespace renderengine
             return lResult;
         }
     };
-    using FlipSwapChainPC=BasicFlipSwapChainPC<IDirect3DDevice9Ex>;
+    using FlipSwapChainPC=BasicFlipSwapChainPC<IDirect3DDevice9Ex, OcclusionQueryLifecyclePC>;
 }
