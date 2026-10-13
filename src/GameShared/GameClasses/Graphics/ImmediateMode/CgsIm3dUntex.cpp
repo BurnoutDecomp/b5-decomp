@@ -44,6 +44,16 @@ extern "C" void D3DDevice_EndVertices(void*);
 extern "C" u32 D3DDevice_InsertFence(void*);
 void* RenderEngineDeviceBeginShaderStates(void*, void**);
 
+// The D3D9 platform-4 program images generated from the exact PC immediate-mode
+// sources (tools/nushaders/Source/Executable/20.fx and 21.fx).
+namespace renderengine
+{
+    extern const u8  gauIm3dUntexVertexProgramPC[];
+    extern const u32 guIm3dUntexVertexProgramPCSize;
+    extern const u8  gauIm3dUntexPixelProgramPC[];
+    extern const u32 guIm3dUntexPixelProgramPCSize;
+}
+
 namespace CgsGraphics
 {
 namespace
@@ -129,6 +139,24 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
 
+    // Adopt the canonical D3D9 platform-4 images when supplied by the PC caller.
+    // They are compiled from the TUB Untex source pair, not the console Xenos blobs.
+    // A non-PC image still follows the original console route below.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
+
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
     // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
@@ -194,12 +222,11 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const u32* lauPixelProgramSize,
                               s8 li8NumberPrograms)
 {
-    // Build the shared render-state library exactly once (module-static guard byte_83010F95).
-    static bool sbStateLibraryConstructed = false;
-    if (!sbStateLibraryConstructed)
+    // Build the shared render-state library once using the shared ARTIST guard byte_83010F95.
+    if (!mgbStateLibraryConstructed)
     {
         ConstructOnceOnly(lpAllocator);
-        sbStateLibraryConstructed = true;
+        mgbStateLibraryConstructed = true;
     }
 
     // Build the untextured position+colour vertex descriptor (the X360 inlines BasicColouredVertex::
@@ -385,5 +412,51 @@ template void ImRenderer<BasicColouredVertex>::BeginRendering();
 template void ImRenderer<BasicColouredVertex>::EndRendering();
 template void ImRenderer<BasicColouredVertex>::Render(renderengine::PrimitiveType, const BasicColouredVertex*, u32);
 template void* ImRenderer<BasicColouredVertex>::SetTransform(const void*);
+
+// ARTIST Im3dUntex::Construct @ 0x827FCBD0. The X360 embeds one program pair
+// (0x820D42D8/316 B VS, 0x820D4418/160 B PS); the host uses the matching D3D9
+// platform-4 pair in Im3dProgramsPC.cpp, recovered from the exact TUB sources.
+//
+// The original body stores the identity transform, calls the typed base
+// constructor with one pair, asserts slot zero's vertex program, and resolves
+// "worldViewProj" into the first shader-state handle.
+void Im3dUntex::Construct(rw::IResourceAllocator* lpAllocator)
+{
+    static const f32 KAF_IDENTITY[16] =
+    {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
+    {
+        mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
+    }
+
+    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dUntexVertexProgramPC };
+    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dUntexPixelProgramPC };
+    const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dUntexVertexProgramPCSize };
+    const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dUntexPixelProgramPCSize };
+    const s8    KI8_PROGRAMS_BUILT        = 1;
+    ImRenderer<BasicColouredVertex>::Construct(
+        lpAllocator,
+        lapVertexProgramBinary, lauVertexProgramSize,
+        lapPixelProgramBinary,  lauPixelProgramSize,
+        KI8_PROGRAMS_BUILT);
+
+    renderengine::ProgramBufferData* const lpVertexProgram =
+        reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
+    CGS_ASSERT(lpVertexProgram != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    // The X360 assertion remains the contract. On the PC, an allocator/adoption
+    // failure must not turn into a null ProgramBuffer dereference when asserts are off.
+    if (lpVertexProgram == nullptr)
+    {
+        return;
+    }
+    renderengine::ProgramBuffer::GetVariableHandleByName(
+        lpVertexProgram, reinterpret_cast<const u8*>("worldViewProj"),
+        reinterpret_cast<renderengine::ProgramVariableHandle*>(&maShaderStateBlocks[0]));
+}
 
 } // namespace CgsGraphics
