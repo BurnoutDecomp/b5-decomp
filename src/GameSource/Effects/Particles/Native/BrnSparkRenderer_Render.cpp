@@ -736,11 +736,11 @@ void SparkVertexBufferBuilder::BuildDispatchData(EffectsVertexBufferLocked* lpLo
 //      The native stream's stride is used rather than re-homing a second descriptor global, and
 //      NativeParticleVertex::VertexIterator::Write -- which is what filled the buffer -- writes
 //      those same 24 bytes.
-//  (2) THE SAMPLER. The library sampler object is not built on this build (ConstructOnceOnly
-//      home is unmounted); LionParticleSampler_ApplyState installs exactly
-//      ConstructSamplerState(alloc, 1, 0, 2, 2) -- min/mag LINEAR, mip NONE, address U/V CLAMP --
-//      which is the same object the Lion particle pass binds for the same reason. Same words,
-//      different home. DELETE-WHEN ConstructOnceOnly lands.
+//  (2) THE SAMPLER. This PC path retains LionParticleSampler_ApplyState as a guarded unit-0
+//      fallback. It supplies the supported fields from ConstructSamplerState(alloc, 1, 0, 2, 2)
+//      -- min/mag LINEAR, mip NONE, address U/V CLAMP -- only when no TextureState block is current.
+//      The shared constructor body is recovered, but this pass still has no stateful sampler bind;
+//      keep the fallback until the original shared state is connected to this draw.
 // ===============================================================================================
 // The Xenos primitive type Dispatch passes to D3DDevice_DrawVertices (X360 `li r4, 6`).
 // 6 == TRIANGLESTRIP, which the PC shim MapPrimitive translates -- and which is why RenderBank
@@ -780,6 +780,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     ImDeviceSetBlendState(gpImAdditiveBlendState);            // dword_83010F24
     ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
     ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
+    // Guarded PC fallback; it leaves a current TextureState block intact.
     renderengine::LionParticleSampler_ApplyState(0);          // dword_83010F60 on unit 0
 
     mpRenderer->BeginRendering();

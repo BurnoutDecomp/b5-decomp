@@ -104,14 +104,14 @@ namespace Native
         //     dword_83010F20 = ConstructBlendState(6, 7, 0)   Standard     SRCALPHA / INVSRCALPHA, ADD
         //     dword_83010F24 = ConstructBlendState(6, 1, 0)   Additive     SRCALPHA / ONE,         ADD
         //     dword_83010F28 = ConstructBlendState(6, 7, 1)   Subtractive  SRCALPHA / INVSRCALPHA, op 1
-        // (0x827F1C34..0x827F1C80). FLAG PC-platform: that library is not built on this backend
-        // (ImRendererBase::ConstructOnceOnly is an empty PC leaf -- the same fact LionParticleRender's
-        // CreateInternalMaterial works around for dword_83010F20), so a template word reads null and
-        // the console's unconditional GetParameters would fault. Where the template is absent this
-        // writes what GetParameters would have read back out of it: ConstructBlendState's own block
+        // (0x827F1C34..0x827F1C80). FLAG PC-platform: the shared construction body is recovered in
+        // CgsImRenderer.cpp, but this caller still accepts a null template when no initialized
+        // library object is supplied; the console's unconditional GetParameters would fault. Where
+        // the template is absent this writes what GetParameters would have read back out of it:
+        // ConstructBlendState's own block
         // (CgsImRendererBlendState.cpp @0x827ED118 -- word 0 = src | op << 5 | dst << 8 | 0x07060000,
-        // custom factors ON, everything else the defaults above). DELETE-WHEN a caller fills the
-        // render-state library.
+        // custom factors ON, everything else the defaults above). Keep this null-template path
+        // until this caller's state-library construction and lifetime guarantee the pointer.
         void ReadTemplateParameters(const renderengine::BlendMaterialState* lpTemplate,
                                     u32 luSourceFactor, u32 luDestinationFactor, u32 luBlendOp,
                                     renderengine::BlendStateParameters& lrParameters)
@@ -239,6 +239,7 @@ namespace Native
         shadow::Device::ResetShadowing();
         ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
         ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
+        // Guarded PC fallback; a current TextureState block for unit 0 remains authoritative.
         renderengine::LionParticleSampler_ApplyState(0);          // dword_83010F60 on unit 0
 
         // THE Z-FADE ARM IS NOT DRAWN ON THIS BUILD -- FLAG PC-platform, stated rather than faked.
