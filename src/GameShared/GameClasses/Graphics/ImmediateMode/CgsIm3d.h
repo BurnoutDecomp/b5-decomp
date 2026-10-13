@@ -46,6 +46,9 @@ namespace CgsGraphics
     // shape; its descriptor and program state remain in ImRenderer<PositionOnlyVertex>.
     struct Im3dZOnly : public Im3dBase<PositionOnlyVertex>
     {
+        // ARTIST 0x827FCCB8: initialize the inherited transform, build the one
+        // position-only program pair, and resolve its worldViewProj handle.
+        void Construct(rw::IResourceAllocator* lpAllocator);
     };
 
     // CgsGraphics::Im3d - the concrete TEXTURED immediate-mode 3D renderer (the smoke / spark /
