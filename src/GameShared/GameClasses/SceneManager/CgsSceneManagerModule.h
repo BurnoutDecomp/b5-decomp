@@ -66,6 +66,7 @@ namespace CgsSceneManager
     namespace SceneManagerIO
     {
         struct TriCacheQueryBuffer;
+        struct InEventLineTest;
         struct InEventLineTestFine;
         struct InEventLineTestNearest;
         struct InEventLineTestFastDoubleSided;
@@ -185,7 +186,9 @@ namespace CgsSceneManager
         void ProcessCoarseSpatialPartitionQueries( const SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
                                                    SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
                                                    SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
-        void ProcessCoarseLineTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );   // @0x828C6D78 TRAP
+        void ProcessCoarseLineTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                    const SceneManagerIO::InEventLineTest& lrQuery,
+                                    SceneManagerIO::OutputBuffer* lpSceneOutputBuffer ); // @0x828C6D78
         // One coarse SPHERE query: broad-phase it, re-emit the hit indices as one
         // scene-output event.
         void ProcessCoarseSphereTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
