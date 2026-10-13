@@ -96,6 +96,8 @@ namespace renderengine
     void ApplySamplerStateBlockPC(IDirect3DDevice9* lpDevice, u32 luUnit,
                                   const void* lpSamplerBlock);
     bool HasSamplerStateBlockPC(IDirect3DDevice9* lpDevice, u32 luUnit);
+    void ReapplyCachedTextureDependentSamplerFiltersPC(IDirect3DDevice9* lpDevice,
+                                                        u32 luUnit);
     bool ReapplyCachedMaxMipRequestPC(IDirect3DDevice9* lpDevice, u32 luUnit);
     void RecordMaxMipRequestPC(IDirect3DDevice9* lpDevice, u32 luUnit, DWORD luRequest);
     void InvalidateSamplerStateSnapshotPC();
@@ -1668,6 +1670,18 @@ namespace renderengine
             return false;
         gXenonSamplerBlockSnapshotPC.SelectDevice(lpDevice);
         return gXenonSamplerBlockSnapshotPC.mabStateValid[luUnit];
+    }
+
+    void ReapplyCachedTextureDependentSamplerFiltersPC(IDirect3DDevice9* lpDevice,
+                                                        u32 luUnit)
+    {
+        if (lpDevice == nullptr || luUnit >= 16u)
+            return;
+        gXenonSamplerBlockSnapshotPC.SelectDevice(lpDevice);
+        if (!gXenonSamplerBlockSnapshotPC.mabStateValid[luUnit])
+            return;
+        ReapplyXenonTextureDependentFilterFieldsPC(
+            lpDevice, luUnit, gXenonSamplerBlockSnapshotPC.maBlocks[luUnit]);
     }
 
     bool ReapplyCachedMaxMipRequestPC(IDirect3DDevice9* lpDevice, u32 luUnit)
@@ -6719,11 +6733,19 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
         SUCCEEDED(lhr) && lpD3DTexture != nullptr &&
         renderengine::HasSamplerStateBlockPC(lpDevice, luSampler);
     if (SUCCEEDED(lhr) && lpD3DTexture != nullptr)
+    {
+        // SetState(TextureState*) applies the block before this bind to preserve
+        // ARTIST's call order. Re-realize only min/mag/max-anisotropy now that
+        // the incoming resource type is bound; replay the separate raw MaxMip
+        // request afterward so a later SetMaxMipLevel request keeps precedence.
+        if (lbHasSamplerState)
+            renderengine::ReapplyCachedTextureDependentSamplerFiltersPC(lpDevice, luSampler);
         renderengine::ReapplyCachedMaxMipRequestPC(lpDevice, luSampler);
+    }
 
     // Type-based sampler values remain a PC fallback for resource-only binds.
-    // A state-bearing ARTIST bind has had its cached MaxMip request reapplied;
-    // the other supported fields were applied when its state block was set.
+    // A state-bearing ARTIST bind keeps its block's unrelated supported fields;
+    // only type-dependent min/mag/aniso and the independent raw MaxMip are replayed.
     if (!lbHasSamplerState && luSampler < KU_RAW_DEPTH_MAX_SAMPLER_UNITS &&
         SUCCEEDED(lhr) && lpD3DTexture != nullptr &&
         lpD3DTexture->GetType() == D3DRTYPE_VOLUMETEXTURE)
