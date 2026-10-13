@@ -14,7 +14,8 @@
 //
 // X360 flow (asm @ 0x8236F070):
 //   v10[0..2] = position[0..2];  v10[3] = 0.0;          (build a Vector3, w=0)
-//   value = WorldMap2D::GetValue(mpStuntManager->mWorldMap2D @ +880, v10);
+//   vperm82CDA450 flattens x,z into the 2D sample lanes0/1.
+//   value = WorldMap2D::GetValue(mpStuntManager->mWorldMap2D @ +880, {x,z});
 //   result.meDistrict = 18 (E_DISTRICT_INVALID);
 //   result.meCounty   = WorldRegion::DistrictToCounty(18);
 //   if ( value != 255 )                                  (KU_INVALID_WORLD_MAP_VALUE)
@@ -26,9 +27,8 @@
 // byte-identical to WorldRegion::Construct(E_DISTRICT_INVALID) (it asserts
 // 18 < E_DISTRICT_COUNT == 19, then sets the same two members). Reconstructed via
 // Construct() so the private WorldRegion members are written BY NAME rather than
-// by raw store. The position is consumed as three floats with a zero w lane,
-// exactly as the X360 vector load does (the trailing vperm is the SIMD register
-// staging for the Vector3 GetValue overload).
+// by raw store. The original vperm selects the x/z plane before GetValue;
+// using the shared Vector3 overload here would instead sample x/height.
 // ============================================================================
 
 namespace BrnGameState
@@ -40,9 +40,10 @@ StuntManagerDebugComponent::GetTriggerWorldRegion(const BrnTrigger::GenericRegio
     // BoxRegion::GetPosition produces the x/y/z trigger centre with a zero w lane,
     // matching the three scalar loads + vector staging in ARTIST.
     const Vector3 lSamplePosition = lpGenericRegion->GetBoxRegion()->GetPosition();
+    const Vector2 lv2Sample = { lSamplePosition.x, lSamplePosition.z, 0.0f, 0.0f };
 
     const u8 luValue =
-        mpStuntManager->GetDistrictMap().GetValue(lSamplePosition);
+        mpStuntManager->GetDistrictMap().GetValue(lv2Sample);
 
     // Default the region to the invalid district (county derived from it) -- the
     // same two-member write the X360 emits unconditionally before the branch.

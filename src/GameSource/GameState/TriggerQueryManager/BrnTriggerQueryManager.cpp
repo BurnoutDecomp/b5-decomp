@@ -811,21 +811,15 @@ u16 TriggerQueryManager::GetActiveTrigger(u32 liIndex) const
 // ----------------------------------------------------------------------------
 void TriggerQueryManager::_AssertLayout()
 {
-    // These two members precede the embedded ResourcePtr<TriggerData> (mpTriggerData), so their
-    // X360 offsets are pointer-width-independent and hold on the 64-bit gate.
+    // The first member is the embedded TriggerQueryManagerDebugComponent, which contains host
+    // pointers and grows on x64. All absolute X360 offsets are therefore meaningful only on the
+    // 32-bit layout; production code accesses these members by name and needs no console padding.
+#if defined(_M_IX86) || (defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4)
     static_assert(offsetof(TriggerQueryManager, maActiveTriggers)              == 912,  "maActiveTriggers @ +912");
     static_assert(offsetof(TriggerQueryManager, mpTriggerData)                == 1568, "mpTriggerData @ +1568");
 
-    // Every member BELOW sits AFTER the by-value CgsResource::ResourcePtr<TriggerData>
-    // (mpTriggerData). That type holds 5 raw pointers + a ResourceHandle: 0x1C (28B) on the X360
-    // 32-bit ABI, but 0x38 (56B) under the 64-bit MSVC gate. The X360 absolute offsets below are
-    // therefore physically unreachable on the gate (they assume 4-byte pointers). Per the committed
-    // codebase convention for ResourcePtr-embedding structs (see BrnWorldGraphicsStreamer.h:
-    // "Absolute offsets/size are NOT static_asserted"), guard these X360-faithful offset guards to
-    // the 32-bit/X360-width build so they document the binary layout without breaking the 64-bit
-    // gate. The member ORDER, names, and the reserved-padding intent are unchanged from the verified
-    // reconstruction; only the unsatisfiable-on-x64 compile-time offset guards are made conditional.
-#if defined(_M_IX86) || (defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4)
+    // These later offsets also include the X360-width ResourcePtr<TriggerData> (28B versus 56B
+    // on the 64-bit gate); preserve the console layout pins only in the 32-bit build.
     static_assert(offsetof(TriggerQueryManager, mbTriggersUpdated)            == 1808, "mbTriggersUpdated @ +1808");
     static_assert(offsetof(TriggerQueryManager, mbPlayerInTrafficLightRegion) == 1809, "mbPlayerInTrafficLightRegion @ +1809");
     static_assert(offsetof(TriggerQueryManager, mPlayerCurrentTrafficLightId) == 1812, "mPlayerCurrentTrafficLightId @ +1812");

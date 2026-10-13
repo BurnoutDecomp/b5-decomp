@@ -394,7 +394,15 @@ namespace CgsDev
     // selected, fires DebugComponent::DebugUISectionCallback for it.
     void DebugManager::RegisterComponent(DebugComponent* lpComponent, const char* lpcPath, const char* lpcName)
     {
-        CGS_ASSERT(!IsComponentRegistered(lpComponent), "!IsComponentRegistered(lpDebugComponent)");
+        if (IsComponentRegistered(lpComponent))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "!IsComponentRegistered(lpDebugComponent)",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
+                809);
+            CgsDev::Assert::EndAssert();
+        }
 
         mComponentList.Add(lpComponent);
         lpComponent->mbActive = false;
@@ -416,8 +424,24 @@ namespace CgsDev
     // X360 0x8282E1E0. Register a "simple" component: a single bool row wired to its mbActive flag.
     void DebugManager::RegisterComponentSimple(DebugComponent* lpComponent, const char* lpcPath, const char* lpcName)
     {
-        CGS_ASSERT(!IsComponentRegistered(lpComponent), "!IsComponentRegistered(lpDebugComponent)");
-        CGS_ASSERT(lpcName, "lpcName");
+        if (IsComponentRegistered(lpComponent))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "!IsComponentRegistered(lpDebugComponent)",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
+                844);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpcName)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpcName",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
+                847);
+            CgsDev::Assert::EndAssert();
+        }
 
         // FLAG: ARTIST 0x8282E29C-0x8282E2A0 defaults a null path to "Debug/Components"
         // (off_82F31990), NOT "" -- a simple component registers under the Debug/Components menu

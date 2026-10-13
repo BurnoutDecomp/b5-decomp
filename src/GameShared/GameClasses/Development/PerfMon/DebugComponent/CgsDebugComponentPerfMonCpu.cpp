@@ -13,12 +13,10 @@
 // under its CPU budget, red over. The data comes from the PerfMonCpu registry (GetMonitorCount /
 // GetMonitorData / IsMonitorOverBudget). Drawn in the loading-screen Im2d pixel space (1280x720).
 //
-// BOUNDED: the graph mode, page navigation, the per-monitor text labels (the deferred font path), and
-// the reset/dump/tracing callbacks are the perfmon follow-on; the bar overlay needs none of them.
-// Construct is the faithful bring-up (PS3 DecFIGS @0xB21C44; the X360 body @0x8282CC98 is not in the
-// export set, but its caller/wrapper shape is identical): it initialises the full overlay state AND
-// brings up the PerfMonCpu registry itself (PerfMonCpu::Construct(count, GetAllocator())) - the
-// registry construction lives HERE on the console, not in DebugManager::Construct.
+// Construct and OnActivate are recovered from the X360 chain. The Construct export is missing, but
+// the raw body at 0x8282CC98 is reachable from DebugManager::Construct @0x828332C0 and calls
+// PerfMonCpu::Construct @0x82824B10 plus optional LogBufferEnable @0x82826C20. The graph, page,
+// reset/dump and tracing consumers remain separate methods in this component.
 
 namespace CgsDev
 {
@@ -67,9 +65,6 @@ namespace CgsDev
         maTraceModeList[1].mpcName = "XBPerf";
         maTraceModeList[2].miValue = 0;
         maTraceModeList[2].mpcName = nullptr;
-        mbLogBufferOverflow     = false;
-        mpau16LogBufferWritePtr = nullptr;
-
         PerfMonCpu::Construct(liMaxMonitors, GetAllocator());
 
         if (lpLogBuffer)
@@ -90,7 +85,15 @@ namespace CgsDev
         }
 
         const s32 liLogBufferSize = liSize - PerfMonCpu::GetMaxMonitorCount();
-        CGS_ASSERT(liLogBufferSize > 0, "liLogBufferSize > 0");
+        if (liLogBufferSize <= 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "liLogBufferSize > 0",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.cpp",
+                681);
+            CgsDev::Assert::EndAssert();
+        }
 
         mpLogBuffer             = lpBuffer;
         mpLogBufferEnd          = static_cast<u8*>(lpBuffer) + liLogBufferSize;

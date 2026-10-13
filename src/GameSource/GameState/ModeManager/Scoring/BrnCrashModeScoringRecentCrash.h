@@ -6,6 +6,7 @@
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"      // BrnTraffic::VehicleClass
 #include "GameShared/GameClasses/Containers/CgsArray.h"       // Array<RecentCrash,64> maRecentCrashes
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<u16,8> mRecentlyHitPropSet
+#include "GameSource/GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.h" // typed first sub-object; owner is forward-declared there
 
 // --- crash-mode event / interface parameter types (pointer-only in the decls below) ---
 // The three game events the handlers take; their home is GameSource/GameState/BrnGameEvents.h.
@@ -57,10 +58,6 @@ namespace BrnGameState
 // BrnCrashModeScoring.h. The overhead-sign bonus: DealWithHitOverheadSign adds it to the base
 // score and ProcessGameEvents' overhead-sign arm reports it in action 128.
 const s32 KI_SCORE_BONUS_PER_OVERHEAD_SIGN = 10000;
-
-// The crash-score debug overlay is embedded as CrashModeScoring's first member and reads its private
-// scoring state directly (BrnCrashModeScoring.h:215); declared here for the friend grant below.
-class CrashScoreDebugComponent;
 
 struct CrashModeScoring
 {
@@ -174,27 +171,26 @@ struct CrashModeScoring
                 const VehicleOutputInterface::PhysicalTrafficStateQueue* lpTrafficStateQueue,
                 f32 lfSimTimeStep);                                                 // X360 0x82320808
 
-    // === Full live-scoring member layout (BrnCrashModeScoring.cpp TU) ===
-    // The byte offsets below are PROVEN by the X360 asm of this TU's methods (the ClearData /
+    // === X360 live-scoring member map (BrnCrashModeScoring.cpp TU) ===
+    // The byte offsets below are proven for the console by the X360 asm of this TU's methods (the ClearData /
     // DealWith* / Update store offsets pin every named member; see the OFFSET->MEMBER MAP in
     // BrnCrashModeScoring.cpp). DWARF member ORDER (BrnCrashModeScoring.h:215-258) is authoritative
     // for naming; the X360 store offsets are authoritative for placement. This GROWS the prior
     // NOMINAL opaque reserve ADDITIVELY: every member is carved at its proven offset, the
-    // maRecentCrashes@+0x7C anchor (count word @+0x27C) is preserved, and the total footprint is the
+    // maRecentCrashes@+0x7C anchor (count word @+0x27C) is preserved, and the X360 footprint is the
     // asm-proven 0x32C (the prior 0x320 reserve was explicitly NOMINAL / not byte-verified; the
     // crash-mode-scorer's own TU asm reaches +0x328 as the last member, so the true size is 0x32C).
     //
-    // Three sub-objects are kept as opaque byte storage to keep this home leak-free / decoupled from
-    // the keystone's by-value embed (they are not touched by name by any of this TU's 13 methods):
-    //   - the embedded CrashScoreDebugComponent (0x20 bytes; its real type derives from
-    //     CgsDev::DebugComponent and is homed in BrnCrashScoreDebugComponent.h),
-    //   - the CgsID stunt-set ring (only Construct/Clear, not in this batch, touch it).
+    // The CgsID stunt-set ring remains opaque byte storage here (only Construct/Clear, not in this
+    // batch, touch it). The crash-score debug component is now its named type. Its X360 footprint is
+    // 0x20 bytes; native pointer width may grow this member and therefore later host offsets. Source
+    // accesses use named members, so no padding is added to force X360 offsets.
     // (The two Vector3 player-position members WERE in that opaque list; they are real Vector3s
     //  as of the showtime-score wave 2026-08-29, which bodies the Update half that reads them.
-    //  Same 16 bytes each, same offsets -- nothing is shifted; only the spelling changes, so the
-    //  distance math can be written with named members instead of a byte blob.)
+    //  Their X360 sizes and offsets are unchanged from that byte reserve; native offsets after the
+    //  typed first member may grow naturally, and the distance math uses these named members.)
 
-    u8  maCrashScoreDebugComponent[0x20];     // +0x00  CrashScoreDebugComponent (h:215; opaque sub-object)
+    CrashScoreDebugComponent mCrashScoreDebugComponent; // +0x00 (h:215; first embedded member)
     Vector3 mPlayerPosLastFrame;              // +0x20  h:219  (Update's `stvx128 v127, r0, this+0x20` tail)
     Vector3 mPlayerPosLastStored;             // +0x30  h:220  (the distance-direction anchor, re-stored every 20 m)
     f32 mfTimeSincePlayerCarMoved;            // +0x40  h:221

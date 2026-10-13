@@ -66,7 +66,15 @@ template void IceMovie::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFi
 // ----------------------------------------------------------------------------
 const char* ICEMoviePlaylist::DebugGetMovieName(s32 liMovie) const
 {
-    CGS_ASSERT(mMoviePoolIndicies[liMovie] <= KI_CAPACITY, "mMoviePoolIndicies[liMovie] <= 20");
+    if (mMoviePoolIndicies[liMovie] > KI_CAPACITY)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mMoviePoolIndicies[liMovie] <= 20",
+            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp",
+            289);
+        CgsDev::Assert::EndAssert();
+    }
     static const char laacMovieNames[KI_CAPACITY][10] = {
         "Movie1",  "Movie2",  "Movie3",  "Movie4",  "Movie5",  "Movie6",  "Movie7",
         "Movie8",  "Movie9",  "Movie10", "Movie11", "Movie12", "Movie13", "Movie14",
@@ -86,7 +94,15 @@ ICEMoviePlaylist::DebugMenuRemoveData ICEMoviePlaylist::GetRemoveData(s32 liMovi
 void ICEMoviePlaylist::SetDebugComponent(DebugComponent* lpDebugComponent)
 {
     mpDebugComponent = lpDebugComponent;
-    CGS_ASSERT(mpDebugComponent != NULL, "mpDebugComponent != NULL");
+    if (mpDebugComponent == NULL)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mpDebugComponent != NULL",
+            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h",
+            563);
+        CgsDev::Assert::EndAssert();
+    }
 }
 
 void ICEMoviePlaylist::SetDebugName(const char* lpcDebugName)
