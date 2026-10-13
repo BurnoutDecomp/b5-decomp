@@ -30,6 +30,46 @@
 #include <cstring>   // memset
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
+// The sampler-state implementation has no public header. Keep this declaration in the owning
+// renderengine namespace and match samplerstate.cpp's parameter type exactly for the linked ABI.
+namespace renderengine
+{
+    struct SamplerStateData;
+
+    struct SamplerStateParameters
+    {
+        u32 muAddressU;
+        u32 muAddressV;
+        u32 muAddressW;
+        u32 muBias;
+        u32 muMaxLevel;
+        u32 muMinLevel;
+        u32 muMaxAnisotropy;
+        u32 muMagFilter;
+        u32 muMinFilter;
+        u32 muMipFilter;
+        u32 muConvolution;
+        u32 muColor;
+        u32 muRemap;
+        u32 muDepthTextureFunction;
+        u32 muGamma;
+        u32 muState17;
+        u8  mbState15;
+        u8  mbState22;
+        u8  mbState16;
+        u8  mbState11Zero;
+        u8  mbState26;
+    };
+
+    class SamplerState
+    {
+    public:
+        static ResourceDescriptorEntry* GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor);
+        static SamplerStateData* Initialize(SamplerStateData** lppState,
+                                            const SamplerStateParameters* lpParams);
+    };
+}
+
 // The X360 D3D texture-bind intrinsic the low-level SetTexture path issues (binds a texture to a
 // sampler stage on the device). Platform API: declared here so the body links against the X360 /
 // platform D3D layer; no project header homes it.
@@ -264,6 +304,147 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
 }
 
 // ---------------------------------------------------------------------------------------------------
+// CgsGraphics::ImRendererBase::ConstructSamplerState  @ 0x827ED538
+// The four caller arguments are carried into the sampler block at offsets +0x0C, +0x10, +0x14 and
+// +0x00/+0x04 exactly as ARTIST stores them. The legacy member names in SamplerStateParameters are
+// not used here to infer meaning; the offsets and constants below follow the X360 stores.
+// ---------------------------------------------------------------------------------------------------
+const SamplerState* ImRendererBase::ConstructSamplerState(
+    rw::IResourceAllocator* lpAllocator, u32 luArg2, u32 luArg3, u32 luArg4, u32 luArg5)
+{
+    renderengine::SamplerStateParameters lParameters = {};
+
+    lParameters.muAddressU = luArg4;          // +0x00 = a4
+    lParameters.muAddressV = luArg5;          // +0x04 = a5
+    lParameters.muAddressW = 0;               // +0x08
+    lParameters.muBias = luArg2;              // +0x0C = a2
+    lParameters.muMaxLevel = luArg2;           // +0x10 = a2
+    lParameters.muMinLevel = luArg3;           // +0x14 = a3
+    lParameters.muMaxAnisotropy = 13;          // +0x18
+    lParameters.muMagFilter = 0;               // +0x1C
+    lParameters.muMinFilter = 0;               // +0x20
+    lParameters.muMipFilter = 0;               // +0x24
+    lParameters.muConvolution = 1;             // +0x28
+    lParameters.muColor = 0;                   // +0x2C
+    lParameters.muRemap = 0;                   // +0x30
+    lParameters.muDepthTextureFunction = 0;    // +0x34
+    lParameters.muGamma = 0;                   // +0x38
+    lParameters.muState17 = 0;                 // +0x3C
+    lParameters.mbState15 = 0;                 // +0x40
+    lParameters.mbState22 = 0;                 // +0x41
+    lParameters.mbState16 = 0;                 // +0x42
+    lParameters.mbState11Zero = 1;             // +0x43
+    lParameters.mbState26 = 1;                 // +0x44
+
+    renderengine::ResourceDescriptorEntry laDescriptor[5] = {};
+    renderengine::SamplerState::GetResourceDescriptor(laDescriptor);
+
+    renderengine::SamplerStateData* lapStateHandles[5] = {};
+    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
+    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, laDescriptor, 0);
+
+    return reinterpret_cast<const SamplerState*>(
+        renderengine::SamplerState::Initialize(lapStateHandles, &lParameters));
+}
+
+// ---------------------------------------------------------------------------------------------------
+// CgsGraphics::ImRendererBase::ConstructWhiteTexture  @ 0x827F1AE8
+// ---------------------------------------------------------------------------------------------------
+renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAllocator* lpAllocator)
+{
+    renderengine::Texture::Parameters lParameters;
+    lParameters.meType = renderengine::Texture::E_TYPE_2D; // +0x00 = 1
+    lParameters.muSysMem = 0;                              // +0x04
+    lParameters.muWidth = 4;                               // +0x08
+    lParameters.muHeight = 4;                              // +0x0C
+    lParameters.muDepth = 1;                               // +0x10
+    lParameters.muNumLevels = 1;                           // +0x14
+    // Preserve the raw X360 format word. The PC Texture API stores a D3D9 format here, and this
+    // backend has no attested conversion for 0x18280086.
+    lParameters.miFormat = 0x18280086;                     // +0x18
+    // +0x1C (muReserved1) is not written by ARTIST; leave this field untouched.
+
+    u32 lauDescriptor[20] = {};
+    renderengine::Texture::GetResourceDescriptor(lauDescriptor, &lParameters);
+
+    rw::Resource lTextureResource = {};
+    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
+    lpAllocatorIf->Create(&lTextureResource, lpAllocatorIf, lauDescriptor, 0);
+
+    renderengine::Texture* lpWhiteTexture =
+        renderengine::Texture::Initialize(&lTextureResource, &lParameters);
+
+    renderengine::Texture::Locked lLocked = {};
+    // The console call is Lock(texture, flags=2, level=0, face=0, out). The host API orders these
+    // as (level, face, flags, out) and returns void, so its lock-result assert cannot be represented.
+    renderengine::Texture::Lock(lpWhiteTexture, 0, 0, 0, &lLocked);
+    CGS_ASSERT(lLocked.mpPixelData != nullptr, "lLocked.pixelData");
+
+    u8* lpPixelRow = static_cast<u8*>(lLocked.mpPixelData);
+    const u32 luStrideBytes = lLocked.muStride & 0xFFFFFFFCu;
+    for (u32 luRow = 0; luRow < 4; ++luRow)
+    {
+        u32* lpPixels = reinterpret_cast<u32*>(lpPixelRow);
+        lpPixels[0] = 0xFFFFFFFFu;
+        lpPixels[1] = 0xFFFFFFFFu;
+        lpPixels[2] = 0xFFFFFFFFu;
+        lpPixels[3] = 0xFFFFFFFFu;
+        lpPixelRow += luStrideBytes;
+    }
+
+    renderengine::Texture::Unlock(lpWhiteTexture, &lLocked);
+    return lpWhiteTexture;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// CgsGraphics::ImRendererBase::ConstructOnceOnly  @ 0x827F1C20
+// ARTIST's callers own the shared one-time guard. This body deliberately rebuilds all state slots
+// when called and does not read or set mgbStateLibraryConstructed.
+// ---------------------------------------------------------------------------------------------------
+void ImRendererBase::ConstructOnceOnly(rw::IResourceAllocator* lpAllocator)
+{
+    // ConstructBlendState's recovered implementation uses `this` as the allocator. The console
+    // passes the allocator in r3 to this helper and forwards that same pointer in r3 to each blend
+    // builder, so preserve that existing helper contract through its class-typed receiver.
+    ImRendererBase* lpAllocatorView = reinterpret_cast<ImRendererBase*>(lpAllocator);
+    mgStateLibrary.mpBlendState_Standard = lpAllocatorView->ConstructBlendState(6, 7, 0);
+    mgStateLibrary.mpBlendState_Additive = lpAllocatorView->ConstructBlendState(6, 1, 0);
+    mgStateLibrary.mpBlendState_Subtractive = lpAllocatorView->ConstructBlendState(6, 7, 1);
+    mgStateLibrary.mpBlendState_SubtractiveColour = lpAllocatorView->ConstructBlendState(6, 1, 4);
+    mgStateLibrary.mpBlendState_Premultiplied = lpAllocatorView->ConstructBlendState(1, 7, 0);
+    mgStateLibrary.mpBlendState_NoAlphaTest = ConstructNoAlphaTestBlendState(lpAllocator);
+    mgStateLibrary.mpBlendState_NoBlendNoAlphaTest = ConstructNoBlendNoAlphaTestBlendState(lpAllocator);
+
+    mgStateLibrary.mpRasterizerState_CullNone = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(0));
+    mgStateLibrary.mpRasterizerState_CullCCW = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(2));
+    mgStateLibrary.mpRasterizerState_CullCW = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(1));
+
+    mgStateLibrary.mpDepthStencilState_ZBufferOn = ConstructDepthStencilState(
+        lpAllocator, true, true, static_cast<renderengine::DepthStencilState::Function>(3));
+    mgStateLibrary.mpDepthStencilState_ZBufferOnWriteOff = ConstructDepthStencilState(
+        lpAllocator, true, false, static_cast<renderengine::DepthStencilState::Function>(3));
+    mgStateLibrary.mpDepthStencilState_ZBufferGreaterEqWriteOff = ConstructDepthStencilState(
+        lpAllocator, true, false, static_cast<renderengine::DepthStencilState::Function>(6));
+    mgStateLibrary.mpDepthStencilState_ZBufferOff = ConstructDepthStencilState(
+        lpAllocator, false, false, static_cast<renderengine::DepthStencilState::Function>(3));
+
+    mgStateLibrary.mpTexture_White = ConstructWhiteTexture(lpAllocator);
+    mgStateLibrary.mpTextureState_Untextured = ConstructDefaultTextureState(
+        lpAllocator, mgStateLibrary.mpTexture_White);
+    mgStateLibrary.mpSamplerState_Linear_MipNearest_ClampUV = ConstructSamplerState(
+        lpAllocator, 1, 0, 2, 2);
+    mgStateLibrary.mpSamplerState_Linear_MipNearest_TileUV = ConstructSamplerState(
+        lpAllocator, 1, 0, 0, 0);
+    mgStateLibrary.mpSamplerState_Nearest_MipNearest_ClampUV = ConstructSamplerState(
+        lpAllocator, 0, 0, 2, 2);
+    mgStateLibrary.mpSamplerState_Nearest_MipNearest_TileUV = ConstructSamplerState(
+        lpAllocator, 0, 0, 0, 0);
+}
+
+// ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::SetStateLowLevel   (X360 ImRendererBase::SetState @ 0x82276D08)
 //
 // WHAT 0x82276D08 ACTUALLY IS: the mgpActiveRenderer assert (`lwz r11, dword_83010F9C@l(r11)`
@@ -383,6 +564,8 @@ void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
 
 // ---- module statics (X360 .data home of this TU) --------------------------------------------------
 ImRendererBase*       ImRendererBase::mgpActiveRenderer        = nullptr;  // dword_83010F9C
+ImRendererBase::StateLibrary ImRendererBase::mgStateLibrary = {};
+bool ImRendererBase::mgbStateLibraryConstructed = false;
 // mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled were second host
 // homes for dword_83010964 / dword_830109E8 / dword_83010968 / byte_83010907, all of which
 // shadow::Device already owns -- see CgsImRenderer.h for the address evidence. Deleted with their
