@@ -1,8 +1,11 @@
 #pragma once
 
+#include <cstddef>                                                   // offsetof (ARTIST record-layout pins)
 #include "BrnCommonTypes.h"                                          // Matrix44, Vector4
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<>, Event
+#include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"   // CgsGeometric::Frustum
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"     // CgsSceneManager::SceneQueryId
+#include "GameShared/GameClasses/SceneManager/CgsVolumeStore.h"       // CgsSceneManager::VolumeSlot
 
 // ===========================================================================
 // CgsSceneManager::SceneManagerIO::InCoarseQueryQueue<N> and its coarse-query
@@ -85,6 +88,35 @@ namespace SceneManagerIO
         u32             muPad;               // +0x1C  never written by the emitter
     };
     static_assert(sizeof(InEventSphereTest) == 32, "InEventSphereTest byte image must match X360 AddEvent liSize (0x20)");
+
+    // The plain frustum query (E_IN_EVENT_FRUSTUM_TEST). DecFIGS declares the query id,
+    // entity-type mask, and Frustum in that order; ARTIST 0x828C6918 passes the frustum
+    // address from event+0x10. The aligned Frustum type supplies that padding naturally.
+    struct alignas(16) InEventFrustumTest : public CgsModule::Event
+    {
+        SceneQueryId             mQueryId;            // +0x00
+        EntityTypeFlags          mx32EntityTypeFlags; // +0x04
+        CgsGeometric::Frustum    mFrustum;            // +0x10 (128-byte swizzled planes)
+    };
+    static_assert(offsetof(InEventFrustumTest, mFrustum) == 0x10,
+                  "ARTIST 0x828C6918 passes the embedded frustum at event+0x10");
+    static_assert(sizeof(InEventFrustumTest) == 0x90, "plain frustum event has the DecFIGS fields and 16-byte alignment");
+
+    // The coarse volume query (E_IN_EVENT_VOLUME_TEST). DecFIGS declares an inline
+    // VolumeSlot image followed by Matrix44Affine; ARTIST 0x828C62C0 passes their addresses
+    // at event+0x10 and event+0x90 respectively.
+    struct alignas(16) InEventVolumeTest : public CgsModule::Event
+    {
+        SceneQueryId                 mQueryId;            // +0x00
+        s32                           mx32EntityTypeFlags; // +0x04 (DWARF int32_t)
+        CgsSceneManager::VolumeSlot   mVolumeBuffer;       // +0x10 (128-byte serialized volume)
+        Matrix44Affine                mTransform;          // +0x90
+    };
+    static_assert(offsetof(InEventVolumeTest, mVolumeBuffer) == 0x10,
+                  "ARTIST 0x828C62C0 passes the embedded volume at event+0x10");
+    static_assert(offsetof(InEventVolumeTest, mTransform) == 0x90,
+                  "ARTIST 0x828C62C0 passes the transform at event+0x90");
+    static_assert(sizeof(InEventVolumeTest) == 0xD0, "coarse volume event is VolumeSlot plus Matrix44Affine");
 
     // Coarse-query input queue. Adds the typed enqueue helpers over the variable
     // event queue base; carries no extra data members (DWARF

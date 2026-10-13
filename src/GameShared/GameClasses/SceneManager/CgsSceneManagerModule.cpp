@@ -2960,10 +2960,15 @@ namespace CgsSceneManager
                 ProcessCoarseSphereTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
                 break;
             case 2:
-                ProcessCoarseVolumeTest(lpEvent, lpSpatialPartitionOutputBuffer, lpSceneOutputBuffer);
+                ProcessCoarseVolumeTest(
+                    *static_cast<const SceneManagerIO::InEventVolumeTest*>(lpEvent),
+                    lpSpatialPartitionOutputBuffer, lpSceneOutputBuffer);
                 break;
             case 3:
-                ProcessCoarseFrustumTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
+                ProcessCoarseFrustumTest(
+                    lpSpatialPartitionOutputBuffer,
+                    *static_cast<const SceneManagerIO::InEventFrustumTest*>(lpEvent),
+                    lpSceneOutputBuffer);
                 break;
             case 4:
                 ProcessCoarseFrustumTestVp(lpSpatialPartitionOutputBuffer, lpEvent,
@@ -3753,17 +3758,62 @@ namespace CgsSceneManager
     }
 
     // =========================================================================================
-    // The remaining coarse Volume and Frustum consumers still have explicit traps. This build
-    // has no mounted producer for those records; retain the trap until each body is recovered
-    // from its own ARTIST evidence.
+    // ProcessCoarseVolumeTest @0x828C62C0.
     // =========================================================================================
-    void SceneManagerModule::ProcessCoarseVolumeTest(const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer*)
+    void SceneManagerModule::ProcessCoarseVolumeTest(
+        const SceneManagerIO::InEventVolumeTest& lrQuery,
+        SpatialPartitionIO::OutputBuffer*         lpSpatialPartitionOutputBuffer,
+        SceneManagerIO::OutputBuffer*             lpSceneOutputBuffer)
     {
-        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseVolumeTest @0x828C62C0 is not reconstructed");
+        CGS_ASSERT((static_cast<u32>(lrQuery.mx32EntityTypeFlags) & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported\n");
+
+        const VolRef::Volume* lpVolume = lrQuery.mVolumeBuffer.GetVolume();
+        CGS_ASSERT(lpVolume != nullptr, "lpVolume != NULL");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        mSpatialPartitionManager.GetSpatialPartition()->VolumeTest(
+            static_cast<u32>(lrQuery.mx32EntityTypeFlags), lpVolume, &lrQuery.mTransform,
+            lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+        const SceneQueryId lQueryId = lrQuery.mQueryId;
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
     }
-    void SceneManagerModule::ProcessCoarseFrustumTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
+
+    // =========================================================================================
+    // ProcessCoarseFrustumTest @0x828C6918.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseFrustumTest(
+        SpatialPartitionIO::OutputBuffer*          lpSpatialPartitionOutputBuffer,
+        const SceneManagerIO::InEventFrustumTest&  lrQuery,
+        SceneManagerIO::OutputBuffer*              lpSceneOutputBuffer)
     {
-        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseFrustumTest @0x828C6918 is not reconstructed");
+        CGS_ASSERT((lrQuery.mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported\n");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        mSpatialPartitionManager.GetSpatialPartition()->FrustumTest(
+            lrQuery.mx32EntityTypeFlags, lrQuery.mFrustum,
+            lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+        const SceneQueryId lQueryId = lrQuery.mQueryId;
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
     }
     // =========================================================================================
     // ProcessLineTestFine @ 0x828CDCD0  (CgsSceneManagerBridgeFunctions.cpp:1048..:1134)

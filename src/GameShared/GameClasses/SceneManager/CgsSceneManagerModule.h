@@ -67,6 +67,8 @@ namespace CgsSceneManager
     {
         struct TriCacheQueryBuffer;
         struct InEventLineTest;
+        struct InEventFrustumTest;
+        struct InEventVolumeTest;
         struct InEventLineTestFine;
         struct InEventLineTestNearest;
         struct InEventLineTestFastDoubleSided;
@@ -194,8 +196,12 @@ namespace CgsSceneManager
         void ProcessCoarseSphereTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
                                       const CgsModule::Event* lpEvent,
                                       SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
-        void ProcessCoarseVolumeTest( const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer* ); // @0x828C62C0 TRAP
-        void ProcessCoarseFrustumTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );// @0x828C6918 TRAP
+        void ProcessCoarseVolumeTest( const SceneManagerIO::InEventVolumeTest& lrQuery,
+                                      SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                      SceneManagerIO::OutputBuffer* lpSceneOutputBuffer ); // @0x828C62C0
+        void ProcessCoarseFrustumTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                       const SceneManagerIO::InEventFrustumTest& lrQuery,
+                                       SceneManagerIO::OutputBuffer* lpSceneOutputBuffer ); // @0x828C6918
         // One coarse view-projection FRUSTUM query. The two arrays are the
         // dispatcher's per-pass scratch, carried across the queue's queries so a query may
         // narrow an earlier one's result run instead of walking the tree again: slot i holds
