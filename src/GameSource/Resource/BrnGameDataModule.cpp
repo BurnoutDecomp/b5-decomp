@@ -27,9 +27,87 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
+// Original 76-type registration uses each canonical concrete class.
+#include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
+#include "GameShared/GameClasses/RenderWare/PS3/CgsRwVertexDescResourceTypePS3.h"
+#include "GameShared/GameClasses/RenderWare/CgsRwTextureStateResourceType.h"
+#include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
+#include "GameShared/GameClasses/RenderWare/CgsRwColourCubeResourceType.h"
+#include "GameShared/GameClasses/Fonts/Resources/CgsFontResourceType.h"
+#include "GameShared/GameClasses/Graphics/Resources/CgsVideoDataResource.h"
+#include "GameShared/GameClasses/RenderWare/cross/CgsModelResourceType.h"
+#include "GameShared/GameClasses/Graphics/Instances/CgsInstanceListResourceType.h"
+#include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListResourceType.h"
+#include "GameSource/Gui/PFX/Resource/BrnGuiPFXHooksResource.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsVoiceHierarchyResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsSnrResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsRegistryResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacWaveContentResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacReverbIRContentResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/CgsGinsuWaveContentResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsBankResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/CSIS/CgsCsisResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerResourceType.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsNicotineResourceType.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSnapshotDataResourceType.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSchemaResourceType.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultResourceType.h"
+#include "GameShared/GameClasses/World/Resources/CgsWorldPainter2DResourceType.h"
+#include "GameShared/GameClasses/SceneManager/Zones/Resources/ZoneListResourceType.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
+#include "SharedClasses/Graphics/TextureNameMapResourceType.h"
+#include "SharedClasses/Graphics/VFXPropsResourceType.h"
+#include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"
+#include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageType.h"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResourceType.h"
+#include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"
+#include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h"
+#include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"
+#include "GameShared/GameClasses/RenderWare/cross/CgsMaterialResourceType.h"
+#include "GameShared/GameClasses/RenderWare/cross/CgsMaterialTechniqueResourceType.h"
+#include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h"
+#include "GameShared/GameClasses/RenderWare/x360/materialstates/CgsRwShaderProgramBufferResourceTypeX360.h"
+#include "SharedClasses/Physics/Props/BrnPropPhysicsListResourceType.h"
+#include "SharedClasses/Physics/Props/BrnPropGraphicsListResourceType.h"
+#include "SharedClasses/Physics/Props/BrnPropInstanceDataResourceType.h"
+#include "SharedClasses/Sound/World/BrnStaticSoundMapResourceType.h"
+#include "SharedClasses/Gui/Flapt/BrnFlaptFileResourceType.h"
+#include "SharedClasses/Trigger/BrnTriggerResourceType.h"
+#include "SharedClasses/AI/AISectionsResourceType.h"
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"
+#include "SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h"
+#include "SharedClasses/Sound/Engines/BrnSoundLoopModelResourceType.h"
+#include "SharedClasses/DataLists/VehicleListResourceType.h"
+#include "SharedClasses/DataLists/WheelListResourceType.h"
+#include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"
+#include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"
+#include "SharedClasses/World/BrnEnvironmentKeyframeResourceType.h"
+#include "SharedClasses/World/BrnEnvironmentTimeLineResourceType.h"
+#include "SharedClasses/World/BrnEnvironmentDictionaryResourceType.h"
+#include "SharedClasses/Massive/Resources/MassiveLookupTableResourceType.h"
+#include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"
+#include "SharedClasses/Progression/BrnProgressionResourceType.h"
+#include "SharedClasses/Physics/Deformation/Resources/StreamedDeformationSpecResourceType.h"
+#include "SharedClasses/StreetData/BrnStreetDataResourceType.h"
+#include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"
+#include "SDKs/Packages/ICE/ICEData.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsTextFileResource.h"
+#include "GameShared/GameClasses/RenderWare/CgsRwMaterialCRC32ResourceType.h"
+#include "GameShared/GameClasses/RenderWare/PS3/materialstates/CgsRwShaderParameterResourceTypePS3.h"
+#include "GameShared/GameClasses/RenderWare/CgsRwDebugResourceType.h"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageListType.h"
+#include "GameShared/GameClasses/Physics/CgsInstanceCollisionListResourceType.h"
+#include "GameShared/GameClasses/RenderWare/cross/CgsClusteredMeshResourceType.h"
+#include "GameShared/GameClasses/RenderWare/cross/CgsKdTreeResourceType.h"
+#include "SharedClasses/Gui/SatNav/Resources/BrnSatNavTileResourceType.h"
+#include "SharedClasses/Progression/BrnProfileUpgradeResourceType.h"
 #include <cstring>                                                              // memset / memcmp / strncmp
 #include <cstdlib>                                                              // atoi (prop-instance zone number)
 #include <cstdio>                                                               // fopen/fread (PC schema-file leaf)
+#include <new>                                                                  // guarded concrete Type construction
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator (schema blob carve)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator::Malloc
 
@@ -41,6 +119,19 @@
 
 namespace BrnResource
 {
+    namespace
+    {
+        // ARTIST guards each Type allocation before its inlined constructor.
+        // Explicitly separate allocation from construction: the canonical
+        // allocation overload returns null but is not declared noexcept.
+        template <class Type>
+        Type* AllocateResourceType(rw::IResourceAllocator* lpAllocator)
+        {
+            void* lpMemory = CgsResource::Type::operator new(sizeof(Type), lpAllocator);
+            return lpMemory != nullptr ? ::new (lpMemory) Type : nullptr;
+        }
+    }
+
     // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
     // value, so this ctor runs at STATIC INIT (before gpDebugPrint is initialized); logging here would
     // deref an uninitialized gpDebugPrint and crash before the window opens.
@@ -1797,13 +1888,98 @@ namespace BrnResource
         mDLCManager.Construct();
         mDLCDebugComponent.Construct();
     }
-    void GameDataModule::RegisterResourceTypes(rw::IResourceAllocator* /*lpAllocator*/)
+    // ARTIST 0x82667EA8. Each concrete type is constructed through the supplied
+    // allocator, then cached and stored in its original game-order slot. Names
+    // are diagnostic strings; the two GraphicsSpec entries are distinct types.
+    void GameDataModule::RegisterResourceTypes(rw::IResourceAllocator* lpAllocator)
     {
-        // FLAG trap-stub: ARTIST 0x82667EA8 constructs its original resource Type
-        // objects and fills maTypes/miNumTypes. The native singleton registry
-        // bridge is a separate provider, not a reconstruction of this producer.
-        __debugbreak();
-        std::abort();
+        miNumTypes = 0;
+        RegisterResourceType(AllocateResourceType<CgsResource::TextFileResourceType>(lpAllocator), "TextFileResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwRasterResourceType>(lpAllocator), "RwRasterResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::MaterialResourceType>(lpAllocator), "MaterialResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwVertexDescResourceType>(lpAllocator), "RwVertexDescResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwMaterialCRC32ResourceType>(lpAllocator), "RwMaterialCRC32ResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwTextureStateResourceType>(lpAllocator), "RwTextureStateResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::MaterialStateResourceType>(lpAllocator), "MaterialStateResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwShaderProgramBufferResourceType>(lpAllocator), "RwShaderProgramBufferResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwShaderParameterResourceType>(lpAllocator), "RwShaderParameterResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::ShaderTechniqueResourceType>(lpAllocator), "ShaderTechniqueResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwDebugResourceType>(lpAllocator), "RwDebugResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::MaterialTechniqueResourceType>(lpAllocator), "MaterialTechniqueResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwRenderableResourceType>(lpAllocator), "RwRenderableResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::AptDataHeaderType>(lpAllocator), "AptDataHeaderType");
+        RegisterResourceType(AllocateResourceType<CgsResource::HudMessageResourceType>(lpAllocator), "HudMessageResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::HudMessageListResourceType>(lpAllocator), "HudMessageListResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::GuiPopupResourceType>(lpAllocator), "GuiPopupResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::FontResourceType>(lpAllocator), "FontResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::LuaCodeResourceType>(lpAllocator), "LuaCodeResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RegistryResourceType>(lpAllocator), "RegistryResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::GinsuWaveContentResourceType>(lpAllocator), "GinsuWaveContentResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::GenericRwacWaveContentResourceType>(lpAllocator), "GenericRwacWaveContentResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::GenericRwacReverbIRContentResourceType>(lpAllocator), "GenericRwacReverbIRContentResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::AemsBankResourceType>(lpAllocator), "AemsBankResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::CsisResourceType>(lpAllocator), "CsisResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::NicotineResourceType>(lpAllocator), "NicotineResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::VoiceHierarchyResourceType>(lpAllocator), "VoiceHierarchyResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::SplicerResourceType>(lpAllocator), "SplicerResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::SnrResourceType>(lpAllocator), "SnrResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::SnapshotDataResourceType>(lpAllocator), "SnapshotDataResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::LanguageResourceType>(lpAllocator), "LanguageResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::VideoDataResourceType>(lpAllocator), "VideoDataResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::ZoneListResourceType>(lpAllocator), "ZoneListResourceType");
+        RegisterResourceType(AllocateResourceType<CgsGraphics::InstanceListResourceType>(lpAllocator), "InstanceListResourceType");
+        RegisterResourceType(AllocateResourceType<CgsPhysics::InstanceCollisionListResourceType>(lpAllocator), "InstanceCollisionListResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::ClusteredMeshResourceType>(lpAllocator), "ClusteredMeshResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::KdTreeResourceType>(lpAllocator), "KdTreeResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::AttribSysSchemaResourceType>(lpAllocator), "AttribSysSchemaResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::AttribSysVaultResourceType>(lpAllocator), "AttribSysVaultResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::ModelResourceType>(lpAllocator), "ModelResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::RwColourCubeResourceType>(lpAllocator), "RwColourCubeResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::WorldPainter2DResourceType>(lpAllocator), "WorldPainter2DResourceType");
+        RegisterResourceType(AllocateResourceType<BrnAI::AISectionsResourceType>(lpAllocator), "AISectionsResourceType");
+        RegisterResourceType(AllocateResourceType<BrnTrigger::TriggerResourceType>(lpAllocator), "TriggerResourceType");
+        RegisterResourceType(AllocateResourceType<BrnTraffic::TrafficDataResourceType>(lpAllocator), "TrafficDataResourceType");
+        RegisterResourceType(AllocateResourceType<BrnTraffic::GraphicsStubResourceType>(lpAllocator), "GraphicsStubResourceType");
+        RegisterResourceType(AllocateResourceType<BrnSound::Vehicles::Engines::LoopModelResourceType>(lpAllocator), "LoopModelResourceType");
+        RegisterResourceType(AllocateResourceType<BrnResource::VehicleListResourceType>(lpAllocator), "VehicleListResourceType");
+        RegisterResourceType(AllocateResourceType<BrnResource::ChallengeListResourceType>(lpAllocator), "ChallengeListResourceType");
+        RegisterResourceType(AllocateResourceType<BrnResource::WheelListResourceType>(lpAllocator), "WheelListResourceType");
+        RegisterResourceType(AllocateResourceType<BrnVehicle::GraphicsSpecResourceType>(lpAllocator), "GraphicsSpecResourceType");
+        RegisterResourceType(AllocateResourceType<BrnWheel::GraphicsSpecResourceType>(lpAllocator), "GraphicsSpecResourceType");
+        RegisterResourceType(AllocateResourceType<BrnParticle::ParticleDescriptionCollectionResourceType>(lpAllocator), "ParticleDescriptionCollectionResourceType");
+        RegisterResourceType(AllocateResourceType<BrnParticle::ParticleDescriptionResourceType>(lpAllocator), "ParticleDescriptionResourceType");
+        RegisterResourceType(AllocateResourceType<BrnParticle::TextureNameMapResourceType>(lpAllocator), "TextureNameMapResourceType");
+        RegisterResourceType(AllocateResourceType<BrnParticle::BrnVFXMeshCollectionResourceType>(lpAllocator), "BrnVFXMeshCollectionResourceType");
+        RegisterResourceType(AllocateResourceType<BrnParticle::VFXPropCollectionResourceType>(lpAllocator), "VFXPropCollectionResourceType");
+        RegisterResourceType(AllocateResourceType<BrnFlapt::FlaptFileResourceType>(lpAllocator), "FlaptFileResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::SatNavTileDirectoryResourceType>(lpAllocator), "SatNavTileDirectoryResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::SatNavTileResourceType>(lpAllocator), "SatNavTileResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::PFXHookBundleResourceType>(lpAllocator), "PFXHookBundleResourceType");
+        RegisterResourceType(AllocateResourceType<BrnProgression::ProgressionResourceType>(lpAllocator), "ProgressionResourceType");
+        RegisterResourceType(AllocateResourceType<BrnPhysics::Props::PropPhysicsResourceType>(lpAllocator), "PropPhysicsResourceType");
+        RegisterResourceType(AllocateResourceType<BrnPhysics::Props::PropGraphicsListResourceType>(lpAllocator), "PropGraphicsListResourceType");
+        RegisterResourceType(AllocateResourceType<BrnPhysics::Props::PropInstanceDataResourceType>(lpAllocator), "PropInstanceDataResourceType");
+        RegisterResourceType(AllocateResourceType<BrnWorld::EnvironmentSettings::KeyframeResourceType>(lpAllocator), "BrnEnvironmentKeyframeResourceType");
+        RegisterResourceType(AllocateResourceType<BrnWorld::EnvironmentSettings::TimeLineResourceType>(lpAllocator), "BrnEnvironmentTimeLineResourceType");
+        RegisterResourceType(AllocateResourceType<BrnWorld::EnvironmentSettings::DictionaryResourceType>(lpAllocator), "BrnEnvironmentDictionaryResourceType");
+        RegisterResourceType(AllocateResourceType<BrnSound::World::StaticSoundMapResourceType>(lpAllocator), "StaticSoundMapResourceType");
+        RegisterResourceType(AllocateResourceType<BrnStreetData::StreetDataResourceType>(lpAllocator), "StreetDataResourceType");
+        RegisterResourceType(AllocateResourceType<CgsContainers::DictionaryResourceType<ICE::ICETakeData>>(lpAllocator), "ICETakeDictionaryResourceType");
+        RegisterResourceType(AllocateResourceType<BrnResource::StreamedDeformationSpecResourceType>(lpAllocator), "StreamedDeformationSpecResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::PolygonSoupListResourceType>(lpAllocator), "PolygonSoupListResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::MassiveLookupTableResourceType>(lpAllocator), "MassiveLookupTableResourceType");
+        RegisterResourceType(AllocateResourceType<CgsResource::PlayerCarColoursResourceType>(lpAllocator), "PlayerCarColoursResourceType");
+        RegisterResourceType(AllocateResourceType<BrnProgression::ProfileUpgradeResourceType>(lpAllocator), "ProfileUpgradeResourceType");
+    }
+
+    // The source helper is inlined throughout ARTIST's registration monolith.
+    // Preserve InitCachedValues before publishing the pointer/name and count.
+    void GameDataModule::RegisterResourceType(CgsResource::Type* lpType, const char* lpcName)
+    {
+        lpType->InitCachedValues();
+        maTypes[miNumTypes].mpType = lpType;
+        maTypes[miNumTypes].mpcName = lpcName;
+        ++miNumTypes;
     }
 
     void GameDataModule::TextureRenderCallback(renderengine::Texture* /*lpTexture*/,
@@ -1963,10 +2139,9 @@ namespace BrnResource
         }
 
         // [BRIDGE -- marked deviation from X360 RegisterResourceTypes 0x82667EA8] Populate the pool type
-        // list from our existing singleton resource-type handlers. The X360 operator-new's 76 Type objects
-        // into a GSResourceType array, but that path's prerequisites (Type::operator new / InitCachedValues
-        // + the 76 subclasses) are deferred, and our tree already registers handler SINGLETONS into a
-        // CgsResource::TypeRegistry (RegisterAllResourceTypes). So reuse those: register them (idempotent),
+        // list from our existing singleton resource-type handlers. The original producer now constructs
+        // its 76 Type objects through GlobalResource; this active native adapter retains its existing
+        // CgsResource::TypeRegistry provider (RegisterAllResourceTypes). Register them (idempotent),
         // then forward the WHOLE registered set into the GSResourceType list. The PoolModule type-registry
         // loop then copies them into maTypes (keyed by GetTypeID()).
         //
