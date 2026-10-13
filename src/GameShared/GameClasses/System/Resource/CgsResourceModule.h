@@ -67,6 +67,13 @@ namespace CgsResource
             E_RELEASE_START = 0, E_RELEASE_POOL = 1, E_RELEASE_BUNDLE = 2, E_RELEASE_FILESYSTEM = 3,
             E_RELEASE_MEMORY = 4, E_RELEASE_BASE = 5, E_RELEASE_DONE = 6
         };
+        // DecFIGS CgsResourceModule.h:134; ARTIST Update returns REQUIRE_STALL only when the
+        // embedded PoolModule::Update reports its emergency-fragment state.
+        enum EUpdateResult
+        {
+            E_RESULT_OK = 0,
+            E_RESULT_REQUIRE_STALL = 1
+        };
 
         // CgsResource::ResourceModule::InitOptions (DWARF CgsResourceModule.h:148) - the full bring-up
         // options ConstructResourceModule (X360 0x8266D570) builds on the stack (1216B on X360) and
@@ -101,7 +108,7 @@ namespace CgsResource
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
-        bool Update(void* lpInputBuffer, void* lpOutputBuffer);        // deferred
+        EUpdateResult Update(void* lpInputBuffer, void* lpOutputBuffer); // 0x82907948; host IO-stack adapter remains partial
 
         // ---- request/response shuttle steps (the pool-create slice of ResourceModule::Update) ---------
         // @ 0x829019F0 - forward the pool module's resource-memory requests (its PoolIO::OutputBuffer

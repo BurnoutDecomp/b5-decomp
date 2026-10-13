@@ -502,10 +502,13 @@ namespace CgsResource
 
     // ARTIST82907948: pump loader, pool and memory in order. Allocation/fixup
     // responses are retained until the next update, as in the original pipeline.
-    bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
+    // FLAG: this partial host adapter does not publish FileSystemStatusInterface into
+    // lpOutputBuffer; the GameData wrapper's status copy remains default-constructed until
+    // the native filesystem-status producer is recovered.
+    ResourceModule::EUpdateResult ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
     {
         auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
-        if (!lpResIn) return false;
+        if (!lpResIn) return E_RESULT_OK;
 
         // FLAG PC-platform leaf: the current module adapter receives no IO stacks.
         // Reuse its serialized scratch buffers; Construct resets queue metadata,
@@ -564,7 +567,10 @@ namespace CgsResource
         s_loaderOut.LockForRead(); s_poolOut.LockForRead();
         ProcessResourceResponses(&s_loaderOut, &s_poolOut);
         s_poolOut.UnlockForRead(); s_loaderOut.UnlockForRead();
-        return lbBusy;
+        // ARTIST @0x82907948 returns 1 iff PoolModule::Update returned 1. The current host
+        // PoolModule::Update bool is true exactly for its emergency-fragment state, so map
+        // that condition explicitly to the attested EUpdateResult value.
+        return lbBusy ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
     }
 
     // @ 0x829019F0 - forward the pool module's emitted resource-memory requests into the MemoryModule
