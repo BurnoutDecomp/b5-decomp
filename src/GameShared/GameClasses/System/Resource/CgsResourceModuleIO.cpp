@@ -49,6 +49,13 @@ namespace CgsResource
             mbDiskErrorOccured = false;
         }
 
+        // DecFIGS declares this accessor; ARTIST inlines the same one-byte read in
+        // GameDataModule::UpdateResourceModule @0x826663B0 after OutputBuffer's read-lock gate.
+        bool FileSystemStatusInterface::GetDiskErrorOccured() const
+        {
+            return mbDiskErrorOccured;
+        }
+
         // -------- OutputBuffer::Construct @ 0x828EC978 --------
         // Construct the IOBuffer base (sets the eStatusConstructed status bit @ +0), then
         // construct the embedded FileSystemStatusInterface @ +1 (clears its disk-error flag).
