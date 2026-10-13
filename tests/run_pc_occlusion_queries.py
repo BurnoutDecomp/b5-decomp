@@ -15,6 +15,7 @@ PROVIDER_SOURCE = REPO / "src/pc/gcm/renderengine/OcclusionQueryProviderPC.cpp"
 TAG = "PCOcclusionQueries"
 BUILD_TIMEOUT_SECONDS = 120
 RUN_TIMEOUT_SECONDS = 30
+TEMP_PREFIX = "brn_pc_occlusion_queries_"
 # Runner exit codes: 0 pass, 1 behavior/build/runtime failure, 77 native setup unavailable.
 
 
@@ -31,13 +32,21 @@ def text_value(value):
 
 def main():
     print(f"{TAG}: direct provider leaf only; WorldDraw observer wiring and renderer activation remain unproven")
-    output = Path(tempfile.mkdtemp(prefix="brn_pc_occlusion_queries_"))
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    output = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX)).resolve()
     def save_log(name, value):
         (output / name).write_text(text_value(value), encoding="utf-8")
 
     def retain(reason):
         (output / "status.txt").write_text(reason + "\n", encoding="utf-8")
         print(f"ARTIFACTS retained: {output}")
+
+    def cleanup_success():
+        if output.parent != temp_root or not output.name.startswith(TEMP_PREFIX):
+            print(f"ARTIFACTS retained (unexpected temp path): {output}")
+            return False
+        shutil.rmtree(output)
+        return True
 
     includes = f'/I"{output}" ' + " ".join(
         f'/I"{WORKFLOW / path}"' for path in settings("msvc_includes.txt"))
@@ -94,7 +103,7 @@ def main():
     print_tail("fixture stdout", run.stdout)
     print_tail("fixture stderr", run.stderr)
 
-    if run.returncode == 77 or "UNAVAILABLE:" in run.stdout:
+    if run.returncode == 77 or re.search(r"^UNAVAILABLE:", run.stdout, re.MULTILINE):
         print(f"{TAG}: UNAVAILABLE (native D3D9Ex/query setup did not support a behavior verdict)")
         retain("native setup unavailable")
         return 77
@@ -124,7 +133,7 @@ def main():
         retain("partial: " + ", ".join(skipped))
         return 0
 
-    shutil.rmtree(output, ignore_errors=True)
+    cleanup_success()
     print(f"{TAG}: PASS ({checks}/{checks} checks)")
     return 0
 
