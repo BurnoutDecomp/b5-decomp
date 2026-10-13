@@ -7,8 +7,9 @@
 // GetResourceDescriptor builds the standard five-entry rw resource descriptor: the
 // loop fills five {size=0, align=1} pairs, then the first pair is overwritten by a
 // 64-bit store with {size=0x20, align=4}. Initialize unpacks a sampler parameters
-// block into the 32-byte runtime state. Parameter names follow DecFIGS DWARF; the
-// state layout follows the X360 byte stores.
+// block into the 32-byte runtime state. Field names follow the ARTIST
+// Initialize -> sub_827E8950 -> D3DDevice_SetSamplerState consumer chain; the
+// X360 byte stores and setter arguments arbitrate over the DecFIGS labels.
 
 namespace renderengine
 {
@@ -20,26 +21,26 @@ namespace renderengine
 
     struct SamplerStateData
     {
-        u32 muColor;
-        u32 muRemap;
+        f32 mfMipMapLodBias;
+        f32 mfAnisotropyBias;
         u8  mu8AddressU;
         u8  mu8AddressV;
         u8  mu8AddressW;
         u8  mbState11Zero;
-        u8  mu8MinLevel;
+        u8  mu8MipFilter;
         u8  mu8DepthTextureFunction;
         u8  mu8Gamma;
         u8  mbState15;
         u8  mbState16;
         u8  mu8State17;
-        u8  mu8MaxLevel;
+        u8  mu8MinFilter;
+        u8  mu8MinFilterZ;
         u8  mu8MagFilter;
-        u8  mu8Bias;
-        u8  mu8MagFilterZ; // +0x15; SetSamplerStateLowLevel passes this to MagFilterZ.
-        u8  mbState22;
-        u8  mu8Convolution;
-        u8  mu8MipFilter;
-        u8  mu8MinMipLevel; // +0x19; SetSamplerStateLowLevel passes this to MinMipLevel.
+        u8  mu8MagFilterZ;
+        u8  mbSeparateZFilterEnable;
+        u8  mu8MaxAnisotropy;
+        u8  mu8MaxMipLevel;
+        u8  mu8MinMipLevel;
         u8  mbState26;
         u8  mu8Pad27;
         u32 muInitialized;
@@ -50,21 +51,21 @@ namespace renderengine
         u32 muAddressU;
         u32 muAddressV;
         u32 muAddressW;
-        u32 muBias;
-        u32 muMaxLevel;
-        u32 muMinLevel;
-        u32 muMagFilterZ; // +0x18 -> runtime +0x15 -> D3DDevice_SetSamplerState_MagFilterZ.
         u32 muMagFilter;
-        u32 muMinMipLevel; // +0x20 -> runtime +0x19 -> D3DDevice_SetSamplerState_MinMipLevel.
+        u32 muMinFilter;
         u32 muMipFilter;
-        u32 muConvolution;
-        u32 muColor;
-        u32 muRemap;
+        u32 muMagFilterZ;
+        u32 muMinFilterZ;
+        u32 muMinMipLevel;
+        u32 muMaxMipLevel;
+        u32 muMaxAnisotropy;
+        f32 mfMipMapLodBias;
+        f32 mfAnisotropyBias;
         u32 muDepthTextureFunction;
         u32 muGamma;
         u32 muState17;
         u8  mbState15;
-        u8  mbState22;
+        u8  mbSeparateZFilterEnable;
         u8  mbState16;
         u8  mbState11Zero;
         u8  mbState26;
@@ -100,22 +101,22 @@ namespace renderengine
         lpState->mu8AddressV = static_cast<u8>(lpParams->muAddressV);
         lpState->mu8AddressW = static_cast<u8>(lpParams->muAddressW);
         lpState->mbState11Zero = static_cast<u8>(lpParams->mbState11Zero == 0);
-        lpState->mu8MinLevel = static_cast<u8>(lpParams->muMinLevel);
+        lpState->mu8MipFilter = static_cast<u8>(lpParams->muMipFilter);
         lpState->mu8DepthTextureFunction = static_cast<u8>(lpParams->muDepthTextureFunction);
         lpState->mu8Gamma = static_cast<u8>(lpParams->muGamma);
         lpState->mbState15 = static_cast<u8>(lpParams->mbState15 != 0);
         lpState->mbState16 = static_cast<u8>(lpParams->mbState16 != 0);
         lpState->mu8State17 = static_cast<u8>(lpParams->muState17);
-        lpState->mu8Bias = static_cast<u8>(lpParams->muBias);
-        lpState->mu8MaxLevel = static_cast<u8>(lpParams->muMaxLevel);
-        lpState->mu8MagFilterZ = static_cast<u8>(lpParams->muMagFilterZ);
+        lpState->mu8MinFilter = static_cast<u8>(lpParams->muMinFilter);
+        lpState->mu8MinFilterZ = static_cast<u8>(lpParams->muMinFilterZ);
         lpState->mu8MagFilter = static_cast<u8>(lpParams->muMagFilter);
+        lpState->mu8MagFilterZ = static_cast<u8>(lpParams->muMagFilterZ);
         lpState->mu8MinMipLevel = static_cast<u8>(lpParams->muMinMipLevel);
-        lpState->mu8MipFilter = static_cast<u8>(lpParams->muMipFilter);
-        lpState->mu8Convolution = static_cast<u8>(lpParams->muConvolution);
-        lpState->muColor = lpParams->muColor;
-        lpState->muRemap = lpParams->muRemap;
-        lpState->mbState22 = static_cast<u8>(lpParams->mbState22 != 0);
+        lpState->mu8MaxMipLevel = static_cast<u8>(lpParams->muMaxMipLevel);
+        lpState->mu8MaxAnisotropy = static_cast<u8>(lpParams->muMaxAnisotropy);
+        lpState->mfMipMapLodBias = lpParams->mfMipMapLodBias;
+        lpState->mfAnisotropyBias = lpParams->mfAnisotropyBias;
+        lpState->mbSeparateZFilterEnable = static_cast<u8>(lpParams->mbSeparateZFilterEnable != 0);
         lpState->muInitialized = 1;
         lpState->mbState26 = static_cast<u8>(lpParams->mbState26 != 0);
         return lpState;

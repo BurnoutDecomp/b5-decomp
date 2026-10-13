@@ -384,7 +384,7 @@ namespace
     const u32 KU_SAMPLER_FILTER_ANISO  = 4;   // `li r22, 4` -> `stw r22, var_4D4 / var_4D0`
     const u32 KU_SAMPLER_MIP_FILTER    = 2;   // constant across all four samplers
 
-    // The MAX ANISOTROPY Construct writes into mapSamplerState_MotionBlur[quality]'s muConvolution:
+    // The MAX ANISOTROPY Construct writes into mapSamplerState_MotionBlur[quality]'s muMaxAnisotropy:
     // `luMaxAnisotropy = 4` before the loop and `luMaxAnisotropy += 12` at the end of every
     // iteration (the X360 `addi r27, r27, 0xC`), i.e. 4 for E_QUALITY_CHEAP and 16 for
     // E_QUALITY_EXPENSIVE. Written as that recurrence's closed form over the SAME quality index the
@@ -409,22 +409,10 @@ namespace renderengine
     // declare their copies (GameSource/Graphics/ImmediateMode/BrnIm3d.cpp:81 and
     // GameSource/Graphics/BrnRendererMemory.cpp:61).
     //
-    // ⚠ THIS BLOCK IS DELIBERATELY IN `namespace renderengine`, NOT IN AN ANONYMOUS ONE, AND THE TWO
-    // SIGNATURES ARE COPIED VERBATIM FROM samplerstate.cpp. MSVC mangles the parameter type into the
-    // function's decorated name, so a copy of this struct in an anonymous namespace -- or an
-    // Initialize spelled over `SamplerState*` instead of `SamplerStateData*` -- produces a symbol NO
-    // TU CAN EVER DEFINE. That is the exact defect ShadowPass.h exists to document; it was
-    // caught here by dumping this object's undefined externals rather than by reading.
-    //
-    // ⚠ THREE OF THE FIELD NAMES BELOW ARE WRONG, and the evidence is in Construct. samplerstate.cpp
-    // calls +0x0C/+0x10 `muBias`/`muMaxLevel` and +0x28 `muConvolution`, but Construct writes
-    // (0,0) / (1,1) / (4,4) into the first pair for the POINT / LINEAR / ANISOTROPIC samplers and
-    // 1 / 1 / (4 or 16) into the second -- i.e. they are MinFilter, MagFilter and MaxAnisotropy. The
-    // DWARF agrees: Construct's recorded setters are SetAddressU/V/W, SetMinMipLevel, SetMaxMipLevel,
-    // SetMinFilter, SetMagFilter, SetMipFilter, SetMaxAnisotropy. Renaming them is a mechanical pass
-    // across samplerstate.cpp + texturestate.cpp + BrnIm3d.cpp + BrnRendererMemory.cpp and is NOT done
-    // here; the assignments in Construct write the same BYTES through the tree's CURRENT names and
-    // say, per line, which field each one really is.
+    // This is deliberately in `namespace renderengine` and token-matches the parameter declaration
+    // in samplerstate.cpp: MSVC includes this type in Initialize's decorated name. The field names
+    // below follow the ARTIST Initialize -> sub_827E8950 -> XDK sampler-setter chain. The source
+    // parameter at +0x0C is MagFilter; +0x10 is MinFilter; +0x14 is MipFilter; +0x28 is MaxAnisotropy.
     struct SamplerStateData;   // the 0x20-byte runtime block; opaque to this TU
 
     struct SamplerStateParameters
@@ -432,21 +420,21 @@ namespace renderengine
         u32 muAddressU;
         u32 muAddressV;
         u32 muAddressW;
-        u32 muBias;                   // really: MIN filter
-        u32 muMaxLevel;               // really: MAG filter
-        u32 muMinLevel;               // really: MIP filter
-        u32 muMagFilterZ;      // +0x18 -> runtime +0x15
-        u32 muMagFilter;
-        u32 muMinMipLevel;     // +0x20 -> runtime +0x19
-        u32 muMipFilter;
-        u32 muConvolution;            // really: MAX ANISOTROPY
-        u32 muColor;
-        u32 muRemap;
+        u32 muMagFilter;              // +0x0C -> runtime +0x14
+        u32 muMinFilter;              // +0x10 -> runtime +0x12
+        u32 muMipFilter;              // +0x14 -> runtime +0x0C
+        u32 muMagFilterZ;             // +0x18 -> runtime +0x15
+        u32 muMinFilterZ;             // +0x1C -> runtime +0x13
+        u32 muMinMipLevel;            // +0x20 -> runtime +0x19
+        u32 muMaxMipLevel;            // +0x24 -> runtime +0x18
+        u32 muMaxAnisotropy;          // +0x28 -> runtime +0x17
+        f32 mfMipMapLodBias;          // +0x2C -> runtime +0x00
+        f32 mfAnisotropyBias;         // +0x30 -> runtime +0x04
         u32 muDepthTextureFunction;
         u32 muGamma;
         u32 muState17;
         u8  mbState15;
-        u8  mbState22;
+        u8  mbSeparateZFilterEnable;
         u8  mbState16;
         u8  mbState11Zero;
         u8  mbState26;
@@ -1305,10 +1293,10 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     lSamplerStateParams_Point.muAddressU    = KU_SAMPLER_ADDRESS_CLAMP;
     lSamplerStateParams_Point.muAddressV    = KU_SAMPLER_ADDRESS_CLAMP;
     lSamplerStateParams_Point.muAddressW    = KU_SAMPLER_ADDRESS_CLAMP;
-    lSamplerStateParams_Point.muBias        = KU_SAMPLER_FILTER_POINT;   // MIN filter
-    lSamplerStateParams_Point.muMaxLevel    = KU_SAMPLER_FILTER_POINT;   // MAG filter
-    lSamplerStateParams_Point.muMinLevel    = KU_SAMPLER_MIP_FILTER;     // MIP filter
-    lSamplerStateParams_Point.muConvolution = 1;                         // MAX anisotropy
+    lSamplerStateParams_Point.muMinFilter   = KU_SAMPLER_FILTER_POINT;
+    lSamplerStateParams_Point.muMagFilter   = KU_SAMPLER_FILTER_POINT;
+    lSamplerStateParams_Point.muMipFilter   = KU_SAMPLER_MIP_FILTER;
+    lSamplerStateParams_Point.muMaxAnisotropy = 1;
     lSamplerStateParams_Point.mbState11Zero = 1;   // `stb r26, var_36D`
     lSamplerStateParams_Point.mbState26     = 1;   // `stb r26, var_36C`
 
@@ -1325,8 +1313,8 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     // Identical but bilinear. Bound on units 1 and 2 always, and on unit 0 when the caller supplied an
     // override source texture (i.e. the source is not 1:1 with the target).
     renderengine::SamplerStateParameters lSamplerStateParams_Linear = lSamplerStateParams_Point;
-    lSamplerStateParams_Linear.muBias     = KU_SAMPLER_FILTER_LINEAR;   // MIN filter
-    lSamplerStateParams_Linear.muMaxLevel = KU_SAMPLER_FILTER_LINEAR;   // MAG filter
+    lSamplerStateParams_Linear.muMinFilter = KU_SAMPLER_FILTER_LINEAR;
+    lSamplerStateParams_Linear.muMagFilter = KU_SAMPLER_FILTER_LINEAR;
 
     renderengine::ResourceDescriptorEntry laSamplerResDesc_Linear[5] = {};
     renderengine::SamplerState::GetResourceDescriptor(laSamplerResDesc_Linear);
@@ -1347,15 +1335,15 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     for (u32 luCount = 0; luCount < MotionBlurState::E_QUALITY_COUNT; ++luCount)
     {
         renderengine::SamplerStateParameters lSamplerStateParams_MotionBlur = lSamplerStateParams_Point;
-        lSamplerStateParams_MotionBlur.muBias        = KU_SAMPLER_FILTER_LINEAR;
-        lSamplerStateParams_MotionBlur.muMaxLevel    = KU_SAMPLER_FILTER_LINEAR;
-        lSamplerStateParams_MotionBlur.muConvolution = 1;
+        lSamplerStateParams_MotionBlur.muMinFilter     = KU_SAMPLER_FILTER_LINEAR;
+        lSamplerStateParams_MotionBlur.muMagFilter     = KU_SAMPLER_FILTER_LINEAR;
+        lSamplerStateParams_MotionBlur.muMaxAnisotropy = 1;
 
         if (luCount == 0 || luCount == 1)
         {
-            lSamplerStateParams_MotionBlur.muBias        = KU_SAMPLER_FILTER_ANISO;
-            lSamplerStateParams_MotionBlur.muMaxLevel    = KU_SAMPLER_FILTER_ANISO;
-            lSamplerStateParams_MotionBlur.muConvolution = luMaxAnisotropy;
+            lSamplerStateParams_MotionBlur.muMinFilter     = KU_SAMPLER_FILTER_ANISO;
+            lSamplerStateParams_MotionBlur.muMagFilter     = KU_SAMPLER_FILTER_ANISO;
+            lSamplerStateParams_MotionBlur.muMaxAnisotropy = luMaxAnisotropy;
         }
 
         renderengine::ResourceDescriptorEntry laSamplerResDesc_MotionBlur[5] = {};
@@ -1803,7 +1791,7 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // alongside the object because the object's words never reach D3D9 (see the seam call below).
     // Every value is the one Construct wrote into that very sampler: POINT/LINEAR at
     // BrnPostFxShader.cpp:1293-1294 / :1313-1314, ANISO + 4|16 at :1341-1343 / :1356. The point and
-    // linear blocks carry muConvolution = 1 (:1296, inherited by the linear copy at :1312).
+    // linear blocks carry muMaxAnisotropy = 1 (:1299, inherited by the linear copy at :1319).
     u32 luSourceFilter        = KU_SAMPLER_FILTER_POINT;
     u32 luSourceMaxAnisotropy = 1;
     if (lbEnableMotionBlur)
