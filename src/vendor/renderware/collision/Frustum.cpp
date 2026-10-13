@@ -59,7 +59,8 @@ int Frustum::IsBoxInFrustum(const Vector3* lapCorners)
             const Vector3& lrCorner = lapCorners[liCorner];
             const f32 lfDot = lrPlane.x * lrCorner.x + lrPlane.y * lrCorner.y
                             + lrPlane.z * lrCorner.z;
-            const int liOnCulledSide = (lrPlane.w >= lfDot) ? 1 : 0;
+            // ARTIST fcmpu/blt rejects only w < dot; unordered stays culled.
+            const int liOnCulledSide = !(lrPlane.w < lfDot) ? 1 : 0;
             liAllCornersOnCulledSide &= liOnCulledSide;
         }
 
