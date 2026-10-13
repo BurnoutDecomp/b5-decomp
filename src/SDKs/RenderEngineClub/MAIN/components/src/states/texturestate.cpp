@@ -40,11 +40,11 @@ namespace renderengine
         u8  mu8MaxLevel;              // +0x12
         u8  mu8MagFilter;             // +0x13
         u8  mu8Bias;                  // +0x14
-        u8  mu8MaxAnisotropy;         // +0x15
+        u8  mu8MagFilterZ;            // +0x15
         u8  mbState22;                // +0x16
         u8  mu8Convolution;           // +0x17
         u8  mu8MipFilter;             // +0x18
-        u8  mu8MinFilter;             // +0x19
+        u8  mu8MinMipLevel;           // +0x19
         u8  mbState26;                // +0x1A
         u8  mu8Pad27;                 // +0x1B
         u32 muInitialized;            // +0x1C
@@ -58,9 +58,9 @@ namespace renderengine
         u32 muBias;                 // +0x0C
         u32 muMaxLevel;             // +0x10
         u32 muMinLevel;             // +0x14
-        u32 muMaxAnisotropy;        // +0x18
+        u32 muMagFilterZ;           // +0x18
         u32 muMagFilter;            // +0x1C
-        u32 muMinFilter;            // +0x20
+        u32 muMinMipLevel;          // +0x20
         u32 muMipFilter;            // +0x24
         u32 muConvolution;          // +0x28
         u32 muColor;                // +0x2C

@@ -44,9 +44,9 @@ namespace renderengine
         u32 muBias;
         u32 muMaxLevel;
         u32 muMinLevel;
-        u32 muMaxAnisotropy;
+        u32 muMagFilterZ;  // +0x18 -> runtime +0x15 -> MagFilterZ
         u32 muMagFilter;
-        u32 muMinFilter;
+        u32 muMinMipLevel; // +0x20 -> runtime +0x19 -> MinMipLevel
         u32 muMipFilter;
         u32 muConvolution;
         u32 muColor;
@@ -306,8 +306,8 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
 // ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::ConstructSamplerState  @ 0x827ED538
 // The four caller arguments are carried into the sampler block at offsets +0x0C, +0x10, +0x14 and
-// +0x00/+0x04 exactly as ARTIST stores them. The legacy member names in SamplerStateParameters are
-// not used here to infer meaning; the offsets and constants below follow the X360 stores.
+// +0x00/+0x04 exactly as ARTIST stores them. The +0x18/+0x20 names follow ARTIST's Initialize-to-
+// SetSamplerStateLowLevel consumer chain; other legacy parameter names remain unchanged.
 // ---------------------------------------------------------------------------------------------------
 const SamplerState* ImRendererBase::ConstructSamplerState(
     rw::IResourceAllocator* lpAllocator, u32 luArg2, u32 luArg3, u32 luArg4, u32 luArg5)
@@ -320,9 +320,9 @@ const SamplerState* ImRendererBase::ConstructSamplerState(
     lParameters.muBias = luArg2;              // +0x0C = a2
     lParameters.muMaxLevel = luArg2;           // +0x10 = a2
     lParameters.muMinLevel = luArg3;           // +0x14 = a3
-    lParameters.muMaxAnisotropy = 0;           // +0x18 = ARTIST v7[6]
+    lParameters.muMagFilterZ = 0;              // +0x18 = ARTIST v7[6]
     lParameters.muMagFilter = 0;               // +0x1C
-    lParameters.muMinFilter = 13;              // +0x20 = ARTIST v7[8]
+    lParameters.muMinMipLevel = 13;            // +0x20 = ARTIST v7[8]
     lParameters.muMipFilter = 0;               // +0x24
     lParameters.muConvolution = 1;             // +0x28
     lParameters.muColor = 0;                   // +0x2C

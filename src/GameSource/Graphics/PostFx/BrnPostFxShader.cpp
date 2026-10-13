@@ -435,9 +435,9 @@ namespace renderengine
         u32 muBias;                   // really: MIN filter
         u32 muMaxLevel;               // really: MAG filter
         u32 muMinLevel;               // really: MIP filter
-        u32 muMaxAnisotropy;
+        u32 muMagFilterZ;      // +0x18 -> runtime +0x15
         u32 muMagFilter;
-        u32 muMinFilter;
+        u32 muMinMipLevel;     // +0x20 -> runtime +0x19
         u32 muMipFilter;
         u32 muConvolution;            // really: MAX ANISOTROPY
         u32 muColor;

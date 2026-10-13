@@ -35,11 +35,11 @@ namespace renderengine
         u8  mu8MaxLevel;
         u8  mu8MagFilter;
         u8  mu8Bias;
-        u8  mu8MaxAnisotropy;
+        u8  mu8MagFilterZ; // +0x15; SetSamplerStateLowLevel passes this to MagFilterZ.
         u8  mbState22;
         u8  mu8Convolution;
         u8  mu8MipFilter;
-        u8  mu8MinFilter;
+        u8  mu8MinMipLevel; // +0x19; SetSamplerStateLowLevel passes this to MinMipLevel.
         u8  mbState26;
         u8  mu8Pad27;
         u32 muInitialized;
@@ -53,9 +53,9 @@ namespace renderengine
         u32 muBias;
         u32 muMaxLevel;
         u32 muMinLevel;
-        u32 muMaxAnisotropy;
+        u32 muMagFilterZ; // +0x18 -> runtime +0x15 -> D3DDevice_SetSamplerState_MagFilterZ.
         u32 muMagFilter;
-        u32 muMinFilter;
+        u32 muMinMipLevel; // +0x20 -> runtime +0x19 -> D3DDevice_SetSamplerState_MinMipLevel.
         u32 muMipFilter;
         u32 muConvolution;
         u32 muColor;
@@ -108,9 +108,9 @@ namespace renderengine
         lpState->mu8State17 = static_cast<u8>(lpParams->muState17);
         lpState->mu8Bias = static_cast<u8>(lpParams->muBias);
         lpState->mu8MaxLevel = static_cast<u8>(lpParams->muMaxLevel);
-        lpState->mu8MaxAnisotropy = static_cast<u8>(lpParams->muMaxAnisotropy);
+        lpState->mu8MagFilterZ = static_cast<u8>(lpParams->muMagFilterZ);
         lpState->mu8MagFilter = static_cast<u8>(lpParams->muMagFilter);
-        lpState->mu8MinFilter = static_cast<u8>(lpParams->muMinFilter);
+        lpState->mu8MinMipLevel = static_cast<u8>(lpParams->muMinMipLevel);
         lpState->mu8MipFilter = static_cast<u8>(lpParams->muMipFilter);
         lpState->mu8Convolution = static_cast<u8>(lpParams->muConvolution);
         lpState->muColor = lpParams->muColor;
