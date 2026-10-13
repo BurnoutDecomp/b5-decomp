@@ -33,6 +33,12 @@ namespace CgsFileSystem
         int GetFileSize(Handle::DeviceHandle lpHandle, u64* lpu64OutSize) override;             // GetFileSizeEx
         int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
                  u64* lpu64OutPosition) override;                                               // SetFilePointerEx
+        // FLAG PC-platform leaf: Win32 find handles back the native directory virtuals.
+        int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, u32 luMaxEntries,
+                          u32* lpuOutCount, Handle::DeviceHandle* lppOutHandle) override;
+        int CloseDirectory(Handle::DeviceHandle lpHandle) override;
+        int ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer,
+                          u32 luMaxEntries, u32* lpuOutCount) override;
         int Shutdown() override;                                                              // close all open handles
 
     private:
