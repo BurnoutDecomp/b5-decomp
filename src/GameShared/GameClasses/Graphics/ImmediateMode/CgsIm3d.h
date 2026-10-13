@@ -16,8 +16,8 @@
 //   Im3dZOnly : Im3dBase<PositionOnlyVertex> : ImRenderer<PositionOnlyVertex> : ImRendererBase
 //   Im3d : Im3dBase<BasicColouredTexturedVertex> : ImRenderer<BasicColouredTexturedVertex>
 //
-// Textured3D publishes full one/two-matrix transforms; the legacy untextured
-// ProgressBar slice remains limited to its previously recovered members.
+// Textured3D publishes full one/two-matrix transforms; Im3dUntex also owns its
+// ARTIST-attested program/transform constructor for the untextured ProgressBar path.
 namespace CgsGraphics
 {
     template <typename V>
@@ -37,6 +37,9 @@ namespace CgsGraphics
     // DWARF CgsIm3d.h:199.
     struct Im3dUntex : public Im3dBase<BasicColouredVertex>
     {
+        // ARTIST 0x827FCBD0: initialize the inherited transform, build the one
+        // untextured program pair, and resolve its worldViewProj handle.
+        void Construct(rw::IResourceAllocator* lpAllocator);
     };
 
     // DecFIGS DWARF CgsIm3d.h:226. The position-only renderer has exactly this inherited base
