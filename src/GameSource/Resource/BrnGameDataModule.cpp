@@ -224,7 +224,7 @@ namespace BrnResource
             // fall through
         case E_PREPARE_ALLOCATORS:
             mePrepareStage = E_PREPARE_ALLOCATORS;
-            if (!CreateAllocators(lpInputStack, lpOutputStack))
+            if (!CreateAllocatorsNativePC(lpInputStack, lpOutputStack))
                 return lReturnFailure();
             // fall through
         case E_PREPARE_DLC_MANAGER:
@@ -812,38 +812,154 @@ namespace BrnResource
         return true;
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The rw allocator OBJECTS the registry's pointer rows reference. On the X360 the create
-    // requests are serviced by CgsMemory::MemoryModule (ProcessCreateLinearAllocatorRequest
-    // @0x8286D130 / the rw-general sibling), which carves a leaf memory bank per allocator and
-    // materialises the allocator object service-side, returning its pointer in the response the
-    // CreateAllocators drain stores into mapGeneratedRW*Allocators. [marked deviation: the async
-    // memory dispatch is deferred (CreatePools precedent), so the objects live here, TU-local.]
+    // ARTIST 0x8266DD00. Unactivated original producer/receiver path. Prepare
+    // retains the separate native synchronous provider below.
+    bool GameDataModule::CreateAllocators(CgsModule::IOBufferStack* lpInputStack,
+                                          CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = nullptr;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        mAllocatorList.mpAudioStreamAllocator = &mAudioStreamAllocator;
+
+        if (miNumAllocatorCreationRequests == 0)
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequestQueue;
+            lRequestQueue.Construct();
+
+            for (s32 liIndex = 0; liIndex < mpMemoryMap->GetNumRawResources(); ++liIndex)
+            {
+                CgsMemory::MemoryIO::CreateResourceRequest lRequest =
+                    *mpMemoryMap->GetRawResource(liIndex)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(liIndex);
+                lRequestQueue.AddEvent(&lRequest, 10, static_cast<s32>(sizeof(lRequest)));
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = liIndex;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
+                mAllocatorList.mapRawResources[liIndex] = &maGeneratedRawResources[liIndex];
+                mAllocatorList.mapRawResourceDescriptors[liIndex] = &maGeneratedRawResourceDescriptors[liIndex];
+            }
+            for (s32 liIndex = 0; liIndex < mpMemoryMap->GetNumLinearAllocators(); ++liIndex)
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest lRequest =
+                    *mpMemoryMap->GetLinearAllocator(liIndex)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(liIndex);
+                lRequest.SetHeapAllocator(nullptr);
+                lRequest.SetLinearAllocator(&maGeneratedLinearAllocators[liIndex]);
+                lRequestQueue.AddEvent(&lRequest, 14, static_cast<s32>(sizeof(lRequest)));
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = liIndex;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
+                mAllocatorList.mapLinearAllocators[liIndex] = &maGeneratedLinearAllocators[liIndex];
+            }
+            for (s32 liIndex = 0; liIndex < mpMemoryMap->GetNumHeapAllocators(); ++liIndex)
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest lRequest =
+                    *mpMemoryMap->GetHeapAllocator(liIndex)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(liIndex);
+                lRequest.SetHeapAllocator(&maGeneratedHeapAllocators[liIndex]);
+                lRequest.SetLinearAllocator(nullptr);
+                lRequestQueue.AddEvent(&lRequest, 14, static_cast<s32>(sizeof(lRequest)));
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = liIndex;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
+                mAllocatorList.mapHeapAllocators[liIndex] = &maGeneratedHeapAllocators[liIndex];
+            }
+            for (s32 liIndex = 0; liIndex < mpMemoryMap->GetNumRWLinearAllocators(); ++liIndex)
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest lRequest =
+                    *mpMemoryMap->GetRWLinearAllocator(liIndex)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(liIndex);
+                lRequestQueue.AddEvent(&lRequest, 11, static_cast<s32>(sizeof(lRequest)));
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = liIndex;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
+            }
+            for (s32 liIndex = 0; liIndex < mpMemoryMap->GetNumRWGeneralAllocators(); ++liIndex)
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest lRequest =
+                    *mpMemoryMap->GetRWGeneralAllocator(liIndex)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(liIndex);
+                lRequestQueue.AddEvent(&lRequest, 12, static_cast<s32>(sizeof(lRequest)));
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = liIndex;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;
+            }
+
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequestQueue);
+            lpResourceInput->UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetCount() == miNumAllocatorCreationRequests)
+        {
+            const CgsModule::Event* lpEvent = nullptr;
+            s32 liSize = 0;
+            s32 liTag = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (liSize > 0)
+            {
+                switch (liTag)
+                {
+                case 10:
+                {
+                    const auto* lpResponse = static_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent);
+                    const s32 liIndex = lpResponse->GetEventId();
+                    lpResponse->GetResource(&maGeneratedRawResources[liIndex],
+                                            &maGeneratedRawResourceDescriptors[liIndex]);
+                    break;
+                }
+                case 11:
+                {
+                    const auto* lpResponse = static_cast<const CgsMemory::MemoryIO::CreateLinearAllocatorResponse*>(lpEvent);
+                    const s32 liIndex = lpResponse->GetEventId();
+                    lpResponse->GetAllocator(&mapGeneratedRWLinearAllocators[liIndex]);
+                    mAllocatorList.mapRWLinearAllocators[liIndex] = mapGeneratedRWLinearAllocators[liIndex];
+                    break;
+                }
+                case 12:
+                {
+                    const auto* lpResponse = static_cast<const CgsMemory::MemoryIO::CreateGeneralAllocatorResponse*>(lpEvent);
+                    const s32 liIndex = lpResponse->GetEventId();
+                    lpResponse->GetAllocator(&mapGeneratedRWGeneralAllocators[liIndex]);
+                    mAllocatorList.mapRWGeneralAllocators[liIndex] = mapGeneratedRWGeneralAllocators[liIndex];
+                    break;
+                }
+                case 14:
+                    break;
+                default:
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Invalid event type\n",
+                        "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 2560);
+                    CgsDev::Assert::EndAssert();
+                    break;
+                }
+                const CgsModule::Event* lpNext = nullptr;
+                liTag = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+            miNumAllocatorCreationRequests = 0;
+            mReceiverQueue.Clear();
+            // ARTIST 0x8266E3D4..0x8266E3E8 retains the newly created input
+            // carve on completion. Reply result codes are not inspected here.
+            return true;
+        }
+
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // FLAG PC-platform adapter: the existing native provider keeps its RW
+    // objects outside bank storage and adopts the same existing native budgets.
     static rw::LinearResourceAllocator        s_aRWLinearAllocators[5];
     static rw::core::GeneralResourceAllocator s_aRWGeneralAllocators[5];
 
-    // @ 0x8266DD00 - create the memory map's allocator set and publish it through the
-    // bank->allocator registry (mAllocatorList) the OutputBuffer hands to every module Prepare.
-    //
-    // The X360 is a resumable two-phase machine: phase 1 walks the memory map's five allocator
-    // record tables (mpMemoryMap +16..+32 counts / +44..+60 tables) and publishes one create
-    // request per record into the ResourceModule input (event types 10 raw-resource / 14 linear +
-    // heap / 11 rw-linear / 12 rw-general; each request carries &mReceiverQueue as mpUser, the
-    // slot index, and - for the type-14s - the module-embedded LinearMalloc/HeapMalloc object the
-    // service constructs in place), registering each record's bank id in the AllocatorList
-    // (maiAllocatorMap[bank] = per-type slot, maeAllocatorType[bank] = family) as it goes; later
-    // calls pump UpdateResourceModule until every response is back in mReceiverQueue, then drain:
-    // case 10 stores the returned rw::Resource + descriptor into maGeneratedRawResources /
-    // ...Descriptors, cases 11/12 store the returned allocator pointers into
-    // mapGeneratedRW{Linear,General}Allocators AND the AllocatorList rows, case 14 has nothing to
-    // store (the embedded objects were constructed in place). [marked deviation, CreatePools
-    // precedent: the request/response round-trip through the ResourceModule + the per-allocator
-    // leaf-bank carve are deferred (CreateBanks submits the bank tree separately) - the same
-    // memory-map records (BrnMemoryMapData.h allocator tables, dumped from unk_82F2A788) are
-    // driven synchronously here, backing memory comes from the root debug allocator, and the
-    // registry/embedded-object stores are the faithful part.] Runs once (the Prepare stage
-    // machine re-enters until done).
-    bool GameDataModule::CreateAllocators(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
+    // Existing synchronous provider. Its body is retained unchanged, including
+    // its one-time guard, audio reset, native headroom, diagnostics and counters.
+    bool GameDataModule::CreateAllocatorsNativePC(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
     {
         // X360 (every call, before the outstanding-request check): wire the audio-stream
         // allocator row at the module-embedded LinearMalloc (`a1[106765] = a1 + 109814`).
@@ -1816,6 +1932,8 @@ namespace BrnResource
 
         // ARTIST 0x82671BF4 stores zero at this+439288 before bank requests begin.
         miNumBankCreationRequests = 0;
+        // ARTIST 0x82671C28 resets the same canonical counter used by 0x8266DD00.
+        miNumAllocatorCreationRequests = 0;
 
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
 

@@ -54,7 +54,8 @@ namespace CgsModule { struct Event; }                                        // 
 // 0x82671EA0, ProcessGetGameDataEvent 0x82672268, GetGameDataEventSlot 0x826664A0) and the FOUR
 // world handlers (GetWorldUnit 0x826705D0, LoadPVS 0x8266F9C0, LoadSurfaceList 0x8266F718,
 // LoadPropInstances 0x8266F178). CreateBanks submits the original typed bank requests and waits
-// for their replies; CreatePools/CreateAllocators retain native bring-up adapters. DLC enumeration has a hard trap boundary, the
+// for their replies. CreateAllocators has an unactivated original queued path; Prepare retains
+// its NativePC provider, and CreatePools retains its native adapter. DLC enumeration has a hard trap boundary, the
 // ResourceModule host status writer and four-argument GameData Prepare output tail remain partial,
 // and AttribSys / HUD / popup prepares, Destruct and non-world ProcessXxxRequest handlers are DEFERRED. The
 // ProcessInternal*Response completion routing (0x82672630 / 0x826736D8 / 0x8266E3F0 /
@@ -159,7 +160,9 @@ namespace BrnResource
         bool CreateBanks(CgsModule::IOBufferStack* lpInputStack,
                          CgsModule::IOBufferStack* lpOutputStack);       // 0x8266DA28
         bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
-        bool CreateAllocators(void* lpInputBuffer, void* lpOutputBuffer);  // 0x8266DD00
+        bool CreateAllocators(CgsModule::IOBufferStack* lpInputStack,
+                              CgsModule::IOBufferStack* lpOutputStack); // ARTIST 0x8266DD00; unactivated
+        bool CreateAllocatorsNativePC(void* lpInputBuffer, void* lpOutputBuffer);
         CgsResource::ResourceModule::EUpdateResult UpdateResourceModule(
             CgsModule::IOBufferStack* lpInputStack,
             CgsModule::IOBufferStack* lpOutputStack,
