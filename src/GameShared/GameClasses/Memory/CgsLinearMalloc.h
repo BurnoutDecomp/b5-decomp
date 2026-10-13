@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/core/memory/memoryfunctions.h"
 #include <cstddef>
 
 // CgsMemory::LinearMalloc - a bump allocator over a caller-supplied region: Create()
@@ -17,9 +18,9 @@ namespace CgsMemory
         void Create(void* lpBuffer, size_t lnSize); // ARTIST 0x82869108; borrowed backing
         void* Malloc(size_t lnSize);   // 0x82866DC0 - align the bump pointer, advance, return it (null if it overflows the region)
         void FreeAll();                // 0x82866E60 - reset the bump pointer to the start (frees every allocation)
-        void Destruct(); // owned-release/RW-hook behavior remains a separate recovery
+        void Destruct(); // ARTIST 0x828691C8; stop RW association, then release owned backing
         void StartRWAllocation();
-        void StopRWAllocation();
+        void StopRWAllocation(); // ARTIST 0x82866C38
         void SetAlignment(size_t lnAlignment);
         size_t GetAlignment() const { return mnAlignment; }   // current bump-pointer alignment
         size_t GetFreeMemory() const;
@@ -28,6 +29,9 @@ namespace CgsMemory
         void* GetStartAddress() const; // borrowed region start, independent of mpAlloc
 
     private:
+        static RwMemoryFunctions mCachedMemoryFuncs;
+        static LinearMalloc* mpActiveRWAllocator;
+
         bool   mbCreated;
         void*  mpAlloc; // owned allocation slot; borrowed Create does not set it
         size_t mnStartAddress;
