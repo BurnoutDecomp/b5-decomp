@@ -8,6 +8,10 @@
 // EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
 namespace CgsFileSystem
 {
+    // Zero-initialized global disk-error latch (ARTIST dword_830EA574; DecFIGS
+    // CgsFileSystem.h:262). EA::Thread::AtomicInt32 preserves the native atomic API.
+    EA::Thread::AtomicInt32 mDiskErrorOccured(0);
+
     // Marked PC sentinel allocator. The X360 passed the GameData allocator to
     // InitializeDeviceManager (which only stores it; DeviceManager::operator new mallocs on PC),
     // so any non-null value satisfies the "Allocator required" assert. Routing the manager through
@@ -27,7 +31,7 @@ namespace CgsFileSystem
 
         DeviceManager* lpManager = GetDeviceManager();
         if (lpManager && !lpManager->FindDevice("p_dvd"))
-            lpManager->AddPhysicalDevice(&gPhysicalDevice, "p_dvd", 0);
+            lpManager->AddPhysicalDevice(&gPhysicalDevice, "p_dvd", &FileSystem::RWDiskErrorHandler);
     }
 
     // @0x827DF320 (boot trace). The X360 ctor walks the 16 file handles and 8 read-stream engines
@@ -44,6 +48,23 @@ namespace CgsFileSystem
         , mpMemFileSystem(nullptr)
         , mbReleasing(false)
     {
+    }
+
+    // ARTIST @0x828E8B20. The X360 callback atomically stores 1 into
+    // dword_830EA574 and returns 0. This host callback's typed contract is
+    // int(int); keep the original error argument even though the native body
+    // does not inspect it.
+    int FileSystem::RWDiskErrorHandler(s32 /*liError*/)
+    {
+        mDiskErrorOccured.SetValue(1);
+        return 0;
+    }
+
+    // ARTIST's ResourceModule::Update reads the same process-wide latch after
+    // response processing, while holding its OutputBuffer write lock.
+    bool FileSystem::HasDiskErrorOccured() const
+    {
+        return mDiskErrorOccured.GetValue() != 0;
     }
 
     ReadStream FileSystem::OpenReadStream(

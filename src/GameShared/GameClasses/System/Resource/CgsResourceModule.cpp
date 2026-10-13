@@ -502,13 +502,28 @@ namespace CgsResource
 
     // ARTIST82907948: pump loader, pool and memory in order. Allocation/fixup
     // responses are retained until the next update, as in the original pipeline.
-    // FLAG: this partial host adapter does not publish FileSystemStatusInterface into
-    // lpOutputBuffer; the GameData wrapper's status copy remains default-constructed until
-    // the native filesystem-status producer is recovered.
-    ResourceModule::EUpdateResult ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
+    // ARTIST writes the disk-error latch into the caller's OutputBuffer after
+    // ProcessResourceResponses. GameDataModule reads this byte under the output
+    // read lock after this method returns.
+    ResourceModule::EUpdateResult ResourceModule::Update(
+        void* lpInputBuffer, ResourceIO::OutputBuffer* lpOutputBuffer)
     {
+        const auto WriteDiskErrorStatus = [this, lpOutputBuffer]()
+        {
+            if (!lpOutputBuffer)
+                return;
+            lpOutputBuffer->LockForWrite();
+            lpOutputBuffer->GetFileSystemStatusInterface()->SetDiskErrorOccured(
+                mFileSystem.HasDiskErrorOccured());
+            lpOutputBuffer->UnlockForWrite();
+        };
+
         auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
-        if (!lpResIn) return E_RESULT_OK;
+        if (!lpResIn)
+        {
+            WriteDiskErrorStatus();
+            return E_RESULT_OK;
+        }
 
         // FLAG PC-platform leaf: the current module adapter receives no IO stacks.
         // Reuse its serialized scratch buffers; Construct resets queue metadata,
@@ -567,6 +582,7 @@ namespace CgsResource
         s_loaderOut.LockForRead(); s_poolOut.LockForRead();
         ProcessResourceResponses(&s_loaderOut, &s_poolOut);
         s_poolOut.UnlockForRead(); s_loaderOut.UnlockForRead();
+        WriteDiskErrorStatus();
         // ARTIST @0x82907948 returns 1 iff PoolModule::Update returned 1. The current host
         // PoolModule::Update bool is true exactly for its emergency-fragment state, so map
         // that condition explicitly to the attested EUpdateResult value.

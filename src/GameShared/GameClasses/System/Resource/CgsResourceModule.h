@@ -32,7 +32,7 @@ namespace CgsResource
 {
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
-    namespace ResourceIO { struct InputBuffer; }                    // the module's request input
+    namespace ResourceIO { struct InputBuffer; struct OutputBuffer; } // request input / status output
     // The write-stream request event types (deprecated adders take these by pointer only).
     namespace Events
     {
@@ -108,7 +108,7 @@ namespace CgsResource
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
-        EUpdateResult Update(void* lpInputBuffer, void* lpOutputBuffer); // 0x82907948; host IO-stack adapter remains partial
+        EUpdateResult Update(void* lpInputBuffer, ResourceIO::OutputBuffer* lpOutputBuffer); // 0x82907948; host IO-stack adapter remains partial
 
         // ---- request/response shuttle steps (the pool-create slice of ResourceModule::Update) ---------
         // @ 0x829019F0 - forward the pool module's resource-memory requests (its PoolIO::OutputBuffer

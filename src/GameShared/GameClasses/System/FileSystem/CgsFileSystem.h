@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsPatchManager.h"
 // Committed vendor Futex: CRITICAL_SECTION-backed fast mutex (the file-system-wide lock).
 #include "eathread/eathread_futex.h"
+#include "eathread/eathread_atomic.h"
 
 // CgsFileSystem::FileSystem - the resource file-I/O subsystem embedded by value inside
 // CgsResource::ResourceModule. It owns the device manager (DeviceManager singleton), the embedded
@@ -26,8 +27,16 @@
 // bundle loader calls it lazily so EVERY load (incl. the early movie/debug-font bootstrapping,
 // which runs before Prepare) goes through the engine (no CRT fallback). The rw::core::filesys
 // Manager + the 16-slot BaseFile/OpenReadStream wrapper above DeviceManager remain follow-on.
+// The p_dvd registration carries the attested error callback, but DevicePhysicalPC currently
+// returns operation failures without invoking it; callback delivery and the RW Manager's own
+// error-handler registration are still open.
 namespace CgsFileSystem
 {
+    // ARTIST dword_830EA574; DecFIGS CgsFileSystem.h:262.
+    // This process-wide latch is set by the registered disk-error callback and read by
+    // ResourceModule::Update when it publishes FileSystemStatusInterface.
+    extern EA::Thread::AtomicInt32 mDiskErrorOccured;
+
     // Idempotent: initialise the DeviceManager + register the PC physical device (spawning its
     // worker thread) if not already up. Callable from FileSystem::Prepare or lazily from the
     // first file read. (X360: FileSystem::Prepare did this once, early in its boot; on PC the
@@ -96,6 +105,10 @@ namespace CgsFileSystem
         // @0x828D6708. True when the read-stream slot `liIndex` is CLOSED.
         bool IsReadStreamClosed(s32 liIndex);
 
+        // DecFIGS CgsFileSystem.h:246; ARTIST ResourceModule::Update reads this latch
+        // after processing filesystem responses and publishes it to the output buffer.
+        bool HasDiskErrorOccured() const;
+
         // DWARF CgsFileSystem.h:189/195. The public locked read-stream pair.
         ReadStream OpenReadStream(const char* lpcName, void* lpBuffer,
                                   u32 luBufferSize, u32 luNumBlocks,
@@ -106,6 +119,13 @@ namespace CgsFileSystem
         const PatchManager& GetPatchManager() const { return mPatchManager; }
 
     private:
+        // EnsureDeviceManagerUp installs this exact callback in the current host
+        // DeviceManager's typed ErrorCallback slot. ARTIST's handler returns false/0.
+        // The host callback type is int(*)(int), so retain its exact signature and result.
+        static int RWDiskErrorHandler(s32 liError);
+
+        friend void EnsureDeviceManagerUp();
+
         // Shared effective-status read used by Is{Open,Closed}: the raw stream status, except that
         // any outstanding operation collapses it to E_STATUS_PENDING (the X360 asm: v=PENDING; if
         // pendingCount<=0 v=meStatus).
