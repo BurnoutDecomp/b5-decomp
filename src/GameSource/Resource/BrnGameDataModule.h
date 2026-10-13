@@ -17,7 +17,7 @@
 #include "SharedClasses/DataLists/BrnHudMessageController.h"                 // [gateui r3] mHudMessageController (X360 a1+416080 == 0x65950)
 #include "SharedClasses/DataLists/BrnPopupController.h"                      // mPopupController (console +0x65974)
 #include "GameSource/Resource/BrnResourceDebugComponent.h"                   // embedded GameData debug component
-#include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC debug component
+#include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC manager + debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace CgsMemory { struct MemoryMap; }
@@ -544,7 +544,10 @@ namespace BrnResource
         BrnResource::PopupController   mPopupController;
         // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
         s32                            miPopupsPrepareStage;
-        // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
+        // ARTIST Construct calls this typed owner at X360 this+475960 before
+        // the DLC debug component; native storage follows the actual member types.
+        BrnResource::DLCManager         mDLCManager;
+        // (the 9 GeneralAllocators, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
 }
