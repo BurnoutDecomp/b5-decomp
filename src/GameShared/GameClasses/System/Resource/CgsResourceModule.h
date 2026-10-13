@@ -10,6 +10,7 @@
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator
 #include "rw/rwcore_general_alloc.h"                                  // persistent file-system allocator
 #include "GameShared/GameClasses/System/Resource/CgsResourceDebugComponent.h"  // embedded mDebugComponent + DebugComponentParams
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"        // retained AddPatchRequest payload
 
 // CgsResource::ResourceModule - the resource-streaming engine: the container module that owns
 // and orchestrates the four resource sub-modules (BundleLoaderModule, PoolModule, MemoryModule,
@@ -89,6 +90,7 @@ namespace CgsResource
         {
             mbIsNewModule = true;
             mpFileSystemAllocator = nullptr;
+            mbHasPendingAddPatchRequest = false;
             mPendingFileResponses.Construct(
                 maPendingFileResponses, maiPendingFileResponseFreeIndices,
                 static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
@@ -121,6 +123,10 @@ namespace CgsResource
         void ProcessResourceResponses(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
                                       PoolIO::OutputBuffer* lpPoolOut);
 
+        // @0x828FD5C8. Register one patch request and retain the exact typed event
+        // until the embedded PatchManager clears its native mbPatching state.
+        bool AddAddPatchRequest(const Events::AddPatchRequest* lpRequest);
+
         // Drain the pool module's output queue (acquire/etc. responses) and route each to its requester
         // (response->mpUser). The pool-response slice of the X360 ProcessResourceResponses shuttle. Caller
         // holds the pool output buffer read-locked.
@@ -136,8 +142,8 @@ namespace CgsResource
         // assert + return false; @0x828D8310 / @0x828D83A0). The four real file-system adders
         // (AddAddPatchRequest @0x828FD5C8 / AddCloseFileRequest @0x828F3EE0 /
         // AddRegisterMemFileRequest @0x828EC600 / AddUnregisterMemFileRequest @0x828EC660) are
-        // PARTIAL: the four real file-system adders still need their own file-handle/memory-file
-        // dependency web and remain deferred.
+        // PARTIAL: the patch producer/response pair is recovered. The other three real file-system
+        // adders still need their own file-handle/memory-file dependency web and remain deferred.
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
         bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
         bool AddOpenReadStreamRequest(const Events::OpenReadStreamRequest* lpRequest);     // @0x829070B0
@@ -158,6 +164,8 @@ namespace CgsResource
         // The widened host wrapper exceeds the 2616-byte allocator reserve, so this owning module
         // keeps the wrapper object while it adopts the same allocated resource/capacity.
         rw::core::GeneralResourceAllocator mFileSystemAllocatorStorage;
+        bool                      mbHasPendingAddPatchRequest; // X360 this+360716
+        Events::AddPatchRequest   mPendingAddPatchRequest;     // X360 this+360720, host-width payload
         PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         CgsContainers::IndexedPool<PendingFileResponse,

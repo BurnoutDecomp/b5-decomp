@@ -151,6 +151,7 @@ namespace CgsResource
                               lpInitOptions->macFileSearchPath,
                               lpInitOptions->mpDiskLayout,
                               lpInitOptions->mpcDiskCacheDrive);
+        mbHasPendingAddPatchRequest = false;
     }
     // ARTIST828EC6B0, with retirement of native pending-response allocations.
     void ResourceModule::Destruct()
@@ -240,6 +241,7 @@ namespace CgsResource
             case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
             case 18: AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
             case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            case 25: AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
             const CgsModule::Event* lpNext = nullptr;
@@ -288,6 +290,30 @@ namespace CgsResource
                 lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
         }
         ProcessPoolOutputResponses(lpPoolOut);
+
+        // ARTIST828EC788 publishes the saved event id only after the embedded
+        // patch search clears its typed mbPatching flag. The reply payload is one
+        // s32; a missing native discovery/I/O backend is not converted to success.
+        if (mbHasPendingAddPatchRequest && !mFileSystem.GetPatchManager().IsPatching())
+        {
+            const s32 liEventId = mPendingAddPatchRequest.miEventId;
+            mPendingAddPatchRequest.mpUser->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&liEventId),
+                25, sizeof(liEventId));
+            mbHasPendingAddPatchRequest = false;
+        }
+    }
+
+    // ARTIST @0x828FD5C8. The console queues AddPatch immediately, copies the
+    // request for its later receiver/id reply, then sets the one-pending flag.
+    bool ResourceModule::AddAddPatchRequest(const Events::AddPatchRequest* lpRequest)
+    {
+        CGS_ASSERT(!mbHasPendingAddPatchRequest, "Can only add 1 patch at a time\n");
+
+        mFileSystem.GetPatchManager().AddPatch(lpRequest->macFileName, lpRequest->miVersion);
+        std::memcpy(&mPendingAddPatchRequest, lpRequest, sizeof(mPendingAddPatchRequest));
+        mbHasPendingAddPatchRequest = true;
+        return true;
     }
 
     // ARTIST @0x829070B0. Start the asynchronous read-stream open, build the
