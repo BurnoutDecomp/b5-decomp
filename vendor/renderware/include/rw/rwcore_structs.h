@@ -165,6 +165,26 @@ struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
                 uint32_t luAlignment, uint32_t luAlignmentOffset = 0) override;
     void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags) override;
     void Free(void* lpBlock, size_t luSizeOrFlags = 0) override;
+
+    // X360 @0x823FF7D0; DecFIGS resourceallocator.h:178. Build the original
+    // five-lane descriptor, dispatch DoAllocate, and return the lane-zero pointer
+    // that DecFIGS names MemoryResource.
+    void* AllocateMemoryResource(uint32_t luSize, uint32_t luAlignment,
+                                 const char* lpcName)
+    {
+        ResourceDescriptor lDescriptor;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            lDescriptor.m_baseResourceDescriptors[luLane].m_size = 0;
+            lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+
+        Resource lResource = DoAllocate(lDescriptor, lpcName);
+        return lResource.m_baseResources[0];
+    }
+
     virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
                                       const char* lpcName);
     virtual void DoFree(const ::rw::Resource& /*lrResource*/) {}

@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Memory/MemoryMap/CgsMemoryMap.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h" // CgsResource::GetLoadBase (rw::Resource load base)
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h" // CgsResource::GetLoadBase64 (rw::Resource load base)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"             // CgsDev::StrStream (runtime-formatted assert message)
 
@@ -11,9 +11,8 @@
 // version equals KI_MEMORY_MAP_VERSION (== 0): the assert text embeds the runtime
 // miVersion, so it is built through a CgsDev::StrStream into a stack message buffer and
 // fired with the explicit Begin/Fire/End triad (matching the committed BrnCgsPlayerName
-// precedent), NOT CGS_ASSERT. Each pointer is then relocated with the same uintptr-word
-// arithmetic the committed CgsShaderConstants FixUps use: a non-null pointer gets the
-// 32-bit load base added, a null pointer stays null.
+// precedent), NOT CGS_ASSERT. The native typed image stores relative pointer values;
+// a non-null pointer receives the full-width PC resource base, while null stays null.
 
 namespace CgsMemory
 {
@@ -42,7 +41,7 @@ void MemoryMap::FixUp(const rw::Resource& lrResource)
 
     // Relocation delta: the rw::Resource's load base. The X360 adds this to each non-null
     // element-array pointer (dwords 9-15); null stays null.
-    const uintptr_t luBase = static_cast<uintptr_t>(CgsResource::GetLoadBase(lrResource));
+    const uintptr_t luBase = CgsResource::GetLoadBase64(lrResource);
 
     if (mpBanks)
         mpBanks = reinterpret_cast<MemoryMapBank*>(reinterpret_cast<uintptr_t>(mpBanks) + luBase);
@@ -103,8 +102,28 @@ const MemoryMapPool* MemoryMap::GetPool(s32 liIndex) const
         CgsDev::Assert::EndAssert();
     }
 
-    // result = 172 * liIndex + mpPools  (X360: mulli 0xAC then add the array base)
+    // result = mpPools + liIndex. X360 rows stride 0xAC; native rows follow the
+    // canonical CreatePoolRequest size, including the widened queue pointer on PC.
     return mpPools + liIndex;
 }
+
+
+// The X360 GameDataModule callers read these same count/pointer members directly in their table
+// loops. These typed accessors expose those exact fields and native row arithmetic to the PC caller.
+s32 MemoryMap::GetVersion() const { return miVersion; }
+s32 MemoryMap::GetPlatform() const { return miPlatform; }
+s32 MemoryMap::GetNumBanks() const { return static_cast<s32>(muNumBanks) - 1; }
+s32 MemoryMap::GetNumPools() const { return static_cast<s32>(muNumPools); }
+s32 MemoryMap::GetNumRawResources() const { return static_cast<s32>(muNumRawResources); }
+s32 MemoryMap::GetNumLinearAllocators() const { return static_cast<s32>(muNumLinearAllocators); }
+s32 MemoryMap::GetNumHeapAllocators() const { return static_cast<s32>(muNumHeapAllocators); }
+s32 MemoryMap::GetNumRWLinearAllocators() const { return static_cast<s32>(muNumRWLinearAllocators); }
+s32 MemoryMap::GetNumRWGeneralAllocators() const { return static_cast<s32>(muNumRWGeneralAllocators); }
+
+const MemoryMapRawResource* MemoryMap::GetRawResource(s32 liIndex) const { return mpRawResources + liIndex; }
+const MemoryMapLinearAllocator* MemoryMap::GetLinearAllocator(s32 liIndex) const { return mpLinearAllocators + liIndex; }
+const MemoryMapHeapAllocator* MemoryMap::GetHeapAllocator(s32 liIndex) const { return mpHeapAllocators + liIndex; }
+const MemoryMapRWLinearAllocator* MemoryMap::GetRWLinearAllocator(s32 liIndex) const { return mpRWLinearAllocators + liIndex; }
+const MemoryMapRWGeneralAllocator* MemoryMap::GetRWGeneralAllocator(s32 liIndex) const { return mpRWGeneralAllocators + liIndex; }
 
 }

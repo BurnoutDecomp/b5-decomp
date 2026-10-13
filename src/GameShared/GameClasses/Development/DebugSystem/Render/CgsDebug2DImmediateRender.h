@@ -86,6 +86,8 @@ namespace CgsDev
         // Text + bar/value helpers: declared for the full API; bodies are the text/font follow-on.
         void DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCheckScreen);
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
+        // ARTIST 0x82824140: signed MB/KB/byte formatting, unchecked text draw.
+        void DrawDataSize(s32 liBytes, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax,
                                RGBA lForeColour, RGBA lBackColour);
         void DrawTextWithBackground(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale,

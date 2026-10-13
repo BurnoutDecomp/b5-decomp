@@ -8,11 +8,25 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h"
 
 // CgsSceneManager::TriangleCollisionManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
+//   Construct (inlined in SceneManagerModule::Construct @ 0x828D09A0)
 //   Prepare                        @ 0x828B2FF0
 //   ProcessAddPolySoupListEvents   @ 0x828B3160
 
 namespace CgsSceneManager
 {
+
+// Construct -- this member's body is inlined into SceneManagerModule::Construct
+// @0x828D09A0. The owner clears the three manager fields at +0x70/+0x74/+0x78,
+// constructs the map at +0x00, then constructs the debug component at +0xA0 with
+// the manager address. mSpacialAllocator is constructed later by Prepare @0x828B2FF0.
+void TriangleCollisionManager::Construct()
+{
+    mpaPolySoupListHandles = nullptr;
+    miMaxNumSoupLists = 0;
+    miNumSoupListsAdded = 0;
+    mPolySoupListSpacialMap.Construct();
+    mDebugComponent.Construct(this);
+}
 
 // Prepare @0x828B2FF0 — build the triangle-collision scene from a caller-supplied
 // linear allocator with a fixed poly-soup-list budget.

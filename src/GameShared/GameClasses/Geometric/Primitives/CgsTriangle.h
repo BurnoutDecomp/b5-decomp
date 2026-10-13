@@ -20,6 +20,15 @@ namespace CgsGeometric
     struct Triangle
     {
     public:
+        // Set(Vector3, Vector3, Vector3) -- DecFIGS CgsTriangle.h:49. The
+        // three vertex stores are the record copied to IntersectTriangleBox.
+        void Set(Vector3 lVertex0, Vector3 lVertex1, Vector3 lVertex2)
+        {
+            maVertices[0] = lVertex0;
+            maVertices[1] = lVertex1;
+            maVertices[2] = lVertex2;
+        }
+
         Vector3 Get(s32 liIndex) const { return maVertices[liIndex]; }
 
         // Vertex 1 minus vertex 0, all four lanes.

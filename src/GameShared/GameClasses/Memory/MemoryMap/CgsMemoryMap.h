@@ -1,6 +1,14 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Memory/CgsMemoryBank.h"
+#include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
+
+namespace BrnResource
+{
+    struct MemoryMapImageInitializer;
+}
 
 // Forward declare the rw::Resource passed by reference to FixUp/FixDown. The relocation
 // reads only its load base via CgsResource::GetLoadBase; the .cpp pulls the complete
@@ -14,46 +22,89 @@ namespace rw
 // memory banks, pools, raw resources and the four allocator families. Reconstructed
 // from the DecFIGS DWARF (CgsMemoryMap.h) + the X360 FixUp pseudocode @ 0x8286C8B8.
 //
-// Console-faithful layout: 32-bit X360 fields, so the nine leading counts/ids occupy
-// dwords 0-8 and the seven element-array pointers occupy dwords 9-15. FixUp relocates
-// only those seven pointers by the resource load base (a 32-bit X360 address); on PC we
-// replicate the exact 32-bit pointer arithmetic via uintptr-sized words (the committed
-// CgsShaderConstants FixUps use the same idiom) so the on-disk layout and the console
-// relocation behaviour are preserved.
+// The X360 header stores nine leading counts/ids and seven 32-bit relative table pointers.
+// The generated PC image preserves that producer/reader order in a typed native object: its
+// table pointers begin as offsetof-derived relative pointer values, then FixUp adds the full
+// native resource base once before any table consumer runs.
 namespace CgsMemory
 {
-    // The seven element record types reached by the relocated pointers. FixUp only
-    // relocates the pointers (never dereferences them); the index accessors (GetBank /
-    // GetPool) return a typed pointer into the matching array using the console record
-    // stride. The two strides used by the accessors are pinned by the X360 ASM:
-    //   GetBank @ 0x82663C88 -> 84-byte stride (`mulli r11, ..., 0x54`)
-    //   GetPool @ 0x82663D60 -> 172-byte stride (`mulli r11, r28, 0xAC`)
-    // The records' real field layouts are DEFERRED to their own TUs (no caller in the
-    // committed tree dereferences them). To keep the typed pointer arithmetic in the
-    // accessors console-exact WITHOUT fabricating named fields, the two records that the
-    // accessors index are sized with an explicit padding buffer to their attested console
-    // size; the remaining five stay forward-declared (FixUp only relocates their pointers).
-    struct MemoryMapRawResource;
-    struct MemoryMapLinearAllocator;
-    struct MemoryMapHeapAllocator;
-    struct MemoryMapRWLinearAllocator;
-    struct MemoryMapRWGeneralAllocator;
-
-    // On-disk bank record. X360 size = 84 bytes (GetBank stride 0x54). Fields DEFERRED:
-    // reserve the exact console size with padding so GetBank's typed pointer arithmetic is
-    // byte-exact; name real fields when the record's own TU lands.
-    struct MemoryMapBank
+    // The map rows use the canonical records they contain. The X360 bank row is its five-lane
+    // MemoryBank::Params (84 bytes); the pool row is the resource CreatePoolRequest. Native
+    // pointer-bearing request rows widen with their canonical request types on PC.
+    struct MemoryMapBaseBank
     {
-        u8 maPad[84];
     };
 
-    // On-disk pool record. X360 size = 172 bytes (GetPool stride 0xAC). Fields DEFERRED:
-    // reserve the exact console size with padding so GetPool's typed pointer arithmetic is
-    // byte-exact; name real fields when the record's own TU lands.
-    struct MemoryMapPool
+    struct MemoryMapBank : public MemoryMapBaseBank
     {
-        u8 maPad[172];
+        const MemoryBank::Params* GetParams() const { return &mBankParams; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        MemoryBank::Params mBankParams;
     };
+
+    struct MemoryMapPool : public MemoryMapBaseBank
+    {
+        const CgsResource::Events::CreatePoolRequest* GetRequest() const { return &mRequest; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        CgsResource::Events::CreatePoolRequest mRequest;
+    };
+
+    struct MemoryMapRawResource : public MemoryMapBaseBank
+    {
+        const MemoryIO::CreateResourceRequest* GetRequest() const { return &mRequest; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        MemoryIO::CreateResourceRequest mRequest;
+    };
+
+    struct MemoryMapLinearAllocator : public MemoryMapBaseBank
+    {
+        const MemoryIO::CreateAllocatorRequest* GetRequest() const { return &mRequest; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        MemoryIO::CreateAllocatorRequest mRequest;
+    };
+
+    struct MemoryMapHeapAllocator : public MemoryMapBaseBank
+    {
+        const MemoryIO::CreateAllocatorRequest* GetRequest() const { return &mRequest; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        MemoryIO::CreateAllocatorRequest mRequest;
+    };
+
+    struct MemoryMapRWLinearAllocator : public MemoryMapBaseBank
+    {
+        const MemoryIO::CreateLinearAllocatorRequest* GetRequest() const { return &mRequest; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        MemoryIO::CreateLinearAllocatorRequest mRequest;
+    };
+
+    struct MemoryMapRWGeneralAllocator : public MemoryMapBaseBank
+    {
+        const MemoryIO::CreateGeneralAllocatorRequest* GetRequest() const { return &mRequest; }
+
+    private:
+        friend struct BrnResource::MemoryMapImageInitializer;
+        MemoryIO::CreateGeneralAllocatorRequest mRequest;
+    };
+
+    static_assert(sizeof(MemoryMapBank) == sizeof(MemoryBank::Params), "memory-map bank is the canonical Params row");
+    static_assert(sizeof(MemoryMapPool) == sizeof(CgsResource::Events::CreatePoolRequest), "memory-map pool is the canonical CreatePoolRequest row");
+    static_assert(sizeof(MemoryMapRawResource) == sizeof(MemoryIO::CreateResourceRequest), "memory-map raw resource uses the canonical request row");
+    static_assert(sizeof(MemoryMapLinearAllocator) == sizeof(MemoryIO::CreateAllocatorRequest), "memory-map linear allocator uses the canonical request row");
+    static_assert(sizeof(MemoryMapHeapAllocator) == sizeof(MemoryIO::CreateAllocatorRequest), "memory-map heap allocator uses the canonical request row");
+    static_assert(sizeof(MemoryMapRWLinearAllocator) == sizeof(MemoryIO::CreateLinearAllocatorRequest), "memory-map rw-linear allocator uses the canonical request row");
+    static_assert(sizeof(MemoryMapRWGeneralAllocator) == sizeof(MemoryIO::CreateGeneralAllocatorRequest), "memory-map rw-general allocator uses the canonical request row");
 
     // CgsMemoryMap.h:45
     struct MemoryMap
@@ -79,7 +130,8 @@ namespace CgsMemory
         // CgsMemoryMap.h:63 - the inverse (subtract the load base). DEFERRED to its own TU.
         void FixDown(const rw::Resource& lrResource);
 
-        // CgsMemoryMap.h:66-123 - accessors. DECLARE-ONLY; defined in their own TUs.
+        // CgsMemoryMap.h:66-123 - typed table accessors. X360 GetBank/GetPool body pins the
+        // index rules; native pointer arithmetic uses the canonical record sizes above.
         s32 GetVersion() const;
         s32 GetPlatform() const;
         const MemoryMapBank* GetBank(s32 liIndex) const;
@@ -101,6 +153,9 @@ namespace CgsMemory
         s32 GetNumRWGeneralAllocators() const;
 
     private:
+        // The generated typed image helper seeds the serialized header and relative table pointers.
+        friend struct BrnResource::MemoryMapImageInitializer;
+
         // ---- console-faithful member layout (X360 dword index in the comments) ----
 
         s32 miVersion;                       // :127  dword 0
