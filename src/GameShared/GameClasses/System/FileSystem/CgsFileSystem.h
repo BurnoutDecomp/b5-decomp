@@ -8,12 +8,13 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileLog.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsReadStream.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"
+#include "GameShared/GameClasses/System/FileSystem/CgsPatchManager.h"
 // Committed vendor Futex: CRITICAL_SECTION-backed fast mutex (the file-system-wide lock).
 #include "eathread/eathread_futex.h"
 
 // CgsFileSystem::FileSystem - the resource file-I/O subsystem embedded by value inside
-// CgsResource::ResourceModule. It owns the device manager (DeviceManager singleton) and, on the
-// real X360, the rw::core::filesys layer, per-stream critical sections, a FileLog, and the
+// CgsResource::ResourceModule. It owns the device manager (DeviceManager singleton), the embedded
+// PatchManager and, on the real X360, the rw::core::filesys layer, per-stream critical sections, a FileLog, and the
 // async open/read/close stream machinery the BundleLoaderModule reads .BUNDLE files through.
 //
 // SOURCES (X360 ARTIST): ctor 0x827DF320, Construct 0x829033C0, Prepare 0x828F04E8,
@@ -62,8 +63,14 @@ namespace CgsFileSystem
     class FileSystem
     {
     public:
-        // ---- PC-native bring-up shim (separate X360 funcs, reconstructed as no-ops) ----
-        void Construct();   // 0x829033C0
+        // ---- X360 Construct entry with the host device-manager adapter ----
+        // @0x829033C0. The X360 embeds PatchManager after the file-system lock and
+        // constructs it with the same persistent allocator recorded here.
+        void Construct(rw::IResourceAllocator* lpFileSystemAllocator,
+                       rw::IResourceAllocator* lpDebugAllocator,
+                       char* lpInitialSearchPath,
+                       DiskLayout* lpDiskLayout,
+                       const char* lpcDiskCacheDrive);
         bool Prepare();     // 0x828F04E8 — brings up the async device engine
         bool Release();     // 0x82903880
         void Destruct();    // 0x828E8A88
@@ -95,6 +102,8 @@ namespace CgsFileSystem
                                   s32 liNormalPriority, s32 liHighPriority,
                                   bool lbUseHDCache);
         void CloseReadStream(ReadStream lStream);
+        PatchManager& GetPatchManager() { return mPatchManager; }
+        const PatchManager& GetPatchManager() const { return mPatchManager; }
 
     private:
         // Shared effective-status read used by Is{Open,Closed}: the raw stream status, except that
@@ -131,6 +140,7 @@ namespace CgsFileSystem
         FileLog               mLog;                                               // :257
         DiskLayout*           mpDiskLayout;                                       // :258
         EA::Thread::Futex     mFileSystemFutex;                                   // :259
+        PatchManager          mPatchManager;                                      // ARTIST Construct this+0x9948
         DeviceMemFileSystem*  mpMemFileSystem;                                    // :260
         bool                  mbReleasing; // FLAG PC-platform leaf: serialized close-once latch
         // (CgsFileSystem.h:261 mDiskCache, :262 mDiskErrorOccured and the

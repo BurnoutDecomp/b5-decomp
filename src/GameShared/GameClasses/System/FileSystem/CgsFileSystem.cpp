@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
 // CgsFileSystem::FileSystem - see the header. The async device engine bring-up lives in
 // EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
@@ -163,19 +164,40 @@ namespace CgsFileSystem
         return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
     }
 
-    void FileSystem::Construct()
+    // The native disk-cache drive is intentionally unused here: DiskCache and
+    // the rw::core::filesys backend remain follow-on source paths.
+    void FileSystem::Construct(rw::IResourceAllocator* lpFileSystemAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator,
+                               char* lpInitialSearchPath,
+                               DiskLayout* lpDiskLayout,
+                               const char* /*lpcDiskCacheDrive*/)
     {
         for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
             maReadStreams[luIndex].Construct(this, &mLog);
         muNumUsedReadStreams = 0;
         mbReleasing = false;
+
+        // ARTIST stores these allocators before constructing the embedded patch
+        // overlay; PatchManager retains the first allocator for its map arrays
+        // and the native directory-search scratch allocation.
+        mpFileSystemAllocator = lpFileSystemAllocator;
+        mpDebugAllocator = lpDebugAllocator;
+        mPatchManager.Construct(lpFileSystemAllocator);
+
+        // FLAG PC-platform leaf: the host DeviceManager uses its process-lifetime
+        // allocator sentinel and physical-device adapter. ARTIST initializes the
+        // native device manager from mpFileSystemAllocator here.
+        EnsureDeviceManagerUp();
+
+        mpDiskLayout = lpDiskLayout;
+        CgsCore::StrCpy(maFilePrefix, sizeof(maFilePrefix), lpInitialSearchPath);
     }
 
     bool FileSystem::Prepare()
     {
         EnsureDeviceManagerUp();
-        // The X360 installs maFilePrefix here. The PC physical device maps this
-        // qualified root to the game's working directory.
+        // Construct retained the X360 initial search path in maFilePrefix. The PC
+        // physical device maps this qualified root to the game's working directory.
         GetDeviceManager()->SetDefaultPath("p_dvd:");
         mbPrepared = true;
         mbReleasing = false;

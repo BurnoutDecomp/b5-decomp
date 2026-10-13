@@ -1754,7 +1754,10 @@ namespace BrnResource
                                   << " -> ResourceModule::Construct\n";
         // X360 ConstructResourceModule stores the already-fixed ARTIST map pointer.
         mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
-        mResourceModule.Construct(&s_InitOptions, lpAllocator);
+        // The lane's current PC resource allocator and debug allocator are the
+        // same host object; keep both native Construct parameters explicit.
+        mResourceModule.Construct(&s_InitOptions, lpAllocator,
+                                  s_InitOptions.mDebugParams.mpDebugAllocator);
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";
 
         // X360 constructs the embedded Resource debug page after the module's

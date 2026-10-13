@@ -21,7 +21,7 @@
 // letter + back-slashes) for the FindFirstFile scan.
 //
 // LATER patches do NOT automatically win: when two patches both contain the same file, the map keeps
-// whichever patch has the SMALLER miValue (the integer passed to AddPatch as the patch's priority
+// whichever patch has the LARGER miValue (the integer passed to AddPatch as the patch's priority
 // key) - see AddFileToCurrentPatch.
 //
 // SOURCES (X360 ARTIST): Construct 0x828F0980, AddPatch 0x828F8F80, DirSearchThreadProc 0x828F0B88,
@@ -35,7 +35,7 @@ namespace CgsFileSystem
     struct PatchEntry
     {
         char miacFolder[64];   // +0  the patch folder path (NUL-terminated, < 64 chars)
-        s32  miValue;          // +64 the patch's priority key (lower wins on a file clash)
+        s32  miValue;          // +64 the patch's priority key (larger wins on a file clash)
     };
 
     // CgsPatchManager.h - the patch overlay manager. Instance layout is the faithful X360 member
@@ -65,6 +65,10 @@ namespace CgsFileSystem
         // path does not fit a PatchEntry::miacFolder buffer.
         bool AddPatch(const char* lpcFolder, s32 liValue);
 
+        // The native resource response shuttle reads mbPatching directly after
+        // AddPatch. Keep that read on this embedded owner with the same bool type.
+        bool IsPatching() const { return mbPatching; }
+
         // @0x828E9488. If the requested path `lpcSource` is claimed by a patch, write
         // "<patchFolder>/<sourcePath>" into `lpcDest` (capacity `luDestSize`) and return true.
         // Otherwise copy the source path through unchanged and return false.
@@ -87,11 +91,11 @@ namespace CgsFileSystem
         void SearchFolder(const char* lpcPatchFolder, const char* lpcSubFolder);
 
         // @0x828E9678. Hash `lpcFile`'s path and record current-patch ownership in mPatchFileMap.
-        // On a clash, keep whichever owning patch has the smaller PatchEntry::miValue.
+        // On a clash, keep whichever owning patch has the larger PatchEntry::miValue.
         void AddFileToCurrentPatch(const char* lpcFile);
 
         // ---- instance layout (faithful X360 member order; X360 members only) ----
-        rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    entry storage
+        rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    map storage + worker scratch
         PatchEntry                           maPatches[KU_MAX_PATCHES];     // +4    (4)    32 * 68
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
         CgsContainers::LinearHashTable<s32, s32> mPatchFileMap;             // +0x888 (2184), 16 bytes on X360
