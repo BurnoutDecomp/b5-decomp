@@ -49,6 +49,9 @@ namespace CgsFileSystem
     }
 
     // @ 0x828DE338. Block on the completion semaphore, then mark the op finished.
+    // FLAG PC-platform leaf: ARTIST calls EA::Thread::Semaphore::Wait(this, &unk_820F6FD8);
+    // this host build uses WaitForWorkerPC so the frame-owner thread can service worker asserts
+    // while blocked. The completion/wakeup contract is preserved; scheduling is host-specific.
     void AsyncOp::Wait()
     {
         CGS_ASSERT(mbOperating, "No operation\n");
