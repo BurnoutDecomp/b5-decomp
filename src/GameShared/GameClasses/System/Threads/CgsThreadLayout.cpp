@@ -316,6 +316,18 @@ namespace CgsSystem
         });
     }
 
+    // DecFIGS declares both setters; the X360 Prepare body @0x823DB848 inlines their stores.
+    // ThreadLayout::Begin @0x828EBAA0 pins the member words at +0x70 and +0x74.
+    void ThreadLayout::SetFrameRate(EFrameRate leFrameRate)
+    {
+        meFrameRate = leFrameRate;
+    }
+
+    void ThreadLayout::SetResourcePercentageOfFrame(s32 liPercentage)
+    {
+        miResourcePercentageOfFrame = liPercentage;
+    }
+
     // @ 0x828D7978 - the default RunnableFunctionUserWrapper EAThread installs for the
     // dispatch thread: just invoke the runnable with its context (tail call, no extra work).
     intptr_t ThreadLayout::GlobalThreadBeginWrapper(EA::Thread::RunnableFunction defaultRunnableFunction,
