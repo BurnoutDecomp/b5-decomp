@@ -6,6 +6,8 @@
 #include "pc/gcm/renderengine/shadows/SceneRender.h"
 #include "pc/gcm/renderengine/reflections/CubeHistory.h"
 #include "pc/gcm/renderengine/reflections/Resolution.h"
+#include "SharedClasses/Trigger/BrnRoamingLocation.h"
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #include "GameSource/Graphics/BrnRendererModule.h"
