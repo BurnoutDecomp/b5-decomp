@@ -132,10 +132,11 @@ namespace BrnHW
 
         bool Prepare();
         int  Release();
-        // The first argument is ignored by the X360 body (r3 is overwritten by the
-        // AllocatorList passed in r4); kept in the signature to match the call site.
-        static int PrepareMassiveMemory(int liUnused,
-                                        BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+        // ARTIST 0x823DB848 calls this on the embedded hardware object with the locked
+        // GameData allocator list. The body does not read fields from `this`, but the original
+        // ABI is an instance method: r3 is &mHardware and r4 is the allocator list.
+        int PrepareMassiveMemory(
+            const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
         bool HasGameBeenRebootedDueToInvite();
     };
 
