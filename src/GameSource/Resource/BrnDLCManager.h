@@ -3,17 +3,19 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (base of DLCDebugComponent)
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"                 // DLC monitor completion queue
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceAsyncOp.h"               // version-file Open/Read/Close state machine
+#include "SDKs/EATech/eathread/eathread_thread.h"                                   // EA::Thread::Thread (monitor owner)
 
 namespace CgsDev { struct Debug2DImmediateRender; }
+namespace BrnResource { namespace GameDataIO { class AllocatorList; } }
 
 // ============================================================================
 // GameSource/Resource/BrnDLCManager.h
 //
-// MINIMAL SLICE -- models only the downloadable-content availability flags that
-// the boot-legal flow touches. The full DLC manager (BrnResource::DLCManager and
-// its package list, the DLC debug component, and the feature-availability table)
-// lands when those TUs are reconstructed; GROW this header then, do NOT fork the
-// DLC types elsewhere.
+// Canonical owner for the downloadable-content feature table, debug page, and the
+// manager lifecycle recovered in this source lane. Keep the shared feature state
+// here; callers such as the boot-legal flow and DLC debug page use the same object.
 //
 // Shape recovered from the X360 asm of DLCBeatTheTeamGame::SetEnabledState
 // (@0x82472CA8) and its baked assert string at BrnDLCManager.h:405
@@ -231,27 +233,52 @@ private:
 // ============================================================================
 // BrnResource::DLCManager -- the runtime DLC package manager. Reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Holds an inline array of DLC package records + a small
-// version-check/monitor state machine. This wave bodies GetPackage @0x82661550 and
-// DLCVersionCheckFailed @0x82662E18; the sibling lifecycle methods are declared for
-// shape (bodies land with their own TUs).
+// version-check/monitor state machine. GetPackage @0x82661550 and DLCVersionCheckFailed
+// @0x82662E18 are already reconstructed; this increment restores the owner Construct and
+// Prepare lifecycle spine. The native monitor producer remains an explicit trap boundary.
 //
 // Capacity is an inference from floor(0x500 / 0x4C); the asm never attests the array bound.
 enum { KU_DLC_PACKAGE_CAPACITY = 16 };
 
 class DLCManager
 {
+    friend class GameDataModule;
+
 public:
-    // One 76-byte (0x4C) DLC package record. Field layout is NOT attested by this batch
-    // (GetPackage only returns a pointer into the array, DLCVersionCheckFailed only shifts whole
-    // records), so the record is an opaque correctly-sized byte span (stride from mulli ...,0x4C).
-    struct DLCPackage
+    enum EPrepareStage
     {
-        u8 mOpaque[76];   // X360-attested stride (0x4C)
+        E_PREPARE_START = 0,
+        E_PREPARE_START_MONITOR = 1,
+        E_PREPARE_WAIT_MONITOR = 2,
+        E_PREPARE_OPEN_VERSION = 3,
+        E_PREPARE_WAIT_OPEN = 4,
+        E_PREPARE_WAIT_READ = 5,
+        E_PREPARE_WAIT_CLOSE = 6,
+        E_PREPARE_PARSE_VERSION = 7,
+        E_PREPARE_NEXT_PACKAGE = 8,
+        E_PREPARE_DONE = 9
     };
 
-    // Sibling DLCManager methods (declared for shape; bodies land with their own TUs).
+    enum EReleaseStage
+    {
+        E_RELEASE_START = 0,
+        E_RELEASE_DONE = 1
+    };
+
+    // One 76-byte (0x4C) DLC package record. ARTIST uses +0x00 as a 64-byte path,
+    // +0x40 as the value logged as "priority", and +0x44 as the value logged as
+    // "version". The final word is written/shifted but has no named use in this evidence.
+    struct DLCPackage
+    {
+        char mPath[64];
+        s32  miPriority;
+        s32  miVersion;
+        u8   mOpaqueTail[4];
+    };
+
+    // DLCManager::Construct @0x826659E8 and Prepare @0x8266AF50.
     void Construct();                                    // DWARF :62
-    bool Prepare(class AllocatorList* lpAllocatorList);  // DWARF :66 -- calls DLCVersionCheckFailed
+    bool Prepare(GameDataIO::AllocatorList* lpAllocatorList); // DWARF :66; caller passes &mAllocatorList
     bool Release();                                      // DWARF :70
     void Destruct();                                     // DWARF :74
     void StartDLCMonitor();                              // DWARF :77
@@ -263,17 +290,26 @@ public:
     DLCPackage* GetPackage(s32 liPackage);
 
     // X360 0x82662E18. The current package's version check failed: shift-remove it from the array,
-    // decrement muPackageCount, and advance meVersionCheckStage (3 = more to check, 9 = done).
+    // decrement muPackageCount, and advance mePrepareStage (3 = more to check, 9 = done).
     // (Returns int only because the asm leaks r3; the value is unused -> effectively void.)
     int DLCVersionCheckFailed();
 
 private:
-    DLCPackage  maPackages[KU_DLC_PACKAGE_CAPACITY];  // +0x000  inline package array (base == this); capacity inferred
-    u8          mPad04C0[0x500 - KU_DLC_PACKAGE_CAPACITY * 76];  // +0x4C0  gap up to the stage dword (0x40 bytes)
-    s32         meVersionCheckStage;                  // +0x500
-    u8          mPad0504[0x620 - 0x504];              // +0x504  unmodelled fields up to the count dword
-    s32         muPackageCount;                        // +0x620
-    s32         miCurrentPackage;                      // +0x624
+    // Offsets in these comments are ARTIST/X360 offsets. Native host pointers inside AsyncOp,
+    // the receiver queue, and EA::Thread widen later fields on PC.
+    DLCPackage  maPackages[KU_DLC_PACKAGE_CAPACITY];  // X360 +0x000; capacity inferred
+    char        macVersionText[16];                   // X360 +0x4C0; filled by AsyncOp::Read
+    CgsFileSystem::AsyncOp mVersionFileOp;            // X360 +0x4D0; staged VERSION.TXT I/O
+    u8          mPad04FC[4];                          // X360 gap to the stage dword
+    EPrepareStage mePrepareStage;                     // X360 +0x500; DWARF name
+    EReleaseStage meReleaseStage;                     // X360 +0x504; DWARF name
+    CgsModule::EventReceiverQueue<256, 16> mMonitorReceiverQueue; // X360 +0x508
+    s32         muPackageCount;                        // X360 +0x620
+    s32         miCurrentPackage;                      // X360 +0x624
+    EA::Thread::Thread mDLCMonitorThread;              // X360 +0x628
+    bool        mbDLCMonitorThreadStarted;             // X360 +0x62C
+    u8          mPad062D[0x650 - 0x62D];               // X360 producer-owned monitor state
+    s32         muMonitorPackageCount;                 // X360 +0x650; missing producer writes this
 };
 
 } // namespace BrnResource
