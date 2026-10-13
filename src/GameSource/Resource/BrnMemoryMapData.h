@@ -119,7 +119,7 @@ namespace BrnResource
         { 9, "Playback", 4, {0x13BC00,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
         { 24, "Rwac", 4, {0x35C000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
         { 25, "Logic", 4, {0x3BC00,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
-        { 31, "2D Immediate Heap", 8, {0x3FC000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 31, "2D Immediate Heap", 8, {0x3FC000,0x0,0x0,0x0,0x0}, {16,1,4096,1,1} },
     };
     static const s32 KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS = 4;
 
@@ -1436,7 +1436,7 @@ namespace BrnResource
                 lrRequest.SetParentBankId(8);
                 rw::ResourceDescriptor lrDescriptor;
                 const u32 lauSizes[5] = {4177920, 0, 0, 0, 0};
-                const u32 lauAlignments[5] = {16, 1, 1, 1, 1};
+                const u32 lauAlignments[5] = {16, 1, 4096, 1, 1};
                 for (s32 liType = 0; liType < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liType)
                 {
                     lrDescriptor.m_baseResourceDescriptors[liType].m_size = lauSizes[liType];
