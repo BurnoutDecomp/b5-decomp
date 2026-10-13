@@ -25,5 +25,8 @@ numeric=compile_and_run(Path(__file__).with_name('PCResourceScratch.cpp'),
         REPO/resource/'CgsResourceImportHashTable.cpp', REPO/resource/'CgsSmallResource.cpp',
         *[REPO/base/'Memory'/name for name in ['CgsLinearMalloc.cpp','CgsDistributionStream.cpp',
              'CgsGatherStream.cpp','CgsScatterStream.cpp']],
-        REPO/'vendor/renderware/src/rw/BaseResourceDescriptor.cpp'])
+        REPO/'vendor/renderware/src/rw/BaseResourceDescriptor.cpp',
+        REPO/'vendor/renderware/src/rwcore_alloc.cpp',
+        REPO/'vendor/coreallocator/source/icoreallocator_interface.cpp',
+        REPO/'vendor/PPMalloc/src/EAGeneralAllocator.cpp'])
 raise SystemExit(report('run_pc_resource_scratch',[],numeric,28))
