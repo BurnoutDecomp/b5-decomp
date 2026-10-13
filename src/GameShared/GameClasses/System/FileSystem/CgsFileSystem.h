@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 // Real instance layout: the 16 file handles, the 8 read-stream engines, the embedded log + lock.
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h" // EDeviceErrors
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"
 // Complete CgsFileSystem::File definition — maFiles[16] is embedded by value below.
 #include "GameShared/GameClasses/System/FileSystem/CgsFileRW.h"
@@ -121,8 +122,8 @@ namespace CgsFileSystem
     private:
         // EnsureDeviceManagerUp installs this exact callback in the current host
         // DeviceManager's typed ErrorCallback slot. ARTIST's handler returns false/0.
-        // The host callback type is int(*)(int), so retain its exact signature and result.
-        static int RWDiskErrorHandler(s32 liError);
+        // Keep the native callback type and argument. The handler latches the error and returns false.
+        static bool RWDiskErrorHandler(EDeviceErrors leError);
 
         friend void EnsureDeviceManagerUp();
 

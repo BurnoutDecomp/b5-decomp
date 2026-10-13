@@ -51,13 +51,12 @@ namespace CgsFileSystem
     }
 
     // ARTIST @0x828E8B20. The X360 callback atomically stores 1 into
-    // dword_830EA574 and returns 0. This host callback's typed contract is
-    // int(int); keep the original error argument even though the native body
-    // does not inspect it.
-    int FileSystem::RWDiskErrorHandler(s32 /*liError*/)
+    // dword_830EA574 and returns false. Preserve its typed error argument even
+    // though the native body does not inspect it.
+    bool FileSystem::RWDiskErrorHandler(EDeviceErrors /*leError*/)
     {
         mDiskErrorOccured.SetValue(1);
-        return 0;
+        return false;
     }
 
     // ARTIST's ResourceModule::Update reads the same process-wide latch after

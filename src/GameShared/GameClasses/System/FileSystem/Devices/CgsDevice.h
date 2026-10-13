@@ -27,9 +27,9 @@
 
 namespace CgsFileSystem
 {
-    // A device-level error callback: receives the device error code, returns the (possibly
-    // remapped) result the failing op should report.
-    typedef int (*ErrorCallback)(int liError);
+    // DecFIGS FDeviceErrorCallback: receives the operation's typed device error and returns
+    // the callback's native boolean decision.
+    typedef bool (*ErrorCallback)(EDeviceErrors leError);
 
     class Device
     {
@@ -64,10 +64,10 @@ namespace CgsFileSystem
         virtual int Shutdown();                                                       // op9
 
         // ---- non-virtual helpers ----
-        // @0x828D65F0. If an error callback is registered, invoke it with liError and remember
-        // its result; then yield the calling thread 5ms (so a hammering retry loop does not
-        // starve the I/O thread) and return the callback's result (0 when none is set).
-        int CallErrorCallback(int liError);
+        // @0x828D65F0. Invoke a registered callback with leError, yield the calling thread 5ms,
+        // and return its bool result (false when none is set). X360 callers sleep indefinitely
+        // on false and report -2 on true; this helper does not retry the I/O operation.
+        bool CallErrorCallback(EDeviceErrors leError);
 
         // DeviceManager::AddPhysicalDevice installs the device's error callback (X360: *(dev+8)
         // = callback, *(dev+4) = 0).

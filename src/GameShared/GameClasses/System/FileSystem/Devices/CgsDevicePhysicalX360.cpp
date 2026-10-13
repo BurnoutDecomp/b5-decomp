@@ -9,8 +9,9 @@
 // +0x10): Open claims a slot and stores the open HANDLE + seek cursor + resolved path there;
 // Close returns the slot. The op methods receive the opaque FileHandleRecord pointer the asm
 // passes directly. The failure path on every op runs the device's
-// error callback and yields 5ms (Device::CallErrorCallback), then retries — the X360 did this
-// inline; routed through the base helper here, faithful to the same effect.
+// error callback and yields 5ms (Device::CallErrorCallback); false then sleeps indefinitely, while
+// true lets the operation return -2. The X360 did this inline; the base helper preserves the callback
+// invocation and delay.
 //
 // The byte transfer itself is the platform leaf: on X360 these were XDK calls against the DVD/HDD;
 // reconstructed here with the host Win32 file API (marked), exactly as the PC sibling does.
@@ -125,7 +126,7 @@ namespace CgsFileSystem
         }
 
         // Open failed: run the error callback (it yields 5ms); block if it does not absorb it.
-        if (!CallErrorCallback(2))
+        if (!CallErrorCallback(E_DEVICEERROR_OPEN))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -141,7 +142,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(4))
+        if (!CallErrorCallback(E_DEVICEERROR_CLOSE))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -161,7 +162,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(0))
+        if (!CallErrorCallback(E_DEVICEERROR_READ))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -190,7 +191,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(1))
+        if (!CallErrorCallback(E_DEVICEERROR_SEEK))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -311,7 +312,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(4))
+        if (!CallErrorCallback(E_DEVICEERROR_CLOSE))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
