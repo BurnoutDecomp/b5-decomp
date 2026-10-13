@@ -1,6 +1,6 @@
 // CgsGraphics::Im2dTransform - the screen-space transform an Im2d batch renders through.
-// This TU homes the class-wide aspect-correction matrix storage and the in-place
-// aspect-ratio fold.
+// This TU homes the canonical default transform, class-wide aspect-correction
+// matrix storage and the in-place aspect-ratio fold.
 //
 // TransformByAspectRatio @0x823DB448: folds the current display aspect ratio into the
 // transform in place. The X360 builds a 3x3 scalar (rw::math::fpu) affine from the
@@ -21,6 +21,21 @@
 
 namespace CgsGraphics
 {
+    // ARTIST cinit 0x82C6C3E8..0x82C6C494 writes these four vector rows to
+    // 0x830112D0. Its input positions are normalised screen coordinates.
+    Im2dTransform Im2dTransform::mgDefault =
+    {
+        { -1.0f, 1.0f, 0.0f, 0.0f },
+        {  2.0f, 0.0f, 0.0f, -2.0f },
+        {  0.0f, 0.0f, 0.0f, 0.0f },
+        {  1.0f, 1.0f, 1.0f, 1.0f }
+    };
+
+    const Im2dTransform& Im2dTransform::GetDefault()
+    {
+        return mgDefault;
+    }
+
     // X360 static @0x830110F0 (nine floats). Zero-initialised here; populated at runtime
     // by Im2dTransform::SetAspectCorrectionMatrix(const Matrix33&) @0x827F98C0.
     rw::math::fpu::Matrix33Template<float> Im2dTransform::msAspectCorrectionMatrix = {};

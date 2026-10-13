@@ -16,6 +16,8 @@ namespace CgsGraphics
         rw::math::vpu::Vector4 mColourShift;
         rw::math::vpu::Vector4 mColourScale;
 
+        static const Im2dTransform& GetDefault();
+
         void TransformByAspectRatio();
 
         // The class-wide aspect-correction matrix (X360 static @0x830110F0, nine floats),
@@ -23,5 +25,9 @@ namespace CgsGraphics
         // TransformByAspectRatio. A static member, so it does not change the 64-byte
         // instance layout (4 x Vector4). Storage homed in CgsIm2dTransform.cpp.
         static rw::math::fpu::Matrix33Template<float> msAspectCorrectionMatrix;
+
+    protected:
+        // ARTIST 0x830112D0, initialised by 0x82C6C3E8. DecFIGS :133.
+        static Im2dTransform mgDefault;
     };
 }
