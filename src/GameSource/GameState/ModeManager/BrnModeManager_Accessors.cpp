@@ -683,35 +683,11 @@ u32 ModeManager::GetRoadRageTakedownTarget()
 // any FlybyManager method). gsm + 0x1DD0 = &mModeManager (gsm + 0x1020) + 0xDB0 = this manager's own
 // mScoringSystem (BrnModeManager.h, +3504). So the online leaf counts THIS ModeManager's scoring slots.
 //
-// [FLAG] STRUCTURAL: the PC GameStateModule does not embed the two flyby managers (BrnGameState::
-// FlybyManager has no owning header: the base is defined inside BrnGameStateFlybyManager.cpp and
-// re-declared, without virtuals, in BrnGameStateOnlineFlybyManager.h; neither TU is mounted). So the
-// virtual cannot be dispatched and the two slot-1 leaves are written out here, on the scoring system
-// the online manager would have been handed. Same values as the console for every input; the leaf's
-// three non-null asserts are on &mScoringSystem, which cannot be null, and are not repeated.
-// RE-WIRE WHEN GameStateModule embeds mOfflineFlybyManager / mOnlineFlybyManager with their vtables:
-// then this is `return mpGameStateModule->GetFlybyManager()->CalculateNumberOfCarsInFlyby();`.
-// StartModeIntro @0x82343018's flyby leg (GetFlybyData, slot 0) is still blocked on that.
-// Consumer: GameMode::GetIntroDurationSeconds @0x82315A88 ((cars + 1) * 4.0 s for online modes other
-// than 15 / 16). Test: tests/run_fxgate_flyby_car_count.py.
+// The canonical flyby owners now carry their original virtual declarations and
+// bodied slot-1 providers. Preserve the selector and virtual dispatch by name.
 s32 ModeManager::GetNumberOfCarsInFlyby()
 {
-    if (!mpGameStateModule->IsOnlineGameMode())
-    {
-        return 0;   // OfflineFlybyManager slot 1, 0x827E2F38
-    }
-
-    // OnlineFlybyManager::CalculateNumberOfCarsInFlyby @0x82357F08.
-    s32 liNumRivals = GetScoringSystem()->GetNumberOfNetworkPlayersStillConnected() - 1;
-    if (liNumRivals > 0)
-    {
-        if (liNumRivals >= 3)
-        {
-            liNumRivals = 3;
-        }
-        return liNumRivals;
-    }
-    return 0;
+    return mpGameStateModule->GetFlybyManager()->CalculateNumberOfCarsInFlyby();
 }
 
 // ============================================================================================

@@ -405,6 +405,14 @@ void GameStateModule::Construct()
     CGS_ASSERT(miStreetManagerPM >= 0, "miStreetManagerPM >= 0");
 }
 
+// ARTIST 82311E48..82311E70 and 82343220..82343248 inline this selector.
+FlybyManager* GameStateModule::GetFlybyManager()
+{
+    if (IsOnlineGameMode())
+        return mpOnlineFlybyManager;
+    return &mOfflineFlybyManager;
+}
+
 // ARTIST 8238EF50. Original whole owner body; the PC bring-up pump still has
 // separate extracted legs until the full PreWorldUpdate caller is recovered.
 // ARTIST 823A5328. The full original pre-world chain; PC bring-up entry points
