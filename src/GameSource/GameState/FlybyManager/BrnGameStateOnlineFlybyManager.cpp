@@ -247,6 +247,31 @@ const CgsNetwork::PlayerName* OnlineFlybyManager::GetRivalName(BrnNetwork::Netwo
     return &mPlayerInputInterface.GetPlayerStatusDataByPlayerID(lPlayerID)->mPlayerName;
 }
 
+// ARTIST 0x82364270: a disconnected player's rating is invalidated. The
+// GetCarData result is dereferenced directly, matching the original continuation.
+void OnlineFlybyManager::CalculateDisconnectRating(FlybyManager::RivalRating* lpRating)
+{
+    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    if (mpScoringSystem->GetCarData(lpRating->mPlayerID)->GetScoreData()->GetDisconnected())
+        lpRating->miRivalWeighting = -1;
+}
+
+// ARTIST 0x823646E8. Opponents on a different round-start team gain 20.
+void OnlineFlybyManager::CalculateTeamRating(FlybyManager::RivalRating* lpRating)
+{
+    const BrnNetwork::NetworkPlayerID lLocalPlayerID = GetGameStateModule()->GetLocalPlayerNetworkID();
+    const ScoringSystem* lpScoringSystem = GetGameStateModule()->GetModeManager()->GetScoringSystem();
+    const CarData* lpCarData = lpScoringSystem->GetCarData(lLocalPlayerID);
+    CGS_ASSERT(lpCarData, "lpCarData");
+    const GameStateModuleIO::EPlayerTeam leLocalTeam = lpCarData->GetRoundStartTeam();
+
+    lpScoringSystem = GetGameStateModule()->GetModeManager()->GetScoringSystem();
+    lpCarData = lpScoringSystem->GetCarData(lpRating->mPlayerID);
+    CGS_ASSERT(lpCarData, "lpCarData");
+    if (leLocalTeam != lpCarData->GetRoundStartTeam())
+        lpRating->miRivalWeighting += 20;
+}
+
 // ---------------------------------------------------------------------------
 // CalculatePointsLeaderRating  @ 0x82358148
 // +50 weighting if this rating's player is the current points leader.
@@ -570,7 +595,7 @@ void OnlineFlybyManager::CalculateOnlineRivals()
         // The X360 cross-references the player to its active-race-car index via the module's
         // player table (sub_8231DD88). When that index equals the local player's active-race-car
         // index this slot is the local player and is marked invalid (mPlayerID = -1).
-        const s32 leActiveRaceCarIndex = ModulePlayerActiveRaceCarIndex(mpGameStateModule, lThisId);
+        const s32 leActiveRaceCarIndex = mpGameStateModule->GetActiveRaceCarIndex(lThisId);
 
         laRivalRatings[liPlayer].mbHasValidRelationship = false;
         laRivalRatings[liPlayer].miRivalWeighting = 0;
@@ -614,7 +639,7 @@ void OnlineFlybyManager::CalculateOnlineRivals()
 
         CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
         const s32 leActiveRaceCarIndex =
-            ModulePlayerActiveRaceCarIndex(mpScoringSystem, lpRating->mPlayerID);
+            mpScoringSystem->GetCarData(lpRating->mPlayerID)->GetActiveRaceCarIndex();
         CGS_ASSERT(leActiveRaceCarIndex > -1, "leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID");
         CGS_ASSERT(leActiveRaceCarIndex < 8, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
@@ -634,11 +659,12 @@ void OnlineFlybyManager::CalculateOnlineRivals()
         {
             lpFlybyData->AddMessage("PRERACE_POINTS_LEADER", NULL);
             // The X360 then re-validates the car count and tags the just-added car as the
-            // points-leader style; bounds asserts preserved verbatim.
+            // style 2; bounds asserts preserved verbatim.
             CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, "miNumberOfCars > 0");
             CGS_ASSERT(lpFlybyData->miNumberOfCars <= 3,
                        "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
-            FlybyData_TagLastCarStyle(lpFlybyData, 2 /*points-leader style*/);
+            lpFlybyData->mRivalsToShow[lpFlybyData->miNumberOfCars - 1].meMessageStyle =
+                static_cast<GameStateModuleIO::FlybyRivalData::EMessageStyle>(2);
         }
         else if (!lpRating->mbHasValidRelationship)
         {
@@ -692,7 +718,8 @@ void OnlineFlybyManager::AddNoRivalryFlybyMessage(FlybyManager::RivalRating* lpR
         CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, "miNumberOfCars > 0");
         CGS_ASSERT(lpFlybyData->miNumberOfCars <= 3,
                    "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
-        FlybyData_TagLastCarStyle(lpFlybyData, 1 /*neutral style*/);
+        lpFlybyData->mRivalsToShow[lpFlybyData->miNumberOfCars - 1].meMessageStyle =
+            GameStateModuleIO::FlybyRivalData::E_MESSAGE_STYLE_NEUTRAL;
         return;
     }
 
