@@ -992,8 +992,220 @@ bool GameStateModule::ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLin
     return true;
 }
 
-// Existing PC preparation adapter. The original Prepare is recovered separately
-// after its typed manager providers; ResourceUpdateThread explicitly selects this body.
+// ARTIST 0x8239E578..0x8239ED10. The original 28-case preparation ladder.
+// ResourceUpdateThread continues to select PrepareNativePC explicitly.
+bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                              CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    (void)lpUpdateOutputBufferStack; // ARTIST never reads r5.
+    bool lbDone = false;
+    mbIsUpdating = true;
+    lpOutputBuffer->LockForWrite();
+
+    // The three resident-list replies have identical validation and payload shape.
+    // Keep assertion continuation: the original does not return on an invalid reply id.
+    const auto GetListReply = [this](s32 liExpectedType, s32 liTypeLine, s32 liEventLine)
+        -> const BrnResource::GameDataIO::GameDataAssetEvent*
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        if (liType != liExpectedType)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liTypeLine);
+            CgsDev::Assert::EndAssert();
+        }
+        const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
+            static_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+        if (lpReply->miEventId != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liEventLine);
+            CgsDev::Assert::EndAssert();
+        }
+        return lpReply;
+    };
+
+    switch (mePrepareStage)
+    {
+    case E_PREPARESTAGE_START:
+        ClearData();
+        mResetPlayerDebugComponent.Register();
+        mGameStateDebugComponent.Register();
+        // fall through
+    case E_PREPARESTAGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_MODE_DATA_ACQUIRING:
+        mePrepareStage = E_PREPARESTAGE_LOAD_TRIGGER_DATA;
+        // fall through
+    case E_PREPARESTAGE_LOAD_TRIGGER_DATA:
+        if (!mTriggerQueryManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
+        // fall through
+    case E_PREPARESTAGE_STUNT_MANAGER:
+        if (!mStuntManager.Prepare(lpOutputBuffer))
+            break;
+        // fall through
+    case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetFreeburnChallengeList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        mpFreeburnChallengeList = static_cast<const BrnResource::ChallengeList*>(
+            GetListReply(KI_REPLY_FREEBURN_CHALLENGE_LIST, 516, 521)->mHandle.mpResourceMemory);
+        // fall through
+    case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetVehicleList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_VEHICLE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        mpVehicleList = static_cast<BrnResource::VehicleList*>(
+            GetListReply(KI_REPLY_VEHICLE_LIST, 556, 561)->mHandle.mpResourceMemory);
+        mProgressionManager.ApplyVehicleList(mpVehicleList);
+        mModeManager.ApplyVehicleList(mpVehicleList);
+        // fall through
+    case E_PREPARESTAGE_REQUEST_WHEEL_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetWheelList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_WHEEL_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        mpWheelList = static_cast<BrnResource::WheelList*>(
+            GetListReply(KI_REPLY_WHEEL_LIST, 599, 604)->mHandle.mpResourceMemory);
+        // fall through
+    case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
+        mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
+        lpOutputBuffer->GetResourceRequestInterface()->AcquireResource(&mReceiverQueue, 0, 5, "CarColours");
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS:
+    {
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        CgsResource::ResourceHandle lHandle;
+        lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+        lHandle.mpSourceEntry = lpAcquire->mpSourceEntry;
+        mpPlayerCarColours = lHandle;
+    }
+        // fall through
+    case E_PREPARESTAGE_MODEMANAGER:
+        mePrepareStage = E_PREPARESTAGE_MODEMANAGER;
+        if (!mModeManager.Prepare(mpFreeburnChallengeList,
+                                  lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+            break;
+        // fall through
+    case E_PREPARESTAGE_TAKEDOWNMANAGER:
+        mePrepareStage = E_PREPARESTAGE_TAKEDOWNMANAGER;
+        if (!mpTakedownManager->Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_MUGSHOTMANAGER:
+        mePrepareStage = E_PREPARESTAGE_MUGSHOTMANAGER;
+        // ARTIST has no provider work in this case.
+        // fall through
+    case E_PREPARESTAGE_PAYBACKMANAGER:
+        mpPaybackManager->Prepare();
+        mePrepareStage = E_PREPARESTAGE_PAYBACKMANAGER;
+        // fall through
+    case E_PREPARESTAGE_INVITEMANAGER:
+        mePrepareStage = E_PREPARESTAGE_INVITEMANAGER;
+        mpGameStateInviteManager->Prepare();
+        // fall through
+    case E_PREPARESTAGE_FLYBYMANAGER:
+        mePrepareStage = E_PREPARESTAGE_FLYBYMANAGER;
+        mOfflineFlybyManager.Prepare();
+        mpOnlineFlybyManager->Prepare();
+        // fall through
+    case E_PREPARESTAGE_NETWORKROUNDMANAGER:
+        mePrepareStage = E_PREPARESTAGE_NETWORKROUNDMANAGER;
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_PROGRESSION:
+        mePrepareStage = E_PREPARESTAGE_PROGRESSION;
+        if (!mProgressionManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+    case E_PREPARESTAGE_RICH_PRESENCE:
+        mePrepareStage = E_PREPARESTAGE_RICH_PRESENCE;
+        mpRichPresenceManager->miNumberPlayers = 0;
+        mpRichPresenceManager->miLobbyContextEnabled = -1;
+        if (!mpRichPresenceManager->RichPresenceManagerBase::Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_ACHIEVEMENT_MANAGER;
+        if (!mAchievementManager.Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_STREET_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_STREET_MANAGER;
+        if (!mStreetManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+    case E_PREPARESTAGE_IMAGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_IMAGE_MANAGER;
+        if (!mpImageManager->Prepare(lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+            break;
+        // fall through
+    case E_PREPARESTAGE_RUMBLE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_RUMBLE_MANAGER;
+        if (!mRumbleManager.Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER;
+        mDeveloperChallengeManager.maCompletedChallenges.UnSetAll();
+        mDeveloperChallengeManager.maRoadRageTakedownTimes.Clear();
+        mDeveloperChallengeManager.maCollectedBillboards.Clear();
+        mDeveloperChallengeManager.maTakenDownRaceCars.UnSetAll();
+        // fall through
+    case E_PREPARESTAGE_ORIGINAL_DONE:
+        mDriveThruManager.Prepare(mTriggerQueryManager.GetTriggerData(),
+                                  CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>(
+                                      mpPlayerCarColours.GetResourceHandle()));
+        lbDone = true;
+        mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+        mOnlineCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+        meReleaseStage = E_RELEASESTAGE_START;
+        break;
+    default:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_GSM_FILE, 825);
+        CgsDev::Assert::EndAssert();
+        break;
+    }
+
+    lpOutputBuffer->UnlockForWrite();
+    mbIsUpdating = false;
+    return lbDone;
+}
+
+// Existing PC preparation adapter. ResourceUpdateThread explicitly selects this
+// preserved body; the original Prepare above remains unactivated.
 bool GameStateModule::PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                               CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                               const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
