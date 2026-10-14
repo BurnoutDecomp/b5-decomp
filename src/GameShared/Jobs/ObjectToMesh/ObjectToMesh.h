@@ -5,7 +5,7 @@
 
 namespace CgsGraphics
 {
-class DispatchPacketInterpreter;
+struct DispatchPacketInterpreter;
 class DispatchList;
 struct DispatchObjectContext;
 struct DispatchCommand;
