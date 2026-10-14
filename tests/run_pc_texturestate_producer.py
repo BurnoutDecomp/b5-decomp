@@ -40,6 +40,7 @@ SOURCE_INPUTS = [
     Path("src/pc/gcm/renderengine/WorldTextureFiltering.h"),
     Path("src/pc/gcm/renderengine/texture.h"),
     SAMPLER_CPP,
+    SAMPLER_CPP.with_suffix(".h"),
     Path("src/SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxtint.cpp"),
     Path("src/GameShared/GameClasses/Fonts/CgsFont.cpp"),
 ]
