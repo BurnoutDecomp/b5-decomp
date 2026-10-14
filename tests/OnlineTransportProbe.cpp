@@ -33,7 +33,7 @@ int main(int liArgc, char** lpArgv)
     WSADATA lWsa;
     if (WSAStartup(MAKEWORD(2, 2), &lWsa) != 0) return 2;
     const SOCKET lSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    sockaddr_in lBind = {}; lBind.sin_family = AF_INET; lBind.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    sockaddr_in lBind = {}; lBind.sin_family = AF_INET; lBind.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(lSocket, reinterpret_cast<sockaddr*>(&lBind), sizeof(lBind)) != 0) return 2;
     u_long luNonBlocking = 1; ioctlsocket(lSocket, FIONBIO, &luNonBlocking);
     PcLanPeerT lSelf = {};
