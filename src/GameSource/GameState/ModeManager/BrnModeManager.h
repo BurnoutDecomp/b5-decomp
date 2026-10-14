@@ -275,6 +275,9 @@ public:
     bool Prepare(const BrnResource::ChallengeList* lpFreeburnChallengeList,
                  CgsMemory::HeapMalloc*            lpHeapMalloc);
 
+    // ARTIST 0x8231E5D8: the inlined ChallengeManager vehicle-list installer.
+    void ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList);
+
     // [tut-ticker] THE BRING-UP SEAM (kept; see the supersession banner in ModeManager_gUI_00.cpp).
     // Construct above is landed but UNCALLED: four of its eight arguments are not reachable at
     // GameStateModule::Construct's call position today. This is the ONLY armed construction path.
