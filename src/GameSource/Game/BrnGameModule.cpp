@@ -1372,8 +1372,8 @@ namespace BrnGame
     }
 
     // FLAG PC-platform leaf: the existing native preparation and persistent-input
-    // pump remains the active boundary. The full original staged caller above is
-    // separate until its owner preparation and world-streaming producer are ready.
+    // pump remains the active boundary. The full original staged caller above stays
+    // separate while its complete owner preparation/lifecycle is established.
     void BrnGameModule::DoUpdate_GameStatePreWorldNativePC(
         BrnGameMainFlowController::EMainGameFlowState leState)
     {
@@ -1445,11 +1445,8 @@ namespace BrnGame
 
         if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
         {
-            // FLAG PC-platform leaf: the partial WorldModule update calls only
-            // UpdateCollisionValidation, not WorldEntityModule::Update_PostPhysics.
-            // It therefore does not publish a live immediate-streamed status yet.
-            // Keep the existing PC pause scheduling until that producer is restored;
-            // consuming its untouched output byte here permanently pauses the junkyard.
+            // The selected world drive publishes the original ImmediateStreamed latch
+            // after its update; the pause producer below consumes the previous sub-step.
             // ⭐⭐ [D2 gesture-sink] THE CONTROLLER -> GAME-STATE BRIDGE. Placed FIRST in
             // this block because that is the console's own order: DoUpdate_GameStatePreWorld
             // @0x823EE0E8 runs BridgeNetworkToGameState + BridgeControllerToGameState and
@@ -1488,6 +1485,78 @@ namespace BrnGame
                     lpGsPreWorld->Construct();
                     mPcInputOutputBuffer.LockForRead();
                     lpGsPreWorld->LockForWrite();
+                    using namespace BrnGameState::GameStateModuleIO;
+                    // ARTIST823EE0E8: original step/play and streaming-pause producer.
+                    const bool lbWasStalled = mbStreamingStalled;
+
+                    if (mbSteppingFrames)
+                    {
+                        if (mbStopStepping)
+                        {
+                            if (mbSimPaused)
+                            {
+                                PlayerPauseStateChangedEvent lEvent;
+                                lEvent.mbActivated = false;
+                                lEvent.mbStalled = false;
+                                lEvent.mbWasStalled = lbWasStalled;
+                                lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                    E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                            }
+                            mbStopStepping = false;
+                            mbSteppingFrames = false;
+                            mbDoStep = false;
+                        }
+                        else if (mbDoStep)
+                        {
+                            PlayerPauseStateChangedEvent lEvent;
+                            lEvent.mbActivated = !mbSimPaused;
+                            lEvent.mbStalled = false;
+                            lEvent.mbWasStalled = lbWasStalled;
+                            if (!mbSimPaused)
+                                mbDoStep = false;
+                            lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                        }
+                    }
+
+                    if (mbWorldStreamingRequestedStall)
+                    {
+                        if (!mbSimPaused)
+                        {
+                            if (!mbOnline)
+                            {
+                                PlayerPauseStateChangedEvent lEvent;
+                                lEvent.mbActivated = true;
+                                lEvent.mbStalled = true;
+                                lEvent.mbWasStalled = lbWasStalled;
+                                lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                    E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                            }
+                            mbStreamingStalled = true;
+                        }
+                    }
+                    else if (mbStreamingStalled)
+                    {
+                        if (!mbOnline)
+                        {
+                            PlayerPauseStateChangedEvent lEvent;
+                            lEvent.mbActivated = false;
+                            lEvent.mbStalled = false;
+                            lEvent.mbWasStalled = lbWasStalled;
+                            lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                        }
+                        mbStreamingStalled = false;
+                    }
+
+                    if (mbStreamingStalled && sbShowStreamStallMessage)
+                    {
+                        CgsDev::DebugInterface lDebug;
+                        lDebug.Get2dRender().Draw2DText(
+                            "STREAM STALL: Stalling game while streaming catches up",
+                            Vector2{200.0f, 40.0f}, 16.0f, 0xFF0000FFu);
+                    }
+
                     s32 liIsPlaying = 0;
                     if (mpNetworkOutputBuffer != 0)
                     {
@@ -4855,6 +4924,15 @@ namespace BrnGame
                 {
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
+                    if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+                    {
+                        // ARTIST823E8D70..823E8DA0, after the selected world's producer.
+                        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = mpWorldUpdateOutputBuffer;
+                        lpWorldOutput->LockForRead();
+                        mbWorldStreamingRequestedStall =
+                            !lpWorldOutput->GetWorldEntityStatusInterface()->GetImmediateStreamed();
+                        lpWorldOutput->UnlockForRead();
+                    }
                 }
 
                 // ---- the RESOURCE tick (FLAG PC placement: the console's own thread) -------
