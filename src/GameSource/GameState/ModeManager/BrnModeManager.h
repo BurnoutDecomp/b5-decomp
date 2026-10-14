@@ -615,6 +615,7 @@ public:
 
 private:
     friend class ModeManagerDebugComponent;
+    friend class GameStateModule; // FinishStreaming clears the original +0x9503 latch
     friend class GameStateDebugComponent; // original HUD reads the private timer and landmark table
     // ===============================================================================================
     // PRIVATE SPINE (agents 3, 6, 7, 8)
