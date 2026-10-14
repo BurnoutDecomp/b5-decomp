@@ -6786,15 +6786,14 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
         }
     }
 
-    // Resource-only raw-depth binds keep their PC fallback unless a sampler
-    // block supplied the state for this unit.
+    // FLAG PC-platform leaf: raw native depth formats require the raw-sampling
+    // policy even when an authored console sampler block was installed first.
     if (luSampler < KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
     {
         D3DFORMAT leBoundFormat = D3DFMT_UNKNOWN;
         if (SUCCEEDED(lhr) && BoundTextureIsRawDepth(lpD3DTexture, &leBoundFormat))
         {
-            if (!lbHasSamplerState)
-                ApplyRawDepthSamplerState(lpDevice, luSampler);
+            ApplyRawDepthSamplerState(lpDevice, luSampler);
             guRawDepthSamplerUnits |= (1u << luSampler);
 
             static bool sabRawDepthReported[KU_RAW_DEPTH_MAX_SAMPLER_UNITS] = {};
@@ -8789,8 +8788,7 @@ void PCSceneBlit_End()
 void ShadowSampler_ApplyState(u32 luUnit)
 {
     IDirect3DDevice9* const lpDevice = Dev();
-    if (lpDevice == nullptr || luUnit >= 16u ||
-        renderengine::HasSamplerStateBlockPC(lpDevice, luUnit))
+    if (lpDevice == nullptr || luUnit >= 16u)
         return;
 
     const DWORD leFilter = ShadowDepthFormatIsHardwareCompare() ? D3DTEXF_LINEAR : D3DTEXF_POINT;
@@ -8900,7 +8898,7 @@ void GlassFractureSampler_ApplyState(u32 luUnit)
 void PostFxDepthSampler_ApplyState(u32 luUnit)
 {
     IDirect3DDevice9* const lpDevice = Dev();
-    if (lpDevice == nullptr || renderengine::HasSamplerStateBlockPC(lpDevice, luUnit))
+    if (lpDevice == nullptr)
         return;
     ApplyRawDepthSamplerState(lpDevice, luUnit);
 }
