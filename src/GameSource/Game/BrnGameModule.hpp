@@ -166,6 +166,10 @@ namespace BrnEffects { namespace EffectsIO { struct InputBuffer; struct Dispatch
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
 #include "GameSource/Network/BrnNetworkModule.h"
 
+// BrnGameModule.cpp:137 (DecFIGS), byte_82FAE28D (ARTIST). NetworkPreSim publishes
+// the online state used by QueryRequestDoStepFrame before it locks the input buffer.
+extern bool _gbHACKIsOnline;
+
 namespace BrnGame
 {
     // BrnGameModule.cpp:92 (DecFIGS) / byte_82FAE28A (ARTIST). PVSDebugComponent registers
@@ -492,6 +496,7 @@ namespace BrnGame
         bool GameMain();
 
         // GameMain callees + sim-step plumbing (reconstructed).
+        void         QueryRequestDoStepFrame(const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
         void         UpdateRequestDoStepFrame();   // @ BrnGameModule.cpp:4048
         void         CreateStaticIOBuffers();      // @ BrnGameModule.cpp:2497
         void         DestroyStaticIOBuffers();     // @ BrnGameModule.cpp:2515

@@ -5743,7 +5743,7 @@ namespace BrnGame
     //               outStack, buffer, lpInputModuleOutput, *(gm+0x9A0622) == 0 -- !mbDiskError)
     //   0x823C5738..0x823C57E8  if (miInputModuleState == 1): the START-pressed port scan (or the invite
     //               relaunch's port), miInputModuleState = 2   -- [FLAG, below]
-    //   0x823C57F0  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- [FLAG, below]
+    //   0x823C5808  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- caller unactivated
     //   0x823C57F8  StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
     // =========================================================================================
     u32 BrnGameModule::DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
@@ -5772,11 +5772,34 @@ namespace BrnGame
         // START action (record +0x5C, maActionInfo[8].muStatus bit 1) was pressed, then sets the state to
         // 2. This build seeds miInputModuleState = 4 in Construct (the PC input bring-up) and the only
         // 0 -> 1 edge (BridgeGuiToGame case 90) needs 0, so the block can never run here.
-        // [FLAG, not reconstructed] 0x823C57F0 QueryRequestDoStepFrame @0x823C5580 -- the debug
-        // step-frame pad chord (player 0's actions 56 + 57 held and 21 pressed raise the step or play
-        // request); not in the tree. Named here so its absence is not silent.
+        // Original 0x823C5808 calls QueryRequestDoStepFrame, recovered below. Caller
+        // activation remains separate from this source recovery.
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
         return liStartPressedPort;
+    }
+
+    // X360 0x823C5580; BrnGameModule.cpp:4013 (DecFIGS).
+    void BrnGameModule::QueryRequestDoStepFrame(
+        const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer)
+    {
+        if (_gbHACKIsOnline)
+            return;
+
+        lpInputOutputBuffer->LockForRead();
+        s32 liControllerPort = 0;
+        const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
+            GetPadInfoForPlayer0(lpInputOutputBuffer, &liControllerPort);
+        if (lpPadInfo != 0 &&
+            (lpPadInfo->maActionInfo[21].muStatus & 2u) != 0 &&
+            (lpPadInfo->maActionInfo[57].muStatus & 1u) != 0 &&
+            (lpPadInfo->maActionInfo[56].muStatus & 1u) != 0)
+        {
+            if (mbSteppingFrames)
+                mbRequestDoPlayFrame = true;
+            else
+                mbRequestDoStepFrame = true;
+        }
+        lpInputOutputBuffer->UnlockForRead();
     }
 
     // @ BrnGameModule.cpp:4048 - apply a pending step/play-frame request: a step request

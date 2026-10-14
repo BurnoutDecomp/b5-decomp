@@ -41,13 +41,12 @@
 
 #include <cstring>   // std::memcpy (the restart-traffic hull copy)
 
+// BrnGameModule.cpp:137 (DecFIGS), byte_82FAE28D (ARTIST): the one online latch
+// shared by DoUpdate_NetworkPreSim and QueryRequestDoStepFrame.
+bool _gbHACKIsOnline = false;
+
 namespace BrnGame
 {
-    // The online latch DoUpdate_NetworkPreSim publishes next to mbOnline. Its reader is
-    // QueryRequestDoStepFrame, which skips the debug step-frame pad chord while it is set;
-    // that function is not in the tree yet, so today this is written and not read.
-    static bool _gbHACKIsOnline = false;
-
     // =========================================================================================
     // DoUpdate_NetworkPreSim
     //
