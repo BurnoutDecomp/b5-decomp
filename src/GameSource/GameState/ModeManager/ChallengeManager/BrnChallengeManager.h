@@ -52,7 +52,7 @@
 namespace BrnResource
 {
     class  ChallengeList;      // mpFreeburnChallengeList; entry count @+0x32E0, GetChallengeData/GetChallengeIndex
-    class  VehicleList;        // mpVehicleList (CheckCurrentCar)
+    struct VehicleList;        // canonical SharedClasses/DataLists/VehicleList.h
 }
 namespace BrnProgression { class ProgressionManager; }
 namespace BrnGui { struct OnlineGameRoomPlayerInfo; }   // friend: reads the two static debug toggles
