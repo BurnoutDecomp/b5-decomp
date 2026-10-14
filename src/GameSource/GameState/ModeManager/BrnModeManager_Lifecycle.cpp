@@ -64,6 +64,13 @@ static const CgsID KU_INVALID_CGS_ID = 0xFFFFFFFFFFFFFFFFull;
 s32 miPreWorldUpdatePM  = -1;
 s32 miPostWorldUpdatePM = -1;
 
+// ARTIST 0x8231E5D8. The compiler inlined this forwarding method and the
+// ChallengeManager installer: Mode +0x73C0 is ChallengeManager +0x5C0.
+void ModeManager::ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList)
+{
+    mChallengeManager.ApplyVehicleList(lpVehicleList);
+}
+
 // ============================================================================
 // ModeManager::Construct -- X360 0x82340008
 // ============================================================================
