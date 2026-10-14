@@ -1922,10 +1922,12 @@ namespace BrnGame
                                 lpWorldInput, lpWorldUpdateOutputBuffer, lpWorldFrameAllocator);
         }
 
-        // [FLAG] the X360 latches !GetImmediateStreamed() into gm+10094123 here (the
-        // "world still streaming" flag the in-game flow polls); that member sits in this
-        // incremental layout's omitted range and has no committed consumer -- it lands
-        // with the DoUpdate cascade that reads it.
+        // ARTIST 823E8D70..823E8DA0: publish the streaming-stall request for
+        // the following original GameState pre-world pass under the output read lock.
+        lpWorldUpdateOutputBuffer->LockForRead();
+        mbWorldStreamingRequestedStall =
+            !lpWorldUpdateOutputBuffer->GetWorldEntityStatusInterface()->GetImmediateStreamed();
+        lpWorldUpdateOutputBuffer->UnlockForRead();
 
         const bool lbDestroyed = lpUpdateInputBufferStack->DestroyIOBuffer(&lpWorldInput);
         CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");        // CgsModuleIOHelper.h:57
