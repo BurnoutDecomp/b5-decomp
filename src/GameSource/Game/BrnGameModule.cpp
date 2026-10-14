@@ -4548,7 +4548,7 @@ namespace BrnGame
                                 BridgeNetworkToGameState(lpGsPreWorld, lpcNetworkOutput);
                                 liIsPlaying = lpcNetworkOutput->IsPlaying() ? 1 : 0;
                             }
-                            BridgeControllerToGameState(&mGameStateModule, &mPcInputOutputBuffer, liIsPlaying);
+                            BridgeControllerToGameStateNativePC(&mGameStateModule, &mPcInputOutputBuffer, liIsPlaying);
                             if (mpNetworkOutputBuffer != 0)
                                 mpNetworkOutputBuffer->UnlockForRead();
                             lpGsPreWorld->UnlockForWrite();
