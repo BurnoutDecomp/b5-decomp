@@ -76,6 +76,46 @@ namespace
     };
     State gState = {};
 
+    struct FileConfig
+    {
+        char maServer[256];
+        char maKey[256];
+
+        FileConfig() : maServer{}, maKey{}
+        {
+            // Use config.ini beside the executable, matching the PC boot shell.
+            // Resolve it independently of a shortcut/terminal's working directory.
+            char laPath[MAX_PATH];
+            const DWORD luLength = GetModuleFileNameA(NULL, laPath, MAX_PATH);
+            if ((luLength == 0) || (luLength >= MAX_PATH)) return;
+            char* lpFile = strrchr(laPath, '\\');
+            if (lpFile == NULL) return;
+            ++lpFile;
+            const size_t luRemaining = sizeof(laPath) - static_cast<size_t>(lpFile - laPath);
+            if (strcpy_s(lpFile, luRemaining, "config.ini") != 0) return;
+            GetPrivateProfileStringA("Online", "Server", "", maServer, sizeof(maServer), laPath);
+            GetPrivateProfileStringA("Online", "Key", "", maKey, sizeof(maKey), laPath);
+        }
+    };
+
+    const FileConfig& Config()
+    {
+        static const FileConfig lConfig;
+        return lConfig;
+    }
+
+    const char* ServerSetting()
+    {
+        const char* lpOverride = getenv("BP_ONLINE_SERVER");
+        return (lpOverride != NULL && *lpOverride != '\0') ? lpOverride : Config().maServer;
+    }
+
+    const char* KeySetting()
+    {
+        const char* lpOverride = getenv("BP_ONLINE_KEY");
+        return (lpOverride != NULL && *lpOverride != '\0') ? lpOverride : Config().maKey;
+    }
+
     uint16_t Read16(const uint8_t* lpBytes)
     { return static_cast<uint16_t>(lpBytes[0] | (lpBytes[1] << 8)); }
     uint32_t Read32(const uint8_t* lpBytes)
@@ -298,8 +338,7 @@ namespace
 
 bool Enabled()
 {
-    const char* lpServer = getenv("BP_ONLINE_SERVER");
-    return (lpServer != NULL) && (*lpServer != '\0');
+    return *ServerSetting() != '\0';
 }
 
 bool Configure(uintptr_t luSocket, uint32_t luIdent, PcLanPeerT* lpSelf)
@@ -311,9 +350,9 @@ bool Configure(uintptr_t luSocket, uint32_t luIdent, PcLanPeerT* lpSelf)
     gState.muIdent = luIdent;
     gState.muMaxPlayers = 8;
     gState.muTimeoutSeconds = 15;
-    if ((luIdent == 0) || !Resolve(getenv("BP_ONLINE_SERVER")) || !OpenKey(getenv("BP_ONLINE_KEY")) || !NewChallenge())
+    if ((luIdent == 0) || !Resolve(ServerSetting()) || !OpenKey(KeySetting()) || !NewChallenge())
     {
-        Log("[net] online configuration failed: check BP_ONLINE_SERVER and the 64-hex-digit BP_ONLINE_KEY\n");
+        Log("[net] online configuration failed: check config.ini [Online] Server and 64-hex-digit Key (or BP_ONLINE_* overrides)\n");
         Shutdown();
         return false;
     }
