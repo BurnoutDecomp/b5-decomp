@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../online/OnlineTransport.h"
 
 #include "GameShared/GameClasses/System/PC/CgsPcNetIdentity.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -241,6 +242,13 @@ namespace
             memcpy(aPacket + sizeof(Header), pBody, (size_t)iLen);
         }
 
+        if (B5Online::Enabled())
+        {
+            const int32_t liResult = B5Online::Send(pTo->uAddr, aPacket, static_cast<int32_t>(sizeof(Header)) + iLen);
+            if (liResult == 0) gPcLan.Stats.uSent += 1;
+            return liResult;
+        }
+
         sockaddr_in To;
         memset(&To, 0, sizeof(To));
         To.sin_family = AF_INET;
@@ -418,7 +426,14 @@ namespace
             Peer.uAddr = ntohl(From.sin_addr.s_addr);
             Peer.uPort = ntohs(From.sin_port);
             Peer.uPad = 0;
-            PcLanCoreReceiveOne(aPacket, iSize, &Peer, uNowMs);
+            if (B5Online::Enabled())
+            {
+                uint8_t laInner[sizeof(PcLanHeaderT) + PCLAN_MAX_BODY];
+                PcLanPeerT lLogicalPeer;
+                const int32_t liInner = B5Online::Receive(&Peer, aPacket, iSize, laInner, sizeof(laInner), &lLogicalPeer);
+                if (liInner > 0) PcLanCoreReceiveOne(laInner, liInner, &lLogicalPeer, uNowMs);
+            }
+            else PcLanCoreReceiveOne(aPacket, iSize, &Peer, uNowMs);
         }
     }
 
@@ -573,6 +588,14 @@ bool PcLanStartup()
     }
     gPcLan.Self.uAddr = PcLanCoreFindSelfAddr();
     gPcLan.Self.uPad = 0;
+    if (!B5Online::Configure(static_cast<uintptr_t>(gPcLan.hSocket), gPcLan.uSelfIdent, &gPcLan.Self))
+    {
+        closesocket(gPcLan.hSocket);
+        gPcLan.hSocket = INVALID_SOCKET;
+        WSACleanup();
+        gPcLan.bWsaStarted = false;
+        return false;
+    }
 
     char strSelf[32];
     PcLanCoreLog("up name=%s xuid=%016llX ident=%08X bound=%s window=%u..%u",
@@ -599,6 +622,7 @@ void PcLanShutdown()
     PcLanCoreLog("down sent=%u resent=%u recv=%u dup=%u acked=%u timeouts=%u bad=%u",
               gPcLan.Stats.uSent, gPcLan.Stats.uResent, gPcLan.Stats.uRecv, gPcLan.Stats.uDup,
               gPcLan.Stats.uAcked, gPcLan.Stats.uTimeouts, gPcLan.Stats.uBad);
+    B5Online::Shutdown();
     closesocket(gPcLan.hSocket);
     gPcLan.hSocket = INVALID_SOCKET;
     PcLanCoreReleaseAllPending();
@@ -614,6 +638,9 @@ bool PcLanActive()
 {
     return gPcLan.hSocket != INVALID_SOCKET;
 }
+
+bool PcLanOnline() { return B5Online::Enabled(); }
+uint16_t PcLanMaxPlayers() { return B5Online::MaxPlayers(); }
 
 PcLanPeerT PcLanSelf()
 {
@@ -632,6 +659,7 @@ void PcLanIdle()
         return;
     }
     const uint64_t uNowMs = PcLanCoreNowMs();
+    B5Online::Update();
     PcLanCoreDrain(uNowMs);
     PcLanCoreRetransmit(PcLanCoreNowMs());
 }
@@ -738,6 +766,11 @@ int32_t PcLanBroadcast(uint8_t uType, uint32_t uGameIdent, const void *pBody, in
 
     // Loopback reaches every instance on this machine; the limited broadcast reaches the LAN
     // (it may be refused on a host with no network, which only matters if loopback failed too).
+    if (B5Online::Enabled())
+    {
+        const PcLanPeerT lServer = { 0, 0, 0 };
+        return PcLanCoreSendRaw(&lServer, uType, uGameIdent, 0, pBody, iLen);
+    }
     int32_t iDelivered = 0;
     const uint32_t aTargets[2] = { KU_LOOPBACK, KU_BROADCAST };
     for (int32_t iTarget = 0; iTarget < 2; ++iTarget)
