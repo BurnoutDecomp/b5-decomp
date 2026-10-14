@@ -29,6 +29,7 @@
 // includes this one back, so there is no cycle (contrast mpTrainingManager below).
 #include "GameSource/GameState/Offences/BrnStuntManager.h"           // BrnGameState::StuntManager (mStuntManager, by value)
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // DeveloperChallengeManager (by value)
+#include "GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h" // original Prepare's embedded owner
 // ---- Prepare2's two sub-objects, both held BY VALUE exactly as the console holds them ----
 // X360 GameStateModule::Construct @0x82380388 constructs both in place:
 //   AchievementManagerBase::Construct(a1 + 181680, a1 + 47920, a1 + 284520, a1 + 7632, a1)
@@ -252,10 +253,9 @@ public:
     void Construct() override;
     void Destruct()  override;
 
-    // Original ARTIST 0x8239E578 declaration; the complete preparation body is
-    // recovered with its typed providers before activation. Native startup explicitly
-    // calls the existing PC adapter below.
-    bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+    // Original ARTIST 0x8239E578, including all 28 preparation cases. Native
+    // startup explicitly calls the existing PC adapter below.
+    virtual bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                  CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
@@ -1516,19 +1516,8 @@ private:
 
     // ---- the Prepare slice's own members (X360 offsets from Prepare @0x8239E578) ----
 
-    // DWARF BrnGameStateModule.h:696. The 27-stage first-pass prepare machine's stage set.
-    // Enumerators + values are DWARF-authoritative.
-    //
-    // ⛔ CORRECTION 2026-08-01: the committed line "the X360 jump table has exactly these" is
-    // WRONG -- MEASURED, the ARTIST jump table at 0x8239E630 has TWENTY-EIGHT cases (0..27), one
-    // more than this DWARF enum. The extra one sits between RUMBLE_MANAGER and DONE:
-    //     X360 case 26  zero-inits the embedded DeveloperChallengeManager (this+185712)
-    //     X360 case 27  DriveThruManager::Prepare + the car-select list publish + the DONE tail
-    // The DecFIGS DWARF is the PS3 INTERNAL build and has no DeveloperChallengeManager stage at
-    // all -- straight version drift (references/DecFIGS/README.md's own warning). The names stay
-    // DWARF-authoritative; what shifts is only which console case each does the work of, so
-    // E_PREPARESTAGE_DONE below carries the X360's case-27 body (which is the terminal one, and
-    // whose `stage = 1; stage2 = 0` tail this machine already reproduced).
+    // ARTIST has 28 cases. The NativePC adapter retains its pre-existing
+    // DONE=26 spelling/value; the original path names its two final cases below.
     enum EPrepareStage
     {
         E_PREPARESTAGE_START                    = 0,
@@ -1557,7 +1546,9 @@ private:
         E_PREPARESTAGE_STREET_MANAGER           = 23,
         E_PREPARESTAGE_IMAGE_MANAGER            = 24,
         E_PREPARESTAGE_RUMBLE_MANAGER           = 25,
-        E_PREPARESTAGE_DONE                     = 26,
+        E_PREPARESTAGE_DONE                     = 26, // existing NativePC terminal stage
+        E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER = 26,
+        E_PREPARESTAGE_ORIGINAL_DONE             = 27,
     };
 
     // DWARF BrnGameStateModule.h:180 (X360 this+552). ⚠️ This NAME-SHADOWS the private
@@ -1601,6 +1592,30 @@ private:
         E_PREPARE2STAGE_DONE           = 3,
     };
     EPrepare2Stage mePrepare2Stage = E_PREPARE2STAGE_START;
+
+    // DecFIGS names +0x230 meReleaseStage. ARTIST adds the developer-challenge
+    // release case at 1, shifting IMAGE_MANAGER..DONE by one from the PS3 enum.
+    enum EReleaseStage
+    {
+        E_RELEASESTAGE_START = 0,
+        E_RELEASESTAGE_DEVELOPER_CHALLENGE_MANAGER = 1,
+        E_RELEASESTAGE_IMAGE_MANAGER = 2,
+        E_RELEASESTAGE_STREET_MANAGER = 3,
+        E_RELEASESTAGE_ACHIEVEMENT_MANAGER = 4,
+        E_RELEASESTAGE_RICH_PRESENCE = 5,
+        E_RELEASESTAGE_PROGRESSION = 6,
+        E_RELEASESTAGE_NETWORKROUNDMANAGER = 7,
+        E_RELEASESTAGE_FLYBYMANAGER = 8,
+        E_RELEASESTAGE_INVITEMANAGER = 9,
+        E_RELEASESTAGE_PAYBACKMANAGER = 10,
+        E_RELEASESTAGE_MUGSHOTMANAGER = 11,
+        E_RELEASESTAGE_TAKEDOWNMANAGER = 12,
+        E_RELEASESTAGE_MODEMANAGER = 13,
+        E_RELEASESTAGE_MANAGER = 14,
+        E_RELEASESTAGE_DONE = 15,
+    };
+    // ARTIST Construct @0x823803D8 seeds 15; original Prepare's tail resets 0.
+    EReleaseStage meReleaseStage = E_RELEASESTAGE_DONE;
 
     // [PC bring-up observer -- NOT an X360 member.] True once Prepare2 has completed BOTH legs,
     // i.e. once "Progression.dat" and "STREETDATA.DAT" are resident in pool 5. It cannot be
@@ -1759,6 +1774,8 @@ public:
 private:
     GameStateInviteManager*    mpGameStateInviteManager = 0;
     GameStateImageManagerBase* mpImageManager           = 0;
+    // ARTIST's offline owner is embedded; no active NativePC caller selects it.
+    OfflineFlybyManager        mOfflineFlybyManager;
     OnlineFlybyManager*        mpOnlineFlybyManager     = 0;
     RichPresenceManagerX360*   mpRichPresenceManager    = 0;
 
