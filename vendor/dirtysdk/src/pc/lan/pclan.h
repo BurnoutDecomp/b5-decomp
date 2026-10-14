@@ -74,6 +74,9 @@ typedef void PcLanHandlerT(void *pRef, const PcLanPeerT *pFrom, const PcLanHeade
 bool PcLanStartup();
 void PcLanShutdown();
 bool PcLanActive();
+// Explicit server mode uses encrypted BPO1 packets and logical peer addresses.
+bool PcLanOnline();
+uint16_t PcLanMaxPlayers();
 
 // This instance's bound address (loopback or first LAN interface) and port.
 PcLanPeerT PcLanSelf();

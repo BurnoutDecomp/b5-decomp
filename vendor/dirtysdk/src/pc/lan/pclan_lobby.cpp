@@ -443,10 +443,15 @@ namespace
         static u8   aBody[4 + KI_TEXT_LEN];
         u16 aPorts[KI_MAX_PLAYERS];
 
+        if (PcLanOnline() && ((g_Lobby.Play.iMaxsize <= 0) || (g_Lobby.Play.iMaxsize > PcLanMaxPlayers())))
+            g_Lobby.Play.iMaxsize = (s8)PcLanMaxPlayers();
         _HostPorts(aPorts);
         const s32 iTextLen = _FormatPlay(&g_Lobby.Play, aPorts, strText, sizeof(strText));
         _Put32(aBody, (u32)iEventKind);
         memcpy(aBody + 4, strText, (size_t)iTextLen + 1);
+        // FLAG PC-platform leaf: publish the existing host-owned record to the
+        // Rust directory. The server does not run the game or replace host authority.
+        if (PcLanOnline()) PcLanBroadcast(PCLAN_PLAY, g_Lobby.uGameIdent, aBody, 4 + iTextLen + 1);
         for (s32 iMember = 0; iMember < KI_MAX_PLAYERS; ++iMember)
         {
             if (g_Lobby.aMembers[iMember].uIdent != 0)
@@ -602,6 +607,8 @@ namespace
         if ((pField = TagFieldFind(pRequest, "MAXSIZE")) != NULL)
         {
             g_Lobby.Play.iMaxsize = (s8)TagFieldGetNumber(pField, 0);
+            if (PcLanOnline() && ((g_Lobby.Play.iMaxsize <= 0) || (g_Lobby.Play.iMaxsize > PcLanMaxPlayers())))
+                g_Lobby.Play.iMaxsize = (s8)PcLanMaxPlayers();
         }
         if ((pField = TagFieldFind(pRequest, "PRIV")) != NULL)
         {
@@ -1087,6 +1094,8 @@ namespace
         pPlay->uSysflags  = (u32)TagFieldGetNumber(TagFieldFind(pRequest, "SYSFLAGS"), 0);
         pPlay->iMinsize   = (s8)TagFieldGetNumber(TagFieldFind(pRequest, "MINSIZE"), 0);
         pPlay->iMaxsize   = (s8)TagFieldGetNumber(TagFieldFind(pRequest, "MAXSIZE"), 0);
+        if (PcLanOnline() && ((pPlay->iMaxsize <= 0) || (pPlay->iMaxsize > PcLanMaxPlayers())))
+            pPlay->iMaxsize = (s8)PcLanMaxPlayers();
         pPlay->iGameMode  = -1;
         pPlay->uSeed      = (u32)TagFieldGetNumber(TagFieldFind(pRequest, "SEED"), 0);
         pPlay->uWhen      = ds_timeinsecs();
@@ -1197,6 +1206,7 @@ namespace
             PcLanSendControl(&g_Lobby.HostPeer, PCLAN_LEAVE, g_Lobby.uGameIdent, NULL, 0);
         }
         _Log("left game", (s32)g_Lobby.uGameIdent);
+        if (PcLanOnline() && g_Lobby.bHost) PcLanBroadcast(PCLAN_BYE, g_Lobby.uGameIdent, NULL, 0);
         _ClearGame();
         LobbyApiPcComplete(pLobbyApi, iId, 0, "");
         LobbyApiPcPostEvent(pLobbyApi, LOBBYAPI_CBTYPE_EVNT, KI_EVENT_USER, 0, "");
