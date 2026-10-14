@@ -119,7 +119,7 @@ namespace CgsResource
 
             const size_t luMaxResources = lrOptions.muMaxResources;
             const size_t luHashLength = GetManagementHashLength(lrOptions.muMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * 2u * luMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * luMaxResources);
             ReservePoolManagementStorage(luOffset, alignof(Entry), sizeof(Entry) * luMaxResources);
             ReservePoolManagementStorage(luOffset, alignof(u8), sizeof(u8) * luMaxResources);
             ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * luMaxResources);
@@ -776,7 +776,7 @@ namespace CgsResource
         lOverheadAllocator.SetAlignment(lStorageLayout.mAlignment);
 
         lOverheadAllocator.SetAlignment(alignof(s16));
-        mpnBatchIndices         = static_cast<s16*>(lOverheadAllocator.Malloc(sizeof(s16) * 2u * luMax));
+        mpnBatchIndices         = static_cast<s16*>(lOverheadAllocator.Malloc(sizeof(s16) * luMax));
         lOverheadAllocator.SetAlignment(alignof(Entry));
         mpResourceEntries       = static_cast<Entry*>(lOverheadAllocator.Malloc(sizeof(Entry) * luMax));
         lOverheadAllocator.SetAlignment(alignof(u8));

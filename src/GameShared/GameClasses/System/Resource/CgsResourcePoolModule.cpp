@@ -33,10 +33,10 @@ namespace CgsResource
         void FireInvalidPoolIdAssert(s32 liPoolId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
-                                      CgsDev::Assert::giMessageBufferSize);
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Pool id " << liPoolId << " is invalid\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                                        KPC_POOLMODULE_CREATE_SRC, 916);
             CgsDev::Assert::EndAssert();
         }
@@ -44,10 +44,10 @@ namespace CgsResource
         void FireDuplicatePoolIdAssert(s32 liPoolId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
-                                      CgsDev::Assert::giMessageBufferSize);
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Pool id " << liPoolId << "is already in use\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                                        KPC_POOLMODULE_CREATE_SRC, 922);
             CgsDev::Assert::EndAssert();
         }
@@ -55,10 +55,10 @@ namespace CgsResource
         void FireMissingDependencyAssert(s32 liDependencyId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
-                                      CgsDev::Assert::giMessageBufferSize);
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Failed to find dependency pool with id " << liDependencyId << "\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                                        KPC_POOLMODULE_CREATE_SRC, 1281);
             CgsDev::Assert::EndAssert();
         }
@@ -677,7 +677,7 @@ namespace CgsResource
             const CgsModule::Event* lpEvent = nullptr;
             s32 liSize = 0;
             s32 liId = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            while (liId != -1 && lpEvent != nullptr)
+            while (lpEvent != nullptr)
             {
                 if (liId == 10)
                     DoCreatePoolRequest(
@@ -710,7 +710,7 @@ namespace CgsResource
         const CgsModule::Event* lpEvent = nullptr;
         s32 liSize = 0;
         s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (liId != -1 && lpEvent != nullptr)
+        while (lpEvent != nullptr)
         {
             if (liId == 0)
                 SendCreatePoolMemoryRequest(
@@ -727,6 +727,10 @@ namespace CgsResource
             else if (liId == 8)
                 DoUnacquireResourceRequest(
                     reinterpret_cast<const Events::UnacquireResourceRequest*>(lpEvent), lpOutputBuffer);
+            else if (liId == 10)
+            {
+                // ARTIST jump-table slot 10 targets the next-event advance directly.
+            }
             else if (liId == 11)
                 DoInvalidatePoolRequest(
                     reinterpret_cast<const Events::InvalidatePoolRequest*>(lpEvent), lpOutputBuffer);
