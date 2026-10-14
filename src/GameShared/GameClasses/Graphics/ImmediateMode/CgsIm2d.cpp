@@ -735,7 +735,29 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
     }
 
-    // Instantiate the coloured+textured 2D renderer the loading screen uses.
-    template struct ImRenderer<Basic2dColouredTexturedVertex>;
-    template struct Im2dBase<Basic2dColouredTexturedVertex>;
+    // Emit only members whose bodies are owned by this translation unit. The 2D
+    // renderer has no ARTIST/DecFIGS BeginRendering(s8) body; Construct, AddProgram
+    // and the ImRenderer transform are separately owned by CgsIm2dColTex.cpp. Keep
+    // the no-argument render pipeline and the Im2dBase transform/mask methods
+    // available to loading, debug and GUI callers without requesting absent bodies.
+    template void ImRenderer<Basic2dColouredTexturedVertex>::BeginRendering();
+    template void ImRenderer<Basic2dColouredTexturedVertex>::EndRendering();
+    template bool ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(s8);
+    template void ImRenderer<Basic2dColouredTexturedVertex>::Render(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template Basic2dColouredTexturedVertex*
+        ImRenderer<Basic2dColouredTexturedVertex>::RenderStart(u32);
+    template void ImRenderer<Basic2dColouredTexturedVertex>::RenderEnd(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::SetTransform(
+        const Im2dTransform&);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::BeginRendering();
+    template void Im2dBase<Basic2dColouredTexturedVertex>::RenderEnd(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::BatchTransformTextureBlendRenderStatic(
+        const Im2dTransform&, renderengine::Texture*, const BlendState*,
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32, u8);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::PushMask(
+        renderengine::Texture*, Basic2dColouredTexturedVertex*);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::PopMask();
 }

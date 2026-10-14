@@ -2100,12 +2100,59 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
-    // Explicit instantiation: the screen-space 2D buffer the Apt/Flapt/GUI/text
-    // rasteriser fills and submits (the family this TU targets). This is the
-    // <Basic2dColouredTexturedVertex> instance whose bodies the dossiers above
-    // were read from.
+    // Explicit instantiation for the screen-space 2D buffer the Apt/Flapt/GUI/text
+    // rasteriser fills and submits. Keep this member list aligned with the generic
+    // bodies above. The four Im2dRenderBuffer-specific command writers are owned by
+    // CgsIm2dRenderBuffer.cpp and explicitly instantiated there; a whole-class
+    // instantiation here requests those unavailable definitions a second time and
+    // emits C4661 warnings.
     // -------------------------------------------------------------------------
-    template struct ImRenderBuffer<Basic2dColouredTexturedVertex>;
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Construct();
+    template bool ImRenderBuffer<Basic2dColouredTexturedVertex>::Prepare(
+        u32, u32, rw::IResourceAllocator*, bool);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Clear();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Swap();
+    template bool ImRenderBuffer<Basic2dColouredTexturedVertex>::IsInARenderingBlock();
+    template Basic2dColouredTexturedVertex*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::AllocVertices(u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::BeginRendering();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::EndRendering();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Render(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::RenderFromStaticVertexBuffer(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template Basic2dColouredTexturedVertex*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::RenderStart(u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::RenderEnd(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetTexture(
+        renderengine::Texture*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetProgram(s8);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::RasterizerState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::TextureState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::BlendState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::DepthStencilState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetTextureState(
+        const renderengine::TextureState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetTransform(
+        const Im2dTransform&);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PushMaskGeometry(
+        uintptr_t, const Basic2dColouredTexturedVertex&,
+        const Basic2dColouredTexturedVertex&);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::EndMask();
+    template const ImCommand*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::GetFirstCommand() const;
+    template const ImCommand*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::GetNextCommand(const ImCommand*) const;
+    template void
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::SetBufferFullRewindToLastEndRender();
+    template bool ImRenderBuffer<Basic2dColouredTexturedVertex>::Release();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Destruct();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Dispatch() const;
 
     // -------------------------------------------------------------------------
     // Explicit instantiation (PER MEMBER, not whole-struct): the untextured 3D

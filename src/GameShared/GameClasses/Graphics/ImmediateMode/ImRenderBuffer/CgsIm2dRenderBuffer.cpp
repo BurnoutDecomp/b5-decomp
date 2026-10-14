@@ -32,9 +32,9 @@
 // already drop them). Every constant (opcode, record size, vertex count, payload
 // offset) is taken straight from the asm immediates; none is fabricated.
 //
-// No new instantiation of the whole template is made here (that lives in
-// CgsImRenderBufferTemplate.cpp for <Basic2dColouredTexturedVertex>); only the four
-// members THIS TU owns are explicitly instantiated, PER MEMBER (the wave-30 lesson).
+// Generic <Basic2dColouredTexturedVertex> bodies are instantiated per member in
+// CgsImRenderBufferTemplate.cpp. This TU separately instantiates only the four
+// Im2d-specific command writers it owns, also per member (the wave-30 lesson).
 // =============================================================================
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
@@ -251,8 +251,8 @@ namespace CgsGraphics
     // Explicit instantiation (PER MEMBER) for the screen-space 2D buffer the Apt/
     // Flapt/GUI rasteriser fills -- the <Basic2dColouredTexturedVertex> instance the
     // X360 Im2dRenderBuffer bodies above were read from. Only the four members THIS
-    // TU owns are instantiated (the whole-struct instantiation for this vertex type
-    // lives in CgsImRenderBufferTemplate.cpp and does not cover these new members).
+    // TU owns are instantiated. Generic members are instantiated individually in
+    // CgsImRenderBufferTemplate.cpp; no whole-struct instantiation crosses TU bodies.
     // -------------------------------------------------------------------------
     template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PushMask(
         const renderengine::TextureState*, const Basic2dColouredTexturedVertex*);
