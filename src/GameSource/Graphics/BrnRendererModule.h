@@ -652,6 +652,22 @@ private:
     void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer,
                            CgsGraphics::DispatchObjectContext* lpContext);
 
+    // ARTIST's renderer-owned query caller, kept separate from the selected
+    // NativePC route until its allocation and lifecycle prerequisites are met.
+    void ConstructOriginalOcclusionRenderers();
+    void ConstructNativePcOcclusionRenderers();
+    void ConstructOriginalOcclusionManager();
+    void ConstructNativePcOcclusionManager();
+    void DispatchOriginalOcclusionQueryList(CgsGraphics::DispatchList* lpList,
+                                            CgsGraphics::DispatchObjectContext* lpContext,
+                                            bool lbUse64RecordBatches,
+                                            bool lbMeasureQueryIssue);
+    void DispatchNativePcOcclusionQueryList(CgsGraphics::DispatchList* lpList,
+                                            CgsGraphics::DispatchObjectContext* lpContext,
+                                            bool lbQueryThisPass,
+                                            bool lbUse64RecordBatches,
+                                            bool lbMeasureQueryIssue);
+
     // [FLAG PC bring-up] Sky-dome bring-up (NOT console functions -- see the bodies).
     // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
     // BrnRendererModule::Construct/Prepare, deferred to the first world frame because
