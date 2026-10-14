@@ -1133,7 +1133,7 @@ public:
     //     } else FinishStreaming(q);
     void WaitForStreaming(GameStateModuleIO::GameActionQueue* lpQueue);
     // X360 0x82382258 -- mbWaitingForStreaming = false; action 191 (1 byte, 0); RequestUnpause(1, q);
-    // then the +42275 byte is cleared (no committed name for it here -- reported, not modelled).
+    // then conditionally clears mModeManager.mbIsModePrepared (GSM+42275 == ModeManager+38147).
     void FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueue);
 
     // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] X360 0x8236B570 (DWARF BrnGameStateModule.h:633):
