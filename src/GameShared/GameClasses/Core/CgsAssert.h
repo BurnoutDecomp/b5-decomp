@@ -24,10 +24,27 @@ namespace Assert
     // CgsAssertManager.h:43 (DWARF) — assert message buffer size.
     const s32 KI_MESSAGEBUFFERSIZE = 256;
 
-    // Original shared formatted-assert destination and its runtime capacity. The backing store is
-    // host-owned here; pool-manager messages use it while BeginAssert holds the canonical mutex.
+    // Original shared formatted-assert destination and its runtime capacity. Synchronous callers
+    // use it under BeginAssert's mutex; deferred workers format into their own scoped storage.
     extern char* gpcMessageBuffer;
     extern s32 giMessageBufferSize;
+
+    // FLAG PC-platform leaf: construct after BeginAssert. Keep the original shared buffer for
+    // synchronous assertions, but own worker text until FireAssert has captured the deferred request.
+    class MessageBufferPC
+    {
+    public:
+        MessageBufferPC();
+        MessageBufferPC(const MessageBufferPC&) = delete;
+        MessageBufferPC& operator=(const MessageBufferPC&) = delete;
+        char* GetBuffer() const { return mpcBuffer; }
+        s32 GetSize() const { return miSize; }
+
+    private:
+        char macBuffer[KI_MESSAGEBUFFERSIZE];
+        char* mpcBuffer;
+        s32 miSize;
+    };
 
     // X360 @0x82820758 — the once-guarded assert-system bring-up (the FIRST call
     // DebugManager::Construct @0x828332C0 makes): Create gAssertMutex + initialise the

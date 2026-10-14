@@ -116,6 +116,15 @@ namespace Assert
         }
     }
 
+    // FLAG PC-platform leaf: BeginAssert intentionally leaves the canonical mutex unlocked for
+    // deferred workers. Their formatting buffer must remain private through QueueAssertPC's capture
+    // and owner wait; synchronous assertions retain the original shared-buffer contract.
+    MessageBufferPC::MessageBufferPC()
+        : mpcBuffer(gbDeferredAssertPC ? macBuffer : gpcMessageBuffer)
+        , miSize(gbDeferredAssertPC ? KI_MESSAGEBUFFERSIZE : giMessageBufferSize)
+    {
+    }
+
     void AttachFrameOwnerPC(void* lpOwner, FrameFencePC lpFence)
     {
         guFrameOwnerThreadPC.store(GetCurrentThreadId(), std::memory_order_release);
