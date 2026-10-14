@@ -3845,7 +3845,7 @@ namespace BrnGame
             BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
                 mGameStateModule.GetOutputBuffer();
 
-            const bool lbGameStatePrepared = mGameStateModule.Prepare(
+            const bool lbGameStatePrepared = mGameStateModule.PrepareNativePC(
                 lpGameStateOutput, mpUpdateOutputBufferStack,
                 lpGameDataOutput ? lpGameDataOutput->GetAllocatorList() : 0);
 

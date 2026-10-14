@@ -992,7 +992,9 @@ bool GameStateModule::ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLin
     return true;
 }
 
-bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+// Existing PC preparation adapter. The original Prepare is recovered separately
+// after its typed manager providers; ResourceUpdateThread explicitly selects this body.
+bool GameStateModule::PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                               CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                               const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
 {
