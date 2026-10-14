@@ -28,6 +28,13 @@ namespace Log
 
 namespace Assert
 {
+    namespace
+    {
+        char gacMessageBuffer[KI_MESSAGEBUFFERSIZE] = {};
+    }
+    char* gpcMessageBuffer = gacMessageBuffer;
+    s32 giMessageBufferSize = KI_MESSAGEBUFFERSIZE;
+
     static rw::core::debug::detail::DebugCriticalSection gAssertMutex = { 0 };
     namespace
     {

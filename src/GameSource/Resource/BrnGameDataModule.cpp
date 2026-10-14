@@ -280,17 +280,13 @@ namespace BrnResource
             const u32 luSafeNodes = 2u * static_cast<u32>(lrDef.miMaxResources) + 1u;
             const u32 luMaxNodes  = (luDefNodes > luSafeNodes) ? luDefNodes : luSafeNodes;
 
-            // Per-type region = heap budget + (type 0) a margin >= the pool overhead (entry arrays / hash /
-            // heap nodes Pool::InitPool Mallocs from the region), rounded up to the 64 KB block size so the
-            // MemoryModule bank carve is block-exact. (Bump allocator -> the slack is harmless.)
+            // Per-type region keeps the authored heap budgets. Type 0 adds the exact shared native
+            // management-layout requirement, then each region retains the existing 64 KB bank rounding.
             u32 lauRegion[3] = { 0, 0, 0 };
             u32 lauAlign[3]  = { 16u, 16u, 16u };
             for (s32 lt = 0; lt < 3; ++lt)
             {
                 u32 luHeapSize = lrDef.mauHeapSize[lt];
-                if (luHeapSize == 0)
-                    continue;
-
                 // ⭐ [FLAG PC platform: PORTED DATA IS BIGGER THAN THE CONSOLE MEMORY MAP]
                 // MEASURED 2026-08-25 (aimodule wave), on the pool-FULL report this build now
                 // prints by name:
@@ -318,20 +314,25 @@ namespace BrnResource
                 lOpt.maHeapInfo[lt].muMaxNodes       = luMaxNodes;
                 lOpt.maHeapInfo[lt].muHeapMemorySize = luHeapSize;
                 lOpt.maHeapInfo[lt].muHeapAlignment  = lrDef.mauHeapAlign[lt];
+                lauAlign[lt] = lrDef.mauHeapAlign[lt] < 16u ? 16u : lrDef.mauHeapAlign[lt];
+            }
 
-                u32 luMargin = 0;
-                if (lt == 0)
+            // The one native host storage calculation drives both InitPool's typed carves and the
+            // main-lane region. Keep the map's outer 64 KB bank rounding and per-heap budgets intact.
+            const bool lbAnyHeap = lOpt.maHeapInfo[0].muHeapMemorySize != 0
+                                || lOpt.maHeapInfo[1].muHeapMemorySize != 0
+                                || lOpt.maHeapInfo[2].muHeapMemorySize != 0;
+            if (lbAnyHeap)
+            {
+                const u32 luMainHeapSize = lOpt.maHeapInfo[0].muHeapMemorySize;
+                const u32 luMainOverhead = CgsResource::Pool::GetOverheadMemoryRequired(&lOpt);
+                lauRegion[0] = (luMainHeapSize + luMainOverhead + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
+                for (s32 lt = 1; lt < 3; ++lt)
                 {
-                    const u32 luMax = static_cast<u32>(lrDef.miMaxResources);
-                    u32 luHashLen = 3u * luMax; --luHashLen;
-                    luHashLen |= luHashLen >> 1;  luHashLen |= luHashLen >> 2;
-                    luHashLen |= luHashLen >> 4;  luHashLen |= luHashLen >> 8;
-                    luHashLen |= luHashLen >> 16; ++luHashLen;
-                    luMargin = luMax * 512u + luHashLen * 16u
-                             + luMaxNodes * 3u * 128u + 0x10000u;
+                    const u32 luHeapSize = lOpt.maHeapInfo[lt].muHeapMemorySize;
+                    if (luHeapSize != 0)
+                        lauRegion[lt] = (luHeapSize + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
                 }
-                lauAlign[lt]  = lrDef.mauHeapAlign[lt] < 16u ? 16u : lrDef.mauHeapAlign[lt];
-                lauRegion[lt] = (luHeapSize + luMargin + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
             }
 
             bool lbAnyType = (lauRegion[0] | lauRegion[1] | lauRegion[2]) != 0;
@@ -350,13 +351,9 @@ namespace BrnResource
             CgsResource::Pool* lpPool = 0;
             bool lbViaAsync = false;
 
-            // ---- [Faithful async path] publish a CreatePool request to the ResourceModule input and pump
-            // ResourceModule::Update -- the real streaming shuttle: ProcessResourceRequests -> pool input;
-            // PoolModule::Update (ProcessInputBuffer -> SendCreatePoolMemoryRequest); ProcessPoolResource
-            // Requests -> MemoryModule input; MemoryModule::Update -> ProcessCreateResourceRequest carves the
-            // bank; ProcessMemoryResponses -> the pool receiver queue; (next frame) ProcessReceiverQueue ->
-            // DoCreatePoolRequest -> CreatePool. The request carries the resolved InitOptions so cross-pool
-            // dependency order (lapPoolById) is preserved exactly. Pool create is 2-frame, so pump a few times.
+            // ---- Current NativePC resolved-options path. The ResourceModule event remains its existing
+            // host payload and is consumed by ProcessInputBufferNativePC; original raw-request startup is not
+            // activated here. Its cross-pool dependency order (lapPoolById) is preserved across the shuttle.
             if (lbAnyType)
             {
                 CgsResource::CreatePoolRequestEvent lReqEvent;
@@ -378,8 +375,8 @@ namespace BrnResource
                 if (lpPool != 0 && lpPool->IsValid()) { lbViaAsync = true; ++lNumViaAsync; ++lNumFromBank; }
             }
 
-            // ---- [Fallback] synchronous bank carve, if the async memory dispatch did not deliver. Carve a
-            // leaf bank directly, else allocate from the root debug allocator, fill mResource, CreatePool.
+            // ---- NativePC fallback: carve a leaf bank directly, else allocate from the root debug
+            // allocator, fill mResource, and call the returning NativePC pool provider.
             if (!lbViaAsync)
             {
                 CgsMemory::MemoryBank::Params lParams;
@@ -436,7 +433,7 @@ namespace BrnResource
                     continue;
                 }
                 if (lbFromBank) ++lNumFromBank; else ++lNumFromHeap;
-                lpPool = lrPoolModule.CreatePool(&lOpt);
+                lpPool = lrPoolModule.CreatePoolNativePC(&lOpt);
             }
 
             if (lpPool != 0 && lpPool->IsValid())
