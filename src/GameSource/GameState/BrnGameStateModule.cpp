@@ -2201,14 +2201,16 @@ void GameStateModule::WaitForStreaming(GameStateModuleIO::GameActionQueue* lpQue
 
 // X360 0x82382258 -- FinishStreaming: the wait is over; tell the GUI (action 191, one zero
 // byte -- BridgeGameStateToGui turns it into the GUI's streaming-complete notice) and release
-// the reason-1 pause. The console then clears the byte at +42275; that member has no committed
-// name in this tree and nothing reads it here, so the store is reported rather than modelled.
+// the reason-1 pause. ARTIST823822A4..823822B8 then conditionally clears
+// ModeManager's existing streaming latch: GSM+42275 == ModeManager+38147.
 void GameStateModule::FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueue)
 {
     mbWaitingForStreaming = false;
     u8 lu8Payload = 0;
     lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload), 191, 1);
     RequestUnpause(1, lpQueue);
+    if (mModeManager.mbIsModePrepared)
+        mModeManager.mbIsModePrepared = false;
 }
 
 // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] X360 0x8236B570 -- the three-instruction forward
