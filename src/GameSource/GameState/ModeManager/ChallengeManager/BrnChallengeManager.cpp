@@ -1113,6 +1113,14 @@ void ChallengeManager::Destruct()
     mChallengeManagerDebugComponent.mpChallengeManager = 0;   // X360 stw 0,+0x1010
 }
 
+// ARTIST ModeManager::ApplyVehicleList @0x8231E5D8 inlines this method.
+// Its BrnChallengeManager.cpp:191 assert is followed by the one pointer store.
+void ChallengeManager::ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList)
+{
+    CGS_ASSERT(lpVehicleList != NULL, "lpVehicleList != NULL");
+    mpVehicleList = lpVehicleList;
+}
+
 // ----------------------------------------------------------------------------
 // Prepare -- X360 0x8233AAF8. Caches the freeburn challenge list, rebuilds the per-player-count
 // histogram (one bucket per challenge, keyed by the entry's num-players), and refills the
