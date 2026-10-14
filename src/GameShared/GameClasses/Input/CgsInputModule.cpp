@@ -19,7 +19,7 @@
 #include "CgsInputModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"   // FLAG PC seat: InputPadsPC::UpdatePadDevices (PreWorldUpdate)
+#include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"   // FLAG PC seat: device scan and output mapping
 #include "rw/rwcore_structs.h"
 
 namespace CgsInput
@@ -65,14 +65,11 @@ void InputModule::PreWorldUpdate(CgsModule::IOBufferStack* /*lpInputBufferStack*
 
     if (lbUpdatePads)
     {
-        // FLAG PC-platform leaf (the console's `mControllers.Update(lpOutputBuffer)`, InputPads::Update
-        // @0x828F8690 -- the ManagerX360 device scan + bind, DeviceX360Pad::Update, then the per-port
-        // fill through gaDefaultGameInputMapping). That body is not reconstructed. On this build its
-        // FILL half is InputPadsPC::UpdatePlayer0, which BrnGameModule's GUI leg runs later in the same
-        // sub-step (one of the controller bridges' documented stand-ins); its DEVICE half -- the only
-        // part the rumble engine reads (DeviceX360Pad::IsConnected / mePort / meType) -- is this
-        // PC-leaf scan of the host XInput pad. DELETE-WHEN InputPads::Update lands: call it here.
+        // FLAG PC-platform leaf: the original InputPads::Update seat performs the device scan
+        // and output mapping. Keep the existing host implementations together here, under the
+        // output write lock, so the following game/controller queries see this sub-step's edges.
         InputPadsPC::UpdatePadDevices(&mControllers);
+        InputPadsPC::UpdatePlayer0(lpOutputBuffer);
     }
 
     lpOutputBuffer->GetBindResultQueue()->Append(mOutputBindResultQueue);
