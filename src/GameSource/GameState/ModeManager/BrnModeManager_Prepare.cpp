@@ -299,15 +299,11 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     //     clrlwi r11, r3, 24 / cmplwi 0 / beq  -> skip
     //     stbx r15(1), r31, 0x9503                       ; mbIsModePrepared = true
     //     bl   OutputBuffer::GetGameActionQueue / lwz r3, 0x6D58(r31)
-    //     bl   GameStateModule::WaitForStreaming         ; PARKED, see below
+    //     bl   GameStateModule::WaitForStreaming
     // [x] BLOCKER (1) DISCHARGED 2026-08-26 (fix round): BrnGameMode.h now carries the console
     // 26-slot order and declares `virtual bool RequiresStreaming() const;` at slot 23, so the GATE
     // AND ITS STORE ARE NOW EMITTED. They used to be lost together with the parked call, which meant
     // mbIsModePrepared was never set on any streaming mode.
-    // [X] BLOCKER (2) STILL OPEN -- GameStateModule::WaitForStreaming has no declaration OR body
-    // anywhere in the tree (grep: only comments), and conductor decision #6 puts it in the
-    // detection/start-driver wave, not this one. Only that ONE call stays parked; re-arm with
-    //     mpGameStateModule->WaitForStreaming(lpOutputBuffer->GetGameActionQueue());
     // BEHAVIOURAL IMPACT ON THIS CAMPAIGN: NONE. StuntAttackMode's vtable (0x820D0720) carries the
     // folded `li r3,0; blr` leaf (0x827E2F38) at BOTH slot 23 and slot 24, so a stunt race enters
     // neither this arm nor the HandleLoadingScreenLoaded path. Base GameMode::RequiresStreaming()
@@ -320,8 +316,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     if (mpCurrentGameMode->RequiresStreaming())   // vtbl+92 == slot 23
     {
         mbIsModePrepared = true;                 // console stbx r15(1), r31, 0x9503
-        // [X] PARKED CALL (blocker 2 above):
-        //     mpGameStateModule->WaitForStreaming(lpOutputBuffer->GetGameActionQueue());
+        mpGameStateModule->WaitForStreaming(lpOutputBuffer->GetGameActionQueue());
     }
 
     if (lbRoadRage)
