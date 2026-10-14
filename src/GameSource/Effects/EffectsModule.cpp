@@ -154,8 +154,10 @@ namespace
     const f32 KF_DEFAULT_TINT_FACTOR = 0.2f;
     const int KI_DEFAULT_TINT_BLEND_NUMBER = 5;
 
-    // The convoy slip-stream effect name (the pointer baked into HandleConvoySlipStream).
-    const char* const KAC_SLIPSTREAM_EFFECT = "gamedb://Instances/Effects/SlipStream/SlipStream";
+    // HandleConvoySlipStream @0x822926F8 loads off_82CDAE44 -> 0x8200D8C8.
+    // Its hash 0x95B0EBB3 is in PARTICLES.BUNDLE; the old Instances/... path was not.
+    const char* const KAC_SLIPSTREAM_EFFECT =
+        "gamedb://burnout5/Burnout/Effects/SlipStream.lef.BurnoutFXLionEffectFile?ID=666262";
 
     // The post-fx vault + colour-cube dictionary PrepareResources loads / acquires.
     const char* const KAC_POSTFX_VAULT_BUNDLE      = "PostFx/postfxvault.bin";
