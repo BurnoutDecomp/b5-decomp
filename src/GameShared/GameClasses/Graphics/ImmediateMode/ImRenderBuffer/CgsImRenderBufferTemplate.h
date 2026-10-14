@@ -447,8 +447,10 @@ namespace CgsGraphics
         // header-only {muType=19} record. Same opcode/record as EndMask (a different X360 call site).
         void PopMask();
 
-        // Push the boost-bar colour pair (X360 Im2dRenderBuffer::PushBoostBarColours @0x824502A8): a
-        // 48-byte {muType=21} record carrying two 16-byte colour vectors (passed in v1/v2) at +16/+32.
+        // Shared native command writer for the boost-bar colour pair: a 48-byte {muType=21} record
+        // carrying two 16-byte vectors at +16/+32. Existing host callers use this Vector4-reference
+        // overload; the ARTIST-derived Im2dRenderBuffer(Vector3, Vector3) API preserves its V1/V2
+        // lanes and forwards here (see CgsIm2dRenderBuffer.h/.cpp and X360 0x824502A8).
         void PushBoostBarColours(const rw::math::vpu::Vector4& lrColour0,
                                  const rw::math::vpu::Vector4& lrColour1);
 
