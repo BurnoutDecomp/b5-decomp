@@ -292,6 +292,21 @@ namespace Events
         bool                    mbAllowDefragmentation;   // +168
     };
 
+    // ARTIST DoCreatePoolRequest echoes only this PoolEvent into output tag 1.
+    // The X360 record is 12 bytes; consumers use sizeof(CreatePoolResponse) on PC.
+    struct CreatePoolResponse : public PoolEvent {};
+
+    // ARTIST Pool input tag 8 is an echo-only Unacquire operation. The resource id is
+    // returned on output tag 9; the recovered handler does not change a reference count.
+    struct UnacquireResourceRequest : public PoolEvent
+    {
+        ID mResourceId;
+    };
+    struct UnacquireResourceResponse : public PoolEvent
+    {
+        ID mResourceId;
+    };
+
     // CgsResourceIOEvents.h:495 -- the request to allocate a resource list. The queued
     // element type of FifoQueue<AllocateResourceListRequest,4> (X360 element stride 48).
     // mListId (ID, 8-byte aligned) sits at +16 after the 12-byte PoolEvent base + 4 pad.

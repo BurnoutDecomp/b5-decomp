@@ -46,10 +46,11 @@ namespace CgsResource
     // native pool options. The name borrows the request's inline buffer; its
     // caller must retain that request through pool creation. Dependency pointers,
     // bank backing and resource descriptors are filled by DoCreatePoolRequest.
-    void PoolModule::ConvertPoolRequestOptions(const void* lpRequest, void* lpOutOptions)
+    void PoolModule::ConvertPoolRequestOptions(const Events::CreatePoolRequest* lpRequest,
+                                               Pool::InitOptions* lpOutOptions)
     {
-        const Events::CreatePoolRequest& lrRequest = *static_cast<const Events::CreatePoolRequest*>(lpRequest);
-        Pool::InitOptions& lrOptions = *static_cast<Pool::InitOptions*>(lpOutOptions);
+        const Events::CreatePoolRequest& lrRequest = *lpRequest;
+        Pool::InitOptions& lrOptions = *lpOutOptions;
         lrOptions.miId = lrRequest.miPoolId;
         lrOptions.mpcName = lrRequest.mpcName;
         lrOptions.miRefCountThreshold = lrRequest.miDeletionDelayFrames;
@@ -63,6 +64,48 @@ namespace CgsResource
             lrOptions.maHeapInfo[li].muHeapMemorySize = lrRequest.mDescriptor.m_baseResourceDescriptors[li].m_size;
             lrOptions.maHeapInfo[li].muHeapAlignment = lrRequest.mDescriptor.m_baseResourceDescriptors[li].m_alignment;
         }
+    }
+
+    // ARTIST 0x828EC458. Convert the three console heaps to the original five-lane RW
+    // descriptor. Arithmetic intentionally wraps in 32 bits at the stores/products; hash
+    // length uses the signed-extended max-resource word and the original 64-bit logical spreads.
+    void PoolModule::GetRequiredResourceDescriptor(const Events::CreatePoolRequest* lpRequest,
+                                                   rw::ResourceDescriptor* lpOutDescriptor)
+    {
+        Pool::InitOptions lOptions;
+        ConvertPoolRequestOptions(lpRequest, &lOptions);
+
+        const u32 luRawMaxResources = lpRequest->muMaxResources;
+        const s64 liSignedMaxResources = (luRawMaxResources & 0x80000000u) != 0
+            ? static_cast<s64>(luRawMaxResources) - 0x100000000ll
+            : static_cast<s64>(luRawMaxResources);
+        u64 luSpread = static_cast<u64>(liSignedMaxResources * 3 - 1);
+        luSpread |= luSpread >> 1;
+        luSpread |= luSpread >> 2;
+        luSpread |= luSpread >> 4;
+        luSpread |= luSpread >> 8;
+        const u32 luLow = static_cast<u32>(luSpread);
+        const u32 luHigh = static_cast<u32>(luSpread >> 16);
+        const u32 luHashLength = (luLow | luHigh) + 1u;
+
+        const u32 luNodeCount = lOptions.maHeapInfo[0].muMaxNodes
+                              + lOptions.maHeapInfo[1].muMaxNodes
+                              + lOptions.maHeapInfo[2].muMaxNodes;
+        const u32 luMainSize = lOptions.maHeapInfo[0].muHeapMemorySize
+                             + 16u * luNodeCount
+                             + 16u * luHashLength
+                             + 100u * lOptions.muMaxResources
+                             + 16u;
+
+        for (s32 li = 0; li < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++li)
+        {
+            lpOutDescriptor->m_baseResourceDescriptors[li].m_size = 0;
+            lpOutDescriptor->m_baseResourceDescriptors[li].m_alignment = 1;
+        }
+        lpOutDescriptor->m_baseResourceDescriptors[0].m_size = luMainSize;
+        lpOutDescriptor->m_baseResourceDescriptors[0].m_alignment = lOptions.maHeapInfo[0].muHeapAlignment;
+        lpOutDescriptor->m_baseResourceDescriptors[2].m_size = lOptions.maHeapInfo[1].muHeapMemorySize;
+        lpOutDescriptor->m_baseResourceDescriptors[2].m_alignment = lOptions.maHeapInfo[1].muHeapAlignment;
     }
 
     // ----------------------------------------------------------------------------------------------
@@ -108,11 +151,42 @@ namespace CgsResource
     // *(response+0x0C) != 0 it fires the "Destroy Bank Failed" assert (CgsPoolModule.cpp:1309). On the
     // success path it does nothing. (response is a serialised DestroyBankResponse payload.)
     // ----------------------------------------------------------------------------------------------
-    void PoolModule::DoDeletePoolRequest(const void* lpResponse)
+    void PoolModule::DoDeletePoolRequestNativePC(const void* lpResponse)
     {
         const CgsMemory::MemoryIO::DestroyBankResponse* lpResult =
             static_cast<const CgsMemory::MemoryIO::DestroyBankResponse*>(lpResponse);
         CGS_ASSERT(lpResult->GetResult() == CgsMemory::MemoryIO::E_RESULT_OK, "Destroy Bank Failed");
+    }
+
+    // ARTIST 0x828D81D0. The output argument is passed through the receiver route but unused here.
+    void PoolModule::DoDeletePoolRequest(const CgsMemory::MemoryIO::DestroyBankResponse* lpResponse,
+                                         PoolIO::OutputBuffer* /*lpOutput*/)
+    {
+        if (lpResponse->GetResult() != CgsMemory::MemoryIO::E_RESULT_OK)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Destroy Bank Failed", KPC_POOLMODULE_SRC, 1309);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST 0x828FD278. This is an echo-only response; it does not decrement the pool's refcount.
+    void PoolModule::DoUnacquireResourceRequest(const Events::UnacquireResourceRequest* lpRequest,
+                                                PoolIO::OutputBuffer* lpOutput)
+    {
+        if (lpOutput == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer", KPC_POOLMODULE_SRC, 1427);
+            CgsDev::Assert::EndAssert();
+        }
+
+        Events::UnacquireResourceResponse lResponse;
+        static_cast<Events::PoolEvent&>(lResponse) = static_cast<const Events::PoolEvent&>(*lpRequest);
+        lResponse.mResourceId = lpRequest->mResourceId;
+        lpOutput->GetPoolOutputQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 9,
+            static_cast<s32>(sizeof(lResponse)));
     }
 
     // ARTIST 82901748. The list itself becomes available before fixing up its

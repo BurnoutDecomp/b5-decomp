@@ -24,6 +24,11 @@ namespace Assert
     // CgsAssertManager.h:43 (DWARF) — assert message buffer size.
     const s32 KI_MESSAGEBUFFERSIZE = 256;
 
+    // Original shared formatted-assert destination and its runtime capacity. The backing store is
+    // host-owned here; pool-manager messages use it while BeginAssert holds the canonical mutex.
+    extern char* gpcMessageBuffer;
+    extern s32 giMessageBufferSize;
+
     // X360 @0x82820758 — the once-guarded assert-system bring-up (the FIRST call
     // DebugManager::Construct @0x828332C0 makes): Create gAssertMutex + initialise the
     // assert-screen state. (The X360 body also sets the assert overlay's vector-font size
