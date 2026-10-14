@@ -1280,9 +1280,9 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
 // shadow::Device seam; the constant/sampler upload machinery rides the PC leaf
 // in shadow::Device::SetMeshTechniquePC (see shadowingdevice.cpp) -- states and
 // shaders fall back to the flagged bring-up defaults until the converted
-// SHADERS bundle + material states are live. Occlusion-query interleaving
-// (BeginQueries/conditional render) stays with the occlusion reconstruction --
-// the PC occlusion switches default OFF.
+// SHADERS bundle + material states are live. Occlusion-query interleaving is
+// provided by BrnRendererModule's separately selected NativePC caller; a null
+// manager keeps this ordinary draw path unchanged.
 // =============================================================================
 s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
                                     DispatchObjectContext* /*lpContext*/,
@@ -1390,6 +1390,13 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
 
         // Bind the mesh geometry + draw.
         shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
+        const bool lbConditionalRender =
+            spOcclusionCullManager != 0
+            && spOcclusionCullManager->meOcclusionMode
+                == OcclusionCullManager::OCCLUSIONMODE_RENDER;
+        if (lbConditionalRender)
+            spOcclusionCullManager->BeginMeshConditionalRender();
+
         if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
         {
             const auto* lpInstances = static_cast<const renderengine::WorldInstanceDrawPC*>(
@@ -1403,8 +1410,13 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
         {
             shadow::Device::DrawIndexedMeshPC(lpMesh);
         }
+
+        if (lbConditionalRender)
+            spOcclusionCullManager->EndMeshConditionalRender();
     }
-    return -1;
+    // ARTIST returns the next record index to its 64-entry query/render loop;
+    // -1 marks the end of the list or an already exhausted range.
+    return luEnd != muCount ? static_cast<s32>(luEnd) : -1;
 }
 
 // =============================================================================
