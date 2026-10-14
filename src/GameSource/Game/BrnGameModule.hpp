@@ -552,11 +552,12 @@ namespace BrnGame
                                  RendererIO::OutputBuffer* lpRendererOutput);
 
 
-        // X360 0x823CD738 -- publish player-0 controller state into the GameState PreWorld input
-        // buffer (+ merge the bind/unbind result queues). FLAG: ledger dest is
-        // GameSource/GameState/BrnGameStateModuleIO.h, but as a BrnGameModule method it co-locates
-        // with its siblings + the shared GetPadInfoForPlayer0 helper in GameBridgeControllerToX.cpp.
-        void BridgeControllerToGameState(BrnGameState::GameStateModule* lpGameStateModule,
+        // ARTIST 823CD738: the caller owns and write-locks the staged buffer.
+        void BridgeControllerToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
+                                         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                         bool lbIsPlaying);
+        // Existing native pump: persistent module-owned input and button-only publication.
+        void BridgeControllerToGameStateNativePC(BrnGameState::GameStateModule* lpGameStateModule,
                                          const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
                                          s32 liActionContext);
 
