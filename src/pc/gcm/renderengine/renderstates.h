@@ -177,8 +177,8 @@ class Texture;  // the imported raster's runtime type (texture.h)
 // is an imported resource (RwRaster, type id 0); the pool's import resolution writes the resolved
 // raster pointer into mpRaster, which the handler (CgsResource::RwTextureStateResourceType)
 // reports via GetImportPointer at that slot. X360 object = 36 bytes: a 32-byte sampler block + a
-// 4-byte raster pointer at +0x20 (the pointer widens to 8 bytes on the x64 target; the sampler
-// block stays opaque until a renderer body needs its fields).
+// 4-byte raster pointer at +0x20 (the pointer widens to 8 bytes on the x64 target;
+// SamplerState::Initialize produces the original runtime block for native draws).
 class TextureState
 {
 public:
@@ -223,11 +223,11 @@ public:
     // Size the texture-state resource (X360 0x82B635C8 builds the rw::BaseResourceDescriptors<5>).
     static void GetResourceDescriptor(u32* lpDescriptorOut);
     static rw::ResourceDescriptor* GetResourceDescriptor(rw::ResourceDescriptor* lpDescriptorOut);
-    // Create a texture state from the sampler parameters (X360 0x82B62720). [PC DIVERGENCE: stores
-    // the config + raster for draw-time application instead of marshalling a Xenos GPU descriptor.]
+    // X36082B62720 calls SamplerState::Initialize, then seats the raster. The native
+    // allocation adapter preserves that runtime block and widens the raster pointer.
     static TextureState* Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams);
 
-    u8       mauSamplerState[32];  // +0x00 sampler params (filter / address / lod)
+    u8       mauSamplerState[32];  // +0x00 packed runtime sampler fields
     Texture* mpRaster;             // +0x20 imported / bound RwRaster
 };
 

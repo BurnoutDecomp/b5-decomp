@@ -25,50 +25,11 @@
 #include "pc/gcm/renderengine/renderstates.h"
 #include "pc/gcm/renderengine/texture.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
 #include "rw/rwcore_structs.h"
 
 #include <cstring>   // memset
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
-
-// The sampler-state implementation has no public header. Keep this declaration in the owning
-// renderengine namespace and match samplerstate.cpp's parameter type exactly for the linked ABI.
-namespace renderengine
-{
-    struct SamplerStateData;
-
-    struct SamplerStateParameters
-    {
-        u32 muAddressU;
-        u32 muAddressV;
-        u32 muAddressW;
-        u32 muBias;
-        u32 muMaxLevel;
-        u32 muMinLevel;
-        u32 muMaxAnisotropy;
-        u32 muMagFilter;
-        u32 muMinFilter;
-        u32 muMipFilter;
-        u32 muConvolution;
-        u32 muColor;
-        u32 muRemap;
-        u32 muDepthTextureFunction;
-        u32 muGamma;
-        u32 muState17;
-        u8  mbState15;
-        u8  mbState22;
-        u8  mbState16;
-        u8  mbState11Zero;
-        u8  mbState26;
-    };
-
-    class SamplerState
-    {
-    public:
-        static ResourceDescriptorEntry* GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor);
-        static SamplerStateData* Initialize(SamplerStateData** lppState,
-                                            const SamplerStateParameters* lpParams);
-    };
-}
 
 // The X360 D3D texture-bind intrinsic the low-level SetTexture path issues (binds a texture to a
 // sampler stage on the device). Platform API: declared here so the body links against the X360 /

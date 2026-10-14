@@ -1,6 +1,8 @@
 #include "pc/gcm/renderengine/renderstates.h"
 #include "pc/gcm/renderengine/texture.h"   // renderengine::Texture (the bound raster)
 #include "rw/rwcore_structs.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
+#include <cstddef>
 
 #include <cstring>   // memcpy
 #include <new>
@@ -8,9 +10,9 @@
 // renderengine::TextureState creation -- the PC realisation of the X360 sampler-state path
 //   GetResourceDescriptor  0x82B635C8
 //   Initialize             0x82B62720 (-> SamplerState::Initialize, a Xenos GPU descriptor marshal)
-// On X360 a TextureState is a marshalled GPU sampler descriptor allocated in graphics memory; on PC
-// a sampler state is a CPU config the device applies at draw time, so Initialize keeps the sampler
-// parameters + the bound raster rather than emitting a GPU descriptor. [PC DIVERGENCE]
+// The runtime block is produced by the same canonical SamplerState::Initialize
+// as ordinary sampler states. Native storage/pointer widths retain the existing
+// PC allocation adapter; draw-time consumers read the original packed fields.
 
 namespace renderengine
 {
@@ -38,18 +40,23 @@ namespace renderengine
         return lpDescriptorOut;
     }
 
-    // X360 0x82B62720 delegates to SamplerState::Initialize (marshals the params into a Xenos GPU
-    // sampler descriptor in the supplied graphics resource). PC: construct the sampler-state object in supplied resource memory (or the legacy heap when none is supplied),
-    // bind the raster, and keep the (opaque) sampler config; the D3D sampler is set from it at draw
-    // time. [PC DIVERGENCE: lpResourceMemory / the rw allocator dance is X360 graphics memory mgmt.]
+    // ARTIST82B6272C calls the canonical sampler producer, then82B62730..34
+    // reads the raster from the parameter suffix and stores it after the block.
+    // The flat native declaration retains the original72-byte parameter prefix.
     TextureState* TextureState::Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams)
     {
         void* lpMemory = lpResourceMemory ? lpResourceMemory->m_baseResources[0] : nullptr;
         TextureState* lpState = lpMemory ? new (lpMemory) TextureState() : new TextureState();
+        static_assert(offsetof(Parameters, mpTexture) == sizeof(SamplerStateParameters),
+                      "Texture parameters retain the original sampler prefix");
+        static_assert(offsetof(Parameters, mfMipLodBias) == 0x2C,
+                      "Original float-bit parameter lane");
+        SamplerStateParameters lSamplerParameters;
+        std::memcpy(&lSamplerParameters, lpParams, sizeof(lSamplerParameters));
+        SamplerStateData* lapSamplerHandles[5] = {};
+        lapSamplerHandles[0] = reinterpret_cast<SamplerStateData*>(lpState->mauSamplerState);
+        SamplerState::Initialize(lapSamplerHandles, &lSamplerParameters);
         lpState->mpRaster = lpParams->mpTexture;
-        // Keep the sampler config (address/filter/lod) for draw-time application. The X360 marshals
-        // it into the 32-byte GPU descriptor; here we just stash the leading config bytes.
-        memcpy(lpState->mauSamplerState, lpParams, sizeof(lpState->mauSamplerState));
         return lpState;
     }
 }

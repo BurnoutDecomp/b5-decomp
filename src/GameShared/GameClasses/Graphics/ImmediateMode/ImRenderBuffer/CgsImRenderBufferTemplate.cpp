@@ -938,10 +938,8 @@ namespace CgsGraphics
             }
         }
 
-        // The address pair a TextureState carries. renderengine::TextureState keeps the sampler
-        // config as the leading 32 opaque bytes of TextureState::Parameters (texturestate.cpp's
-        // `memcpy(mauSamplerState, lpParams, 32)`), whose first two words ARE muAddressU and
-        // muAddressV -- read by that contract, not by re-typing the whole block.
+        // SamplerState::Initialize writes the original runtime address bytes
+        // at+0x08/+0x09. Generated and imported TextureStates share this block.
         void DispatchTextureStateAddressModes(const renderengine::TextureState* lpState,
                                               DWORD* lpuAddressUOut, DWORD* lpuAddressVOut)
         {
@@ -949,8 +947,8 @@ namespace CgsGraphics
             u32 luAddressV = 2u;
             if (lpState != nullptr)
             {
-                memcpy(&luAddressU, lpState->mauSamplerState + 0, sizeof(u32));
-                memcpy(&luAddressV, lpState->mauSamplerState + 4, sizeof(u32));
+                luAddressU = lpState->mauSamplerState[0x08];
+                luAddressV = lpState->mauSamplerState[0x09];
             }
             *lpuAddressUOut = DispatchAddressMode(luAddressU);
             *lpuAddressVOut = DispatchAddressMode(luAddressV);
