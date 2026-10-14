@@ -15,10 +15,10 @@
 // out-of-class then the members THIS TU owns are instantiated INDIVIDUALLY (per-member explicit
 // instantiation on the committed ImRenderer<V>), NEVER a fresh whole-struct instantiation -- that
 // would force fabricated bodies for the template members this TU does not attest (the wave-30
-// BasicColouredVertex lesson). The committed CgsIm2d.cpp already PC-folds and whole-struct-
-// instantiates this vertex type's BeginRendering / EndRendering / Render / RenderStart / RenderEnd;
-// those are NOT re-homed here. The X360 BeginRendering (@0x823ABED8) / EndRendering (@0x823ABFD8) /
-// Render (@0x823C7030) are attested for this TU but their committed ImRenderer<V> counterparts are
+// BasicColouredVertex lesson). The committed CgsIm2d.cpp already PC-folds and per-member-instantiates
+// this vertex type's BeginRendering / EndRendering / Render / RenderStart / RenderEnd; those are NOT
+// re-homed here. The X360 BeginRendering (@0x823ABED8) / EndRendering (@0x823ABFD8) / Render
+// (@0x823C7030) are attested for this TU but their committed ImRenderer<V> counterparts are
 // the PC fold (CgsIm2d.cpp), so they are NOT re-bodied here.
 //
 // The eight ImRenderBuffer<V> command-buffer members the postmortem also lists for this symbol
@@ -324,11 +324,10 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
 // Emit the three X360-attested ImRenderer<Basic2dColouredTexturedVertex> member bodies the committed
 // CgsIm2d.cpp PC fold does not already body (Construct / AddProgram / SetTransform). We instantiate
 // the members INDIVIDUALLY rather than `template struct ImRenderer<Basic2dColouredTexturedVertex>`
-// because the committed CgsIm2d.cpp already PC-folds and whole-struct-instantiates this type's
-// BeginRendering / EndRendering / Render / RenderStart / RenderEnd -- a fresh whole-struct
-// instantiation here would re-home those committed bodies (and force a fabricated SetProgram, which
-// for this vertex type is the ImRenderBuffer command-buffer member, not an ImRenderer one). This is
-// the wave-30 / wave-37 lesson: instantiate only the members this TU owns.
+// because the committed CgsIm2d.cpp already PC-folds and per-member-instantiates this type's
+// BeginRendering / EndRendering / Render / RenderStart / RenderEnd. A fresh whole-struct request
+// here would cross those body owners and also ask for declarations this vertex specialization does
+// not define. This is the wave-30 / wave-37 lesson: instantiate only the members this TU owns.
 template void ImRenderer<Basic2dColouredTexturedVertex>::Construct(
     rw::IResourceAllocator*, const void* const*, const u32*, const void* const*, const u32*, s8);
 template s8 ImRenderer<Basic2dColouredTexturedVertex>::AddProgram(

@@ -503,8 +503,9 @@ namespace CgsGraphics
     };
 
     // The screen-space 2D immediate buffer the Apt/Flapt/GUI rasteriser fills and
-    // submits (the <Basic2dColouredTexturedVertex> explicit instantiation - 20-byte
-    // pos+RGBA8+UV vertex). This is the family this TU reconstructs.
+    // submits (the <Basic2dColouredTexturedVertex> member instantiations - 20-byte
+    // pos+RGBA8+UV vertex). Generic bodies are instantiated in this template TU;
+    // the four Im2d-specific writers are instantiated in CgsIm2dRenderBuffer.cpp.
     typedef ImRenderBuffer<Basic2dColouredTexturedVertex> Im2dColouredTexturedRenderBuffer;
 
     // The untextured 3D immediate buffer (the <BasicColouredVertex> explicit
