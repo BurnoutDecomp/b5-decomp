@@ -39,8 +39,22 @@
 #include "rw/rwcore_general_alloc.h"              // rw::core::GeneralResourceAllocator base conversion
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 
-// BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
-namespace CgsGraphics { extern u32 suOcclusionCullIndexCountThreshold; }
+// BrnRendererModule::Render publishes the manager and threshold consumed by the
+// original query and conditional-render command walks.
+namespace CgsGraphics
+{
+    extern OcclusionCullManager* spOcclusionCullManager;
+    extern u32 suOcclusionCullIndexCountThreshold;
+}
+
+namespace
+{
+    // [FLAG PC-platform boundary] The original renderer/query caller chain is
+    // recovered below, but the host selection stays disabled until its actual
+    // allocator capacity and provider/manager lifetime are supported. This is
+    // not an original debug-menu control and does not mean construction is ready.
+    constexpr bool KU_NATIVE_PC_OCCLUSION_PATH_SELECTED = false;
+}
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -1248,6 +1262,7 @@ void BrnRendererModule::Construct()
     mIm3dBufferRacePosition.Construct();
     mIm3dBufferMenusAndHud.Construct();
     CgsGraphics::PrepareIm3dStateLibraryPC();
+    ConstructNativePcOcclusionRenderers();
     // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
     // ⭐ THE REUSABLE LOADING-SCREEN ALLOCATOR, 2026-08-17 (boot audit F-P2-4/F-P6-12). The
     // console owns this as an embedded member at renderer+0xC8FC and lends its address to the
@@ -1425,6 +1440,8 @@ void BrnRendererModule::Construct()
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
     mShadowMapRenderManager.Construct(2);
 
+    ConstructNativePcOcclusionManager();
+
     // The loading-screen renderer (creates its textures + scratch buffer, picks language).
     mLoadingScreenRenderer.Construct();
 
@@ -1450,6 +1467,38 @@ void BrnRendererModule::Construct()
                                     "(effects apply, tint blend and composite skipped)\n");
         }
     }
+}
+
+void BrnRendererModule::ConstructOriginalOcclusionRenderers()
+{
+    // ARTIST Construct @0x8240A778: Im3dUntex precedes Im3dZOnly and both receive
+    // the renderer's canonical GlobalGraphics allocator.
+    rw::IResourceAllocator* const lpAllocator =
+        BrnResource::Allocators::GetGlobalGraphicsAllocator();
+    mIm3dRendererUntex.Construct(lpAllocator);
+    mIm3dRendererZOnly.Construct(lpAllocator);
+}
+
+void BrnRendererModule::ConstructNativePcOcclusionRenderers()
+{
+    if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+        ConstructOriginalOcclusionRenderers();
+}
+
+void BrnRendererModule::ConstructOriginalOcclusionManager()
+{
+    // ARTIST Construct @0x8240A778 passes these typed renderer owners, the same
+    // canonical allocator, and 0x2000 query-list entries to the manager.
+    rw::IResourceAllocator* const lpAllocator =
+        BrnResource::Allocators::GetGlobalGraphicsAllocator();
+    mOcclusionCullManager.Construct(&mIm3dRendererUntex, &mIm3dRendererZOnly,
+                                    lpAllocator, 0x2000u);
+}
+
+void BrnRendererModule::ConstructNativePcOcclusionManager()
+{
+    if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+        ConstructOriginalOcclusionManager();
 }
 
 // @0x82409C20. ARTIST's stage helper increments before checking the terminal state;
@@ -4690,6 +4739,67 @@ void BrnRendererLogPostFxEffectState()
 //   CARS TRANSPARENT  (20)  -> DispatchAllMeshes (blobby shadows gated off)
 // Occlusion-query interleaving is the mbOcclusionCull* path (default false).
 // The context is the one Render built through BuildDispatchLists, on Render's stack.
+void BrnRendererModule::DispatchOriginalOcclusionQueryList(
+    CgsGraphics::DispatchList* lpList,
+    CgsGraphics::DispatchObjectContext* lpContext,
+    bool lbUse64RecordBatches,
+    bool lbMeasureQueryIssue)
+{
+    if (lbUse64RecordBatches)
+    {
+        s32 liFirst = 0;
+        do
+        {
+            if (lbMeasureQueryIssue)
+                CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchWorldOpaqueList);
+
+            mOcclusionCullManager.BeginQueries();
+            lpList->DispatchAllMeshOcclusionQueries(mpInterpreter, liFirst,
+                                                    CgsGraphics::KI_MAX_NUM_QUERIES);
+            mOcclusionCullManager.EndQueries();
+
+            if (lbMeasureQueryIssue)
+                CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchWorldOpaqueList);
+
+            mOcclusionCullManager.BeginConditionalRender();
+            liFirst = lpList->DispatchAllMeshes(
+                mpInterpreter, lpContext, static_cast<u32>(liFirst),
+                CgsGraphics::KI_MAX_NUM_QUERIES);
+            mOcclusionCullManager.EndConditionalRender();
+        }
+        while (liFirst != -1);
+        return;
+    }
+
+    mOcclusionCullManager.BeginQueries();
+    lpList->DispatchAllMeshOcclusionQueries(mpInterpreter, 0, -1);
+    mOcclusionCullManager.EndQueries();
+    mOcclusionCullManager.BeginConditionalRender();
+    lpList->DispatchAllMeshes(mpInterpreter, lpContext, 0, -1);
+    mOcclusionCullManager.EndConditionalRender();
+}
+
+void BrnRendererModule::DispatchNativePcOcclusionQueryList(
+    CgsGraphics::DispatchList* lpList,
+    CgsGraphics::DispatchObjectContext* lpContext,
+    bool lbQueryThisPass,
+    bool lbUse64RecordBatches,
+    bool lbMeasureQueryIssue)
+{
+    if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED
+        && mOcclusionCullManager.mbOcclusionEnabled
+        && lbQueryThisPass)
+    {
+        DispatchOriginalOcclusionQueryList(lpList, lpContext,
+                                           lbUse64RecordBatches, lbMeasureQueryIssue);
+        return;
+    }
+
+    // Preserve the selected NativePC full-list draw while the original query
+    // path remains explicitly disabled by its separate host selection boundary.
+    lpList->DispatchAllMeshes(mpInterpreter, lpContext, 0, -1);
+}
+
 void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* /*lpDispatchThreadInputBuffer*/,
                                           CgsGraphics::DispatchObjectContext* lpContext)
 {
@@ -4859,7 +4969,13 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
                 shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
             WaitForMeshSortPC(19u);
-            GetMeshFrameForReadPC().GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            CgsGraphics::DispatchList* const lpCarOpaqueList =
+                GetMeshFrameForReadPC().GetList(19);
+            if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+                DispatchNativePcOcclusionQueryList(
+                    lpCarOpaqueList, &lContext, mbOcclusionCullCarOpaque, true, false);
+            else
+                lpCarOpaqueList->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
 
             if (lbForceCarStencil)
                 shadow::Device::EndForceStencilWrite();
@@ -4876,7 +4992,13 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             // costs a query issue and nothing else. DELETE with the shadow bring-up probes.
             renderengine::ShadowProbe_Begin(3u);
             WaitForMeshSortPC(11u);
-            GetMeshFrameForReadPC().GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            CgsGraphics::DispatchList* const lpWorldOpaqueList =
+                GetMeshFrameForReadPC().GetList(11);
+            if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+                DispatchNativePcOcclusionQueryList(
+                    lpWorldOpaqueList, &lContext, mbOcclusionCullWorldOpaque, true, true);
+            else
+                lpWorldOpaqueList->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
             renderengine::ShadowProbe_End(3u);
         }
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldOpaque);
@@ -4918,7 +5040,14 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         if (mbRenderWorldTransparent)
         {
             WaitForMeshSortPC(15u);
-            GetMeshFrameForReadPC().GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            CgsGraphics::DispatchList* const lpWorldTransparentList =
+                GetMeshFrameForReadPC().GetList(15);
+            if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+                DispatchNativePcOcclusionQueryList(
+                    lpWorldTransparentList, &lContext,
+                    mbOcclusionCullWorldTransparent, false, false);
+            else
+                lpWorldTransparentList->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
         }
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldTransparent);
         // X360 @0x8240D338-0x8240D348 / @0x8240D3F4-0x8240D3FC: the car-TRANSPARENT window. The
@@ -4937,7 +5066,14 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
                 shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
             WaitForMeshSortPC(20u);
-            GetMeshFrameForReadPC().GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            CgsGraphics::DispatchList* const lpCarTransparentList =
+                GetMeshFrameForReadPC().GetList(20);
+            if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+                DispatchNativePcOcclusionQueryList(
+                    lpCarTransparentList, &lContext,
+                    mbOcclusionCullCarTransparent, false, false);
+            else
+                lpCarTransparentList->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
 
             if (lbForceCarStencil)
                 shadow::Device::EndForceStencilWrite();
@@ -5091,6 +5227,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 
     // ARTIST 8240C0EC..8240C0F8 publishes renderer+0xC430 before loading
     // commands, dispatch conversion, shadow draws and environment-map draws.
+    if (KU_NATIVE_PC_OCCLUSION_PATH_SELECTED)
+        CgsGraphics::spOcclusionCullManager = &mOcclusionCullManager;
     CgsGraphics::suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
 
     // Forward the dispatch buffer's loading-screen command into the renderer - the X360
