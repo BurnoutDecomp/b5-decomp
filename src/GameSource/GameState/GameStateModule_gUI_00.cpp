@@ -34,6 +34,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16>
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer (lock + GetGameActionQueue)
+#include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h" // current player-status snapshot
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"             // mpTakedownCache->mTakedownEventQueue (the post-world scoring leg)
 #include "GameSource/GameState/BrnGameEvents.h"                         // RecordPropHitEvent / E_EVENT_RECORD_PROP_HIT / E_EVENT_CHANGE_WORLD_REGION
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // WorldRegionChangeEvent (the case-115 payload)
@@ -434,6 +435,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     if (mpPreWorldInputBuffer != 0 && !IsSimPaused(true, false))
     {
         mpPreWorldInputBuffer->LockForRead();
+        // ARTIST 0x823A5734..0x823A5744 copies this snapshot before the mode/intro update.
+        mpOnlineFlybyManager->mPlayerInputInterface = *mpPreWorldInputBuffer->GetPlayerStatusInterface();
         mModeManager.PreWorldUpdate(
             mpOutputBuffer,
             mpPreWorldInputBuffer,
