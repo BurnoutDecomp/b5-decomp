@@ -153,10 +153,10 @@ namespace CgsGraphics
         friend struct OcclusionCullManager;
 
         void BeginRendering();
-        // X360-attested signed-char overload (DWARF CgsImRenderer.h attests BOTH `void BeginRendering();`
-        // and `void BeginRendering(signed char);` on the ImRenderer<V> template). Bodied per vertex type
-        // (the LionBlend path @ X360 0x8227C3A8 supplies the LionBlendVertex instantiation). Distinct from
-        // the no-arg PC-fold BeginRendering().
+        // X360 signed-char overload for the per-program renderer specializations (the LionBlend path
+        // @ X360 0x8227C3A8 supplies the LionBlendVertex instantiation). It is bodied only for vertex
+        // types with a matching ARTIST function. The DecFIGS Basic2dColouredTexturedVertex specialization
+        // declares only the no-argument overload, which is the loading/debug/blit path used by CgsIm2d.cpp.
         void BeginRendering(s8 li8Program);
         void EndRendering();
         void Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount);
