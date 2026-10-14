@@ -313,7 +313,9 @@ static void TestProtocol()
     PoolProtocolFixture::GetRequiredResourceDescriptor(&lRequest,&lDescriptor);
     CgsMemory::MemoryIO::CreateResourceResponse lReply;
     lReply.Construct(nullptr,999); lReply.SetResult(CgsMemory::MemoryIO::E_RESULT_BANK_OUT_OF_RANGE);
-    lReply.SetResource(&lMemory,&lDescriptor);
+    lReply.SetDescriptor(&lDescriptor);
+    for (u32 luLane=0; luLane<rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        lReply.SetResourceData(luLane,lMemory.m_baseResources[luLane]);
     lpModule->DoCreatePoolRequest(&lReply,&lOutput);
     Check(sCapturedOptions.miId==7 && std::strcmp(sacCapturedName,"first")==0
         && sCapturedOptions.mResource.m_baseResources[0]==lMemory.m_baseResources[0]
