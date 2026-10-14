@@ -38,6 +38,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                   // the action payload homes
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // OutputBuffer / GameActionQueue
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h"               // streaming handshake publishers
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint
 #include "GameSource/Gui/Events/BrnGuiChallengeEvents.h"           // GUI 574 / 576 / 577 (free-burn challenge arms)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"           // CgsSystem::Time (the action-152 record)
@@ -398,6 +399,28 @@ namespace
                 lpGuiInput->GetGuiEvents()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lrReset.mCarModelId),
                     415, sizeof(CgsID));
+                break;
+            }
+            // ARTIST823EBBD0..823EBC0C: request the GUI's fourth streaming
+            // reply, then translate the loading-state byte without changing the wait.
+            case BrnGameState::GameStateModuleIO::E_ACTION_WAIT_FOR_STREAMING:
+            {
+                CgsGui::GuiEvent<134> lEvent;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_SET_LOADING_STATE:
+            {
+                if (*reinterpret_cast<const u8*>(lpAction) != 0)
+                {
+                    CgsGui::GuiEvent<136> lEvent;
+                    CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                }
+                else
+                {
+                    CgsGui::GuiEvent<137> lEvent;
+                    CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                }
                 break;
             }
             // ARTIST 0x823ED838-0x823ED84C: release the GUI's model-change wait.

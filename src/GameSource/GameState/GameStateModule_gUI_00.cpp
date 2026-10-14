@@ -345,6 +345,15 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         const GameStateModuleIO::PreWorldInputBuffer* lpcPreWorldInputBuffer = mpPreWorldInputBuffer;
         ProcessGameEvents(&lGameEventQueue, lpActionQueue, lpcPreWorldInputBuffer, mpOutputBuffer);
 
+        // ARTIST823A58C0..823A5900: start the four-module wait after event dispatch.
+        if (mbWaitingForStreaming && miStreamingWaitCountdown > 0 && --miStreamingWaitCountdown == 0)
+        {
+            // The original empty action copies one unspecified representation byte.
+            GameStateModuleIO::WaitForStreamingAction lAction;
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+                GameStateModuleIO::E_ACTION_WAIT_FOR_STREAMING, sizeof(lAction));
+        }
+
         if (mCarSelectManager.IsInJunkyard())
         {
             mCarSelectManager.Update(lpActionQueue, lpcPreWorldInputBuffer->GetControllerInput(), lfGameTimestep);
@@ -432,6 +441,14 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     //       declaration and no body anywhere in the tree. While the sim is paused this leg is
     //       skipped entirely, which is what the console does with PreWorldUpdate on that arm --
     //       what is lost is PausedUpdate's own work, not this one's.
+    // ARTIST8238EFA8..8238F050: refresh the pose consumed by the landmark arrow,
+    // including paused frames, before the mode-update branch.
+    if (mLastActiveRaceCarInterface.IsPlayerCarActive())
+    {
+        mPlayerCarTransform = mLastActiveRaceCarInterface.GetRaceCarState(
+            GetPlayerActiveRaceCarIndex())->mTransform;
+    }
+
     if (mpPreWorldInputBuffer != 0 && !IsSimPaused(true, false))
     {
         mpPreWorldInputBuffer->LockForRead();
@@ -803,6 +820,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         mpPreWorldInputBuffer->UnlockForRead();
     }
 
+    // ARTIST823A5F08: the original tail renders the two landmark debug controls.
+    mGameStateDebugComponent.RenderLandmarkDebug();
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
 }
