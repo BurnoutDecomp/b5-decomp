@@ -5415,6 +5415,7 @@ void TrafficEntityModule::Construct()
     miDEBUGOverrideVehicleToSpawn     = -1;     // 0x727C0 stwx r29 (r29 == -1)
     mbDEBUGDontRenderMeshes           = false;  // 0x727C8
     mbDEBUGAllowAnarchy               = false;  // 0x727C9
+    mfDEBUGDistanceForAnarchy         = 250.0f;  // 0x727CC: flt_82004A24 (43 7A 00 00)
     mfDEBUGTrafficLightTimeMultiplier = 1.0f;   // 0x727D0 stfsx flt_82001C98 == 1.0f
     mbDEBUGEnableKillzones            = true;   // 0x727D4 stbx r27
     // LOAD-BEARING: PickVehicleToSpawn gates on `miDEBUGFlowtypeOverride >= 0`, so dropping
