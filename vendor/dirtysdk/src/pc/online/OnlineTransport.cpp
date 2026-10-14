@@ -21,6 +21,7 @@ namespace
     const int32_t KI_TAG = 16;
     const int32_t KI_CHUNK = 1136;
     const int32_t KI_MAX_INNER = 20 + PCLAN_MAX_BODY;
+    const int32_t KI_MAX_RELAY = KI_MAX_INNER + 8;
     const uint8_t KU_HELLO = 1;
     const uint8_t KU_WELCOME = 2;
     const uint8_t KU_PACKET = 3;
@@ -36,7 +37,18 @@ namespace
         uint8_t muMask;
         uint16_t muLengths[4];
         uint64_t muSince;
-        uint8_t maData[KI_MAX_INNER];
+        uint64_t muSequence;
+        uint64_t muFirstSequence;
+        uint8_t maData[KI_MAX_RELAY];
+    };
+    struct PeerEpoch
+    {
+        bool mbUsed;
+        bool mbClosed;
+        uint32_t muSender;
+        uint64_t muEpoch;
+        uint64_t muSequence;
+        uint64_t muSeen;
     };
     struct State
     {
@@ -60,6 +72,7 @@ namespace
         uint16_t muTimeoutSeconds;
         bool mbConnectedLogged;
         Assembly maAssemblies[16];
+        PeerEpoch maPeerEpochs[4096]; // matches the service's maximum authenticated clients
     };
     State gState = {};
 
@@ -189,12 +202,66 @@ namespace
         return true;
     }
 
+    bool AcceptPeerEpoch(uint32_t luSender, uint64_t luEpoch, uint64_t luSequence, bool lbBye,
+                         bool* lpPeerRestarted)
+    {
+        const uint64_t luNow = GetTickCount64();
+        PeerEpoch* lpPeer = NULL;
+        PeerEpoch* lpFree = NULL;
+        for (PeerEpoch& lEntry : gState.maPeerEpochs)
+        {
+            if (lEntry.mbUsed && (lEntry.muSender == luSender)) { lpPeer = &lEntry; break; }
+            // A forgotten ordering witness must be older than every datagram
+            // the replay window can still admit, and past the retry lifetime.
+            if (lEntry.mbUsed && (gState.muRxHigh > lEntry.muSequence) &&
+                (gState.muRxHigh - lEntry.muSequence >= 128) &&
+                (luNow - lEntry.muSeen >= uint64_t(TimeoutMs()) * 2)) lEntry.mbUsed = false;
+            if (!lEntry.mbUsed) lpFree = &lEntry;
+        }
+        if (lpPeer == NULL)
+        {
+            if (lpFree == NULL) return false;
+            lpPeer = lpFree;
+            *lpPeer = { true, false, luSender, luEpoch, 0, luNow };
+        }
+        else if (lpPeer->muEpoch != luEpoch)
+        {
+            // Epochs are random. Only the relay's authenticated per-recipient
+            // sequence establishes that this is a newer connection.
+            if (luSequence <= lpPeer->muSequence) return false;
+            if (lpPeerRestarted != NULL) *lpPeerRestarted = !lpPeer->mbClosed;
+            lpPeer->muEpoch = luEpoch;
+            lpPeer->mbClosed = false;
+        }
+        if (luSequence > lpPeer->muSequence) lpPeer->muSequence = luSequence;
+        lpPeer->muSeen = luNow;
+        if (lpPeer->mbClosed) return false;
+        if (lbBye) lpPeer->mbClosed = true;
+        return true;
+    }
+
+    int32_t CompleteServerPacket(uint32_t luSender, uint64_t luSequence, const uint8_t* lpData,
+                                int32_t liSize, uint8_t* lpInner, int32_t liCapacity,
+                                uint64_t* lpConnectionEpoch, bool* lpPeerRestarted)
+    {
+        if ((liSize < 28) || (liSize - 8 > liCapacity) || (Read64(lpData) == 0)) return 0;
+        const uint8_t* lpGame = lpData + 8;
+        if ((memcmp(lpGame, "BPL1", 4) != 0) || (lpGame[4] != PCLAN_VERSION) ||
+            (lpGame[5] >= PCLAN_NUM_TYPES) || (Read16(lpGame + 6) != liSize - 28) ||
+            (Read32(lpGame + 8) != luSender)) return 0;
+        const uint64_t luEpoch = Read64(lpData);
+        if (!AcceptPeerEpoch(luSender, luEpoch, luSequence, lpGame[5] == PCLAN_BYE, lpPeerRestarted)) return 0;
+        if (lpConnectionEpoch != NULL) *lpConnectionEpoch = luEpoch;
+        memcpy(lpInner, lpGame, liSize - 8);
+        return liSize - 8;
+    }
+
     int32_t SendFrame(uint8_t luKind, uint32_t luTarget, uint16_t luMessage, uint8_t luIndex,
                       uint8_t luCount, const uint8_t* lpBody, int32_t liLength)
     {
         uint8_t laPacket[1200] = {};
         memcpy(laPacket, "BPO1", 4);
-        laPacket[4] = 1;
+        laPacket[4] = 2;
         laPacket[5] = luKind;
         Write16(laPacket + 6, static_cast<uint16_t>(liLength));
         Write32(laPacket + 8, gState.muIdent);
@@ -278,6 +345,7 @@ void Update()
         gState.muSession = 0;
         gState.muRxHigh = gState.muRxLow = gState.muRxUpper = 0;
         memset(gState.maAssemblies, 0, sizeof(gState.maAssemblies));
+        memset(gState.maPeerEpochs, 0, sizeof(gState.maPeerEpochs));
         if (!NewChallenge()) return;
     }
     if (gState.muSession == 0)
@@ -301,6 +369,7 @@ void Update()
 }
 
 uint16_t MaxPlayers() { return gState.muMaxPlayers ? gState.muMaxPlayers : 8; }
+uint32_t TimeoutMs() { return uint32_t(gState.muTimeoutSeconds ? gState.muTimeoutSeconds : 15) * 1000; }
 
 int32_t Send(uint32_t luTarget, const uint8_t* lpPacket, int32_t liLength)
 {
@@ -318,11 +387,13 @@ int32_t Send(uint32_t luTarget, const uint8_t* lpPacket, int32_t liLength)
 }
 
 int32_t Receive(const PcLanPeerT* lpFrom, const uint8_t* lpPacket, int32_t liLength,
-                uint8_t* lpInner, int32_t liCapacity, PcLanPeerT* lpPeer)
+                uint8_t* lpInner, int32_t liCapacity, PcLanPeerT* lpPeer, uint64_t* lpConnectionEpoch,
+                bool* lpPeerRestarted)
 {
+    if (lpPeerRestarted != NULL) *lpPeerRestarted = false;
     if (!gState.mbEnabled || (lpFrom->uAddr != gState.mServer.uAddr) || (lpFrom->uPort != gState.mServer.uPort)
         || (liLength < KI_HEADER + KI_TAG) || (liLength > 1200) || (memcmp(lpPacket, "BPO1", 4) != 0)
-        || (lpPacket[4] != 1) || (Read32(lpPacket + 12) != gState.muIdent)) return 0;
+        || (lpPacket[4] != 2) || (Read32(lpPacket + 12) != gState.muIdent)) return 0;
     const int32_t liSize = Read16(lpPacket + 6);
     const uint8_t luKind = lpPacket[5];
     const uint8_t luIndex = lpPacket[46];
@@ -345,9 +416,9 @@ int32_t Receive(const PcLanPeerT* lpFrom, const uint8_t* lpPacket, int32_t liLen
     const uint64_t luSession = Read64(lpPacket + 16);
     if (luKind == KU_WELCOME)
     {
-        if ((Read32(lpPacket + 8) != 0) || (liSize != 12) || (Read64(laPlain) != gState.muChallenge)
+        if ((Read32(lpPacket + 8) != 0) || (liSize != 20) || (Read64(laPlain) != gState.muChallenge)
             || (luSession == 0) || (Read16(laPlain + 8) < 2) || (Read16(laPlain + 8) > 8)
-            || (Read16(laPlain + 10) < 10) || (Read16(laPlain + 10) > 300)) return 0;
+            || (Read16(laPlain + 10) < 10) || (Read16(laPlain + 10) > 300) || (Read64(laPlain + 12) == 0)) return 0;
         if ((gState.muSession != 0) && (luSession != gState.muSession)) return 0;
         gState.muSession = luSession;
         gState.muMaxPlayers = Read16(laPlain + 8);
@@ -357,7 +428,7 @@ int32_t Receive(const PcLanPeerT* lpFrom, const uint8_t* lpPacket, int32_t liLen
         SendFrame(KU_KEEPALIVE, 0, 0, 0, 1, NULL, 0);
         if (!gState.mbConnectedLogged)
         {
-            Log("[net] online server connected: authenticated encrypted relay, protocol=1\n");
+            Log("[net] online server connected: authenticated encrypted relay, protocol=2\n");
             gState.mbConnectedLogged = true;
         }
         return 0;
@@ -373,18 +444,21 @@ int32_t Receive(const PcLanPeerT* lpFrom, const uint8_t* lpPacket, int32_t liLen
     lpPeer->uPad = 0;
     if (luCount == 1)
     {
-        if (liSize > liCapacity) return 0;
-        memcpy(lpInner, laPlain, liSize);
-        return liSize;
+        return CompleteServerPacket(luSender, Read64(lpPacket + 24), laPlain, liSize,
+                                    lpInner, liCapacity, lpConnectionEpoch, lpPeerRestarted);
     }
     const uint64_t luNow = GetTickCount64();
+    const uint64_t luFrameSequence = Read64(lpPacket + 24);
+    if (luFrameSequence <= luIndex) return 0;
+    const uint64_t luFirstSequence = luFrameSequence - luIndex;
     Assembly* lpAssembly = NULL;
     Assembly* lpFree = NULL;
     for (int liSlot = 0; liSlot < 16; ++liSlot)
     {
         Assembly* lpEntry = &gState.maAssemblies[liSlot];
         if (lpEntry->mbUsed && (luNow - lpEntry->muSince >= 2000)) lpEntry->mbUsed = false;
-        if (lpEntry->mbUsed && (lpEntry->muSender == luSender) && (lpEntry->muMessage == luMessage)) lpAssembly = lpEntry;
+        if (lpEntry->mbUsed && (lpEntry->muSender == luSender) && (lpEntry->muMessage == luMessage) &&
+            (lpEntry->muFirstSequence == luFirstSequence)) lpAssembly = lpEntry;
         if (!lpEntry->mbUsed) lpFree = lpEntry;
     }
     if (lpAssembly == NULL)
@@ -397,18 +471,20 @@ int32_t Receive(const PcLanPeerT* lpFrom, const uint8_t* lpPacket, int32_t liLen
         lpAssembly->muMessage = luMessage;
         lpAssembly->muCount = luCount;
         lpAssembly->muSince = luNow;
+        lpAssembly->muFirstSequence = luFirstSequence;
     }
     const int32_t liOffset = luIndex * KI_CHUNK;
     if ((lpAssembly->muCount != luCount) || ((lpAssembly->muMask & (1u << luIndex)) != 0)
-        || (liOffset + liSize > KI_MAX_INNER)) return 0;
+        || (liOffset + liSize > KI_MAX_RELAY)) return 0;
     memcpy(lpAssembly->maData + liOffset, laPlain, liSize);
+    const uint64_t luSequence = Read64(lpPacket + 24);
+    if (luSequence > lpAssembly->muSequence) lpAssembly->muSequence = luSequence;
     lpAssembly->muLengths[luIndex] = static_cast<uint16_t>(liSize);
     lpAssembly->muMask |= static_cast<uint8_t>(1u << luIndex);
     if (lpAssembly->muMask != ((1u << luCount) - 1)) return 0;
     const int32_t liTotal = (luCount - 1) * KI_CHUNK + lpAssembly->muLengths[luCount - 1];
     lpAssembly->mbUsed = false;
-    if (liTotal > liCapacity) return 0;
-    memcpy(lpInner, lpAssembly->maData, liTotal);
-    return liTotal;
+    return CompleteServerPacket(luSender, lpAssembly->muSequence, lpAssembly->maData, liTotal,
+                                lpInner, liCapacity, lpConnectionEpoch, lpPeerRestarted);
 }
 }

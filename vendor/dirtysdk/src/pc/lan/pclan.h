@@ -54,8 +54,8 @@ struct PcLanHeaderT
     uint16_t uLen;           // body bytes after the header
     uint32_t uSenderIdent;   // sender's lobby ident
     uint32_t uGameIdent;     // game the message belongs to, 0 when none
-    uint16_t uSeq;           // control sequence number (0 for DATA); ACK echoes it
-    uint16_t uPad;
+    uint16_t uSeq;           // control sequence low word (0 for DATA); ACK echoes it
+    uint16_t uPad;           // zero on LAN; control sequence high word inside BPO v2
 };
 #pragma pack(pop)
 
