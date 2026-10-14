@@ -1769,6 +1769,8 @@ private:
 public:
     GameStateInviteManager*    GetGameStateInviteManager() { return mpGameStateInviteManager; }
     GameStateImageManagerBase* GetImageManager()           { return mpImageManager; }
+    // DecFIGS .h:561; ARTIST inlines the selector before both flyby virtual calls.
+    FlybyManager*             GetFlybyManager();
     OnlineFlybyManager*        GetOnlineFlybyManager()     { return mpOnlineFlybyManager; }
     RichPresenceManagerX360*   GetRichPresenceManager()    { return mpRichPresenceManager; }
 private:
