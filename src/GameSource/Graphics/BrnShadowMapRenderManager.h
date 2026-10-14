@@ -18,7 +18,7 @@ class CgsRenderTarget;
 namespace CgsGraphics
 {
     class BufferedDispatchFrame;
-    class DispatchPacketInterpreter;
+    struct DispatchPacketInterpreter;
     class Im2d;
 }
 class DispatchMeshContext;
