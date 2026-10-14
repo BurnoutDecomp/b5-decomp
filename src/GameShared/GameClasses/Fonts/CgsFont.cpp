@@ -376,6 +376,11 @@ namespace CgsResource
         lParams.muField13       = 0u;
         lParams.muField14       = 0u;
         lParams.muField15       = 0u;
+        lParams.mu8Field40      = 0u;
+        lParams.mu8Field41      = 0u;
+        lParams.mu8Field42      = 0u;
+        lParams.mu8Field43      = 1u;
+        lParams.mu8Field44      = 1u;
         lParams.mpTexture       = mpapTextures[0];   // atlas page 0
 
         u32 lauDescriptor[10];
