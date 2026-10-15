@@ -96,6 +96,20 @@ namespace BrnGui
     static_assert(sizeof(GuiEATraxNewTrackEvent) == 24,
                   "MusicEffect posts this record as AddEvent(&r, 502, 24)");
 
+    // DecFIGS names these members. ARTIST UpdateParams @0x826FE5C8 posts
+    // the piece index FIRST, followed by the two 48-byte text IDs (GUI event 503).
+    struct GuiClassicalChyronEvent
+    {
+        static const u32 KU_CLASSICAL_CHYRON_TEXT_ID_MAX_CHARACTERS = 48;
+        s32 miPieceIndex;
+        char macComposerTextId[KU_CLASSICAL_CHYRON_TEXT_ID_MAX_CHARACTERS];
+        char macWorkTextId[KU_CLASSICAL_CHYRON_TEXT_ID_MAX_CHARACTERS];
+
+        s32 GetEventType() const { return 503; }
+    };
+    static_assert(sizeof(GuiClassicalChyronEvent) == 100,
+                  "ARTIST posts 100 bytes for the classical chyron");
+
     // GUI event 462 -- the trax play-order selector (the profile stores it as a 4-byte word
     // at +0x7340).
     struct GuiEventAudioTraxPlayOrder

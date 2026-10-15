@@ -4,6 +4,7 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
+#include "GameSource/Sound/Vehicles/BrnAIVehicleStateManager.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
@@ -89,6 +90,9 @@ static const u32 guPanningLfeLevelName = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("PanningLfeLevel"));
 static const u32 guCutoffFreqName = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("CutoffFreq"));
+// ARTIST CRT @ 0x82C63BD8: AICarSubmixVoiceSpec parameter 0.
+static const u32 guAILowPassFrequencyName = static_cast<u32>(
+    CgsSound::Playback::Name::MakeHash("LowPassFrequency"));
 static const u32 guLowShelfFreqName = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("LowShelfFreq"));
 static const u32 guLowShelfGainName = static_cast<u32>(
@@ -462,36 +466,58 @@ bool DualGinsuEffect::Attach()
         meDualGinsuPrepareState = E_GINSU_PREPARE_STATE_INITIALIZE_SUBMIX;
         // ARTIST falls through and creates the submix in the same tick.
     case E_GINSU_PREPARE_STATE_INITIALIZE_SUBMIX:
-        if (GetStateId() != 1)
+        // ARTIST @ 0x826F14C0: AI sources feed the reverb submix first,
+        // then its dry send feeds the spatial car submix.
+        if (GetStateId() == 2)
         {
-            // AI content pooling remains owned by AIVehicleStateManager.  The
-            // player graph is independent and is the path mounted here.
-            meDualGinsuPrepareState = E_GINSU_PREPARE_STATE_FINISHED;
-            return true;
+            mAICarReverbSubmix.Construct(lpModule, lpModule->GetUniqueId(),
+                guGenericRwacFactoryName,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                    "AIReverbSubmixvoiceSpec")));
+            mSubmixIdent = static_cast<u32>(mAICarReverbSubmix.GetIdent());
+            mCarSubmix.Construct(lpModule, lpModule->GetUniqueId(),
+                guGenericRwacFactoryName,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                    "AICarSubmixVoiceSpec")));
+            miCarSubmixSend01Index = 0;
+            miCarSubmixReverbIndex = -1;
+            miCarSubmixPanningAngleIndex = 3;
+            miCarSubmixPanningDistanceIndex = 4;
+            miCarSubmixPanningSizeIndex = 5;
+            miCarSubmixPanningTwistIndex = 6;
+            miCarSubmixPanningCentreLevelIndex = 7;
+            miCarSubmixPanningMainLevelIndex = 8;
+            miCarSubmixPanningLfeLevelIndex = 9;
+            miCarSubmixCutoffFreq = 0;
+            miCarSubmixLowShelfFreq = miCarSubmixLowShelfGain = -1;
+            miCarSubmixHighShelfFreq = miCarSubmixHighShelfGain = -1;
+            miCarSubmixPeakingFreq = miCarSubmixPeakingGain = miCarSubmixPeakingQ = -1;
         }
-
-        mCarSubmix.Construct(lpModule, lpModule->GetUniqueId(),
-            guGenericRwacFactoryName,
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash(
-                "PlayerCarSubmixVoiceSpec")));
-        miCarSubmixSend01Index = 0;
-        miCarSubmixReverbIndex = 1;
-        miCarSubmixPanningAngleIndex = 8;
-        miCarSubmixPanningDistanceIndex = 9;
-        miCarSubmixPanningSizeIndex = 10;
-        miCarSubmixPanningTwistIndex = 11;
-        miCarSubmixPanningCentreLevelIndex = 12;
-        miCarSubmixPanningMainLevelIndex = 13;
-        miCarSubmixPanningLfeLevelIndex = 14;
-        miCarSubmixCutoffFreq = 7;
-        miCarSubmixLowShelfFreq = 3;
-        miCarSubmixLowShelfGain = 4;
-        miCarSubmixHighShelfFreq = 5;
-        miCarSubmixHighShelfGain = 6;
-        miCarSubmixPeakingFreq = 0;
-        miCarSubmixPeakingGain = 1;
-        miCarSubmixPeakingQ = 2;
-        mSubmixIdent = static_cast<u32>(mCarSubmix.GetIdent());
+        else if (GetStateId() == 1)
+        {
+            mCarSubmix.Construct(lpModule, lpModule->GetUniqueId(),
+                guGenericRwacFactoryName,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                    "PlayerCarSubmixVoiceSpec")));
+            miCarSubmixSend01Index = 0;
+            miCarSubmixReverbIndex = 1;
+            miCarSubmixPanningAngleIndex = 8;
+            miCarSubmixPanningDistanceIndex = 9;
+            miCarSubmixPanningSizeIndex = 10;
+            miCarSubmixPanningTwistIndex = 11;
+            miCarSubmixPanningCentreLevelIndex = 12;
+            miCarSubmixPanningMainLevelIndex = 13;
+            miCarSubmixPanningLfeLevelIndex = 14;
+            miCarSubmixCutoffFreq = 7;
+            miCarSubmixLowShelfFreq = 3;
+            miCarSubmixLowShelfGain = 4;
+            miCarSubmixHighShelfFreq = 5;
+            miCarSubmixHighShelfGain = 6;
+            miCarSubmixPeakingFreq = 0;
+            miCarSubmixPeakingGain = 1;
+            miCarSubmixPeakingQ = 2;
+            mSubmixIdent = static_cast<u32>(mCarSubmix.GetIdent());
+        }
         meDualGinsuPrepareState = E_GINSU_PREPARE_STATE_CREATE_VOICES;
         return false;
 
@@ -502,7 +528,27 @@ bool DualGinsuEffect::Attach()
     case E_GINSU_PREPARE_STATE_CREATE_VOICES:
     {
         mCarSubmix.Connect(guSend01Name, 1);
-        mCarSubmix.Connect(guReverbSendName, 2);
+        if (GetStateId() == 1)
+            mCarSubmix.Connect(guReverbSendName, 2);
+        else
+        {
+            mAICarReverbSubmix.Connect(guReverbSendName, 2);
+            mAICarReverbSubmix.Connect(guSend01Name,
+                static_cast<u32>(mCarSubmix.GetIdent()));
+        }
+
+        mCarSubmix.SetParameter(miCarSubmixPanningDistanceIndex, 0.75f,
+                                &guPanningDistanceName);
+        mCarSubmix.SetParameter(miCarSubmixPanningSizeIndex, 1.0f,
+                                &guPanningSizeName);
+        mCarSubmix.SetParameter(miCarSubmixPanningTwistIndex, 0.0f,
+                                &guPanningTwistName);
+        mCarSubmix.SetParameter(miCarSubmixPanningCentreLevelIndex, 1.0f,
+                                &guPanningCentreLevelName);
+        mCarSubmix.SetParameter(miCarSubmixPanningMainLevelIndex, 1.0f,
+                                &guPanningMainLevelName);
+        mCarSubmix.SetParameter(miCarSubmixPanningLfeLevelIndex, 1.0f,
+                                &guPanningLfeLevelName);
 
         CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
         if (!mpHybridControl)
@@ -519,11 +565,26 @@ bool DualGinsuEffect::Attach()
         mfMinRpm = lrAttribs.MinRpm();
         mfDecelMinRpm = lrAttribs.DecelMinRpm();
 
-        CgsResource::ResourceHandle* lpHandle = GetResourceRegistrar().GetResource(
-            nullptr, lrAttribs.LoopModel());
-        if (!lpHandle)
-            return false;
-        mLoopModelResource = *lpHandle;
+        AIVehicleStateManager* lpAIManager = nullptr;
+        char lacBundleName[64];
+        const char* lpcBundleName = nullptr;
+        if (GetStateId() == 2)
+        {
+            const char* lpcComponent = mpPhysicsControl->GetEngineComponentName(
+                VehicleState::E_EXHAUST);
+            std::snprintf(lacBundleName, sizeof(lacBundleName), "Engines\\%08x.bundle",
+                         CgsResource::ID::HashString(
+                             reinterpret_cast<const u8*>(lpcComponent)));
+            lpcBundleName = lacBundleName;
+            lpAIManager = static_cast<AIVehicleStateManager*>(
+                lpModule->GetEnvironment().GetStateManager(2));
+            CGS_ASSERT(lpAIManager != nullptr, "lpAIStateManager");
+            miAIEngineIndex = (std::max)(0, (std::min)(
+                AIVehicleStateManager::KI_NUMBER_OF_AUDIO_AI_ENGINES - 1,
+                static_cast<s32>(VehicleStateManager::GetAIEngineAssignment(
+                    mpPhysicsControl->GetAttachInfo().muVehicleIndex)) - 1));
+        }
+        mLoopModelResource = GetAsset(lpcBundleName, lrAttribs.LoopModel());
 
         CgsResource::ResourcePtr<LoopModelData> lLoopModel(mLoopModelResource);
         if (!lLoopModel.HasMemoryResource())
@@ -549,10 +610,16 @@ bool DualGinsuEffect::Attach()
 
         for (u32 liPartial = 0; liPartial < miNumberOfLoops; ++liPartial)
         {
-            maLoopContentSpecs[liPartial].Construct(
-                lpModule, guGenericRwacFactoryName,
-                lpLoopModel->mpaPartials[liPartial].mWaveName.mHash);
-            mapLoopContentSpecs[liPartial] = &maLoopContentSpecs[liPartial];
+            if (lpAIManager)
+                mapLoopContentSpecs[liPartial] =
+                    lpAIManager->GetLoopModelContent(miAIEngineIndex, liPartial);
+            else
+            {
+                maLoopContentSpecs[liPartial].Construct(
+                    lpModule, guGenericRwacFactoryName,
+                    lpLoopModel->mpaPartials[liPartial].mWaveName.mHash);
+                mapLoopContentSpecs[liPartial] = &maLoopContentSpecs[liPartial];
+            }
         }
 
         CgsSound::Logic::VoiceWrapper::CreateParams lParams;
@@ -575,13 +642,19 @@ bool DualGinsuEffect::Attach()
                 << " partials=" << static_cast<s32>(miNumberOfLoops) << "\n";
         }
 
-        lParams.mContentSpecName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash(lrAttribs.GinsuFileAccel()));
+        if (lpAIManager)
+            lParams.mpContent = lpAIManager->GetAccelGinsuContent(miAIEngineIndex);
+        else
+            lParams.mContentSpecName = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash(lrAttribs.GinsuFileAccel()));
         mAccelGinsuVoice.Create(lParams);
         mAccelGinsuVoice.Play(0);
 
-        lParams.mContentSpecName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash(lrAttribs.GinsuFileDecel()));
+        if (lpAIManager)
+            lParams.mpContent = lpAIManager->GetDecelGinsuContent(miAIEngineIndex);
+        else
+            lParams.mContentSpecName = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash(lrAttribs.GinsuFileDecel()));
         mDecelGinsuVoice.Create(lParams);
         mDecelGinsuVoice.Play(0);
 
@@ -590,7 +663,7 @@ bool DualGinsuEffect::Attach()
     }
 
     case E_GINSU_PREPARE_STATE_VOICES_ARE_PLAYING:
-        for (u32 liPartial = 0; liPartial < miNumberOfLoops; ++liPartial)
+        for (u32 liPartial = 0; GetStateId() != 2 && liPartial < miNumberOfLoops; ++liPartial)
         {
             if (!mapLoopContentSpecs[liPartial] ||
                 !mapLoopContentSpecs[liPartial]->IsLoaded())
@@ -690,24 +763,32 @@ void DualGinsuEffect::ProcessUpdate()
 
     mCarSubmix.SetParameter(miCarSubmixPanningAngleIndex, lfPanningAngle,
                             &guPanningAngleName);
-    mCarSubmix.SetParameter(miCarSubmixLowShelfFreq, mfLowShelfFreq,
-                            &guLowShelfFreqName);
-    mCarSubmix.SetParameter(miCarSubmixLowShelfGain, mfLowShelfGain,
-                            &guLowShelfGainName);
-    mCarSubmix.SetParameter(miCarSubmixHighShelfFreq, mfHighShelfFreq,
-                            &guHighShelfFreqName);
-    mCarSubmix.SetParameter(miCarSubmixHighShelfGain, mfHighShelfGain,
-                            &guHighShelfGainName);
-    mCarSubmix.SetParameter(miCarSubmixPeakingFreq, mfPeakingFreq,
-                            &guPeakingFreqName);
-    mCarSubmix.SetParameter(miCarSubmixPeakingGain, mfPeakingGain,
-                            &guPeakingGainName);
-    mCarSubmix.SetParameter(miCarSubmixPeakingQ, mfPeakingQ,
-                            &guPeakingQName);
-    mCarSubmix.SetGain(miCarSubmixReverbIndex, lfSubmixGain,
-                       &guReverbSendName);
+    if (GetStateId() == 1)
+    {
+        mCarSubmix.SetParameter(miCarSubmixLowShelfFreq, mfLowShelfFreq,
+                                &guLowShelfFreqName);
+        mCarSubmix.SetParameter(miCarSubmixLowShelfGain, mfLowShelfGain,
+                                &guLowShelfGainName);
+        mCarSubmix.SetParameter(miCarSubmixHighShelfFreq, mfHighShelfFreq,
+                                &guHighShelfFreqName);
+        mCarSubmix.SetParameter(miCarSubmixHighShelfGain, mfHighShelfGain,
+                                &guHighShelfGainName);
+        mCarSubmix.SetParameter(miCarSubmixPeakingFreq, mfPeakingFreq,
+                                &guPeakingFreqName);
+        mCarSubmix.SetParameter(miCarSubmixPeakingGain, mfPeakingGain,
+                                &guPeakingGainName);
+        mCarSubmix.SetParameter(miCarSubmixPeakingQ, mfPeakingQ,
+                                &guPeakingQName);
+        mCarSubmix.SetGain(miCarSubmixReverbIndex, lfSubmixGain,
+                           &guReverbSendName);
+    }
+    else
+    {
+        mAICarReverbSubmix.SetGain(1, lfSubmixGain, &guReverbSendName);
+    }
     mCarSubmix.SetParameter(miCarSubmixCutoffFreq, lfCutoff,
-                            &guCutoffFreqName);
+                            GetStateId() == 1 ? &guCutoffFreqName :
+                                                &guAILowPassFrequencyName);
 
     // ARTIST @0x826FC7C8: the engine index comes from EntityId bits 10..23.
     // KI_DEBUG_PRINT_RPM_OUTPUT enables the detailed line for the player; otherwise

@@ -112,12 +112,13 @@ public:
     //     *(this + 8) = *(this + 4);  *(this + 4) = voice.meUpdateStage;   // VoiceWrapper +0x48
     // MusicEffect::Attach @0x8269CC60 zeroes both on all four streams, and UpdateParams
     // @0x826FE5C8 case 12 (@0x826FF694..6D0) posts GuiOut 504 -- "menu-stream audio
-    // ready", the MovieManager's WAITING_FOR_AUDIO -> PLAYING trigger -- while
-    //     prev == current || current == 6 (VoiceWrapper::E_UPDATE_STAGE_PLAYING).
-    bool IsVoiceStageSettledOrPlaying() const
+    // ready", the MovieManager's WAITING_FOR_AUDIO -> PLAYING trigger -- on the
+    // transition into VoiceWrapper::E_UPDATE_STAGE_PLAYING, not on steady stages.
+    bool HasVoiceStartedPlaying() const
     {
-        return mu32PrevVoiceUpdateStage == mu32VoiceUpdateStage ||
-               mu32VoiceUpdateStage == 6u;
+        return mu32PrevVoiceUpdateStage != mu32VoiceUpdateStage &&
+               mu32VoiceUpdateStage ==
+                   CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING;
     }
     void ResetVoiceStages() { mu32VoiceUpdateStage = 0; mu32PrevVoiceUpdateStage = 0; }
 
@@ -127,7 +128,7 @@ public:
     void StreamStopped() override;
 
 private:
-    u32 mu32VoiceUpdateStage;       // +0x04 (see IsVoiceStageSettledOrPlaying)
+    u32 mu32VoiceUpdateStage;       // +0x04 (see HasVoiceStartedPlaying)
     u32 mu32PrevVoiceUpdateStage;   // +0x08
     CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;   // +0x0C
     Streaming::StreamingStateManager* mpStreamingManager;

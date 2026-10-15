@@ -137,9 +137,10 @@ void VoiceWrapper::Update()
             // ARTIST checks the content state immediately after attachment.
         }
         case E_UPDATE_STAGE_WAIT:
-            if (mContent.IsLoaded())
-                meUpdateStage = E_UPDATE_STAGE_START;
-            break;
+            if (!mContent.IsLoaded())
+                break;
+            meUpdateStage = E_UPDATE_STAGE_START;
+            // ARTIST @ 0x826DC5E0 starts ready content in this update.
 
         case E_UPDATE_STAGE_START:
             if (mbPlay)
