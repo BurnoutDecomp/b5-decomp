@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; } }
+namespace CgsDev { namespace Log { StrStreamBase* gpDebugPrint = nullptr; } }
 namespace CgsDev { namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char*, const char*, int) { std::abort(); }
