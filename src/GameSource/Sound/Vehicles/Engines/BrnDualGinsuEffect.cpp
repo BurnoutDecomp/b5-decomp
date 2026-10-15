@@ -957,11 +957,13 @@ void DualGinsuEffect::UpdateAccelGinsu()
         return;
     f32 lfPitch = GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
         mpEngineControl->GetAudioPitch();
-    if (lfRpm < mfMinRpm && mfMinRpm > 0.0f)
+    if (lfRpm < mfMinRpm)
     {
         lfPitch = (lfPitch / mfMinRpm) * lfRpm;
-        if (lfRpm < 0.0f)
-            lfRpm = 0.0f;
+        // ARTIST 0x826B39AC..B4 reloads the minimum into f0, then fsel
+        // holds the synth at that minimum. Only the external pitch falls below
+        // it; lowering both frequency and pitch scales the engine note twice.
+        lfRpm = mfMinRpm;
     }
     mfAccelGinsuRPM.Update(lfRpm);
 
@@ -1010,20 +1012,22 @@ void DualGinsuEffect::UpdateDecelGinsu()
     CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
     if (!mpEngineControl)
         return;
-    const f32 lfPitch =
+    f32 lfPitch =
         GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
         mpEngineControl->GetAudioPitch();
-    mfDecelGinsuRPM.Update(lfRpm);
-
-    f32 lfGain =
-        GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL) *
-        mpHybridControl->GetFinalEngineVolume().DecelGinsu;
     if (KI_DEBUG_PITCH_BELOW_IDLE_DECEL_GINSU != 0 &&
         lfRpm < mfDecelMinRpm)
     {
-        lfGain = (lfGain / mfDecelMinRpm) * lfRpm;
-        lfRpm = 0.0f;
+        // ARTIST 0x826B3C14..24 applies the same frequency floor to decel
+        // when the original debug option is enabled. It scales pitch, not gain.
+        lfPitch = (lfPitch / mfDecelMinRpm) * lfRpm;
+        lfRpm = mfDecelMinRpm;
     }
+    mfDecelGinsuRPM.Update(lfRpm);
+
+    const f32 lfGain =
+        GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL) *
+        mpHybridControl->GetFinalEngineVolume().DecelGinsu;
     mDecelGinsuVoice.SetParameter(3, 0.0f, &guGinsuPauseName);
     mDecelGinsuVoice.SetGain(0, lfGain, &guSend01Name);
     mDecelGinsuVoice.SetParameter(0, lfRpm, &guGinsuFrequencyName);
