@@ -164,36 +164,44 @@ s32 Cgs3dEffectControl::GetPanningAngle(
     return static_cast<s32>(lfDegrees);
 }
 
-void Cgs3dEffectControl::UpdateDoppler(f32 afDeltaTime, s32)
+void Cgs3dEffectControl::UpdateDoppler(f32 afDeltaTime, s32 aiPlayer)
 {
-    if (!mpEmitterPosition || !GetDMixIOPtr())
+    if (!mpEmitterPosition)
         return;
 
     MicrophoneSystem& lrMicSystem =
         GetLogicModule()->GetEnvironment().GetMicrophoneSystem();
-    for (s32 liMic = 0; liMic < 2; ++liMic)
+    // ARTIST @ 0x826A4E90: both samples use the requested player microphone.
+    // The histories are updated in reverse order: history 1 feeds mixer slot 13.
+    for (s32 liMic = 1; liMic >= 0; --liMic)
     {
         const rw::math::vpu::Vector3& lrMicPos =
             lrMicSystem.GetMicrophone(
                 MicrophoneSystem::E_MIC_PLAYER,
-                static_cast<MicrophoneSystem::EPlayer>(liMic))
+                static_cast<MicrophoneSystem::EPlayer>(aiPlayer))
                 ->GetMicrophoneMatrix().wAxis;
         const f32 lfDistance = rw::math::vpu::Length(*mpEmitterPosition - lrMicPos);
         const f32 lfPrevious = mfDistanceToMic[liMic].GetCurrent();
         mfDistanceToMic[liMic].Update(lfDistance);
         const f32 lfVelocity = (lfDistance - lfPrevious) /
             (afDeltaTime == 0.0f ? 1.0f : afDeltaTime);
-        const f32 lfPreviousVelocity = mfVelocityToMic[liMic].GetCurrent();
         mfVelocityToMic[liMic].Update(lfVelocity);
+    }
+    if (!GetDMixIOPtr())
+        return;
+    for (s32 liMic = 1; liMic >= 0; --liMic)
+    {
+        const f32 lfVelocity = mfVelocityToMic[liMic].GetCurrent();
+        const f32 lfPreviousVelocity = mfVelocityToMic[liMic].GetPrevious();
         if ((lfVelocity < 0.0f && lfPreviousVelocity > 0.0f) ||
             (lfVelocity > 0.0f && lfPreviousVelocity < 0.0f))
         {
-            const s32 liFlag = liMic == 0 ? static_cast<s32>(0x80000000u)
+            const s32 liFlag = liMic == 1 ? static_cast<s32>(0x80000000u)
                                           : 0x40000000;
             SetMixerInputValueUnbound(
                 15, GetDMixIOPtr()->GetDMixInput(15) | liFlag);
         }
-        SetMixerInputValueUnbound(13 + liMic,
+        SetMixerInputValueUnbound(14 - liMic,
                                   static_cast<s32>(lfVelocity * 100.0f));
     }
 }
@@ -252,7 +260,7 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
     MicrophoneSystem& lrMicSystem =
         GetLogicModule()->GetEnvironment().GetMicrophoneSystem();
 
-    if (true)
+    if (lrMicSystem.GetNumberOfPlayers() == 1)
     {
         if (GetDMixIOPtr())
         {
@@ -282,6 +290,10 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
             f32 lfDist1 = rw::math::vpu::Length(lrMic1Pos - lrEmitterPos) * 100.0f;
             SetMixerInputValueUnbound(0, static_cast<s32>(lfDist1));
         }
+    }
+    else if (lrMicSystem.GetNumberOfPlayers() != 0)
+    {
+        CGS_ASSERT(false, "Two Player game not supported yet. Needs some work.");
     }
 }
 

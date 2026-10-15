@@ -1181,7 +1181,7 @@ s32 HUDEffect::GetFreeVoice(u8 au8ChokeGroup)
 //     case 2:   ; a PAUSE/GUI COMPONENT -- no table, a fixed two-splice pair
 //       if ( (module dispatch slot 0 flag & 2) == 0 ) {
 //           lu8ChokeGroup  = 0;
-//           lu8MixerOutput = (u8)module dispatch slot 0;
+//           lu8MixerOutput = 3;
 //           liSplice       = event.miAction ? 2 : 1;
 //           lbFound        = true;
 //       }
@@ -1246,16 +1246,15 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     }
     else if (lrEvent.miComponentType == 2)
     {
-        // X360 @0x826F60B0: `ldx` the sound module's 64-bit dispatch flags word
-        // (module + 0x13570); bit 1 -- the loading screen, GUI event 33 -- gates the
-        // whole arm (`rlwinm 30,30`), and the word's HIGH dword is taken as the mixer
-        // output (IDA's `*(module + 79216)`); nothing ever writes those bits, so it is 0.
+        // ARTIST @0x826F60B0 tests bit 1 of the module dispatch flags. The mixer
+        // slot is the constant 3 already in r10 (`stb r10` @0x826F60DC).
+        // Hex-Rays incorrectly aliases that register with the module flags load.
         const BrnSound::Module::SoundLogicModule* lpModule =
             static_cast<const BrnSound::Module::SoundLogicModule*>(GetLogicModule());
         if (lpModule && (lpModule->mDispatchState.mu64Flags & 2u) == 0)
         {
             lu8ChokeGroup  = 0;
-            lu8MixerOutput = static_cast<u8>(lpModule->mDispatchState.mu64Flags >> 32);
+            lu8MixerOutput = 3;
             liSpliceIndex  = (lrEvent.miAction != 0) ? 2 : 1;
             lbFound        = true;
         }
