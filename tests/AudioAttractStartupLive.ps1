@@ -1,5 +1,5 @@
 # An ordinary launch idles into attract mode with no Accept input. The last
-# backbuffer must contain visible video rather than a WAITING_FOR_AUDIO black screen.
+# backbuffer near the end must show video rather than a WAITING_FOR_AUDIO black screen.
 @{
   Name = 'audio_attract_startup'
   Area = 'audio'
@@ -21,6 +21,7 @@
       }
       @{ Pass=($null -ne $sound -and $sound -ne 0); Detail="attract reached=$attract, audio stream=$sound" }
     } }
-    @{ Kind='Frame'; Name='idle attract output is visible'; At='last'; Stat='lum_mean'; Min=5 }
+    # The final dump can be interrupted by the harness stopping the process.
+    @{ Kind='Frame'; Name='idle attract output is visible'; At='last'; Offset=-1; Stat='lum_mean'; Min=5 }
   )
 }
