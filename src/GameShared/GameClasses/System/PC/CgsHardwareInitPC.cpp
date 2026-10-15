@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 
 #include <Windows.h>
+#include <Dbt.h>
 #include <d3d9.h>
 
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
@@ -66,23 +67,53 @@ bool CgsSystem::HardwareInit::mbIsGuideOnScreen;
 
 bool CgsSystem::HardwareInit::mbHasDetectedAutomaticTestingFile;
 
+// Snapshots the user's accessibility shortcut and screensaver settings once, then either
+// applies the in-game settings (accessibility hotkeys off, screensaver off) or restores the
+// snapshot. fWinIni is 0 throughout, so nothing is written to the user profile.
 static void SetSystemParameters(bool reset)
 {
     static bool alreadyRetrievedParams = false;
+    static STICKYKEYS savedStickyKeys;
+    static TOGGLEKEYS savedToggleKeys;
+    static FILTERKEYS savedFilterKeys;
+    static BOOL savedScreenSaverActive;
+
     if (!alreadyRetrievedParams)
     {
-        // TODO: Implement SetSystemParameters
+        savedStickyKeys.cbSize = sizeof(STICKYKEYS);
+        SystemParametersInfoA(SPI_GETSTICKYKEYS, sizeof(STICKYKEYS), &savedStickyKeys, 0);
+        savedToggleKeys.cbSize = sizeof(TOGGLEKEYS);
+        SystemParametersInfoA(SPI_GETTOGGLEKEYS, sizeof(TOGGLEKEYS), &savedToggleKeys, 0);
+        savedFilterKeys.cbSize = sizeof(FILTERKEYS);
+        SystemParametersInfoA(SPI_GETFILTERKEYS, sizeof(FILTERKEYS), &savedFilterKeys, 0);
+        SystemParametersInfoA(SPI_GETSCREENSAVEACTIVE, 0, &savedScreenSaverActive, 0);
 
         alreadyRetrievedParams = true;
     }
 
     if (reset)
     {
-        // TODO: Implement SetSystemParameters
+        SystemParametersInfoA(SPI_SETSTICKYKEYS, sizeof(STICKYKEYS), &savedStickyKeys, 0);
+        SystemParametersInfoA(SPI_SETTOGGLEKEYS, sizeof(TOGGLEKEYS), &savedToggleKeys, 0);
+        SystemParametersInfoA(SPI_SETFILTERKEYS, sizeof(FILTERKEYS), &savedFilterKeys, 0);
+        SystemParametersInfoA(SPI_SETSCREENSAVEACTIVE, savedScreenSaverActive, nullptr, 0);
     }
     else
     {
-        // TODO: Implement SetSystemParameters
+        // Clear the hotkey-active and confirm-hotkey bits; every other field keeps the user's value.
+        STICKYKEYS stickyKeys = savedStickyKeys;
+        stickyKeys.dwFlags &= ~(SKF_HOTKEYACTIVE | SKF_CONFIRMHOTKEY);
+        SystemParametersInfoA(SPI_SETSTICKYKEYS, sizeof(STICKYKEYS), &stickyKeys, 0);
+
+        TOGGLEKEYS toggleKeys = savedToggleKeys;
+        toggleKeys.dwFlags &= ~(TKF_HOTKEYACTIVE | TKF_CONFIRMHOTKEY);
+        SystemParametersInfoA(SPI_SETTOGGLEKEYS, sizeof(TOGGLEKEYS), &toggleKeys, 0);
+
+        FILTERKEYS filterKeys = savedFilterKeys;
+        filterKeys.dwFlags &= ~(FKF_HOTKEYACTIVE | FKF_CONFIRMHOTKEY);
+        SystemParametersInfoA(SPI_SETFILTERKEYS, sizeof(FILTERKEYS), &filterKeys, 0);
+
+        SystemParametersInfoA(SPI_SETSCREENSAVEACTIVE, FALSE, nullptr, 0);
     }
 }
 
@@ -101,10 +132,19 @@ static void CheckSSE2Support()
     }
 }
 
-static bool RegisterDeviceNotif(HDEVNOTIFY* notify)
+// Asks for WM_DEVICECHANGE arrival/removal notices for every device interface class.
+// The handle is written even on failure (null), and the result reports whether it is valid.
+static bool RegisterDeviceNotif(HWND recipient, HDEVNOTIFY* notify)
 {
-    // TODO: Implement RegisterDeviceNotif
-    return true;
+    DEV_BROADCAST_DEVICEINTERFACE_A notificationFilter;
+    ZeroMemory(&notificationFilter, sizeof(notificationFilter));
+    notificationFilter.dbcc_size = sizeof(notificationFilter);
+    notificationFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+
+    HDEVNOTIFY handle = RegisterDeviceNotificationA(recipient, &notificationFilter,
+                                                    DEVICE_NOTIFY_WINDOW_HANDLE | DEVICE_NOTIFY_ALL_INTERFACE_CLASSES);
+    *notify = handle;
+    return handle != nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +173,9 @@ static DWORD WINAPI ShutdownWatchdogProc(LPVOID)
     *CgsDev::Log::gpDebugPrint
         << "[exit-diag] shutdown watchdog expired after " << static_cast<s32>(KU_SHUTDOWN_BUDGET_MS)
         << " ms -- TerminateProcess\n";
+    // ReleaseHardware will not run, so give the user back their accessibility shortcut and
+    // screensaver settings here. A second restore from a late ReleaseHardware is harmless.
+    SetSystemParameters(true);
     TerminateProcess(GetCurrentProcess(), 0);
     return 0;
 }
@@ -172,6 +215,11 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
                 SaveFullscreenConfigPC();
             return 0;
         }
+        // Alt or F10 on its own would put the window into menu mode, whose modal loop
+        // stalls the game until another key or click. Other system keys (Alt+F4) still
+        // reach DefWindowProc.
+        if (uMsg == WM_SYSKEYDOWN && (wParam == VK_MENU || wParam == VK_F10))
+            return 0;
         break;
     case WM_DISPLAYCHANGE:
         if (renderengine::gFullscreen && !IsIconic(hwnd))
@@ -328,7 +376,7 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
 
     if (!window)
     {
-        GetLastError(); // TODO: This is probably handled in the internal build
+        GetLastError(); // the PC release also discards the error
         return nullptr;
     }
 
@@ -336,8 +384,9 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
     if (fullscreen)
         sWindowMode.Toggle(window, renderengine::gFullscreen);
 
+    // The handle is not kept or unregistered; the registration lasts as long as the process.
     HDEVNOTIFY notify = nullptr;
-    return RegisterDeviceNotif(&notify) ? window : nullptr;
+    return RegisterDeviceNotif(window, &notify) ? window : nullptr;
 }
 
 void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
@@ -407,7 +456,8 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
 
     CgsCore::SnPrintf(macRootPath, knHardwarePathMaxLength, "p_hdd:/%s/", pathBuffer);
 
-    // TODO: Implement CgsSystem::HardwareInit::InitializeHardware
+    // The PC release also sets a global flag to 1 here. Nothing in that executable reads
+    // it, so it has no effect to reproduce.
 
     isPartyEdition = true;
     isPartyEdition = DetermineIsPartyEditionVersion();
@@ -421,7 +471,9 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
     mouseY = 0;
     leftMouseDown = false;
 
-    // TODO: Implement CgsSystem::HardwareInit::InitializeHardware
+    // The PC release starts its own job backend here, with one worker per processor
+    // clamped to 2..6. This build uses the console job scheduler instead, set up after
+    // CoInitialize below.
 
     s32 j = 0;
     char c4 = 0;
@@ -504,7 +556,11 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
         mJobManager.AddThread(lParameters);
     }
 
-    // TODO: Implement CgsSystem::HardwareInit::InitializeHardware
+    // Not reproduced: the PC release ends here with product-specific setup that has no
+    // consumer in this build. It registers the ATL ActiveX host window classes
+    // (AtlAxWin80, AtlAxWinLic80) and its module object, resets two licence/telemetry
+    // state values, and reads the install's "ergc" registry value under
+    // HKLM\Software\Electronic Arts\EA Games\Burnout(TM) Paradise The Ultimate Box.
 }
 
 void CgsSystem::HardwareInit::ReleaseHardware()
@@ -517,11 +573,13 @@ void CgsSystem::HardwareInit::ReleaseHardware()
     SetCursor(hCursor);
     ShowCursor(TRUE);
 
-    // TODO: Implement CgsSystem::HardwareInit::ReleaseHardware
+    // The PC release removes a Windows hook here if one is set. Nothing in that
+    // executable installs one (it does not import SetWindowsHookEx), so the branch
+    // never runs and there is nothing to release.
 
     SetSystemParameters(true);
 
-    // TODO: Implement CgsSystem::HardwareInit::ReleaseHardware
+    // The PC release destroys its job backend here; the scheduler above is already gone.
 
     timeEndPeriod(1u);
     CoUninitialize();
@@ -539,7 +597,7 @@ bool CgsSystem::HardwareInit::IsAlreadyRunning()
     const char* lpcMutexName = CgsSystem::HarnessSlot::Name(lacMutexName, sizeof(lacMutexName), mutexName);
 
     HANDLE hMutex = OpenMutex(MUTEX_ALL_ACCESS, FALSE, lpcMutexName);
-    GetLastError(); // TODO: This is probably handled in the internal build
+    GetLastError(); // the PC release also discards the error
     if (hMutex)
     {
         HWND existingWindow = FindWindow(windowClassName, windowName);
