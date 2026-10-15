@@ -21,7 +21,8 @@
 //
 //  The shared sink has one 48 kHz stereo clock. Movie producers supply signed
 //  16-bit PCM; the six-channel RWAC transport is folded to float stereo by
-//  DacOutputPC. XAudio2 receives their float sum with an output mastering limiter.
+//  DacOutputPC. Only the completed float sum is saturated to the device range;
+//  samples below full scale retain the authored mix without another dynamics pass.
 //  One OnBufferEnd callback owns production. Priming submits only silence before
 //  starting the voice; capture and diagnostic I/O run on a separate bounded worker.
 // ===========================================================================

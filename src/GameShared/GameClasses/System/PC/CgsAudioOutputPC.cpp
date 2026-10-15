@@ -10,7 +10,6 @@
 // same 2.9 engine and same interfaces, but it names xaudio2_9redist.dll -- the
 // down-level-capable build we ship beside the exe. See Open() below.
 #include <xaudio2Redist.h>
-#include <xapofxRedist.h>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -24,7 +23,7 @@
 // ===========================================================================
 //  CgsSystem::AudioOutputPC -- XAudio2 2.9 PC output backend (Microsoft's XAudio2
 //  Redistributable, xaudio2_9redist.dll). See the header for the
-//  X360 (Dac -> XAudio render-driver) correspondence. A single stereo 16-bit source
+//  X360 (Dac -> XAudio render-driver) correspondence. A single stereo float source
 //  voice is fed by a triple-buffered, callback-driven pull (OnBufferEnd refills the
 //  drained buffer and re-submits it), matching the X360 render-driver frame callback.
 // ===========================================================================
@@ -258,11 +257,18 @@ std::atomic<bool> g_diagStop(false);
 HANDLE g_diagEvent = nullptr;
 HANDLE g_diagThread = nullptr;
 
+// FLAG PC-platform leaf: final normalized device range, with no gain or history.
+f32 SaturateDeviceSample(f32 afValue)
+{
+    if (!std::isfinite(afValue)) return 0.0f;
+    if (afValue > 1.0f) return 1.0f;
+    if (afValue < -1.0f) return -1.0f;
+    return afValue;
+}
+
 s16 DiagnosticS16(f32 afValue)
 {
-    if (!(afValue >= -1.0f)) afValue = -1.0f;
-    if (afValue > 1.0f) afValue = 1.0f;
-    return static_cast<s16>(afValue * 32767.0f);
+    return static_cast<s16>(SaturateDeviceSample(afValue) * 32767.0f);
 }
 
 DWORD WINAPI DiagnosticThread(void*)
@@ -395,7 +401,16 @@ void SubmitBuffer(int liIndex, bool abPrime = false)
             --g_engineActive;
             g_fillIdle.notify_all();
         }
+        // Retain the pre-saturation floats for peak/overrange diagnostics. The
+        // worker's WAV conversion uses the same device-range guard as playback.
         QueueDiagnostics(lpBuf, lpEngineFill != nullptr);
+        // FLAG PC-platform leaf: saturate only at the completed stereo device
+        // boundary. Preserve all representable samples exactly, including a
+        // large engine lane cancelled by the movie lane. RWAC already owns the
+        // authored master dynamics; a second XAPOFX loudness processor changes
+        // even quiet music and introduces another 1024 frames of latency.
+        for (int li = 0; li < liValues; ++li)
+            lpBuf[li] = SaturateDeviceSample(lpBuf[li]);
     }
     XAUDIO2_BUFFER lBuf = {};
     lBuf.AudioBytes = static_cast<UINT32>(liValues * sizeof(f32));
@@ -609,28 +624,6 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         return false;
     }
 
-    // FLAG PC-platform leaf: XAPOFX limits the FINAL float stereo sum, after
-    // the 6->2 fold and movie addition. No source gains or authored RWAC DSP change.
-    typedef HRESULT (WINAPI *CreateFXFn)(REFCLSID, IUnknown**, const void*, UINT32);
-    CreateFXFn lpCreateFX = reinterpret_cast<CreateFXFn>(
-        ::GetProcAddress(g_hXAudioDll, "CreateFX"));
-    IUnknown* lpLimiter = nullptr;
-    if (!lpCreateFX || FAILED(lpCreateFX(CLSID_FXMasteringLimiter, &lpLimiter, nullptr, 0)))
-    {
-        AUDIO_LOG << "[Audio] final output limiter unavailable\n";
-        Close();
-        return false;
-    }
-    XAUDIO2_EFFECT_DESCRIPTOR lEffect = { lpLimiter, TRUE, 2 };
-    XAUDIO2_EFFECT_CHAIN lChain = { 1, &lEffect };
-    const HRESULT lLimiterResult = g_pMaster->SetEffectChain(&lChain);
-    lpLimiter->Release();
-    if (FAILED(lLimiterResult))
-    {
-        Close();
-        return false;
-    }
-
     // BRN_AUDIO_MUTE: the whole mute, applied to the voice every mix passes through. Applied
     // HERE, per Open, because the device is opened and re-opened many times in one boot (the
     // movie streams churn the primary fill through ReleasePrimaryFill) and a single un-muted
@@ -674,7 +667,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
     }
 
     AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels
-              << " ch (float PCM, final limiter)";
+              << " ch (float PCM, final saturation)";
     if (luEndpointIndex != UINT32_MAX)
         AUDIO_LOG << " via active endpoint " << luEndpointIndex;
     // [FLAG PC witness] The mastering voice's OWN gain, read back out of the engine rather than
