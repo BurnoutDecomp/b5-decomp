@@ -45,6 +45,7 @@ namespace CgsGeometric
         s32                          miLastQueryResultCount;  // result[25]   number of results from the last query
 
     public:
+        s32 GetNumLevels() const { return miNumLevels; } // ARTIST Collision::OnActivate 828AAD38
         // Construct @0x82839600 — zero the handle pointer + count (minimal POD init).
         void Construct();
         // Prepare @0x82839610 — point at a caller-owned handle array of the given size.

@@ -39,6 +39,7 @@
 // Vertex (6-byte) record types are consumed elsewhere and are referenced here purely
 // by byte stride, so they are not defined in this home.
 #include "types.hpp"
+#include "BrnCommonTypes.h"
 
 namespace CgsGeometric
 {
@@ -83,6 +84,7 @@ namespace CgsGeometric
         // The X360 index arg is an unsigned __int16 (clrlwi r,16) compared against the
         // u8 vertex count.
         u8* GetVertex(u16 lu16VertexIndex) const;
+        Vector3 GetVertexPosition(u8 lu8VertexIndex) const; // DWARF :202; raw ARTIST 828AF0D0
 
         u8 GetNumPolygons() const { return mu8NumPolygons; }
         u8 GetNumQuads()    const { return mu8NumQuads; }

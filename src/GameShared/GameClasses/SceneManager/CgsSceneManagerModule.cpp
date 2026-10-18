@@ -283,6 +283,8 @@ void SceneManagerModule::Construct()
     mOverlapCuller.Construct();             // X360 (**[+0xDC9A0])([+0xDC9A0])
     mFineIntersectionTestModule.Construct();
 
+    mTriangleCollisionManager.Construct(); // ARTIST 828D0AC8..828D0AF4 (inlined).
+
     mpTriangleCacheCollisionGenerator = nullptr;   // X360 [+0x3A84D0] <- 0
 
     // The two "total CG setup" timers are registered unconditionally each Construct

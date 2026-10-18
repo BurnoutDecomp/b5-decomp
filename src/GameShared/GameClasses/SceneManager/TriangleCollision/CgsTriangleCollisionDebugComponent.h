@@ -1,73 +1,77 @@
 #pragma once
-
 #include "types.hpp"
+#include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
+#include "vendor/renderware/collision/Frustum.hpp"
 
-// CgsTriangleCollisionDebugComponent.h — debug-UI identity hook for the triangle-
-// collision debug component (the in-game overlay that draws poly soups, soup AABBs,
-// poly normals and runs the interactive sphere/line/box/swept-sphere collision tests).
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsSceneManager::TriangleCollisionDebugComponent::GetName @ 0x827DD828  -> "Collision"
-//
-// HEADER-KEYED MINIMAL SLICE: the X360 ledger attests exactly one function for this
-// header TU — the GetName override, a leaf that returns a literal and touches no
-// instance state. The full TriangleCollisionDebugComponent is a heavy CgsDev::
-// DebugComponent subclass (DWARF lists ~60 members embedding Frustum, the tri-collision
-// manager pointer, the per-test perf-mon counters and a 2 MiB spatial buffer pointer)
-// whose bodies are separate engine-gated TUs (tri-collision manager + Debug3DImmediate
-// render path are not yet reconstructed). Mirroring the committed sibling debug-name
-// hooks (CgsDebugComponentPerfMonGpu.h / ...Cpu.h), the recovered hook is homed inline
-// on a minimal standalone class so callers can compile against the name without pulling
-// in the DebugComponent base cascade. GetName is the protected virtual override of
-// CgsDev::DebugComponent::GetName() const; the full class layout + its base linkage are
-// fleshed out IN THIS SAME FILE when the tri-collision debug TU is worked.
-
+namespace CgsGeometric { struct PolygonSoup; }
 namespace CgsSceneManager
 {
-    // DWARF CgsTriangleCollisionDebugComponent.h:39
-    const s32 KI_MAX_NUM_COLLISION_POLY_CALLBACKS = 4;
+class TriangleCollisionManager;
+const s32 KI_MAX_NUM_COLLISION_POLY_CALLBACKS = 4;
+// DecFIGS header:59/91/92; console callback/context stride 8, two native pointers on PC.
+struct DrawCollisionPolyCallbackData
+{
+    typedef void (*DrawCollisionPolyCallback)(CgsDev::Debug3DImmediateRender*, void*, const Vector3*, s32, Vector3, u32, s32);
+    DrawCollisionPolyCallback mpCallbackFunc;
+    void* mpUserData;
+};
+typedef DrawCollisionPolyCallbackData DrawCollisionPolyCallback;
 
-    // An entry in the static "draw collision poly" callback registry. The X360 accessor
-    // (GetDrawCollisionPolyCallback, see below) reads/returns these at an exact 8-byte
-    // stride (`slwi r10, liIndex, 3`); each slot is the callback functor the tri-collision
-    // debug overlay invokes when it wants a registered system to render a colliding poly.
-    // DWARF gives no field breakdown for the slot beyond its 8-byte size, so it is homed
-    // as an opaque 8-byte POD (the X360-attested stride) — the canonical {fn-ptr, context}
-    // field split is filled in IN THIS SAME STRUCT when the tri-collision debug TU is worked.
-    struct DrawCollisionPolyCallback
+// ARTIST 828B3340 + DecFIGS declaration order. Drawing is recovered; the
+// separate sphere/box/swept query diagnostics remain unreconstructed.
+class TriangleCollisionDebugComponent : public CgsDev::DebugComponent
+{
+public:
+    void Construct(const TriangleCollisionManager* lpTriCollisionManager);
+    void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+    const char* GetName() const override { return "Collision"; } // 827DD828
+    const char* GetPath() const override { return "World"; } // vtable 820CEEBC -> 827DD250
+    static bool RegisterDrawCollisionPolyCallback(DrawCollisionPolyCallbackData::DrawCollisionPolyCallback lpHandlerFunc, void* lpUserData);
+    static DrawCollisionPolyCallback& GetDrawCollisionPolyCallback(s32 liIndex)
     {
-        u8 mPad0[8];
-    };
+        CGS_ASSERT(liIndex < siNumDrawPolyCallbacks, "liIndex < siNumDrawPolyCallbacks");
+        return siDrawPolyCallbacks[liIndex];
+    }
+    static void DrawCollisionPoly(CgsDev::Debug3DImmediateRender* lpDisplay,
+        const Vector3* lpaPoints, s32 liNumPoints, Vector3 lNormal, u32 luTag, s32 liSoupIndex);
+private:
+    void OnActivate() override;
+    void UpdateViewFrustum(CgsDev::Debug3DImmediateRender* lpDisplay);
+    bool IsPolyVisible(const Vector3* lpaPoints, s32 liNumPoints, CgsDev::Debug3DImmediateRender* lpDisplay) const;
+    void DrawPolySoups(CgsDev::Debug3DImmediateRender* lpDisplay);
+    void DrawPolySoupPoly(CgsDev::Debug3DImmediateRender* lpDisplay,
+        const CgsGeometric::PolygonSoup* lpSoup, s32 liSoupIndex, u8 luPolyIndex, bool lbDistanceCull);
+    void BuildSpacialMap();
 
-    class TriangleCollisionDebugComponent
-    {
-    public:
-        // @0x827DD828. The debug-menu display name for this component.
-        const char* GetName() const { return "Collision"; }
-
-        // Register this component with the debug-UI component registry (CgsDev::
-        // DebugComponent::Register @ CgsDebugComponent.h:43). Called by
-        // TriangleCollisionManager::Prepare. Declaration-only here; the full base linkage +
-        // body are fleshed out with the tri-collision debug TU (grow this home, do not fork).
-        void Register();
-
-        // @0x828AA458 (recovered, EXECUTED in the boot-trace milestone).
-        // Indexer into the static draw-collision-poly callback registry. The X360 body is
-        // the bounds-checked accessor `RegisterDrawCollisionPolyCallback` uses to reach the
-        // next free slot: it asserts liIndex < siNumDrawPolyCallbacks and returns
-        // &siDrawPolyCallbacks[liIndex] (8-byte stride). Both the slot array and its live
-        // count are file-static (X360 dword_830848A0 == siNumDrawPolyCallbacks,
-        // unk_8307A880 == siDrawPolyCallbacks[]); homed as class statics here.
-        static DrawCollisionPolyCallback& GetDrawCollisionPolyCallback(s32 liIndex)
-        {
-            CGS_ASSERT(liIndex < siNumDrawPolyCallbacks, "liIndex < siNumDrawPolyCallbacks");
-            return siDrawPolyCallbacks[liIndex];
-        }
-
-    private:
-        // X360 unk_8307A880 / dword_830848A0 — the static callback registry + its live count.
-        static DrawCollisionPolyCallback siDrawPolyCallbacks[KI_MAX_NUM_COLLISION_POLY_CALLBACKS];
-        static s32 siNumDrawPolyCallbacks;
-    };
+    const TriangleCollisionManager* mpTriCollisionManager;
+    rw::collision::Frustum mViewFrustum;
+    bool mbDrawPolySoups, mbDrawSoupAabbs, mbDrawPolyNormals, mbUpdateViewFrustum, mbDrawEdgeCosines;
+    bool mbTestSphere;
+    f32 mSpherePos[3], mfSphereRad;
+    bool mbNeedToInitSpherePos;
+    u32 muSphereTestCycles;
+    f32 mfSphereTestTimeSecs, mfSphereTestTimePercentFrame;
+    s32 miSphereTestResultCount, miSphereTestPerfMon, miSphereTestGetListsPerfMon, miSphereTestProcessSoupsPerfMon;
+    bool mbTestLine, mbNeedToInitLinePosition;
+    f32 mLineStartPosition[3], mLineEndPosition[3];
+    s32 miLineTestPerfMon, miLineTestGetListsPerfMon, miLineTestProcessSoupsPerfMon;
+    bool mbTestBox, mbNeedToInitBoxPos;
+    f32 mBoxPos[3], mBoxSize[3], mBoxOrientation[3];
+    u32 muBoxTestCycles;
+    s32 miNumBoxTests;
+    u32 muBoxTestCyclesPerTriangle;
+    f32 mfBoxTestTime, mfBoxTestPercent;
+    bool mbTestSweptSphere, mbNeedToInitSweptSpherePos;
+    f32 mSweptSpherePos[3], mSweptSphereSize, mSweptSphereVelocity[3];
+    s32 miMaxLevelToDraw, miMinLevelToDraw;
+    char* mpcSpacialBuffer;
+    s32 miNumLevels, miLastNumLevels, miMemUse, miNumListsSearched;
+    CgsMemory::LinearMalloc mMalloc;
+    f32 mfSoupDrawDistance;
+    static DrawCollisionPolyCallback siDrawPolyCallbacks[KI_MAX_NUM_COLLISION_POLY_CALLBACKS];
+    static s32 siNumDrawPolyCallbacks;
+};
 }
