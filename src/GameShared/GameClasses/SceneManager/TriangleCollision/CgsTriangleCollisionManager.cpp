@@ -14,6 +14,15 @@
 namespace CgsSceneManager
 {
 
+// Inlined in ARTIST SceneManagerModule::Construct, 828D0AC8..828D0AF4.
+void TriangleCollisionManager::Construct()
+{
+    mpaPolySoupListHandles = nullptr;
+    miMaxNumSoupLists = miNumSoupListsAdded = 0;
+    mPolySoupListSpacialMap.Construct();
+    mDebugComponent.Construct(this);
+}
+
 // Prepare @0x828B2FF0 — build the triangle-collision scene from a caller-supplied
 // linear allocator with a fixed poly-soup-list budget.
 //

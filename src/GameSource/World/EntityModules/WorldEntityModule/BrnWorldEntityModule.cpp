@@ -1145,6 +1145,22 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
 }
 
 // =============================================================================
+// GetSurface @ 0x822BB150 (inlined header helper emitted by ARTIST).
+// r3=this, r4=u8 surface id, r5=output; the ld at 822BB1C4 reads
+// RefSpec::mCollectionKey, then the full 64-bit surface class key is resolved.
+// =============================================================================
+void WorldEntityModule::GetSurface( u8 luSurfaceId, Attrib::Gen::surface* lpOutSurface ) const
+{
+    CGS_ASSERT( lpOutSurface != nullptr, "lpOutSurface != NULL" );
+    const void* lpRefData = mSurfaceList.Surfaces( luSurfaceId );
+    if ( !lpRefData )
+        lpRefData = Attrib::DefaultDataArea( sizeof( Attrib::RefSpec ) );
+    const auto& lrRef = *static_cast<const Attrib::RefSpec*>( lpRefData );
+    lpOutSurface->Change( Attrib::FindCollectionWithDefault(
+        0x68428A3C7836CF50ull, lrRef.GetCollectionKey() ) );
+}
+
+// =============================================================================
 // PrepareWorldCollision  @ 0x823068F8  (cpp:2115)
 // =============================================================================
 bool

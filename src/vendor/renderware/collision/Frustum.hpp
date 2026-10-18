@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "vendor/renderware/collision/Plane.hpp"
 
 // ===========================================================================
 // rw::collision::Frustum -- a 6-plane view frustum used for box culling
@@ -24,6 +25,9 @@ namespace collision
 class Frustum
 {
 public:
+    // DecFIGS cmn/rw/collision/frustum.h:51/61; ARTIST 828C0E20 writes six planes.
+    void SetPlane(u32 luIndex, const Plane& lrPlane) { m_planes[luIndex] = lrPlane; }
+    const Plane& GetPlane(u32 luIndex) const { return m_planes[luIndex]; }
     // One 4-lane (xyzw) vector row matching the 16-byte VMX register the asm
     // loads. For a plane: xyz is the (inward) normal, w the offset bound the
     // dot3 is compared against. For a corner: xyz the position, w carried.
@@ -41,6 +45,8 @@ public:
     // when no plane separates it (box overlaps / is inside the frustum).
     // X360 __fastcall: r3=lpPlanes (6 entries), r4=lpCorners (8 entries).
     static int IsBoxInFrustum(const Vec4* lpPlanes, const Vec4* lpCorners);
+private:
+    Plane m_planes[6];
 };
 
 } // namespace collision

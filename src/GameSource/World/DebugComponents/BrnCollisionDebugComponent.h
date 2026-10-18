@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
+#include "SharedClasses/World/BrnCollisionTag.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnWorld::CollisionDebugComponent::GetName          @ 0x827DB658  -> "Collision draw mode"
@@ -23,10 +25,14 @@ namespace BrnWorld
     class CollisionDebugComponent : public CgsDev::DebugComponent
     {
     public:
-        void Construct( WorldEntityModule* lpWorldEntityModule )
+        enum EDrawMode
         {
-            mpWorldEntityModule = lpWorldEntityModule;
-        }
+            E_DRAWMODE_SURFACES, E_DRAWMODE_FLAGS, E_DRAWMODE_ZONES,
+            E_DRAWMODE_TRAFFIC, E_DRAWMODE_AISECTION, E_DRAWMODE_DRIVABLE,
+            E_DRAWMODE_COUNT
+        };
+
+        void Construct(const WorldEntityModule* lpWorldEntityModule);
 
         const char* GetName() const { return "Collision draw mode"; }
         const char* GetPath() const { return "World"; }
@@ -34,9 +40,21 @@ namespace BrnWorld
         // 0x822A8C50 -- map a traffic-density/angle scalar to a packed 0xAARRGGBB-style debug
         // colour word (the X360 stores it through the result pointer; returned here by value).
         // Defined in BrnCollisionDebugComponent.cpp.
-        u32 GetTrafficColour(f32 lfValue) const;
+        static u32 GetTrafficColour(f32 lfValue);
+        static u32 GetFlagsRenderColour(CollisionTag lTag);
+        static u32 GetSurfaceRenderColour(u8 luSurfaceId);
+        static u32 GetPolyColour(CollisionTag lTag, s32 liPolySoupIndex);
+        static void DrawCollisionPolyCallback(CgsDev::Debug3DImmediateRender* lpDisplay,
+            void* lpUserData, const Vector3* lpaPolyPoints, s32 liNumPolyPoints,
+            Vector3 lNormal, u32 luTag, s32 liPolySoupIndex);
 
     private:
-        WorldEntityModule* mpWorldEntityModule;
+        void OnActivate() override;
+        CgsDev::DebugUI::StringList maDrawModeList[E_DRAWMODE_COUNT + 1];
+        static const WorldEntityModule* spWorldEntityModule;
+        static s32 siDrawMode;
+        static bool sbDrawNormals;
+        static bool sbDrawTags;
+        static s32 siSurfaceAlpha;
     };
 }
