@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"      // CgsDev::DebugInterface
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"             // CgsDev::DebugManager::ActivateComponent
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender, RGBA
-#include "SDKs/EATech/eathread/eathread_futex.h"             // EA::Thread::AutoFutex
+#include <eathread/eathread_futex.h>                         // AutoFutex for the selected vendor Futex
 #include "SDKs/Realmc/RealmcXenonUtil.h"                     // XCONTENT_DATA / XCONTENT_DEVICE_DATA
 #include <cstddef>   // offsetof
 #include <cstring>   // memset
@@ -63,7 +63,8 @@ namespace BrnResource
         if (!mbDLCMonitorThreadStarted)
         {
             EA::Thread::ThreadParameters lParameters;
-            lParameters.mbSuspended = false;
+            // FLAG PC-platform leaf: the selected vendor Begin resumes after setup;
+            // it has no suspended-start field, matching ARTIST's explicit false request.
             lParameters.mpName = "DLCNotifyThread";
             lParameters.mnProcessor = 0;
             lParameters.mnPriority = 100;
