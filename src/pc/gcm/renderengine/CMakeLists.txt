@@ -1,6 +1,110 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
+        CoronaProgramsPC.cpp
+        DepthStencilState.cpp
         device.cpp
+        DeviceParameters.cpp
+        Im2dBlitProgramsPC.cpp
+        Im3dProgramsPC.cpp
+        ImmediateMode.cpp
+        IndexBuffer.cpp
+        LionBlendProgramsPC.cpp
+        MeshHelper.cpp
+        OcclusionQueryProviderPC.cpp
+        PixelBuffer.cpp
+        PostFxB4BlurProgramsPC.cpp
+        PostFxBloomProgramsPC.cpp
+        PostFxHelperProgramsPC.cpp
+        PostFxProgramsPC.cpp
+        PostFxRenderTarget.cpp
+        RasterizerState.cpp
+        RenderEngine.cpp
+        renderengine_vb_embed_check.cpp
+        renderengine_vd_embed_check.cpp
+        renderengine_vps_embed_check.cpp
+        SkidImmediateMode.cpp
+        SkidProgramsPC.cpp
+        SkyDomeProgramsPC.cpp
+        StateHelper.cpp
+        SunCoronaProgramsPC.cpp
+        texture.cpp
+        Texture2D.cpp
+        TextureResourceHandle.cpp
+        texturestate.cpp
+        VertexBuffer.cpp
+        VertexBufferHelper.cpp
+        VertexDescriptor.cpp
+        VertexDescriptorParameters.cpp
+        VertexProgramState.cpp
+        WorldGeometry.cpp
+        WorldTexturedProgramsPC.cpp
+        Xbox2TextureShims.cpp
+        XConfigUserSettings.cpp
+        XenonD3D9Shims.cpp
+
     PUBLIC
+        AssertFrame.h
+        CoronaProgramsPC.h
+        DepthOnly.h
+        DepthRange.h
         device.h
+        DeviceParameters.h
+        DispatchSortJobs.h
+        DisplayResize.h
+        FlipSwapChain.h
+        FrameProfile.h
+        GeometryAssociativeFrontCache.h
+        GeometryBindings.h
+        GeometryBufferPool.h
+        GeometryBufferPoolD3D9.h
+        GeometryEntryReferences.h
+        GlassPixelDiagPC.h
+        GpuFrameTiming.h
+        GpuMonitorTiming.h
+        GraphicsDiagnostics.h
+        GraphicsSettings.h
+        Im2dBlitProgramsPC.h
+        ImWhiteTexture.h
+        IndexBuffer.h
+        IndexRange.h
+        InstancedDraw.h
+        Instancing.h
+        LionDrawDiagPC.h
+        MeshJobOwnerWait.h
+        MeshPreparation.h
+        NvApiResourceRegistry.h
+        OcclusionQueryProviderPC.h
+        PackedNormal.h
+        pixelformat.h
+        RenderEngine.h
+        renderstates.h
+        SamplerStateCache.h
+        ShaderBindings.h
+        ShaderConstantCache.h
+        ShadowPass.h
+        ShadowQuality.h
+        ShadowReceiver.h
+        StateBlockRestore.h
+        SunCoronaProgramsPC.h
+        texture.h
+        TextureResource.h
+        TextureResourceHandle.h
+        TextureStagingCache.h
+        TextureUpload.h
+        TrailPausedDiagPC.h
+        TrailPixelDiagPC.h
+        VertexBuffer.h
+        VertexBufferHelper.h
+        VertexDescriptor.h
+        VertexProgramState.h
+        WindowPresentation.h
+        WorldGeometry.h
+        WorldTextureFiltering.h
+        Xbox2SurfaceShims.h
+        Xbox2TextureShims.h
+        Xbox2VertexBufferShims.h
+        XConfigUserSettings.h
 )
+
+add_subdirectory(reflections)
+add_subdirectory(shadows)
