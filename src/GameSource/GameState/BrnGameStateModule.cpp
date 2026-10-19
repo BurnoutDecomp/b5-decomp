@@ -91,11 +91,10 @@ enum EGsmGameAction
 //
 // The console's GameStateModule is a CgsModule::ModuleSingleBuffered, so its
 // GameStateModuleIO::OutputBuffer is the DataStructure the base allocates from the module's
-// own DataBuffer inside Prepare() -> CreateOutputDataStructure(). ⚠️ FLAG (PC bring-up seam):
-// nothing on PC calls this module's Prepare(), so that allocation point never runs. The
-// buffer is newed here instead and freed in Destruct(); the buffer TYPE, its Construct
-// (X360 0x82382940) and its accessors are the real console ones -- only the allocation SITE
-// moves. DELETE-WHEN the module's Prepare()/CreateOutputDataStructure() path is real.
+// own DataBuffer inside Prepare() -> CreateOutputDataStructure(). The PC calls the original Prepare
+// stage ladder, but the host's new-style base Prepare does not create that per-pass DataStructure.
+// Keep a stable typed OutputBuffer allocated here for GamePrepare's persistent request transport;
+// the buffer type, Construct (X360 0x82382940) and accessors are the console ones.
 //
 // Constructing it is what makes the game-state -> director game-action route exist at all:
 // BrnGameModule::BridgeGameStateToDirector @0x823CD170 Appends this buffer's +0x04 queue into
@@ -846,10 +845,10 @@ void GameStateModule::Destruct()
 // THE SHAPE (console, statement for statement):
 //     mbIsUpdating = true;                       // *(this + 292289) = 1
 //     LockForWrite(lpOutputBuffer);
-//     switch (mePrepareStage) { ...27 cases, each falling into the next on success... }
+//     switch (mePrepareStage) { ...28 stage values, 0..27, falling into the next on success... }
 //     UnlockForWrite(lpOutputBuffer);
 //     mbIsUpdating = false;
-//     return <true only after stage 26>;
+//     return <true only after stage 27>;
 // Every stage that is still waiting for a resource reply breaks straight to the unlock tail and
 // returns false, so the caller pumps it once per frame.
 //
@@ -864,24 +863,12 @@ void GameStateModule::Destruct()
 // (LoadingScriptedState::LoadGameState2 @0x823EF4D8 is the same bracket for the SECOND pass,
 // GameStateModule::Prepare2 @0x8239ED10 -- Progression + Street. Not this wave.)
 //
-// ⚠️⚠️ RECONSTRUCTED SLICE -- say it plainly. The REAL stages are:
-//   stage 3  E_PREPARESTAGE_LOAD_TRIGGER_DATA -> TriggerQueryManager::Prepare @0x82398218.
-//   stage 4  E_PREPARESTAGE_STUNT_MANAGER     -> the LoadBundle("Districts.dat") half of
-//            StuntManager::Prepare's LoadDistrictMap (the tally half is still deferred; see
-//            the stage body and mbDistrictsBundleRequested).
-//   stages 7/8 and 9/10 -> the vehicle / wheel list GETs.
-//   stages 11/12 -> AcquireResource("CarColours", pool 5) + CreateFromHandle(mpPlayerCarColours)
-//            (FX-FLOW, 2026-09-24; the palette the DONE stage hands DriveThruManager::Prepare).
-//   stage 23 E_PREPARESTAGE_STREET_MANAGER    -> StreetManager::Prepare @0x82350900
-//            (LoadAIData + LoadDistrictMap -> mDistrictMapResourceHandle), added 2026-08-11.
-//   stage 25 E_PREPARESTAGE_RUMBLE_MANAGER    -> RumbleManager::Prepare @0x823648D0 (FX-RUMBLE,
-//            2026-09-22).
-//   stage 26 -> the car-select / progression list publish.
-// Every other stage logs once and advances, naming its X360 call. In console order they are:
+// Complete 28-stage map (original order):
 //   0  START                    ClearData @0x8236B3A8 + DebugComponent::Register x2
 //                               (this+208544 / this+208376)
-//   1  MANAGER                  ModuleSingleBuffered::Prepare  -- see the mbIsNewModule note below
+//   1  MANAGER                  host new-style flag, then ModuleSingleBuffered::Prepare
 //   2  MODE_DATA_ACQUIRING      pass-through on the console too (it only sets the stage word)
+//   3  LOAD_TRIGGER_DATA        TriggerQueryManager::Prepare(this+42320, out, &rq)
 //   4  STUNT_MANAGER            StuntManager::Prepare(this+183952, out)
 //   5/6 CHALLENGE_LIST          RequestInterface<3072>::GetFreeburnChallengeList(&rq, 0)
 //                               -> reply type 53, mpChallengeList = reply.mHandle.mpResourceMemory
@@ -904,12 +891,11 @@ void GameStateModule::Destruct()
 //   23 STREET_MANAGER           StreetManager::Prepare(this+284520, out, &rq)
 //   24 IMAGE_MANAGER            GameStateImageManagerBase::Prepare(this+185520, heapAlloc 0x1B)
 //   25 RUMBLE_MANAGER           RumbleManager::Prepare(this+46680)
-//   26 DONE                     DriveThruManager::Prepare(this+44240, mTriggerQueryManager's
-//                               TriggerData, the CarColours palette), publish the vehicle/wheel
-//                               list pointers into two sub-managers, re-arm mePrepareStage to 1
-//                               and clear the Prepare2 stage word.
-// NONE of those is faked here: each is a log line, not a fabricated body. They land as their
-// managers do. DO NOT read the log line as "done".
+//   26 DEVELOPER_CHALLENGE      clear completed-challenge, takedown-time, billboard and car sets
+//   27 ORIGINAL_DONE            DriveThruManager::Prepare, publish vehicle/wheel lists, re-arm
+//                               Prepare at stage 1 and reset the release stage.
+// The full body below runs each owner operation and each resource wait; these entries are not
+// log-only placeholders. The PC-only base-module flag at stage 1 is explained separately below.
 //
 // ⚠️ FLAG (PC deviation, stage 1): `mbIsNewModule = true` before the base Prepare. The PC
 // ModuleSingleBuffered::Construct leaves it FALSE, and with it false the base walks the
@@ -937,76 +923,9 @@ static const s32 KI_MODE_MANAGER_HEAP_BANK = 0x1B;
 // @0x82399458, so KPC_DISTRICT_MAP_BUNDLE_NAME / _RESOURCE_NAME / KI_DISTRICT_MAP_EVENT_ID /
 // KI_DISTRICT_MAP_POOL_ID live in BrnStuntManager.cpp alongside it.
 
-namespace
-{
-    // One log line per stage, once. (Same shape as the loading flow's LogScriptedStageOnce.)
-    void LogPrepareStageOnce(s32 liStage, const char* lpcWhat)
-    {
-        static bool sbLogged[32] = { false };
-        if (liStage < 0 || liStage >= 32 || sbLogged[liStage])
-            return;
-        sbLogged[liStage] = true;
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::Prepare] stage " << liStage << " -- " << lpcWhat << "\n";
-        }
-    }
-}
-
-// ----------------------------------------------------------------------------
-// The shared body of Prepare's three "receive a resident data list" stages (vehicle @X360
-// LABEL_17, wheel @LABEL_25, challenge @LABEL_9). The console writes all three out longhand;
-// they are identical apart from the expected reply id and the two baked assert LINES, so they
-// are folded here with those as parameters -- the same folding the committed
-// GameDataModule::PrepareDataListResource already does for its two twins.
-//
-//   if (mReceiverQueue.GetLength() < 1) return false;            // still waiting
-//   assert(event type == <replyId>)     "Invalid event id received\n"  <line A>
-//   assert(reply->miEventId == 0)       "Invalid event id received\n"  <line B>
-//   *lppOut = reply->mHandle.mpResourceMemory;                   // X360 `v13[8]`, i.e. +0x20
-//
-// ⚠️ The console's two asserts are built through the StrStream operator<< form
-// (CgsDev::StrStream + StrStreamBase::operator<<), not FireAssert's literal; the message text
-// is identical either way, so the plain Begin/Fire/End sequence is used with the X360 lines.
-// ----------------------------------------------------------------------------
-bool GameStateModule::ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLineType,
-                                          s32 liAssertLineEventId, void** lppOutResource)
-{
-    if (mReceiverQueue.GetLength() < 1)
-        return false;
-
-    const CgsModule::Event* lpEvent = 0;
-    s32                     liSize  = 0;
-    const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-
-    if (liType != liExpectedReplyId)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liAssertLineType);
-        CgsDev::Assert::EndAssert();
-    }
-
-    const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
-        static_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
-
-    if (lpReply == 0 || lpReply->miEventId != 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liAssertLineEventId);
-        CgsDev::Assert::EndAssert();
-        return false;
-    }
-
-    // X360 `*(this + 284392) = v13[8]` -- payload +0x20 is mHandle.mpResourceMemory. Read BY
-    // MEMBER (the host ResourceHandle is 16 bytes where the console's is 8, so every literal
-    // offset past it shifts).
-    *lppOutResource = lpReply->mHandle.mpResourceMemory;
-    return true;
-}
-
 // ARTIST 0x8239E578..0x8239ED10. The original 28-case preparation ladder.
-// ResourceUpdateThread continues to select PrepareNativePC explicitly.
+// BrnGameModule::GamePrepare calls this body; ResourceUpdateThread services the GameData requests
+// and posts replies to the module-owned receiver queue between passes.
 bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                               CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                               const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
@@ -1050,6 +969,9 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
     case E_PREPARESTAGE_MANAGER:
         mePrepareStage = E_PREPARESTAGE_MANAGER;
+        // FLAG PC adaptation: ModuleSingleBuffered::Construct leaves the host module on its
+        // old-style data path. GameState uses OutputBuffer IO, so set this before the base Prepare.
+        mbIsNewModule = true;
         if (!CgsModule::ModuleSingleBuffered::Prepare())
             break;
         // fall through
@@ -1209,467 +1131,6 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_GSM_FILE, 825);
         CgsDev::Assert::EndAssert();
-        break;
-    }
-
-    lpOutputBuffer->UnlockForWrite();
-    mbIsUpdating = false;
-    return lbDone;
-}
-
-// Existing PC preparation adapter. ResourceUpdateThread explicitly selects this
-// preserved body; the original Prepare above remains unactivated.
-bool GameStateModule::PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
-                              CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
-                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
-{
-    // The console asserts nothing here; GamePrepare always hands it a live buffer. Guard anyway
-    // -- a null would otherwise fault inside TriggerQueryManager::Prepare's own assert.
-    if (lpOutputBuffer == 0)
-    {
-        CGS_ASSERT(false, "lpOutputBuffer");
-        return false;
-    }
-    (void)lpUpdateOutputBufferStack;   // stage 24 (heap allocator) + the manager prepares
-                                       //   are the deferrals listed above
-
-    // X360: `*(this + 292289) = 1` at entry, cleared at the single exit.
-    mbIsUpdating = true;
-
-    // (mReceiverQueue, every stage's reply target, is Constructed by Construct -- see there.)
-
-    lpOutputBuffer->LockForWrite();
-
-    bool lbDone = false;
-
-    switch (mePrepareStage)
-    {
-    case E_PREPARESTAGE_START:
-        // X360 case 0 (0x8239E6A4): `mr r3, r31 ; bl ClearData` @0x8239E6A8, then the two
-        // DebugComponent::Register calls (this+0x32EA0 @0x8239E6B4, this+0x32DF8 @0x8239E6C0).
-        ClearData();
-        mResetPlayerDebugComponent.Register();
-        mGameStateDebugComponent.Register();
-        LogPrepareStageOnce(0, "ClearData + Reset Player Car and Game State debug registered");
-        // fall through
-
-    case E_PREPARESTAGE_MANAGER:
-        mePrepareStage = E_PREPARESTAGE_MANAGER;
-        // See the FLAG above: the console's GameState module is a new-style module, so the base
-        // prepare is a no-op that reports done. Setting the flag is what makes that true here.
-        mbIsNewModule = true;
-        if (!CgsModule::ModuleSingleBuffered::Prepare())
-            break;
-        // fall through
-
-    case E_PREPARESTAGE_MODE_DATA_ACQUIRING:
-        // The console's case 2 only advances the stage word (LABEL_4 -> LABEL_5).
-        mePrepareStage = E_PREPARESTAGE_LOAD_TRIGGER_DATA;
-        // fall through
-
-    case E_PREPARESTAGE_LOAD_TRIGGER_DATA:
-        // ⭐ REAL. X360: `if (!TriggerQueryManager::Prepare(this + 42320, lpOutputBuffer,
-        //                    this + 232384)) break;  *(this + 552) = 4;`
-        // This is the LoadBundle("Triggers.dat", pool 5) -> acquire("TriggerData") ->
-        // LoadTrafficLanes chain. It needs several pumps.
-        mePrepareStage = E_PREPARESTAGE_LOAD_TRIGGER_DATA;
-        if (!mTriggerQueryManager.Prepare(lpOutputBuffer, &mReceiverQueue))
-            break;
-        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
-        // fall through
-
-    case E_PREPARESTAGE_STUNT_MANAGER:
-        // ⭐⭐ REAL, WHOLE (2026-08-20, [gateui]). X360:
-        //     `if (!StuntManager::Prepare(this + 183952, out)) break;  *(this + 552) = 6;`
-        // (@0x8239E578, LABEL_7/LABEL_8: the store is 6, not the 5 an earlier banner here quoted.
-        //  Behaviourally identical in this tree -- E_PREPARESTAGE_REQUEST_CHALLENGE_LIST (5) is an
-        //  immediate fall-through to 6 -- but the quoted asm has to be right.)
-        // StuntManager::Prepare @0x8239C9C0 is TWO halves and BOTH are live now:
-        //   * LoadDistrictMap @0x82399458 -- LoadBundle("Districts.dat", pool 5) -> wait ->
-        //     acquire("Districts") -> bind mDistrictMapResourceHandle from the response. It needs
-        //     several pumps, which is why this stage breaks and is re-entered.
-        //   * the census -- bind mWorldMap2D over the streamed grid, then walk every generic
-        //     region, county-classify it and tally the JUMP / SMASH / BILLBOARD totals (and the
-        //     signature-takedown count). Those totals ARE the "12/45" denominator the HUD popup
-        //     prints, so nothing downstream of a smashed billboard is meaningful without them.
-        //
-        // ⭐ WHY THE BUNDLE LOAD HAS TO HAPPEN AT THIS STAGE (unchanged, and still the reason):
-        // stage 23's StreetManager::LoadDistrictMap @0x8234FB98 only ACQUIRES "Districts" -- it
-        // never loads the bundle, because on the console THIS stage loaded it 19 stages earlier.
-        // Without the bundle resident, PoolModule::DoAcquireResourceRequest still replies (it
-        // always does) but with a NULL handle, and SetupParRivals then null-derefs. The request
-        // that keeps that working is now the console's own, issued from the console's own
-        // function, instead of from the meDistrictsBundleStage stand-in latch this replaces (the
-        // latch, its enum and its member are deleted from the header this wave).
-        //
-        // ⓘ RE-PREPARE SAFETY (the reason the old latch had to be sticky): the terminal stage
-        // re-arms mePrepareStage at MANAGER, so this stage is re-entered on a second pass.
-        // StuntManager::meDistrictMapLoadStage's E_DISTRICT_MAP_DONE case returns true without
-        // re-requesting, so the second pass walks through and only re-runs the census.
-        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
-        if (!mStuntManager.Prepare(lpOutputBuffer))
-            break;
-        mePrepareStage = E_PREPARESTAGE_REQUEST_CHALLENGE_LIST;
-        // fall through
-    case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
-        // Console case 5: `stage = 6; GetFreeburnChallengeList(requests, &mReceiverQueue,
-        // 0); mReceiverQueue.Clear();` then fall into the receive -- the vehicle-list shape.
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
-        lpOutputBuffer->GetResourceRequestInterface()->GetFreeburnChallengeList(&mReceiverQueue, 0);
-        mReceiverQueue.Clear();
-        // fall through
-
-    case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
-        // Console case 6: wait for the reply, assert id 53 (line 516) and event id 0
-        // (line 521), then `stwx reply+0x20, this, 0x45710` -- mpFreeburnChallengeList.
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
-        {
-            void* lpChallengeList = 0;
-            if (!ReceiveListResource(KI_REPLY_FREEBURN_CHALLENGE_LIST, 516, 521, &lpChallengeList))
-                break;
-            mpFreeburnChallengeList = static_cast<const BrnResource::ChallengeList*>(lpChallengeList);
-        }
-        mePrepareStage = E_PREPARESTAGE_REQUEST_VEHICLE_LIST;
-        // fall through
-    case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
-        // ⭐ REAL. X360 LABEL_16: `stage = 8; GetVehicleList(requests, &mReceiverQueue, 0);
-        //                          mReceiverQueue.Clear();` then fall into the receive.
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
-        lpOutputBuffer->GetResourceRequestInterface()->GetVehicleList(&mReceiverQueue, 0);
-        mReceiverQueue.Clear();
-        // fall through
-
-    case E_PREPARESTAGE_RECEIVE_VEHICLE_LIST:
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
-        if (!ReceiveListResource(KI_REPLY_VEHICLE_LIST, 556, 561,
-                                 reinterpret_cast<void**>(&mpVehicleList)))
-            break;
-        // ⭐ [progression wave: lifecycle, 2026-09-06] REAL. X360 0x8239E8E8, the instruction
-        // after the reply is stamped into mpVehicleList:
-        //     BrnProgression::ProgressionManager::ApplyVehicleList(a1 + 47920);
-        // -- one argument on the console because the list it reads is the module's own word it
-        // has just written (`lwz r4, 0x20(r29)` / `stw r4, 0(r29)` immediately above); the
-        // reconstructed signature takes it explicitly rather than reaching back into the caller.
-        // It installs ProgressionManager::mpVehicleList AND seeds miMaxCarCount from the list's
-        // selectable/sponsor pair. This is the seat the old stage-26 SetVehicleList stand-in was
-        // guessing at; that line is retired (see its note in the DONE stage).
-        mProgressionManager.ApplyVehicleList(mpVehicleList);
-        // [deferred] the SECOND of the console's two republish hooks here,
-        // ModeManager::ApplyVehicleList(this+4128, mpVehicleList) -- no body in this tree (only
-        // ChallengeManager::ApplyVehicleList is even declared). It lands with its manager.
-        LogPrepareStageOnce(8, "vehicle list installed; ProgressionManager::ApplyVehicleList REAL, "
-                               "ModeManager::ApplyVehicleList [deferred]");
-        mePrepareStage = E_PREPARESTAGE_REQUEST_WHEEL_LIST;
-        // fall through
-
-    case E_PREPARESTAGE_REQUEST_WHEEL_LIST:
-        // ⭐ REAL. X360 LABEL_24, the same shape with reply id 59.
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
-        lpOutputBuffer->GetResourceRequestInterface()->GetWheelList(&mReceiverQueue, 0);
-        mReceiverQueue.Clear();
-        // fall through
-
-    case E_PREPARESTAGE_RECEIVE_WHEEL_LIST:
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
-        if (!ReceiveListResource(KI_REPLY_WHEEL_LIST, 599, 604,
-                                 reinterpret_cast<void**>(&mpWheelList)))
-            break;
-        mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
-        // fall through
-    case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
-        // ⭐ [FX-FLOW 2026-09-24] REAL. X360 case 11 @0x8239E9D4..0x8239EA2C:
-        //     stw 11, mePrepareStage
-        //     rec = { mpUser = &mReceiverQueue (r30 = this+232384), miEventId = 0 (r20),
-        //             miPoolId = 5 (`li r10,5`), mResourceId = ID::HashString("CarColours") }
-        //     OutputBuffer's RequestInterface<3072>::mRequestQueue.AddEvent(&rec, 4, 0x18)
-        //     BaseEventReceiverQueue::Clear(&mReceiverQueue)
-        // -- the inlined RequestInterface::AcquireResource, spelled through it (the Hex-Rays
-        // `hash | 0x500000000` is the interleaved miPoolId store fused into the id's std; see
-        // AcquireResource's own note). Without it mpPlayerCarColours stayed unbound and the
-        // paint-shop arm of DriveThruManager::ProcessDriveThru asserted and faulted.
-        mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
-        lpOutputBuffer->GetResourceRequestInterface()->AcquireResource(&mReceiverQueue, 0, 5, "CarColours");
-        mReceiverQueue.Clear();
-        // fall through
-    case E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS:
-    {
-        // X360 case 12 @0x8239EA34..0x8239EA90: `stw 12`; wait while the reply queue holds
-        // nothing (`cmpwi len,1 ; blt` -> not done this pass); then CreateFromHandle(
-        // &mpPlayerCarColours, firstEvent + 0x18) -- the AcquireResourceResponse's trailing
-        // {mpResourceMemory, mpSourceEntry} pair IS a ResourceHandle -- and straight on to stage
-        // 13. No assert and no Clear here on the console (the reply stays queued until the next
-        // request's own Clear -- ProgressionManager::LoadAIData's, stage 20).
-        mePrepareStage = E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS;
-        if (mReceiverQueue.GetLength() < 1)
-            break;
-
-        const CgsModule::Event* lpEvent = 0;
-        s32                     liSize  = 0;
-        mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
-            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
-
-        CgsResource::ResourceHandle lPlayerCarColoursHandle;
-        lPlayerCarColoursHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
-        lPlayerCarColoursHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
-        mpPlayerCarColours = lPlayerCarColoursHandle;   // == CreateFromHandle(this+284400, rec+0x18)
-
-        // [diag] one line (not in the X360 binary): the palette the paint shop will read.
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::Prepare] stage 12 -- \"CarColours\" bound: "
-                << (mpPlayerCarColours.HasMemoryResource() ? 1 : 0) << " (paint-shop palette 2 colours "
-                << (mpPlayerCarColours.HasMemoryResource()
-                        ? mpPlayerCarColours->maPalettes[2].miNumColours : -1) << ")\n";
-        }
-        mePrepareStage = E_PREPARESTAGE_MODEMANAGER;
-    }
-        // fall through
-    case E_PREPARESTAGE_MODEMANAGER:
-        // Console case 13: `stage = 13; if (!ModeManager::Prepare(this + 4128,
-        // mpFreeburnChallengeList, lpAllocatorList->GetHeapAllocator(0x1B))) break;` --
-        // ChallengeManager::Prepare (the challenge list) and ScoringSystem::Prepare (each per-car
-        // record's road-rule table from the network heap).
-        mePrepareStage = E_PREPARESTAGE_MODEMANAGER;
-        if (!mModeManager.Prepare(mpFreeburnChallengeList,
-                                  lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
-        {
-            break;
-        }
-        mePrepareStage = E_PREPARESTAGE_TAKEDOWNMANAGER;
-        // fall through
-    case E_PREPARESTAGE_TAKEDOWNMANAGER:
-    case E_PREPARESTAGE_MUGSHOTMANAGER:
-    case E_PREPARESTAGE_PAYBACKMANAGER:
-    case E_PREPARESTAGE_INVITEMANAGER:
-    case E_PREPARESTAGE_FLYBYMANAGER:
-    case E_PREPARESTAGE_NETWORKROUNDMANAGER:
-        LogPrepareStageOnce(14, "the manager prepares Mugshot/Payback/NetworkRound [deferred]");
-        // [takedown wave 2026-09-02] stage 14 of the console ladder, `if (TakedownManager::Prepare(gsm+568))`
-        // -- REAL now (Mugshot, Payback and NetworkRound stay deferred as the line above says).
-        if (!PrepareTakedownBringUp())
-        {
-            break;
-        }
-        // [PGEP] Stage 17: the invite manager's inlined Prepare (its game-event queue Prepared and
-        // Cleared around the prepared-bits clear); stage 18: the flyby managers' (this build's online
-        // one only). Neither can fail, so the console's ladder falls straight through both.
-        mePrepareStage = E_PREPARESTAGE_INVITEMANAGER;
-        mpGameStateInviteManager->Prepare();
-        mePrepareStage = E_PREPARESTAGE_FLYBYMANAGER;
-        mpOnlineFlybyManager->Prepare();
-        mePrepareStage = E_PREPARESTAGE_PROGRESSION;
-        // fall through
-
-    case E_PREPARESTAGE_PROGRESSION:
-        // ⭐ [progression wave: lifecycle, 2026-09-06] REAL. X360 LABEL_48 / 0x8239EB4C:
-        //     *(this + 552) = 20;
-        //     if (!BrnProgression::ProgressionManager::Prepare(this + 47920)) break;
-        // Hex-Rays shows one argument; the ASM at 0x8239EB50..0x8239EB60 sets THREE registers --
-        //     add r5, r31, r24   (r24 == 232384 -> &mReceiverQueue)
-        //     mr  r4, r19        (the output buffer)
-        //     add r3, r31, r16   (&mProgressionManager)
-        // -- and ProgressionManager::Prepare @0x8239DC38 forwards r4/r5 to LoadAIData without
-        // ever writing them. So it is a two-argument method, and this is what binds
-        // ProgressionManager::mpAISectionData: LoadAILanes("AI.dat", pool 5) -> GetAILanes
-        // ("WorldMapData") -> CreateFromHandle. It returns false while the stream is in flight,
-        // which re-enters this stage on the next Prepare pass exactly like stage 23's
-        // StreetManager::Prepare below -- that is the console's own polling shape, not a stall.
-        // ⓘ ORDERING NOTE: this is the console's FIRST loader of AI.dat, seventeen stages before
-        // anything else wants it. StreetManager::Prepare (stage 23) only GETs the resource.
-        mePrepareStage = E_PREPARESTAGE_PROGRESSION;
-        if (!mProgressionManager.Prepare(lpOutputBuffer, &mReceiverQueue))
-            break;
-        // fall through
-
-    case E_PREPARESTAGE_RICH_PRESENCE:
-    case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
-        LogPrepareStageOnce(21, "RichPresenceManagerBase / AchievementManagerX360::Prepare [deferred]");
-        // fall through
-
-    case E_PREPARESTAGE_STREET_MANAGER:
-        // ⭐ REAL. X360 LABEL_51: `*(this+552) = 23;
-        //     if (!StreetManager::Prepare(this + 284520, out, this + 232384)) break;`
-        // i.e. mStreetManager.Prepare(out, &mReceiverQueue). StreetManager::Prepare @0x82350900 is
-        //     LoadAIData(out, rq) && LoadDistrictMap(out, rq)
-        //         -> debug component Construct + Register; return true
-        // LoadDistrictMap @0x8234FB98 is the ONLY writer of mDistrictMapResourceHandle, which
-        // SetupParRivals dereferences unconditionally -- so this stage is the precondition for
-        // Prepare2 case 2's SetupParRivals leg. It acquires "Districts" out of pool 5; stage 4
-        // above is what makes that bundle resident.
-        mePrepareStage = E_PREPARESTAGE_STREET_MANAGER;
-        if (!mStreetManager.Prepare(lpOutputBuffer, &mReceiverQueue))
-            break;
-        // fall through
-
-    case E_PREPARESTAGE_IMAGE_MANAGER:
-        // [PGEP] Console stage 24: `stage = 24; if (!GameStateImageManagerBase::Prepare(gsm+0x2D4B0,
-        // lpAllocatorList->GetHeapAllocator(0x1B))) break;` -- the three gallery mugshot textures.
-        mePrepareStage = E_PREPARESTAGE_IMAGE_MANAGER;
-        if (!mpImageManager->Prepare(lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
-            break;
-        // fall through
-
-    case E_PREPARESTAGE_RUMBLE_MANAGER:
-        // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D5] REAL. X360 LABEL_53 (0x8239EC14..0x8239EC30):
-        //     *(this+552) = 25;
-        //     if (!RumbleManager::Prepare(this + 46680)) break;
-        // Prepare @0x823648D0 resets the per-wheel surface/rumble slots (0xFF / 0 / 0.0 / -1) and
-        // Clears the four queues; it always returns true, so the stage always falls through.
-        mePrepareStage = E_PREPARESTAGE_RUMBLE_MANAGER;
-        if (!mRumbleManager.Prepare())
-            break;
-        // fall through
-    case E_PREPARESTAGE_DONE:
-        // [diagnostic, one-shot] print BOTH ENDS of the two list stages -- a non-null pointer
-        // is not proof the list decoded. Delete with the rest of the bring-up diagnostics.
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[GameStateModule::Prepare] lists: vehicles="
-                << (mpVehicleList != 0 ? mpVehicleList->GetVehicleCount() : -1)
-                << " wheels="
-                << (mpWheelList != 0 ? mpWheelList->GetWheelCount() : -1) << "\n";
-        }
-        // ⭐ REAL now (the "list publish" half of the terminal stage). X360 @0x8239EC8C, straight
-        // after DriveThruManager::Prepare:
-        //     r9 = this + 0x2CDA0 (mCarSelectManager);  r8 = this + 0x2CE20 (mOnlineCarSelectManager)
-        //     stw *(this+0x456EC), 0x18(r9)   <- CarSelectManager::mpWheelList
-        //     stw *(this+0x456E8), 0x14(r9)   <- CarSelectManager::mpVehicleList
-        //     stw *(this+0x456EC), 0x10(r8)   <- OnlineCarSelectManager::mpWheelList
-        //     stw *(this+0x456E8), 0x0C(r8)   <- OnlineCarSelectManager::mpVehicleList
-        // Those four stores ARE CarSelectManager::Prepare / OnlineCarSelectManager::Prepare, both
-        // fully inlined (neither has a symbol in the image; the DWARF declares both as
-        // `Prepare(const VehicleList*, const WheelList*)`). Called through the named methods here.
-        //
-        // This is what the whole junkyard flow was missing: SetupSpawnLocations, SpawnInStartCar,
-        // GetProfileCarData and StartCarSelectState all resolve their car records through
-        // CarSelectManager::mpVehicleList, and nothing had ever written it.
-        //
-        // ⭐ [drive-thru wave 2026-08-27] REAL now -- the "[deferred]" half of this stage is paid.
-        // X360 0x8239E578 @LABEL_55 (pseudocode lines 271-273), the two lines immediately BEFORE
-        // the four car-select list stores below:
-        //     Memor = BrnTrigger::TriggerData_::GetMemor(a1 + 43888);   // mTriggerQueryManager's
-        //                                                              //   ResourcePtr<TriggerData>
-        //     v25   = BrnWorld::GlobalColour(v33, a1 + 284400);         // the CarColours palette
-        //     BrnGameState::DriveThruManager::Prepare(a1 + 44240, Memor, v25);
-        // Prepare is what turns the loaded TriggerData into the manager's working set: it walks
-        // every generic region, keeps the IsDriveThru() ones into maDriveThruTriggerData[46] with
-        // their world position, and tallies miTotalJunkYards / miTotalGasStations / miTotalBodyShops
-        // / miTotalPaintShops / miTotalCarParks. Without it every one of those totals stays 0 and
-        // HandleDriveThru's "find this region's entry" scan can never match, so the whole drive-thru
-        // chain is inert even with the call sites restored.
-        // ✅ [FX-FLOW 2026-09-24] THE PALETTE IS BOUND NOW (stage 11/12 above is real), and the
-        // FLAG that stood here is paid: a DEFAULT-CONSTRUCTED (null) ResourcePtr used to be
-        // passed, so ProcessDriveThru's PAINT_SHOP arm -- the one arm that dereferences it
-        // (maPalettes[2].miNumColours) -- asserted "Can not instance resource pointer" and then
-        // faulted reading +0x20 of null on every paint shop.
-        // The console passes the member BY VALUE through ResourcePtr<GlobalColourPalette>'s copy
-        // constructor @0x82368FC8 (`addi r4,src,0x14` -> zero-init + self-link + CreateFromHandle
-        // on the source's bound handle, @0x8239EC6C..0x8239EC74). That copy constructor is
-        // declared-only in CgsResourcePtr.h, so the temporary is built through the handle
-        // constructor from GetResourceHandle() -- the same {+0x14,+0x18} pair, the same stores,
-        // the same CreateFromHandle.
-        mDriveThruManager.Prepare(mTriggerQueryManager.GetTriggerData(),
-                                  CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>(
-                                      mpPlayerCarColours.GetResourceHandle()));
-
-        mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
-        mOnlineCarSelectManager.Prepare(mpVehicleList, mpWheelList);
-
-        // ⭐ AND THE PROGRESSION LAYER'S COPY (X360 ProgressionManager +133448). MEASURED:
-        // the first live ResetPlayerCarAction chain fired the console's own "lpVehicleListEntry"
-        // assert (BrnProgressionManager.cpp:1258) from OnPlayerCarChange, because the
-        // ProgressionManager's vehicle-list pointer had NEVER been installed by anything --
-        // its SetVehicleList had zero callers in the whole tree, and the header's own FLAG said
-        // so ("nothing installs it yet -- Prepare2's caller does on the console"). Every
-        // progression body that resolves a car record reads that pointer.
-        // ✅ [progression wave: lifecycle, 2026-09-06] THE STAND-IN IS RETIRED, ITS OWN
-        // DELETE-WHEN PAID -- but read the correction, because the FLAG that stood here guessed
-        // the wrong seat. It said "the console installs it from Prepare2's caller". It does not:
-        // the console's installer is ProgressionManager::ApplyVehicleList @0x82359A20, called
-        // from THIS function's stage 8 (E_PREPARESTAGE_RECEIVE_VEHICLE_LIST, X360 0x8239E8E8),
-        // seventeen stages EARLIER than here -- and it also seeds miMaxCarCount from the list,
-        // which SetVehicleList never did. That call is live now (see the stage), so this line is
-        // redundant and gone. Nothing else changes: the pointer installed is the same pointer,
-        // from the same list, only earlier and with the count seed the console pairs with it.
-        // The SetVehicleList setter itself is left declared -- it is another lane's neighbour in
-        // the header and has no other caller. FOLLOW-UP: delete SetVehicleList.
-
-        // [diagnostic, one-shot] Prove the junkyard half of the trigger data end to end, WITHOUT
-        // driving anything: count the E_TYPE_JUNK_YARD generic regions, run the console's own
-        // FindNearestJunkyardID @0x8236BAC8 from the track's authored player-start position (the
-        // exact vector SendSetupPlayerCarEvent @0x8239A918 feeds it), and check that the id it
-        // picks also appears in the SPAWN table -- because that cross-table agreement is the
-        // precondition for CarSelectManager::SetupSpawnLocations filling all five slots, and
-        // therefore for the junkyard entry not null-dereferencing maSpawnLocations[1].
-        // Delete with the rest of the bring-up diagnostics.
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
-            if (lpTriggerData != 0)
-            {
-                s32 liJunkyardRegions = 0;
-                const s32 liRegionCount = lpTriggerData->GetGenericRegionCount();
-                for (s32 li = 0; li < liRegionCount; ++li)
-                {
-                    if (lpTriggerData->GetGenericRegion(li)->GetType()
-                        == BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD)
-                        ++liJunkyardRegions;
-                }
-
-                const Vector3 lStart      = lpTriggerData->GetPlayerStartPosition();
-                const CgsID   lJunkyardId = FindNearestJunkyardID(lStart);
-
-                s32 liMatchingSpawns = 0;
-                const s32 liSpawnCount = lpTriggerData->GetSpawnLocationCount();
-                for (s32 li = 0; li < liSpawnCount; ++li)
-                {
-                    if (lpTriggerData->GetSpawnLocation(li)->GetJunkyardId() == lJunkyardId)
-                        ++liMatchingSpawns;
-                }
-
-                *CgsDev::Log::gpDebugPrint
-                    << "[GameStateModule] junkyard regions=" << liJunkyardRegions
-                    << "/" << liRegionCount
-                    << " playerStart=(" << lStart.x << ", " << lStart.y << ", " << lStart.z << ")"
-                    << " nearestJunkyardId=" << static_cast<u64>(lJunkyardId)
-                    << " spawnsForThatJunkyard=" << liMatchingSpawns << "\n";
-            }
-        }
-        // ⓘ The start-of-game latch (+0x32DC4, mbSendSetupPlayerCarPending) is NOT armed here any
-        // more: the console arms it once, in Construct (0x823807A4), and nothing else in the image
-        // writes it -- see the note there. [FX-AIBUZZ 2026-09-24: this was the PC's arming site]
-
-        // [drive-thru wave 2026-08-27] One-shot: prove Prepare actually classified regions. A
-        // non-zero miTotalGasStations is the precondition for every later gas-station claim; a zero
-        // here means the TriggerData had no drive-thru regions, NOT that the effect failed.
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[drivethru] Prepare: gas=" << mDriveThruManager.GetTotalDriveThrusOfType(
-                       BrnTrigger::GenericRegion::E_TYPE_GAS_STATION)
-                << " body=" << mDriveThruManager.GetTotalDriveThrusOfType(
-                       BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP)
-                << " paint=" << mDriveThruManager.GetTotalDriveThrusOfType(
-                       BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP)
-                << " junk=" << mDriveThruManager.GetTotalDriveThrusOfType(
-                       BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD)
-                << " carpark=" << mDriveThruManager.GetTotalDriveThrusOfType(
-                       BrnTrigger::GenericRegion::E_TYPE_CAR_PARK) << "\n";
-        }
-        LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare REAL -- prepare DONE");
-        // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
-        // for a later re-prepare and clears the +560 flag. (CORRECTION 2026-08-11: +560 is NOT
-        // Prepare2's stage word, as an earlier note here claimed -- Prepare2 @0x8239ED10 switches
-        // on this+556 (`lwz r11, 0x22C(r31)`). +560 is a separate flag this slice does not model.)
-        mePrepareStage = E_PREPARESTAGE_MANAGER;
-        lbDone = true;
-        break;
-
-    default:
-        CGS_ASSERT(false, "Invalid Stage\n");   // X360 BrnGameStateModule.cpp:825
         break;
     }
 
