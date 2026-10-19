@@ -11,19 +11,8 @@
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO::PostWorldInputBuffer
 
-namespace BrnGameState { class GameStateModule; }
-
 namespace BrnGameState
 {
-    // Un-homed game-state accessors reached by name from
-    // BrnGameModule::BridgeGameStateToController (the console's single accessor returns the
-    // bind-request queue; the unbind-request queue sits at +0x4C from it). Their canonical home
-    // is the game-state IO; declared here so the bridge TU resolves them until that TU lands.
-    const CgsInput::InputIO::PostWorldInputBuffer::BindRequestQueue*
-        GetGameStateInputBindRequestQueue(GameStateModule* lpGameStateOutput);
-    const CgsInput::InputIO::PostWorldInputBuffer::UnBindRequestQueue*
-        GetGameStateInputUnbindRequestQueue(GameStateModule* lpGameStateOutput);
-
     // The takedown-event output queue TranslateTakedownsToGuiEvents walks is NOT declared here:
     // it is the committed CgsModule::EventQueue<BrnGameState::TakedownEvent, 8> that
     // BridgeGameStateToWorld already names (GameSource/GameState/TakedownManager/

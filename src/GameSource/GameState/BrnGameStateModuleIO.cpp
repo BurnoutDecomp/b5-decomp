@@ -751,6 +751,12 @@ RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface()
 }
 
 // X360 0x82362D78 - write-lock accessor for the game-state-to-controller output interface (this+0x43AC).
+const GameStateToControllerInterface* OutputBuffer::GetGameStateToControllerInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mGameStateToControllerInterface;
+}
+
 GameStateToControllerInterface* OutputBuffer::GetGameStateToControllerInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");

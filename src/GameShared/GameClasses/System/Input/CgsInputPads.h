@@ -108,6 +108,9 @@ namespace CgsInput
         // X360: InputModule::ProcessRumbleRequests @0x828FFE50 inlines it at 0x829000C4..0x829000F0 --
         // the three flags, then UpdatePadRumble(port, maPorts[port].GetPlayerID(), lfTimeStep) x4.
         void UpdateRumble(f32 lfTimeStep, bool lbPauseRumble, bool lbEnableRumble, bool lbEnableWheelForceFeedback);
+        // DecFIGS CgsInputPads.h:129. The X360 post-world input body copies the two spring words
+        // into this member through its embedded InputPads object.
+        void SetWheelSpring(const CgsInput::Device::WheelFFSpring& lrSpring);
 
         // X360 0x823A5F38 (CgsInputPads.h:251) -- homed in CgsInputPads_GetDebugGamePad.cpp.
         // Returns the address of the liPortIndex-th physical pad record.

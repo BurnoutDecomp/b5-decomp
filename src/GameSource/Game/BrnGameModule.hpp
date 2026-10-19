@@ -573,13 +573,15 @@ namespace BrnGame
         void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
 
-        // X360 0x823C0AE8 -- merge the game-state output's input-bind / input-unbind REQUEST queues
-        // into the input module's post-world input buffer (PostBindRequest / PostUnbindRequest per
-        // queued request), stamping miInputModuleState with the bind (3) / unbind (6) sentinel when
-        // either queue produced work. Called by DoUpdate_InputPostWorld. Home
-        // GameSource/Game/GameBridgeGameStateToX.cpp.
-        void BridgeGameStateToController(BrnGameState::GameStateModule* lpGameStateOutput,
-                                         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput);
+        // X360 0x823C0AE8 -- caller holds PostWorldInput for write and GameState output for read.
+        // Copies the typed GameStateToController bind/unbind requests into PostWorldInput and
+        // stamps miInputModuleState with the bind (3) / unbind (6) sentinel.
+        void BridgeGameStateToController(CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput,
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+        // X360 0x823BD248 -- caller holds this input-module output buffer for read.
+        void BridgeInputToGame(const CgsInput::InputIO::OutputBuffer* lpInputModuleOutput);
+        void HandleInputBindResult(const CgsInput::InputIO::BindResult& lrResult);
+        void HandleInputUnbindResult(const CgsInput::InputIO::UnBindResult& lrResult);
 
         // X360 0x823E1C38 -- walk the game-state output's TakedownEvent output queue and push one
         // GUI takedown event per record through the CgsGui GUI module (this + 7252512). A record
@@ -905,6 +907,16 @@ namespace BrnGame
         u32 DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
                                    CgsModule::IOBufferStack* lpOutputBufferStack,
                                    CgsInput::InputIO::OutputBuffer* lpInputModuleOutput);
+        // ARTIST 0x823C59E8: helper buffer is allocated on the input stack; the third/fourth
+        // arguments are the const GameState output and const World output read during this leg.
+        void DoUpdate_InputPostWorld(CgsModule::IOBufferStack* lpInputBufferStack,
+                                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                                     const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+                                     const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+                                     u32 liStartPressedPort);
+        // ARTIST 0x823BCF40 / 0x823BD390.
+        void PrepareInitialInputMapping(CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput);
+        void BindInputToPort(s32 liPort, CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput);
 
         // ARTIST 823EE0E8: original per-step input staging and whole owner update.
         void DoUpdate_GameStatePreWorld(CgsModule::IOBufferStack* lpInputBufferStack,

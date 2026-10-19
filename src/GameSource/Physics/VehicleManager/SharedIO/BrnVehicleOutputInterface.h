@@ -365,6 +365,12 @@ namespace Vehicle
         {
             mWheelFFSpring = lrSpring;
         }
+        // DWARF BrnVehicleOutputInterface.h:173; ARTIST InputPostWorld reaches the same
+        // member through UpdateOutputBuffer::GetVehicleManagerOutputInterface and copies it.
+        const CgsInput::Device::WheelFFSpring& GetPlayerWheelFFSpring() const
+        {
+            return mWheelFFSpring;
+        }
 
         // DWARF-attested (BrnVehicleOutputInterface.h:214
         // `int32_t AddCreateVehicleResult(CreateVehicleResult)`), and the X360 inlines it as a bare

@@ -37,6 +37,7 @@
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }
 namespace CgsModule { struct IOBufferStack; }   // PreWorldUpdate's two (unread) stack parameters
+namespace BrnGame { class BrnGameModule; }
 
 namespace CgsInput
 {
@@ -63,6 +64,9 @@ namespace CgsInput
                                     const InputIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                                     InputIO::OutputBuffer* lpOutputBuffer,
                                     bool lbUpdatePads);
+        // X360 0x828F8478, virtual slot 18 (vtable +72). The input stack is unused by the body.
+        virtual void PostWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                                     const InputIO::PostWorldInputBuffer* lpPostWorldInput);
         // Boot Construct/Prepare/Release/Destruct state stages (DWARF CgsInputModule.h:51/59).
         enum EPrepareStage : s32
         {
@@ -95,6 +99,10 @@ namespace CgsInput
         virtual void Destruct();
 
     private:
+        // BrnGameModule::HandleInputBindResult follows the console's direct traversal to
+        // mControllers.GetDebugGamePad; this grants that owner access without widening the API.
+        friend class BrnGame::BrnGameModule;
+
         // X360 0x828E7098. Drain the post-world pad-mapping request queue: for each PadMapping event,
         // copy its 112-byte action-mapping payload into the addressed pad's mapping storage (port == -1
         // broadcasts to all KU_NUMBER_OF_PADS pads).
