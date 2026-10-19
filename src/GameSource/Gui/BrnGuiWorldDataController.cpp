@@ -48,8 +48,8 @@ namespace BrnGui
 //     answers those from its own resident tables (ProcessGetVehicleListRequest replies with
 //     &GameDataModule::mVehicleList), and the console reads the pointer out of the reply's
 //     mHandle.mpResourceMemory -- the X360 `lwz r11, 0x20(payload) / stw r11, 0x464(this)`.
-//     This is the SAME reply GameStateModule::ReceiveListResource consumes for its own
-//     mpVehicleList, so both consumers end up holding the identical resident table.
+//     This is the SAME typed reply GameStateModule::Prepare consumes for its own mpVehicleList,
+//     so both consumers end up holding the identical resident table.
 //
 // Each stage is resumable: the machine issues its request, advances meState, and returns false
 // while its reply has not arrived. The console's caller (GuiModule::Prepare stage 14) re-enters

@@ -149,11 +149,10 @@ public:
     // into the director input buffer's own <13312,16> queue once a frame. That Append is
     // the ONLY route by which a game action ever reaches MainDirector::ProcessInputQueue.
     //
-    // ⚠️ FLAG (PC bring-up seam): nothing on PC calls this module's Prepare(), so the
-    // console's allocation point never runs. Construct() below news the buffer instead and
-    // Destruct() frees it. The buffer itself, its Construct and its accessors are the real
-    // console ones; only the ALLOCATION SITE is moved. DELETE-WHEN the module's
-    // Prepare()/CreateOutputDataStructure() path is reconstructed.
+    // PC runs the original Prepare stage ladder, but its host ModuleSingleBuffered::Prepare does
+    // not create the console's DataStructure-backed per-pass output buffer. Construct() allocates
+    // this stable buffer for GamePrepare's request transport; the buffer type and accessors remain
+    // the console ones.
     GameStateModuleIO::OutputBuffer* GetOutputBuffer() { return mpOutputBuffer; }
 
     // ------------------------------------------------------------------------
@@ -253,15 +252,10 @@ public:
     void Construct() override;
     void Destruct()  override;
 
-    // Original ARTIST 0x8239E578, including all 28 preparation cases. Native
-    // startup explicitly calls the existing PC adapter below.
+    // Original ARTIST 0x8239E578, including all 28 preparation stages.
     virtual bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                  CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
-
-    bool PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
-                         CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
-                         const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
     // ------------------------------------------------------------------------
     // ⭐ X360 0x8239ED10 -- the module's SECOND-pass prepare. Its ONE caller is
@@ -1215,12 +1209,6 @@ private:
     // Construct (0x823807A8) and Prepare's START stage (0x8239E6A8). [FX-TAILS-A 2026-09-24]
     void  ClearData();
 
-    // The shared body of Prepare's "receive a resident data list" stages (vehicle reply 52,
-    // wheel reply 59). The console writes each one out longhand; they differ only in the reply
-    // id and their two baked assert lines. Returns false while the reply has not arrived.
-    bool ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLineType,
-                             s32 liAssertLineEventId, void** lppOutResource);
-
     // The game-event dispatcher PreWorldUpdate runs once a frame over its merged event queue: one
     // walk, one switch on the event id, the prop-progression tail after the walk. Body:
     // GameStateModule_ProcessGameEvents.cpp. The arms live in five helpers, one partfile each
@@ -1514,8 +1502,8 @@ private:
 
     // ---- the Prepare slice's own members (X360 offsets from Prepare @0x8239E578) ----
 
-    // ARTIST has 28 cases. The NativePC adapter retains its pre-existing
-    // DONE=26 spelling/value; the original path names its two final cases below.
+    // ARTIST has 28 stage values: stage 26 clears DeveloperChallengeManager state, and stage 27
+    // performs the final drive-thru/list publication.
     enum EPrepareStage
     {
         E_PREPARESTAGE_START                    = 0,
@@ -1544,7 +1532,6 @@ private:
         E_PREPARESTAGE_STREET_MANAGER           = 23,
         E_PREPARESTAGE_IMAGE_MANAGER            = 24,
         E_PREPARESTAGE_RUMBLE_MANAGER           = 25,
-        E_PREPARESTAGE_DONE                     = 26, // existing NativePC terminal stage
         E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER = 26,
         E_PREPARESTAGE_ORIGINAL_DONE             = 27,
     };
@@ -1663,7 +1650,7 @@ private:
     // embeds it. Console attestations for the offset:
     //   * GameStateModule::Prepare @0x8239E578 stage 27 calls DriveThruManager::Prepare(this+44240,
     //     the TriggerQueryManager's TriggerData, the CarColours palette) immediately BEFORE the
-    //     car-select list publish this tree already reproduces in E_PREPARESTAGE_DONE.
+    //     car-select list publish this tree already reproduces in E_PREPARESTAGE_ORIGINAL_DONE.
     //   * PreWorldUpdate @0x823A5328 passes `a1 + 44240` as TriggerQueryManager::
     //     ProcessPlayerTriggers' lpDriveThruManager argument (the drive-thru fan-out leg).
     // The member is NOT laid out at the console byte offset (semantic parity by named members,
