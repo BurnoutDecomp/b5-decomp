@@ -720,6 +720,13 @@ void BridgeEntityModulesToOutput_PostPhysics(
             }
         }
     }
+
+    // X360 leg 15 @0x827AF174. The caller holds the destination for writing and this
+    // per-frame WorldEntity output for reading; use its const/read-lock accessor. The
+    // public setter copies all five status bytes by value before the source buffer is
+    // destroyed, preserving the producer's computed ImmediateStreamed and AllStreamed.
+    lpOutputBuffer->SetWorldEntityStatusInterface(
+        lpWorldEntityOutput_PostPhysics->GetStatusInterface());
 }
 
 // ----------------------------------------------------------------------------
