@@ -510,10 +510,13 @@ namespace BrnGameState
                 if (lfTimerAfter <= KF_ZERO)
                 {
                     // The pending window has elapsed: commit the buffered combo into mRecentStunt.
-                    // The record is re-seeded word by word; its score and multiplier words are
-                    // NOT cleared here (each banking arm below writes its own).
+                    // ARTIST re-seeds the record word by word, including its opaque trailing
+                    // halfwords at StuntInfo+0x14/+0x16 (scorer+0x7C/+0x7E); the score and
+                    // multiplier words are NOT cleared here (each banking arm below writes its own).
                     mRecentStunt.muFlatSpins      = 0;
                     mRecentStunt.muBarrelRolls    = 0;
+                    mRecentStunt.mu16X360Tail14   = 0;
+                    mRecentStunt.mu16X360Tail16   = 0;
                     mRecentStunt.muStuntTypes        = muStuntTypesInProgress;
                     mRecentStunt.muAwesomeStuntTypes = muAwesomeStuntTypesInProgress;
 
