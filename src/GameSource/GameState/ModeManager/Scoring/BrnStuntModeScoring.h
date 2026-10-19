@@ -101,8 +101,9 @@ namespace BrnGameState
     // WasStuntRecentlyPerformed(). ARTIST 0x82313280 copies SIX dwords from mRecentStunt at
     // +0x68, so the X360 record is 24 bytes even though DecFIGS names only the first 20. The
     // final four bytes are also forwarded by action 132 / GUI 429 and read by the GUI handler;
-    // keep them as opaque bytes until their source names are attested. They are intentionally not
-    // assigned by the current scorer reconstruction, preserving the original leftover bytes.
+    // keep them as opaque offset-named halfwords until their source names are attested. ARTIST's
+    // UpdateBufferedScore zeros both words when banking mRecentStunt before the recent-stunt latch
+    // is raised, so the event copy carries zero for these fields on the reached producer path.
     struct StuntInfo
     {
         u32 muStuntTypes;          // :100 -- bit-mask of EStuntType categories in the stunt
