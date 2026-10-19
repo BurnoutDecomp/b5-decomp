@@ -851,6 +851,9 @@ namespace BrnGame
         // adapter that bridge documents.
         int BridgeGuiToGameState(BrnGameState::GameStateModule* lpGameStateInput,
                                  const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue);
+        // Original typed target; required by the temporary partial-loading route.
+        int BridgeGuiToGameState(BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
+                                 const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
 
         // X360 0x823C54D8 [P1 sim-pause] -- walk the game-state output buffer's game-action
         // queue under its read lock: action 86 sets mbSimPaused and STOPS the sim timer

@@ -4257,21 +4257,10 @@ namespace BrnGame
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
                 CreateStaticIOBuffers();
 
-                // The PC host drives the active flow state's sound slice before it drives
-                // GuiModule::Update below. Copy the previous GUI batch into the scheduler
-                // output for the existing one-sub-step sound/network hand-off, then retire
-                // that batch. The current step starts with empty GUI output even when the
-                // frame-step guard skips GuiModule::Update, as with ARTIST's fresh output.
+                // FLAG PC-platform leaf: GuiModule owns its output queue. Match the
+                // original fresh per-call output boundary, including skipped GUI frames.
                 if (mGuiModule.IsPrepared())
-                {
-                    CGS_ASSERT(mpGuiOutputBuffer != 0, "GUI output buffer was not created");
-                    const CgsModule::VariableEventQueue<18432, 16>* const lpRetainedGuiEvents =
-                        mGuiModule.GetGuiOutQueue();
-                    mpGuiOutputBuffer->LockForWrite();
-                    mpGuiOutputBuffer->AddGuiOutEvents(lpRetainedGuiEvents);
-                    mpGuiOutputBuffer->UnlockForWrite();
                     mGuiModule.GetGuiOutQueue()->Clear();
-                }
 
                 mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
@@ -4295,7 +4284,8 @@ namespace BrnGame
                 if (lbRunFullModuleCascade)
                     lFullModuleUpdateSet = ConstructUpdateSetFromFsm();
 
-                BridgeTimers(0);
+                if (lbRunFullModuleCascade)
+                    BridgeTimers(0);
 
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
                 bool lbInputPreWorldFilledPC = false;
@@ -4313,9 +4303,7 @@ namespace BrnGame
                 // console loads them: the update input/output buffer stacks and the input module's
                 // output buffer (the PC keeps that one as mPcInputOutputBuffer). The START-pressed port
                 // it returns feeds only the flagged pad scan (see the body), so it is not consumed here.
-                if ((leState == BrnGameMainFlowController::E_MGS_IN_GAME)
-                    || ((leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE)
-                        && (leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING)))
+                if (lbRunFullModuleCascade)
                 {
                     DoUpdate_InputPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
                                            &mPcInputOutputBuffer);
@@ -4367,63 +4355,17 @@ namespace BrnGame
                 // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
                 // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
                 // mpDirectorOutputBuffer, which stays alive through this frame's Render.
-                DoUpdate_Director(false);
+                if (lbRunFullModuleCascade)
+                    DoUpdate_Director(false);
 
-                // ⭐ RETIRING THIS SUB-STEP'S GAME ACTIONS (FLAG PC lifecycle, 2026-08-01) happens
-                // at the END of the sub-step, after the network post-simulation leg (see the
-                // block there). Its consumers: the WORLD leg (DriveWorldUpdateFrame ->
-                // BridgeGameStateToWorld, inside lpState->Update() above), the DIRECTOR leg
-                // (DoUpdate_Director(false) -> BridgeGameStateToDirector), the GUI leg below, the
-                // EFFECTS leg and the NETWORK post-simulation leg (BridgeGameStateToNetwork).
-                //
-                // WHY THIS IS NEEDED. The console's full update passes a fresh typed
-                // GameStateModuleIO::OutputBuffer from its per-pass IOBufferStack lifetime, so
-                // the game-action queue starts EMPTY and a posted action is ONE-SHOT. On the PC
-                // the module owns ONE persistent OutputBuffer (BrnGameStateModule.cpp:68; a
-                // host allocation/lifetime adaptation), so
-                // without this the queue only ever grows: every action would be re-delivered to
-                // the world and the director on every sub-step for the rest of the session, and
-                // the 13312-byte queue would eventually overflow its own AddEvent. Latent until
-                // now (nothing posts yet), LIVE the moment CarSelectManager is ticked.
-                // This is the same lifecycle the GUI out-queue Clear() further down handles for
-                // the same reason, and the same one GamePrepare stage 4 already applies to this
-                // very buffer's resource-request queue.
-                // DELETE-WHEN the module's real Prepare/Swap DataStructure path lands.
-                //
-                // ⭐⭐ [gateui] ...AND THE THIRD CONSUMER RUNS FIRST: THE GUI LEG.
-                // On the console the game-state output's action queue has THREE consumers, and
-                // BridgeGameStateToGui @0x823EE880 -> TranslateGameActionsToGuiEvents
-                // @0x823E9CE0 (call site @0x823EF22C) is the one that turns a completed
-                // stunt-collectible (action 58) into the HUD popup event (GUI 217/218). It must
-                // run BEFORE the retire below, or it drains an already-cleared queue -- which is
-                // the whole reason it is here rather than down in the GUI block, where the
-                // console runs it.
-                // ⓘ GATED ON !mbSteppingFrames, mirroring DoUpdate @0x823F0AF8, which skips the
-                // entire GUI leg while the frame-stepper is engaged. Without that gate a stepped
-                // frame would post GUI events the GUI never drains, and they would pile up in
-                // the input buffer.
-                // The source is read-locked and the GUI input buffer write-locked -- the console's
-                // own bracket for this bridge (its own assert names lpGuiInput->GetGuiEvents()).
-                if (!mbSteppingFrames && mpGuiInputBuffer != 0)
-                {
-                    const BrnGameState::GameStateModuleIO::OutputBuffer* lpcGameStateOutput =
-                        mGameStateModule.GetOutputBuffer();
-                    if (lpcGameStateOutput != 0)
-                    {
-                        mGameStateModule.GetOutputBuffer()->LockForRead();
-                        mpGuiInputBuffer->LockForWrite();
-                        // [stuntrace wave E1] the event score/timer builds run FIRST, matching
-                        BridgeGameStateToGui(mpGuiInputBuffer, lpcGameStateOutput);
-                        mpGuiInputBuffer->UnlockForWrite();
-                        mGameStateModule.GetOutputBuffer()->UnlockForRead();
-                    }
-                }
+                // ARTIST DoUpdate_GUI823F0758 runs only in the full cascade.
+                // Boot and the below-stage8 partial route own their GUI/time seats.
                 // ⭐ FRAME-STEP GUARD, 2026-08-16 (boot audit F-P3-9). DoUpdate skips the
                 // whole GUI leg while the frame-stepper is engaged (`lbzx` on gm+0x9A0B98);
                 // ours ran it unconditionally, so single-stepping a frame also advanced the
                 // GUI a frame and the two were never actually in step. mbSteppingFrames is
                 // the PC's name for that byte.
-                if (!mbSteppingFrames)
+                if (lbRunFullModuleCascade && !mbSteppingFrames)
                 {
                 // ⭐ CLEAR FIRST, 2026-08-16 (boot audit F-P3-8). DoUpdate_GUI @0x823F0758
                 // opens by clearing BOTH out buffers, then runs its bridges; we cleared the
@@ -4432,6 +4374,8 @@ namespace BrnGame
                 // "the leg starts with an empty queue" is the invariant the console relies
                 // on, and clearing at the end only holds while nothing outside this leg can
                 // post into the queue.
+                mpGuiOutputBuffer->Clear();
+                mpGuiModelOutputBuffer->Clear();
                 if (mGuiModule.IsPrepared())
                     mGuiModule.GetGuiOutQueue()->Clear();
 
@@ -4459,23 +4403,7 @@ namespace BrnGame
                         mPcInputOutputBuffer.UnlockForWrite();
                     }
 
-                    mPcInputOutputBuffer.LockForRead();
                     mpGuiInputBuffer->LockForWrite();
-                    BridgeControllerToGui(mpGuiInputBuffer, &mPcInputOutputBuffer);
-                    // The game->GUI flow-FSM bridge (X360 0x823DCA10, run under the same
-                    // write bracket the console's LoadingScriptedState::Update uses): post
-                    // any pending GuiEventRunFsm stage the main flow requested.
-                    BridgeGameToGui(mpGuiInputBuffer);
-
-                    // X360 DoUpdate_GUI: BridgeDirectorToGui @0x823DD5C0 -- the camera's
-                    // post-FX hook requests and the hook-enumeration request (495..500).
-                    if (mpDirectorOutputBuffer != 0)
-                    {
-                        mpDirectorOutputBuffer->LockForRead();
-                        BridgeDirectorToGui(mpGuiInputBuffer, mpDirectorOutputBuffer);
-                        mpDirectorOutputBuffer->UnlockForRead();
-                    }
-
                     // ⭐ [boost-bar 206 wave] the world->GUI vehicle bridge (the console's
                     // DoUpdate_GUI @0x823F0758 calls BridgeWorldToGui under its own GUI-input
                     // write bracket) -- the read bracket mirrors the BridgeWorldToDirector
@@ -4488,6 +4416,23 @@ namespace BrnGame
                         mpWorldUpdateOutputBuffer->UnlockForRead();
                     }
 
+                    mPcInputOutputBuffer.LockForRead();
+                    BridgeControllerToGui(mpGuiInputBuffer, &mPcInputOutputBuffer);
+                    const BrnGameState::GameStateModuleIO::OutputBuffer* const lpGameStateOutput =
+                        mGameStateModule.GetOutputBuffer();
+                    lpGameStateOutput->LockForRead();
+                    BridgeGameStateToGui(mpGuiInputBuffer, lpGameStateOutput);
+                    lpGameStateOutput->UnlockForRead();
+
+                    // X360 DoUpdate_GUI: BridgeDirectorToGui @0x823DD5C0 -- the camera's
+                    // post-FX hook requests and the hook-enumeration request (495..500).
+                    if (mpDirectorOutputBuffer != 0)
+                    {
+                        mpDirectorOutputBuffer->LockForRead();
+                        BridgeDirectorToGui(mpGuiInputBuffer, mpDirectorOutputBuffer);
+                        mpDirectorOutputBuffer->UnlockForRead();
+                    }
+
                     // The network -> GUI bridge, under a read lock on the network output (console
                     // DoUpdate_GUI runs it after the replay bridge, before BridgeGameToGui).
                     if (mpNetworkOutputBuffer != 0)
@@ -4497,7 +4442,12 @@ namespace BrnGame
                         mpNetworkOutputBuffer->UnlockForRead();
                     }
 
-                    // GameState's complete bridge posts the snapshot GuiEventTimeInfo.
+                    // The game->GUI flow-FSM bridge (X360 0x823DCA10, run under the same
+                    // write bracket the console's LoadingScriptedState::Update uses): post
+                    // any pending GuiEventRunFsm stage the main flow requested.
+                    BridgeGameToGui(mpGuiInputBuffer);
+
+                    // The wrapper has already posted snapshot time26 in the native order.
 
                     // FLAG world-load stand-in: the console's GameState side reports the
                     // world-load status as game action 191, which the game module's
@@ -4515,53 +4465,9 @@ namespace BrnGame
                         CgsGui::GuiEvent<137> lWorldLoadComplete;
                         CgsGui::GuiModule::AddGuiEvent(lWorldLoadComplete, mpGuiInputBuffer);
                     }
-                    // FLAG GameState stand-in (the live-progression handoff, event 350).
-                    // CONSOLE CHAIN, recovered end to end from ARTIST:
-                    //   BrnGameState::GameStateModule::PreWorldUpdate @0x823A5EA4 posts, on
-                    //   EVERY pre-world update and unconditionally, game action 193 =
-                    //   { &this->mProfile, the ProgressionData resource (or NULL), a flag }
-                    //   (12 bytes) onto the module's GameActionQueue; then
-                    //   BrnGameModule::BridgeGameStateToGui @0x823EE880 ->
-                    //   TranslateGameActionsToGuiEvents @0x823E9CE0 case 193 @0x823EBBA4
-                    //   copies those 12 bytes into a stack record and publishes them with
-                    //   AddGuiEvent<GuiEventProgressionProfileData> @0x823EBBC8. That single
-                    //   `bl` is the ONLY producer of GUI event 350 in the whole image.
-                    // On arrival the console does two things: CgsGui::GuiModule::Update's
-                    // event switch (case 209 == id 350, the switch is rebased by 141)
-                    // @0x82528AB4 hands payload[0]/payload[1] to
-                    // ProfileManager::SetProgressionProfile, and the registered flow states
-                    // latch the profile pointer -- which is how BrnGui::InGame gets the
-                    // mpProfile whose mbIsNewProfile byte gates "TO_INTRO".
-                    // WHY A STAND-IN: the TRANSPORT does not exist on PC --
-                    // BrnGameModule::DoUpdate is a documented no-op and
-                    // GameBridgeGameStateToX.cpp defers BridgeGameStateToGui -- so the record
-                    // is published straight onto the GUI input queue from the same point in
-                    // the sub-step the console's action 193 travels through (inside the
-                    // GUI-input write bracket, before the GUI drive), via the same
-                    // AddGuiEvent<T> boundary. Replace it with the real translator when the
-                    // GameState bridge lands.
-                    //
-                    // ⭐⭐⭐ [one-profile wave 2026-08-28] THE PAYLOAD IS NOW THE CONSOLE'S.
-                    // It used to read the profile pointer straight BACK OUT of the GUI's own
-                    // ProfileManager (`mGuiModule.GetProfileManager().GetProgressionProfile()`)
-                    // and re-post it -- an echo that could only ever name the module-static
-                    // stand-in BrnGuiModule::Prepare had installed. The console's producer
-                    // names the GAME STATE module's own embedded profile:
-                    //     v96[0] = a1 + 48288;    // == &this->mProgressionManager.mProfile
-                    //     v96[1] = *(a1 + 181268) ? ProgressionData(a1 + 181268) : 0;
-                    //     v97    = (*(a1 + 90800) >= 4u) || *(a1 + 181376) || *(a1 + 181380);
-                    //     AddEvent(gameActionQueue, v96, 193, 12);
-                    // and every one of those three offsets resolves through mProgressionManager
-                    // (GameStateModule + 47920):
-                    //     47920 + 368    == 48288  -> ProgressionManager::mProfile   (+0x170)
-                    //     47920 + 133348 == 181268 -> mpProgressionData (the ResourcePtr)
-                    //     47920 + 42880  == 90800  -> mProfile.muMedalCountFromTheStart
-                    //     47920 + 133456 == 181376 -> miNumberOfParCrashRoadRulesRuledByPlayer
-                    //     47920 + 133460 == 181380 -> miNumberOfParTimeRoadRulesRuledByPlayer
-                    // -- so the flag word is literally AreRoadRulesAvailable() inlined, and the
-                    // profile word is the ONE Profile the console has. Reading it from the
-                    // manager is what makes ProfileManager::Deserialise land in the object
-                    // gameplay actually reads.
+                    // The real PreWorld action193 -> wrapper -> canonical GUI350 route
+                    // replaces the direct stand-in (requires Traffic checkpoint04).
+                    // Retain the existing read-only profile ownership diagnostic.
                     {
                         BrnProgression::ProgressionManager* const lpProgressionManager =
                             mGameStateModule.GetProgressionManager();
@@ -4571,19 +4477,6 @@ namespace BrnGame
                         lProgressionProfile.mpProgressionData  = lpProgressionManager->GetProgressionData();
                         lProgressionProfile.mbRoadRulesAvailable =
                             lpProgressionManager->AreRoadRulesAvailable();
-                        if (lProgressionProfile.mpProfile != 0)
-                        {
-                            // The three steps of AddGuiEvent<GuiEventProgressionProfileData>
-                            // @0x823D4548, inlined: the X360 emits it as a NON-static member of
-                            // the CgsGui::GuiModule the game module holds at +7252512, but the
-                            // body never reads `this` (see CgsGuiModule.h), and the PC game
-                            // module has no such embed to call it through.
-                            mpGuiInputBuffer->GetGuiEvents()->AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(&lProgressionProfile),
-                                lProgressionProfile.GetEventType(),
-                                static_cast<s32>(sizeof(lProgressionProfile)));
-                        }
-
                         // [DIAG one-profile] NOT IN THE X360 BINARY. The two candidate owners
                         // side by side, from the ONE place both are addressable, so the claim
                         // "there is a single Profile" is settled by POINTER IDENTITY and not by
@@ -4711,32 +4604,15 @@ namespace BrnGame
                     // frame's update set (bit 8 == in-game).
                     mGuiModule.SetFrameUpdateSet(ConstructUpdateSetFromFsm());
                     mGuiModule.Update();
+                    // FLAG PC-platform leaf: export the batch just produced by this
+                    // no-argument GUI port into the frame-owned native output object.
+                    mpGuiOutputBuffer->Clear();
+                    mpGuiOutputBuffer->LockForWrite();
+                    mpGuiOutputBuffer->AddGuiOutEvents(mGuiModule.GetGuiOutQueue());
+                    mpGuiOutputBuffer->UnlockForWrite();
                     // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
                     // commands (70/71, the loading screen 19/20, ...) the states posted.
                     BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
-                    // Native caller boundary: retain the current loading GUI
-                    // Update timing until the authentic typed loading legs land.
-                    // Full dispatch owns its own original GUI Render later.
-                    bool lbRenderLoadingGui = false;
-                    if (leState == BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN)
-                    {
-                        MainGameFlowStateInitialLoadingScreen* const lpInitialState =
-                            static_cast<MainGameFlowStateInitialLoadingScreen*>(mMainFlowStateMachine.GetState(leState));
-                        lbRenderLoadingGui = lpInitialState->meLoadingScreenStage
-                            > MainGameFlowStateInitialLoadingScreen::E_LOADINGSTAGE_GUIMODULE;
-                    }
-                    else if (leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE
-                             && leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING)
-                    {
-                        lbRenderLoadingGui = gBrnScriptedLoadStage != 8;
-                    }
-                    if (lbRenderLoadingGui)
-                    {
-                        LoadingScriptedState* const lpLoadingState =
-                            static_cast<LoadingScriptedState*>(mMainFlowStateMachine.GetState(leState));
-                        lpLoadingState->RenderGUI(mpGuiInputBuffer, mpGuiOutputBuffer,
-                            mpGuiModelOutputBuffer, mGuiModule.GetViewInputBuffer(), false);
-                    }
                 }
                 // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
                 // It runs BridgeGuiToDirector over the SAME out-queue, so the queue must still
@@ -4765,7 +4641,8 @@ namespace BrnGame
                 // "returning to the front end / loading" gate, which has no producer here yet;
                 // FALSE is the console's value while a race is running, and it is what keeps
                 // the effects system live rather than suspended.
-                DoUpdate_Effects(mpUpdateInputBufferStack,
+                if (lbRunFullModuleCascade)
+                    DoUpdate_Effects(mpUpdateInputBufferStack,
                                  mpUpdateOutputBufferStack,
                                  /*input   out*/ 0,
                                  mGameStateModule.GetOutputBuffer(),
@@ -4779,7 +4656,8 @@ namespace BrnGame
 
                 // ARTIST DoUpdate's sound leg follows the final camera publication
                 // and effects update. Complete the capture begun before world update.
-                FinishInGameSoundFramePC();
+                if (lbRunFullModuleCascade)
+                    FinishInGameSoundFramePC();
 
                 // ---- ADOPT THE SERIALISERS THE EFFECTS LEG JUST REGISTERED ----------------
                 // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
@@ -4806,7 +4684,7 @@ namespace BrnGame
                 // Idempotent by construction (only slots whose pointer changed are touched), so
                 // running it every frame costs one null compare per slot.
                 // DELETE-WHEN ReplayModule::Update_PostSim lands: the call moves there.
-                if (mpEffectsOutputBuffer != 0)
+                if (lbRunFullModuleCascade && mpEffectsOutputBuffer != 0)
                 {
                     mpEffectsOutputBuffer->LockForRead();
                     const BrnEffects::EffectsIO::OutputBuffer* lpcEffectsOut = mpEffectsOutputBuffer;
@@ -4845,9 +4723,9 @@ namespace BrnGame
                 // LatchDispatchCamera.
                 // THE NETWORK POST-SIMULATION LEG. Console DoUpdate order: ... DoUpdate_Effects,
                 // DoUpdate_Sound, DoUpdate_ReplaysPostSim, DoUpdate_GameStatePostWorld, then this,
-                // then UpdateTimers (right below, as on the console). The GUI output buffer carries
-                // the GUI out-events retained from the previous sub-step (the same one-sub-step
-                // hand-off the sound leg uses), so each reaches the network exactly once.
+                // then UpdateTimers (right below, as on the console). The GUI output buffer
+                // carries this sub-step's just-produced GUI batch, shared with Sound and
+                // PostWorld before the per-step output lifetime ends.
                 if (mpNetworkOutputBuffer != 0)
                 {
                     DoUpdate_NetworkPostSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
@@ -4876,7 +4754,8 @@ namespace BrnGame
                 // burst started a frame late the same way. Game-state requests were not affected.
                 // It runs BEFORE the game-action retire below, which clears the game-state output's
                 // request slot this drains.
-                UpdateTimers();
+                if (lbRunFullModuleCascade)
+                    UpdateTimers();
 
                 // THE GAME-ACTION RETIRE (FLAG PC lifecycle, see the note above DoUpdate_Director's
                 // GUI block). On the console the game-state output buffer is re-Constructed every
@@ -4936,7 +4815,13 @@ namespace BrnGame
                     }
                 }
 
-                LatchDispatchCamera();
+                // Every current-frame GUI consumer has finished. This also drops a
+                // skipped/partial batch at the same boundary as the native IO teardown.
+                if (mGuiModule.IsPrepared())
+                    mGuiModule.GetGuiOutQueue()->Clear();
+
+                if (lbRunFullModuleCascade)
+                    LatchDispatchCamera();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)

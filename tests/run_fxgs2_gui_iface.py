@@ -69,13 +69,21 @@ def wiring(tree):
         wrapper = ""
     retire = main.find("lpGameStateOutput->GetGameStateToGuiInterface()->Construct();")
     if wrapper:
-        call = main.find("BridgeGameStateToGui(mpGuiInputBuffer,lpcGameStateOutput);")
+        wrapped_call = re.search(r"BridgeGameStateToGui\(mpGuiInputBuffer,([A-Za-z_]\w*)\);", main)
+        call = wrapped_call.start() if wrapped_call else -1
+        output = wrapped_call.group(1) if wrapped_call else ""
+        binding = bool(output and re.search(
+            r"constBrnGameState::GameStateModuleIO::OutputBuffer\*(?:const)?" + re.escape(output)
+            + r"=mGameStateModule.GetOutputBuffer\(\);", main[:max(call, 0)]))
+        output_lock = main.rfind(output + "->LockForRead();", 0, max(call, 0)) if output else -1
+        output_unlock = main.find(output + "->UnlockForRead();", max(call, 0)) if output else -1
         lock = main.rfind("mpGuiInputBuffer->LockForWrite();", 0, call)
         unlock = main.find("mpGuiInputBuffer->UnlockForWrite();", max(call, 0))
         takedowns = wrapper.find("TranslateTakedownsToGuiEvents(")
         interface = wrapper.find("TranslateGuiInterfaceToGuiEvents(lpGuiInput,lpGameStateOutput->GetGameStateToGuiInterface());")
         time = wrapper.find("PushGuiEvent(lTimeInfo,lpGuiInput);")
-        ordered = 0 <= lock < call < unlock and 0 <= takedowns < interface < time
+        ordered = (binding and 0 <= lock <= output_lock < call < output_unlock < unlock
+                   and 0 <= takedowns < interface < time)
     else:
         # Preserve the historical baseline's original free-function seat literally.
         takedowns = main.find("TranslateTakedownsToGuiEvents(")

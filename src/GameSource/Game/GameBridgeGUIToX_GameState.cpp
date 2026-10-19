@@ -1,5 +1,6 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGUIToX.h"
+#include "GameSource/GameState/BrnGameStateModuleIO.h" // typed PostWorldInputBuffer owner
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress ("GMInvAccept" / "GMStrOffline")
@@ -49,15 +50,11 @@ namespace BrnGame
     //     member yet -- FLAG'd below, read as 0 (bit clear), which is the console's value
     //     until something sets it.
     // =========================================================================
-    int BrnGameModule::BridgeGuiToGameState(
-        BrnGameState::GameStateModule* lpGameStateInput,
+    static int TranslateGuiEventsToGameState(
+        CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        BrnGameState::TrainingManager* lpTrainingManager,
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
     {
-        CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue =
-            BrnGameState::GameStateModuleIO::PostWorldInput(lpGameStateInput);
-
-        BrnGameState::TrainingManager* lpTrainingManager =
-            lpGameStateInput->GetTrainingManager();
         // FLAG: the 64-bit game-flags word (console this+0x691E60) is un-homed on the PC
         // module; bit 41 reads 0 (see the banner).
         const u64 lu64GameFlags = 0;
@@ -449,6 +446,29 @@ namespace BrnGame
         }
 
         return liResult;
+    }
+
+    // Existing host adapter: the full PC post-world seat still targets the carry
+    // queue. Partial loading uses the typed overload below, never this adapter.
+    int BrnGameModule::BridgeGuiToGameState(
+        BrnGameState::GameStateModule* lpGameStateInput,
+        const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
+    {
+        return TranslateGuiEventsToGameState(
+            BrnGameState::GameStateModuleIO::PostWorldInput(lpGameStateInput),
+            lpGameStateInput->GetTrainingManager(), lpGuiEventQueue);
+    }
+
+    // ARTIST823DDB84..DBA8: r4 is PostWorldInput, r5 is const GUI output.
+    // Their caller-held write/read locks are checked by these real accessors.
+    int BrnGameModule::BridgeGuiToGameState(
+        BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
+    {
+        const CgsModule::VariableEventQueue<18432, 16>* const lpGuiEvents =
+            lpGuiOutput->GetOutEventQueue();
+        return TranslateGuiEventsToGameState(lpGameStateInput->GetGameEventQueue(),
+            mGameStateModule.GetTrainingManager(), lpGuiEvents);
     }
 
 }
