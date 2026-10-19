@@ -2114,17 +2114,12 @@ static_assert(sizeof(GuiTraitorousTakedownEvent) == 4, "X360 AddGuiEvent size 4 
 
 // DWARF :6163 (PS3 GuiEvent<424>; X360 id 429, record 24 bytes). The stunt snapshot the
 // scoring system publishes; the analyzer keys skill messages off the flag masks and the
-// spin/roll counters. StuntInfo is the committed 20-byte scoring record
-// (BrnStuntModeScoring.h); the X360 record carries TWO MORE half-words after it.
-// FLAG: the two tail half-words are X360-only (no DWARF names) -- consumer-inferred:
-// HandleStuntPerformed @0x8251B608 bound-checks them <= 1 / sums +0x14 with the
-// multiplier exactly like the flat-spin/barrel-roll counters, so they are modelled as
-// the "super" counter pair pending a better-attested name.
+// spin/roll counters. ARTIST copies six dwords from the scorer's StuntInfo; DecFIGS names only
+// the first five words. The final four bytes remain opaque in StuntInfo. HandleStuntPerformed
+// @0x8251B608 reads their halfwords at +0x14/+0x16, but their source names remain unresolved.
 struct GuiHUDMessageStuntPerformed
 {
-    BrnGameState::StuntInfo mStuntInfo;        // +0x00..+0x13 (DWARF :5301)
-    u16                     mu16TailCount14;   // +0x14 (FLAG: X360-only, name unrecovered)
-    u16                     mu16TailCount16;   // +0x16 (FLAG: X360-only, name unrecovered)
+    BrnGameState::StuntInfo mStuntInfo;        // +0x00..+0x17 (DWARF prefix + X360 tail)
 
     s32 GetEventType() const { return 429; }
 };
@@ -3119,6 +3114,24 @@ struct GuiEventNetworkVehicleListRequest
 
     s32 GetEventType() const { return 263; }
 };
+
+// X360 TranslateGameActionsToGuiEvents case 184 posts this raw 1072-byte payload as GUI 412.
+// ARTIST writes the Array count at +0x400, appends the live CgsIDs from +0, copies the two
+// 128-bit sets from +0x408/+0x418, and writes miMaxAvailableCars at +0x428. There is no
+// 12-byte CgsGui::GuiEvent header in front of this data.
+struct GuiCarSelectionEvent
+{
+    Array<CgsID, 128>             maCars;                 // +0x000, count word +0x400
+    CgsContainers::BitArray<128>  mHasBeenDrivenBitArray; // +0x408
+    CgsContainers::BitArray<128>  mWreckedArray;          // +0x418
+    s32                           miMaxAvailableCars;     // +0x428
+
+    s32 GetEventType() const { return 412; }
+};
+static_assert(offsetof(GuiCarSelectionEvent, mHasBeenDrivenBitArray) == 0x408 &&
+              offsetof(GuiCarSelectionEvent, mWreckedArray) == 0x418 &&
+              offsetof(GuiCarSelectionEvent, miMaxAvailableCars) == 0x428 &&
+              sizeof(GuiCarSelectionEvent) == 1072, "X360 GUI 412 raw payload layout");
 
 //  -- the car-select screen's wheel-list request (wheel list only). id 417
 // (GuiEvent<412> on the other platform). Consumer: BrnGameModule::BridgeGuiToResource (payload +0x00).

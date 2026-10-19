@@ -121,9 +121,9 @@ namespace BrnGui
         // Event 412 (GuiCarSelectionEvent). The transport is a
         // CgsContainers::Array<s64,128> (elements @+0x000, count @+0x400 -- see
         // CgsArrayS64_128.cpp) followed by the two 128-bit state arrays and the
-        // "cars unlocked" companion counter. Modelled as a local view, the same idiom the
-        // sibling screen states use, because the record's canonical home
-        // (BrnGuiDemangledEventTypes.h) is mutually exclusive with BrnGuiEventTypeDefs.h.
+        // "cars unlocked" companion counter. The canonical typed record lives in
+        // BrnGuiEventTypeDefs.h; this local view keeps the screen's explicit raw-count sentinel
+        // and upper-bound assertions instead of routing them through Array::GetLength().
         struct GuiCarSelectionPayload : public CgsModule::Event
         {
             CgsID maCarIds[128];        // +0x000

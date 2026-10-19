@@ -36,6 +36,7 @@
 // EMBED-BY-VALUE rule: ScoringSystem names members + calls methods; it does NOT depend on a
 // byte-exact sizeof. NOT byte-verified. Single owner -- grow this slice, do not fork.
 
+#include <cstddef>                                            // offsetof (StuntInfo X360 tail)
 #include <cstring>                                            // memcpy / size_t (SetOnlineChainableMultiplierDisplay)
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                   // Vector3, CgsID (typedef u64)
@@ -97,7 +98,11 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
 
     // DWARF BrnStuntModeScoring.h:98. Snapshot of a completed stunt handed back to callers via
-    // WasStuntRecentlyPerformed().
+    // WasStuntRecentlyPerformed(). ARTIST 0x82313280 copies SIX dwords from mRecentStunt at
+    // +0x68, so the X360 record is 24 bytes even though DecFIGS names only the first 20. The
+    // final four bytes are also forwarded by action 132 / GUI 429 and read by the GUI handler;
+    // keep them as opaque bytes until their source names are attested. They are intentionally not
+    // assigned by the current scorer reconstruction, preserving the original leftover bytes.
     struct StuntInfo
     {
         u32 muStuntTypes;          // :100 -- bit-mask of EStuntType categories in the stunt
@@ -106,7 +111,12 @@ namespace BrnGameState
         s32 miStuntMultiplier;     // :103
         u16 muFlatSpins;           // :104
         u16 muBarrelRolls;         // :105
+        u16 mu16X360Tail14;        // +0x14, handler reads this halfword; semantic name unresolved
+        u16 mu16X360Tail16;        // +0x16, handler reads this halfword; semantic name unresolved
     };
+    static_assert(offsetof(StuntInfo, mu16X360Tail14) == 0x14 &&
+                  offsetof(StuntInfo, mu16X360Tail16) == 0x16 && sizeof(StuntInfo) == 24,
+                  "X360 WasStuntRecentlyPerformed copies six dwords");
 
     // DWARF BrnStuntModeScoring.h:74. Per-category running state used while rating a stunt.
     struct StuntTypeInfo

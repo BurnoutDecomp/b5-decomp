@@ -45,6 +45,16 @@ namespace CgsGui
         s32 GetEventType() const { return EventTypeId; }
     };
 
+    // ARTIST AddGuiEvent<GuiEvent<91>> posts one unwritten byte (0x823D2660: AddEvent id 91,
+    // size 1), so this tag is the empty event representation rather than the generic 12-byte
+    // header above. The local object remains uninitialized, matching the original payload.
+    template <>
+    struct GuiEvent<91> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 91; }
+    };
+    static_assert(sizeof(GuiEvent<91>) == 1, "ARTIST GUI tag 91 is one byte");
+
     // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
     // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /
     // OutputInternalState channels) builds and hands to VariableEventQueue::AddEvent. It boxes an

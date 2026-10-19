@@ -47,6 +47,7 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                          // ModeManager::GetScoringSystem (case 279)
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                // ScoringSystem::GetCrashScorer (case 279)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring (case 279)
+#include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"                  // HUDMessageLogic::ComboPerformedMessage (case 133)
 #include <stdlib.h>                                               // getenv (the [UI-gate] diag guard)
 #include <cstring>                                                 // memset/strncpy (the 537 ticker record)
 
@@ -303,17 +304,13 @@ namespace
     // the push is written against the input buffer's queue instead.
     // Sole caller: BridgeGameStateToGui @0x823EE880 (call site @0x823EF22C).
     //
-    // PARTIAL RECONSTRUCTION. ARTIST has 188 explicit top-level case labels in this switch.
-    // At this pinned source snapshot, this TU and its helpers represent 122 unique action ids:
-    // 69 labels are in this inline switch, 40 additional EventFlow arms and 13 FreeRoam arms.
-    // The eight Showtime bodies are called by eight inline labels and counted there once.
-    // EventFlow's case 2 is an unreachable duplicate because this switch handles action 2 first.
-    //
-    // The other 66 explicit ARTIST cases remain unclassified here; their omission is not a no-op
-    // disposition. The disassembly's separate default arm list is preserved as default behavior.
-    // This count concerns this translator's action ids, independent of debug-menu registration
-    // counts. The queue walk is active every frame in the current PC source, so an omitted live
-    // action arm is a behavior gap. Do not infer behavior from a caption or a missing direct xref.
+    // PARTIAL RECONSTRUCTION. ARTIST has 188 unique explicit top-level action ids.
+    // This source snapshot represents 140/188; the report records each handled arm and the
+    // 48 explicit ids still unrepresented. The disassembly's separate default-arm list remains
+    // default behavior and is not conflated with the explicit-case inventory.
+    // This count concerns action ids, independent of debug-menu registration counts. The queue
+    // walk is active every frame in the current PC source, so omitted live actions remain gaps;
+    // do not infer a no-op from a caption or missing direct xref.
     //
     // ⓘ ACTION IDS ARE THE X360 ONES, taken from the enum, never from literals:
     // BrnGameActions.h carries E_ACTION_ON_STUNT_ELEMENT_COMPLETE = 58 / _FOR_COUNTY = 59 /
@@ -408,6 +405,21 @@ namespace
                 }
                 break;
             }
+            // ARTIST 0x823EBBA4..0x823EBBC8 copies the native action's two pointer words and
+            // availability byte into the typed 12-byte X360 GUI 350 record. The named action and
+            // event types widen their pointers together on PC; no second profile producer is added.
+            case BrnGameState::GameStateModuleIO::E_ACTION_PROGRESSION_PROFILE_DATA:
+            {
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::ProgressionProfileDataAction*>(lpAction);
+                BrnGui::GuiEventProgressionProfileData lEvent;
+                lEvent.mpProfile = lrAction.mpProgressionProfile;
+                lEvent.mpProgressionData = lrAction.mpProgressionData;
+                lEvent.mbRoadRulesAvailable = lrAction.mbAreRoadRulesAvailable;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ARTIST 0x823ED838-0x823ED84C: release the GUI's model-change wait.
             case 66:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 565, sizeof(CgsID));
@@ -467,6 +479,21 @@ namespace
                 break;
             }
 
+            // ARTIST 0x823EAD6C..0x823EAD78 posts the canonical one-byte GuiEvent<91> tag.
+            // Its payload is unwritten; preserve that representation without assigning a value.
+            case 22:
+            {
+                CgsGui::GuiEvent<91> lEvent;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EACB0..0x823EACB8 compresses BRNFBFSM and discards the result; it
+            // posts no GUI record. Preserve that original leftover explicitly.
+            case 25:
+                (void)CgsIDCompress("BRNFBFSM");
+                break;
+
             // ARTIST 0x823EACBC..0x823EAD1C, case 26 gates on words {2 or 16, not 10}, then
             // posts RunFsm (GUI 144 / 24).
             case 26:
@@ -525,6 +552,106 @@ namespace
                 PushGuiEvent(lRequest, lpGuiInput);
                 break;
             }
+
+            // ARTIST 0x823ED1C8..0x823ED1E8: copy CrashComboAction's {entry type, value}
+            // words to the raw 8-byte GUI 347 record. No downstream case-347 reader was found.
+            case BrnGameState::GameStateModuleIO::E_ACTION_CRASH_COMBO:
+            {
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::CrashComboAction*>(lpAction);
+                BrnGui::GuiCrashComboEvent lEvent = {};
+                std::memcpy(lEvent.maData, &lrAction.meEntryType, sizeof(lrAction.meEntryType));
+                std::memcpy(lEvent.maData + sizeof(lrAction.meEntryType), &lrAction.mfValue,
+                            sizeof(lrAction.mfValue));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EC178..0x823EC1AC forwards the 24-byte StuntInfo image as GUI 429.
+            case 132:
+            {
+                using StuntPerformedAction = BrnGameState::HUDMessageLogic::StuntPerformedMessage;
+                static_assert(sizeof(StuntPerformedAction) == 24, "X360 action 132 payload size");
+                const auto& lrAction = *reinterpret_cast<const StuntPerformedAction*>(lpAction);
+                BrnGui::GuiHUDMessageStuntPerformed lEvent = {};
+                lEvent.mStuntInfo = lrAction.mStuntInfo;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EC1B0..0x823EC1DC posts GUI 430 / 8 bytes, then passes the
+            // original action base to the embedded developer-challenge owner. The producer is
+            // HUDMessageLogic::GenerateStuntMessage: ARTIST posts its three WasComboRecentlyPerformed
+            // out-slots as one 12-byte action (f32, s32, bool), matching ComboPerformedMessage.
+            case 133:
+            {
+                using ComboPerformedAction = BrnGameState::HUDMessageLogic::ComboPerformedMessage;
+                static_assert(sizeof(ComboPerformedAction) == 12, "X360 action 133 payload size");
+                static_assert(offsetof(ComboPerformedAction, mfComboTime) == 0, "X360 action 133 float");
+                static_assert(offsetof(ComboPerformedAction, miComboScore) == 4, "X360 action 133 score");
+                static_assert(offsetof(ComboPerformedAction, mbValidCombo) == 8, "X360 action 133 validity");
+                const auto& lrAction = *reinterpret_cast<const ComboPerformedAction*>(lpAction);
+                BrnGui::GuiHUDMessageComboPerformed lEvent = {};
+                lEvent.miScore = lrAction.miComboScore;
+                lEvent.mbBestScore = lrAction.mbValidCombo;
+                PushGuiEvent(lEvent, lpGuiInput);
+                GetGameStateModule().GetDeveloperChallengeManager()->OnStuntRunComboPerformed(
+                    &lrAction.mfComboTime);
+                break;
+            }
+
+            // ARTIST 0x823EC1E4..0x823EC1F4 posts one byte as GUI 431. The source local is
+            // unwritten; HudMessageAnalyzer's case 431 ignores the byte and triggers a fixed tag.
+            case 134:
+            {
+                BrnGui::GuiHUDMessageStuntTimeUp lEvent = {};
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED6F8..0x823ED710 copies ShowtimeIntroAction::mbStart (+0x10) to
+            // GUI 392 / 1 byte; copy the field representation rather than converting bool.
+            case BrnGameState::GameStateModuleIO::E_ACTION_SHOWTIME_INTRO_START:
+            {
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::ShowtimeIntroAction*>(lpAction);
+                BrnGui::GuiShowtimeTriggered lEvent = {};
+                std::memcpy(lEvent.maData, &lrAction.mbStart, sizeof(lEvent.maData));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED758..0x823ED7B4 publishes GUI 404 / 8 bytes before selecting
+            // the online or offline stunt scorer from current GameMode::mbIsOnline (+172).
+            case BrnGameState::GameStateModuleIO::E_ACTION_POWER_PARK_RESULT:
+            {
+                const auto* const lpcAction = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::PowerParkResultAction*>(lpAction);
+                BrnGui::GuiPowerParkResult lEvent = {};
+                lEvent.meOutcome = lpcAction->meOutcome;
+                lEvent.miOverallRating = lpcAction->miOverallRating;
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                BrnGameState::ModeManager* const lpModeManager = GetGameStateModule().GetModeManager();
+                BrnGameState::GameMode* const lpCurrentGameMode = lpModeManager->GetCurrentGameMode();
+                BrnGameState::ScoringSystem* const lpScoringSystem = lpModeManager->GetScoringSystem();
+                if (lpCurrentGameMode != 0 && lpCurrentGameMode->IsOnline())
+                    lpScoringSystem->GetOnlineStuntScorer()->DealWithPowerPark(lpcAction);
+                else
+                    lpScoringSystem->GetStuntScorer()->DealWithPowerPark(lpcAction);
+                break;
+            }
+
+            // ARTIST 0x823EBFF4..0x823EC008 unconditionally fires the original assertion and
+            // posts no GUI record. Preserve its original message, source path and line.
+            case 185:
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "lpHUDMessageOnlineTeamChangeAction",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                    2284);
+                CgsDev::Assert::EndAssert();
+                break;
 
             // ARTIST 0x823ED854..0x823ED86C: online car id -> GUI 566 (8 bytes).
             case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_ONLINE:
@@ -622,6 +749,31 @@ namespace
                     reinterpret_cast<const CgsModule::Event*>(&lReply), 413, sizeof(lReply));
                 break;
             }
+
+            // ARTIST 0x823EBCA4..0x823EBD40 rebuilds GUI 412 from the 128-car action:
+            // append exactly the live IDs, copy both 128-bit sets, then copy the maximum.
+            case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_RESPONSE:
+            {
+                using CarSelectionAction = BrnGameState::GameStateModuleIO::CarSelectionResponseAction;
+                static_assert(sizeof(CarSelectionAction) == 1072, "X360 action 184 payload size");
+                const auto& lrAction = *reinterpret_cast<const CarSelectionAction*>(lpAction);
+                BrnGui::GuiCarSelectionEvent lEvent;
+                lEvent.maCars.Clear();
+
+                // ARTIST GetLength returns in r27 and compares with signed cmpwi against zero.
+                const s32 liCarCount = static_cast<s32>(lrAction.maCars.GetLength());
+                for (s32 liCar = 0; liCar < liCarCount; ++liCar)
+                {
+                    lEvent.maCars.Append(lrAction.maCars.GetItem(static_cast<u32>(liCar)));
+                }
+
+                lEvent.mHasBeenDrivenBitArray = lrAction.mHasBeenDrivenBitArray;
+                lEvent.mWreckedArray = lrAction.mWreckedArray;
+                lEvent.miMaxAvailableCars = lrAction.miMaxAvailableCars;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ARTIST 0x823EA87C..0x823EA890 and 0x823EA894..0x823EA8A8: pause-state edges.
             case 86:
             case 87:
@@ -1673,6 +1825,24 @@ namespace
                         << " stunt " << lpRankInfo->miStuntAttack
                         << " marked " << lpRankInfo->miMarkedMan << ")\n";
                 }
+                break;
+            }
+
+            // ARTIST 0x823EBC10..0x823EBC48 posts the 64-byte action-182 image as GUI 406.
+            // The first 56 bytes are the PlayerInfo payload itself (the GUI event's first 12
+            // bytes are not a queue header here); the console then writes only damage at +0x38.
+            case BrnGameState::GameStateModuleIO::E_ACTION_PLAYER_INFO_RESPONSE:
+            {
+                using PlayerInfoAction = BrnGameState::GameStateModuleIO::PlayerInfoResponseAction;
+                static_assert(sizeof(PlayerInfoAction) == 64, "X360 action 182 payload size");
+                static_assert(sizeof(BrnGui::GuiPlayerInfoResponse) == 64,
+                              "X360 GUI 406 payload size");
+                const auto& lrAction = *reinterpret_cast<const PlayerInfoAction*>(lpAction);
+                BrnGui::GuiPlayerInfoResponse lEvent;
+                std::memcpy(&lEvent, &lrAction.mPlayerInfo, sizeof(lrAction.mPlayerInfo));
+                std::memcpy(reinterpret_cast<u8*>(&lEvent) + 0x38,
+                            &lrAction.mbIsCarDamaged, sizeof(lrAction.mbIsCarDamaged));
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
