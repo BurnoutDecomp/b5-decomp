@@ -709,8 +709,9 @@ enum EGameActionType
     //       band takes (CHANGE_COLOUR 74->79 immediately below is the neighbouring proof).
     //       ⓘ The X360 switch has a SECOND arm onto the same GUI event, case 72
     //       (DWARF :77 E_ACTION_CAR_SELECT_START_GUI_ON_GAME_START == 67, +5) @0x823EA6E8,
-    //       which posts the literal 1 instead of forwarding the action's word. Nothing in this
-    //       tree posts 72 yet, so only the 75 arm is landed.
+    //       which posts literal 1 instead of forwarding an action word. Its bridge arm now uses
+    //       the named X360 action id below; the literal payload stays in the translator.
+    E_ACTION_CAR_SELECT_START_GUI_ON_GAME_START           = 72,   // DWARF 67 (+5 X360)
     E_ACTION_CAR_SELECT_READY                            = 75,   // DWARF 70  (+5 X360)
     E_ACTION_UPDATE_PLAYER_MEDALS                        = 200,  // DWARF 192 (+8 X360)
     E_ACTION_EVENT_AT_JUNCTION_AVAILABLE                 = 201,  // DWARF 193 (+8 X360)

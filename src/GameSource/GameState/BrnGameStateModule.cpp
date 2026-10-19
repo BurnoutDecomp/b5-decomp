@@ -779,6 +779,8 @@ void GameStateModule::ClearData()
 
 void GameStateModule::Destruct()
 {
+    mGameStateDebugComponent.Destruct();
+
     if (mpOutputBuffer != 0)
     {
         delete mpOutputBuffer;
@@ -2212,8 +2214,8 @@ void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue
 // nearest where the player left it), and the smashed props (action 194 -> the prop world asks for the
 // profile's hit-prop bits -> the ProcessGameEvents tail answers).
 //
-// Callers: ProcessGameEvents cases 8 and 109, and ProcessGameEventsGameStartBringUp (the boot's event-8
-// seat); all run it inside the output buffer's write lock with mbIsUpdating raised, as PreWorldUpdate does.
+// Callers: ProcessGameEvents cases 8 and 109, inside PreWorldUpdate's output
+// write lock with mbIsUpdating raised.
 // ============================================================================
 void GameStateModule::OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
                                       GameStateModuleIO::GameActionQueue* lpOutputActionQueue)
@@ -2365,29 +2367,6 @@ CgsID GameStateModule::GetSpawnCar(const BrnProgression::Profile* lpProfile)
         return CgsIDCompress("PUSMC01");
     }
     return lSpawnCarId;
-}
-
-// ============================================================================
-// ProcessGameEventsGameStartBringUp -- ProcessGameEvents @0x823A0A18, the extracted CASE-8 ARM
-// (0x823A2758..0x823A2788). See the header for the console words and the seat.
-// ============================================================================
-void GameStateModule::ProcessGameEventsGameStartBringUp()
-{
-    if (mpOutputBuffer == 0)
-    {
-        return;
-    }
-    mpOutputBuffer->LockForWrite();
-    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
-    mbIsUpdating = true;
-    if (mbWaitForStreaming)   // `lbzx r11, r31, 0x38B70 ; cmplwi cr6, r11, 0 ; beq`
-    {
-        OnProfileLoaded(mpOutputBuffer, lpActionQueue);
-        WaitForStreaming(lpActionQueue);
-    }
-    mbIsUpdating = false;
-    mpOutputBuffer->UnlockForWrite();
 }
 
 // ============================================================================

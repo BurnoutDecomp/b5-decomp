@@ -24,6 +24,7 @@ namespace BrnGameState
     {
     public:
         void Construct(GameStateModule* lpGameStateModule);
+        void Destruct();
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
         void RenderLandmarkDebug() const;
         void DrawRankNumber(s32 liRank);

@@ -588,6 +588,15 @@ namespace BrnGame
         // BrnGui::GuiSoftTakedownEvent. (The body compares the record's +0x04 field, meVictimIndex,
         // against the third argument -- which the caller loads from the scoring output interface's
         // mePlayerRaceCarIndex, so it is the PLAYER index, not a runner index.)
+        // ARTIST 0x823EE880; original wrapper shared by normal GUI and scripted loading.
+        void BridgeGameStateToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                  const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+        // ARTIST 0x823E1D90, promoted from the file-local bring-up seat.
+        void TranslateGuiInterfaceToGuiEvents(
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+            const BrnGameState::GameStateModuleIO::GameStateToGuiInterface* lpGameToGuiInterface);
+
         // Called by BridgeGameStateToGui. Home GameSource/Game/GameBridgeGameStateToX.cpp.
         void TranslateTakedownsToGuiEvents(
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
@@ -600,9 +609,9 @@ namespace BrnGame
         // prologue (r3 = this, r4 = lpGuiInput, r5 = lpGameStateOutput); the two null asserts
         // are GameBridgeGameStateToX.cpp:754/755. Called by BridgeGameStateToGui @0x823EE880
         // (call site @0x823EF22C).
-        // ⚠️ PARTIAL RECONSTRUCTION -- the console body is a ~700-case switch and only some of
-        // its arms are reproduced. The set has grown well past the original stunt-collectible
-        // three, so it is NOT duplicated here: the banner above the body in
+        // PARTIAL RECONSTRUCTION -- ARTIST has 188 explicit action IDs; source handling is
+        // split across this switch and its helper dispatchers. The set has grown beyond the
+        // original stunt-collectible three, so the current inventory lives in
         // GameBridgeGameStateToX_StuntGuiEvents.cpp enumerates exactly which arms exist and is
         // the one list to keep current.
         // Home GameSource/Game/GameBridgeGameStateToX.cpp.

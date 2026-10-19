@@ -1,5 +1,5 @@
 // FX-GS2 (crash parity 2026-09-23, G10-D11 part 2): the PRODUCTION TranslateGuiInterfaceToGuiEvents
-// (with its two TU-local wire records, extracted from src/GameSource/Game/BrnGameModule.cpp), the
+// (qualified member in GameBridgeGameStateToX.cpp; historical free owner supported), the
 // PRODUCTION PushGuiEvent (src/GameSource/Game/GameBridgeGameStateToX.h) and the PRODUCTION
 // GameStateToGuiInterface Construct / publishers / const queue accessors
 // (src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp), by run_fxgs2_gui_iface.py.
@@ -135,7 +135,7 @@ int main()
 {
     // (1) a freshly Constructed interface posts nothing
     gInterface.Construct();
-    BrnGame::TranslateGuiInterfaceToGuiEvents(&gInput, &gInterface);
+    BrnGame::InvokeTranslator(&gInput, &gInterface);
     Check(gInput.mQueue.miCount == 0, "empty interface: no GUI event posted");
 
     // (2) every queue carries records: two new tricks, one triggered, two ending (survived, not),
@@ -173,7 +173,7 @@ int main()
     gInterface.AddOnTailEvent(0x7FFF000000000001ull, static_cast<::EActiveRaceCarIndex>(6));
 
     gInput.mQueue.miCount = 0;
-    BrnGame::TranslateGuiInterfaceToGuiEvents(&gInput, &gInterface);
+    BrnGame::InvokeTranslator(&gInput, &gInterface);
     const PostedEvent* lp = gInput.mQueue.maPosted;
     const bool lbCount = (gInput.mQueue.miCount == 11);
     Check(lbCount, "eleven records -> eleven GUI events");
@@ -228,13 +228,13 @@ int main()
     // (4) the retire is the interface's own Construct: after it, the leg posts nothing
     gInterface.Construct();
     gInput.mQueue.miCount = 0;
-    BrnGame::TranslateGuiInterfaceToGuiEvents(&gInput, &gInterface);
+    BrnGame::InvokeTranslator(&gInput, &gInterface);
     Check(gInput.mQueue.miCount == 0, "after Construct (the per-sub-step retire) nothing is re-posted");
 
     // (5) only the on-tail queue populated: exactly one 486, nothing else
     gInterface.AddOnTailEvent(0x0000000000000042ull, static_cast<::EActiveRaceCarIndex>(3));
     gInput.mQueue.miCount = 0;
-    BrnGame::TranslateGuiInterfaceToGuiEvents(&gInput, &gInterface);
+    BrnGame::InvokeTranslator(&gInput, &gInterface);
     Check(gInput.mQueue.miCount == 1 && Is(gInput.mQueue.maPosted[0], 486, 16)
               && ReadU64(gInput.mQueue.maPosted[0], 0) == 0x42ull && ReadS32(gInput.mQueue.maPosted[0], 8) == 3,
           "a lone on-tail record posts exactly one 486 {id, slot}");

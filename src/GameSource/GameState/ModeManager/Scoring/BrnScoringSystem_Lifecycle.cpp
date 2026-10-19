@@ -385,7 +385,7 @@ void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
 // 4TH ARG NOW IN-SIGNATURE (2026-06-18). The keystone declaration was retyped to carry the hidden X360
 // r7 (== ASM pseudocode `a5`, HIDWORD(v9)) as `EActiveRaceCarIndex lePlayerRaceCarIndex`, so the prior
 // LABEL_26-only fallback is replaced by the real branch. ASM grounding of where r7 actually flows:
-//   * out.mePlayerRaceCarIndex (out+0xA38): the ASM stores `*(a1+0x4EE8)` == muCarsInCurrentMode here,
+//   * out.miNumPlayersInGame (out+0xA38): the ASM stores `*(a1+0x4EE8)` == muCarsInCurrentMode here,
 //     NOT r7 -- so this remains the car-count store (unchanged from the prior round). The task brief's
 //     listing of mePlayerRaceCarIndex as an r7 site is a misread of this slot; the ASM is authoritative.
 //   * online Update(this, *(a1+0x4EE8)) 2nd arg: again muCarsInCurrentMode (a car count), NOT r7.
@@ -425,7 +425,7 @@ void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface*
     }
 
     // ASM lwz 0x4EE8 / stw 0xA38(out): the active-car count published into the output's race-car-index slot.
-    lrOut.mePlayerRaceCarIndex = static_cast<EActiveRaceCarIndex>(muCarsInCurrentMode);
+    lrOut.miNumPlayersInGame = static_cast<s32>(muCarsInCurrentMode);
 
     // ---- online half: drive the current online sub-scorer ----
     if (lbOnline)

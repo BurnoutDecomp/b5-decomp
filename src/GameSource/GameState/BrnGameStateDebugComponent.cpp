@@ -162,6 +162,13 @@ namespace
         meTrainingMessage = 0;
     }
 
+    // ARTIST 0x82375464..0x82375468, inlined in GameStateModule::Destruct.
+    void GameStateDebugComponent::Destruct()
+    {
+        mpGameStateModule = nullptr;
+        DebugComponent::Destruct();
+    }
+
     const char* GameStateDebugComponent::GetName() const
     {
         return "Game State"; // X360 0x82357528
