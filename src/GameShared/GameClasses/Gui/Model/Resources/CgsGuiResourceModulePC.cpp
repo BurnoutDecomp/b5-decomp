@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -356,6 +357,7 @@ namespace CgsGui
         struct AptBundleLead
         {
             char                macName[64];  // the movie/bundle name (host lookup key)
+            char                macPath[160]; // original resident-list identity
             u32                 muSwfHash;     // HashString("<name>.swf") -- the acquire request id
             CgsResource::Entry* mpLeadEntry;  // the bundle's lead AptData resource entry
         };
@@ -376,9 +378,11 @@ namespace CgsGui
         // and attribute all its AptData so the NEXT bundle's lead scan skips them. The lead is keyed
         // by both the bundle name (host lead-header lookup) and the acquire request id
         // HashString("<name>.swf") (so the acquire resolves to THIS bundle, missing until it loads).
-        void RecordAptBundleLead(CgsResource::Pool* lpPool, const char* lpacBundleName)
+        void RecordAptBundleLead(CgsResource::Pool* lpPool, const char* lpacBundleName,
+                                 const char* lpacBundlePath)
         {
-            CgsResource::Entry* lpLeadEntry = 0;
+            CgsResource::Entry* lpLeadEntry =
+                CgsResource::PCAptOwnership::FindBundleLead(lpPool, lpacBundlePath);
             const u32 luMax = lpPool->GetMaxResources();
             for (u32 lu = 0; lu < luMax; ++lu)
             {
@@ -392,16 +396,24 @@ namespace CgsGui
                 void* lpMem = lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
                 if (lpMem == 0 || IsAptDataAttributed(lpMem))
                     continue;
-                if (lpLeadEntry == 0)
-                    lpLeadEntry = lpEntry;
                 if (s_uAttributedAptDataCount < KU_APT_STREAMED_BANK_MAX_NODES)
                     s_apAttributedAptData[s_uAttributedAptDataCount++] = lpMem;
+            }
+            for (u32 i = 0; i < s_uAptBundleLeadCount; ++i)
+            {
+                if (_stricmp(s_aAptBundleLeads[i].macPath, lpacBundlePath) == 0)
+                {
+                    s_aAptBundleLeads[i].mpLeadEntry = lpLeadEntry;
+                    return;
+                }
             }
             if (lpLeadEntry != 0 && s_uAptBundleLeadCount < KU_MAX_APT_BUNDLE_LEADS)
             {
                 AptBundleLead& lrLead = s_aAptBundleLeads[s_uAptBundleLeadCount++];
                 std::strncpy(lrLead.macName, lpacBundleName, sizeof(lrLead.macName) - 1);
                 lrLead.macName[sizeof(lrLead.macName) - 1] = '\0';
+                std::strncpy(lrLead.macPath, lpacBundlePath, sizeof(lrLead.macPath) - 1);
+                lrLead.macPath[sizeof(lrLead.macPath) - 1] = '\0';
                 char lacSwf[80];
                 std::snprintf(lacSwf, sizeof(lacSwf), "%s.swf", lpacBundleName);
                 lrLead.muSwfHash   = static_cast<u32>(
@@ -446,7 +458,8 @@ namespace CgsGui
             {
                 const CgsResource::Entry* lpEntry = s_aAptBundleLeads[lu].mpLeadEntry;
                 const bool lbLive = (lpEntry != 0) &&
-                    (lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] != 0);
+                    (lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] != 0) &&
+                    CgsResource::PCAptOwnership::IsBundleLoaded(lpPool, s_aAptBundleLeads[lu].macPath);
                 if (!lbLive)
                     continue;
                 if (luKeptLeads != lu)
@@ -591,7 +604,7 @@ namespace CgsGui
                             // Attribute the bundle's AptData so the host can resolve its lead movie.
                             char lacMovieName[64];
                             ParseAptBundleName(lpRequest->macFileName, lacMovieName, sizeof(lacMovieName));
-                            RecordAptBundleLead(lpPool, lacMovieName);
+                            RecordAptBundleLead(lpPool, lacMovieName, lpRequest->macFileName);
                         }
                         const u32 luEmitted =
                             EmitAptDataNotifications(lpPool, lpRequest->miEventId, lpOutput);

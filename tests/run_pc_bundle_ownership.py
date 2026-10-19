@@ -9,11 +9,15 @@ from fxgs_common import Tree, definition, compile_and_run, report, REPO
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--rev')
+parser.add_argument('--omit-apt-retain', action='store_true', help='negative control: remove the real bundle reference acquisition')
 parser.add_argument('--skip-malformed', action='store_true', help='allow a pre-validation negative control to finish')
 args = parser.parse_args()
 tree = Tree(args.rev)
 base = 'src/GameShared/GameClasses/System/Resource/'
 source = tree.read(base + 'CgsResourceBundleLoader.cpp')
+if args.omit_apt_retain:
+    retain = definition(source, 'static s32 RetainBundle(')
+    source = source.replace(retain, 'static s32 RetainBundle(Bundle&) { return 0; }')
 code = 'namespace CgsResource {\n'
 for name, signatures in [
     ('CgsResourceID.cpp', ['s32 ID::HashString(']),
@@ -33,4 +37,23 @@ numeric = compile_and_run(
     'PCBundleOwnership', extra_flags='/D_CRT_SECURE_NO_WARNINGS' + (' /DPC_BUNDLE_SKIP_MALFORMED' if args.skip_malformed else ''),
     extra_sources=[REPO / base / 'CgsResourceTypeBase.cpp', REPO / base / 'CgsEntryListResource.cpp',
                    REPO / 'vendor/renderware/src/rw/BaseResourceDescriptor.cpp'])
-raise SystemExit(report('run_pc_bundle_ownership', [], numeric, 46))
+gui = 'src/GameShared/GameClasses/Gui/'
+aux = tree.read(gui + 'View/AptInterface/CgsAptAux.cpp')
+load = definition(aux, 'void AptCallbackFile::LoadAnimation(')
+file_source = tree.read('src/SDKs/EATech/include/Apt/AptFile.cpp')
+free = definition(file_source, 'void AptFile_FreeLoadedBlock(')
+dtor = definition(file_source, 'AptFile::~AptFile(')
+remove = definition(tree.read(gui + 'View/AptInterface/CgsAptDataHandler.cpp'),
+                    'void AptDataHandler::RemoveAptData(')
+wiring = [
+    ('native LoadAnimation publishes a root only after real bundle acquisition',
+     load.index('PCAptOwnership::Retain(') < load.index('AptCompleteAnimationAsyncLoad(')),
+    ('native ACTIVE state is restored after successful completion',
+     load.index('AptCompleteAnimationAsyncLoad(') < load.index('meCurrentState = AptDataHeader::E_APTDATASTATE_ACTIVE')),
+    ('resource release follows native Unresolve and FreeAnimation',
+     dtor.index('pAnimation->Unresolve(') < dtor.index('AptFile_FreeLoadedBlock(')
+     and free.index('gpAptFreeAnimationHook(pDataBlock)') < free.index('PCAptOwnership::Release(')),
+    ('unregister does not clear roots still referenced by importing movies',
+     'InvalidateLoadedData' not in remove),
+]
+raise SystemExit(report('run_pc_bundle_ownership', wiring, numeric, 68))
