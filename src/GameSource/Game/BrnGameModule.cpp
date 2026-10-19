@@ -100,6 +100,27 @@ namespace BrnGame
     // Mutable UI latch from ARTIST byte_82FAE28C. Its original symbol and startup writer are
     // unresolved; findinit finds only the BridgeGuiToGame read/clear sites.
     static bool         sbForceQuitToStartMenu;
+    // ARTIST 0x823BCF40 passes the exact 28-row console table at 0x82CDBEB8 to
+    // PostMappingRequest(port=-1). These bytes match the recovered rows in CgsInputPadsPC.cpp;
+    // keep them typed as the ActionMapping records consumed by the real IO.
+    static const CgsInput::InputIO::ActionMapping KA_CONSOLE_DEFAULT_GAME_INPUT_MAPPING[28] =
+    {
+        { { 37, 41, 58, 14 } }, { { 38, 42, 60, 15 } },
+        { { 39, 43, 59, 16 } }, { { 40, 44, -1, 17 } },
+        { { 8, 45, -1, -1 } }, { { 50, 46, -1, 36 } },
+        { { 13, 47, -1, 34 } }, { { 12, 48, -1, 35 } },
+        { { 3, 49, -1, 19 } }, { { 11, 53, 50, 21 } },
+        { { 2, 51, -1, 20 } }, { { 5, 52, -1, 18 } },
+        { { 6, 54, -1, 24 } }, { { 7, 55, -1, 25 } },
+        { { 1, 56, -1, 22 } }, { { 0, 57, -1, 23 } },
+        { { -1, 41, -1, 26 } }, { { -1, 42, -1, 27 } },
+        { { -1, 43, -1, 28 } }, { { -1, 44, -1, 29 } },
+        { { -1, -1, -1, 30 } }, { { -1, -1, -1, 31 } },
+        { { -1, -1, -1, 32 } }, { { -1, -1, -1, 33 } },
+        { { 0, 41, -1, 30 } }, { { 1, 42, -1, 31 } },
+        { { -1, 43, -1, 32 } }, { { -1, 44, -1, 33 } }
+    };
+    static bool sbInitialInputMappingPosted = false; // ARTIST byte_82FAE28B, BSS-zeroed.
 
     BrnGameModule::BrnGameModule()
         : mpUpdateInputBufferStack(0)
@@ -5169,6 +5190,156 @@ namespace BrnGame
         QueryRequestDoStepFrame(lpInputModuleOutput);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
         return liStartPressedPort;
+    }
+
+    // ARTIST 0x823BCF40; one-time initial console mapping, all four pads (port -1).
+    void BrnGameModule::PrepareInitialInputMapping(
+        CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
+    {
+        CGS_ASSERT(lpPostWorldInput != 0, "lpInputBuffer");
+        lpPostWorldInput->LockForWrite();
+        lpPostWorldInput->PostMappingRequest(KA_CONSOLE_DEFAULT_GAME_INPUT_MAPPING, -1);
+        CGS_ASSERT(lpPostWorldInput != 0, "lpInputBuffer");
+        lpPostWorldInput->UnlockForWrite();
+    }
+
+    // ARTIST 0x823BD390; bind player 0 to the port selected by the pre-world input leg.
+    void BrnGameModule::BindInputToPort(
+        s32 liPort,
+        CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
+    {
+        CGS_ASSERT(lpPostWorldInput != 0, "lpInputBuffer");
+        lpPostWorldInput->LockForWrite();
+        lpPostWorldInput->PostBindRequest(0, liPort);
+        CGS_ASSERT(lpPostWorldInput != 0, "lpInputBuffer");
+        lpPostWorldInput->UnlockForWrite();
+    }
+
+    // ARTIST 0x823C59E8. Both stacks are passed by the original caller; only the input stack
+    // owns this helper. The GameState output is read-locked and the World output read-locked
+    // around their respective bridges, in console order.
+    void BrnGameModule::DoUpdate_InputPostWorld(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* /*lpOutputBufferStack*/,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        u32 liStartPressedPort)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+        CgsModule::IOHelper<CgsInput::InputIO::PostWorldInputBuffer> lpPostWorldInput(
+            lpInputBufferStack, "InputPostWorld");
+        CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInputBuffer = lpPostWorldInput;
+
+        if (!sbInitialInputMappingPosted)
+        {
+            PrepareInitialInputMapping(lpPostWorldInputBuffer);
+            sbInitialInputMappingPosted = true;
+        }
+
+        if (miInputModuleState == 2)
+        {
+            BindInputToPort(static_cast<s32>(liStartPressedPort), lpPostWorldInputBuffer);
+            miInputModuleState = 3;
+        }
+        else if (miInputModuleState == 5)
+        {
+            lpPostWorldInputBuffer->LockForWrite();
+            lpPostWorldInputBuffer->PostUnbindRequest(0);
+            lpPostWorldInputBuffer->UnlockForWrite();
+            miInputModuleState = 6;
+        }
+
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        CgsModule::LockBuffersForIO(lpPostWorldInputBuffer, lpGameStateOutput);
+        BridgeGameStateToController(lpPostWorldInputBuffer, lpGameStateOutput);
+        CgsModule::UnlockBuffersForIO(lpPostWorldInputBuffer, lpGameStateOutput);
+
+        CgsModule::LockBuffersForIO(lpPostWorldInputBuffer, lpWorldOutput);
+        const BrnWorldIO::UpdateOutputBuffer::VehicleManagerOutputInterface*
+            lpVehicleManagerOutput = lpWorldOutput->GetVehicleManagerOutputInterface();
+        lpPostWorldInputBuffer->SetWheelFFSpring(lpVehicleManagerOutput->GetPlayerWheelFFSpring());
+        CgsModule::UnlockBuffersForIO(lpPostWorldInputBuffer, lpWorldOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+
+        mInputModule.PostWorldUpdate(lpInputBufferStack, lpPostWorldInputBuffer);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
+    }
+
+    // ARTIST 0x823BD248. The caller owns the input-module output buffer's read lock.
+    void BrnGameModule::BridgeInputToGame(
+        const CgsInput::InputIO::OutputBuffer* lpInputModuleOutput)
+    {
+        if (lpInputModuleOutput->GetBindResultQueue()->GetLength() != 0 &&
+            miInputModuleState != 3)
+        {
+            CGS_ASSERT(false,
+                "lpInputModuleOutput->GetBindResultQueue()->GetLength() == 0 || "
+                "meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED");
+        }
+        if (lpInputModuleOutput->GetUnbindResultQueue()->GetLength() != 0 &&
+            miInputModuleState != 6)
+        {
+            CGS_ASSERT(false,
+                "lpInputModuleOutput->GetUnbindResultQueue()->GetLength() == 0 || "
+                "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED");
+        }
+
+        if (miInputModuleState == 3)
+        {
+            const CgsInput::InputIO::OutputBuffer::BindResultQueue* lpBindResults =
+                lpInputModuleOutput->GetBindResultQueue();
+            const s32 liNumResults = lpBindResults->GetLength();
+            for (s32 i = 0; i < liNumResults; ++i)
+                HandleInputBindResult(lpBindResults->GetEvent(i));
+        }
+        else if (miInputModuleState == 6)
+        {
+            const CgsInput::InputIO::OutputBuffer::UnBindResultQueue* lpUnbindResults =
+                lpInputModuleOutput->GetUnbindResultQueue();
+            const s32 liNumResults = lpUnbindResults->GetLength();
+            for (s32 i = 0; i < liNumResults; ++i)
+                HandleInputUnbindResult(lpUnbindResults->GetEvent(i));
+        }
+    }
+
+    // ARTIST 0x823A8C38. Only player 0 changes the game's active-controller state.
+    void BrnGameModule::HandleInputBindResult(const CgsInput::InputIO::BindResult& lrResult)
+    {
+        if (lrResult.miPlayer != 0)
+            return;
+
+        CGS_ASSERT(miInputModuleState == 3,
+                   "meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED");
+        CGS_ASSERT(lrResult.meResultCode == CgsInput::E_BINDRESULTOK,
+                   "CgsInput::E_BINDRESULTOK == lResult.GetResultCode()");
+
+        miPlayer0ControllerPort = lrResult.miPort;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Active controller is port: "
+                                       << lrResult.miPort << "\n";
+
+        miSecondaryControllerPort = (miPlayer0ControllerPort == 0) ? 1 : 0;
+        mDebugManager.SetGamePad(
+            mInputModule.mControllers.GetDebugGamePad(miSecondaryControllerPort));
+        miInputModuleState = 4;
+    }
+
+    // ARTIST 0x823A8D50. Only player 0 changes the game's active-controller state.
+    void BrnGameModule::HandleInputUnbindResult(const CgsInput::InputIO::UnBindResult& lrResult)
+    {
+        if (lrResult.miPlayer != 0)
+            return;
+
+        CGS_ASSERT(miInputModuleState == 6,
+                   "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED");
+        CGS_ASSERT(lrResult.meResultCode == CgsInput::E_UNBINDRESULTOK,
+                   "CgsInput::E_UNBINDRESULTOK == lResult.GetResultCode()");
+
+        miPlayer0ControllerPort = CgsInput::KU_NUMBER_OF_PADS;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Active controller invalidated\n";
+        mDebugManager.SetGamePad(0);
+        miInputModuleState = 0;
     }
 
     // X360 0x823C5580; BrnGameModule.cpp:4013 (DecFIGS).

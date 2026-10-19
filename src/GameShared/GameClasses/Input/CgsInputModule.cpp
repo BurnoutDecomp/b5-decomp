@@ -5,6 +5,7 @@
 //   InputModule::Release               @0x828EF100
 //   InputModule::Destruct              @0x828F8438
 //   InputModule::PreWorldUpdate        @0x82903328   (FX-RUMBLE3 2026-09-24, export hole)
+//   InputModule::PostWorldUpdate       @0x828F8478
 //   InputModule::ProcessRumbleRequests @0x828FFE50   (FX-RUMBLE3 2026-09-24, export hole)
 //   InputModule::ProcessMappingQueue   @0x828E7098
 //
@@ -77,6 +78,19 @@ void InputModule::PreWorldUpdate(CgsModule::IOBufferStack* /*lpInputBufferStack*
     mOutputBindResultQueue.Clear();
     mOutputUnbindResultQueue.Clear();
     lpOutputBuffer->UnlockForWrite();
+}
+
+// X360 0x828F8478 (vtable slot 18): drain unbind, bind, then mapping requests under the
+// PostWorldInput read lock and publish its wheel spring into the owned InputPads member.
+void InputModule::PostWorldUpdate(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
+                                  const InputIO::PostWorldInputBuffer* lpPostWorldInput)
+{
+    lpPostWorldInput->LockForRead();
+    ProcessUnbindRequestQueue(lpPostWorldInput);
+    ProcessBindRequestQueue(lpPostWorldInput);
+    ProcessMappingQueue(lpPostWorldInput);
+    mControllers.SetWheelSpring(*lpPostWorldInput->GetWheelFFSpring());
+    lpPostWorldInput->UnlockForRead();
 }
 
 // X360 0x828FFE50 (export hole; ppcdis). Every queue is re-fetched through its read-lock accessor

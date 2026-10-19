@@ -467,6 +467,11 @@ namespace CgsInput
         }
     }
 
+    void InputPads::SetWheelSpring(const CgsInput::Device::WheelFFSpring& lrSpring)
+    {
+        mWheelFFSpring = lrSpring;
+    }
+
     // ------------------------------------------------------------------------------------------------
     // X360 0x828DC3C0 -- StopRumbleEvent.
     // Resolve the player to a port, find the rumble slot matching the id, and clear it (time 0, volume

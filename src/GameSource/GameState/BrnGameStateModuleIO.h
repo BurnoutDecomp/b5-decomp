@@ -657,6 +657,8 @@ namespace GameStateModuleIO
         RaceCarRaceDistanceInterface*     GetRaceCarRaceDistanceInterface();
         // X360 0x82362D78 (write-lock; "Not locked for writing", line 293) -- write-side accessor for
         // the game-state-to-controller output interface (this+0x43AC). GameStateInviteManager::Update.
+        // X360 0x823B9CD8 (read-lock; line 292) -- bridge read-side, this+0x43AC.
+        const GameStateToControllerInterface* GetGameStateToControllerInterface() const;
         GameStateToControllerInterface*   GetGameStateToControllerInterface();
         // X360 0x823B9AE0 (read-lock; "Not locked for reading", line 283) -- read-side accessor for
         // the trigger-management input interface (this+0x9050). BridgeGameStateToWorld.
