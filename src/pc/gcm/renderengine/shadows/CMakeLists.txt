@@ -1,0 +1,9 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        SceneRender.cpp
+    PUBLIC
+        RenderContext.h
+        SceneRender.h
+        SceneSettings.h
+        SceneSettingsDebug.h
+)
