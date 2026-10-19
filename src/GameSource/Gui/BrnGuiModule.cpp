@@ -2864,12 +2864,6 @@ void GuiModule::Destruct()
             mGuiCache.SetGameplayHudReady((muFrameUpdateSet & 8) != 0);
             GuiEventCache lCacheEvent;
             lCacheEvent.mpGuiCache = &mGuiCache;
-            // Delivery to every subscriber -- the three flows AND the always-available
-            // manager (its real 19-id table includes 64; it latches the GuiCache its
-            // Prepare state machine waits on) -- rides the one subscription filter.
-            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
-                             static_cast<s32>(sizeof(lCacheEvent)));
-
             // ⭐ [licence-icon] the CUSTOM-RENDERER manager is the event's other console
             // consumer (its RecvEvent case 64 fans the GuiCache to every component --
             // NetworkPlayerImageRenderer latches mpGuiCache off it, the pointer its staged
@@ -3454,6 +3448,16 @@ void GuiModule::Destruct()
             DrainFlowOutputQueue(E_GUIOBSERVER_ALWAYSAVAILABLE);
         }
         mViewInputBuffer.UnlockForWrite();
+
+        // The FSM's OnEnter registrations are committed by the drain above. Queue the
+        // per-frame cache pointer after that handoff so a newly entered state receives
+        // event 64 before the next frame's inbound response events.
+        {
+            GuiEventCache lCacheEvent;
+            lCacheEvent.mpGuiCache = &mGuiCache;
+            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
+                             static_cast<s32>(sizeof(lCacheEvent)));
+        }
 
         // ---- 6. the MovieManager pump (receiver -> RecvEvent -> Update -> 510 back) ---
         {
