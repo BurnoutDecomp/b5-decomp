@@ -17,8 +17,14 @@ namespace BrnGui
         mMainAllocator.Construct(lResource.m_baseResources[0],
             static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_size));
         miMainAlignment = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_alignment);
-        mGraphicsAllocator.Create(lResource.m_baseResources[2],
-            lDescriptor.m_baseResourceDescriptors[2].m_size);
+        if (lDescriptor.m_baseResourceDescriptors[2].m_size != 0)
+        {
+            // The PC MovieManager can intentionally supply no graphics lane. Preserve the
+            // original failure for a missing non-empty backing, but don't create a zero-byte
+            // allocator with a null base (LinearMalloc::Create asserts on lpBuffer either way).
+            mGraphicsAllocator.Create(lResource.m_baseResources[2],
+                lDescriptor.m_baseResourceDescriptors[2].m_size);
+        }
         mGraphicsAllocator.SetAlignment(lDescriptor.m_baseResourceDescriptors[2].m_alignment);
         return true;
     }
