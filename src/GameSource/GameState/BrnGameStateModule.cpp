@@ -364,6 +364,13 @@ void GameStateModule::Construct()
     // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
     ClearData();
 
+    // ARTIST Construct's four full-vector identity stores at +0x47570.
+    mPlayerCarTransform.SetIdentity();
+
+    // ARTIST 823803AC saves this; 82380934 restores it into r11, and
+    // 82380944 stores r24's original true byte at +4 after base Construct cleared it.
+    mbIsNewModule = true;
+
     // GameStateDebugComponent::OnActivate's module-owned controls: ARTIST Construct @0x82380388
     // writes the two snap-race gates true and clears the four signature-takedown debug values.
     mbDebugLimitSnapRaceStartConditions = true;   // X360 +0x4575F
@@ -372,9 +379,6 @@ void GameStateModule::Construct()
     mbDrawCrashDebugText = false;                 // X360 +0x475B4
     mbDrawSignatureTakedownRegionText = false;    // X360 +0x475B5
     mbDebugMakeAllTakedownsSignature = false;     // X360 +0x475B6
-
-    // ARTIST Construct's four full-vector identity stores at +0x47570.
-    mPlayerCarTransform.SetIdentity();
 
     // ARTIST's complete monitor block: page5, no minimum, budget1, scaled.
     miTriggersPostPM = CgsDev::PerfMonCpu::AddMonitor("Trigger Post update", CgsDev::E_PMP_5, false, 1.0f, true);
@@ -893,19 +897,9 @@ void GameStateModule::Destruct()
 //   26 DEVELOPER_CHALLENGE      clear completed-challenge, takedown-time, billboard and car sets
 //   27 ORIGINAL_DONE            DriveThruManager::Prepare, publish vehicle/wheel lists, re-arm
 //                               Prepare at stage 1 and reset the release stage.
-// The full body below runs each owner operation and each resource wait; these entries are not
-// log-only placeholders. The PC-only base-module flag at stage 1 is explained separately below.
-//
-// ⚠️ FLAG (PC deviation, stage 1): `mbIsNewModule = true` before the base Prepare. The PC
-// ModuleSingleBuffered::Construct leaves it FALSE, and with it false the base walks the
-// old-style DataStructure path -- CreateInputDataStructure() fires its own
-// "This is a new module type" assert and returns null, so Prepare would return false FOR EVER
-// and GamePrepare would wedge. This is the previous PC adapter's compatibility store, not an
-// attested GameState operation: ARTIST base Construct (0x8286E768) clears the flag, GameState
-// Construct (0x82380388) has no later local write, and Prepare stage 1 (0x8239E6C4..CC) only
-// selects its stage and calls base Prepare. No GameState DataStructure-hook override or external
-// flag writer is established. The original base route remains unresolved. GameData differs:
-// its ARTIST Construct (0x82671B90) explicitly sets the flag. Keep these provenances separate.
+// The full body below runs each owner operation and each resource wait. ARTIST
+// Construct sets mbIsNewModule at 82380944 after base Construct clears it; stage 1
+// only selects its stage and calls base Prepare (8239E6C4..CC), with no flag rewrite.
 // ----------------------------------------------------------------------------
 // The GameData reply ids the two live list stages match (BrnGameDataModule's dispatch stages
 // them at the slot: ProcessGetVehicleListRequest -> 52, ProcessGetWheelListRequest -> 59).
@@ -969,9 +963,6 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
     case E_PREPARESTAGE_MANAGER:
         mePrepareStage = E_PREPARESTAGE_MANAGER;
-        // FLAG PC adaptation: ModuleSingleBuffered::Construct leaves the host module on its
-        // old-style data path. GameState uses OutputBuffer IO, so set this before the base Prepare.
-        mbIsNewModule = true;
         if (!CgsModule::ModuleSingleBuffered::Prepare())
             break;
         // fall through
