@@ -1372,8 +1372,8 @@ namespace BrnGame
     }
 
     // FLAG PC-platform leaf: the existing native preparation and persistent-input
-    // pump remains the active boundary. The full original staged caller above is
-    // separate until its owner preparation and world-streaming producer are ready.
+    // pump remains the active boundary. The full original staged caller above stays
+    // separate while its complete owner preparation/lifecycle is established.
     void BrnGameModule::DoUpdate_GameStatePreWorldNativePC(
         BrnGameMainFlowController::EMainGameFlowState leState)
     {
@@ -1445,11 +1445,8 @@ namespace BrnGame
 
         if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
         {
-            // FLAG PC-platform leaf: the partial WorldModule update calls only
-            // UpdateCollisionValidation, not WorldEntityModule::Update_PostPhysics.
-            // It therefore does not publish a live immediate-streamed status yet.
-            // Keep the existing PC pause scheduling until that producer is restored;
-            // consuming its untouched output byte here permanently pauses the junkyard.
+            // The selected world drive publishes the original ImmediateStreamed latch
+            // after its update; the pause producer below consumes the previous sub-step.
             // ⭐⭐ [D2 gesture-sink] THE CONTROLLER -> GAME-STATE BRIDGE. Placed FIRST in
             // this block because that is the console's own order: DoUpdate_GameStatePreWorld
             // @0x823EE0E8 runs BridgeNetworkToGameState + BridgeControllerToGameState and
@@ -1470,12 +1467,9 @@ namespace BrnGame
             // ⚠️ THE WRITE LOCK IS THE CALLER'S, exactly as on the console (sub_823B7620 ==
             // LockBuffersForIO takes it around the whole pre-world staging pass). Same
             // bracket shape as DoUpdate_World's BridgeControllerToWorld call above.
-            // ⚠️ THE PAD RECORD IS ONE SUB-STEP STALE and that is stated, not hidden:
-            // InputPadsPC::UpdatePlayer0 refills mPcInputOutputBuffer further down this
-            // same function (the controller -> GUI pass), so this reads the previous
-            // sub-step's fill. Harmless for a 0.35 s hold gate, and it is the same latency
-            // the GUI leg already lives with. DELETE-WHEN the DoUpdate cascade lands and
-            // the input fill moves to the top of the frame where the console has it.
+            // InputPreWorld now fills the PC pad output before the network and GameState
+            // legs, at the original input-module update seat. The GUI consumes that same
+            // snapshot later without polling away its pressed/released edges.
             // The network -> game-state bridge runs first, under a read lock on the
             // network output held across both bridges, and the controller bridge's last
             // argument is that buffer's IsPlaying() -- the console's own sequence.
@@ -1491,6 +1485,78 @@ namespace BrnGame
                     lpGsPreWorld->Construct();
                     mPcInputOutputBuffer.LockForRead();
                     lpGsPreWorld->LockForWrite();
+                    using namespace BrnGameState::GameStateModuleIO;
+                    // ARTIST823EE0E8: original step/play and streaming-pause producer.
+                    const bool lbWasStalled = mbStreamingStalled;
+
+                    if (mbSteppingFrames)
+                    {
+                        if (mbStopStepping)
+                        {
+                            if (mbSimPaused)
+                            {
+                                PlayerPauseStateChangedEvent lEvent;
+                                lEvent.mbActivated = false;
+                                lEvent.mbStalled = false;
+                                lEvent.mbWasStalled = lbWasStalled;
+                                lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                    E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                            }
+                            mbStopStepping = false;
+                            mbSteppingFrames = false;
+                            mbDoStep = false;
+                        }
+                        else if (mbDoStep)
+                        {
+                            PlayerPauseStateChangedEvent lEvent;
+                            lEvent.mbActivated = !mbSimPaused;
+                            lEvent.mbStalled = false;
+                            lEvent.mbWasStalled = lbWasStalled;
+                            if (!mbSimPaused)
+                                mbDoStep = false;
+                            lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                        }
+                    }
+
+                    if (mbWorldStreamingRequestedStall)
+                    {
+                        if (!mbSimPaused)
+                        {
+                            if (!mbOnline)
+                            {
+                                PlayerPauseStateChangedEvent lEvent;
+                                lEvent.mbActivated = true;
+                                lEvent.mbStalled = true;
+                                lEvent.mbWasStalled = lbWasStalled;
+                                lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                    E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                            }
+                            mbStreamingStalled = true;
+                        }
+                    }
+                    else if (mbStreamingStalled)
+                    {
+                        if (!mbOnline)
+                        {
+                            PlayerPauseStateChangedEvent lEvent;
+                            lEvent.mbActivated = false;
+                            lEvent.mbStalled = false;
+                            lEvent.mbWasStalled = lbWasStalled;
+                            lpGsPreWorld->GetGameEventQueue()->AddEvent(&lEvent,
+                                E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                        }
+                        mbStreamingStalled = false;
+                    }
+
+                    if (mbStreamingStalled && sbShowStreamStallMessage)
+                    {
+                        CgsDev::DebugInterface lDebug;
+                        lDebug.Get2dRender().Draw2DText(
+                            "STREAM STALL: Stalling game while streaming catches up",
+                            Vector2{200.0f, 40.0f}, 16.0f, 0xFF0000FFu);
+                    }
+
                     s32 liIsPlaying = 0;
                     if (mpNetworkOutputBuffer != 0)
                     {
@@ -4816,6 +4882,7 @@ namespace BrnGame
                 BridgeTimers(0);
 
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
+                bool lbInputPreWorldFilledPC = false;
 
                 // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] THE INPUT PRE-WORLD LEG -- the first
                 // leg of the console's update step, and the one that carries the game's rumble requests
@@ -4836,13 +4903,14 @@ namespace BrnGame
                 {
                     DoUpdate_InputPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
                                            &mPcInputOutputBuffer);
+                    lbInputPreWorldFilledPC = !mbDiskError;
                 }
 
                 // THE NETWORK PRE-SIMULATION LEG. Console DoUpdate order: DoUpdate_InputPreWorld,
                 // then this, then DoUpdate_GameStatePreWorld; unconditional whenever DoUpdate runs,
                 // which on this build is exactly when the sub-step has a network output buffer
-                // (CreateStaticIOBuffers). The pad record is the one the GUI pass fills later in
-                // the sub-step, so it is one sub-step stale, as for BridgeControllerToGameState.
+                // (CreateStaticIOBuffers). InputPreWorld publishes this sub-step's pad record
+                // before this network leg and the GameState controller bridge.
                 if (mpNetworkOutputBuffer != 0)
                 {
                     DoUpdate_NetworkPreSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
@@ -4856,6 +4924,15 @@ namespace BrnGame
                 {
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
+                    if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+                    {
+                        // ARTIST823E8D70..823E8DA0, after the selected world's producer.
+                        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = mpWorldUpdateOutputBuffer;
+                        lpWorldOutput->LockForRead();
+                        mbWorldStreamingRequestedStall =
+                            !lpWorldOutput->GetWorldEntityStatusInterface()->GetImmediateStreamed();
+                        lpWorldOutput->UnlockForRead();
+                    }
                 }
 
                 // ---- the RESOURCE tick (FLAG PC placement: the console's own thread) -------
@@ -5004,9 +5081,14 @@ namespace BrnGame
                     miLanguageCycleTimerLo   = static_cast<s32>(liNowMs / 1000);
                     mfLanguageCycleTimerFrac = static_cast<f32>(liNowMs % 1000) * 0.001f;
 
-                    mPcInputOutputBuffer.LockForWrite();
-                    CgsInput::InputPadsPC::UpdatePlayer0(&mPcInputOutputBuffer);
-                    mPcInputOutputBuffer.UnlockForWrite();
+                    // Boot/GUI-only states have not run InputPreWorld. Preserve their fill;
+                    // a normal input update has already polled once, even while single-stepping.
+                    if (!lbInputPreWorldFilledPC)
+                    {
+                        mPcInputOutputBuffer.LockForWrite();
+                        CgsInput::InputPadsPC::UpdatePlayer0(&mPcInputOutputBuffer);
+                        mPcInputOutputBuffer.UnlockForWrite();
+                    }
 
                     mPcInputOutputBuffer.LockForRead();
                     mpGuiInputBuffer->LockForWrite();
@@ -5772,8 +5854,8 @@ namespace BrnGame
         // START action (record +0x5C, maActionInfo[8].muStatus bit 1) was pressed, then sets the state to
         // 2. This build seeds miInputModuleState = 4 in Construct (the PC input bring-up) and the only
         // 0 -> 1 edge (BridgeGuiToGame case 90) needs 0, so the block can never run here.
-        // Original 0x823C5808 calls QueryRequestDoStepFrame, recovered below. Caller
-        // activation remains separate from this source recovery.
+        // Original 0x823C5808: query only after the input module has published its pad output.
+        QueryRequestDoStepFrame(lpInputModuleOutput);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
         return liStartPressedPort;
     }
