@@ -1,0 +1,5 @@
+add_subdirectory(Core)
+add_subdirectory(Containers)
+add_subdirectory(Module)
+add_subdirectory(System)
+add_subdirectory(Development)
