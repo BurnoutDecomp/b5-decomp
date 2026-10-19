@@ -278,14 +278,9 @@ public:
     // ARTIST 0x8231E5D8: the inlined ChallengeManager vehicle-list installer.
     void ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList);
 
-    // [tut-ticker] THE BRING-UP SEAM (kept; see the supersession banner in ModeManager_gUI_00.cpp).
-    // Construct above is landed but UNCALLED: four of its eight arguments are not reachable at
-    // GameStateModule::Construct's call position today. This is the ONLY armed construction path.
-    // DELETE-WHEN the four land (the exact condition is spelled out in the partfile banner).
-    void ConstructInterModeStateBringUp(GameStateModule* lpGameStateModule);
-
-    // The extracted CLOCK leg of ModeManager::PreWorldUpdate @0x823537B8 (bring-up; superseded by the
-    // full PreWorldUpdate below the moment THAT is mounted -- never both armed).
+    // Retained extracted clock helper for a separate cleanup. No current caller was found in this
+    // source tree; the full PreWorldUpdate is reached through the selected GameState EMM path.
+    // Do not add this helper alongside that full path because it would advance the clocks twice.
     void PreWorldUpdateClocksBringUp(f32 lfGameTimestep);
 
     // ===============================================================================================
