@@ -1,0 +1,26 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        LionSimulation.cpp
+        Resolution.cpp
+        SceneCapture.cpp
+        SceneParticles.cpp
+        SceneRender.cpp
+    PUBLIC
+        ClipDistance.h
+        CubeHistory.h
+        EnvironmentMap.h
+        GlassCapture.h
+        LightSubmission.h
+        LionSimulation.h
+        PropReflection.h
+        ReflectionDistance.h
+        ReflectionLod.h
+        ReflectionLodDebug.h
+        RenderContext.h
+        Resolution.h
+        ResolutionDebug.h
+        SceneCapture.h
+        SceneRender.h
+        SceneSettings.h
+        SceneSettingsDebug.h
+)
