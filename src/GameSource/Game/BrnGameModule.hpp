@@ -611,11 +611,9 @@ namespace BrnGame
         // prologue (r3 = this, r4 = lpGuiInput, r5 = lpGameStateOutput); the two null asserts
         // are GameBridgeGameStateToX.cpp:754/755. Called by BridgeGameStateToGui @0x823EE880
         // (call site @0x823EF22C).
-        // PARTIAL RECONSTRUCTION -- ARTIST has 188 explicit action IDs; source handling is
-        // split across this switch and its helper dispatchers. The set has grown beyond the
-        // original stunt-collectible three, so the current inventory lives in
-        // GameBridgeGameStateToX_StuntGuiEvents.cpp enumerates exactly which arms exist and is
-        // the one list to keep current.
+        // PARTIAL RECONSTRUCTION -- ARTIST has 188 unique explicit action IDs.
+        // This source checkpoint represents 142; omitted IDs remain unresolved.
+        // Keep the per-arm inventory with GameBridgeGameStateToX_StuntGuiEvents.cpp.
         // Home GameSource/Game/GameBridgeGameStateToX.cpp.
         void TranslateGameActionsToGuiEvents(
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,

@@ -114,13 +114,14 @@ public:
 
     // The banked-stunt notification: the StuntInfo record WasStuntRecentlyPerformed hands back.
     // The X360 posts the very buffer it passed to that query (`addi r4, r1, var_30` is both the
-    // query's out-param and the AddEvent payload), with liSize 24 -- the X360 sizeof(StuntInfo)
-    // (6 dwords, matching the query's own `v5 = 6` copy loop). The host StuntInfo is 20 bytes,
-    // so the SIZE is taken from sizeof() at the call site, never from the X360 literal.
+    // query's out-param and the AddEvent payload), with liSize 24 -- six dwords, matching the
+    // query's own `v5 = 6` copy loop. StuntInfo now includes the four-byte opaque X360 tail so
+    // sizeof(StuntPerformedMessage) and the typed query output remain the attested 24 bytes.
     struct StuntPerformedMessage : public CgsModule::Event
     {
         StuntInfo mStuntInfo;
     };
+    static_assert(sizeof(StuntPerformedMessage) == 24, "X360 action 132 payload size");
 
     // 12-byte combo-completed notification. The X360 builds it as the THREE out-params of
     // WasComboRecentlyPerformed in three adjacent stack slots and posts the block from the lowest

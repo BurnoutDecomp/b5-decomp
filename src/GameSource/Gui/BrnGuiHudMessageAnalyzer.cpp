@@ -3264,7 +3264,7 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
                 CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_REVERSE"));
             }
 
-            if (lpEvent->mu16TailCount16 <= 1)
+            if (lpEvent->mStuntInfo.mu16X360Tail16 <= 1)
             {
                 CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_LEAP_CAR_SINGLE"));
             }
@@ -3273,7 +3273,7 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
                 lpLanguageManager->FormatTextFromInt(
                     lacFormatBuffer, 63, "STUNT_RUN_MULTIPLIER_LEAP_CAR_MULTIPLE",
                     CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
-                    lpEvent->mu16TailCount16,
+                    lpEvent->mStuntInfo.mu16X360Tail16,
                     CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
                 CgsCore::StrCat(lacBuffer, 0x80, lacFormatBuffer);
             }
@@ -3310,19 +3310,19 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
         }
 
         // chain (the tail count) -- always plural-formatted
-        if (lpEvent->mu16TailCount14 != 0)
+        if (lpEvent->mStuntInfo.mu16X360Tail14 != 0)
         {
             lpLanguageManager->FormatTextFromInt(
                 lacFormatBuffer, 63, "STUNT_RUN_MULTIPLIER_CHAIN",
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
-                lpEvent->mu16TailCount14,
+                lpEvent->mStuntInfo.mu16X360Tail14,
                 CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
             CgsCore::StrCat(lacBuffer, 0x80, lacFormatBuffer);
         }
 
         CGS_ASSERT(std::strlen(lacBuffer) > 3, "strlen(lacBuffer) > 3");
 
-        const s32 liChainScore = lpEvent->mu16TailCount14 + lpEvent->mStuntInfo.miStuntMultiplier;
+        const s32 liChainScore = lpEvent->mStuntInfo.mu16X360Tail14 + lpEvent->mStuntInfo.miStuntMultiplier;
         lacBuffer[std::strlen(lacBuffer) - 3] = 0;   // trim the trailing category separator
 
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 0, liChainScore);

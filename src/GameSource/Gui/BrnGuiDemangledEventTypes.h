@@ -95,7 +95,8 @@ namespace BrnGui
     struct GuiCarSelectStartEvent { u8 maData[4]; s32 GetEventType() const { return 81; } };  // id 81 size 4 (raw; size not GuiEvent-shaped)
     struct GuiCarSelectionChangedDropIn { u8 maData[8]; s32 GetEventType() const { return 565; } };  // id 565 size 8 (raw; size not GuiEvent-shaped)
     struct GuiCarSelectionChangedOnline { u8 maData[8]; s32 GetEventType() const { return 566; } };  // id 566 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiCarSelectionEvent : public CgsGui::GuiEvent<412> { u8 maPayload[1060]; };  // id 412 size 1072 (12B GuiEvent header + opaque payload)
+    // X360 id 412 is the raw 1072-byte Array/BitArray record; its canonical type is in
+    // BrnGuiEventTypeDefs.h. Do not restore the old GuiEvent<412> + opaque-blob shell.
     struct GuiCarUnlockEvent { u8 maData[8]; s32 GetEventType() const { return 76; } };  // id 76 size 8 (raw; size not GuiEvent-shaped)
     struct GuiCarUnlockNewCarEvent { u8 maData[8]; s32 GetEventType() const { return 73; } };  // id 73 size 8 (raw; size not GuiEvent-shaped)
     struct GuiCarUnlockStartEvent { u8 maData[1]; s32 GetEventType() const { return 75; } };  // id 75 size 1 (raw; size not GuiEvent-shaped)
