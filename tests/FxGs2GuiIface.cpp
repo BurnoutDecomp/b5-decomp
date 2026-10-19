@@ -40,7 +40,7 @@ namespace Assert
     int   FireAssert(const char*, const char*, int) { ++gAsserts; return 0; }
     void* EndAssert() { return nullptr; }
 }
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }   // the [gui-iface] witness stays silent
+namespace Log { StrStreamBase* gpDebugPrint = nullptr; }   // canonical CgsLog.h boundary; witness stays silent
 }
 
 // ---- the GUI input-buffer fixture: GetGuiEvents()->AddEvent(event, id, size) records ------------
