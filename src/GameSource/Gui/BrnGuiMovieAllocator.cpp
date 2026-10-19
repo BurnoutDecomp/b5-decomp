@@ -17,8 +17,15 @@ namespace BrnGui
         mMainAllocator.Construct(lResource.m_baseResources[0],
             static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_size));
         miMainAlignment = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_alignment);
-        mGraphicsAllocator.Create(lResource.m_baseResources[2],
-            lDescriptor.m_baseResourceDescriptors[2].m_size);
+        if (lDescriptor.m_baseResourceDescriptors[2].m_size != 0)
+        {
+            // FLAG PC-platform leaf: D3D owns movie pixel storage, and PC movie rw descriptors
+            // request only lane 0, so the zero-capacity graphics lane has no backing to create.
+            // For a nonempty graphics descriptor, keep the original Create call so a null base
+            // still triggers its original lpBuffer assertion.
+            mGraphicsAllocator.Create(lResource.m_baseResources[2],
+                lDescriptor.m_baseResourceDescriptors[2].m_size);
+        }
         mGraphicsAllocator.SetAlignment(lDescriptor.m_baseResourceDescriptors[2].m_alignment);
         return true;
     }
