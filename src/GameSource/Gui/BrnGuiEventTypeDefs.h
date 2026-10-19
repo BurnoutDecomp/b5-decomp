@@ -3125,3 +3125,43 @@ struct GuiCarSelectWheelRequest
 };
 
 } // namespace BrnGui
+
+// ARTIST direct BridgeGameStateToGui payloads: plain records, no GuiEvent header.
+namespace BrnGui
+{
+    // The per-car race-distance record BrnGameModule::BridgeGameStateToGui posts every frame
+    // (id 239, 144 bytes; the stores are record-relative, so the record carries no GuiEvent
+    // header). The reference members, in their order, plus the console's per-car word at +0x60
+    // that the reference row does not list. FLAG: that word is named after its producer's source,
+    // CarScoreData::GetOnlineStuntScore.
+    struct GuiEventRaceDistanceRemaining
+    {
+        CgsID maCarId[8];                 // +0x00
+        f32   mafDistanceToFinish[8];     // +0x40
+        s32   maiOnlineStuntScore[8];     // +0x60
+        bool  mabPlayerEliminated[8];     // +0x80
+        bool  mabValid[8];                // +0x88
+        s32 GetEventType() const { return 239; }
+    };
+    static_assert(sizeof(GuiEventRaceDistanceRemaining) == 144, "id 239 is posted with 144 bytes");
+    // The player's distance to the next checkpoint (id 240, 4 bytes).
+    struct GuiEventRaceDistanceToCheckpoint
+    {
+        f32 mfDistanceToCheckpoint;       // +0x00
+        s32 GetEventType() const { return 240; }
+    };
+
+    struct GuiPursuitScoreUpdate
+    {
+        s32 miRivalDamage;
+        s32 GetEventType() const { return 432; }
+    };
+    static_assert(sizeof(GuiPursuitScoreUpdate) == 4, "ARTIST 823D1018 posts four bytes");
+
+    struct GuiEventSpecificPresetRaces
+    {
+        BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface mEvents;
+        s32 GetEventType() const { return 194; }
+    };
+    static_assert(sizeof(GuiEventSpecificPresetRaces) == 7704, "ARTIST 823D13B0 posts 0x1E18 bytes");
+}

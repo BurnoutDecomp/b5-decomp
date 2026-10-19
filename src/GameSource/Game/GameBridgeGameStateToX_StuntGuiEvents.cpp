@@ -5,7 +5,7 @@
 // members whose DWARF home is GameSource/Game/GameBridgeGameStateToX.cpp:
 //
 //   MapStuntEnumsFromGameplayToGui   0x823AA4A8   (a real X360 symbol, whole)
-//   TranslateGameActionsToGuiEvents  0x823E9CE0   (PARTIAL -- cases 58/59/60 only)
+//   TranslateGameActionsToGuiEvents  0x823E9CE0   (PARTIAL; see split-dispatch inventory)
 //
 // WHY A SIBLING TU RATHER THAN THE PARENT FILE. Historical: GameBridgeGameStateToX.cpp
 // neither compiled nor linked when this slice landed. Both are fixed -- the parent TU
@@ -302,33 +302,17 @@ namespace
     // the push is written against the input buffer's queue instead.
     // Sole caller: BridgeGameStateToGui @0x823EE880 (call site @0x823EF22C).
     //
-    // ⚠️⚠️ PARTIAL RECONSTRUCTION, AND IT IS NAMED, NOT HIDDEN. The console body is a
-    // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. The arms
-    // reproduced here are 58 / 59 / 60 (the stunt-collectible family), 55, 112, 148 (the
-    // training ticker, [tut-ticker] 2026-08-24), 181, 97 / 98 / 100 / 101 (the drive-thru
-    // family, [drive-thru] 2026-08-29), 45 (the drive-thru ICON TABLE -> the pending sat-nav
-    // record posted at the tail, [minimap blips, issue #9] 2026-09-07), and 6 (the TAKEDOWN
-    // CRASH-BAR edge -> GUI 377 payloads 2/3, [takedown HUD] 2026-09-13), and 152..155/157/160
-    // (the free-burn challenge family -> GUI 108/574..584), and 279 (the per-frame road-rule
-    // score -> GUI 338; the rest of the road-rule band is in the sibling below); the event-flow arms live in the sibling
-    // GameBridgeGameStateToX_EventFlowGuiEvents.cpp, reached through the `default:` below.
-    // Every other action falls through with NO event posted. A future owner adding, say, the
-    // road-rules arms must add them HERE rather than in a parallel function.
+    // PARTIAL RECONSTRUCTION. ARTIST has 188 explicit top-level case labels in this switch.
+    // At this pinned source snapshot, this TU and its helpers represent 122 unique action ids:
+    // 69 labels are in this inline switch, 40 additional EventFlow arms and 13 FreeRoam arms.
+    // The eight Showtime bodies are called by eight inline labels and counted there once.
+    // EventFlow's case 2 is an unreachable duplicate because this switch handles action 2 first.
     //
-    // ⛔⛔ THE SENTENCE THAT STOOD HERE WAS STALE, AND IT WAS THE LOAD-BEARING ONE. It read:
-    // "each of them is currently unreachable anyway (this TU has never been mounted, and
-    //  BridgeGameStateToGui @0x823EE880, the only caller, is still DEFERRED), so nothing
-    //  regresses". BOTH HALVES ARE FALSE and have been for a while: this TU is mounted
-    // (tools/build/build_game_exe.bat), and TranslateGameActionsToGuiEvents is called EVERY
-    // FRAME from BrnGameModule.cpp inside the LockForRead/LockForWrite bracket, because the PC
-    // build re-seats the console's BridgeGameStateToGui call sequence inline. So a missing arm
-    // here is a LIVE behavioural gap, not a parked one -- which is exactly what it turned out
-    // to be for the drive-thru: the mechanic worked and the game said nothing for a day because
-    // 97/98/100 were absent from a drain loop that was running the whole time. Do not write
-    // "unreachable anyway" into this banner again without re-checking both facts.
-    // The nearest sibling arms, for whoever comes next: 55 -> GuiAutosaveRequestEvent(356);
-    // 57 -> GuiEventJumpStarted(216) @0x823EB868; 61 has NO case (the boost action is consumed
-    // off the HUD path); 127 -> the Showtime-only CrashModeScoring leg, mode-gated 2/16.
+    // The other 66 explicit ARTIST cases remain unclassified here; their omission is not a no-op
+    // disposition. The disassembly's separate default arm list is preserved as default behavior.
+    // This count concerns this translator's action ids, independent of debug-menu registration
+    // counts. The queue walk is active every frame in the current PC source, so an omitted live
+    // action arm is a behavior gap. Do not infer behavior from a caption or a missing direct xref.
     //
     // ⓘ ACTION IDS ARE THE X360 ONES, taken from the enum, never from literals:
     // BrnGameActions.h carries E_ACTION_ON_STUNT_ELEMENT_COMPLETE = 58 / _FOR_COUNTY = 59 /
@@ -427,6 +411,50 @@ namespace
             case 66:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 565, sizeof(CgsID));
                 break;
+            // ARTIST 0x823ED854..0x823ED86C: online car id -> GUI 566 (8 bytes).
+            case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_ONLINE:
+            {
+                const auto* lpChanged = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::CarSelectionChangedOnlineAction*>(lpAction);
+                BrnGui::GuiCarSelectionChangedOnline lEvent = {};
+                std::memcpy(lEvent.maData, &lpChanged->mCarId, sizeof(lpChanged->mCarId));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EA6E8..0x823EA6FC: start junkyard car select with word 1.
+            case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_START_GUI_ON_GAME_START:
+            {
+                BrnGui::GuiCarSelectStartEvent lEvent = {};
+                const s32 liCarSelectFlow = 1;
+                std::memcpy(lEvent.maData, &liCarSelectFlow, sizeof(liCarSelectFlow));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED818..0x823ED834: zero input posts the one-byte ready-to-exit signal.
+            case 74:
+                if (*reinterpret_cast<const u8*>(lpAction) == 0)
+                {
+                    BrnGui::GuiCarSelectReadyToExitEvent lEvent = {};
+                    PushGuiEvent(lEvent, lpGuiInput);
+                }
+                break;
+
+            // ARTIST 0x823ED870..0x823ED888: forward the action byte as GUI 84.
+            case 78:
+            {
+                BrnGui::GuiCarSelectAbortEvent lEvent = {};
+                lEvent.maData[0] = *reinterpret_cast<const u8*>(lpAction);
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EA71C..0x823EA72C: GUI 85 is a one-byte tag.
+            case 80:
+                PushGuiTag(85, lpGuiInput);
+                break;
+
             // ⭐⭐ [boost-wave2 2026-09-14] 287 -> GUI 380, the SHORTCUT latch. ARTIST
             // 0x823ED554..0x823ED56C, the console's `case 287`:
             //     lbz  r11, 0(r31)                 ; the action's one byte
@@ -453,6 +481,20 @@ namespace
             case 81:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 414, 8);
                 break;
+            // ARTIST 0x823EA730..0x823EA748: copy the time word as GUI 82 (four bytes).
+            case 82:
+            {
+                BrnGui::GuiCarSelectOnlineTimeLeftEvent lEvent = {};
+                std::memcpy(lEvent.maData, lpAction, sizeof(lEvent.maData));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EA74C..0x823EA75C: GUI 83 is a one-byte tag.
+            case 83:
+                PushGuiTag(83, lpGuiInput);
+                break;
+
             case 183:
             {
                 const auto& lrCars =
@@ -465,6 +507,63 @@ namespace
                     reinterpret_cast<const CgsModule::Event*>(&lReply), 413, sizeof(lReply));
                 break;
             }
+            // ARTIST 0x823EA87C..0x823EA890 and 0x823EA894..0x823EA8A8: pause-state edges.
+            case 86:
+            case 87:
+            {
+                BrnGui::GuiGamePausedEvent lEvent = {};
+                lEvent.maData[4] = (liActionType == 86) ? 1u : 0u;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EA8AC..0x823EA8C0: literal true -> GUI show-HUD event 148.
+            case 89:
+            {
+                BrnGui::GuiEventShowHideHud lEvent = {};
+                lEvent.maData[0] = 1;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EBF54..0x823EBF70: construct the named offline-string overlay.
+            case 90:
+            {
+                BrnGui::GuiOverlayRequest lRequest;
+                lRequest.Construct("GMStrOffline");
+                PushGuiEvent(lRequest, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EBF34..0x823EBF50: construct the invite-accept overlay.
+            case 91:
+            {
+                BrnGui::GuiOverlayRequest lRequest;
+                lRequest.Construct("GMInvAccept");
+                PushGuiEvent(lRequest, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EBF90..0x823EBFA0: update-prepare-for-invite sends tag 129.
+            case BrnGameState::GameStateModuleIO::E_ACTION_UPDATE_PREPARE_FOR_INVITE:
+                PushGuiTag(129, lpGuiInput);
+                break;
+
+            // ARTIST 0x823EBFA4..0x823EBFB4: perform-invite sends tag 131; action bytes are unread.
+            case BrnGameState::GameStateModuleIO::E_ACTION_PERFORM_INVITE:
+                PushGuiTag(131, lpGuiInput);
+                break;
+
+            // ARTIST 0x823EBFB8..0x823EBFF0: assert the record, then relay its success byte.
+            case BrnGameState::GameStateModuleIO::E_ACTION_INVITE_COMPLETE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpInviteCompleteAction");
+                BrnGui::GuiEventInviteComplete lEvent = {};
+                std::memcpy(lEvent.maData, lpAction, sizeof(lEvent.maData));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 45  E_ACTION_SET_UP_ALL_DRIVE_THRUS (1112 bytes) -------------------------
             // ⭐⭐ [minimap blips, issue #9] THE DRIVE-THRU ICON TABLE HOP. While the pending count
             // is below 48, one SatNavIconInfo per DriveThruInfo:
@@ -1697,7 +1796,7 @@ namespace
                 // [stuntrace wave E1, 2026-08-26] the EVENT-FLOW arms (23/37/38/39/44/47/200/201)
                 // live in the sibling GameBridgeGameStateToX_EventFlowGuiEvents.cpp -- one drain
                 // walk, split across sibling TUs exactly like this one.
-                // [FLAG] the remaining ~690 console arms are not reproduced -- see the banner.
+                // [FLAG] original explicit action cases without an arm remain unresolved; their absence here is not a no-op disposition.
                 BrnGame::TranslateEventFlowGameActionToGuiEvent(
                     liActionType, lpAction, lpGuiInput, lpGameStateOutput);
                 break;

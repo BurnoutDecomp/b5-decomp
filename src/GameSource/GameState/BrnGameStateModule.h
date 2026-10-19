@@ -758,7 +758,7 @@ public:
     // junkyard nearest its saved position (GetSpawnCar + CarSelectManager::EnterJunkyardAtStartOfGame),
     // StreetManager / ModeManager OnProfileLoaded (the road-rule tables, the challenge bits), and
     // actions 194 / 28 / 19 + RequestUnpause(2). Its two console call sites are ProcessGameEvents case 8
-    // (the boot; ProcessGameEventsGameStartBringUp below is its seat on this build) and case 109
+    // (the boot, reached through the full PreWorldUpdate event queue) and case 109
     // (an in-game load). Body: BrnGameStateModule.cpp.
     void OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
                          GameStateModuleIO::GameActionQueue* lpOutputActionQueue);
@@ -768,22 +768,6 @@ public:
     // the player's progression rank is below the rank that car needs (its VehicleListEntry gameplay
     // byte, entry+0x99) -- then the default car, CgsIDCompress("PUSMC01"). Sole caller OnProfileLoaded.
     CgsID GetSpawnCar(const BrnProgression::Profile* lpProfile);
-
-    // ⭐⭐⭐ [L4 boot order 2026-09-28] X360 ProcessGameEvents @0x823A0A18, THE CASE-8 ARM
-    // (0x823A2758..0x823A2788) -- game event 8, E_EVENT_GAME_START (DWARF BrnGameEvents.h:18):
-    //     lbzx r11, r31, 0x38B70 ; beq <next>         -- mbWaitForStreaming
-    //     bl OnProfileLoaded(this, r27 = the output buffer, r22 = the output action queue)
-    //     bl WaitForStreaming(this, r22)
-    // Event 8 is posted by BrnGameModule::DoUpdate_GameStatePreWorld @0x823EE0E8 once gm+10094117 is set,
-    // which MainGameFlowStateMemoryCard::Update @0x823F2F98 does as the MemoryCard state is left -- so
-    // this is THE BOOT DELIVERY OF THE LOADED PROFILE. mbWaitForStreaming is armed by Construct
-    // @0x82380388 and nothing clears it (ClearData @0x8236B3A8 clears +0x38B71/+0x38B72 but not +0x38B70),
-    // so the arm always runs. [FLAG PC seat] this build's pre-world pump runs only in-game, and event 8
-    // is posted as the MemoryCard state is left, so the event never reaches ProcessGameEvents' case 8:
-    // the game module's event-8 seat calls this copy of the arm in the sub-step the console drains
-    // event 8 in. It takes the output buffer's write lock and raises mbIsUpdating around the arm, as
-    // PreWorldUpdate holds both.
-    void ProcessGameEventsGameStartBringUp();
 
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world

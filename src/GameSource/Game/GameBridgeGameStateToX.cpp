@@ -1,22 +1,6 @@
-// ============================================================================
-// b5-decomp/src/GameSource/Game/GameBridgeGameStateToX.cpp
-//
-// The BrnGame::BrnGameModule game-state->X bridge family. Reconstructed store-for-store
-// from the console build. Only the verified functions of this TU are homed here; the two
-// top-level bridge entry points (BridgeGameStateToGui / BridgeGameStateToNetwork) remain
-// DEFERRED (their pseudocode is not store-for-store faithful -- ToGui's IDA output is flagged
-// "local variable allocation has failed" over ~160 locals with un-homed GUI event payloads +
-// VariableEventQueue Append; ToNetwork is a ~240-case switch over un-homed network-action
-// payloads) and are homed by their owning batches once those event layouts land.
-//
-//   BridgeGameStateToController     [MOVED -> GameBridgeGameStateToX_Controller.cpp; that
-//                                    sibling is NOT mounted -- see its banner for the four
-//                                    un-homed symbols it reaches by name]
-//   ConvertTrainingTypeToStringId   [MOVED -> GameBridgeGameStateToX_TrainingStringIds.cpp]
-//   TranslateTakedownsToGuiEvents   [reconstructed, BOTH arms]
-//   MapStuntEnumsFromGameplayToGui  [MOVED -> GameBridgeGameStateToX_StuntGuiEvents.cpp]
-//   TranslateGameActionsToGuiEvents [PARTIAL (cases 58/59/60), same sibling TU]
-// ============================================================================
+// GameState-to-X bridges. ARTIST 0x823EE880 is recovered below with its direct
+// output builders in EventStatusGuiEvents/EventStartsGuiEvents. The network
+// wrapper remains deferred; the action translator has its separately owned TU.
 
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGameStateToX.h"
@@ -42,10 +26,201 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"           // CgsModule::BaseEventQueue / EventQueue<TakedownEvent,8>
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // CgsGuiModuleIO::InputBuffer::GetGuiEvents()
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // [td-gui] PC witness
+#include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
+#include <cstring>
 #include <cstdlib>                                                  // std::getenv ([td-gui] switch)
 
 namespace BrnGame
 {
+    // ARTIST 0x823EE880: r3=this, r4=GUI input, r5=GameState output.
+    // The AddGuiEvent instantiations do not read their CgsGui::GuiModule this;
+    // PushGuiEvent follows their existing whole-record queue boundary.
+    void BrnGameModule::BridgeGameStateToGui(
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+    {
+        CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");
+        CGS_ASSERT(lpGameStateOutput != 0, "lpGameStateOutput");
+        const BrnGameState::GameStateModuleIO::ScoringOutputInterface* lpScoringOutputInterface =
+            lpGameStateOutput->GetScoringOutputInterface();
+        const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* lpOnlScoringOutputInterface =
+            lpGameStateOutput->GetOnlineScoringOutputInterface();
+        CGS_ASSERT(lpScoringOutputInterface != 0, "lpScoringOutputInterface");
+        CGS_ASSERT(lpOnlScoringOutputInterface != 0, "lpOnlScoringOutputInterface");
+        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, "lpGuiInput->GetGuiEvents()");
+        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, "lpGameStateOutput->GetGuiEventQueue()");
+
+        // 823EE9C4: the Append result is ignored. It neither clears nor retires its source.
+        lpGuiInput->GetGuiEvents()->Append(*lpGameStateOutput->GetGuiEventQueue());
+        BridgeGameStateToGui_EventStatus(&mTimerStatusInterface, lpGameStateOutput, lpGuiInput);
+        BridgeGameStateToGui_EventStarts(lpGameStateOutput, lpGuiInput);
+        if (lpGameStateOutput->GetSpecificGameModeEventInterfaceIsValid())
+        {
+            BrnGui::GuiEventSpecificPresetRaces lEvents;
+            const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface& lrEvents =
+                lpGameStateOutput->GetSpecificGameModeEventInterface();
+            std::memcpy(&lEvents.mEvents, &lrEvents, sizeof(lEvents.mEvents));
+            PushGuiEvent(lEvents, lpGuiInput); // 194 / 7704, 823D13B0; no GuiEvent header
+        }
+        TranslateGameActionsToGuiEvents(lpGuiInput, lpGameStateOutput);
+        CGS_ASSERT(lpGameStateOutput->GetTakedownEventOutputQueue() != 0,
+                   "lpGameStateOutput->GetTakedownEventOutputQueue()");
+        TranslateTakedownsToGuiEvents(lpGuiInput, lpGameStateOutput->GetTakedownEventOutputQueue(),
+                                     static_cast<s32>(lpScoringOutputInterface->mePlayerRaceCarIndex));
+        CGS_ASSERT(lpGameStateOutput->GetGameStateToGuiInterface() != 0,
+                   "lpGameStateOutput->GetGameStateToGuiInterface()");
+        TranslateGuiInterfaceToGuiEvents(lpGuiInput, lpGameStateOutput->GetGameStateToGuiInterface());
+
+        // 823EF2C0..823EF300: status snapshot, not the live game timer.
+        const CgsSystem::TimerStatus* lpGameTimerStatus = mTimerStatusInterface.GetGameTimerStatus();
+        const CgsSystem::Time lGameTime = lpGameTimerStatus->GetTime();
+        CgsGui::GuiEventTimeInfo lTimeInfo;
+        lTimeInfo.Set(lpGameTimerStatus->GetCurrentTimeStep(),
+                      static_cast<f32>(lGameTime.GetSeconds()) + lGameTime.GetFraction());
+        PushGuiEvent(lTimeInfo, lpGuiInput); // 26 / 8
+    }
+
+    void BrnGameModule::TranslateGuiInterfaceToGuiEvents(
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        const BrnGameState::GameStateModuleIO::GameStateToGuiInterface* lpGameToGuiInterface)
+    {
+        typedef BrnGameState::GameStateModuleIO::GameStateToGuiInterface GameStateToGuiInterface;
+
+        s32 liIndex;
+
+        const GameStateToGuiInterface::NewDirtyTrickQueue* lpDirtyTrickNewQueue =
+            lpGameToGuiInterface->GetNewDirtyTrickQueue();                      // + 4
+        const GameStateToGuiInterface::DirtyTrickTriggeredQueue* lpDirtyTrickTriggeredQueue =
+            lpGameToGuiInterface->GetDirtyTrickTriggeredQueue();                // + 0x40
+        const GameStateToGuiInterface::DirtyTrickEndingQueue* lpDirtyTrickEndingQueue =
+            lpGameToGuiInterface->GetDirtyTrickEndingQueue();                   // + 0x7C
+        const GameStateToGuiInterface::OvertakeEventQueue* lpOvertakeQueue =
+            lpGameToGuiInterface->GetOvertakeEventQueue();                      // + 0xC8
+        const GameStateToGuiInterface::FinishedRaceEventQueue* lpFinishRaceQueue =
+            lpGameToGuiInterface->GetFinishedRaceEventQueue();                  // + 0xF4
+        const GameStateToGuiInterface::TookLeadEventQueue* lpTookLeadEventQueue =
+            lpGameToGuiInterface->GetTookLeadEventQueue();                      // + 0x120
+        const GameStateToGuiInterface::TookLastEventQueue* lpTookLastEventQueue =
+            lpGameToGuiInterface->GetTookLastEventQueue();                      // + 0x140
+        const GameStateToGuiInterface::OnTailEventQueue* lpOnTailEventQueue =
+            lpGameToGuiInterface->GetOnTailEventQueue();                        // + 0x160
+
+        const s32 liDTNewLength       = lpDirtyTrickNewQueue->GetLength();
+        const s32 liDTTriggeredLength = lpDirtyTrickTriggeredQueue->GetLength();
+        const s32 liDTEndedLength     = lpDirtyTrickEndingQueue->GetLength();
+        const s32 liOvertakeLength    = lpOvertakeQueue->GetLength();
+        const s32 liFinishRaceLength  = lpFinishRaceQueue->GetLength();
+        const s32 liTookLeadLength    = lpTookLeadEventQueue->GetLength();
+        const s32 liTookLastLength    = lpTookLastEventQueue->GetLength();
+        const s32 liOnTailQueueLength = lpOnTailEventQueue->GetLength();
+
+        for (liIndex = 0; liIndex < liDTNewLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiNewDirtyTrick lDirtyTrickNew =
+                lpDirtyTrickNewQueue->GetEvent(liIndex);
+            BrnGui::GuiDirtyTrickNewEvent lGuiDirtyTrickNewEvent;
+            lGuiDirtyTrickNewEvent.meAggressorActiveRaceCarIndex = lDirtyTrickNew.meAggressorActiveRaceCarIndex;
+            lGuiDirtyTrickNewEvent.meVictimActiveRaceCarIndex    = lDirtyTrickNew.meVictimActiveRaceCarIndex;
+            lGuiDirtyTrickNewEvent.meTrickType                   = lDirtyTrickNew.meTrickType;
+            PushGuiEvent(lGuiDirtyTrickNewEvent, lpGuiInput);                   // 177 / 12
+        }
+
+        for (liIndex = 0; liIndex < liDTTriggeredLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiTriggeredDirtyTrick lDirtyTrickTriggered =
+                lpDirtyTrickTriggeredQueue->GetEvent(liIndex);
+            BrnGui::GuiDirtyTrickTriggerEvent lGuiDirtyTrickTriggerEvent;
+            lGuiDirtyTrickTriggerEvent.meAggressorActiveRaceCarIndex = lDirtyTrickTriggered.meAggressorActiveRaceCarIndex;
+            lGuiDirtyTrickTriggerEvent.meVictimActiveRaceCarIndex    = lDirtyTrickTriggered.meVictimActiveRaceCarIndex;
+            lGuiDirtyTrickTriggerEvent.meTrickType                   = lDirtyTrickTriggered.meTrickType;
+            PushGuiEvent(lGuiDirtyTrickTriggerEvent, lpGuiInput);               // 179 / 12
+        }
+
+        for (liIndex = 0; liIndex < liDTEndedLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiEndingDirtyTrick lDirtyTrickEnding =
+                lpDirtyTrickEndingQueue->GetEvent(liIndex);
+            BrnGui::GuiDirtyTrickEndedEvent lGuiDirtyTrickEndedEvent;
+            lGuiDirtyTrickEndedEvent.meAggressorActiveRaceCarIndex = lDirtyTrickEnding.meAggressorActiveRaceCarIndex;
+            lGuiDirtyTrickEndedEvent.meVictimActiveRaceCarIndex    = lDirtyTrickEnding.meVictimActiveRaceCarIndex;
+            lGuiDirtyTrickEndedEvent.meTrickType                   = lDirtyTrickEnding.meTrickType;
+            lGuiDirtyTrickEndedEvent.mbSurvived                    = lDirtyTrickEnding.mbSurvived;  // `lbz 0x7c` -> `stb 0x6c`
+            PushGuiEvent(lGuiDirtyTrickEndedEvent, lpGuiInput);                 // 181 / 16
+        }
+
+        for (liIndex = 0; liIndex < liOvertakeLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiOvertakeEvent lOvertake =
+                lpOvertakeQueue->GetEvent(liIndex);
+            BrnGui::GuiOvertakeEvent lGuiOvertakeEvent;
+            lGuiOvertakeEvent.muNewPosition        = lOvertake.mu8NewPosition;          // rec +0 -> +4 (`stb`)
+            lGuiOvertakeEvent.meActiveRaceCarIndex = lOvertake.meActiveRaceCarIndex;    // rec +4 -> +0
+            PushGuiEvent(lGuiOvertakeEvent, lpGuiInput);                        // 371 / 8
+        }
+
+        for (liIndex = 0; liIndex < liFinishRaceLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiFinishedRaceEvent lFinishRace =
+                lpFinishRaceQueue->GetEvent(liIndex);
+            BrnGui::GuiFinishRaceEvent lGuiFinishRaceEvent;
+            lGuiFinishRaceEvent.meFinishType         = lFinishRace.meFinishType;         // rec +0 -> +4
+            lGuiFinishRaceEvent.meActiveRaceCarIndex = lFinishRace.meActiveRaceCarIndex; // rec +4 -> +0
+            PushGuiEvent(lGuiFinishRaceEvent, lpGuiInput);                      // 372 / 8
+        }
+
+        for (liIndex = 0; liIndex < liTookLeadLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiTookLeadEvent lTookLeadEvent =
+                lpTookLeadEventQueue->GetEvent(liIndex);
+            BrnGui::GuiTookLeadEvent lGuiTookLeadEvent;
+            lGuiTookLeadEvent.meLeadActiveRaceCarIndex = lTookLeadEvent.meActiveRaceCarIndex;  // rec +8 -> +8
+            lGuiTookLeadEvent.mOfflineRivalCarID       = lTookLeadEvent.mOfflineRivalCarID;    // rec +0 -> +0
+            PushGuiEvent(lGuiTookLeadEvent, lpGuiInput);                        // 484 / 16
+        }
+
+        for (liIndex = 0; liIndex < liTookLastLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiTookLastEvent lTookLastEvent =
+                lpTookLastEventQueue->GetEvent(liIndex);
+            BrnGui::GuiTookLastEvent lGuiTookLastEvent;
+            lGuiTookLastEvent.meLastActiveRaceCarIndex = lTookLastEvent.meActiveRaceCarIndex;  // rec +8 -> +8
+            lGuiTookLastEvent.mOfflineRivalCarID       = lTookLastEvent.mOfflineRivalCarID;    // rec +0 -> +0
+            PushGuiEvent(lGuiTookLastEvent, lpGuiInput);                        // 485 / 16
+        }
+
+        for (liIndex = 0; liIndex < liOnTailQueueLength; ++liIndex)
+        {
+            const BrnGameState::GameStateToGuiOnTailEvent lOnTailEvent =
+                lpOnTailEventQueue->GetEvent(liIndex);
+            BrnGui::GuiNetworkPlayerOnTailEvent lGuiOnTailEvent;
+            lGuiOnTailEvent.meOnTailActiveRaceCarIndex = lOnTailEvent.meOnTailActiveRaceCarIndex;  // rec +8 -> +8
+            lGuiOnTailEvent.mOfflineRivalCarID         = lOnTailEvent.mOfflineRivalCarID;          // rec +0 -> +0
+            PushGuiEvent(lGuiOnTailEvent, lpGuiInput);                          // 486 / 16
+        }
+
+        // [gui-iface] PC witness (BRN_MODEMGR_DIAG -- the switch the [tailing] producer witness
+        // already uses): prove the leg RUNS and what it posted. The first 24 non-empty calls.
+        // [FLAG PC witness]
+        {
+            static const bool sbDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+            static s32 siPrinted = 0;
+            const s32 liPosted = liDTNewLength + liDTTriggeredLength + liDTEndedLength
+                               + liOvertakeLength + liFinishRaceLength + liTookLeadLength
+                               + liTookLastLength + liOnTailQueueLength;
+            if (sbDiag && liPosted > 0 && siPrinted < 24 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siPrinted;
+                *CgsDev::Log::gpDebugPrint
+                    << "[gui-iface] posted 177x" << liDTNewLength << " 179x" << liDTTriggeredLength
+                    << " 181x" << liDTEndedLength << " 371x" << liOvertakeLength
+                    << " 372x" << liFinishRaceLength << " 484x" << liTookLeadLength
+                    << " 485x" << liTookLastLength << " 486x" << liOnTailQueueLength
+                    << " [FLAG PC witness]\n";
+            }
+        }
+    }
+
     // =========================================================================
     // TranslateTakedownsToGuiEvents
     //

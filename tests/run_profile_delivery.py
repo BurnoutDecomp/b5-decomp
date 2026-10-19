@@ -13,7 +13,7 @@ PC session the road-rule records were wiped (StreetManager::Update copies its ze
 max-car count missed the owned sponsor cars, the junkyard spawned the default car, and the smashed props respawned.
 
   1. WIRING -- the seat, the case-8 arm, OnProfileLoaded's statement order and arguments, case 109, the two
-     one-line callees, the retired PreWorldUpdate stand-in, Profile::FixUp.
+     one-line callees, the full PreWorldUpdate event route, Profile::FixUp.
   2. NUMERIC -- tests/ProfileDelivery.cpp compiles the PRODUCTION GetSpawnCar and OnLoadProfile onto a fixture.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_profile_delivery.py [--rev <b5 rev>]
@@ -30,7 +30,9 @@ from fxgs_common import Tree, code_only, compile_and_run, definition, report
 
 GAME_MODULE_CPP = "src/GameSource/Game/BrnGameModule.cpp"
 GSM_CPP = "src/GameSource/GameState/BrnGameStateModule.cpp"
-DISPATCH_CPP = "src/GameSource/GameState/GameStateModule_gUI_00.cpp"
+DISPATCH_CPP = "src/GameSource/GameState/GameStateModule_ProcessGameEvents.cpp"
+GROUP1_CPP = "src/GameSource/GameState/GameStateModule_ProcessGameEvents_wBT_01.cpp"
+GROUP4_CPP = "src/GameSource/GameState/GameStateModule_ProcessGameEvents_wBT_04.cpp"
 PM_CPP = "src/GameSource/GameState/Progression/BrnProgressionManager.cpp"
 PM_PREWORLD_CPP = "src/GameSource/GameState/Progression/BrnProgressionManager_PreWorldUpdate.cpp"
 MODE_MANAGER_CPP = "src/GameSource/GameState/ModeManager/BrnModeManager.cpp"
@@ -39,10 +41,12 @@ PROFILE_H = "src/GameSource/GameState/Progression/BrnProfile.h"
 EVENTS_H = "src/GameSource/GameState/BrnGameEvents.h"
 
 GAME_MAIN = "bool BrnGameModule::GameMain()"
-CASE8_ARM = "void GameStateModule::ProcessGameEventsGameStartBringUp()"
+PREWORLD_CALLER = "void BrnGameModule::DoUpdate_GameStatePreWorld("
+PREWORLD = "void GameStateModule::PreWorldUpdate("
+CASE8_ARM = "void GameStateModule::ProcessGameEvents_Group1("
+CASE109_ARM = "void GameStateModule::ProcessGameEvents_Group4("
 ON_PROFILE_LOADED = "void GameStateModule::OnProfileLoaded("
 GET_SPAWN_CAR = "CgsID GameStateModule::GetSpawnCar("
-PROP_ARM = "void GameStateModule::ProcessGameEventsPropProgressionBringUp("
 ON_LOAD_PROFILE = "void ProgressionManager::OnLoadProfile()"
 PM_PREWORLD = "void ProgressionManager::PreWorldUpdate("
 MM_ON_PROFILE_LOADED = "void ModeManager::OnProfileLoaded()"
@@ -94,17 +98,25 @@ def in_order(text, needles):
 
 def wiring(tree):
     game_main = squash(body(tree, GAME_MODULE_CPP, GAME_MAIN))
-    yield ("the MemoryCard-exit seat (game event 8) runs the extracted case-8 arm, not WaitForStreaming alone "
-           "(DoUpdate_GameStatePreWorld @0x823EE0E8 posts 8; ProcessGameEvents case 8 0x823A2758)",
-           "mGameStateModule.ProcessGameEventsGameStartBringUp()" in game_main
-           and "mGameStateModule.WaitForStreaming(" not in game_main)
+    caller = squash(body(tree, GAME_MODULE_CPP, PREWORLD_CALLER))
+    yield ("the full pre-world caller posts game event 8 before GameState PreWorldUpdate, "
+           "without the extracted case-8 shortcut (DoUpdate_GameStatePreWorld @0x823EE0E8)",
+           "DoUpdate_GameStatePreWorld(" in game_main
+           and "ProcessGameEventsGameStartBringUp" not in game_main
+           and in_order(caller, ["if(mbRequestStreamingWait)", "mbRequestStreamingWait=false",
+                                "AddEvent(&lEvent,E_EVENT_GAME_START)",
+                                "mGameStateModule.PreWorldUpdate("]))
 
-    arm = squash(body(tree, GSM_CPP, CASE8_ARM))
+    arm = squash(body(tree, GROUP1_CPP, CASE8_ARM))
+    preworld = squash(body(tree, GSM_CPP, PREWORLD))
+    dispatch = squash(source(tree, DISPATCH_CPP))
     yield ("the case-8 arm is the console's: if (mbWaitForStreaming /*+0x38B70*/) { OnProfileLoaded(out, queue); "
-           "WaitForStreaming(queue); }, under the output write lock with mbIsUpdating raised",
-           "if(mbWaitForStreaming){OnProfileLoaded(mpOutputBuffer,lpActionQueue);WaitForStreaming(lpActionQueue);}" in arm
-           and in_order(arm, ["LockForWrite()", "mbIsUpdating=true", "if(mbWaitForStreaming)", "mbIsUpdating=false",
-                              "UnlockForWrite()"]))
+           "WaitForStreaming(queue); }, reached through the full dispatcher under PreWorld's output lock",
+           "caseGameStateModuleIO::E_EVENT_GAME_START:if(mbWaitForStreaming){OnProfileLoaded(lpOutput,lpActionQueue);WaitForStreaming(lpActionQueue);}" in arm
+           and in_order(dispatch, ["caseGameStateModuleIO::E_EVENT_GAME_START:", "ProcessGameEvents_Group1("])
+           and in_order(preworld, ["mbIsUpdating=true", "lpOutput->LockForWrite()",
+                                  "ProcessGameEvents(&lGameEvents,lpActionQueue,lpInput,lpOutput)",
+                                  "lpOutput->UnlockForWrite()", "mbIsUpdating=false"]))
 
     opl = squash(body(tree, GSM_CPP, ON_PROFILE_LOADED))
     order = ["lpProfile->FixUp()",
@@ -136,11 +148,14 @@ def wiring(tree):
            re.search(r"static\s+const\s+s32\s+KI_GAME_MODE_SLOTS\s*=\s*18\s*;", mode_manager_h) is not None
            and re.search(r"KF_ONPROFILELOADED_RANK_ZERO_TRAFFIC_SCALE\s*=\s*0\.9f\s*;", gsm_source) is not None)
 
-    prop_arm = squash(body(tree, DISPATCH_CPP, PROP_ARM))
+    profile_arm = squash(body(tree, GROUP4_CPP, CASE109_ARM))
     events = code_only(source(tree, EVENTS_H))
     yield ("case 109 (an in-game load, GUI 352 bridged by BridgeGuiToGameState @0x823DDB78) calls OnProfileLoaded "
            "(0x823A33D4..0x823A33E0)",
-           "if(liType==GameStateModuleIO::E_EVENT_PROGRESSION_PROFILE_LOADED){OnProfileLoaded(mpOutputBuffer,lpActionQueue);" in prop_arm
+           in_order(profile_arm, ["caseGameStateModuleIO::E_EVENT_PROGRESSION_PROFILE_LOADED:",
+                                  "OnProfileLoaded(lpOutput,lpActionQueue)"])
+           and in_order(dispatch, ["caseGameStateModuleIO::E_EVENT_PROGRESSION_PROFILE_LOADED:",
+                                   "ProcessGameEvents_Group4("])
            and re.search(r"E_EVENT_PROGRESSION_PROFILE_LOADED\s*=\s*109\s*,", events) is not None)
 
     mm = squash(body(tree, MODE_MANAGER_CPP, MM_ON_PROFILE_LOADED))

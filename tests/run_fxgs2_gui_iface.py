@@ -7,8 +7,8 @@ the consumer of the eight GameStateToGuiInterface queues, and its call site.
   on tail 486/16 {car id, slot}. BridgeGameStateToGui @0x823EE880 calls it at 0x823EF2BC, right
   after TranslateTakedownsToGuiEvents, on the read-locked game-state output.
 
-Numeric: tests/FxGs2GuiIface.cpp compiles the extracted production bodies (the translate and its two
-TU-local wire records from BrnGameModule.cpp; PushGuiEvent from GameBridgeGameStateToX.h; the
+Numeric: tests/FxGs2GuiIface.cpp compiles the extracted production bodies (the qualified member from GameBridgeGameStateToX.cpp, or the historical free function
+and its two wire records from BrnGameModule.cpp; PushGuiEvent from GameBridgeGameStateToX.h; the
 interface's Construct, publishers and const accessors from BrnGameStateToGuiIOInterfaces.cpp)
 against a recording GUI input buffer.
 Wiring: the call in GameMain's GUI leg -- after the takedown translator, inside the write lock, and
@@ -25,6 +25,7 @@ sys.dont_write_bytecode = True
 from fxgs_common import Tree, definition, code_only, compile_and_run, report, STRSTREAM_CPP
 
 GAME_CPP = "src/GameSource/Game/BrnGameModule.cpp"
+BRIDGE_CPP = "src/GameSource/Game/GameBridgeGameStateToX.cpp"
 BRIDGE_H = "src/GameSource/Game/GameBridgeGameStateToX.h"
 GUI_CPP = "src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp"
 NUMERIC_CHECKS = 21
@@ -56,55 +57,76 @@ TRANSLATE_STAND_IN = ("void TranslateGuiInterfaceToGuiEvents(CgsGui::CgsGuiModul
 
 def wiring(tree):
     game = tree.read(GAME_CPP)
+    bridge_cpp = tree.read(BRIDGE_CPP)
     try:
-        # code only, and every whitespace run removed: the checks match tokens, not layout
         main = re.sub(r"\s+", "", code_only(definition(game, "bool BrnGameModule::GameMain()")))
     except ValueError:
         main = ""
-    takedowns = main.find("TranslateTakedownsToGuiEvents(")
-    call = main.find("TranslateGuiInterfaceToGuiEvents(mpGuiInputBuffer,"
-                     "lpcGameStateOutput->GetGameStateToGuiInterface());")
-    unlock = main.find("mpGuiInputBuffer->UnlockForWrite();", max(takedowns, 0))
+    try:
+        wrapper = re.sub(r"\s+", "", code_only(definition(
+            bridge_cpp, "void BrnGameModule::BridgeGameStateToGui(")))
+    except ValueError:
+        wrapper = ""
     retire = main.find("lpGameStateOutput->GetGameStateToGuiInterface()->Construct();")
-    yield ("GameMain's GUI leg calls TranslateGuiInterfaceToGuiEvents(guiInput, "
-           "output->GetGameStateToGuiInterface()) right after TranslateTakedownsToGuiEvents, inside the "
-           "GUI input write lock (0x823EF278 -> 0x823EF2BC)",
-           0 <= takedowns < call < unlock)
-    yield ("the interface is translated BEFORE the per-sub-step retire (its Construct) empties it",
-           0 <= call < retire)
+    if wrapper:
+        call = main.find("BridgeGameStateToGui(mpGuiInputBuffer,lpcGameStateOutput);")
+        lock = main.rfind("mpGuiInputBuffer->LockForWrite();", 0, call)
+        unlock = main.find("mpGuiInputBuffer->UnlockForWrite();", max(call, 0))
+        takedowns = wrapper.find("TranslateTakedownsToGuiEvents(")
+        interface = wrapper.find("TranslateGuiInterfaceToGuiEvents(lpGuiInput,lpGameStateOutput->GetGameStateToGuiInterface());")
+        time = wrapper.find("PushGuiEvent(lTimeInfo,lpGuiInput);")
+        ordered = 0 <= lock < call < unlock and 0 <= takedowns < interface < time
+    else:
+        # Preserve the historical baseline's original free-function seat literally.
+        takedowns = main.find("TranslateTakedownsToGuiEvents(")
+        call = main.find("TranslateGuiInterfaceToGuiEvents(mpGuiInputBuffer,lpcGameStateOutput->GetGameStateToGuiInterface());")
+        unlock = main.find("mpGuiInputBuffer->UnlockForWrite();", max(takedowns, 0))
+        ordered = 0 <= takedowns < call < unlock
+    yield ("GUI bridge calls the interface translator after takedowns, within the GUI input write lock", ordered)
+    yield ("the interface is translated before per-sub-step retirement", 0 <= call < retire)
 
 
 def numeric(tree):
     game = tree.read(GAME_CPP)
+    bridge_cpp = tree.read(BRIDGE_CPP)
     bridge = tree.read(BRIDGE_H)
     gui = tree.read(GUI_CPP)
-    stood_in = []
     try:
         push = "template <class GuiEventT>\n" + definition(bridge, "static void PushGuiEvent(")
     except ValueError:
         print("NUMERIC: cannot build -- production body absent: PushGuiEvent")
         return None
     gui_parts = []
-    for signature in GUI_REQUIRED:
+    for signature in GUI_REQUIRED + GUI_ACCESSORS:
         try:
             gui_parts.append(definition(gui, signature))
         except ValueError:
             print("NUMERIC: cannot build -- production body absent: " + signature)
             return None
     try:
-        translate = definition(game, TRANSLATE)
-        records = [definition(game, signature) + ";" for signature in WIRE_RECORDS]
-        for signature in GUI_ACCESSORS:
-            gui_parts.append(definition(gui, signature))
+        translate = definition(bridge_cpp, "void BrnGameModule::TranslateGuiInterfaceToGuiEvents(")
+        # Explicit owner boundary double: production uses this only for AddGuiEvent's
+        # embedded GUI module; the recovered queue pusher does not inspect it.
+        owner = ("struct BrnGameModule { void TranslateGuiInterfaceToGuiEvents("
+                 "CgsGui::CgsGuiModuleIO::InputBuffer*, const BrnGameState::GameStateModuleIO::GameStateToGuiInterface*); };\n")
+        implementation = owner + translate
+        invocation = "BrnGameModule().TranslateGuiInterfaceToGuiEvents(lpInput, lpInterface);"
     except ValueError:
-        translate = "// [stand-in: body absent in this revision]\n" + TRANSLATE_STAND_IN
-        records = []
-        stood_in.append("TranslateGuiInterfaceToGuiEvents")
-    if stood_in:
-        print("NUMERIC: bodies absent in this revision (empty stand-ins): " + ", ".join(stood_in))
+        try:
+            translate = definition(game, TRANSLATE)
+            records = [definition(game, signature) + ";" for signature in WIRE_RECORDS]
+            implementation = "namespace {\n" + "\n".join(records) + "\n" + translate + "\n}\n"
+            invocation = "TranslateGuiInterfaceToGuiEvents(lpInput, lpInterface);"
+        except ValueError:
+            print("NUMERIC: body absent in this revision: TranslateGuiInterfaceToGuiEvents")
+            implementation = "// [stand-in: body absent in this revision]\n" + TRANSLATE_STAND_IN
+            invocation = "TranslateGuiInterfaceToGuiEvents(lpInput, lpInterface);"
+    # This fixture adapter selects the actual production owner without changing its body.
+    adapter = ("static void InvokeTranslator(CgsGui::CgsGuiModuleIO::InputBuffer* lpInput, "
+               "const BrnGameState::GameStateModuleIO::GameStateToGuiInterface* lpInterface) { "
+               + invocation + " }\n")
     inc = ("namespace BrnGameState { namespace GameStateModuleIO {\n" + "\n".join(gui_parts) + "\n} }\n"
-           + "namespace BrnGame {\n" + push + "\nnamespace {\n" + "\n".join(records) + "\n" + translate
-           + "\n}\n}\n")
+           + "namespace BrnGame {\n" + push + "\n" + implementation + "\n" + adapter + "}\n")
     return compile_and_run(Path(__file__).with_name("FxGs2GuiIface.cpp"), "gui_iface_methods.inc", inc,
                            "FxGs2GuiIface", extra_sources=[STRSTREAM_CPP])
 

@@ -324,27 +324,8 @@ namespace BrnGui
     // the auto-derived shell here read the attested record size 12 as "GuiEvent<350>
     // header, no payload", but the X360 producer (GameBridgeGameStateToX case 193
     // @0x823EBBA4) fills all 12 bytes with payload. Do not re-add it here.
-    // The per-car race-distance record BrnGameModule::BridgeGameStateToGui posts every frame
-    // (id 239, 144 bytes; the stores are record-relative, so the record carries no GuiEvent
-    // header). The reference members, in their order, plus the console's per-car word at +0x60
-    // that the reference row does not list. FLAG: that word is named after its producer's source,
-    // CarScoreData::GetOnlineStuntScore.
-    struct GuiEventRaceDistanceRemaining
-    {
-        CgsID maCarId[8];                 // +0x00
-        f32   mafDistanceToFinish[8];     // +0x40
-        s32   maiOnlineStuntScore[8];     // +0x60
-        bool  mabPlayerEliminated[8];     // +0x80
-        bool  mabValid[8];                // +0x88
-        s32 GetEventType() const { return 239; }
-    };
-    static_assert(sizeof(GuiEventRaceDistanceRemaining) == 144, "id 239 is posted with 144 bytes");
-    // The player's distance to the next checkpoint (id 240, 4 bytes).
-    struct GuiEventRaceDistanceToCheckpoint
-    {
-        f32 mfDistanceToCheckpoint;       // +0x00
-        s32 GetEventType() const { return 240; }
-    };
+    // Race-distance records are owned by BrnGuiEventTypeDefs.h.
+
     // id 493 size 4: the GUI's collision-world request (BrnGuiEventTypeDefs.h). The
     // payload is the request kind; BrnGameModule::BridgeGuiToWorld switches on it.
     struct GuiEventRequestCollisionWorldEvent
@@ -398,7 +379,7 @@ namespace BrnGui
     struct GuiEventScoreboardResponseVariationEvent : public CgsGui::GuiEvent<118> { u8 maPayload[2040]; };  // id 118 size 2052 (12B GuiEvent header + opaque payload)
     struct GuiEventShowFreeburnChallenge { u8 maData[8]; s32 GetEventType() const { return 582; } };  // id 582 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventShowHideHud { u8 maData[1]; s32 GetEventType() const { return 148; } };  // id 148 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiEventSpecificPresetRaces : public CgsGui::GuiEvent<194> { u8 maPayload[7692]; };  // id 194 size 7704 (12B GuiEvent header + opaque payload)
+    // GuiEventSpecificPresetRaces is owned by BrnGuiEventTypeDefs.h.
     // ⭐⭐⭐ [pause-stats wave 2026-08-29] GuiEventStatsResponse (id 436, 432 bytes) has been
     // RECOVERED and now lives in GameSource/Gui/Events/BrnGuiEventStatsResponse.h with its real
     // DWARF member names (BrnGuiEventTypeDefs.h:4950..:5056). The opaque
@@ -599,7 +580,7 @@ namespace BrnGui
     // [gateui r3] GuiPowerParkResult (id 404) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5467, sizeof 8).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
-    struct GuiPursuitScoreUpdate { u8 maData[4]; s32 GetEventType() const { return 432; } };  // id 432 size 4 (raw; size not GuiEvent-shaped)
+    // GuiPursuitScoreUpdate is owned by BrnGuiEventTypeDefs.h.
     // [gateui r3] GuiRaceCheckpointReached (id 425) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5690, sizeof 12).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
