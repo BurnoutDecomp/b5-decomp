@@ -2309,12 +2309,12 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
     lpTrafficOutput_PostPhysics->LockForWrite();
     lpUpdateOutputBuffer->LockForWrite();
 
+    // The source is write-locked above; these mutable accessors match the X360 calls
+    // at 0x822BA810 and 0x822BA8B8.
     lpUpdateOutputBuffer->GetResourceRequestResourceInterface()->Append(
-        *static_cast<const WorldEntityIO::OutputBuffer_PostPhysics*>(
-            lpWorldEntityOutput_PostPhysics )->GetResourceRequestInterface() );
+        *lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface());
     lpUpdateOutputBuffer->SetWorldEntityStatusInterface(
-        static_cast<const WorldEntityIO::OutputBuffer_PostPhysics*>(
-            lpWorldEntityOutput_PostPhysics )->GetStatusInterface() );
+        lpWorldEntityOutput_PostPhysics->GetStatusInterface());
     // [FLAG PC boot gate] the traffic GUI-event forward
     // (VariableEventQueue<32768,16>::Append of the traffic post-physics output's
     // GUI queue into the update output's GUI queue) is deferred with the traffic
