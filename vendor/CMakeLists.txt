@@ -1,2 +1,8 @@
+add_subdirectory(EABase)
 add_subdirectory(EAThread)
+add_subdirectory(EASTL)
 add_subdirectory(renderware)
+add_subdirectory(coreallocator)
+add_subdirectory(PPMalloc)
+add_subdirectory(zlib)
+add_subdirectory(dirtysdk)
