@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (diag probe)
 #include <cstdio>                                                         // std::snprintf (diag probe)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (the attract video resource id)
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"             // CgsSound::Playback::Name::MakeHash
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 // BrnGui::BootLegal -- the boot legal / title-screen state (BF_LEGAL), reconstructed from
@@ -654,6 +655,10 @@ namespace BrnGui
                 BrnGui::GuiEventPlayVideo lPlay;
                 lPlay.muVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>(KAAC_ATTRACT_MOVIE[muCurrentAttractMovieIdx])));
+                // ARTIST 0x82477B48..50 stores the sound-name hash alongside the
+                // resource id. A null sound name requests a stop instead of audio.
+                lPlay.muSoundStreamName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                    KAAC_ATTRACT_MOVIE[muCurrentAttractMovieIdx]));
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlay);
             }
             meUpdateStage = E_STAGE_ATTRACT_PLAYING;

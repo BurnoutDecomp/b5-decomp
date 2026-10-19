@@ -26,6 +26,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <map>
+#include <new>
+#include <tuple>
+#include "../online/OnlineTransport.h"
 
 #include "GameShared/GameClasses/System/PC/CgsPcNetIdentity.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -34,9 +38,12 @@ static_assert(sizeof(PcLanHeaderT) == 20, "PcLanHeaderT is the 20-byte wire head
 
 namespace
 {
-    // How long a received control sequence number is remembered for de-duplication. It must
-    // outlive the sender's whole retransmit window (PCLAN_PEER_TIMEOUT_MS).
-    const uint64_t KU64_DEDUP_KEEP_MS = 2u * PCLAN_PEER_TIMEOUT_MS;
+    // WAN control acknowledgements share the server's negotiated timeout. The LAN
+    // timeout is too short when an internet connection queues packets for seconds.
+    uint64_t PcLanCorePeerTimeoutMs()
+    {
+        return B5Online::Enabled() ? B5Online::TimeoutMs() : PCLAN_PEER_TIMEOUT_MS;
+    }
     const int32_t  KI_DEDUP_SLOTS     = 256;
 
     // Datagrams drained per PcLanIdle call; the rest wait for the next frame.
@@ -53,7 +60,7 @@ namespace
         bool        bUsed;
         PcLanPeerT  To;
         uint8_t     uType;
-        uint16_t    uSeq;
+        uint32_t    uSeq;
         uint32_t    uGameIdent;
         uint64_t    uFirstMs;
         uint64_t    uLastMs;
@@ -91,7 +98,7 @@ namespace
         bool        bWsaStarted;
         PcLanPeerT  Self;
         uint16_t    uPortBase;
-        uint16_t    uNextSeq;
+        uint32_t    uNextSeq;
         uint32_t    uSelfIdent;
         PcLanStatsT Stats;
         int32_t     iLogLeft;
@@ -103,6 +110,9 @@ namespace
     };
 
     PcLanStateT gPcLan = { INVALID_SOCKET, false };
+    const size_t KU_ONLINE_DEDUP_CAPACITY = 8192;
+    typedef std::tuple<uint32_t, uint16_t, uint32_t, uint64_t, uint32_t> OnlineReceiptKeyT;
+    std::map<OnlineReceiptKeyT, uint64_t> gOnlineReceipts;
 
     const char *const kPcLanTypeNames[PCLAN_NUM_TYPES] =
     {
@@ -222,7 +232,12 @@ namespace
         return uAddr;
     }
 
-    int32_t PcLanCoreSendRaw(const PcLanPeerT *pTo, uint8_t uType, uint32_t uGameIdent, uint16_t uSeq,
+    uint32_t PcLanCoreControlSequence(const PcLanHeaderT *pHeader)
+    {
+        return pHeader->uSeq | (B5Online::Enabled() ? (uint32_t(pHeader->uPad) << 16) : 0);
+    }
+
+    int32_t PcLanCoreSendRaw(const PcLanPeerT *pTo, uint8_t uType, uint32_t uGameIdent, uint32_t uSeq,
                           const void *pBody, int32_t iLen)
     {
         uint8_t aPacket[sizeof(PcLanHeaderT) + PCLAN_MAX_BODY];
@@ -233,12 +248,19 @@ namespace
         Header.uLen = (uint16_t)iLen;
         Header.uSenderIdent = gPcLan.uSelfIdent;
         Header.uGameIdent = uGameIdent;
-        Header.uSeq = uSeq;
-        Header.uPad = 0;
+        Header.uSeq = static_cast<uint16_t>(uSeq);
+        Header.uPad = B5Online::Enabled() ? static_cast<uint16_t>(uSeq >> 16) : 0;
         memcpy(aPacket, &Header, sizeof(Header));
         if (iLen > 0)
         {
             memcpy(aPacket + sizeof(Header), pBody, (size_t)iLen);
+        }
+
+        if (B5Online::Enabled())
+        {
+            const int32_t liResult = B5Online::Send(pTo->uAddr, aPacket, static_cast<int32_t>(sizeof(Header)) + iLen);
+            if (liResult == 0) gPcLan.Stats.uSent += 1;
+            return liResult;
         }
 
         sockaddr_in To;
@@ -298,14 +320,32 @@ namespace
         }
     }
 
-    // True when this (address, ident, seq) was already dispatched inside the keep window; the
-    // first sighting is recorded.
-    bool PcLanCoreSeenBefore(const PcLanPeerT *pFrom, const PcLanHeaderT *pHeader, uint64_t uNowMs)
+    // 1: duplicate; 0: first receipt recorded; -1: no room to safely acknowledge it.
+    int32_t PcLanCoreSeenBefore(const PcLanPeerT *pFrom, const PcLanHeaderT *pHeader,
+                              uint64_t uNowMs, uint64_t uConnectionEpoch)
     {
+        const uint64_t uDedupKeepMs = 2u * PcLanCorePeerTimeoutMs();
+        if (B5Online::Enabled())
+        {
+            for (auto lEntry = gOnlineReceipts.begin(); lEntry != gOnlineReceipts.end(); )
+            {
+                if ((uNowMs - lEntry->second) >= uDedupKeepMs) lEntry = gOnlineReceipts.erase(lEntry);
+                else ++lEntry;
+            }
+            const OnlineReceiptKeyT lKey = std::make_tuple(pFrom->uAddr, pFrom->uPort,
+                pHeader->uSenderIdent, uConnectionEpoch, PcLanCoreControlSequence(pHeader));
+            if (gOnlineReceipts.find(lKey) != gOnlineReceipts.end()) return 1;
+            // Never overwrite a live receipt. Withhold the ACK if the bounded
+            // cache is full, so the sender retries rather than losing a control.
+            if (gOnlineReceipts.size() >= KU_ONLINE_DEDUP_CAPACITY) return -1;
+            try { gOnlineReceipts.emplace(lKey, uNowMs); }
+            catch (const std::bad_alloc&) { return -1; }
+            return 0;
+        }
         for (int32_t iSlot = 0; iSlot < KI_DEDUP_SLOTS; ++iSlot)
         {
             const DedupT *pEntry = &gPcLan.aDedup[iSlot];
-            if ((pEntry->uMs != 0) && ((uNowMs - pEntry->uMs) < KU64_DEDUP_KEEP_MS) &&
+            if ((pEntry->uMs != 0) && ((uNowMs - pEntry->uMs) < uDedupKeepMs) &&
                 (pEntry->uAddr == pFrom->uAddr) && (pEntry->uPort == pFrom->uPort) &&
                 (pEntry->uSeq == pHeader->uSeq) && (pEntry->uSenderIdent == pHeader->uSenderIdent))
             {
@@ -329,7 +369,8 @@ namespace
             PendingT *pPending = &gPcLan.aPending[iSlot];
             // Sequence numbers are ours and unique inside the retransmit window, so seq + port
             // identify the message even when a multi-homed peer answers from another address.
-            if (pPending->bUsed && (pPending->uSeq == pHeader->uSeq) && (pPending->To.uPort == pFrom->uPort))
+            if (pPending->bUsed && (pPending->uSeq == PcLanCoreControlSequence(pHeader)) &&
+                (pPending->To.uPort == pFrom->uPort))
             {
                 PcLanCoreReleasePending(pPending);
                 gPcLan.Stats.uAcked += 1;
@@ -338,7 +379,8 @@ namespace
         }
     }
 
-    void PcLanCoreReceiveOne(const uint8_t *pPacket, int32_t iSize, const PcLanPeerT *pFrom, uint64_t uNowMs)
+    void PcLanCoreReceiveOne(const uint8_t *pPacket, int32_t iSize, const PcLanPeerT *pFrom,
+                            uint64_t uNowMs, uint64_t uConnectionEpoch = 0, bool bPeerRestarted = false)
     {
         PcLanHeaderT Header;
         if (iSize < (int32_t)sizeof(Header))
@@ -367,18 +409,36 @@ namespace
         gPcLan.Stats.uRecv += 1;
         const uint8_t *pBody = pPacket + sizeof(Header);
 
+        if (bPeerRestarted)
+        {
+            // A new authenticated connection superseded this address. Clean up
+            // its old membership/link before even ACKing the first new packet.
+            // Keep old receipts and the transport's newly accepted epoch intact.
+            PcLanHeaderT Bye = { PCLAN_MAGIC, PCLAN_VERSION, PCLAN_BYE, 0,
+                Header.uSenderIdent, 0, 0, 0 };
+            PcLanCoreAfterBye(pFrom, Header.uSenderIdent);
+            PcLanCoreDispatch(pFrom, &Bye, NULL);
+        }
+
         if (Header.uType == PCLAN_ACK)
         {
             PcLanCoreOnAck(pFrom, &Header);
             return;
         }
 
-        if ((Header.uType != PCLAN_DATA) && (Header.uSeq != 0))
+        const uint32_t uSequence = PcLanCoreControlSequence(&Header);
+        if ((Header.uType != PCLAN_DATA) && (uSequence != 0))
         {
+            const int32_t iSeen = PcLanCoreSeenBefore(pFrom, &Header, uNowMs, uConnectionEpoch);
+            if (iSeen < 0)
+            {
+                PcLanCoreLog("online control receipt cache full; ACK deferred");
+                return;
+            }
             // Every copy is acked (the sender may have lost our previous ack); only the first
             // is dispatched.
-            PcLanCoreSendRaw(pFrom, PCLAN_ACK, Header.uGameIdent, Header.uSeq, NULL, 0);
-            if (PcLanCoreSeenBefore(pFrom, &Header, uNowMs))
+            PcLanCoreSendRaw(pFrom, PCLAN_ACK, Header.uGameIdent, uSequence, NULL, 0);
+            if (iSeen != 0)
             {
                 gPcLan.Stats.uDup += 1;
                 return;
@@ -418,7 +478,18 @@ namespace
             Peer.uAddr = ntohl(From.sin_addr.s_addr);
             Peer.uPort = ntohs(From.sin_port);
             Peer.uPad = 0;
-            PcLanCoreReceiveOne(aPacket, iSize, &Peer, uNowMs);
+            if (B5Online::Enabled())
+            {
+                uint8_t laInner[sizeof(PcLanHeaderT) + PCLAN_MAX_BODY];
+                PcLanPeerT lLogicalPeer;
+                uint64_t uConnectionEpoch = 0;
+                bool bPeerRestarted = false;
+                const int32_t liInner = B5Online::Receive(&Peer, aPacket, iSize, laInner, sizeof(laInner),
+                                                         &lLogicalPeer, &uConnectionEpoch, &bPeerRestarted);
+                if (liInner > 0) PcLanCoreReceiveOne(laInner, liInner, &lLogicalPeer, uNowMs,
+                                                   uConnectionEpoch, bPeerRestarted);
+            }
+            else PcLanCoreReceiveOne(aPacket, iSize, &Peer, uNowMs);
         }
     }
 
@@ -445,7 +516,8 @@ namespace
         char strPeer[32];
         gPcLan.Stats.uTimeouts += 1;
         PcLanCoreLog("peer %s ident=%08X dropped: %s unacked for %d ms, BYE synthesised",
-                  PcLanCoreAddrText(&Peer, strPeer, sizeof(strPeer)), uIdent, PcLanTypeName(uType), PCLAN_PEER_TIMEOUT_MS);
+                  PcLanCoreAddrText(&Peer, strPeer, sizeof(strPeer)), uIdent, PcLanTypeName(uType),
+                  static_cast<int32_t>(PcLanCorePeerTimeoutMs()));
 
         PcLanHeaderT Bye;
         Bye.uMagic = PCLAN_MAGIC;
@@ -462,6 +534,7 @@ namespace
 
     void PcLanCoreRetransmit(uint64_t uNowMs)
     {
+        const uint64_t uTimeoutMs = PcLanCorePeerTimeoutMs();
         for (int32_t iSlot = 0; iSlot < PCLAN_MAX_PENDING; ++iSlot)
         {
             if (gPcLan.hSocket == INVALID_SOCKET)
@@ -473,7 +546,7 @@ namespace
             {
                 continue;
             }
-            if ((uNowMs - pPending->uFirstMs) >= PCLAN_PEER_TIMEOUT_MS)
+            if ((uNowMs - pPending->uFirstMs) >= uTimeoutMs)
             {
                 PcLanCoreTimeoutPeer(iSlot);
                 continue;
@@ -555,13 +628,15 @@ bool PcLanStartup()
     PcLanCoreReleaseAllPending();
     memset(gPcLan.aPeers, 0, sizeof(gPcLan.aPeers));
     memset(gPcLan.aDedup, 0, sizeof(gPcLan.aDedup));
+    gOnlineReceipts.clear();
     gPcLan.iDedupNext = 0;
     gPcLan.iLogLeft = KI_LOG_BUDGET;
     gPcLan.uSelfIdent = CgsPcNetIdentityLobbyIdent();
     gPcLan.uPortBase = PcLanCoreReadPortBase();
     // A restarted instance must not reuse the sequence numbers its previous life left in a
     // peer's de-duplication window.
-    gPcLan.uNextSeq = (uint16_t)((GetTickCount64() ^ (gPcLan.uSelfIdent >> 3)) | 1u);
+    const uint32_t uSeed = static_cast<uint32_t>((GetTickCount64() ^ (gPcLan.uSelfIdent >> 3)) | 1u);
+    gPcLan.uNextSeq = B5Online::Enabled() ? uSeed : static_cast<uint16_t>(uSeed);
 
     if (!PcLanCoreOpenSocket())
     {
@@ -573,6 +648,14 @@ bool PcLanStartup()
     }
     gPcLan.Self.uAddr = PcLanCoreFindSelfAddr();
     gPcLan.Self.uPad = 0;
+    if (!B5Online::Configure(static_cast<uintptr_t>(gPcLan.hSocket), gPcLan.uSelfIdent, &gPcLan.Self))
+    {
+        closesocket(gPcLan.hSocket);
+        gPcLan.hSocket = INVALID_SOCKET;
+        WSACleanup();
+        gPcLan.bWsaStarted = false;
+        return false;
+    }
 
     char strSelf[32];
     PcLanCoreLog("up name=%s xuid=%016llX ident=%08X bound=%s window=%u..%u",
@@ -584,6 +667,7 @@ bool PcLanStartup()
 
 void PcLanShutdown()
 {
+    gOnlineReceipts.clear();
     if (gPcLan.hSocket == INVALID_SOCKET)
     {
         return;
@@ -599,6 +683,7 @@ void PcLanShutdown()
     PcLanCoreLog("down sent=%u resent=%u recv=%u dup=%u acked=%u timeouts=%u bad=%u",
               gPcLan.Stats.uSent, gPcLan.Stats.uResent, gPcLan.Stats.uRecv, gPcLan.Stats.uDup,
               gPcLan.Stats.uAcked, gPcLan.Stats.uTimeouts, gPcLan.Stats.uBad);
+    B5Online::Shutdown();
     closesocket(gPcLan.hSocket);
     gPcLan.hSocket = INVALID_SOCKET;
     PcLanCoreReleaseAllPending();
@@ -614,6 +699,9 @@ bool PcLanActive()
 {
     return gPcLan.hSocket != INVALID_SOCKET;
 }
+
+bool PcLanOnline() { return B5Online::Enabled(); }
+uint16_t PcLanMaxPlayers() { return B5Online::MaxPlayers(); }
 
 PcLanPeerT PcLanSelf()
 {
@@ -632,6 +720,7 @@ void PcLanIdle()
         return;
     }
     const uint64_t uNowMs = PcLanCoreNowMs();
+    B5Online::Update();
     PcLanCoreDrain(uNowMs);
     PcLanCoreRetransmit(PcLanCoreNowMs());
 }
@@ -691,7 +780,8 @@ int32_t PcLanSendControl(const PcLanPeerT *pTo, uint8_t uType, uint32_t uGameIde
         memcpy(pCopy, pBody, (size_t)iLen);
     }
 
-    const uint16_t uSeq = gPcLan.uNextSeq++;
+    const uint32_t uSeq = gPcLan.uNextSeq++;
+    if (!B5Online::Enabled()) gPcLan.uNextSeq = static_cast<uint16_t>(gPcLan.uNextSeq);
     const uint64_t uNowMs = PcLanCoreNowMs();
 
     PendingT *pPending = &gPcLan.aPending[iFree];
@@ -738,6 +828,11 @@ int32_t PcLanBroadcast(uint8_t uType, uint32_t uGameIdent, const void *pBody, in
 
     // Loopback reaches every instance on this machine; the limited broadcast reaches the LAN
     // (it may be refused on a host with no network, which only matters if loopback failed too).
+    if (B5Online::Enabled())
+    {
+        const PcLanPeerT lServer = { 0, 0, 0 };
+        return PcLanCoreSendRaw(&lServer, uType, uGameIdent, 0, pBody, iLen);
+    }
     int32_t iDelivered = 0;
     const uint32_t aTargets[2] = { KU_LOOPBACK, KU_BROADCAST };
     for (int32_t iTarget = 0; iTarget < 2; ++iTarget)

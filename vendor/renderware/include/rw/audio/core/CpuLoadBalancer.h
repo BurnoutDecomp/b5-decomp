@@ -67,7 +67,7 @@ public:
 
     // Cull the lowest-priority voices until the frame cost fits the CPU budget. Its body is a
     // separate ledger TU; declared here because Balance calls it (r3 = self).
-    static u32 CullVoices(CpuLoadBalancer *self);
+    static void CullVoices(CpuLoadBalancer *self, f32 afExcessCycles);
 
     // ----------------------------------------------------------------------------------
     // Layout. X360 (4-byte-word) offsets in the +0xNN comments; access is by name.

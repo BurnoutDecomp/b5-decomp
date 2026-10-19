@@ -80,6 +80,9 @@ void MusicStream::Update(f32 afDeltaTime)
 {
     if (meState == E_STOPPED && mbSongQueued)
     {
+        // ARTIST @ 0x826871F8 cancels this user's older requests before replacement.
+        mpStreamingManager->PostStreamRequest(
+            Streaming::StreamStopRequest(this, 0.0f));
         mCreateParams.mContentSpecName = muQueuedContentSpec;
         mpStreamingManager->PostStreamRequest(
             Streaming::StreamRequest(this, muPriority, 0.1f));
@@ -99,7 +102,7 @@ void MusicStream::Update(f32 afDeltaTime)
         if (mfFadeTime >= mfFadeDuration)
         {
             mpStreamingManager->PostStreamRequest(
-                Streaming::StreamStopRequest(this, mfFadeDuration));
+                Streaming::StreamStopRequest(this, 0.0f));
             meState = E_STOPPED;
         }
     }

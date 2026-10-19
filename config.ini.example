@@ -1,4 +1,12 @@
 ; Copy selected settings into config.ini beside Burnout_PC.exe, then restart.
+[Online]
+; Leave Server empty for LAN. Set the same server and key on every player's PC.
+; Example: Server=online.decomp.adriwin.fr:27900
+Server=
+; The server's 64-hex-digit access key. Keep your configured key out of Git.
+Key=
+; Optional BP_ONLINE_SERVER / BP_ONLINE_KEY environment values override these.
+
 [Display]
 Width=1280
 Height=720

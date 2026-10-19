@@ -33,7 +33,7 @@ namespace BrnWorld
 
         // @0x822F9F40. Initializes the option list, records the module for the static
         // surface-colour helper, and registers the polygon callback.
-        void Construct(WorldEntityModule* lpWorldEntityModule);
+        void Construct(const WorldEntityModule* lpWorldEntityModule);
 
         const char* GetName() const override { return "Collision draw mode"; }
         const char* GetPath() const override { return "World"; }

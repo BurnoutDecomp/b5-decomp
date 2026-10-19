@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -40,7 +41,7 @@ namespace
     s16*            g_pcm      = nullptr;   // interleaved stereo, X360 master-clock frames
     long            g_frames   = 0;         // total stereo frames in g_pcm
     long            g_cursor   = 0;         // next frame to output
-    volatile bool   g_finished = true;
+    std::atomic<bool> g_finished(true);
     bool            g_loaded   = false;
 
     const int kPacketBytes = 2048;
@@ -561,6 +562,7 @@ void MovieAudioPC::Fill(s16* lpOut, int liFrames) { FillStatic(lpOut, liFrames, 
 void MovieAudioPC::Start()
 {
     if (!g_loaded) return;
+    AudioOutputPC::ReleasePrimaryFill();
     g_cursor = 0; g_finished = false;
     // The device was already opened (silent) in Load(), before Play() -- so starting playback is
     // just swapping the fill to this stream, which is instant and keeps audio aligned with the
@@ -575,10 +577,8 @@ void MovieAudioPC::Start()
 
 void MovieAudioPC::Stop()
 {
-    // Retire only the movie-owned producer. DestroyVoice still provides the
-    // callback barrier required before Load/Release frees g_pcm; when the RWAC
-    // Dac is present the shared backend immediately resumes at its native 48 kHz
-    // so deferred commands and the engine mix continue after the final movie.
+    // Unpublish and drain the movie fill before Load/Release can free its PCM.
+    // The shared device and engine producer continue without an endpoint restart.
     AudioOutputPC::ReleasePrimaryFill();
     g_finished = true;
 }

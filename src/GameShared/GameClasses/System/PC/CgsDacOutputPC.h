@@ -14,14 +14,14 @@
 //  THIS leaf is the external DAC. Its engine fill callback (registered through
 //  AudioOutputPC::SetEngineFill) inverts the XenonThread packet loop:
 //     ExecuteCommandsLock -> ExecuteCommands -> Mix -> ok ? interleave-frame
-//     fold 6->2 + f32->s16 : silence -> ExecuteCommandsUnlock
+//     float stereo fold : silence -> ExecuteCommandsUnlock
 //  once per 256-frame device buffer (AudioOutputPC's kFrames == the engine's
 //  MIXER frame quantum). FLAG PC-platform leaf throughout -- the engine side of
 //  every call is the faithful reconstruction; only the device marshalling here
 //  is PC-authored.
 // ===========================================================================
 
-namespace rw { namespace audio { namespace core { class Dac; } } }
+namespace rw { namespace audio { namespace core { class Dac; class System; } } }
 
 namespace CgsSound
 {
@@ -35,6 +35,10 @@ public:
     // backend, and open the device if nothing has yet (idempotent; 48 kHz stereo,
     // the engine's own rate). Null detaches.
     static void Attach(rw::audio::core::Dac* apDac);
+    // Nonblocking retirement while ExecuteCommands owns the command lock.
+    static void Detach(rw::audio::core::Dac* apDac);
+    // Quiesce the producer before System teardown; caller holds no RWAC locks.
+    static void ReleaseSystem(rw::audio::core::System* apSystem);
 
     // The attached plug-in (null before Attach).
     static rw::audio::core::Dac* GetDac();

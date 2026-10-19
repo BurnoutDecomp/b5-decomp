@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Global/BrnMusicEffect.h"
+#include "GameSource/Sound/Global/BrnCameraControl.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
@@ -534,12 +535,10 @@ u32 MusicEffect::GetStreamFromVideoName(u32 auName) const
 // running game mode and its phase decide.
 s32 MusicEffect::GetMusicType(const void* apGameModeInterface) const
 {
-    // X360 first test: `if (CameraControl::GetCameraModeFromLogicModule(mpLogicModule)
-    // == 2) return 6;` -- the picture-paradise (photo mode) camera. CameraControl in
-    // this tree is the MINIMAL boot-trace home (BrnCameraControl.h: "GetCameraMode /
-    // GetCameraModeFromLogicModule / GetEventSnapshot ... DEFERRED"), so that test has
-    // nothing to call yet. Consequence, stated rather than hidden: music type 6 is
-    // unreachable here, so the classical picture-paradise arm below never runs.
+    if (CameraControl::GetCameraModeFromLogicModule(
+            static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())) ==
+        BrnSound::E_CAMERA_MODE_PICTURE_PARADISE)
+        return E_MUSIC_TYPE_PICTURE_PARADISE;
     if (mePendingMusicType)
         return mePendingMusicType;
     if (meJunkyardAmbience)
@@ -1052,9 +1051,23 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                        "KA_CLASSICAL_MUSIC_DATA[ miPicParadiseMusic ].mpcStream");
             mSecondaryStream.Queue(
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash(lrTrack.mpcStream)), 6);
-            // X360: a 100-byte GUI-out event 503 carrying { index, composer text id,
-            // work text id } goes out here so the photo HUD can caption the piece.
-            // Its producer side is the GuiOut queue this effect does not yet reach.
+            BrnGui::GuiClassicalChyronEvent lEvent = {};
+            lEvent.miPieceIndex = miPicParadiseMusic;
+            CGS_ASSERT(lrTrack.mpcComposerTextId != 0,
+                       "KA_CLASSICAL_MUSIC_DATA[ miPicParadiseMusic ].mpcComposerTextId");
+            CGS_ASSERT(lrTrack.mpcWorkTextId != 0,
+                       "KA_CLASSICAL_MUSIC_DATA[ miPicParadiseMusic ].mpcWorkTextId");
+            CGS_ASSERT(std::strlen(lrTrack.mpcComposerTextId) < sizeof(lEvent.macComposerTextId),
+                       "String too long");
+            CGS_ASSERT(std::strlen(lrTrack.mpcWorkTextId) < sizeof(lEvent.macWorkTextId),
+                       "String too long");
+            std::strcpy(lEvent.macComposerTextId, lrTrack.mpcComposerTextId);
+            std::strcpy(lEvent.macWorkTextId, lrTrack.mpcWorkTextId);
+            CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
+                reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+                    lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+            lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                               503, sizeof(lEvent));
             if (MusicDiagEnabled())
                 MusicDiagPrintf("[music] picture paradise '%s' (%s / %s) -> Queue(Secondary, slot 6)\n",
                             lrTrack.mpcStream, lrTrack.mpcComposerTextId,
@@ -1093,11 +1106,11 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                             mMenuStreamName);
         }
         // X360 @0x826FF694..6D0:
-        //     if (menu.prevVoiceStage == menu.voiceStage || menu.voiceStage == 6)
+        //     if (menu.prevVoiceStage != menu.voiceStage && menu.voiceStage == 6)
         //         AddEvent(module + 0x4EB0 /*PreUpdateOutput GuiOut*/, &byte, 504, 1);
         // GuiOut 504 is the MovieManager's "audio ready" (RecvEvent @0x824F9688: 6 -> 7);
         // the GuiModule feeds it from the sound module's GuiOut queue every frame.
-        if (mMusicStreamMenu.IsVoiceStageSettledOrPlaying())
+        if (mMusicStreamMenu.HasVoiceStartedPlaying())
         {
             u8 lu8AudioReady = 0;
             CgsModule::VariableEventQueue<256, 16>* lpGuiOut =

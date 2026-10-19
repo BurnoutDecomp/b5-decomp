@@ -67,6 +67,9 @@ namespace CgsSceneManager
         // Inherited Register() is the actual CgsDev::DebugComponent::Register path.
         const char* GetName() const override { return "Collision"; }
 
+        // ARTIST vtable 0x820CEEBC selects the folded World path @0x827DD250.
+        const char* GetPath() const override { return "World"; }
+
     protected:
         // ARTIST 0x828AAA68: register the collision controls and seed live spatial-level state.
         void OnActivate() override;

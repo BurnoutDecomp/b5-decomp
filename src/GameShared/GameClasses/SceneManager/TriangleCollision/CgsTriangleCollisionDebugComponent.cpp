@@ -47,27 +47,6 @@ namespace
             static_cast<u8>((luPackedColour >> 24u) & 0xFFu));
     }
 
-    // C++ form of the packed-vertex expansion performed by ARTIST sub_828AF0D0.
-    // The PC world-support porter stores these 16-bit lanes in host byte order;
-    // the named GetVertex accessor supplies the record and its original bounds assert.
-    Vector3* UnpackSub828AF0D0(Vector3* lpOut,
-                               const CgsGeometric::PolygonSoup& lrSoup,
-                               u8 lu8VertexIndex)
-    {
-        const u8* lpPackedVertex = lrSoup.GetVertex(lu8VertexIndex);
-        u16 lau16Packed[3];
-        std::memcpy(lau16Packed, lpPackedVertex, sizeof(lau16Packed));
-
-        const u32 luX = static_cast<u32>(lrSoup.miPosX) + static_cast<u32>(lau16Packed[0]);
-        const u32 luY = static_cast<u32>(lrSoup.miPosY) + static_cast<u32>(lau16Packed[1]);
-        const u32 luZ = static_cast<u32>(lrSoup.miPosZ) + static_cast<u32>(lau16Packed[2]);
-        lpOut->x = static_cast<f32>(static_cast<s32>(luX)) * lrSoup.mfScale;
-        lpOut->y = static_cast<f32>(static_cast<s32>(luY)) * lrSoup.mfScale;
-        lpOut->z = static_cast<f32>(static_cast<s32>(luZ)) * lrSoup.mfScale;
-        lpOut->w = 0.0f;
-        return lpOut;
-    }
-
     void SinCosTriangleDebugAngle(f32 lfAngle, f32& rfSine, f32& rfCosine)
     {
         // ARTIST 0x828B40B0/0x828B4404: range reduction, rounded powers,
@@ -391,25 +370,12 @@ namespace CgsSceneManager
             if (!lSoupListBounds.ContainsPoint(lvCameraPoint))
                 continue;
 
-            const CgsGeometric::PolygonSoup* const* lppaPolySoups =
-                reinterpret_cast<const CgsGeometric::PolygonSoup* const*>(
-                    lpSoupList->mpapPolySoups);
-            const CgsGeometric::AxisAlignedBox4* lpaSoupBounds =
-                reinterpret_cast<const CgsGeometric::AxisAlignedBox4*>(
-                    lpSoupList->mpaPolySoupBoxes);
-
-            for (s32 liSoup = 0; liSoup < lpSoupList->miNumPolySoups; ++liSoup)
+            for (s32 liSoup = 0; liSoup < lpSoupList->GetNumPolygonSoups(); ++liSoup)
             {
-                CGS_ASSERT(liSoup >= 0 && liSoup < lpSoupList->miNumPolySoups,
-                           "liPolySoupIndex >= 0 && liPolySoupIndex < GetNumPolygonSoups()");
-                const s32 li4BoxIndex = liSoup / 4;
-                const s32 liNum4Boxes = (lpSoupList->miNumPolySoups + 3) & ~3;
-                CGS_ASSERT(li4BoxIndex >= 0 && li4BoxIndex < liNum4Boxes,
-                           "li4BoxIndex >= 0 && li4BoxIndex < GetNum4Boxes()");
-
-                const CgsGeometric::PolygonSoup* lpPolySoup = lppaPolySoups[liSoup];
+                const CgsGeometric::PolygonSoup* lpPolySoup =
+                    lpSoupList->GetPolygonSoup(liSoup);
                 const CgsGeometric::AxisAlignedBox lSoupBounds =
-                    lpaSoupBounds[li4BoxIndex].GetAxisAlignedBox(
+                    lpSoupList->Get4Boxes(liSoup / 4)->GetAxisAlignedBox(
                         static_cast<u32>(liSoup % 4));
                 const rw::math::vpu::Vector4& lrMin = lSoupBounds.mMin;
                 const rw::math::vpu::Vector4& lrMax = lSoupBounds.mMax;
@@ -421,7 +387,7 @@ namespace CgsSceneManager
                 if (!lSoupBounds.ContainsPoint(lvCameraPoint) && !(lfSqDistToSoup < 10000.0f))
                     continue;
 
-                for (u32 lu8Poly = 0; lu8Poly < lpPolySoup->mu8NumPolygons; ++lu8Poly)
+                for (u32 lu8Poly = 0; lu8Poly < lpPolySoup->GetNumPolygons(); ++lu8Poly)
                 {
                     DrawPolySoupPoly(lpRenderer, lpPolySoup, liSoup,
                                      static_cast<u8>(lu8Poly), true);
@@ -463,14 +429,15 @@ namespace CgsSceneManager
         const CgsGeometric::PolygonSoupPoly* lpPoly =
             reinterpret_cast<const CgsGeometric::PolygonSoupPoly*>(
                 lpPolySoup->GetPolygon(lu8Poly));
-        const bool lbIsQuad = lu8Poly < lpPolySoup->mu8NumQuads;
+        const bool lbIsQuad = lu8Poly < lpPolySoup->GetNumQuads();
         const s32 liNumVertices = lbIsQuad ? 4 : 3;
 
         rw::math::vpu::Vector3 laPolyPoints[4];
         for (s32 liVertex = 0; liVertex < liNumVertices; ++liVertex)
         {
-            UnpackSub828AF0D0(&laPolyPoints[liVertex], *lpPolySoup,
-                              lpPoly->mau8VertexIndex[liVertex]);
+            // ARTIST sub_828AF0D0: shared packed-vertex expansion (native halfwords).
+            laPolyPoints[liVertex] =
+                lpPolySoup->GetVertexPosition(lpPoly->mau8VertexIndex[liVertex]);
         }
 
         const rw::math::vpu::Vector3& lrVertex0 = laPolyPoints[0];
@@ -1321,7 +1288,8 @@ namespace CgsSceneManager
 
         mbNeedToInitSpherePos = true;
         mbNeedToInitLinePosition = true;
-        const s32 liNumLevels = mpTriCollisionManager->mPolySoupListSpacialMap.miNumLevels;
+        const s32 liNumLevels =
+            mpTriCollisionManager->GetPolySoupListSpacialMap()->GetNumLevels();
         miLastNumLevels = liNumLevels;
         miNumLevels = liNumLevels;
     }
