@@ -304,6 +304,13 @@ namespace Thread
     // Rtl* critical-section calls on the embedded section. We model the X360
     // InitializeCriticalSectionAndSpinCount with the host equivalent (the vendor
     // EATHREAD_FUTEX_SPIN_COUNT is 256); functionally identical to the plain init.
+    static_assert(sizeof(Futex) == (sizeof(void*) == 8 ? 40u : 32u),
+                  "EA::Thread::Futex host storage width changed");
+    static_assert(sizeof(Futex) >= sizeof(CRITICAL_SECTION),
+                  "EA::Thread::Futex storage must hold the host CRITICAL_SECTION");
+    static_assert(alignof(Futex) >= alignof(CRITICAL_SECTION),
+                  "EA::Thread::Futex storage must meet host CRITICAL_SECTION alignment");
+
     Futex::Futex()
     {
         InitializeCriticalSectionAndSpinCount(
@@ -480,6 +487,12 @@ namespace Thread
     {
         if (!gpGlobalRunnableFunctionUserWrapper)
             gpGlobalRunnableFunctionUserWrapper = pUserWrapper;
+    }
+
+    // 0x82B42D88 -- return the process-wide wrapper loaded by the X360 body.
+    RunnableFunctionUserWrapper Thread::GetGlobalRunnableFunctionUserWrapper()
+    {
+        return gpGlobalRunnableFunctionUserWrapper;
     }
 
     // 0x82B43F80
