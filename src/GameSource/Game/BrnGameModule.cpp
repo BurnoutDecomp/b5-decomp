@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/GameClasses/Core/CgsAssertProbePC.h"
 #ifdef AddMonitor
@@ -7,6 +8,7 @@
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
@@ -33,6 +35,8 @@
 #include "pc/gcm/renderengine/device.h"               // renderengine::GetDisplayRefreshRate (the step-9 timer rate)
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: the 60Hz-sim / uncapped-render blend
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // RegisterFunction (the Debug/Sim actions)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
+#include "GameSource/GameState/BrnGameEvents.h"
 #include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::InputBuffer/OutputBuffer (GamePrepare's renderer pair)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer::GetCameraOutput (DoUpdate_Sound)
@@ -93,6 +97,9 @@ namespace BrnGame
     static bool         _lbForceAssert = false;
     static volatile s32 sbSimUpdateComplete = 0;
     bool                sbShowStreamStallMessage = false; // byte_82FAE28A
+    // Mutable UI latch from ARTIST byte_82FAE28C. Its original symbol and startup writer are
+    // unresolved; findinit finds only the BridgeGuiToGame read/clear sites.
+    static bool         sbForceQuitToStartMenu;
 
     BrnGameModule::BrnGameModule()
         : mpUpdateInputBufferStack(0)
@@ -292,10 +299,17 @@ namespace BrnGame
             // and small-caster controls in addition to the original UI pools.
             lParams.miVariablePoolSize         += 128;
             lParams.miVariableMetadataPoolSize += 256;
-            // [FLAG] mpRwAllocator stays null: Allocators::mpInternalDebugAllocator is the
-            // absent allocator layer (F-P0-1), and the debug pools' backing still comes from
-            // the global heap, which ignores it.
+            // ARTIST823C9FC8 supplies the public GlobalDebug allocator wrapper.
+            // It is separate from the temporary default used during memory-map setup.
+            lParams.mpRwAllocator = BrnResource::GetDebugAllocator();
             mDebugManager.Construct(&lParams);
+        }
+
+        // X360 Construct @0x823CA000 registers this mutable bool with an empty path. The raw
+        // path pointer (0x820046A7) is the NUL terminator at the end of "%s%s%s".
+        {
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            lDebugInterface.RegisterVariable(&sbForceQuitToStartMenu, "", "Force Quit to Start Menu");
         }
 
         // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
@@ -467,40 +481,10 @@ namespace BrnGame
             mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
                 static_cast<CgsDev::PerfMonCpuPage>(liPage), KAPC_PERFMON_PAGE_NAMES[liPage]);
 
-        // ⭐ THE DEBUG-INTERFACE REGISTRATIONS, PINNED 2026-08-17 (boot audit F-P1-14). The
-        // note used to say only "Debug/Framerate + Debug/Sim (Step/Play via StepFrameCB/
-        // PlayFrameCB) + screenshot registrations". Read off Construct @0x823CAEBC-F48, they
-        // are three calls on a stack DebugInterface, and they do NOT all need the same thing:
-        //
-        //   DebugInterface lIface(&mDebugManager);                       @0x823CAEBC
-        //   lIface.SetOptions(<"Framerate type" under "Debug/Framerate">) @0x823CAF00
-        //   lIface.RegisterFunction("Step", "Debug/Sim", StepFrameCB)    @0x823CAF28
-        //   lIface.RegisterFunction("Play", "Debug/Sim", PlayFrameCB)    @0x823CAF48
-        //
-        // AVAILABLE: RegisterVariable + SetOptions are both on CgsDev::DebugInterface
-        // (CgsDebugInterface.h:80-92), and the variable is meFrameRateManagerType -- so the
-        // Framerate half needs only its StringList of type names recovered.
-        // ⭐ ...AND THE SIM HALF LANDED TOO, minutes later. I recorded RegisterFunction as
-        // "missing, do not invent the signature" -- then checked what was behind it:
-        // DebugUI::FunctionManager::RegisterFunction is already BODIED (CgsFunctionManager.cpp,
-        // X360 0x8282E7E0) with exactly the argument order the two call sites pin, and
-        // DebugUI::GetFunctionManager + DebugInterface::GetUI both exist. So the "missing API"
-        // was a four-line forwarder over machinery that was already there, and nothing had to
-        // be guessed. Registered below.
-        //
-        // @0x823CAEBC-F48 -- the Debug/Sim step + play actions.
-        {
-            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
-            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
-            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
-        }
-
-        // [gated] the rest of steps 7-9 (the
-        // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
-        // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
-        // via StepFrameCB/PlayFrameCB) + screenshot debug-interface registrations, and the two
-        // replay serialisers (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) -- their
-        // members/subsystems are not in this layout yet.
+        // [gated] The event-receiver queue at +10094268 and the two replay serialisers
+        // (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) still need their exact
+        // typed storage. The remaining menu controls are registered after timer setup below;
+        // the Force shutdown and Take screen shots bool readers/backends remain unproven.
 
         // NOTE: the bitmap debug font is NOT brought up here -- it arrives through GamePrepare's
         // id-5 AcquireResource reply (the console's own path: Font::CreateTextureState +
@@ -529,6 +513,10 @@ namespace BrnGame
         // seeds. Both are pure init so the order was not observable, but it was inverted
         // (boot audit F-P1-12).
         mMainFlowStateMachine.Construct();
+
+        // X360 Construct clears the registered bool at gm+10097332 (0x9A12B4) before timer
+        // setup and later exposes it as "Take screen shots". Its reader/backend is unresolved.
+        mbTakeScreenShots = false;
 
         {
             // ⚠️ FLAG PC QUALITY-OF-LIFE, 2026-08-17: THE SIMULATION RATE IS NOW FIXED AT
@@ -616,6 +604,29 @@ namespace BrnGame
                             : "CONSOLE-LOCKED (one simulation step per rendered frame)")
                     << ", min/max steps " << (s32)mi8FrameRateMinSteps << "/"
                     << (s32)mi8FrameRateMaxSteps << "\n";
+        }
+
+        // X360 Construct @0x823CAEBC-F48 registers the Framerate variable, its 0..2 range and
+        // options, then the two simulation actions. The option pairs are the raw table at
+        // 0x8203525C: {0,"Single"}, {1,"Multiple Capped"}, {2,"Multiple Uncapped"}.
+        {
+            static const CgsDev::DebugUI::StringList KAC_FRAMERATE_OPTIONS[] = {
+                {0, "Single"},
+                {1, "Multiple Capped"},
+                {2, "Multiple Uncapped"},
+            };
+
+            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+            s32* const lpiFrameRateType = reinterpret_cast<s32*>(&meFrameRateManagerType);
+            lDebugInterface.RegisterVariable(lpiFrameRateType, "Debug/Framerate", "Framerate type");
+            lDebugInterface.SetRange(lpiFrameRateType, 0, 2);
+            lDebugInterface.SetOptions(lpiFrameRateType, KAC_FRAMERATE_OPTIONS);
+            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
+            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
+            lDebugInterface.RegisterVariable(&mbForceShutdown, "Debug/Sim", "Force shutdown");
+            lDebugInterface.RegisterVariable(&mbTakeScreenShots,
+                                             "Core/Debug/Performance/CPU Monitors",
+                                             "Take screen shots");
         }
 
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
@@ -757,6 +768,14 @@ namespace BrnGame
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
+        // X360 BridgeGuiToGame @0x823CB7A8/B8 polls and clears byte_82FAE28C before walking
+        // GUI events, then sets the game-flow return latch at gm+10094118.
+        if (sbForceQuitToStartMenu)
+        {
+            sbForceQuitToStartMenu = false;
+            BrnGameMainFlowController::gBrnReturnToFrontEndRequested = true;
+        }
+
         while (liId >= 0 && lpEvent != 0)
         {
             const s32 liCommand = liId;
@@ -1233,6 +1252,427 @@ namespace BrnGame
         return 0;
     }
 
+    // ARTIST 823EE0E8..823EE4D4; DecFIGS BrnGameModuleUpdateFunctions.cpp:156.
+    // The input belongs to this call, including its original failure assertions
+    // and destruction after the outer GameState monitor has stopped.
+    void BrnGameModule::DoUpdate_GameStatePreWorld(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        const CgsInput::InputIO::OutputBuffer* lpInputModuleOutput,
+        const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput,
+        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        BrnUpdateSet lUpdateSet)
+    {
+        using namespace BrnGameState::GameStateModuleIO;
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+        CgsModule::IOHelper<PreWorldInputBuffer> lInput(lpInputBufferStack, "GameStatePreWorld");
+        PreWorldInputBuffer* const lpInput = lInput;
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        // sub_823B6FE0 checks both pointers before taking W(input)/R(input output).
+        CGS_ASSERT(lpInput != 0, "lpInputBuffer");
+        CGS_ASSERT(lpInputModuleOutput != 0, "lpOutputBuffer0");
+        CgsModule::LockBuffersForIO(lpInput, lpInputModuleOutput);
+        const bool lbWasStalled = mbStreamingStalled;
+
+        if (mbSteppingFrames)
+        {
+            if (mbStopStepping)
+            {
+                if (mbSimPaused)
+                {
+                    PlayerPauseStateChangedEvent lEvent;
+                    lEvent.mbActivated = false;
+                    lEvent.mbStalled = false;
+                    lEvent.mbWasStalled = lbWasStalled;
+                    lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                        E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                }
+                mbStopStepping = false;
+                mbSteppingFrames = false;
+                mbDoStep = false;
+            }
+            else if (mbDoStep)
+            {
+                PlayerPauseStateChangedEvent lEvent;
+                lEvent.mbActivated = !mbSimPaused;
+                lEvent.mbStalled = false;
+                lEvent.mbWasStalled = lbWasStalled;
+                if (!mbSimPaused)
+                    mbDoStep = false;
+                lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                    E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+            }
+        }
+
+        if (mbWorldStreamingRequestedStall)
+        {
+            if (!mbSimPaused)
+            {
+                if (!mbOnline)
+                {
+                    PlayerPauseStateChangedEvent lEvent;
+                    lEvent.mbActivated = true;
+                    lEvent.mbStalled = true;
+                    lEvent.mbWasStalled = lbWasStalled;
+                    lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                        E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+                }
+                mbStreamingStalled = true;
+            }
+        }
+        else if (mbStreamingStalled)
+        {
+            if (!mbOnline)
+            {
+                PlayerPauseStateChangedEvent lEvent;
+                lEvent.mbActivated = false;
+                lEvent.mbStalled = false;
+                lEvent.mbWasStalled = lbWasStalled;
+                lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                    E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
+            }
+            mbStreamingStalled = false;
+        }
+
+        if (mbStreamingStalled && sbShowStreamStallMessage)
+        {
+            CgsDev::DebugInterface lDebug;
+            lDebug.Get2dRender().Draw2DText(
+                "STREAM STALL: Stalling game while streaming catches up",
+                Vector2{200.0f, 40.0f}, 16.0f, 0xFF0000FFu);
+        }
+
+        lpNetworkOutput->LockForRead();
+        BridgeNetworkToGameState(lpInput, lpNetworkOutput);
+        BridgeControllerToGameState(lpInput, lpInputModuleOutput, lpNetworkOutput->IsPlaying());
+        lpNetworkOutput->UnlockForRead();
+        if (mMainFlowStateMachine.IsVideoState())
+        {
+            CgsModule::UnlockBuffersForIO(lpInput, lpInputModuleOutput);
+            CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        }
+        else
+        {
+            if (mbRequestStreamingWait)
+            {
+                mbRequestStreamingWait = false;
+                // The original empty game-start tag copies one unspecified byte.
+                GameEvent<E_EVENT_GAME_START> lEvent;
+                lpInput->GetGameEventQueue()->AddEvent(&lEvent, E_EVENT_GAME_START);
+            }
+            lpInput->SetTimerStatusInterface(&mTimerStatusInterface);
+            CgsModule::UnlockBuffersForIO(lpInput, lpInputModuleOutput);
+            CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+            if (!mbDiskError)
+                mGameStateModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
+                    lpInput, lpGameStateOutput, lUpdateSet);
+            CheckGameActions(lpGameStateOutput);
+        }
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
+    }
+
+    // FLAG PC-platform leaf: the existing native preparation and persistent-input
+    // pump remains the active boundary. The full original staged caller above is
+    // separate until its owner preparation and world-streaming producer are ready.
+    void BrnGameModule::DoUpdate_GameStatePreWorldNativePC(
+        BrnGameMainFlowController::EMainGameFlowState leState)
+    {
+        // ⭐ THE GAME-STATE PRE-WORLD LEG (X360 DoUpdate_GameStatePreWorld @0x823EE0E8 ->
+        // GameStateModule::PreWorldUpdate @0x823A5328). Only its ONE-SHOT start-of-game
+        // latch is reconstructed (see PreWorldUpdateSetupPlayerCarBringUp); it runs
+        // BEFORE the flow state's Update, because that is what drives the world and
+        // therefore BridgeGameStateToWorld -- the leg that carries this sub-step's game
+        // actions (including the ResetPlayerCarAction it posts) into the world. The
+        // console's ordering is the same: PreWorldUpdate, then DoUpdate_World.
+        //
+        // ⚠️ MEASURED (2026-08-01): the flow-state gate below is LOAD-BEARING, not
+        // defensive. GameStateModule::Prepare's terminal stage -- where the latch is
+        // armed -- completes during InitialLoadingScreen stage 1, ~150 log lines BEFORE
+        // WorldModule::Prepare stage 6 has even created the race-car module's slots. Fire
+        // it there and the action is posted into a queue whose consumer does not exist
+        // yet, and this sub-step's retiring Clear() throws it away: the first run of this
+        // wave posted a perfectly correct ResetPlayerCarAction and NOTHING EVER SAW IT.
+        // On the console the arming EVENT cannot occur before the game is running, so
+        // this gate stands in for that ordering, not for the call.
+        // ⭐ X360 DoUpdate_GameStatePreWorld @0x823EE0E8, the +10094117 arm (outside the
+        // video states, i.e. under `!IsVideoState()`; the disk-error byte gates the whole
+        // leg):
+        //     if (gm+10094117) { gm+10094117 = 0; PreWorldInput.events += {8 /*1 byte*/}; }
+        // Game event 8 (E_EVENT_GAME_START) is drained by GameStateModule::PreWorldUpdate's
+        // ProcessGameEvents @0x823A0A18 case 8 (0x823A2758..0x823A2788):
+        //     if (mbWaitForStreaming) { OnProfileLoaded(out, queue); WaitForStreaming(queue); }
+        // ⭐⭐⭐ [L4 boot order 2026-09-28] OnProfileLoaded @0x82397310 IS THE BOOT DELIVERY OF
+        // THE LOADED PROFILE. The profile finishes loading in the MemoryCard state, a video
+        // state, where DoUpdate_GameStatePostWorld skips PostWorldUpdate and so drops the
+        // GUI-352 -> game-event-109 the GUI posts; this event, posted as the MemoryCard state is
+        // left, is what hands the profile to the game state (the saved car at the junkyard
+        // nearest its saved position, the road-rule tables, the max-car count, the prop
+        // world's hit props). This seat used to call only WaitForStreaming, so on PC NONE of
+        // that ran: every session wiped the road-rule records and respawned the default car.
+        // WaitForStreaming -> RequestPause(1) -> action 86 is how the console keeps the sim
+        // (and, through the sound dispatch's bit 0, the EA Trax song selection) paused from
+        // the MemoryCard exit across the post-title world load and the intro video, until
+        // FinishStreaming.
+        // [PC seat] this build's GameState drain is narrowed to E_MGS_IN_GAME (the banner
+        // above), so an event 8 posted here would be thrown away before InGame; the one
+        // hop is collapsed and the extracted case-8 arm is called in place -- same arm, same
+        // sub-step the console would drain it in.
+        if (!mMainFlowStateMachine.IsVideoState() && !mbDiskError && mbRequestStreamingWait)
+        {
+            mbRequestStreamingWait = false;
+            if (mGameStateModule.GetOutputBuffer() != 0)
+            {
+                mGameStateModule.ProcessGameEventsGameStartBringUp();
+                CgsDev::Log::WriteToLog("[sim-pause] MemoryCard exit -> game event 8 -> "
+                                        "OnProfileLoaded + WaitForStreaming (reason 1)\n");
+            }
+        }
+        // [FLAG world-load stand-in] the FinishStreaming seat for BridgeGuiToGame case 65.
+        if (mbPcStreamingFinishPending)
+        {
+            mbPcStreamingFinishPending = false;
+            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                mGameStateModule.GetOutputBuffer();
+            if (lpGameStateOutput != 0)
+            {
+                lpGameStateOutput->LockForWrite();
+                mGameStateModule.RequestUnpause(1, lpGameStateOutput->GetGameActionQueue());
+                lpGameStateOutput->UnlockForWrite();
+                CgsDev::Log::WriteToLog("[sim-pause] in-game screen entered (65) -> "
+                                        "RequestUnpause(1) (FinishStreaming stand-in)\n");
+            }
+        }
+
+        if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+        {
+            // FLAG PC-platform leaf: the partial WorldModule update calls only
+            // UpdateCollisionValidation, not WorldEntityModule::Update_PostPhysics.
+            // It therefore does not publish a live immediate-streamed status yet.
+            // Keep the existing PC pause scheduling until that producer is restored;
+            // consuming its untouched output byte here permanently pauses the junkyard.
+            // ⭐⭐ [D2 gesture-sink] THE CONTROLLER -> GAME-STATE BRIDGE. Placed FIRST in
+            // this block because that is the console's own order: DoUpdate_GameStatePreWorld
+            // @0x823EE0E8 runs BridgeNetworkToGameState + BridgeControllerToGameState and
+            // only THEN calls GameStateModule::PreWorldUpdate with the buffer they filled.
+            // Every PreWorldUpdate*BringUp leg below is an extraction of that PreWorldUpdate,
+            // so the fill has to happen ahead of them.
+            //
+            // ⭐ WHAT IT PUBLISHES, and why this call is the point of the leg:
+            // PreWorldInputBuffer::SetButtonPressed @0x823BA240 derives ControllerInput
+            // +0x11 (buffer +0x45) mbRaceModePressed as
+            // `maActionInfo[0].mfValue > 0.25f && maActionInfo[1].mfValue > 0.25f` -- the
+            // ANALOGUE accelerator + brake gesture that starts an offline event at a set of
+            // traffic lights (ShouldStartSnapRaceMode @0x82363700 holds it 0.35 s at speed
+            // <= 30, then StartModeAtLights @0x82396CF8 runs with start mechanism 2).
+            // BEFORE THIS CALL EXISTED THE BYTE WAS COMPUTED INTO A FILE-STATIC AND
+            // DISCARDED -- see GameBridgeControllerToX.cpp's sink banner.
+            //
+            // ⚠️ THE WRITE LOCK IS THE CALLER'S, exactly as on the console (sub_823B7620 ==
+            // LockBuffersForIO takes it around the whole pre-world staging pass). Same
+            // bracket shape as DoUpdate_World's BridgeControllerToWorld call above.
+            // ⚠️ THE PAD RECORD IS ONE SUB-STEP STALE and that is stated, not hidden:
+            // InputPadsPC::UpdatePlayer0 refills mPcInputOutputBuffer further down this
+            // same function (the controller -> GUI pass), so this reads the previous
+            // sub-step's fill. Harmless for a 0.35 s hold gate, and it is the same latency
+            // the GUI leg already lives with. DELETE-WHEN the DoUpdate cascade lands and
+            // the input fill moves to the top of the frame where the console has it.
+            // The network -> game-state bridge runs first, under a read lock on the
+            // network output held across both bridges, and the controller bridge's last
+            // argument is that buffer's IsPlaying() -- the console's own sequence.
+            // [FLAG PC placement] the console stages a freshly created (so freshly
+            // Constructed) pre-world buffer every sub-step; the PC buffer is the game-state
+            // module's persistent one, so it is re-Constructed here first. Without that the
+            // network bridge's queue appends would pile up across sub-steps.
+            {
+                BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGsPreWorld =
+                    mGameStateModule.GetPreWorldInputBuffer();
+                if (lpGsPreWorld != 0)
+                {
+                    lpGsPreWorld->Construct();
+                    mPcInputOutputBuffer.LockForRead();
+                    lpGsPreWorld->LockForWrite();
+                    s32 liIsPlaying = 0;
+                    if (mpNetworkOutputBuffer != 0)
+                    {
+                        mpNetworkOutputBuffer->LockForRead();
+                        const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpcNetworkOutput =
+                            mpNetworkOutputBuffer;
+                        BridgeNetworkToGameState(lpGsPreWorld, lpcNetworkOutput);
+                        liIsPlaying = lpcNetworkOutput->IsPlaying() ? 1 : 0;
+                    }
+                    BridgeControllerToGameStateNativePC(&mGameStateModule, &mPcInputOutputBuffer, liIsPlaying);
+                    if (mpNetworkOutputBuffer != 0)
+                        mpNetworkOutputBuffer->UnlockForRead();
+                    lpGsPreWorld->UnlockForWrite();
+                    mPcInputOutputBuffer.UnlockForRead();
+
+                    // [DIAG BRN_GESTURE_DIAG] BRING-UP SCAFFOLDING, NOT CONSOLE CODE.
+                    // Reads the gesture byte BACK OUT of the sink through the committed
+                    // read-locked accessor -- i.e. it proves the whole producer -> buffer
+                    // -> consumer path, not just that the predicate was evaluated. Reports
+                    // only on a change, so holding the gesture prints one line. Off unless
+                    // the env var is set; remove with the bring-up path.
+                    {
+                        static const bool sbGestureDiag = (getenv("BRN_GESTURE_DIAG") != 0);
+                        static s32 siLastReported = -1;
+                        if (sbGestureDiag && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            lpGsPreWorld->LockForRead();
+                            const BrnGameState::GameStateModuleIO::ControllerInput*
+                                lpControllerInput = lpGsPreWorld->GetControllerInput();
+                            const s32 liRaceMode =
+                                lpControllerInput->mbRaceModePressed ? 1 : 0;
+                            const s32 liAccelerate =
+                                lpControllerInput->mbAcceleratePressed ? 1 : 0;
+                            const s32 liStartEvent =
+                                lpControllerInput->mbStartEventPressed ? 1 : 0;
+                            lpGsPreWorld->UnlockForRead();
+
+                            if (liRaceMode != siLastReported)
+                            {
+                                siLastReported = liRaceMode;
+                                *CgsDev::Log::gpDebugPrint
+                                    << "[gesture] mbRaceModePressed (+0x45) -> " << liRaceMode
+                                    << "  (accelHeld " << liAccelerate
+                                    << " startEvent " << liStartEvent << ")\n";
+                            }
+                        }
+                    }
+
+                    // ⭐⭐⭐ THE TIMER-STATUS PUBLISH -- the console's OWN arm, restored
+                    // 2026-09-15 (issue #24). DoUpdate_GameStatePreWorld @0x823EE0E8 runs
+                    //     ... BridgeControllerToGameState(a1, v16, a4, IsPlaying);
+                    //     ... PreWorldInputBuffer::SetTimerStatusInterface(v16, a1 + 10095372);
+                    //     ... sub_823B7060(v16, a4);
+                    //     ... GameStateModule::PreWorldUpdate(a1 + 6722816, ...);
+                    // and `a1 + 10095372` IS BrnGameModule::mTimerStatusInterface -- the
+                    // same object BridgeTimers hands StoreTimers (see the BridgeTimers
+                    // banner above: `StoreTimers(gm+10095372, gm+10095316, gm+10095344)`).
+                    // 0x823EE0E8 is the ONLY xref_to of SetTimerStatusInterface @0x823B8D08
+                    // in the whole image, so with this one call missing the buffer's timer
+                    // block stayed at GameStateModule::Construct's ZERO-FILL for ever.
+                    //
+                    // ⛔⛔ WHAT THAT COST (measured, issue #24 runs 1 and 2). Every game mode
+                    // takes its per-frame delta from
+                    //   lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep()
+                    // so that product was exactly 0.0f and every MODE clock stood still.
+                    // In MARKED MAN that pins SurvivorMode::PreWorldUpdate @0x8234D188's
+                    // mfRampTimer at 0, so liOpponentCount == 0 == miBroadcastOpponentCount
+                    // for ever, SurvivorMode::UpdateOpponents @0x823451F8 is NEVER called,
+                    // game action 129 is never posted, RaceCar::mbIsAllowedInRoadRage stays
+                    // false, and IsRaceCarWrappable @0x822E9E18's third gate
+                    // (`!IsAllowedInRoadRage()`) can never open -- so marked-man rivals are
+                    // never wrapped back to the player and finish the event 2.7-6.3 km away
+                    // with DecideToAttack called ZERO times. RoadRageMode::UpdateHiddenRivals
+                    // (BrnRoadRageMode.cpp:394) and StuntAttackMode read the same pair and
+                    // were frozen the same way.
+                    {
+                        lpGsPreWorld->LockForWrite();
+                        lpGsPreWorld->SetTimerStatusInterface(&mTimerStatusInterface);
+                        lpGsPreWorld->UnlockForWrite();
+                    }
+                }
+            }
+
+            // ⭐⭐⭐ [returning-player wave 2026-08-28] THE ORDERING STAND-IN IS GONE.
+            // This call used to pass MainDirector::IsNewProfileIntroActive() as
+            // "lbMayCompleteJunkyardEntry", a stand-in for game event 78. That signal is
+            // NEW-PROFILE-ONLY, so on any boot that finds a Profile.sav the start-of-game
+            // junkyard entry never completed, mbInCarSelectScreen was never cleared, and
+            // ActiveRaceCar::UpdateEngineState refused to crank -- A RETURNING PLAYER
+            // COULD NOT DRIVE AT ALL (measured, scratch/flow_run/eng_b2_probe: 74 s of
+            // held throttle, engine state 0 for every tick).
+            // The entry is now completed by ProcessGameEvents' case-78 arm (inside the
+            // pre-world pump below), on the console's own event 78, which
+            // BridgeGuiToGameState (called further down this same DoUpdate) fills into the
+            // carry queue from BrnGui::InGame::OnEnter's command 145.
+            mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp();
+
+            // ⭐⭐ THE CONTROLLER-ACTIVE PUBLISH (X360 PreWorldUpdate @0x823A5328, the
+            // store just before the case-193 AddEvent). It MUST run before
+            // lpState->Update() below, because that is the leg that drives the world and
+            // therefore BridgeGameStateToWorld, which reads the flag back out at :1022 --
+            // the same reason the leg above runs here.
+            // ⚠️ WITHOUT IT NOTHING CAN DRIVE: ProcessPlayerVehicleInput zero-fills the
+            // whole BrnPlayerDriverControls record while the flag is false. See the
+            // header banner for the measurement.
+            // ⓘ NARROWER THAN THE CONSOLE, DELIBERATELY: the console publishes from
+            // PreWorldUpdate on every frame; this runs only inside E_MGS_IN_GAME, which
+            // is a strict subset (the flag's only consumer is the race-car module, which
+            // needs an attached player car anyway). It inherits the ordering gate the
+            // leg above already stands behind rather than adding a second one.
+            mGameStateModule.PreWorldUpdatePublishControllerActiveBringUp();
+
+            // ⭐⭐ [gateui] THE STUNT-COLLECTIBLE PRE-WORLD PASS (X360
+            // GameStateModule::PreWorldUpdate @0x823A5328, its three stunt-chain legs in
+            // the console's own order: the merged event queue -> ProcessGameEvents case
+            // 111 -> StuntManager::OnPropHit LATCHES; TriggerQueryManager::PreWorldUpdate
+            // ARMS the trigger set; StuntManager::Update CONSUMES the latch and posts the
+            // game actions). See BrnGameStateModule.h for the leg-by-leg map and the two
+            // named reductions.
+            // ⚠️ THE TIMESTEP IS THE GAME TIMER'S, NOT THE SIM TIMER'S -- the console
+            // latches the game timer status's base step * multiplier
+            // @0x823A54D8, and StoreTimers writes entry 0 from mGameTimer. Read off the
+            // LIVE timer (the frame's own mTimerStatusInterface snapshot).
+            // ⭐⭐⭐ [D4 stuntrace WAVE D] THE SAME CALL, NOW THE WHOLE PRE-WORLD PUMP.
+            // The callee has grown from three stunt-chain legs to the console's own
+            // PreWorldUpdate @0x823A5328 body order for every piece that exists on this
+            // build: GameStateModule::ProcessGameEvents and the CarSelectManager tick after
+            // it, ModeManager::PreWorldUpdate via
+            // the EmmPreWorldUpdate hop (#86), the trigger legs (#93),
+            // CheckIfPlayerIsAtJunctionWithAnEvent (#96), DetectModeStarts (#98) and
+            // StuntManager::Update (#103). See the callee for the leg-by-leg map.
+            //
+            // [x] THE lbIsAGameModeActive FLAG IS DISCHARGED. It used to read "passed
+            // FALSE ... this build never starts a game mode ... revisit when
+            // ModeManager::StartGameMode has a caller". StartGameMode now HAS a caller (the
+            // case-20 arm inside this very pump), so the argument is computed from the live
+            // ModeManager exactly as the console's v50 is -- `mpCurrentGameMode != NULL`,
+            // reached through GetModeManager()/GetCurrentGameMode(), never an offset.
+            //
+            // ⭐ THE THIRD ARGUMENT IS THE FRAME'S TIMER SNAPSHOT, and it is why this call
+            // site is the right home for it: ModeManager::PreWorldUpdate needs a
+            // CgsSystem::TimerStatusInterface and the console fills its copy from the
+            // PreWorldInputBuffer, which nothing on PC fills. mTimerStatusInterface IS
+            // filled at the start of every sub-step by TimerStatusInterface::StoreTimers
+            // (BridgeTimers, the console's 0x823F0DE4) -- the same data by the same route,
+            // one copy earlier. Full note at the callee's declaration.
+            // (ORDER, 2026-09-25: that snapshot is THIS sub-step's, taken before this leg, as
+            // on the console; the old note's one-leg staleness went with the timer-order fix.)
+            mGameStateModule.PreWorldUpdateStuntBringUp(
+                mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
+                mGameStateModule.GetModeManager()->GetCurrentGameMode() != 0,
+                mTimerStatusInterface);
+
+            // ⭐⭐ [tut-ticker] THE TRAINING LEG (X360 PreWorldUpdate @0x823A57C8:
+            // ShouldAllowTimedTutorialTips -> TrainingManager::Update, near the END of
+            // the body, after the stunt legs -- the console's own order). Ticks the
+            // ModeManager free-burn clock first (the console does that earlier in the
+            // same PreWorldUpdate, via ModeManager::PreWorldUpdate @0x823537B8). Same
+            // game-timer timestep as the two legs above, same E_MGS_IN_GAME gate.
+            // This is the arm that turns a queued LEAVES_JUNKYARD request into
+            // GameAction 148 -> GUI event 537 -> the bottom-of-screen tutorial ticker.
+            mGameStateModule.PreWorldUpdateTrainingBringUp(
+                mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
+
+            // ⭐ [P1 sim-pause] THE PAUSE CONSUMER (X360 DoUpdate_GameStatePreWorld
+            // @0x823EE0E8 tail: `CheckGameActions(gm, gameStateOutputBuffer)` runs
+            // right after GameStateModule::PreWorldUpdate, in the same not-video
+            // branch). The pre-world pump above (ProcessGameEvents' pause family inside
+            // PreWorldUpdateStuntBringUp) posts actions 86/87 via RequestPause/
+            // RequestUnpause; this drains them and stops/starts the sim timer.
+            // Narrowed to E_MGS_IN_GAME with the rest of the leg (the producers all
+            // stand behind the same predicate -- the r3 overflow rule).
+            {
+                BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                    mGameStateModule.GetOutputBuffer();
+                if (lpGameStateOutput != 0)
+                    CheckGameActions(lpGameStateOutput);
+            }
+        }
+
+    }
+
     // @ 0x823EE4D8 -- the SOUND pre-update leg (faithful-audio-engine phase C4). Called by
     // BOTH console spines ahead of the network/game-state/world drives: the loading spine
     // @0x823F2714 and the full DoUpdate cascade. Statement for statement against the 42-instr
@@ -1482,10 +1922,12 @@ namespace BrnGame
                                 lpWorldInput, lpWorldUpdateOutputBuffer, lpWorldFrameAllocator);
         }
 
-        // [FLAG] the X360 latches !GetImmediateStreamed() into gm+10094123 here (the
-        // "world still streaming" flag the in-game flow polls); that member sits in this
-        // incremental layout's omitted range and has no committed consumer -- it lands
-        // with the DoUpdate cascade that reads it.
+        // ARTIST 823E8D70..823E8DA0: publish the streaming-stall request for
+        // the following original GameState pre-world pass under the output read lock.
+        lpWorldUpdateOutputBuffer->LockForRead();
+        mbWorldStreamingRequestedStall =
+            !lpWorldUpdateOutputBuffer->GetWorldEntityStatusInterface()->GetImmediateStreamed();
+        lpWorldUpdateOutputBuffer->UnlockForRead();
 
         const bool lbDestroyed = lpUpdateInputBufferStack->DestroyIOBuffer(&lpWorldInput);
         CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");        // CgsModuleIOHelper.h:57
@@ -3405,7 +3847,7 @@ namespace BrnGame
             BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
                 mGameStateModule.GetOutputBuffer();
 
-            const bool lbGameStatePrepared = mGameStateModule.Prepare(
+            const bool lbGameStatePrepared = mGameStateModule.PrepareNativePC(
                 lpGameStateOutput, mpUpdateOutputBufferStack,
                 lpGameDataOutput ? lpGameDataOutput->GetAllocatorList() : 0);
 
@@ -3613,6 +4055,7 @@ namespace BrnGame
 
         const u64 luPreviousCommandGeneration = mRenderModule.GetPublishedCommandGenerationPC();
         mRenderModule.EndOfFrame(lbStalled);
+        CgsDev::PerfMonGpu::Swap(); // ARTIST823DC3F4, after renderer EndOfFrame.
         // FLAG PC-platform leaf: all draw snapshots follow the same completed
         // producer generation. An extra presentation preserves the last command
         // frame, while original control IO and trail EOF still run above.
@@ -4407,299 +4850,7 @@ namespace BrnGame
                                            ConstructUpdateSetFromFsm());
                 }
 
-                // ⭐ THE GAME-STATE PRE-WORLD LEG (X360 DoUpdate_GameStatePreWorld @0x823EE0E8 ->
-                // GameStateModule::PreWorldUpdate @0x823A5328). Only its ONE-SHOT start-of-game
-                // latch is reconstructed (see PreWorldUpdateSetupPlayerCarBringUp); it runs
-                // BEFORE the flow state's Update, because that is what drives the world and
-                // therefore BridgeGameStateToWorld -- the leg that carries this sub-step's game
-                // actions (including the ResetPlayerCarAction it posts) into the world. The
-                // console's ordering is the same: PreWorldUpdate, then DoUpdate_World.
-                //
-                // ⚠️ MEASURED (2026-08-01): the flow-state gate below is LOAD-BEARING, not
-                // defensive. GameStateModule::Prepare's terminal stage -- where the latch is
-                // armed -- completes during InitialLoadingScreen stage 1, ~150 log lines BEFORE
-                // WorldModule::Prepare stage 6 has even created the race-car module's slots. Fire
-                // it there and the action is posted into a queue whose consumer does not exist
-                // yet, and this sub-step's retiring Clear() throws it away: the first run of this
-                // wave posted a perfectly correct ResetPlayerCarAction and NOTHING EVER SAW IT.
-                // On the console the arming EVENT cannot occur before the game is running, so
-                // this gate stands in for that ordering, not for the call.
-                // ⭐ X360 DoUpdate_GameStatePreWorld @0x823EE0E8, the +10094117 arm (outside the
-                // video states, i.e. under `!IsVideoState()`; the disk-error byte gates the whole
-                // leg):
-                //     if (gm+10094117) { gm+10094117 = 0; PreWorldInput.events += {8 /*1 byte*/}; }
-                // Game event 8 (E_EVENT_GAME_START) is drained by GameStateModule::PreWorldUpdate's
-                // ProcessGameEvents @0x823A0A18 case 8 (0x823A2758..0x823A2788):
-                //     if (mbWaitForStreaming) { OnProfileLoaded(out, queue); WaitForStreaming(queue); }
-                // ⭐⭐⭐ [L4 boot order 2026-09-28] OnProfileLoaded @0x82397310 IS THE BOOT DELIVERY OF
-                // THE LOADED PROFILE. The profile finishes loading in the MemoryCard state, a video
-                // state, where DoUpdate_GameStatePostWorld skips PostWorldUpdate and so drops the
-                // GUI-352 -> game-event-109 the GUI posts; this event, posted as the MemoryCard state is
-                // left, is what hands the profile to the game state (the saved car at the junkyard
-                // nearest its saved position, the road-rule tables, the max-car count, the prop
-                // world's hit props). This seat used to call only WaitForStreaming, so on PC NONE of
-                // that ran: every session wiped the road-rule records and respawned the default car.
-                // WaitForStreaming -> RequestPause(1) -> action 86 is how the console keeps the sim
-                // (and, through the sound dispatch's bit 0, the EA Trax song selection) paused from
-                // the MemoryCard exit across the post-title world load and the intro video, until
-                // FinishStreaming.
-                // [PC seat] this build's GameState drain is narrowed to E_MGS_IN_GAME (the banner
-                // above), so an event 8 posted here would be thrown away before InGame; the one
-                // hop is collapsed and the extracted case-8 arm is called in place -- same arm, same
-                // sub-step the console would drain it in.
-                if (!mMainFlowStateMachine.IsVideoState() && !mbDiskError && mbRequestStreamingWait)
-                {
-                    mbRequestStreamingWait = false;
-                    if (mGameStateModule.GetOutputBuffer() != 0)
-                    {
-                        mGameStateModule.ProcessGameEventsGameStartBringUp();
-                        CgsDev::Log::WriteToLog("[sim-pause] MemoryCard exit -> game event 8 -> "
-                                                "OnProfileLoaded + WaitForStreaming (reason 1)\n");
-                    }
-                }
-                // [FLAG world-load stand-in] the FinishStreaming seat for BridgeGuiToGame case 65.
-                if (mbPcStreamingFinishPending)
-                {
-                    mbPcStreamingFinishPending = false;
-                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                        mGameStateModule.GetOutputBuffer();
-                    if (lpGameStateOutput != 0)
-                    {
-                        lpGameStateOutput->LockForWrite();
-                        mGameStateModule.RequestUnpause(1, lpGameStateOutput->GetGameActionQueue());
-                        lpGameStateOutput->UnlockForWrite();
-                        CgsDev::Log::WriteToLog("[sim-pause] in-game screen entered (65) -> "
-                                                "RequestUnpause(1) (FinishStreaming stand-in)\n");
-                    }
-                }
-
-                if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
-                {
-                    // FLAG PC-platform leaf: the partial WorldModule update calls only
-                    // UpdateCollisionValidation, not WorldEntityModule::Update_PostPhysics.
-                    // It therefore does not publish a live immediate-streamed status yet.
-                    // Keep the existing PC pause scheduling until that producer is restored;
-                    // consuming its untouched output byte here permanently pauses the junkyard.
-                    // ⭐⭐ [D2 gesture-sink] THE CONTROLLER -> GAME-STATE BRIDGE. Placed FIRST in
-                    // this block because that is the console's own order: DoUpdate_GameStatePreWorld
-                    // @0x823EE0E8 runs BridgeNetworkToGameState + BridgeControllerToGameState and
-                    // only THEN calls GameStateModule::PreWorldUpdate with the buffer they filled.
-                    // Every PreWorldUpdate*BringUp leg below is an extraction of that PreWorldUpdate,
-                    // so the fill has to happen ahead of them.
-                    //
-                    // ⭐ WHAT IT PUBLISHES, and why this call is the point of the leg:
-                    // PreWorldInputBuffer::SetButtonPressed @0x823BA240 derives ControllerInput
-                    // +0x11 (buffer +0x45) mbRaceModePressed as
-                    // `maActionInfo[0].mfValue > 0.25f && maActionInfo[1].mfValue > 0.25f` -- the
-                    // ANALOGUE accelerator + brake gesture that starts an offline event at a set of
-                    // traffic lights (ShouldStartSnapRaceMode @0x82363700 holds it 0.35 s at speed
-                    // <= 30, then StartModeAtLights @0x82396CF8 runs with start mechanism 2).
-                    // BEFORE THIS CALL EXISTED THE BYTE WAS COMPUTED INTO A FILE-STATIC AND
-                    // DISCARDED -- see GameBridgeControllerToX.cpp's sink banner.
-                    //
-                    // ⚠️ THE WRITE LOCK IS THE CALLER'S, exactly as on the console (sub_823B7620 ==
-                    // LockBuffersForIO takes it around the whole pre-world staging pass). Same
-                    // bracket shape as DoUpdate_World's BridgeControllerToWorld call above.
-                    // ⚠️ THE PAD RECORD IS ONE SUB-STEP STALE and that is stated, not hidden:
-                    // InputPadsPC::UpdatePlayer0 refills mPcInputOutputBuffer further down this
-                    // same function (the controller -> GUI pass), so this reads the previous
-                    // sub-step's fill. Harmless for a 0.35 s hold gate, and it is the same latency
-                    // the GUI leg already lives with. DELETE-WHEN the DoUpdate cascade lands and
-                    // the input fill moves to the top of the frame where the console has it.
-                    // The network -> game-state bridge runs first, under a read lock on the
-                    // network output held across both bridges, and the controller bridge's last
-                    // argument is that buffer's IsPlaying() -- the console's own sequence.
-                    // [FLAG PC placement] the console stages a freshly created (so freshly
-                    // Constructed) pre-world buffer every sub-step; the PC buffer is the game-state
-                    // module's persistent one, so it is re-Constructed here first. Without that the
-                    // network bridge's queue appends would pile up across sub-steps.
-                    {
-                        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGsPreWorld =
-                            mGameStateModule.GetPreWorldInputBuffer();
-                        if (lpGsPreWorld != 0)
-                        {
-                            lpGsPreWorld->Construct();
-                            mPcInputOutputBuffer.LockForRead();
-                            lpGsPreWorld->LockForWrite();
-                            s32 liIsPlaying = 0;
-                            if (mpNetworkOutputBuffer != 0)
-                            {
-                                mpNetworkOutputBuffer->LockForRead();
-                                const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpcNetworkOutput =
-                                    mpNetworkOutputBuffer;
-                                BridgeNetworkToGameState(lpGsPreWorld, lpcNetworkOutput);
-                                liIsPlaying = lpcNetworkOutput->IsPlaying() ? 1 : 0;
-                            }
-                            BridgeControllerToGameState(&mGameStateModule, &mPcInputOutputBuffer, liIsPlaying);
-                            if (mpNetworkOutputBuffer != 0)
-                                mpNetworkOutputBuffer->UnlockForRead();
-                            lpGsPreWorld->UnlockForWrite();
-                            mPcInputOutputBuffer.UnlockForRead();
-
-                            // [DIAG BRN_GESTURE_DIAG] BRING-UP SCAFFOLDING, NOT CONSOLE CODE.
-                            // Reads the gesture byte BACK OUT of the sink through the committed
-                            // read-locked accessor -- i.e. it proves the whole producer -> buffer
-                            // -> consumer path, not just that the predicate was evaluated. Reports
-                            // only on a change, so holding the gesture prints one line. Off unless
-                            // the env var is set; remove with the bring-up path.
-                            {
-                                static const bool sbGestureDiag = (getenv("BRN_GESTURE_DIAG") != 0);
-                                static s32 siLastReported = -1;
-                                if (sbGestureDiag && CgsDev::Log::gpDebugPrint != 0)
-                                {
-                                    lpGsPreWorld->LockForRead();
-                                    const BrnGameState::GameStateModuleIO::ControllerInput*
-                                        lpControllerInput = lpGsPreWorld->GetControllerInput();
-                                    const s32 liRaceMode =
-                                        lpControllerInput->mbRaceModePressed ? 1 : 0;
-                                    const s32 liAccelerate =
-                                        lpControllerInput->mbAcceleratePressed ? 1 : 0;
-                                    const s32 liStartEvent =
-                                        lpControllerInput->mbStartEventPressed ? 1 : 0;
-                                    lpGsPreWorld->UnlockForRead();
-
-                                    if (liRaceMode != siLastReported)
-                                    {
-                                        siLastReported = liRaceMode;
-                                        *CgsDev::Log::gpDebugPrint
-                                            << "[gesture] mbRaceModePressed (+0x45) -> " << liRaceMode
-                                            << "  (accelHeld " << liAccelerate
-                                            << " startEvent " << liStartEvent << ")\n";
-                                    }
-                                }
-                            }
-
-                            // ⭐⭐⭐ THE TIMER-STATUS PUBLISH -- the console's OWN arm, restored
-                            // 2026-09-15 (issue #24). DoUpdate_GameStatePreWorld @0x823EE0E8 runs
-                            //     ... BridgeControllerToGameState(a1, v16, a4, IsPlaying);
-                            //     ... PreWorldInputBuffer::SetTimerStatusInterface(v16, a1 + 10095372);
-                            //     ... sub_823B7060(v16, a4);
-                            //     ... GameStateModule::PreWorldUpdate(a1 + 6722816, ...);
-                            // and `a1 + 10095372` IS BrnGameModule::mTimerStatusInterface -- the
-                            // same object BridgeTimers hands StoreTimers (see the BridgeTimers
-                            // banner above: `StoreTimers(gm+10095372, gm+10095316, gm+10095344)`).
-                            // 0x823EE0E8 is the ONLY xref_to of SetTimerStatusInterface @0x823B8D08
-                            // in the whole image, so with this one call missing the buffer's timer
-                            // block stayed at GameStateModule::Construct's ZERO-FILL for ever.
-                            //
-                            // ⛔⛔ WHAT THAT COST (measured, issue #24 runs 1 and 2). Every game mode
-                            // takes its per-frame delta from
-                            //   lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep()
-                            // so that product was exactly 0.0f and every MODE clock stood still.
-                            // In MARKED MAN that pins SurvivorMode::PreWorldUpdate @0x8234D188's
-                            // mfRampTimer at 0, so liOpponentCount == 0 == miBroadcastOpponentCount
-                            // for ever, SurvivorMode::UpdateOpponents @0x823451F8 is NEVER called,
-                            // game action 129 is never posted, RaceCar::mbIsAllowedInRoadRage stays
-                            // false, and IsRaceCarWrappable @0x822E9E18's third gate
-                            // (`!IsAllowedInRoadRage()`) can never open -- so marked-man rivals are
-                            // never wrapped back to the player and finish the event 2.7-6.3 km away
-                            // with DecideToAttack called ZERO times. RoadRageMode::UpdateHiddenRivals
-                            // (BrnRoadRageMode.cpp:394) and StuntAttackMode read the same pair and
-                            // were frozen the same way.
-                            {
-                                lpGsPreWorld->LockForWrite();
-                                lpGsPreWorld->SetTimerStatusInterface(&mTimerStatusInterface);
-                                lpGsPreWorld->UnlockForWrite();
-                            }
-                        }
-                    }
-
-                    // ⭐⭐⭐ [returning-player wave 2026-08-28] THE ORDERING STAND-IN IS GONE.
-                    // This call used to pass MainDirector::IsNewProfileIntroActive() as
-                    // "lbMayCompleteJunkyardEntry", a stand-in for game event 78. That signal is
-                    // NEW-PROFILE-ONLY, so on any boot that finds a Profile.sav the start-of-game
-                    // junkyard entry never completed, mbInCarSelectScreen was never cleared, and
-                    // ActiveRaceCar::UpdateEngineState refused to crank -- A RETURNING PLAYER
-                    // COULD NOT DRIVE AT ALL (measured, scratch/flow_run/eng_b2_probe: 74 s of
-                    // held throttle, engine state 0 for every tick).
-                    // The entry is now completed by ProcessGameEvents' case-78 arm (inside the
-                    // pre-world pump below), on the console's own event 78, which
-                    // BridgeGuiToGameState (called further down this same DoUpdate) fills into the
-                    // carry queue from BrnGui::InGame::OnEnter's command 145.
-                    mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp();
-
-                    // ⭐⭐ THE CONTROLLER-ACTIVE PUBLISH (X360 PreWorldUpdate @0x823A5328, the
-                    // store just before the case-193 AddEvent). It MUST run before
-                    // lpState->Update() below, because that is the leg that drives the world and
-                    // therefore BridgeGameStateToWorld, which reads the flag back out at :1022 --
-                    // the same reason the leg above runs here.
-                    // ⚠️ WITHOUT IT NOTHING CAN DRIVE: ProcessPlayerVehicleInput zero-fills the
-                    // whole BrnPlayerDriverControls record while the flag is false. See the
-                    // header banner for the measurement.
-                    // ⓘ NARROWER THAN THE CONSOLE, DELIBERATELY: the console publishes from
-                    // PreWorldUpdate on every frame; this runs only inside E_MGS_IN_GAME, which
-                    // is a strict subset (the flag's only consumer is the race-car module, which
-                    // needs an attached player car anyway). It inherits the ordering gate the
-                    // leg above already stands behind rather than adding a second one.
-                    mGameStateModule.PreWorldUpdatePublishControllerActiveBringUp();
-
-                    // ⭐⭐ [gateui] THE STUNT-COLLECTIBLE PRE-WORLD PASS (X360
-                    // GameStateModule::PreWorldUpdate @0x823A5328, its three stunt-chain legs in
-                    // the console's own order: the merged event queue -> ProcessGameEvents case
-                    // 111 -> StuntManager::OnPropHit LATCHES; TriggerQueryManager::PreWorldUpdate
-                    // ARMS the trigger set; StuntManager::Update CONSUMES the latch and posts the
-                    // game actions). See BrnGameStateModule.h for the leg-by-leg map and the two
-                    // named reductions.
-                    // ⚠️ THE TIMESTEP IS THE GAME TIMER'S, NOT THE SIM TIMER'S -- the console
-                    // latches the game timer status's base step * multiplier
-                    // @0x823A54D8, and StoreTimers writes entry 0 from mGameTimer. Read off the
-                    // LIVE timer (the frame's own mTimerStatusInterface snapshot).
-                    // ⭐⭐⭐ [D4 stuntrace WAVE D] THE SAME CALL, NOW THE WHOLE PRE-WORLD PUMP.
-                    // The callee has grown from three stunt-chain legs to the console's own
-                    // PreWorldUpdate @0x823A5328 body order for every piece that exists on this
-                    // build: GameStateModule::ProcessGameEvents and the CarSelectManager tick after
-                    // it, ModeManager::PreWorldUpdate via
-                    // the EmmPreWorldUpdate hop (#86), the trigger legs (#93),
-                    // CheckIfPlayerIsAtJunctionWithAnEvent (#96), DetectModeStarts (#98) and
-                    // StuntManager::Update (#103). See the callee for the leg-by-leg map.
-                    //
-                    // [x] THE lbIsAGameModeActive FLAG IS DISCHARGED. It used to read "passed
-                    // FALSE ... this build never starts a game mode ... revisit when
-                    // ModeManager::StartGameMode has a caller". StartGameMode now HAS a caller (the
-                    // case-20 arm inside this very pump), so the argument is computed from the live
-                    // ModeManager exactly as the console's v50 is -- `mpCurrentGameMode != NULL`,
-                    // reached through GetModeManager()/GetCurrentGameMode(), never an offset.
-                    //
-                    // ⭐ THE THIRD ARGUMENT IS THE FRAME'S TIMER SNAPSHOT, and it is why this call
-                    // site is the right home for it: ModeManager::PreWorldUpdate needs a
-                    // CgsSystem::TimerStatusInterface and the console fills its copy from the
-                    // PreWorldInputBuffer, which nothing on PC fills. mTimerStatusInterface IS
-                    // filled at the start of every sub-step by TimerStatusInterface::StoreTimers
-                    // (BridgeTimers, the console's 0x823F0DE4) -- the same data by the same route,
-                    // one copy earlier. Full note at the callee's declaration.
-                    // (ORDER, 2026-09-25: that snapshot is THIS sub-step's, taken before this leg, as
-                    // on the console; the old note's one-leg staleness went with the timer-order fix.)
-                    mGameStateModule.PreWorldUpdateStuntBringUp(
-                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
-                        mGameStateModule.GetModeManager()->GetCurrentGameMode() != 0,
-                        mTimerStatusInterface);
-
-                    // ⭐⭐ [tut-ticker] THE TRAINING LEG (X360 PreWorldUpdate @0x823A57C8:
-                    // ShouldAllowTimedTutorialTips -> TrainingManager::Update, near the END of
-                    // the body, after the stunt legs -- the console's own order). Ticks the
-                    // ModeManager free-burn clock first (the console does that earlier in the
-                    // same PreWorldUpdate, via ModeManager::PreWorldUpdate @0x823537B8). Same
-                    // game-timer timestep as the two legs above, same E_MGS_IN_GAME gate.
-                    // This is the arm that turns a queued LEAVES_JUNKYARD request into
-                    // GameAction 148 -> GUI event 537 -> the bottom-of-screen tutorial ticker.
-                    mGameStateModule.PreWorldUpdateTrainingBringUp(
-                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
-
-                    // ⭐ [P1 sim-pause] THE PAUSE CONSUMER (X360 DoUpdate_GameStatePreWorld
-                    // @0x823EE0E8 tail: `CheckGameActions(gm, gameStateOutputBuffer)` runs
-                    // right after GameStateModule::PreWorldUpdate, in the same not-video
-                    // branch). The pre-world pump above (ProcessGameEvents' pause family inside
-                    // PreWorldUpdateStuntBringUp) posts actions 86/87 via RequestPause/
-                    // RequestUnpause; this drains them and stops/starts the sim timer.
-                    // Narrowed to E_MGS_IN_GAME with the rest of the leg (the producers all
-                    // stand behind the same predicate -- the r3 overflow rule).
-                    {
-                        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                            mGameStateModule.GetOutputBuffer();
-                        if (lpGameStateOutput != 0)
-                            CheckGameActions(lpGameStateOutput);
-                    }
-                }
+                DoUpdate_GameStatePreWorldNativePC(leState);
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)
                 {
@@ -5592,7 +5743,7 @@ namespace BrnGame
     //               outStack, buffer, lpInputModuleOutput, *(gm+0x9A0622) == 0 -- !mbDiskError)
     //   0x823C5738..0x823C57E8  if (miInputModuleState == 1): the START-pressed port scan (or the invite
     //               relaunch's port), miInputModuleState = 2   -- [FLAG, below]
-    //   0x823C57F0  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- [FLAG, below]
+    //   0x823C5808  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- caller unactivated
     //   0x823C57F8  StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
     // =========================================================================================
     u32 BrnGameModule::DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
@@ -5621,11 +5772,34 @@ namespace BrnGame
         // START action (record +0x5C, maActionInfo[8].muStatus bit 1) was pressed, then sets the state to
         // 2. This build seeds miInputModuleState = 4 in Construct (the PC input bring-up) and the only
         // 0 -> 1 edge (BridgeGuiToGame case 90) needs 0, so the block can never run here.
-        // [FLAG, not reconstructed] 0x823C57F0 QueryRequestDoStepFrame @0x823C5580 -- the debug
-        // step-frame pad chord (player 0's actions 56 + 57 held and 21 pressed raise the step or play
-        // request); not in the tree. Named here so its absence is not silent.
+        // Original 0x823C5808 calls QueryRequestDoStepFrame, recovered below. Caller
+        // activation remains separate from this source recovery.
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
         return liStartPressedPort;
+    }
+
+    // X360 0x823C5580; BrnGameModule.cpp:4013 (DecFIGS).
+    void BrnGameModule::QueryRequestDoStepFrame(
+        const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer)
+    {
+        if (_gbHACKIsOnline)
+            return;
+
+        lpInputOutputBuffer->LockForRead();
+        s32 liControllerPort = 0;
+        const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
+            GetPadInfoForPlayer0(lpInputOutputBuffer, &liControllerPort);
+        if (lpPadInfo != 0 &&
+            (lpPadInfo->maActionInfo[21].muStatus & 2u) != 0 &&
+            (lpPadInfo->maActionInfo[57].muStatus & 1u) != 0 &&
+            (lpPadInfo->maActionInfo[56].muStatus & 1u) != 0)
+        {
+            if (mbSteppingFrames)
+                mbRequestDoPlayFrame = true;
+            else
+                mbRequestDoStepFrame = true;
+        }
+        lpInputOutputBuffer->UnlockForRead();
     }
 
     // @ BrnGameModule.cpp:4048 - apply a pending step/play-frame request: a step request

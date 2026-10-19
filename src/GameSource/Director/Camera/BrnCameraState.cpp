@@ -13,6 +13,7 @@
 #include "GameSource/Director/Camera/BrnCameraState.h"
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"   // sbFailFlagMaskSet / sFailFlagMask (Clear)
 #include <cstddef>   // offsetof
+#include <cstring>   // strcmp
 
 namespace BrnDirector
 {
@@ -24,6 +25,59 @@ namespace Camera
 // adjacent qword at +0x10 as the previous-frame comparand.
 static_assert(offsetof(CameraState, mCurrentFlags)  == 0x08, "current flag set @ +0x08");
 static_assert(offsetof(CameraState, mPreviousFlags) == 0x10, "previous flag set @ +0x10");
+
+// X360 0x82CDA568: KAAC_FLAG_NAMES is the 30-pointer table indexed by EFlag.
+// The pointer entries and strings were read from the ARTIST raw image (4-byte big-endian
+// pointers); entry 0 and entry 29 were independently matched to the export and consistency
+// assert. Preserve the retail spelling and capitalization, including "Racing GameplayCamera".
+static const char* const KAAC_FLAG_NAMES[CameraState::E_FLAG_COUNT] =
+{
+    "Widescreen",
+    "Valid",
+    "Hide Player",
+    "Racing GameplayCamera",
+    "Bumper Cam",
+    "Super Wide",
+    "New this frame",
+    "Jump Camera",
+    "Hard Stop Camera",
+    "Tumbling Player Focused",
+    "Crash Camera",
+    "Takedown Camera",
+    "Internal Car Camera",
+    "Dont update scene space",
+    "Is Picture Paradise",
+    "Is Crash Stunt",
+    "Small near clip",
+    "Record Metrics",
+    "Send Metrics",
+    "Applying Race End Effect",
+    "Jump Photo",
+    "Junkyard Flash",
+    "In Junkyard Camera",
+    "Junkyard New Car Intro",
+    "Online Race Intro Start",
+    "Online Race Intro Rival",
+    "Online Race Intro Finished",
+    "Road following camera",
+    "Showing online intro",
+    "CONSISTENCY TEST"
+};
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::CameraState::GetDebugFlagName @0x821F8440
+//
+// The r3-only PPC ABI makes this static: r3 is the EFlag and the selected string pointer
+// returns in r3. The X360 asserts `leFlag < E_FLAG_COUNT`, checks the consistency-test
+// table entry against its literal, then returns KAAC_FLAG_NAMES[leFlag].
+// ----------------------------------------------------------------------------
+const char* CameraState::GetDebugFlagName(EFlag leFlag)
+{
+    CGS_ASSERT(leFlag < E_FLAG_COUNT, "leFlag < E_FLAG_COUNT");
+    CGS_ASSERT(std::strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], "CONSISTENCY TEST") == 0,
+               "!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], \"CONSISTENCY TEST\")");
+    return KAAC_FLAG_NAMES[leFlag];
+}
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::CameraState::SetFlag @0x82204368

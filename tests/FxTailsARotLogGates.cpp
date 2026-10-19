@@ -31,7 +31,7 @@ namespace CgsDev {
 namespace Log {
 StrStreamBase& DebugPrint::operator<<(const char* lpcText) { gPrinted += (lpcText != nullptr) ? lpcText : "<null>"; return *this; }
 static DebugPrint gCapture;
-DebugPrint* gpDebugPrint = &gCapture;
+StrStreamBase* gpDebugPrint = &gCapture;
 }
 namespace Message { u64 gxMessageFilterFlags = 0; }
 namespace Assert {
@@ -157,8 +157,8 @@ namespace
         RouteNode lPrev, lNext;
         std::memset(&lPrev, 0, sizeof(lPrev));
         std::memset(&lNext, 0, sizeof(lNext));
-        lPrev.muSectionIndex = 0; lPrev.muPad0x0E = 0;            // section 0, portal 0
-        lNext.muSectionIndex = 0; lNext.muPad0x0E = 1;            // section 0, portal 1
+        lPrev.muSectionIndex = 0; lPrev.muPortalIndex = 0;            // section 0, portal 0
+        lNext.muSectionIndex = 0; lNext.muPortalIndex = 1;            // section 0, portal 1
         ResetOnTrackManager::ResetOnTrackCoords lCoords;
         std::memset(&lCoords, 0, sizeof(lCoords));
         sManager.ConvertNodesToPositionAndDirection(&lPrev, &lNext, 0.5f, 20.0f, &lCoords);

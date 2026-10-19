@@ -22,16 +22,16 @@
 // cannot go stale. VehicleManager embeds `DebugComponent maRaceCarDebugComponent[8]` by value and
 // the array subscript does the striding, so nothing in the tree spells a slot stride by hand.
 //
-// The render/HUD side (RenderWorld, RenderHUD and the ten draw/report leaves they dispatch to,
-// PrimitiveVehicleDebugRender2D, and the OnActivate menu registration) is owned by its own dev-UI
-// pass. The toggles those read are declared here because they are part of the layout and Construct
-// seeds every one of them.
+// The original active tick, world/HUD displays, draw/report leaves and menu/window lifecycle are
+// recovered in this class's TU. PrimitiveVehicleDebugRender2D has separate PS3 declaration evidence;
+// its ARTIST attribution remains unresolved.
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
     class RaceCarPhysics;
+    struct VehiclePhysics;
 
     // One gear's worth of sampled shift data, 28 bytes. The component keeps six rows and
     // accumulates into the row miCurrentGear names until the gear-stat report closes it.
@@ -74,6 +74,11 @@ namespace Vehicle
         // the sim timestep. Samples only: gear-stats time accumulate, the four wheels'
         // road-contact mirror, and the speed mirror. Bodied in this TU.
         void Update(f32 lfTimeStep);
+        // ARTIST vtable slot 820CF988 -> unnamed 825DA4A8. The active debug
+        // component tick mirrors engine/inertia state and drives its windows.
+        void Update() override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
 
         // Mirror the magnitude of the down force VehiclePhysics::UpdateDownForce just applied, for
         // the suspension page of the debug menu. Inlined by the console at its one call site.
@@ -85,12 +90,31 @@ namespace Vehicle
         // onto the debug manager's list.
         const char* GetName() const override;
         const char* GetPath() const override;
+        // The X360 page registers the per-car handling/suspension state and then prepares its two
+        // grip-curve windows. The body is recovered from ARTIST @0x82620730.
+        void OnActivate() override;
 
     private:
+        // ARTIST ApplySuspensionForces records directly into the four wheel
+        // force/flag pairs; keep that original typed producer access.
+        friend struct VehiclePhysics;
         // Compile-time seat gate. Every member below is pinned to its console offset through the
         // cumulative host-widening chain; defined in this class's .cpp so it compiles with the
         // class. Never called.
         static void _AssertLayout();
+
+        // Register the two component-path toggles and bind the front/rear windows to the exact
+        // wheel pairs used by the X360 body. Called at the tail of OnActivate.
+        void InitWindows();
+        void DrawTractionLines(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawTractionLineNormals(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawAboveGroundLineTest(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawLastWallTriangle(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawAngularVelocity(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void RenderDeformationStats(CgsDev::Debug2DImmediateRender* lpDisplay);
+        void RenderTireFrictions(CgsDev::Debug2DImmediateRender* lpDisplay);
+        void UpdateAndRenderGearStats(CgsDev::Debug2DImmediateRender* lpDisplay);
 
         // ---- the sampled mirror of the car, refreshed every tick by Update ---------------------
         Wheel::RoadContact   maRoadContacts[4];                  // +0x010 (console stride 0x30)

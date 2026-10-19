@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 
 #include <math.h>
 #include <cstring>
@@ -196,21 +197,39 @@ namespace CgsDev
         DispatchVertices();
     }
 
-    // X360 DrawBox (pseudocode is VPU-garbage; reconstructed as the quad it emits).
-    void Debug2DImmediateRender::DrawBox(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour)
+    // ARTIST 82816E50: reject only a strict separating comparison. Reversed
+    // corners are not sorted, and an unordered comparison does not separate.
+    bool Debug2DImmediateRender::Do2DBoxesIntersect(Vector2 lv2MinA, Vector2 lv2MaxA,
+                                                   Vector2 lv2MinB, Vector2 lv2MaxB) const
     {
-        EmitQuad(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lColour);
+        if (lv2MinB.x > lv2MaxA.x || lv2MinA.x > lv2MaxB.x)
+            return false;
+        if (lv2MinB.y > lv2MaxA.y || lv2MinA.y > lv2MaxB.y)
+            return false;
+        return true;
     }
 
-    void Debug2DImmediateRender::DrawBox(f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, RGBA lColour)
+    // ARTIST 8281C2D8 adds the SIZE vector to POSITION before culling and AddQuad.
+    // EmitQuad retains the existing native triangle-strip adapter.
+    void Debug2DImmediateRender::DrawBox(Vector2 lv2Position, Vector2 lv2Size, RGBA lColour)
     {
-        EmitQuad(lfX, lfY, lfX + lfWidth, lfY + lfHeight, lColour);
+        const Vector2 lv2End = {lv2Position.x + lv2Size.x, lv2Position.y + lv2Size.y,
+                               lv2Position.z + lv2Size.z, lv2Position.w + lv2Size.w};
+        if (!Do2DBoxesIntersect(Vector2{0, 0, 0, 0}, GetVirtualScreenSize(), lv2Position, lv2End))
+            return;
+        EmitQuad(lv2Position.x, lv2Position.y, lv2End.x, lv2End.y, lColour);
+    }
+
+    // ARTIST export hole 8281C3E0: f3-f1 and f4-f2 produce the vector size.
+    void Debug2DImmediateRender::DrawBox(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour)
+    {
+        DrawBox(Vector2{lfX0, lfY0, 0, 0}, Vector2{lfX1 - lfX0, lfY1 - lfY0, 0, 0}, lColour);
     }
 
     // X360 @0x8281C960 (the bordered frame around (x0,y0)-(x1,y1)): four DrawBox strips - the
     // top and bottom span the full frame width INCLUDING the corners (x0-border .. x1+border,
     // border tall), the left and right fill between them (border wide, y0 .. y1). The VPU
-    // pseudocode is register soup, but each of the four DrawBox(x, y, width, height) argument
+    // pseudocode is register soup, but each of the four DrawBox(position, size) argument
     // sets reads off it: box 1 = {x0-b, y0-b, (x1+b)-(x0-b), b}, box 2 = the same strip at y1,
     // boxes 3/4 = the side fills.
     void Debug2DImmediateRender::DrawFrame(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1,
@@ -219,10 +238,14 @@ namespace CgsDev
         const f32 lfOuterX0    = lfX0 - lfBorderSize;
         const f32 lfOuterWidth = (lfX1 + lfBorderSize) - lfOuterX0;
 
-        DrawBox(lfOuterX0, lfY0 - lfBorderSize, lfOuterWidth, lfBorderSize, lColour);   // top
-        DrawBox(lfOuterX0, lfY1,               lfOuterWidth, lfBorderSize, lColour);   // bottom
-        DrawBox(lfOuterX0, lfY0,               lfBorderSize, lfY1 - lfY0,  lColour);   // left
-        DrawBox(lfX1,      lfY0,               lfBorderSize, lfY1 - lfY0,  lColour);   // right
+        DrawBox(Vector2{lfOuterX0, lfY0 - lfBorderSize, 0, 0},
+                Vector2{lfOuterWidth, lfBorderSize, 0, 0}, lColour); // top
+        DrawBox(Vector2{lfOuterX0, lfY1, 0, 0},
+                Vector2{lfOuterWidth, lfBorderSize, 0, 0}, lColour); // bottom
+        DrawBox(Vector2{lfOuterX0, lfY0, 0, 0},
+                Vector2{lfBorderSize, lfY1 - lfY0, 0, 0}, lColour); // left
+        DrawBox(Vector2{lfX1, lfY0, 0, 0},
+                Vector2{lfBorderSize, lfY1 - lfY0, 0, 0}, lColour); // right
     }
 
     // ARTIST 8281C1F0: line-list mode and the original two screen-space endpoints.
@@ -303,19 +326,22 @@ namespace CgsDev
         }
     }
 
-    // ARTIST 0x8281CAC0. A two-pixel frame surrounds the track; the filled
-    // portion occupies its interior in proportion to value/max.
+    // ARTIST 8281CAC0. The second color fills the complete background first;
+    // the first color is the original asymmetric inset, including a one-unit
+    // foreground at value zero. Its right endpoint uses a fused multiply-add.
     void Debug2DImmediateRender::DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max,
                                                     f32 lfValue, f32 lfMax,
-                                                    RGBA lBackColour, RGBA lBarColour)
+                                                    RGBA lForeColour, RGBA lBackColour)
     {
-        if (lfMax <= 0.0f || lfValue < 0.0f || lfValue > lfMax)
+        // The first branch is not-GT (so unordered max rejects); the value
+        // branches are strict LT/GT (so unordered value proceeds).
+        if (!(lfMax > 0.0f) || lfValue < 0.0f || lfValue > lfMax)
             return;
 
-        DrawFrame(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lBackColour, 2.0f);
-        const f32 lfWidth = (lv2Max.x - lv2Min.x - 4.0f) * (lfValue / lfMax);
-        DrawBox(lv2Min.x + 2.0f, lv2Min.y + 2.0f,
-                lfWidth, lv2Max.y - lv2Min.y - 4.0f, lBarColour);
+        DrawBox(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lBackColour);
+        const f32 lfSpan = (lv2Max.x - lv2Min.x) - 2.0f;
+        const f32 lfRight = fmaf(lfSpan, lfValue / lfMax, lv2Min.x + 1.0f);
+        DrawBox(lv2Min.x, lv2Min.y + 2.0f, lfRight, lv2Max.y - 2.0f, lForeColour);
     }
 
     // Faithful port of X360 0x82823DE0 (the pseudocode is VPU-garbled -- the rect setup is reconstructed
@@ -399,9 +425,8 @@ namespace CgsDev
                                                          f32 lfBorder)
     {
         const Vector2 lExtent = CalcTextExtent(lpcText, lfScale);
-        DrawBox(lfX - lfBorder, lfY - lfBorder,
-                lExtent.x + lfBorder * 2.0f,
-                lExtent.y + lfBorder * 2.0f,
+        DrawBox(Vector2{lfX - lfBorder, lfY - lfBorder, 0, 0},
+                Vector2{lExtent.x + lfBorder * 2.0f, lExtent.y + lfBorder * 2.0f, 0, 0},
                 lBackgroundColour);
         DrawText(lpcText, lfX, lfY, lfScale, lTextColour);
     }
@@ -413,6 +438,32 @@ namespace CgsDev
         char lacValue[256];
         std::snprintf(lacValue, sizeof(lacValue), "%d", liValue);
         DrawText(lacValue, lfX, lfY, lfScale, lColour);
+    }
+
+    // ARTIST 0x82824140..0x82824248 (export hole); DecFIGS h:126.
+    void Debug2DImmediateRender::DrawDataSize(s32 liBytes, f32 lfX, f32 lfY,
+                                               f32 lfScale, RGBA lColour)
+    {
+        char lacSize[256];
+        const s32 liMegabytes = liBytes / 0x100000;
+        const s32 liKilobytes = liBytes % 0x100000 / 1024;
+        const s32 liRemainder = liBytes % 0x100000 % 1024;
+
+        if (liMegabytes <= 0)
+        {
+            if (liKilobytes <= 0)
+                CgsCore::SPrintf(lacSize, sizeof(lacSize), "%dB", liRemainder);
+            else
+                CgsCore::SPrintf(lacSize, sizeof(lacSize), "%dKB, %dB", liKilobytes, liRemainder);
+        }
+        else
+        {
+            CgsCore::SPrintf(lacSize, sizeof(lacSize), "%dMB, %dKB, %dB",
+                             liMegabytes, liKilobytes, liRemainder);
+        }
+
+        const Vector2 lv2Position = {lfX, lfY, 0.0f, 0.0f};
+        DrawText(lacSize, lv2Position, lfScale, lColour, false);
     }
 
     Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const

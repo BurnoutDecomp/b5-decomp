@@ -3,8 +3,12 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                    // Matrix44 / Vector4
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"            // ImRenderer<V>
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h" // Im3dUntexVertex
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsPositionOnlyVertex.h" // PositionOnlyVertex
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"                // DrawIndexedParameters
+
+namespace rw { struct IResourceAllocator; }
+namespace renderengine { class IndexBuffer; class VertexBuffer; }
 
 // =============================================================================
 // CgsOcclusionCullManager.h  (GameShared/GameClasses/Graphics/Dispatch)
@@ -23,10 +27,12 @@
 // (CgsOcclusionCullManager.h: meOcclusionMode / mbOcclusionEnabled /
 // mbRenderingMesh / miOccludeeIndex / KI_MAX_NUM_QUERIES).
 //
-// Console offsets of the members this TU touches (member names from the debug
-// info; the cube vertex / index tables are not touched here and stay padding):
+// Console offsets from the DecFIGS member names and ARTIST stores:
 //   0x000  mViewProjectionMatrix  the camera's view-projection (InterpretOcclusionQuery)
 //   0x0C0  mNearClipOffset   Vector4 subtracted from the clip-space box centre
+//   0x0D0  maCubeVertices[8]  Im3dUntexVertex, 0x20-byte stride
+//   0x1D0  maCubeVerticesZOnly[8] PositionOnlyVertex, 0x10-byte stride
+//   0x250  mau16CubeIndices[24]
 //   0x280  miOccludeeIndex   s32     current occludee slot (result[160])
 //   0x284  miNextQueryIndex  s32     next GPU survey id
 //   0x28C  mpOccludeeIm3dZOnly       the position-only renderer the box is drawn with
@@ -40,6 +46,17 @@
 
 namespace CgsGraphics
 {
+    struct Im3dUntex;
+    struct Im3dZOnly;
+
+    struct OcclusionQueryList
+    {
+        Matrix44* mpBoxToClipMatrices;
+        u32* mpuTrivialAcceptBits;
+        u32 muSize;
+        u32 muNumQueries;
+    };
+
     // KI_MAX_NUM_QUERIES: maQueryIds capacity (the asm bounds-checks miOccludeeIndex
     // against 64 before every query-table access).
     const s32 KI_MAX_NUM_QUERIES = 64;
@@ -61,6 +78,15 @@ namespace CgsGraphics
         static const s32 KI_BASE_QUERY_INDEX = 0;
         static const s32 KI_MAX_QUERY_INDEX  = 63;
 
+        // X360 0x827F1E00. Store the passed renderers and allocator-backed cube/query resources;
+        // the query-list capacity is caller-provided and controls both optional array sizes.
+        void Construct(Im3dUntex* lpOccludeeIm3d,
+                       Im3dZOnly* lpOccludeeIm3dZOnly,
+                       rw::IResourceAllocator* lpAllocator,
+                       u32 luQueryListSize);
+        void BeginQueries();
+        void EndQueries();
+
         // X360 0x827E8F18: assert RENDER mode + enabled + not already rendering a
         // mesh, mark rendering, then begin a predicated draw on the current
         // occludee's query id (skip if the id is the 0xFFFF "trivially accepted"
@@ -76,6 +102,11 @@ namespace CgsGraphics
         // (query id = 0xFFFF, i.e. always-draw) and advance to the next slot.
         void TrivialAcceptOccludeeBoundingBox();
 
+        // X360 0x827E91A8 / 0x827E9250: select the conditional-render mode and
+        // reset the shadow cache when leaving it.
+        void BeginConditionalRender();
+        void EndConditionalRender();
+
         // Transform the occludee's box into clip space; unless it reaches the near-clip offset,
         // issue a GPU survey that draws the box with the position-only renderer and record
         // the survey id for the occludee. A box crossing the near plane is accepted as visible.
@@ -87,20 +118,36 @@ namespace CgsGraphics
         Matrix44              mAlwaysFailMatrix;         // +0x040
         Matrix44              mAlwaysPassMatrix;         // +0x080
         Vector4               mNearClipOffset;           // +0x0C0
-        u8                    mPad0[0x280 - 0x0D0];      // +0x0D0 the cube vertex / index tables
+        Im3dUntexVertex       maCubeVertices[8];          // +0x0D0, 0x20-byte stride
+        PositionOnlyVertex    maCubeVerticesZOnly[8];     // +0x1D0, 0x10-byte stride
+        u16                   mau16CubeIndices[24];       // +0x250
         s32                   miOccludeeIndex;           // +0x280
         s32                   miNextQueryIndex;          // +0x284
-        void*                 mpOccludeeIm3d;            // +0x288
-        // The Im3dZOnly renderer, held through the ImRenderer<PositionOnlyVertex> base whose
-        // SetTransform the query draw calls (Im3dZOnly itself has no complete home yet).
+        Im3dUntex*            mpOccludeeIm3d;             // +0x288
+        // Im3dZOnly's proven Im3dBase<PositionOnlyVertex> base supplies the query draw's SetTransform.
         ImRenderer<PositionOnlyVertex>* mpOccludeeIm3dZOnly; // +0x28C
         s32                   meOcclusionMode;           // +0x290
-        void*                 mpVertexBuffer;            // +0x294
-        void*                 mpVertexDescriptor;        // +0x298
-        void*                 mpIndexBuffer;             // +0x29C
+        renderengine::VertexBuffer* mpVertexBuffer;       // +0x294
+        renderengine::VertexDescriptor* mpVertexDescriptor; // +0x298
+        renderengine::IndexBuffer* mpIndexBuffer;         // +0x29C
         DrawIndexedParameters mDrawParameters;           // +0x2A0
         u16 maQueryIds[KI_MAX_NUM_QUERIES];     // +0x2B0 (128 bytes -> ends 0x330)
-        u8  mbRenderingMesh;                    // +0x330
-        u8  mbOcclusionEnabled;                 // +0x331
+        // ARTIST Construct initializes these state bytes before creating the vertex/index buffers
+        // and the caller-sized query list.
+        bool mbRenderingMesh = false;            // +0x330 (Construct @0x827F1E00)
+        bool mbOcclusionEnabled = false;         // +0x331
+        bool mbShowOccludeeBBs = false;           // +0x332
+        bool mbOccludeesDoubleSided = false;      // +0x333
+        bool mbOcclusionCheapShader = true;       // +0x334
+        bool mbDisplayStats = false;              // +0x335
+        bool mbDetectNearClipIntersections = true;// +0x336
+        bool mbImmediateMode = false;             // +0x337
+        bool mbConditionalRendering = true;       // +0x338
+        OcclusionQueryList* mpQueryList;           // +0x33C (Construct @0x827F1E00)
     };
+
+    static_assert(sizeof(Im3dUntexVertex) == 0x20,
+                  "ARTIST Construct advances Im3dUntexVertex by 0x20 bytes");
+    static_assert(sizeof(PositionOnlyVertex) == 0x10,
+                  "ARTIST Construct advances PositionOnlyVertex by 0x10 bytes");
 }

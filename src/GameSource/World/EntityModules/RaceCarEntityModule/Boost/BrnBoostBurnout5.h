@@ -85,6 +85,8 @@ namespace BrnWorld
 // ----------------------------------------------------------------------------
 class BoostBurnout5 : public BoostStrategy
 {
+    friend class BoostDebugComponent;
+
 public:
     // DWARF BrnBoostBurnout5.h:143. The enumerator VALUES are X360-pinned:
     // Prepare @0x822C1DC0 and OnEnterInfiniteBoost @0x822C23FC both store 0 to

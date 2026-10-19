@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                         // CgsID (CarSelect player-car-change grows)
+#include "BrnCommonTypes.h"                                         // CgsID and RenderWare math aliases
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
 #include "SharedClasses/BrnSharedConstants.h"                       // BrnUpdateSet (PostWorldUpdate)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
@@ -20,6 +20,7 @@
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
 #include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h" // BrnGameState::OnlineCarSelectManager (mOnlineCarSelectManager, by value)
 #include "GameSource/GameState/BrnResetPlayerDebugComponent.h"
+#include "GameSource/GameState/BrnGameStateDebugComponent.h" // embedded debug page registered by Prepare
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"          // [FX-BRIDGES CC-11] BrnAI::RouteMapModuleIO::RequestOwner (SendRouteRequestAction)
@@ -28,6 +29,7 @@
 // includes this one back, so there is no cycle (contrast mpTrainingManager below).
 #include "GameSource/GameState/Offences/BrnStuntManager.h"           // BrnGameState::StuntManager (mStuntManager, by value)
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // DeveloperChallengeManager (by value)
+#include "GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h" // original Prepare's embedded owner
 // ---- Prepare2's two sub-objects, both held BY VALUE exactly as the console holds them ----
 // X360 GameStateModule::Construct @0x82380388 constructs both in place:
 //   AchievementManagerBase::Construct(a1 + 181680, a1 + 47920, a1 + 284520, a1 + 7632, a1)
@@ -223,18 +225,10 @@ public:
             const GameStateModuleIO::PreWorldInputBuffer* lpInput,
             GameStateModuleIO::OutputBuffer*              lpOutput);
 
-    // ⭐ X360 0x8239A428. The start-detection arm. Console arguments: r3 = this, r4 = the
-    // pre-world input buffer, r5 = the output buffer.
-    // ⚠️ THE TIMESTEP IS A PARAMETER HERE AND IS NOT ON THE CONSOLE: 0x8239A518 loads it as
-    // `lfs f1, 0(this + 292284)` -- the module's own cached game timestep, latched by
-    // PreWorldUpdate @0x823A54D8 out of the PreWorldInputBuffer's TimerStatusInterface
-    // (the game timer status's base step * multiplier). That member is not modelled on this minimal slice,
-    // and its producer (PreWorldUpdate's timer leg) is not reconstructed, so the value arrives
-    // from the caller -- exactly as PreWorldUpdateStuntBringUp / PreWorldUpdateTrainingBringUp
-    // above already take it. DELETE-WHEN the +292284 latch lands.
+    // ARTIST 8239A428; DecFIGS BrnGameStateModule.cpp:4936. The snap gesture and
+    // intro countdown use mfSimTimeStep; showtime's start gate reads the input game timer.
     void DetectModeStarts(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
-                          GameStateModuleIO::OutputBuffer*              lpOutput,
-                          f32                                           lfGameTimestep);
+                          GameStateModuleIO::OutputBuffer* lpOutput);
 
     // ⭐ X360 0x82363700. The gesture gate. Console arguments, read off DetectModeStarts'
     // call site @0x8239A504..0x8239A51C: r3 = this, r4 = `lbz 0x45(lpInput)` (the buffer's
@@ -259,28 +253,15 @@ public:
     void Construct() override;
     void Destruct()  override;
 
-    // ------------------------------------------------------------------------
-    // ⭐ X360 0x8239E578 -- the module's FIRST-pass prepare (vtable +64). DWARF
-    // BrnGameStateModule.h:510: `virtual bool Prepare(GameStateModuleIO::OutputBuffer*,
-    // IOBufferStack*, const AllocatorList*)`. Its ONE caller is
-    // BrnGameModule::GamePrepare @0x823EFBD0 stage 4, which pumps it until it returns true and
-    // forwards the requests it stages onto the output buffer's resource-request interface into
-    // the frame's GameData input (AppendRequestInterface<3072>).
-    //
-    // ⭐ THIS is where TRIGGERS.DAT is loaded (stage 3, E_PREPARESTAGE_LOAD_TRIGGER_DATA ->
-    // TriggerQueryManager::Prepare @0x82398218). Nothing on PC ran it before 2026-08-01, which
-    // is why `[WorldMap] LOADED -- traffic=1 trigger=0 ai=0` and why every consumer of
-    // `mpTriggerQueryManager->GetTriggerData()` (the junkyard spawn-location walk above all)
-    // was looking at a null resource pointer.
-    //
-    // ⚠️ SLICE: stage 3 is REAL; the other 24 stages log once and advance (each one names its
-    // X360 call at the body). See the body for the full deferral list.
-    //
-    // NOTE: this hides the base `ModuleSingleBuffered::Prepare()` -- exactly as the console's
-    // own override does. Stage 1 calls the base explicitly.
-    bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+    // Original ARTIST 0x8239E578, including all 28 preparation cases. Native
+    // startup explicitly calls the existing PC adapter below.
+    virtual bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                  CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+
+    bool PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                         CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                         const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
     // ------------------------------------------------------------------------
     // ⭐ X360 0x8239ED10 -- the module's SECOND-pass prepare. Its ONE caller is
@@ -368,6 +349,14 @@ public:
     // game-event snapshots into the module, runs the mode manager and the trigger queries, then
     // ProcessContacts, the per-car crashing flags, the player-index publish and the boost tips.
     // Body in GameStateModule_wW_01.cpp.
+    // ARTIST 823A5328; DecFIGS BrnGameStateModule.cpp:1032. The original
+    // caller owns its input/output lock and temporary event-queue lifetime.
+    void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                        CgsModule::IOBufferStack* lpOutputBufferStack,
+                        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                        GameStateModuleIO::OutputBuffer* lpOutput,
+                        BrnUpdateSet lUpdateSet);
+
     void PostWorldUpdate(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
                          CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                          const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer,
@@ -466,16 +455,8 @@ public:
     // between `RumbleManager::UpdatePauseState` and the `(a6 & 8)` TriggerQueryManager block,
     // inside the `LockForWrite(lpOutput)` bracket, monitored by the +292348 PerfMon slot.
     //
-    // [FLAG PC bring-up] ONE deviation, the same one PreWorldUpdateStuntBringUp above carries
-    // and for the same measured reason: the frame's Time comes from a TimerStatusInterface
-    // handed in by the caller instead of from the module's own 48-byte copy of the
-    // PreWorldInputBuffer's timer block (the console reads gsm+208368, which is that copy's
-    // mSimTimerStatus.mTime -- EmmPreWorldUpdate @0x8238EF50 fills gsm+208328..+208372 with the
-    // twelve-word copy). Nothing on PC fills that block, so the console route would hand this
-    // function an all-zero "now" and every published mode time would be garbage. Same data, one
-    // copy earlier. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
-    void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput,
-                                 const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
+    // ARTIST 8236CDC0 reads the module timer cache, refreshed by EmmPreWorldUpdate.
+    void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput);
 
     // [takedown wave 2026-09-02] the manager's plumbing, bodied in GameStateModule_gTD_00.cpp:
     // Construct/Prepare at their console stages, the post-world input cache (the console's
@@ -498,7 +479,7 @@ public:
     // takedown the player scored it calls ScoringSystem::OnPlayerDoesATakedown (-> RoadRageModeScoring::
     // IncrementPlayerNumTakedowns, THE road-rage counter), the profile / achievement /
     // developer-challenge / telemetry hooks, and for a takedown the player SUFFERED in Marked Man it
-    // requests training tip 56. Four hooks are parked with log-once FLAGs -- see the partfile banner.
+    // requests training tip 56. The hooks are bodied in the partfile's existing chain.
     //
     // DWARF BrnGameStateModule.h:709:
     //     void ProcessTakedownEvents(InputBuffer::GameActionQueue*, const InputBuffer::TakedownEventQueue*,
@@ -515,14 +496,10 @@ public:
     // ProcessGameEvents (#68) and BEFORE EmmPreWorldUpdate (#86). Staged at that point in
     // PreWorldUpdateStuntBringUp.
     //
-    // [FLAG PC signature deviation] the FOURTH parameter, the same one CopyScoringDataToOutput
-    // above carries and for the same measured reason: the console's Time is gsm+208368, the module's
-    // copy of the PreWorldInputBuffer timer block, which nothing on PC fills. DELETE-WHEN
-    // DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
-    void ProcessTakedownEvents(GameStateModuleIO::GameActionQueue*            lpGameActionQueue,
+    // ARTIST 8238FC50 reads the module timer cache before this frame's EMM refresh.
+    void ProcessTakedownEvents(GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                                const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
-                               GameStateModuleIO::OutputBuffer*               lpOutputBuffer,
-                               const CgsSystem::TimerStatusInterface&         lrTimerStatusInterface);
+                               GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
     // ⭐ [FX-BRIDGES CC-11, 2026-09-24] SendRouteRequestAction -- X360 0x82381DC8, DWARF
     // BrnGameStateModule.h:648 (body BrnGameStateModule.cpp:5622). Turns a two-point
@@ -1188,7 +1165,13 @@ public:
     // X360 read at GameStateModule+0xAB70 (43888). The currently-loaded track's trigger data (the
     // landmark / generic-region table the teleport-location menu is built from). The X360 reaches
     // it through the embedded resource pointer at this offset; de-inlined to a named accessor.
-    BrnTrigger::TriggerData* GetTrackTriggerData();
+    // ARTIST8236C060..70: module+42320 (mTriggerQueryManager) +1568
+    // (its TriggerData ResourcePtr) is the same +0xAB70 read. This existing
+    // port accessor exposes the canonical typed owner to its read-only callers.
+    const BrnTrigger::TriggerData* GetTrackTriggerData() const
+    {
+        return mTriggerQueryManager.GetTriggerData();
+    }
 
     // X360 read at GameStateModule+0x3C090 (245904). The world district map (sampled to label each
     // teleport region with its county/district name).
@@ -1213,6 +1196,7 @@ public:
     bool IsModeChangeInProgress() const;
 
 private:
+    friend class GameStateDebugComponent; // the original GameState debug page binds module-owned menu values
     // [P1 sim-pause] the PostWorldInput free function returns the private carry queue (see its
     // declaration above the class) -- friendship, not a fabricated public accessor, per the
     // GuiCache exposure rule.
@@ -1404,6 +1388,13 @@ private:
         BrnResource::ChallengeListEntry::E_FREEBURN_STYLE_NONE;
     // Console +0x475BC, reference header mfSimTimeStep. PreWorldUpdate latches the sim timer's
     // step here at its top; UpdateRoadRulesManager and StreetManager::Update read it.
+    // X360 +0x475B0..+0x475B6 (DecFIGS :440..:437): the four registered signature-takedown
+    // debug controls. The export set has no other body naming these variables; keep them as
+    // unresolved reader candidates until their full original consumer map is complete.
+    u32 muDebugSigTDRegionIndex;
+    bool mbDrawCrashDebugText;
+    bool mbDrawSignatureTakedownRegionText;
+    bool mbDebugMakeAllTakedownsSignature;
     f32 mfSimTimeStep = 0.0f;
 
     // [L4 WORLDVFX 2026-09-27] Console +0x475C0 (292288), DWARF BrnGameStateModule.h:449
@@ -1413,10 +1404,25 @@ private:
     // value for the window before Construct.
     bool mbPropSystemNeedsProgression = false;
 
-    // Console +0x475EC (292332): the PerfMonCpu handle ProcessGameEvents brackets its walk with.
-    // The console's Construct registers it as "Process events" (this tree's Construct does not register
-    // the module's monitors yet); -1 is the unregistered handle StartMonitor ignores.
+    // DecFIGS :887..904; ARTIST Construct stores these monitor handles at
+    // +0x475C4..+0x47604. The host follows named members, not console offsets.
+    s32 miTriggersPostPM = -1;
+    s32 miTriggersPrePM = -1;
+    s32 miShowTimeUpdate = -1;
+    s32 miCarSelectManagerUpdate = -1;
+    s32 miGameStatePrePM = -1;
+    s32 miGameStatePostPM = -1;
+    s32 miTakedownPM = -1;
+    s32 miDetectModeStartsPM = -1;
+    s32 miRoadRulesPM = -1;
+    s32 miDriveThrusPM = -1;
     s32 miProcessEventsPM = -1;
+    s32 miEmmUpdatePM = -1;
+    s32 miModeManagerPrePM = -1;
+    s32 miModeManagerPostPM = -1;
+    s32 miCopyingAndResettingPM = -1;
+    s32 miProcessContactsPM = -1;
+    s32 miStreetManagerPM = -1;
 
     // Console +0x32DC8 (208328), 48 bytes: the module's copy of the PreWorldInputBuffer's timer block,
     // taken at the top of ProcessGameEvents and read by the mode and scoring updates after it.
@@ -1489,6 +1495,10 @@ private:
     // Street/road display state, held by value as in the original. The AI snapshot
     // is copied during PostWorldUpdate before the next street-tracking update.
     StreetManager                            mStreetManager;
+    // DecFIGS BrnGameStateModule.h:870; ARTIST RenderNextLandmarkInfo reads zAxis/wAxis at
+    // this+0x47590/+0x475A0. The matrix starts immediately after StreetManager
+    // (X360 +0x456C8, sizeof 0x1E08), at +0x47570.
+    Matrix44Affine                            mPlayerCarTransform;
     RoadRulesManager                         mRoadRulesManager;
     BrnAI::AIModuleIO::AICarOutputInterface    mLastAICarOutputInterface;
 
@@ -1506,19 +1516,8 @@ private:
 
     // ---- the Prepare slice's own members (X360 offsets from Prepare @0x8239E578) ----
 
-    // DWARF BrnGameStateModule.h:696. The 27-stage first-pass prepare machine's stage set.
-    // Enumerators + values are DWARF-authoritative.
-    //
-    // ⛔ CORRECTION 2026-08-01: the committed line "the X360 jump table has exactly these" is
-    // WRONG -- MEASURED, the ARTIST jump table at 0x8239E630 has TWENTY-EIGHT cases (0..27), one
-    // more than this DWARF enum. The extra one sits between RUMBLE_MANAGER and DONE:
-    //     X360 case 26  zero-inits the embedded DeveloperChallengeManager (this+185712)
-    //     X360 case 27  DriveThruManager::Prepare + the car-select list publish + the DONE tail
-    // The DecFIGS DWARF is the PS3 INTERNAL build and has no DeveloperChallengeManager stage at
-    // all -- straight version drift (references/DecFIGS/README.md's own warning). The names stay
-    // DWARF-authoritative; what shifts is only which console case each does the work of, so
-    // E_PREPARESTAGE_DONE below carries the X360's case-27 body (which is the terminal one, and
-    // whose `stage = 1; stage2 = 0` tail this machine already reproduced).
+    // ARTIST has 28 cases. The NativePC adapter retains its pre-existing
+    // DONE=26 spelling/value; the original path names its two final cases below.
     enum EPrepareStage
     {
         E_PREPARESTAGE_START                    = 0,
@@ -1547,7 +1546,9 @@ private:
         E_PREPARESTAGE_STREET_MANAGER           = 23,
         E_PREPARESTAGE_IMAGE_MANAGER            = 24,
         E_PREPARESTAGE_RUMBLE_MANAGER           = 25,
-        E_PREPARESTAGE_DONE                     = 26,
+        E_PREPARESTAGE_DONE                     = 26, // existing NativePC terminal stage
+        E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER = 26,
+        E_PREPARESTAGE_ORIGINAL_DONE             = 27,
     };
 
     // DWARF BrnGameStateModule.h:180 (X360 this+552). ⚠️ This NAME-SHADOWS the private
@@ -1591,6 +1592,30 @@ private:
         E_PREPARE2STAGE_DONE           = 3,
     };
     EPrepare2Stage mePrepare2Stage = E_PREPARE2STAGE_START;
+
+    // DecFIGS names +0x230 meReleaseStage. ARTIST adds the developer-challenge
+    // release case at 1, shifting IMAGE_MANAGER..DONE by one from the PS3 enum.
+    enum EReleaseStage
+    {
+        E_RELEASESTAGE_START = 0,
+        E_RELEASESTAGE_DEVELOPER_CHALLENGE_MANAGER = 1,
+        E_RELEASESTAGE_IMAGE_MANAGER = 2,
+        E_RELEASESTAGE_STREET_MANAGER = 3,
+        E_RELEASESTAGE_ACHIEVEMENT_MANAGER = 4,
+        E_RELEASESTAGE_RICH_PRESENCE = 5,
+        E_RELEASESTAGE_PROGRESSION = 6,
+        E_RELEASESTAGE_NETWORKROUNDMANAGER = 7,
+        E_RELEASESTAGE_FLYBYMANAGER = 8,
+        E_RELEASESTAGE_INVITEMANAGER = 9,
+        E_RELEASESTAGE_PAYBACKMANAGER = 10,
+        E_RELEASESTAGE_MUGSHOTMANAGER = 11,
+        E_RELEASESTAGE_TAKEDOWNMANAGER = 12,
+        E_RELEASESTAGE_MODEMANAGER = 13,
+        E_RELEASESTAGE_MANAGER = 14,
+        E_RELEASESTAGE_DONE = 15,
+    };
+    // ARTIST Construct @0x823803D8 seeds 15; original Prepare's tail resets 0.
+    EReleaseStage meReleaseStage = E_RELEASESTAGE_DONE;
 
     // [PC bring-up observer -- NOT an X360 member.] True once Prepare2 has completed BOTH legs,
     // i.e. once "Progression.dat" and "STREETDATA.DAT" are resident in pool 5. It cannot be
@@ -1675,8 +1700,9 @@ private:
     // GetOutputGuiEventQueue() returns". It is not -- that one is a VariableEventQueue<18432,16>
     // at a different offset (its accessor is X360 0x823566F8); +248384 is this <1536,16> queue,
     // as both Append<1536,16> call sites prove. That comment had no member behind it either.
-    CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
+    GameStateDebugComponent mGameStateDebugComponent; // ARTIST +0x32DF8 (208376)
     ResetPlayerDebugComponent mResetPlayerDebugComponent; // ARTIST +0x32EA0 (208544)
+    CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
 
     // ⚠️ [FLAG PC bring-up] X360 this+46640. The console embeds TrainingManager BY VALUE here
     // (PreWorldUpdate @0x823A5328 calls `TrainingManager::Update(a1 + 46640, ...)`, and four
@@ -1743,11 +1769,15 @@ private:
 public:
     GameStateInviteManager*    GetGameStateInviteManager() { return mpGameStateInviteManager; }
     GameStateImageManagerBase* GetImageManager()           { return mpImageManager; }
+    // DecFIGS .h:561; ARTIST inlines the selector before both flyby virtual calls.
+    FlybyManager*             GetFlybyManager();
     OnlineFlybyManager*        GetOnlineFlybyManager()     { return mpOnlineFlybyManager; }
     RichPresenceManagerX360*   GetRichPresenceManager()    { return mpRichPresenceManager; }
 private:
     GameStateInviteManager*    mpGameStateInviteManager = 0;
     GameStateImageManagerBase* mpImageManager           = 0;
+    // ARTIST's offline owner is embedded; no active NativePC caller selects it.
+    OfflineFlybyManager        mOfflineFlybyManager;
     OnlineFlybyManager*        mpOnlineFlybyManager     = 0;
     RichPresenceManagerX360*   mpRichPresenceManager    = 0;
 
@@ -1888,6 +1918,12 @@ private:
     // (`stb r29(=0), 0(r31)` @0x82380F78). Construct @0x82380388 stores 0.
     bool               mbToggleShowtimeBehaviour        = false;
 
+    // X360 +284511/+284514 (0x4575F/0x45762), DecFIGS DWARF :404/:380. These are the two
+    // snap-race controls registered by GameStateDebugComponent::OnActivate; Construct sets both
+    // true. ShouldStartSnapRaceMode's ARTIST body does not read either byte, so their original
+    // reader disposition remains unresolved pending the complete image-wide consumer scan.
+    bool               mbDebugLimitSnapRaceStartConditions;
+
     // X360 +284510 (0x4575E), DWARF :857. "The car has been on the ground at some point during the
     // intro window." Cleared when the window opens (`stbx r28(0), r30, r9`, r9 == 0x4575E,
     // @0x8239A6C8) and OR-ed every frame with `!(mfTimeInAir > 0.0f)` (@0x8239A7A0..0x8239A7BC).
@@ -1908,6 +1944,7 @@ private:
     // Starts false: the console's own initial state is "not in showtime", so the first entry into
     // showtime IS a rising edge, which is exactly what makes the first post happen.
     bool mbWasInShowtimeGameMode        = false;
+    bool mbAllowSnapRaceMode;
 
     // =========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH-CHAIN HAND-OFF, three members.
@@ -1958,6 +1995,14 @@ private:
     u16 muShowtimeRequestedTrafficIndex = 0xFFFFu;
 
 public:
+    // ARTIST 8238EF50; called inside PreWorldUpdate's input/output lock bracket.
+    // The event-queue argument is retained from the attested declaration even
+    // though ARTIST does not read it.
+    void EmmPreWorldUpdate(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                          GameStateModuleIO::OutputBuffer* lpOutput,
+                          const GameStateModuleIO::GameEventQueue* lpGameEvents,
+                          bool lbIsOnline);
+
     // Called by EmmPreWorldUpdate's not-sim-paused arm
     // (GameStateModule_gUI_00.cpp leg 1c) with the output buffer and the pre-world input buffer's
     // ControllerInput; the caller holds the output buffer's write lock and the input buffer's read

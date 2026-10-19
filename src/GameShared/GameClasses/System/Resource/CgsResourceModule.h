@@ -44,6 +44,7 @@ namespace CgsResource
 
     class ResourceModule : public CgsModule::ModuleSingleBuffered
     {
+        friend class DebugComponent;
     public:
         static const s32 KI_MAX_PENDING_FILE_SYSTEM_RESPONSES = 16;
 

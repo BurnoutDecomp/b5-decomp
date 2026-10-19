@@ -2,6 +2,7 @@
 #include "pc/gcm/renderengine/device.h"   // gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog (create-failure diagnostics)
 #include "rw/rwcore_structs.h"   // rw::Resource (the rw-resource Initialize overload's memory block)
+#include "pc/gcm/renderengine/pixelformat.h"
 
 #include <d3d9.h>
 #include "pc/gcm/renderengine/TextureUpload.h"
@@ -382,6 +383,19 @@ namespace renderengine
 
     namespace
     {
+        // Convert the one Xenos format word that the shared immediate renderer passes on to the PC
+        // texture provider. The public raster header keeps the original word; only the D3D9
+        // allocation receives its native format number. All other values retain their prior
+        // pass-through behavior; additional Xenos encodings remain outside this mapping.
+        D3DFORMAT lD3DFormat(s32 liFormat)
+        {
+            if (liFormat == PIXELFORMAT_A8R8G8B8)
+            {
+                return D3DFMT_A8R8G8B8;
+            }
+            return static_cast<D3DFORMAT>(liFormat);
+        }
+
         // Bytes per 4x4 block for the block-compressed (DXT/BCn) D3DFORMATs; 0 otherwise.
         u32 lFormatBytesPerBlock(s32 liFormat)
         {
@@ -549,6 +563,7 @@ namespace renderengine
         {
             return;
         }
+        const D3DFORMAT leD3DFormat = lD3DFormat(lpParams->miFormat);
 
         // --- the CUBE case (reflections step 1) ------------------------------------------------
         // WHY IT HAD TO EXIST: 22 shipped vehicle pixel shaders and 7 shipped world pixel shaders
@@ -580,7 +595,7 @@ namespace renderengine
             IDirect3DCubeTexture9* lpD3DCube = nullptr;
             const HRESULT lhrCube = TextureUploadPC::CreateCube(gDevice,
                 lpParams->muWidth, luCubeLevels,
-                static_cast<D3DFORMAT>(lpParams->miFormat), &lpD3DCube);
+                leD3DFormat, &lpD3DCube);
             if (FAILED(lhrCube))
             {
                 char lacCube[176];
@@ -681,7 +696,7 @@ namespace renderengine
             IDirect3DVolumeTexture9* lpD3DVolume = nullptr;
             const HRESULT lhrVolume = TextureUploadPC::CreateVolume(gDevice,
                 lpParams->muWidth, lpParams->muHeight, lpParams->muDepth, luVolumeLevels,
-                static_cast<D3DFORMAT>(lpParams->miFormat), &lpD3DVolume);
+                leD3DFormat, &lpD3DVolume);
             if (FAILED(lhrVolume))
             {
                 char lacVol[176];
@@ -758,7 +773,7 @@ namespace renderengine
         const UINT luLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
         IDirect3DTexture9* lpD3DTexture = nullptr;
         const HRESULT lhrCreate = TextureUploadPC::Create2D(gDevice, lpParams->muWidth, lpParams->muHeight, luLevels,
-                                                         static_cast<D3DFORMAT>(lpParams->miFormat), &lpD3DTexture);
+                                                         leD3DFormat, &lpD3DTexture);
         if (FAILED(lhrCreate))
         {
             char lac[160];

@@ -11,6 +11,8 @@
 #include "SharedClasses/World/BrnEnvironmentDictionary.h"
 #include "SharedClasses/World/BrnEnvironmentUtil.h"
 
+#include "rw/math/vpu/vector3_operation.h"
+
 #include <cmath>
 
 namespace BrnWorld
@@ -23,6 +25,50 @@ namespace
     const f32 KF_SUN_ELEVATION_ZERO_SECONDS = 23400.0f;
     const f32 KF_RADIANS_PER_SECOND_OF_DAY = 0.000072722054f;
     const f32 KF_JUNKYARD_MAX_VERTICAL = 0.98900002f;
+
+    f32 JunkyardFlush(f32 lfValue)
+    {
+        return std::fpclassify(lfValue) == FP_SUBNORMAL
+            ? std::copysign(0.0f, lfValue) : lfValue;
+    }
+
+    f32 JunkyardMultiply(f32 lfA, f32 lfB)
+    {
+        return JunkyardFlush(JunkyardFlush(lfA) * JunkyardFlush(lfB));
+    }
+
+    f32 JunkyardMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+    {
+        return JunkyardFlush(std::fmaf(JunkyardFlush(lfA), JunkyardFlush(lfC), JunkyardFlush(lfB)));
+    }
+
+    f32 JunkyardNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+    {
+        const f32 lfDifference = JunkyardMultiplyAdd(lfA, lfC, -JunkyardFlush(lfB));
+        return lfDifference != lfDifference ? lfDifference : -lfDifference;
+    }
+
+    // ARTIST 827C7804..783C: both refinements run unconditionally and the
+    // resulting scale multiplies all four lanes. No zero-vector fallback.
+    // FLAG (numeric model): rounded rsqrt seed and canonical scalar dot3;
+    // hardware estimate bits, NaN payloads and floating status remain unverified.
+    Vector3 NormalizeJunkyardKeyLightDirection(Vector3 lDirection)
+    {
+        lDirection = {JunkyardFlush(lDirection.x), JunkyardFlush(lDirection.y),
+                      JunkyardFlush(lDirection.z), JunkyardFlush(lDirection.w)};
+        const f32 lfLengthSquared = JunkyardFlush(rw::math::vpu::MagnitudeSquared(lDirection));
+        f32 lfEstimate = JunkyardFlush(static_cast<f32>(
+            1.0 / std::sqrt(static_cast<double>(lfLengthSquared))));
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const f32 lfSquare = JunkyardMultiply(lfEstimate, lfEstimate);
+            const f32 lfHalf = JunkyardMultiply(lfEstimate, 0.5f);
+            const f32 lfResidual = JunkyardNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
+            lfEstimate = JunkyardMultiplyAdd(lfHalf, lfResidual, lfEstimate);
+        }
+        return {JunkyardMultiply(lDirection.x, lfEstimate), JunkyardMultiply(lDirection.y, lfEstimate),
+                JunkyardMultiply(lDirection.z, lfEstimate), JunkyardMultiply(lDirection.w, lfEstimate)};
+    }
 
     f32 ClockToSeconds(u32 luHours, u32 luMinutes, u32 luSeconds)
     {
@@ -226,19 +272,23 @@ void DebugComponent::DebugToManager()
     CloudsData& lrClouds = lrManager.mClouds;
 
     lrManager.mfTimeOfDay = ClockToSeconds(muTimeOfDay_HH, muTimeOfDay_MM, muTimeOfDay_SS);
-    lrManager.mfTimeOfDayDelta = lrManager.mfTimeOfDayDelta <= 0.0f
-                               ? -mfTimeOfDayDelta : mfTimeOfDayDelta;
+    // ARTIST branches only for a positive old delta; unordered values negate.
+    lrManager.mfTimeOfDayDelta = lrManager.mfTimeOfDayDelta > 0.0f
+                               ? mfTimeOfDayDelta : -mfTimeOfDayDelta;
     lrManager.mfCloudDelta = mfCloudDelta;
 
     lrScattering.mv3SkyTopColour[0] = mfSkyTopColour_r;
     lrScattering.mv3SkyTopColour[1] = mfSkyTopColour_g;
     lrScattering.mv3SkyTopColour[2] = mfSkyTopColour_b;
+    lrScattering.mv3SkyTopColour[3] = 0.0f;
     lrScattering.mv3SkyHorColour[0] = mfSkyHorColour_r;
     lrScattering.mv3SkyHorColour[1] = mfSkyHorColour_g;
     lrScattering.mv3SkyHorColour[2] = mfSkyHorColour_b;
+    lrScattering.mv3SkyHorColour[3] = 0.0f;
     lrScattering.mv3SkySunColour[0] = mfSkySunColour_r;
     lrScattering.mv3SkySunColour[1] = mfSkySunColour_g;
     lrScattering.mv3SkySunColour[2] = mfSkySunColour_b;
+    lrScattering.mv3SkySunColour[3] = 0.0f;
     lrScattering.mfSkyHorPow = mfSkyHorPow;
     lrScattering.mfSkySunPow = mfSkySunPow;
     lrScattering.mfSkyDrk = mfSkyDrk;
@@ -249,12 +299,15 @@ void DebugComponent::DebugToManager()
     lrScattering.mv3ScattTopColour[0] = mfScattTopColour_r;
     lrScattering.mv3ScattTopColour[1] = mfScattTopColour_g;
     lrScattering.mv3ScattTopColour[2] = mfScattTopColour_b;
+    lrScattering.mv3ScattTopColour[3] = 0.0f;
     lrScattering.mv3ScattHorColour[0] = mfScattHorColour_r;
     lrScattering.mv3ScattHorColour[1] = mfScattHorColour_g;
     lrScattering.mv3ScattHorColour[2] = mfScattHorColour_b;
+    lrScattering.mv3ScattHorColour[3] = 0.0f;
     lrScattering.mv3ScattSunColour[0] = mfScattSunColour_r;
     lrScattering.mv3ScattSunColour[1] = mfScattSunColour_g;
     lrScattering.mv3ScattSunColour[2] = mfScattSunColour_b;
+    lrScattering.mv3ScattSunColour[3] = 0.0f;
     lrScattering.mfScattHorPow = mfScattHorPow;
     lrScattering.mfScattSunPow = mfScattSunPow;
     lrScattering.mfScattDrk = mfScattDrk;
@@ -269,27 +322,35 @@ void DebugComponent::DebugToManager()
     lrLighting.mv3KeyLightColour[0] = mfKeyLightColour_r;
     lrLighting.mv3KeyLightColour[1] = mfKeyLightColour_g;
     lrLighting.mv3KeyLightColour[2] = mfKeyLightColour_b;
+    lrLighting.mv3KeyLightColour[3] = 0.0f;
     lrLighting.mv3SpecularColour[0] = mfSpecularColour_r;
     lrLighting.mv3SpecularColour[1] = mfSpecularColour_g;
     lrLighting.mv3SpecularColour[2] = mfSpecularColour_b;
+    lrLighting.mv3SpecularColour[3] = 0.0f;
     lrLighting.mv3KeyFillColour[0] = mfKeyFillColour_r;
     lrLighting.mv3KeyFillColour[1] = mfKeyFillColour_g;
     lrLighting.mv3KeyFillColour[2] = mfKeyFillColour_b;
+    lrLighting.mv3KeyFillColour[3] = 0.0f;
     lrLighting.mv3ShadowFillColour[0] = mfShadowFillColour_r;
     lrLighting.mv3ShadowFillColour[1] = mfShadowFillColour_g;
     lrLighting.mv3ShadowFillColour[2] = mfShadowFillColour_b;
+    lrLighting.mv3ShadowFillColour[3] = 0.0f;
     lrLighting.mv3RightFillColour[0] = mfRightFillColour_r;
     lrLighting.mv3RightFillColour[1] = mfRightFillColour_g;
     lrLighting.mv3RightFillColour[2] = mfRightFillColour_b;
+    lrLighting.mv3RightFillColour[3] = 0.0f;
     lrLighting.mv3LeftFillColour[0] = mfLeftFillColour_r;
     lrLighting.mv3LeftFillColour[1] = mfLeftFillColour_g;
     lrLighting.mv3LeftFillColour[2] = mfLeftFillColour_b;
+    lrLighting.mv3LeftFillColour[3] = 0.0f;
     lrLighting.mv3UpFillColour[0] = mfUpFillColour_r;
     lrLighting.mv3UpFillColour[1] = mfUpFillColour_g;
     lrLighting.mv3UpFillColour[2] = mfUpFillColour_b;
+    lrLighting.mv3UpFillColour[3] = 0.0f;
     lrLighting.mv3DownFillColour[0] = mfDownFillColour_r;
     lrLighting.mv3DownFillColour[1] = mfDownFillColour_g;
     lrLighting.mv3DownFillColour[2] = mfDownFillColour_b;
+    lrLighting.mv3DownFillColour[3] = 0.0f;
     lrLighting.mfAmbientIrradianceScale = mfAmbientIrradianceScale;
 
     lrClouds.mafLayerDensity[0] = mafCloudLayerDensity[0];
@@ -301,9 +362,11 @@ void DebugComponent::DebugToManager()
     lrClouds.mav3LayerDarkColour[0][0] = mfCloudLayerDarkColourR;
     lrClouds.mav3LayerDarkColour[0][1] = mfCloudLayerDarkColourG;
     lrClouds.mav3LayerDarkColour[0][2] = mfCloudLayerDarkColourB;
+    lrClouds.mav3LayerDarkColour[0][3] = 0.0f;
     lrClouds.mav3LayerLiteColour[0][0] = mfCloudLayerLiteColourR;
     lrClouds.mav3LayerLiteColour[0][1] = mfCloudLayerLiteColourG;
     lrClouds.mav3LayerLiteColour[0][2] = mfCloudLayerLiteColourB;
+    lrClouds.mav3LayerLiteColour[0][3] = 0.0f;
 
     lrManager.mfSunTiltAtHorizon = mfSunTiltAtHorizon;
     lrManager.mfSunTiltAtMidday = mfSunTiltAtMidday;
@@ -432,19 +495,13 @@ void DebugComponent::Update()
 
     if (mbOverrideJunkyardKeyLightDirection)
     {
-        const f32 lfX = mafJunkyardKeyLightDirection[0];
-        const f32 lfY = mafJunkyardKeyLightDirection[1];
-        const f32 lfZ = mafJunkyardKeyLightDirection[2];
-        const f32 lfInvLength = 1.0f / std::sqrt(lfX * lfX + lfY * lfY + lfZ * lfZ);
-
-        mpEnvironmentManager->mOverrideKeyLightDirection.x = lfX * lfInvLength;
-        mpEnvironmentManager->mOverrideKeyLightDirection.y = lfY * lfInvLength;
-        mpEnvironmentManager->mOverrideKeyLightDirection.z = lfZ * lfInvLength;
+        const Vector3 lDirection = {mafJunkyardKeyLightDirection[0], mafJunkyardKeyLightDirection[1],
+                                    mafJunkyardKeyLightDirection[2], 0.0f};
+        mpEnvironmentManager->mOverrideKeyLightDirection = NormalizeJunkyardKeyLightDirection(lDirection);
         if (mpEnvironmentManager->mOverrideKeyLightDirection.y > KF_JUNKYARD_MAX_VERTICAL)
             mpEnvironmentManager->mOverrideKeyLightDirection.y = KF_JUNKYARD_MAX_VERTICAL;
         if (mpEnvironmentManager->mOverrideKeyLightDirection.y < -KF_JUNKYARD_MAX_VERTICAL)
             mpEnvironmentManager->mOverrideKeyLightDirection.y = -KF_JUNKYARD_MAX_VERTICAL;
-        mpEnvironmentManager->mOverrideKeyLightDirection.w = 0.0f;
     }
 
     if (mbCalculateJunkyardKeyLightDirectionFromTime)

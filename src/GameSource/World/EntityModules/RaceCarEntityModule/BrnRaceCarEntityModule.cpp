@@ -2,6 +2,9 @@
 #ifdef AddMonitor
 #undef AddMonitor
 #endif
+#ifdef GetNextWindow
+#undef GetNextWindow // Win32 macro conflicts with the original DebugUI method declaration
+#endif
 // ============================================================================
 // BrnWorld::RaceCarEntityModule -- the race-car entity module (file TU).
 //
@@ -53,6 +56,10 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"                  // AcquireResourceRequest / *Response
 #include "GameShared/GameClasses/System/Resource/CgsResourceId.h"                        // CgsResource::ID::HashString
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"   // CgsDev::DebugInterface
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"             // DebugUI::Metrics
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"         // Draw2DTextJustified
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                                   // CgsCore::SPrintf
 #include "SharedClasses/Trigger/BrnRegion.h"
 #include "SharedClasses/World/BrnCollisionTag.h"                                        // BrnWorld::KU_COLLISION_FLAG_FATAL ([crash-verdict] witness)
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                               // BrnWorld::GlobalColourPalette
@@ -93,6 +100,7 @@ namespace renderengine { extern u32 guPresentCount; }   // [net] netcar witness:
 #include <cstdlib>   // getenv  ([motion] opt-in probe)
 #include <cmath>     // sqrtf
 #include <cstddef>   // offsetof (the action-276 record pin)
+#include <limits>    // numeric_limits<f32>::max() (the original nearest-AI sentinel)
 
 namespace BrnWorld
 {
@@ -275,6 +283,11 @@ void RaceCarEntityModule::Construct()
 
     mReceiverQueue.Construct();
 
+    // X360 Construct @0x822FD8F8..0x822FD914 initializes the embedded Boost page:
+    // the base Construct is the folded empty body, followed by the owner pointer,
+    // miBoostRules = 1, and miActionTextModifiedTime = 0.
+    mBoostDebugComponent.Construct(this);
+
     // X360: the module Construct brings the streamer up along with the rest of the
     // interior (the receiver queue and the streamer are adjacent members, +0x100E8 and
     // +0x11100). Without this the five component streamers have no request/receiver
@@ -352,6 +365,9 @@ void RaceCarEntityModule::Construct()
     mbWaitingForStreaming    = false;
     mbSendStreamingComplete  = false;
     mbCarSelectAllowedInGameMode = false;
+    // X360 Construct @0x822FDBA4 / @0x822FDBAC seeds +0x1834A to 0 and +0x18349 to 1.
+    mbRivalDebug = false;
+    mbDisplayPlayerCarPosition = true;
     mbInCarSelectScreen       = false;
     mbInCarModScreen          = false;
     meCarSelectResetType      = 0;     // E_CAR_SELECT_DONT_DROP
@@ -691,11 +707,11 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // 0x82303FE8 `addi r3, r3, -0x7DB0` (module + 0x18250) ; 0x82304048 bl
         // PowerParkingManager::Prepare -- clears the scorer and registers its debug component;
         // the bool it returns is not tested (crash parity FX-SCENEMGR item 4, 2026-09-24).
-        // [FLAG PC bring-up] the other inlined scalar resets the console runs between the two
-        // calls (on +0x180D8 / +0x180E8: the air-time and traffic-check seats) and the three
-        // diagnostic storage at +0x180F0/+0x17E50 remains incomplete. The recovered
-        // Race Car Entity component (+0x17CF0) is registered below.
+        // [FLAG PC bring-up] the other inlined scalar resets (the air-time and traffic-check
+        // seats) remain separate from this stage. The Boost page (+0x17E50) and Race Car Entity
+        // diagnostic component (+0x17CF0) register below in the original order.
         mPowerParkingManager.Prepare();
+        mBoostDebugComponent.Register(); // ARTIST 823040C0
         mRCEntityModuleDebugComponent.Register(); // ARTIST 823040C4..823040CC
         mePrepareStage = 0;
     // fall through
@@ -8013,12 +8029,132 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     SendStreamerEvents( lpOutput );
 
+    // X360 0x82307948..0x82307960: test the registered +0x18349 switch and draw the original
+    // player-position/velocity overlay before the replay serializer call.
+    if( mbDisplayPlayerCarPosition )
+    {
+        DebugRenderPosition();
+    }
+
     // The console's own unlock order: read first (0x82307980), then write (0x82307988).
     if( lpInput != 0 )
     {
         lpInput->UnlockForRead();
     }
     lpOutput->UnlockForWrite();
+}
+
+// X360 0x822BDAB0; DecFIGS declares this const. The first four rows are the player's
+// transform position/forward axis and linear/angular velocity. The optional rival section
+// counts the first eight global slots, then searches all 35 slots for the nearest AI.
+void RaceCarEntityModule::DebugRenderPosition() const
+{
+    CgsDev::DebugInterface lDebugInterface;
+    CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
+    const CgsDev::DebugUI::Metrics& lrMetrics = lDebugInterface.GetUI().GetMetrics();
+    const f32 lfTextX = lrMetrics.mfScreenWidth - 40.0f;
+    char lacText[64];
+
+    const EActiveRaceCarIndex lePlayerIndex = GetPlayerActiveRaceCarIndex();
+    if( lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_0 )
+    {
+        return;
+    }
+
+    const RaceCar& lrPlayerRaceCar = maRaceCars[static_cast<s32>(lePlayerIndex)];
+    if( !lrPlayerRaceCar.HasActiveRaceCar() )
+    {
+        return;
+    }
+
+    const ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( lePlayerIndex );
+    const auto* lpPhysicsState = lpPlayerCar->GetPhysicsState();
+    const Vector3& lvPlayerPosition = lpPhysicsState->mTransform.wAxis;
+
+    CgsCore::SPrintf( lacText, sizeof(lacText), "Pos: %5.1f, %5.1f, %5.1f",
+                      lvPlayerPosition.x, lvPlayerPosition.y, lvPlayerPosition.z );
+    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 30.0f, 0.0f, 0.0f},
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+
+    const Vector3& lvPlayerForward = lpPhysicsState->mTransform.zAxis;
+    CgsCore::SPrintf( lacText, sizeof(lacText), "At: % .3f, % .3f, % .3f",
+                      lvPlayerForward.x, lvPlayerForward.y, lvPlayerForward.z );
+    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 45.0f, 0.0f, 0.0f},
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+
+    const Vector3& lvLinearVelocity = lpPhysicsState->mLinearVelocity;
+    CgsCore::SPrintf( lacText, sizeof(lacText), "Lin Vel: % .1f, % .1f, % .1f",
+                      lvLinearVelocity.x, lvLinearVelocity.y, lvLinearVelocity.z );
+    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 60.0f, 0.0f, 0.0f},
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+
+    const Vector3& lvAngularVelocity = lpPhysicsState->mAngularVelocity;
+    CgsCore::SPrintf( lacText, sizeof(lacText), "Ang Vel: % .1f, % .1f, % .1f",
+                      lvAngularVelocity.x, lvAngularVelocity.y, lvAngularVelocity.z );
+    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 75.0f, 0.0f, 0.0f},
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+
+    if( mbRivalDebug )
+    {
+        u8 luAICount = 0;
+        u8 luInRangeRivalCount = 0;
+        for( s32 liGlobal = 0; liGlobal < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liGlobal )
+        {
+            const RaceCar& lrRaceCar = maRaceCars[liGlobal];
+            if( lrRaceCar.IsInWorld() )
+            {
+                if( lrRaceCar.IsAIDriven() )
+                {
+                    ++luAICount;
+                }
+                if( lrRaceCar.IsInRangeRival() )
+                {
+                    ++luInRangeRivalCount;
+                }
+            }
+        }
+
+        CgsCore::SPrintf( lacText, sizeof(lacText), "AIs in range: %u/%u",
+                          static_cast<u32>(luInRangeRivalCount), static_cast<u32>(luAICount) );
+        lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 90.0f, 0.0f, 0.0f},
+                                      CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+
+        f32 lfClosestDistanceSquared = std::numeric_limits<f32>::max();
+        s32 liClosestGlobalCar = -1;
+        Vector3 lvClosestPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+        for( s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal )
+        {
+            const RaceCar& lrRaceCar = maRaceCars[liGlobal];
+            const ERaceCarType leType = lrRaceCar.GetType();
+            CGS_ASSERT( leType < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+            if( leType == E_RACE_CAR_TYPE_INACTIVE )
+            {
+                continue;
+            }
+
+            CGS_ASSERT( leType < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+            if( leType == E_RACE_CAR_TYPE_AI )
+            {
+                const Vector3 lvPosition = lrRaceCar.GetPosition();
+                const Vector3 lvSeparation = lvPosition - lvPlayerPosition;
+                const f32 lfDistanceSquared = rw::math::vpu::Dot( lvSeparation, lvSeparation );
+                if( lfDistanceSquared < lfClosestDistanceSquared )
+                {
+                    lfClosestDistanceSquared = lfDistanceSquared;
+                    liClosestGlobalCar = liGlobal;
+                    lvClosestPosition = lvPosition;
+                }
+            }
+        }
+
+        if( liClosestGlobalCar != -1 )
+        {
+            CgsCore::SPrintf( lacText, sizeof(lacText), "Closest AI: %5.1f, %5.1f, %5.1f",
+                              lvClosestPosition.x, lvClosestPosition.y, lvClosestPosition.z );
+            lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 110.0f, 0.0f, 0.0f},
+                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+        }
+    }
 }
 
 // ============================================================================

@@ -138,7 +138,7 @@ public:
     // X360 0x8238D698. Per-frame pre-world hook: refresh the current race time, publish + clear any
     // pending buffered road-rage takedown event onto the output queue, then age out the buffered
     // road-rage takedowns + collected billboards past their time windows.
-    void PreWorldUpdate(GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
+    void PreWorldUpdate(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                         GameStateModuleIO::OutputBuffer*         lpOutput);
 
     // X360 0x82373258. A flat-spin completed with magnitude lfFlatSpinAngle (radians/degrees per
@@ -189,6 +189,10 @@ public:
     bool CheckCarID(CgsID lCarId, CgsID lTargetCarId);
 
 private:
+    // ARTIST GameStateModule::Prepare stage 26 inlines these container clears.
+    // Keep that owner access local to the original caller rather than inventing a Prepare API.
+    friend class GameStateModule;
+
     // X360 0x823674B8. Mark developer-challenge liChallengeIndex complete: set it on the persisted
     // Profile and record it locally in maCompletedChallenges. Asserts the index in [0, 15).
     void SetChallengeCompleted(s32 liChallengeIndex);

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h" // Vector3 / VecFloat in the recovered draw-helper signatures
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h" // AirRamEffect / VehiclePhysics
 // FIXED 2026-08-03: this was `#include "DebugSystem/Core/CgsDebugComponent.h"`, which resolves
 // against NO -I directory in either the per-TU gate or build_game_exe.bat -- i.e. this header had
 // never been compiled by anything. The real path is below. (B5PhysicsHandlingDebugComponent.h
@@ -8,10 +10,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
 
 // BrnPhysics::Vehicle::PhysicalTrafficManagerDebugComponent - the in-game debug menu/overlay for
-// the physical traffic manager (air-ram / driver-control / joint / catchup / reset-on-water
-// visualisations). Derives from the real CgsDev::DebugComponent. The many RenderWorld/DrawXxx
-// render helpers declared in the DecFIGS DWARF are owned by its own dev-UI pass. Incremental:
-// this TU implements the leaf name getter (GetName @0x827DBA50) and Construct.
+// physical traffic (air-rams, driver controls, articulated joints, catchup targets, and reset
+// height). The menu registration, world renderer, and its X360-attested draw helpers live here.
 //
 // THE DATA LAYOUT IS NOW REAL (2026-08-03). It was an empty slice here and, separately, an
 // opaque `{ void* mpVTable; u8 [60]; }` FORK of the same fully-qualified name inside
@@ -37,6 +37,7 @@ namespace BrnPhysics
 namespace Vehicle
 {
     class PhysicalTrafficManager;   // owner; pointer-only (Construct only stores it)
+    struct PhysicalTrafficVehicle;
 
     class PhysicalTrafficManagerDebugComponent : public CgsDev::DebugComponent
     {
@@ -52,10 +53,41 @@ namespace Vehicle
         //   asm: lis r11,aPhysicalTraffi@ha ; addi r3,r11,aPhysicalTraffi@l "Physical traffic" ; blr
         const char* GetName() const override;
 
+        // @0x8261C678: register the 18 original debug controls with their source ranges and steps.
+        void OnActivate() override;
+        // @0x82636628: dispatch the world-overlay groups.
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+
     private:
         // Never called -- exists only so offsetof() can see the private members below (offsetof
         // on a private member needs member-function context). The gate FAILS if any pin moves.
         static void _AssertLayout();
+
+        // @0x825EDAB8 -- convert an active impulse to world space and draw its cone.
+        void RenderAirRam(const VehiclePhysics::AirRamEffect* lpAirRam,
+                          const VehiclePhysics* lpVehicle,
+                          CgsDev::Debug3DImmediateRender* lpDisplay) const;
+        // @0x825C9E90 -- draw the cone surface and radial base markers.
+        void RenderCone(Vector3 lvConeStart, Vector3 lvConeDirection, VecFloat lvfConeLength,
+                        u32 luColour, VecFloat lvfTheta,
+                        CgsDev::Debug3DImmediateRender* lpDisplay) const;
+        // @0x825EDD98 / @0x825CA2B8.
+        void RenderDriverControls(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void RenderControls(Vector3 lvPosition, const BrnPlayerDriverControls* lpControls,
+                            CgsDev::Debug3DImmediateRender* lpDisplay);
+
+        // @0x825ED508 is a named ARTIST export hole called by RenderWorld. It also consumes the
+        // +0x1A joint toggle and draws the physical vehicles, wheels, and joint frames.
+        void DrawPhysicalTraffic(CgsDev::Debug3DImmediateRender* lpDisplay);
+        // @0x8262C3E8 / @0x8262C730 / @0x8261C998.
+        void DrawSimpleTraffic(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawTrafficUsingBoxWorldTests(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawTrafficBox(const PhysicalTrafficVehicle* lpTrafficVehicle,
+                            CgsDev::Debug3DImmediateRender* lpDisplay, bool lbDrawWheels);
+        // @0x825ED0C0 / @0x825EE0F8 / @0x825EE4A0.
+        void DrawCatchupTargets(CgsDev::Debug3DImmediateRender* lpDisplay);
+        void DrawResetOnWaterHeight(CgsDev::Debug3DImmediateRender* lpDisplay);
+        static void ResetTrafficAboveWater(void* lpUserData);
 
         PhysicalTrafficManager* mpTrafficManager;           // :137  X360 +12
         bool                    mbDrawTrafficAirRams;       // :138  X360 +16

@@ -119,10 +119,8 @@ namespace Vehicle
             return mUpdateNetworkTrafficEventQueue.GetLength() - 1;
         }
 
-        // @0x8271C9C0 (478). DWARF :144. The trailer (cab + trailer) twin. DECLARED so
-        // AddVehicleToPhysics' articulated arm compiles; the body is a named gate (trailers are
-        // parked for wave-T3 round 1 -- wave-T2 generation only builds InitialiseAsStandard cars,
-        // so the arm is unreachable today).
+        // @0x8271C9C0 (478). DWARF :144. The trailer (cab + trailer) twin. Validates and queues
+        // both halves for the articulated physical-traffic drain.
         void CreateArticulatedTraffic(VolumeInstanceId lVolumeInstanceId_Cab,
                                       Matrix44Affine lInitialTransform_Cab,
                                       Vector3 lInitialVelocity_Cab, Vector3 lAngularVelocity_Cab,

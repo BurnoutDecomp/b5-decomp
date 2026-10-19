@@ -7,6 +7,7 @@
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::Construct     @ 0x827F89A8
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::AddProgram    @ 0x827EFAB0
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::SetProgram    @ 0x827DBE58
+//   CgsGraphics::ImRenderer<PositionOnlyVertex>::BeginRendering@ 0x827EF450 (export hole)
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::EndRendering  @ 0x827EB0F0
 //   CgsGraphics::ImRenderer<PositionOnlyVertex>::SetTransform  @ 0x827EB160
 //
@@ -19,6 +20,7 @@
 // "is pixel program" flag (1) come straight from the immediates -- none are fabricated.
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsPositionOnlyVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -26,6 +28,17 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+
+// The native D3D9 program pair generated from the exact TUB position-only sources
+// (tools/nushaders/Source/Executable/24.fx and 25.fx).
+namespace renderengine
+{
+    extern const u8  gauIm3dZOnlyVertexProgramPC[];
+    extern const u32 guIm3dZOnlyVertexProgramPCSize;
+    extern const u8  gauIm3dZOnlyPixelProgramPC[];
+    extern const u32 guIm3dZOnlyPixelProgramPCSize;
+}
 
 namespace CgsGraphics
 {
@@ -113,6 +126,24 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
 
+    // Adopt the canonical D3D9 platform-4 images when supplied by the PC caller.
+    // They are compiled from the TUB ZOnly source pair, not the console Xenos blobs.
+    // A non-PC image still follows the original console route below.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
+
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
     // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
@@ -178,12 +209,11 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const u32* lauPixelProgramSize,
                               s8 li8NumberPrograms)
 {
-    // Build the shared render-state library exactly once (module-static guard byte_83010F95).
-    static bool sbStateLibraryConstructed = false;
-    if (!sbStateLibraryConstructed)
+    // Build the shared render-state library once using the shared ARTIST guard byte_83010F95.
+    if (!mgbStateLibraryConstructed)
     {
         ConstructOnceOnly(lpAllocator);
-        sbStateLibraryConstructed = true;
+        mgbStateLibraryConstructed = true;
     }
 
     // Build the position-only vertex descriptor (the X360 inlines PositionOnlyVertex::
@@ -253,21 +283,10 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
-    // The live vertex-program shadow cache (X360 dword_8301095C). One per module, not per renderer.
-    static renderengine::ProgramBuffer* spgLastVertexProgram = nullptr;
-
-    renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == lpVertexProgram)
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-        lbChanged = true;
-    }
+    // ARTIST compares dword_8301095C in the shared shadow device. BeginRendering
+    // resets this same cache; a second TU-local cache would survive that reset.
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program]));
 
     if (lbChanged)
     {
@@ -279,10 +298,29 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
 }
 
 // ---------------------------------------------------------------------------------------------------
+// ImRenderer<PositionOnlyVertex>::BeginRendering  @ 0x827EF450
+// Default-program entry point recovered from the original image's 248-byte export hole.
+// ---------------------------------------------------------------------------------------------------
+template <typename V>
+void ImRenderer<V>::BeginRendering()
+{
+    // ARTIST 827EF450..827EF548: claim the renderer, reset the shared shadow,
+    // select slot zero, then bind its programs and the position-only descriptor.
+    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0] != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    mgpActiveRenderer = static_cast<ImRendererBase*>(this);
+    shadow::Device::ResetShadowing();
+    mi8CurrentProgram = 0;
+    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
+    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
+    shadow::Device::SetVertexDescriptor(
+        reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
+}
+
+// ---------------------------------------------------------------------------------------------------
 // ImRenderer<PositionOnlyVertex>::EndRendering  @ 0x827EB0F0
-// Assert this renderer is the active one, then clear the active-renderer module static. (The X360
-// compares mgpActiveRenderer against `this + 4` -- the ImRendererBase subobject pointer past this
-// renderer's vptr; `this` when null stays null.)
+// Assert this renderer is active, then clear the shared active-renderer pointer.
 // ---------------------------------------------------------------------------------------------------
 template <typename V>
 void ImRenderer<V>::EndRendering()
@@ -330,18 +368,63 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
     return lpResult;
 }
 
-// Emit the five X360-attested ImRenderer<PositionOnlyVertex> member bodies (the Im3dZOnly path).
+// Emit the six X360-attested ImRenderer<PositionOnlyVertex> member bodies (the Im3dZOnly path).
 // We instantiate the members INDIVIDUALLY rather than `template struct ImRenderer<PositionOnlyVertex>`
-// because the rest of the template's API (BeginRendering / Render / RenderStart / RenderEnd) is the PC
-// 2D fold whose bodies live in CgsIm2d.cpp and is NOT attested by the X360 ARTIST for this TU -- a
-// whole-struct explicit instantiation would force fabricated bodies for them. (This is the wave-30
-// BasicColouredVertex lesson: instantiate only what this TU owns.)
+// so this TU emits only the individually recovered members. The default-program BeginRendering
+// above is a real ARTIST body omitted from the JSON export set; it does not use the PC 2D fold.
 template void ImRenderer<PositionOnlyVertex>::Construct(
     rw::IResourceAllocator*, const void* const*, const u32*, const void* const*, const u32*, s8);
 template s8 ImRenderer<PositionOnlyVertex>::AddProgram(
     rw::IResourceAllocator*, const void*, u32, const void*, u32);
 template bool ImRenderer<PositionOnlyVertex>::SetProgram(s8);
+template void ImRenderer<PositionOnlyVertex>::BeginRendering();
 template void ImRenderer<PositionOnlyVertex>::EndRendering();
 template void* ImRenderer<PositionOnlyVertex>::SetTransform(const void*);
+
+// ARTIST Im3dZOnly::Construct @ 0x827FCCB8. The X360 embeds one program pair
+// (0x820D4A90/280 B VS, 0x820D4BA8/156 B PS); the host uses the corresponding
+// D3D9 platform-4 pair in Im3dProgramsPC.cpp, compiled from the exact TUB source.
+//
+// The original body stores the identity transform, calls the typed base
+// constructor with one pair, asserts slot zero's vertex program, and resolves
+// "worldViewProj" into the first shader-state handle.
+void Im3dZOnly::Construct(rw::IResourceAllocator* lpAllocator)
+{
+    static const f32 KAF_IDENTITY[16] =
+    {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
+    {
+        mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
+    }
+
+    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dZOnlyVertexProgramPC };
+    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dZOnlyPixelProgramPC };
+    const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dZOnlyVertexProgramPCSize };
+    const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dZOnlyPixelProgramPCSize };
+    const s8    KI8_PROGRAMS_BUILT        = 1;
+    ImRenderer<PositionOnlyVertex>::Construct(
+        lpAllocator,
+        lapVertexProgramBinary, lauVertexProgramSize,
+        lapPixelProgramBinary,  lauPixelProgramSize,
+        KI8_PROGRAMS_BUILT);
+
+    renderengine::ProgramBufferData* const lpVertexProgram =
+        reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
+    CGS_ASSERT(lpVertexProgram != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    // Keep the original assertion; avoid a null ProgramBuffer dereference if host
+    // allocation/adoption fails with assertions disabled.
+    if (lpVertexProgram == nullptr)
+    {
+        return;
+    }
+    renderengine::ProgramBuffer::GetVariableHandleByName(
+        lpVertexProgram, reinterpret_cast<const u8*>("worldViewProj"),
+        reinterpret_cast<renderengine::ProgramVariableHandle*>(&maShaderStateBlocks[0]));
+}
 
 } // namespace CgsGraphics

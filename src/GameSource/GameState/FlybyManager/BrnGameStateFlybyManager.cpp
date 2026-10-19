@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h"
 #include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"
+#include "GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h"
 #include "GameSource/GameState/BrnGameStateModule.h"              // GameStateModule::GetLocalPlayerNetworkID
 
 namespace BrnGameState
@@ -79,21 +80,42 @@ GameStateModuleIO::FlybyData* FlybyManager::GetFlybyData()
     return &mFlybyData;
 }
 
-// OfflineFlybyManager : public FlybyManager (DWARF BrnGameStateOfflineFlybyManager.h:42). Minimal
-// slice: only the one method reconstructed by this TU.
-class OfflineFlybyManager : public FlybyManager
+// ARTIST GameStateModule::Construct @0x8238061C..0x82380634 inlines this
+// provider: construct the base, then clear the offline manager's two-bit set.
+void OfflineFlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem)
 {
-public:
-    // X360 @ 0x82364820. const FlybyData* CalculateFlybyRivals().
-    const GameStateModuleIO::FlybyData* CalculateFlybyRivals();
-};
+    FlybyManager::Construct(lpGameStateModule, lpScoringSystem);
+    mStatShownMessages.UnSetAll();
+}
+
+// ARTIST Prepare stage 18 @0x8239EB30 clears only this owner's message set.
+// The following FlybyData::Prepare belongs to the online manager.
+bool OfflineFlybyManager::Prepare()
+{
+    mStatShownMessages.Prepare();
+    return true;
+}
+
+// ARTIST vtable 0x820CE774's second slot is ICF-folded to 0x827E2F38:
+// li r3,0; blr. DecFIGS names the slot CalculateNumberOfCarsInFlyby.
+s32 OfflineFlybyManager::CalculateNumberOfCarsInFlyby()
+{
+    return 0;
+}
+
+// ARTIST 0x82391FA8: the online vtable's first slot calculates the rivals
+// before returning the same base-owned payload as the offline first slot.
+const GameStateModuleIO::FlybyData* OnlineFlybyManager::CalculateFlybyRivals()
+{
+    CalculateOnlineRivals();
+    return GetFlybyData();
+}
 
 // X360 @ 0x82364820  ==  addi r3,r3,0x10 ; blr.
 // IDA-truncated symbol was 'OfflineFlybyManager::Cal'; full name recovered from DWARF mangled
 // symbol _ZN12BrnGameState19OfflineFlybyManager20CalculateFlybyRivalsEv and confirmed by the
 // identically-truncated sibling OnlineFlybyManager::Calc @0x82391FA8.
-// The Offline override emits no rival-calculation call (that work was inlined into Prepare); the
-// surviving vtable entry is the bare 'return &mFlybyData' == return GetFlybyData() (this+0x10).
+// The surviving offline vtable entry returns the base-owned payload directly.
 const GameStateModuleIO::FlybyData* OfflineFlybyManager::CalculateFlybyRivals()
 {
     return GetFlybyData();

@@ -2,8 +2,38 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <thread>
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "rw/rwcore_structs.h"
+
+// Test-only traps for unused allocator interface slots. The registry must use
+// the supplied resource allocator's DoAllocate and matching DoFree overrides.
+namespace rw {
+void* IResourceAllocator::Alloc(size_t,const char*,uint32_t,uint32_t,uint32_t) { std::abort(); }
+void* IResourceAllocator::Alloc(size_t,const char*,uint32_t) { std::abort(); }
+void IResourceAllocator::Free(void*,size_t) { std::abort(); }
+Resource IResourceAllocator::DoAllocate(const ResourceDescriptor&,const char*) { std::abort(); }
+void IResourceAllocator::DoFreeDisposable(Resource&) { std::abort(); }
+}
+
+struct RegistryAllocator : rw::IResourceAllocator {
+    alignas(16) unsigned char bytes[64 * 96];
+    rw::ResourceDescriptor descriptor{};
+    int allocations=0, frees=0;
+    const char* name=nullptr;
+    bool matchingFree=false;
+    RegistryAllocator() { std::memset(bytes,0xCD,sizeof(bytes)); }
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& request,const char* tag) override {
+        ++allocations; descriptor=request; name=tag;
+        rw::Resource result; result.m_baseResources[0]=bytes; return result;
+    }
+    void DoFree(const rw::Resource& resource) override {
+        ++frees; matchingFree=resource.m_baseResources[0]==bytes;
+        for (unsigned lane=1;lane<rw::KU_RESOURCE_LANE_COUNT;++lane)
+            matchingFree &= resource.m_baseResources[lane]==nullptr;
+    }
+};
 
 namespace CgsDev { namespace Assert {
 std::atomic<unsigned> assertions{0};
@@ -18,7 +48,19 @@ static void Check(bool good,const char* label) {
 int main() {
     using namespace CgsDev;
     using namespace CgsDev::PerfMonCpu;
-    Check(Construct(64,nullptr),"registry constructed");
+    RegistryAllocator allocator;
+    Check(Construct(64,&allocator),"registry constructed");
+    Check(allocator.allocations==1 && allocator.name==nullptr,
+          "registry allocation reaches the supplied allocator without a tag");
+    bool descriptor=allocator.descriptor.m_baseResourceDescriptors[0].m_size==64*96
+        && allocator.descriptor.m_baseResourceDescriptors[0].m_alignment==16;
+    for (unsigned lane=1;lane<rw::KU_RESOURCE_LANE_COUNT;++lane)
+        descriptor &= allocator.descriptor.m_baseResourceDescriptors[lane].m_size==0
+            && allocator.descriptor.m_baseResourceDescriptors[lane].m_alignment==1;
+    Check(descriptor,"original 96-byte records, 16-byte alignment and five-lane descriptor");
+    bool cleared=true;
+    for (unsigned char byte:allocator.bytes) cleared &= byte==0;
+    Check(cleared,"Construct clears every byte of the allocator-provided registry");
     const int timer = AddMonitor("Dispatch work",E_PMP_GENERAL,false,1.0f,false);
     const int scaled = AddMonitor("Per-step work",E_PMP_GENERAL,false,1.0f,true);
     StartProfiling();
@@ -67,6 +109,8 @@ int main() {
     ResetValuesInActiveMonitors(); StartProfiling(); GetMonitorData(timer,&data);
     Check(data.miNumCalls == 0 && data.mfCurrentValue == 0,"reset clears the completed snapshot");
     StopProfiling(); Destruct();
+    Check(allocator.frees==1 && allocator.matchingFree,
+          "host teardown returns the complete resource to its producing allocator");
     Check(CgsDev::Assert::assertions == 0,"independent frame owners raise no monitor assertions");
     std::printf("PCPerfMonSnapshot: %d checks, %d failures\n",checks,failures);
     return failures ? 1 : 0;

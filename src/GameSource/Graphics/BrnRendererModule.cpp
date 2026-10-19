@@ -1,5 +1,9 @@
 #include <algorithm>
 #include "pc/gcm/renderengine/MeshJobOwnerWait.h"
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
+#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 #include "pc/gcm/renderengine/ShadowReceiver.h"
 #include "pc/gcm/renderengine/reflections/SceneSettings.h"
 #include "pc/gcm/renderengine/reflections/SceneRender.h"
@@ -31,6 +35,12 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
+#include "GameSource/Resource/BrnResourceAllocator.h" // Allocators and the debug/global graphics allocators
+#include "rw/rwcore_general_alloc.h"              // rw::core::GeneralResourceAllocator base conversion
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
+
+// BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
+namespace CgsGraphics { extern u32 suOcclusionCullIndexCountThreshold; }
 
 // ---------------------------------------------------------------------------------------------
 // BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
@@ -248,43 +258,13 @@ namespace
 #define BRN_ENVMAP_PASS_AVAILABLE 1
 
 // ---------------------------------------------------------------------------------------------
-// BRN_GPU_PERFMON_AVAILABLE -- the GPU perf-monitor sub-gate (2026-08-14).
-//
-// CgsDev::PerfMonGpu::StartMonitor / StopMonitor are the last two of the six symbols the bracket
-// bodies reference, and they are the two the bracket flip could NOT satisfy. They are DECLARED in
-// GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h:47-48 and the only definitions in
-// the tree are in .../PerfMon/Gpu/PS3/CgsPerfMonGpuPS3.cpp:165 and :183. THREE separate reasons this
-// is not a one-step fix, all measured rather than assumed:
-//
-//   1. NEITHER Gpu TU IS ON tools/build/build_game_exe.bat. `grep -n -i "PerfMon"` over that file
-//      returns lines 1267/1268 (rem comments), 1800/1801 -- the two **Cpu** TUs -- and 2934/2936
-//      (BrnGuiPerfmons). There is no Gpu line. So this is a real LNK2019, not a stale banner.
-//   2. THE TWO FILES ARE A PAIR. CgsPerfMonGpuPS3.cpp holds the bodies; CgsPerfMonGpu.cpp:15-20
-//      holds the six static data members (maMonitors, miMaxMonitor, meGameFrequency,
-//      mbProfilingRunning, mbActiveMonitor, miActiveMonitorID). Mounting either alone trades two
-//      unresolved externals for six.
-//   3. MOUNTING BOTH FIRES FOUR ASSERTS A FRAME. StartMonitor asserts `mbProfilingRunning == true`
-//      (CgsPerfMonGpuPS3.cpp:175) and StopMonitor the same (:191), and nothing in this tree calls
-//      PerfMonGpu::StartProfiling / Construct / Swap. Worse, EVERY id in mGpuMonitors is 0
-//      (BrnGpuMonitors::Construct, BrnRendererModule.h:302-307, memsets the whole struct to 0 and
-//      nothing calls PerfMonGpu::AddMonitor anywhere), so miScreenClear == miDownsampleMSAAAndComp-
-//      Particles == 0 and the frame's SECOND StartMonitor would also trip
-//      `!gValues.mabUsedThisFrame[0]` (:173). Mounting the pair is its own step, and it needs
-//      Construct + StartProfiling + AddMonitor wired first.
-//
-// THE PRECEDENT FOR DROPPING GPU PERFMON INSTRUMENTATION IS THIS VERY FUNCTION. Render @0x8240BFA8
-// brackets its own frame with CgsDev__PerfMonGpu__StartProfiling (@0x8240C4C8) and about twenty
-// Start/StopMonitor pairs; the reconstructed PC Render below carries NONE of them. The eight calls
-// inside the two bracket bodies survived only because the bodies were compiled out. This gate makes
-// them consistent with the rest of the file WITHOUT deleting the console's calls: the text stays,
-// greppable and in the console's order, including the monitor-order flip between
-// BeginRenderAntiAliased's two branches that the comments there explain.
-//
-// TO TURN THIS ON: mount CgsPerfMonGpu.cpp and PerfMon/Gpu/PS3/CgsPerfMonGpuPS3.cpp on
-// build_game_exe.bat, wire PerfMonGpu::Construct + AddMonitor (so the ids stop all being 0) and
-// StartProfiling/StopProfiling/Swap into the frame, then set this to 1. Profiling only -- it moves
-// no pixels either way.
-#define BRN_GPU_PERFMON_AVAILABLE 0
+#ifdef AddMonitor
+#undef AddMonitor
+#endif
+
+// GPU timing uses the original registry/brackets and a native D3D9 query transport.
+// The GPU transport never substitutes CPU submission duration for a GPU sample.
+#define BRN_GPU_PERFMON_AVAILABLE 1
 
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (the PC presentation draw)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] BRN_IM2D_TRACE probes
@@ -408,6 +388,55 @@ void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1
                          laLeftX[liThread] * KF_W,           0.91f * KF_H,
                          (laLeftX[liThread] + 0.015f) * KF_W, 0.94f * KF_H, lColour);
     }
+    mIm2dRenderer.EndRendering();
+}
+
+// @0x82406208. ARTIST calls this with a normalized upper-right position (0.7, 0.0),
+// a normalized size (0.3, 0.3), and opaque white to show a render-target texture.
+void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
+                                                  Vector2 lrPosition, Vector2 lrSize,
+                                                  CgsDev::RGBA luColour)
+{
+    mIm2dRenderer.BeginRendering();
+    // ARTIST8240623C..82406298 rebuilds the actual owned TextureState in
+    // its existing resource, then binds its complete sampler/raster at stage0.
+    mTextureStateParams.mpTexture = lpTexture;
+    mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource, &mTextureStateParams);
+    mIm2dRenderer.SetState(mpTextureState);
+
+    const f32 KF_LOGICAL_WIDTH = 1280.0f;
+    const f32 KF_LOGICAL_HEIGHT = 720.0f;
+    const f32 lfLeft = lrPosition.x * KF_LOGICAL_WIDTH;
+    const f32 lfTop = lrPosition.y * KF_LOGICAL_HEIGHT;
+    const f32 lfRight = (lrPosition.x + lrSize.x) * KF_LOGICAL_WIDTH;
+    const f32 lfBottom = (lrPosition.y + lrSize.y) * KF_LOGICAL_HEIGHT;
+
+    const CgsGraphics::RGBA8 lColour = {
+        static_cast<u8>(luColour & 0xFFu),
+        static_cast<u8>((luColour >> 8) & 0xFFu),
+        static_cast<u8>((luColour >> 16) & 0xFFu),
+        static_cast<u8>((luColour >> 24) & 0xFFu)
+    };
+    CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
+    laVertices[0].mv2Pos = { lfLeft, lfTop };
+    laVertices[1].mv2Pos = { lfLeft, lfBottom };
+    laVertices[2].mv2Pos = { lfRight, lfTop };
+    laVertices[3].mv2Pos = { lfRight, lfBottom };
+    laVertices[0].mv2Tex0UV = { 0.0f, 0.0f };
+    laVertices[1].mv2Tex0UV = { 0.0f, 1.0f };
+    laVertices[2].mv2Tex0UV = { 1.0f, 0.0f };
+    laVertices[3].mv2Tex0UV = { 1.0f, 1.0f };
+    for (u32 luVertex = 0; luVertex < 4; ++luVertex)
+        laVertices[luVertex].mv4Colour = lColour;
+
+    // The native backend consumes logical pixels; BeginRendering's published
+    // screen transform and the coordinate conversion above lower ARTIST's
+    // SetTransform(flt_830112D0). Reuse the full shared F20/F3C state objects.
+    mIm2dRenderer.SetState(
+        reinterpret_cast<const CgsGraphics::BlendState*>(CgsGui::gpGuiBlendStateStandard));
+    mIm2dRenderer.SetState(
+        reinterpret_cast<const CgsGraphics::RasterizerState*>(CgsGui::gpGuiRasterizerStateCullNone));
+    mIm2dRenderer.Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
     mIm2dRenderer.EndRendering();
 }
 
@@ -549,7 +578,7 @@ namespace
             lHeapCapacity.m_baseResourceDescriptors[luLane].m_size      = (luLane == 0) ? luHeapBytes : 0u;
             lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 128u : 1u;
         }
-        sWorldDispatchAllocator.Initialize(lHeapResource, lHeapCapacity);
+        sWorldDispatchAllocator.AdoptMemory(lHeapResource, lHeapCapacity);
         sbWorldDispatchAllocatorReady = true;
         return true;
     }
@@ -677,8 +706,8 @@ namespace
             // BrnSunCorona::Construct sets mbRenderSunCorona true, which IS the console's value
             // (`stb r27(=1), 0x51(r31)` @0x824009EC). The knob only SEEDS that member, once, right
             // where Construct wrote it -- NO SECOND SWITCH IS MINTED (AGENTS.md rule 3); the
-            // console's other writer is BrnGraphics::DebugComponent, which is an empty placeholder
-            // in this tree. DELETE-WHEN the debug component owns the switch.
+            // The recovered Renderer debug page owns the module's corona-pass switch; it does not
+            // register BrnSunCorona::mbRenderSunCorona, so this host-only knob remains distinct.
             lrSunCorona.PCBringUpSetRenderSunCorona(renderengine::gSunCorona != 0);
             if (renderengine::gSunCorona == 0)
             {
@@ -1185,6 +1214,31 @@ namespace
 
 void BrnRendererModule::Construct()
 {
+    // ARTIST8240B43C..8240B710: preserve registration order, white RGBA,
+    // and the original refresh-budget percentages (WorldOpaque is raw23.0).
+    // This belongs here, after DebugManager::Construct, not in the C++ ctor.
+    const rw::RGBA lGpuMonitorColour(255, 255, 255, 255);
+    mGpuMonitors.miScreenClear = CgsDev::PerfMonGpu::AddMonitor("ScreenClear", lGpuMonitorColour, 1.0f);
+    mGpuMonitors.miShadowmap = CgsDev::PerfMonGpu::AddMonitor("ShadowMap", lGpuMonitorColour, 10.0f);
+    mGpuMonitors.miSky = CgsDev::PerfMonGpu::AddMonitor("Sky", lGpuMonitorColour, 3.0f);
+    mGpuMonitors.miEnvironmentMap = CgsDev::PerfMonGpu::AddMonitor("EnvironmentMap", lGpuMonitorColour, 6.0f);
+    mGpuMonitors.miPreZ = CgsDev::PerfMonGpu::AddMonitor("Pre-Z", lGpuMonitorColour, 3.0f);
+    mGpuMonitors.miWorldOpaque = CgsDev::PerfMonGpu::AddMonitor("WorldOpaque", lGpuMonitorColour, 23.0f);
+    mGpuMonitors.miWorldTransparent = CgsDev::PerfMonGpu::AddMonitor("WorldTransparent", lGpuMonitorColour, 3.0f);
+    mGpuMonitors.miCarOpaque = CgsDev::PerfMonGpu::AddMonitor("CarOpaque", lGpuMonitorColour, 20.0f);
+    mGpuMonitors.miCarTransparent = CgsDev::PerfMonGpu::AddMonitor("CarTransparent", lGpuMonitorColour, 3.0f);
+    mGpuMonitors.miFullResParticles = CgsDev::PerfMonGpu::AddMonitor("FullResParticles", lGpuMonitorColour, 1.0f);
+    mGpuMonitors.miQuarterResParticles = CgsDev::PerfMonGpu::AddMonitor("ShrinkZ&DrawQuarterResParticles", lGpuMonitorColour, 5.0f);
+    mGpuMonitors.miResolveMSAAFromEDRAM = CgsDev::PerfMonGpu::AddMonitor("ResolveMSAAFromEDRAM", lGpuMonitorColour, 2.5f);
+    mGpuMonitors.miDownsampleMSAAAndCompParticles = CgsDev::PerfMonGpu::AddMonitor("CompParticles&DownsampledMSAA", lGpuMonitorColour, 2.5f);
+    mGpuMonitors.miSunCoronaVisibilityTest = CgsDev::PerfMonGpu::AddMonitor("Sun corona visibility test", lGpuMonitorColour, 0.1f);
+    mGpuMonitors.miCoronas = CgsDev::PerfMonGpu::AddMonitor("Coronas", lGpuMonitorColour, 0.4f);
+    mGpuMonitors.miPostFX = CgsDev::PerfMonGpu::AddMonitor("PostFX", lGpuMonitorColour, 9.0f);
+    mGpuMonitors.miIm3dAndRacePositions = CgsDev::PerfMonGpu::AddMonitor("Im3dAndRacePositions", lGpuMonitorColour, 1.0f);
+    mGpuMonitors.miMenusAndHud = CgsDev::PerfMonGpu::AddMonitor("MenusAndHud", lGpuMonitorColour, 3.0f);
+    mGpuMonitors.miDebug3d = CgsDev::PerfMonGpu::AddMonitor("Debug3d", lGpuMonitorColour, 0.0f);
+    mGpuMonitors.miDebug2d = CgsDev::PerfMonGpu::AddMonitor("Debug2d", lGpuMonitorColour, 0.0f);
+
     mIm2dRenderBuffer.Construct();
     mIm2dDebugRenderBuffer.Construct();
     mIm2dAssertRenderBufferPC.Construct();
@@ -1354,6 +1408,20 @@ void BrnRendererModule::Construct()
         }
     }
 
+    // ARTIST @8240BC94 constructs the renderer's debug-menu owner before the remaining managers.
+    mDebugComponent.Construct(this);
+
+    // ARTIST8240BD14..8240BD94: clamp U/V, retain the constructor's point
+    // filters and allocate the five-lane resource used by the preview's
+    // TextureState::Initialize. The existing native allocator owns its memory;
+    // no per-frame heap state or opaque one-byte Resource is used by the preview.
+    mTextureStateParams.muAddressU = mTextureStateParams.muAddressV = 2;
+    mTextureStateParams.muMagFilter = mTextureStateParams.muMinFilter = 0;
+    rw::ResourceDescriptor lTextureStateDescriptor;
+    renderengine::TextureState::GetResourceDescriptor(&lTextureStateDescriptor);
+    mTextureStateResource = BrnResource::Allocators::GetGlobalGraphicsAllocator()->DoAllocate(
+        lTextureStateDescriptor, nullptr);
+
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
     mShadowMapRenderManager.Construct(2);
 
@@ -1382,6 +1450,92 @@ void BrnRendererModule::Construct()
                                     "(effects apply, tint blend and composite skipped)\n");
         }
     }
+}
+
+// @0x82409C20. ARTIST's stage helper increments before checking the terminal state;
+// it returns the previous value, which each call site discards.
+bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    const auto AdvancePrepareStage = [this]()
+    {
+        mePrepareStage = static_cast<ERendererPrepareStage>(mePrepareStage + 1);
+        CGS_ASSERT(mePrepareStage <= eRendererPrepareDone,
+                   "leEnumIndex <= BrnRendererModule::eRendererPrepareDone");
+    };
+
+    switch (mePrepareStage)
+    {
+    case eRendererPrepareStart:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareManager:
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            return false;
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareBlobbyShadows:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareCoronas:
+        AdvancePrepareStage();
+        [[fallthrough]];
+    case eRendererPrepareDone:
+        meReleaseStage = eRendererReleaseStart;
+        break;
+    default:
+        CGS_ASSERT(false, "Invalid Render Module Prepare State");
+        return false;
+    }
+
+    rw::core::GeneralResourceAllocator* const lpAllocator =
+        lpAllocatorList->GetRWGeneralResourceAllocator(31);
+
+    const bool lbIm2dPrepared = mIm2dRenderBuffer.Prepare(110592, 393216, lpAllocator, false);
+    CGS_ASSERT(lbIm2dPrepared,
+               "mIm2dRenderBuffer.Prepare( KI_IM2D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM2D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
+    const bool lbIm3dPrepared = mIm3dRenderBuffer.Prepare(1024, 0x8000, lpAllocator, false);
+    CGS_ASSERT(lbIm3dPrepared,
+               "mIm3dRenderBuffer.Prepare( KI_IM3D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
+    const bool lbIm3dUntexPrepared =
+        mIm3dRenderBufferUntex.Prepare(0x4000, 0x80000, lpAllocator, false);
+    CGS_ASSERT(lbIm3dUntexPrepared,
+               "mIm3dRenderBufferUntex.Prepare( KI_IM3D_RENDER_BUFFER_UNTEX_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_UNTEX_VERTEX_BUFFER_SIZE, lpAllocator )");
+
+    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+               "Allocators::mpInternalDebugAllocator");
+    const bool lbIm3dDebugPrepared = mIm3dDebugRenderBuffer.Prepare(
+        0x100000, 0x100000, BrnResource::GetDebugAllocator(), true);
+    CGS_ASSERT(lbIm3dDebugPrepared,
+               "mIm3dDebugRenderBuffer.Prepare( KI_IM3D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM3D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
+
+    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
+               "Allocators::mpInternalDebugAllocator");
+    const bool lbIm2dDebugPrepared = mIm2dDebugRenderBuffer.Prepare(
+        81920, 0x200000, BrnResource::GetDebugAllocator(), true);
+    CGS_ASSERT(lbIm2dDebugPrepared,
+               "mIm2dDebugRenderBuffer.Prepare( KI_IM2D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
+               "KI_IM2D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
+
+    const bool lbRacePositionPrepared =
+        mIm3dBufferRacePosition.Prepare(0x20000, 0x20000, lpAllocator, false);
+    CGS_ASSERT(lbRacePositionPrepared,
+               "mIm3dBufferRacePosition.Prepare( KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_COMMANDBUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_VERTEXBUFFER_SIZE, lpAllocator )");
+    const bool lbMenusHudPrepared =
+        mIm3dBufferMenusAndHud.Prepare(512, 4, lpAllocator, false);
+    CGS_ASSERT(lbMenusHudPrepared,
+               "mIm3dBufferMenusAndHud.Prepare( KI_IM3D_RENDER_BUFFER_MENUSANDHUD_COMMANDBUFFER_SIZE, "
+               "KI_IM3D_RENDER_BUFFER_MENUSANDHUD_VERTEXBUFFER_SIZE, lpAllocator )");
+
+    mSkyDome.Prepare(&mIm3dRendererSkyDome,
+                     BrnResource::Allocators::GetGlobalGraphicsAllocator());
+    mDebugComponent.Register();
+    MemoryUsage();
+    return true;
 }
 
 // @ 0x82405E28 (BrnRendererModule::Update, the SetDispatchFrame expression)
@@ -3024,7 +3178,7 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
     if (mbMultisampledBackbuffer)
     {
 #if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
 #endif
 
         for (u32 luTile = 0; luTile < KU_NUM_MSAA_TILES; ++luTile)
@@ -3088,7 +3242,7 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
         // StopMonitor comes BEFORE EndTiling (@0x823FFD38 then @0x823FFD5C) -- the tiling close is
         // outside the downsample monitor's bracket. Order preserved.
 #if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
 #endif
 
         // Close the tiling pass. Nothing is left to resolve or clear at this level -- the per-tile
@@ -3113,7 +3267,7 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
                 mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight()).maTile[0];
 
 #if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
 #endif
 
         renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrScreen,
@@ -3127,7 +3281,7 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
                                         KF_CLEAR_Z, luStencilValue, nullptr);
 
 #if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
 #endif
     }
 }
@@ -3287,7 +3441,7 @@ void BrnRendererModule::BeginQuarterResBuffer()
 //
 // Close the anti-aliased pass: composite the quarter-res particle buffer back over the scene.
 // Console body, in order:
-//     PerfMonGpu::StartMonitor(mGpuMonitors.miQuarterResParticles)     (a1[12922])
+//     PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles) (a1[12922])
 //     v3 = mapRenderTarget[4]                                          the DOWN-SAMPLE buffer
 //     CgsRenderTarget::SetRenderTargetState(v3, 0)
 //     push saDepthStencilStates[1] ZOFF_ZALL_ZWRITEOFF  (dword_83010910, @0x82408BCC)
@@ -3306,7 +3460,7 @@ void BrnRendererModule::BeginQuarterResBuffer()
 // (PostFxRenderTarget.cpp's Resolve() banner), so there is nothing to copy. It is reproduced
 // rather than dropped so the call graph still matches and the day a backend needs it, it is there.
 //
-// ⚠ THE PERFMON BRACKET IS NOT REPRODUCED (this file's banner at :250).
+// The caller restores this original GPU bracket around the native composite.
 // =================================================================================================
 void BrnRendererModule::EndRenderAntiAliased()
 {
@@ -4558,6 +4712,25 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     mu32NumWorldTransparentObjectTotals += luWorldTransparent;
     mu32NumCarTransparentObjectTotals   += luCarTransparent;
 
+    // X360 Render @0x8240C5FC..0x8240C688 publishes five 60-frame averages.
+    // RenderShadowMapPasses has already added this frame's shadow total before this pass.
+    ++mu32DispatchFrameCounter;
+    if (mu32DispatchFrameCounter == 60u)
+    {
+        mu32NumWorldOpaqueObjects      = mu32NumWorldOpaqueObjectTotals / 60u;
+        mu32NumCarOpaqueObjects        = mu32NumCarOpaqueObjectTotals / 60u;
+        mu32NumWorldTransparentObjects = mu32NumWorldTransparentObjectTotals / 60u;
+        mu32NumCarTransparentObjects   = mu32NumCarTransparentObjectTotals / 60u;
+        mu32NumShadowObjects           = mu32NumShadowObjectTotals / 60u;
+
+        mu32NumWorldOpaqueObjectTotals      = 0u;
+        mu32NumCarOpaqueObjectTotals        = 0u;
+        mu32NumWorldTransparentObjectTotals = 0u;
+        mu32NumCarTransparentObjectTotals   = 0u;
+        mu32NumShadowObjectTotals           = 0u;
+        mu32DispatchFrameCounter            = 0u;
+    }
+
     // [FLAG PC bring-up] One-shot map of where the world producer's records actually
     // landed. The world feed's AddToBin list bytes were flagged provisional by the
     // renderer wave (BrnWorldEntityModule's camera call site), so name every non-empty
@@ -4615,12 +4788,14 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     // mbRenderPreZ, mesh list 21 walked with DispatchAllMeshesZOnly). The list is fed
     // by DrawRenderable::Interpret's pre-Z re-emit, which only runs when the object
     // context carries mbPreZEnabled and the producer stamped a pre-Z list id.
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miPreZ);
     if (lbPreZWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
         WaitForMeshSortPC(21u);
         GetMeshFrameForReadPC().GetList(21)->DispatchAllMeshesZOnly(mpInterpreter, &lContext);
     }
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miPreZ);
 
     // ==============================================================================================
     // THE CARS-vs-WORLD MOTION-BLUR MASK -- the CAR half (X360 Render @0x8240CEC4-0x8240CF90 and
@@ -4674,6 +4849,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
 
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCarOpaque);
         if (mbRenderCarsOpaque)
         {
             // X360 @0x8240CEC4-0x8240CED4 / @0x8240CF84-0x8240CF8C: the Begin/End pair sits INSIDE
@@ -4688,6 +4864,8 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (lbForceCarStencil)
                 shadow::Device::EndForceStencilWrite();
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCarOpaque);
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miWorldOpaque);
         if (mbRenderWorldOpaque)
         {
             // [FLAG PC bring-up probe] THE CONTROL for the shadow pass's occlusion probe
@@ -4701,6 +4879,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             GetMeshFrameForReadPC().GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
             renderengine::ShadowProbe_End(3u);
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldOpaque);
     }
 
     CgsDev::Assert::PollFrameProbePC(1);
@@ -4713,6 +4892,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     //
     // The joined publication copied the world frame into the internal slot.
     // Sky, reflections, coronas and post-FX consume that same immutable frame.
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miSky);
     if (mbRenderSky && (lbPreZWork || lbOpaqueWork || lbTransparentWork)
         && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
         && EnsureSkyDomeBringUp())
@@ -4727,17 +4907,20 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         // back to the pass default so the transparent pass below starts where it expects.
         renderengine::Device::SetWorldPassDefaultStates(false);
     }
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miSky);
 
     // Transparent passes: Z test on / write off, alpha blend on. Same FLAG.
     if (lbTransparentWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(true);
 
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miWorldTransparent);
         if (mbRenderWorldTransparent)
         {
             WaitForMeshSortPC(15u);
             GetMeshFrameForReadPC().GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldTransparent);
         // X360 @0x8240D338-0x8240D348 / @0x8240D3F4-0x8240D3FC: the car-TRANSPARENT window. The
         // whole window sits INSIDE the mbRenderCarsTransparent gate: `lbzx r11, r31, 0xC417` /
         // `cmplwi cr6, r11, 0` / `beq cr6, loc_8240D400` @0x8240D2F4-0x8240D304, and loc_8240D400 is
@@ -4747,6 +4930,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         // (0x8240D36C) or the plain arm (0x8240D3D0), both of which dispatch mesh list 0x14 -- the
         // same shape as the opaque half above. (Step-10 verify finding: the first reading had the
         // pair outside the gate.)
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCarTransparent);
         if (mbRenderCarsTransparent)
         {
             if (lbForceCarStencil)
@@ -4758,6 +4942,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             if (lbForceCarStencil)
                 shadow::Device::EndForceStencilWrite();
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCarTransparent);
     }
 
     // Back to the opaque default before the 2D overlay tail (the Im2d path re-sets
@@ -4904,6 +5089,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         return;
     }
 
+    // ARTIST 8240C0EC..8240C0F8 publishes renderer+0xC430 before loading
+    // commands, dispatch conversion, shadow draws and environment-map draws.
+    CgsGraphics::suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
+
     // Forward the dispatch buffer's loading-screen command into the renderer - the X360
     // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)),
     // the `lwzx r4, r26, 0x9990` at 0x8240C17C). The command is one-shot: the manager's
@@ -4955,6 +5144,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // after the draw gate so retained/stalled command banks keep their clock.
     if (mpInterpreter != nullptr)
         mpInterpreter->SetTime(maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetGameTime());
+
+    CgsDev::PerfMonGpu::StartProfiling(); // ARTIST8240C4C8.
 
     // [PC bring-up] Realise the shadow-map render target. The console builds the whole
     // render-target pool in BrnRendererMemory::Construct during BrnRendererModule::Construct;
@@ -5292,12 +5483,14 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // ---- X360 Render:545-640 -- THE SHADOW-MAP PASS. -------------------------------------
     // Before RenderWorldPasses and before anything binds the scene target, exactly as the
     // console orders it. Gated on mRenderSwitches.mbRenderShadows.
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miShadowmap);
     if (lbDispatchReady)
     {
         lRenderStage.Next(RENDER_SHADOWS);
         RenderShadowMapPasses(&lDispatchContext, lpSceneParticleDataPC);
         lRenderStage.Next(RENDER_SETUP);
     }
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miShadowmap);
 
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
     // ---- X360 Render:725 -- OPEN THE ANTI-ALIASED SCENE PASS (call @0x8240CDB8). ----------
@@ -5476,12 +5669,12 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     //   * `D3DDevice_SetShaderGPRAllocation(dev, 0, 0x30, 0x50)` @0x8240CB38 -- a Xenos GPR-partition
     //     hint with no D3D9 counterpart. This file already drops the other three occurrences in
     //     Render (0x8240C7F0, 0x8240D6FC, 0x8240DE68); named here so it stays greppable.
-    //   * the PerfMonGpu / PerfMonCpu Start/Stop pairs (miEnvironmentMap gpu +51664, cpu +51528,
-    //     per-face wait +51532) -- the whole of Render carries none of them on this build; see the
-    //     BRN_GPU_PERFMON_AVAILABLE banner.
+    // GPU pass timing surrounds the complete cube loop below. CPU monitor
+    // recovery remains separate from the native GPU timestamp transport.
     // The per-face sort rendezvous at ARTIST 8240CBF8 is handled below by
     // WaitForMeshSortPC, using the descriptors belonging to this frame bank.
     // ============================================================================================
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miEnvironmentMap);
     lRenderStage.Next(RENDER_ENVMAP);
     bool lbParticlesPreparedForCube = false;
     if (mRenderSwitches.mbRenderEnvmap && lbSceneBracketOpen
@@ -5773,6 +5966,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             }
         }
     }
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miEnvironmentMap);
 #endif  // BRN_ENVMAP_PASS_AVAILABLE
 
     lRenderStage.Next(RENDER_SETUP);
@@ -5830,10 +6024,6 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // are therefore drawn INTO the scene target, additively, and the post-fx grade sees them --
         // which is what makes a flare bloom.
         //
-        // (The PerfMon bracket is not reproduced: every id in mGpuMonitors is 0 on this build
-        // because nothing calls PerfMonGpu::AddMonitor -- this file's own banner at :250 says so --
-        // so a bracket here would time one monitor id shared with every other pass.)
-        //
         // THE SWITCH IS THE CONSOLE'S OWN. mbRenderCoronas already exists (BrnRendererModule.h:733,
         // set true by ConstructRenderSwitches at :832) -- no new global is minted (AGENTS.md rule
         // 3). The user-facing knob is config.ini [Settings] Coronas, which BrnMain seeds into it.
@@ -5841,10 +6031,12 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // (lbSceneBracketOpen: the console's only gate is mbRenderCoronas because its scene target
         // always exists; here the additive pass must not land in whatever target is bound when the
         // anti-alias bracket did not open.)
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCoronas);
         if (lbSceneBracketOpen && mbRenderCoronas && EnsureCoronaManagerBringUp(mCoronaManager))
         {
             mCoronaManager.Render(lfFrameWhiteLevel);
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCoronas);
 
         // ==========================================================================================
         // THE FULL-RES PARTICLE PASS -- ParticleModule::RenderFullResParticles @0x8229AFD0.
@@ -5888,6 +6080,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             lbSceneBracketOpen && EnsureQuarterResParticleChain(mAllocatedRenderTargets);
         BrnParticle::ParticleModule::PCBringUpSetQuarterResRouting(lbQuarterResParticles);
 
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miFullResParticles);
         if (lbSceneBracketOpen && mbRenderParticles && lpDispatchThreadInputBuffer != 0)
         {
             const BrnParticle::ParticleModule::ParticleRenderData* lpFullResRenderData =
@@ -5921,6 +6114,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
                 lpFullResRenderData->mpParticleModule->RenderFullResParticles(lpFullResRenderData);
             }
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miFullResParticles);
     }
 
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
@@ -5959,13 +6153,16 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // scene's DEPTH is never cleared again.
         // ARTIST 8240D520..D538: world immediate buffers and RacePosition
         // share the textured3D renderer before the scene resolve/post-fx.
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miIm3dAndRacePositions);
         if (mbRenderWorldImmediateMode && mbIm3dRendererConstructedPC)
         {
             mIm3dRenderBuffer.Dispatch(&mIm3dRenderer);
             mIm3dBufferRacePosition.Dispatch(&mIm3dRenderer);
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miIm3dAndRacePositions);
         // ARTIST 8240D57C..D59C: debug3D follows world immediate mode,
         // independently of its switch, before the scene resolve.
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDebug3d);
         if (mbIm3dRendererConstructedPC
             && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
         {
@@ -5993,6 +6190,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             }
             mIm3dDebugRenderBuffer.Dispatch(&mIm3dRenderer);
         }
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDebug3d);
         ResolveMSAA(lfFrameWhiteLevel, luSceneStencilClearValue);
 
         // ==========================================================================================
@@ -6029,7 +6227,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             : false;
         if (lbSunCoronaAllowed && EnsureSunCoronaBringUp(mAllocatedRenderTargets, mSunCorona))
         {
+            CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miSunCoronaVisibilityTest);
             ComputeSunCoronaVisibility();
+            CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miSunCoronaVisibilityTest);
 
             CgsRenderTarget* const lpSceneTarget = mAllocatedRenderTargets.GetDownSampleBuffer();
             if (lpSceneTarget != 0 && lpSceneTarget->GetRenderTarget() != 0)
@@ -6042,20 +6242,15 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
                 // mfWhiteLevel, and BrnShaderConstantsFrame::GetKeyLightColour on the same frame).
                 //
                 // The last two arguments are the console's NO-OVERRIDE values: it reads them from
-                // BrnGraphics::DebugComponent (this+0xCA50 mfSunFlareOverrideBrightness and
-                // this+0xCA54 mbSunFlareOverrideBrightness -- DWARF
-                // BrnRendererModuleDebugComponent.h:86/87, exposed as GetOverriddenSunBrightness() /
-                // GetOverrideSunBrightness()), which is a DEBUG-MENU toggle and is an EMPTY
-                // PLACEHOLDER struct in this tree (BrnRendererModule.h:200). Passing (0.0f, false)
-                // is the console's own default, not an invention: with the flag false the float is
-                // never read and BrnSunCorona::RenderOccludedFlare uses mfSunBrightness.
-                // DELETE-WHEN BrnGraphics::DebugComponent is reconstructed.
+                // BrnGraphics::DebugComponent (renderer+0xCA50/0xCA54) owns the console's
+                // debug-menu override values; pass the same values the ARTIST call reads.
                 const BrnShaderConstantsFrame& lrSunFrame =
                     maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
                 mSunCorona.RenderOccludedFlare(mAllocatedRenderTargets.GetSunCoronaBuffer(),
                                                lrSunFrame.GetKeyLightColour(),
                                                lrSunFrame.GetWhiteLevel(),
-                                               0.0f, false);
+                                               mDebugComponent.GetOverriddenSunBrightness(),
+                                               mDebugComponent.GetOverrideSunBrightness());
             }
         }
 
@@ -6097,6 +6292,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // query over what actually exists, so the two reads cannot disagree inside a frame.
         if (mAllocatedRenderTargets.PCBringUpParticleCompositeChainReady())
         {
+            CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miQuarterResParticles);
             BeginQuarterResBuffer();
 
             if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
@@ -6112,7 +6308,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
                 }
             }
 
+            CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miQuarterResParticles);
+            CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
             EndRenderAntiAliased();
+            CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
         }
 
         // [FLAG PC bring-up] PRESENT THE SCENE TARGET. The world passes above drew into the
@@ -6139,6 +6338,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // therefore calls PCBringUpHandBackTheBackBuffer() on both of its no-scene early returns;
         // see its banner. That is why this call is UNCONDITIONAL inside the bracket gate: the
         // condition that authorised the bind is the condition that guarantees the unbind.
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miPostFX);
 #if BRN_POSTFX_COMPOSITE_AVAILABLE
         // ---- THE REAL COMPOSITE, at the console's own position (call @0x8240DE3C). -------------
         //
@@ -6404,6 +6604,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 #else
         PCBringUpBlitSceneTargetToBackBuffer(mAllocatedRenderTargets, &mIm2dRenderer);
 #endif
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miPostFX);
     }
 #endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
 
@@ -6426,7 +6627,28 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
             lpDispatchThreadInputBuffer->UnlockForRead();   // the frame-long read lock, both exits
         lRenderStage.Next(RENDER_PRESENT);
         renderengine::Device::ShowPixelBuffer();
+        CgsDev::PerfMonGpu::StopProfiling();
         return;
+    }
+
+    // ARTIST Render @0x8240DEB4..DFF0 displays the selected shadow depth texture
+    // at the upper right: position (0.7, 0.0), size (0.3, 0.3), opaque white.
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miMenusAndHud);
+    if (mbShowShadowMap)
+    {
+        miShowShadowMapIndex %= 4;
+        CGS_ASSERT(miShowShadowMapIndex >= 0 && miShowShadowMapIndex < 4,
+                   "liIndex >=0 && liIndex<4");
+
+        Vector2 lPosition = {};
+        lPosition.x = 0.7f;
+        lPosition.y = 0.0f;
+        Vector2 lSize = {};
+        lSize.x = 0.3f;
+        lSize.y = 0.3f;
+        DebugDisplayRenderTarget(
+            mAllocatedRenderTargets.GetShadowMapBuffer(miShowShadowMapIndex)->GetDepthTexture(),
+            lPosition, lSize, 0xFFFFFFFFu);
     }
 
     // ARTIST 8240E000..E054: one HUD gate and the original command order.
@@ -6440,7 +6662,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
     }
 
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miMenusAndHud);
+
     // ARTIST 8240E158..E190 consumes the already published debug bank.
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDebug2d);
     if (mbRenderHudImmediateMode
         && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
         mIm2dDebugRenderBuffer.Dispatch(&mIm2dRenderer);
@@ -6466,12 +6691,15 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         RenderThreeThreadMonitors(liBehind < 3, liBehind < 2, liBehind < 1);
     }
 
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDebug2d);
+
     // UnlockForRead @0x8240E304 -- the end of the console's frame-long read window (taken above).
     if (lpDispatchThreadInputBuffer != 0)
         lpDispatchThreadInputBuffer->UnlockForRead();
 
     lRenderStage.Next(RENDER_PRESENT);
     renderengine::Device::ShowPixelBuffer();
+    CgsDev::PerfMonGpu::StopProfiling(); // ARTIST8240E244, after Present.
 }
 
 // FLAG PC-platform leaf: the modal loop consumes its own bank on the fenced

@@ -1,6 +1,9 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"
+#include "pc/math/VmxFloat.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::CameraRwFrustum (SetFromRwFrustum source)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 
 #include <cmath>   // std::fabs / std::fma (IntersectionOf3Planes)
 
@@ -13,6 +16,8 @@
 //   CgsGeometric::Frustum::SetPlaneByIndex        @ 0x827BAA48
 //   CgsGeometric::Frustum::IsSphereInFrustum      @ 0x828AF020
 //   CgsGeometric::Frustum::CalcVertices           @ 0x82840DF8  (2026-08-12)
+//   CgsGeometric::Frustum::DebugRender            @ 0x82845EC0
+//   CgsGeometric::Frustum::DebugRenderCustomPlanes@ 0x82845BB8
 //
 // The stored planes live in a struct-of-arrays layout across the 8 x 16-byte
 // maSwizzledPlanes lanes: two batches of four planes, each batch four lanes
@@ -41,15 +46,11 @@
 // against the 0x80000000 splat. That is byte-for-byte the SoA layout above plus
 // VectorToPlane's negate, independently confirming Get/SetPlaneByIndex.
 //
-// Sibling ledger functions in their own passes (their bodies need collaborators
-// this file cannot ground faithfully):
-//   CgsGeometric::Frustum::DebugRender            @ 0x82845EC0  (BLOCKED)
-//   CgsGeometric::Frustum::DebugRenderCustomPlanes@ 0x82845BB8  (BLOCKED)
-//
-// Both draw the frustum through the 3D debug renderer (CgsDev::DebugRender::
-// DrawQuad / DrawArrow / DrawLine), whose declarations/arg shapes are not homed,
-// and they call the sibling IntersectionOf3Planes (bodied below) and
-// the un-pinned rw::collision::Plane accessors (GetNormal / GetDistance).
+// ARTIST-attested Frustum debug consumers are reconstructed below. Their typed
+// drawing surface is CgsDev::DebugRender; plane components are the existing
+// named rw::collision::Plane x/y/z/w fields. The two raw globals used by
+// DebugRenderCustomPlanes have no attested source names: their names here describe
+// only the observed byte gate and word reset, and retain their original addresses.
 //
 // ⚠ RETRACTED 2026-08-12 -- the banner here used to list SetFromRwFrustum
 // @0x82839FA8 as BLOCKED on "its rodata vperm masks are NOT in the dossier ...
@@ -67,6 +68,48 @@ namespace CgsGeometric
 {
     namespace
     {
+        // X360 byte_82F33088: initial image byte 0x01. The custom-plane consumer
+        // keeps a candidate only when it is inside all other planes, unless this
+        // byte is zero. No source-level symbol name is attested.
+        bool sbFrustumDebugClipCustomPlanesToHull = true;
+
+        // X360 dword_830390E4: initial image dword 0. ARTIST
+        // DebugRenderCustomPlanes resets it to zero on entry; no other source
+        // name or semantic use is established.
+        u32 guUnidentifiedFrustumDebugWord_830390E4 = 0;
+
+        inline Vector3 MakeFrustumDebugVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+        {
+            return Vector3{ lfX, lfY, lfZ, lfW };
+        }
+
+        inline Vector3 AddFrustumDebugVectors(const Vector3& lrA, const Vector3& lrB)
+        {
+            return MakeFrustumDebugVector(CgsPC::VmxFloat::Add(lrA.x, lrB.x), CgsPC::VmxFloat::Add(lrA.y, lrB.y),
+                                          CgsPC::VmxFloat::Add(lrA.z, lrB.z), CgsPC::VmxFloat::Add(lrA.w, lrB.w));
+        }
+
+        inline Vector3 ScaleFrustumDebugVector(const Vector3& lrVector, f32 lfScale)
+        {
+            return CgsPC::VmxFloat::Multiply(lrVector, lfScale);
+        }
+
+        // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
+        inline Vector3 AverageFrustumDebugFace(const Vector3& lrA, const Vector3& lrB,
+                                               const Vector3& lrC, const Vector3& lrD)
+        {
+            return ScaleFrustumDebugVector(
+                AddFrustumDebugVectors(AddFrustumDebugVectors(AddFrustumDebugVectors(lrA, lrB), lrC), lrD),
+                0.25f);
+        }
+
+        inline Vector3 AddFrustumDebugPlane(const Vector3& lrPoint,
+                                            const rw::collision::Plane& lrPlane)
+        {
+            return MakeFrustumDebugVector(CgsPC::VmxFloat::Add(lrPoint.x, lrPlane.x), CgsPC::VmxFloat::Add(lrPoint.y, lrPlane.y),
+                                          CgsPC::VmxFloat::Add(lrPoint.z, lrPlane.z), CgsPC::VmxFloat::Add(lrPoint.w, lrPlane.w));
+        }
+
         // The 8 stored lanes are a struct-of-arrays: maSwizzledPlanes[batch + comp]
         // packs component `comp` of a batch's four planes across the float lanes,
         // one plane per lane. Selecting plane (index & 3)'s component is picking the
@@ -468,6 +511,151 @@ namespace CgsGeometric
     }
 
     // ------------------------------------------------------------------------
+    // Frustum::DebugRender @ 0x82845EC0
+    //
+    // Solve the eight near/far, bottom/top, left/right plane triples in the
+    // call order the X360 uses, draw the four side quads (the near/far caps are
+    // intentionally absent), then draw the six face-centre-to-plane-normal
+    // arrows in PlaneId order. The target ignores each intersection return and
+    // consumes the output slots as-is, so this body does the same.
+    // ------------------------------------------------------------------------
+    void Frustum::DebugRender() const
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lRender = lDebugInterface.GetRender();
+        const CgsDev::RGBA lWhite = static_cast<CgsDev::RGBA>(0xFFFFFFFFu);
+
+        static const u32 KAA_PLANE_TRIPLES[8][3] =
+        {
+            { PlaneNear, PlaneBottom, PlaneLeft  },
+            { PlaneNear, PlaneBottom, PlaneRight },
+            { PlaneNear, PlaneTop,    PlaneLeft  },
+            { PlaneNear, PlaneTop,    PlaneRight },
+            { PlaneFar,  PlaneBottom, PlaneLeft  },
+            { PlaneFar,  PlaneBottom, PlaneRight },
+            { PlaneFar,  PlaneTop,    PlaneLeft  },
+            { PlaneFar,  PlaneTop,    PlaneRight },
+        };
+
+        Vector3 laCorners[8];
+        for (u32 luCorner = 0; luCorner < 8; ++luCorner)
+        {
+            const rw::collision::Plane lPlane0 = GetPlaneByIndex(KAA_PLANE_TRIPLES[luCorner][0]);
+            const rw::collision::Plane lPlane1 = GetPlaneByIndex(KAA_PLANE_TRIPLES[luCorner][1]);
+            const rw::collision::Plane lPlane2 = GetPlaneByIndex(KAA_PLANE_TRIPLES[luCorner][2]);
+            (void)IntersectionOf3Planes(lPlane0, lPlane1, lPlane2, laCorners[luCorner]);
+        }
+
+        // These are the four DrawQuad argument groups at 0x828461C8, 0x828461F4,
+        // 0x82846220 and 0x8284623C. Preserve their vertex order and white colour.
+        lRender.DrawQuad(laCorners[0], laCorners[2], laCorners[6], laCorners[4], lWhite);
+        lRender.DrawQuad(laCorners[2], laCorners[3], laCorners[7], laCorners[6], lWhite);
+        lRender.DrawQuad(laCorners[3], laCorners[7], laCorners[5], laCorners[1], lWhite);
+        lRender.DrawQuad(laCorners[5], laCorners[1], laCorners[4], laCorners[0], lWhite);
+
+        // The four vector adds for each centre retain the X360 accumulation
+        // order; the centre array is consumed in PlaneId order by the arrow loop.
+        const Vector3 laFaceCentres[6] =
+        {
+            AverageFrustumDebugFace(laCorners[0], laCorners[2], laCorners[4], laCorners[6]), // left
+            AverageFrustumDebugFace(laCorners[2], laCorners[3], laCorners[6], laCorners[7]), // top
+            AverageFrustumDebugFace(laCorners[1], laCorners[3], laCorners[5], laCorners[7]), // right
+            AverageFrustumDebugFace(laCorners[0], laCorners[1], laCorners[4], laCorners[5]), // bottom
+            AverageFrustumDebugFace(laCorners[4], laCorners[5], laCorners[6], laCorners[7]), // far
+            AverageFrustumDebugFace(laCorners[0], laCorners[1], laCorners[2], laCorners[3]), // near
+        };
+
+        for (u32 luPlane = 0; luPlane < 6; ++luPlane)
+        {
+            const rw::collision::Plane lPlane = GetPlaneByIndex(luPlane);
+            lRender.DrawArrow(laFaceCentres[luPlane],
+                              AddFrustumDebugPlane(laFaceCentres[luPlane], lPlane),
+                              lWhite);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Frustum::DebugRenderCustomPlanes @ 0x82845BB8
+    //
+    // Enumerate each ordered pair i<j, then every third plane k, solve that
+    // triple, and retain the point only when all other planes contain it (the
+    // original byte gate can disable that clipping). The target draws each
+    // consecutive pair of retained points for the fixed (i,j) pair; duplicate
+    // intersections are not deduplicated.
+    // ------------------------------------------------------------------------
+    void Frustum::DebugRenderCustomPlanes() const
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lRender = lDebugInterface.GetRender();
+        const CgsDev::RGBA lWhite = static_cast<CgsDev::RGBA>(0xFFFFFFFFu);
+
+        // ARTIST 0x82845BE0..0x82845BF4: this target object is reset on every
+        // entry. The raw global has no proven semantic name or other consumer.
+        guUnidentifiedFrustumDebugWord_830390E4 = 0;
+
+        rw::collision::Plane laPlanes[8];
+        for (u32 luPlane = 0; luPlane < 8; ++luPlane)
+        {
+            laPlanes[luPlane] = GetPlaneByIndex(luPlane);
+        }
+
+        for (u32 luPlane0 = 0; luPlane0 < 7; ++luPlane0)
+        {
+            for (u32 luPlane1 = luPlane0 + 1; luPlane1 < 8; ++luPlane1)
+            {
+                Vector3 laPointsForPair[6];
+                u32 luPointCount = 0;
+
+                for (u32 luPlane2 = 0; luPlane2 < 8; ++luPlane2)
+                {
+                    if (luPlane2 == luPlane0 || luPlane2 == luPlane1)
+                    {
+                        continue;
+                    }
+
+                    Vector3 lIntersection;
+                    if (!IntersectionOf3Planes(laPlanes[luPlane0], laPlanes[luPlane1],
+                                               laPlanes[luPlane2], lIntersection))
+                    {
+                        continue;
+                    }
+
+                    bool lbInsideOtherPlanes = true;
+                    for (u32 luOtherPlane = 0; luOtherPlane < 8; ++luOtherPlane)
+                    {
+                        if (luOtherPlane == luPlane0 || luOtherPlane == luPlane1
+                            || luOtherPlane == luPlane2)
+                        {
+                            continue;
+                        }
+
+                        const rw::collision::Plane& lrPlane = laPlanes[luOtherPlane];
+                        const Vector3 lPlaneNormal = { lrPlane.x, lrPlane.y, lrPlane.z, 0.0f };
+                        const f32 lfSignedDistance = CgsPC::VmxFloat::Subtract(
+                            CgsPC::VmxFloat::Dot3(lPlaneNormal, lIntersection), lrPlane.w);
+
+                        if (-0.001f > lfSignedDistance)
+                        {
+                            lbInsideOtherPlanes = false;
+                            break;
+                        }
+                    }
+
+                    if (lbInsideOtherPlanes || !sbFrustumDebugClipCustomPlanesToHull)
+                    {
+                        laPointsForPair[luPointCount++] = lIntersection;
+                    }
+                }
+
+                for (u32 luPoint = 1; luPoint < luPointCount; ++luPoint)
+                {
+                    lRender.DrawLine(laPointsForPair[luPoint - 1], laPointsForPair[luPoint], lWhite);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
     // Never called -- layout pins for the swizzled batch every function above
     // indexes by hand. A member function so the body is a complete-class context
     // with private access.
@@ -557,7 +745,8 @@ namespace CgsGeometric
         lIntersectionPointOut.x = std::fma(l01.x, lPlane2.w, std::fma(l12.x, lPlane0.w, l20.x * lPlane1.w)) * lfInverseDeterminant;
         lIntersectionPointOut.y = std::fma(l01.y, lPlane2.w, std::fma(l12.y, lPlane0.w, l20.y * lPlane1.w)) * lfInverseDeterminant;
         lIntersectionPointOut.z = std::fma(l01.z, lPlane2.w, std::fma(l12.z, lPlane0.w, l20.z * lPlane1.w)) * lfInverseDeterminant;
-        lIntersectionPointOut.w = std::fma(l01.w, lPlane2.w, std::fma(l12.w, lPlane0.w, l20.w * lPlane1.w)) * lfInverseDeterminant;
+        lIntersectionPointOut.w =
+            std::fma(l01.w, lPlane2.w, std::fma(l12.w, lPlane0.w, l20.w * lPlane1.w)) * lfInverseDeterminant;
         return true;
     }
 }

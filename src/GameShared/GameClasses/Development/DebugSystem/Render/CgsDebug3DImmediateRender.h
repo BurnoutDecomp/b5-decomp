@@ -47,7 +47,6 @@ namespace CgsDev
         static const s32 KI_VERTEX_BUFFER_SIZE = 1000;
 
         // X360 Construct @0x8281A488, called by ConstructRenderer @0x8281ADD0.
-        // Text-renderer construction remains separate parity work.
         void Construct(rw::IResourceAllocator* lpAllocator, f32 lfVirtualScreenWidth, f32 lfVirtualScreenHeight);
         void CreateDebugRenderStates(rw::IResourceAllocator* lpAllocator);
 
@@ -59,6 +58,9 @@ namespace CgsDev
         // X360 SetRenderBuffer inline (DebugManager::Render @0x8282F770 stores the frame's 3D debug
         // render buffer here after asserting it non-null, CgsDebug3DImmediateRender.h:282).
         void SetRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpRenderBuffer) { mpRenderBuffer = lpRenderBuffer; }
+
+        // Public in DecFIGS at CgsDebug3DImmediateRender.h:138; DrawTriangleTest calls it directly.
+        void SetZTestEnable(ZTestEnable leEnable);
 
         // X360 Begin/End open/close the frame's 3D command block. RenderWorld
         // @0x8282E030 brackets buffered primitives and active components with these.
@@ -146,13 +148,15 @@ namespace CgsDev
         // debug overlay's per-prop stat read-outs (RenderProps / RenderPropStats / RenderTrafficLights).
         void DrawText(rw::math::vpu::Vector3 lWorldPosition, const char* lpcText,
                       f32 lfScale, rw::RGBA lColour = rw::RGBA(255, 255, 255, 255));
+        // ARTIST 8281D298: vector-font strokes use the 2D projection of this 3D bank.
+        void Draw2DLineForVectorFont(rw::math::vpu::Vector3 lFrom,
+                                     rw::math::vpu::Vector3 lTo, rw::RGBA lColour);
 
         // The current debug camera world position (the cull origin the world-space debug passes
         // measure prop distance from). X360: read by RenderProps/RenderPropStats/RenderInertiaBoxes/
         // RenderTrafficLights as the first lane group of the renderer's view state (+0x7DB0).
     private:
         void SetProjectionMode(ProjectionMode leMode);
-        void SetZTestEnable(ZTestEnable leEnable);
         void SetDrawingMode(DrawingMode leMode);
         void BuildSphereIndices();
         void GetSphereVertices(rw::math::vpu::Vector3* lpVertexArray,

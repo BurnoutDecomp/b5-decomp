@@ -1,20 +1,24 @@
 # Boot, operate GUI, accelerate and lift through the ordinary input chain.
 # Capture mixer witnesses and actual engine-send PCM, with the device muted.
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 @{
   Name = 'audio_ui_engine'
   Area = 'audio'
   Bug = 'GUI routing, live camera attenuation and below-minimum Ginsu pitch must remain correct'
   Frames = $false
   Run = @{ MaxSeconds=75; SkipIntro=$true; Drive=$true; ThrottleScript='0:accel,12:none,18:accel' }
-  PcmTraceFile = Join-Path $root 'build/game/audio_ui_engine_pcm.txt'
   DiagEnv = 'BRN_ENGINE_GAIN_DIAG=1,BRN_HUD_SOUND_DIAG=1,BRN_SOUND_PCM_TRACE=audio_ui_engine_pcm.txt'
   Setup = {
     param($ctx)
-    $ctx.Case.PcmTraceFile = Join-Path (Split-Path $ctx.GameLog -Parent) 'audio_ui_engine_pcm.txt'
-    if (Test-Path -LiteralPath $ctx.Case.PcmTraceFile) {
-      Remove-Item -LiteralPath $ctx.Case.PcmTraceFile
+    # Slot executables still use build/game as their working directory. Give
+    # fopen an absolute, run-owned path rather than guessing from the log path.
+    $ctx.Case.PcmTraceFile = Join-Path $ctx.RunDir 'audio_ui_engine_pcm.live.txt'
+    if ($ctx.Case.PcmTraceFile -match '[,\s=]') {
+      throw 'The flow harness requires a PCM trace path without whitespace, commas or equals signs.'
     }
+    if (Test-Path -LiteralPath $ctx.Case.PcmTraceFile) {
+      throw 'Preserve the previous run: use a new RunDir for the PCM trace.'
+    }
+    $ctx.Case.DiagEnv = $ctx.Case.DiagEnv -replace 'BRN_SOUND_PCM_TRACE=[^,\s]+', ('BRN_SOUND_PCM_TRACE='+$ctx.Case.PcmTraceFile)
   }
   Checks = @(
     @{ Kind='NewAsserts'; Name='no new assertion families' }
@@ -53,12 +57,15 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
         $source=Get-Item -LiteralPath $ctx.Case.PcmTraceFile -ErrorAction SilentlyContinue
         $started=$null; $duration=$null
         if ($ctx.MarksText -match '(?m)^RUNSTART (.+)\r?$') {
-          $started=[datetime]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+          $started=[datetimeoffset]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture).UtcDateTime
         }
-        if ($ctx.MarksText -match '(?m)^END\s+([\d.]+)s') { $duration=[double]$Matches[1] }
+        # flow_run formats elapsed times with the host culture (e.g. 75,2s).
+        if ($ctx.MarksText -match '(?m)^END\s+([\d.,]+)s') {
+          $duration=[double]::Parse($Matches[1].Replace(',','.'), [Globalization.CultureInfo]::InvariantCulture)
+        }
         if ($source -and $started -and $null -ne $duration -and
-            $source.LastWriteTime -ge $started -and
-            $source.LastWriteTime -le $started.AddSeconds($duration + 5)) {
+            $source.LastWriteTimeUtc -ge $started -and
+            $source.LastWriteTimeUtc -le $started.AddSeconds($duration + 5)) {
           Copy-Item -LiteralPath $source.FullName -Destination $trace
         }
       }

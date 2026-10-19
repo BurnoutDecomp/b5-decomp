@@ -2,30 +2,61 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // CgsMemory::LinearMalloc - bump allocator over a caller-supplied region. Recovered
-// behaviour: Construct() resets the allocator to empty; Create() adopts [buffer,
-// buffer+size) and allocations advance mnNextAddress.
+// Construct resets the region and owned slot without touching the last allocation.
+// Create borrows [buffer, buffer+size); it does not claim ownership of that buffer.
 
 namespace CgsMemory
 {
+    // ARTIST 0x8305F500 and 0x8305F50C: canonical zero-initialized class storage.
+    RwMemoryFunctions LinearMalloc::mCachedMemoryFuncs = {};
+    LinearMalloc* LinearMalloc::mpActiveRWAllocator = nullptr;
+
+    // ARTIST 0x828690E0. mpLastAlloc is not part of this reset.
     void LinearMalloc::Construct()
     {
-        mbCreated = false;
         mpAlloc = nullptr;
+        mbCreated = false;
         mnStartAddress = 0;
         mnEndAddress = 0;
         mnNextAddress = 0;
         mnAlignment = KI_DEFAULT_ALIGNMENT;
-        mpLastAlloc = nullptr;
     }
 
-    void LinearMalloc::Create(void* lpAlloc, size_t lnSize)
+    // ARTIST 0x82869108. The assertions continue into borrowed-region stores.
+    void LinearMalloc::Create(void* lpBuffer, size_t lnSize)
     {
-        mpAlloc = lpAlloc;
-        mnStartAddress = reinterpret_cast<size_t>(lpAlloc);
-        mnEndAddress = mnStartAddress + lnSize;
+        if (mpAlloc != nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mpAlloc==NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                164);
+            CgsDev::Assert::EndAssert();
+        }
+        if (mbCreated)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mbCreated==false",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                165);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpBuffer == nullptr)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                166);
+            CgsDev::Assert::EndAssert();
+        }
+
+        mnStartAddress = reinterpret_cast<size_t>(lpBuffer);
         mnNextAddress = mnStartAddress;
+        mnEndAddress = mnStartAddress + lnSize;
         mnAlignment = KI_DEFAULT_ALIGNMENT;
-        mpLastAlloc = nullptr;
         mbCreated = true;
     }
 
@@ -53,14 +84,22 @@ namespace CgsMemory
         mnNextAddress = mnStartAddress;
     }
 
+    // ARTIST 0x828691C8. Stop restores the table before owned backing is released.
     void LinearMalloc::Destruct()
     {
-        mbCreated = false;
-        mpAlloc = nullptr;
+        if (mpActiveRWAllocator == this)
+            StopRWAllocation();
+
+        if (mpAlloc != nullptr)
+        {
+            ::rwMemoryFunctions.rwfree(mpAlloc);
+            mpAlloc = nullptr;
+        }
+
         mnStartAddress = 0;
         mnEndAddress = 0;
         mnNextAddress = 0;
-        mpLastAlloc = nullptr;
+        mbCreated = false;
     }
 
     void LinearMalloc::SetAlignment(size_t lnAlignment)
@@ -82,14 +121,27 @@ namespace CgsMemory
 
     void* LinearMalloc::GetStartAddress() const
     {
-        return mpAlloc;
+        return reinterpret_cast<void*>(mnStartAddress);
     }
 
     void LinearMalloc::StartRWAllocation()
     {
     }
 
+    // ARTIST 0x82866C38. Assertion continuation still restores the cached table.
     void LinearMalloc::StopRWAllocation()
     {
+        if (mpActiveRWAllocator != this)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "IsRWAllocator()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
+                245);
+            CgsDev::Assert::EndAssert();
+        }
+
+        mpActiveRWAllocator = nullptr;
+        ::rwMemoryFunctions = mCachedMemoryFuncs;
     }
 }

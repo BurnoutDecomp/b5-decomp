@@ -177,6 +177,7 @@ namespace BrnGameState
         }
 
     private:
+        friend class GameStateDebugComponent; // ARTIST GameStateDebugComponent::OnActivate binds this debug flag
         // ---- private methods (declaration-only; each owned by its own X360 TU) ----
         void              Clear();                                              // :166 (own TU)
         void              ClearPropData();                                      // :169 (own TU)

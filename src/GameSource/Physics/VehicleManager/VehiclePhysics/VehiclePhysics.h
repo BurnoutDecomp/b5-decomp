@@ -126,6 +126,23 @@ namespace Deformation { struct StreamedDeformationSpec; }
 
 namespace Vehicle
 {
+    // X360 debug-menu variables from VehicleManagerDebugComponent::OnActivate. Values read by
+    // simulation code stay in one shared typed storage location; the three menu-only values have
+    // no other original export references and remain storage without an invented consumer.
+    extern bool   gbEnableInAirRotation;       // 0x82F2A1A7; menu-only reference in ARTIST
+    extern f32    gfRollCorrectionFactor;      // 0x82F2A254; menu-only reference in ARTIST
+    extern f32    gfIncreaseRollFactor;        // 0x82F2A25C; menu-only reference in ARTIST
+    extern f32    gfFullDampThreshold;         // 0x82F2A26C; UpdateInAirBehaviour reads
+    extern f32    gfNoDampThreshold;           // 0x82F2A270; UpdateInAirBehaviour reads
+    extern f32    gfMinRollFactor;             // 0x82F2A274; UpdateInAirBehaviour reads
+    extern f32    gfRollDampingUsed;           // 0x82FB7E20; UpdateInAirBehaviour writes
+    extern f32    gfLandingAssistDamping;      // 0x82F2A258; UpdateInAirBehaviour reads
+    extern f32    gfMinRollToAllowCorrection;  // 0x82F2A260; UpdateInAirBehaviour reads
+    extern f32    gfMaxWheelieAngle;           // 0x82F2A264; ApplyBoostKickForce reads
+    extern f32    gfWheelieLimitDamping;       // 0x82F2A268; ApplyBoostKickForce reads
+    extern f32    gfForcedAcceleration;        // 0x82FB7E24; UpdateEngine reads
+    extern Vector3 gvMaxCrashAngularVelocity;  // 0x82FB9DA0..0x82FB9DAF; UpdateCrashing reads
+
     // this file used to forward-declare
     // `class BrnPlayerDriverControls;` (also mis-keyed as `class` where the DWARF says `struct`).
     // The type is now INCLUDED above, because mPreviousControls @+0x1090 embeds it BY VALUE.

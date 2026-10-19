@@ -52,7 +52,8 @@ namespace Gen
         // [FLAG PC bring-up, additive host helper] the resolved collection's key, so the
         // [skid-bind] probe can name WHICH surface collection each element resolved to.
         using Instance::GetCollection;
-        // Inlined generated re-export in WorldEntityModule::GetSurface (822BB1E4).
+        // ARTIST 0x822BB1E4 inlines this generated re-export into GetSurface;
+        // private inheritance requires the original Change exposure.
         using Instance::Change;
 
         // DecFIGS surface.h:89/:96; Breaker ReadSurfaceProperties addresses the

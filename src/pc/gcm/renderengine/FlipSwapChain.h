@@ -1,7 +1,9 @@
 #pragma once
 
 #include <d3d9.h>
+#include "pc/gcm/renderengine/OcclusionQueryProviderPC.h"
 #include "pc/gcm/renderengine/GpuFrameTiming.h"
+#include "pc/gcm/renderengine/GpuMonitorTiming.h"
 #include "pc/gcm/renderengine/GeometryBindings.h"
 #include "pc/gcm/renderengine/ShaderBindings.h"
 #include "pc/gcm/renderengine/NvApiResourceRegistry.h"
@@ -12,7 +14,7 @@
 // back before drawing; if rollback also fails, the main loop waits for recovery.
 namespace renderengine
 {
-    template<class DeviceType> class BasicFlipSwapChainPC
+    template<class DeviceType, class LifecyclePolicy> class BasicFlipSwapChainPC
     {
         DeviceType* mpDevice = nullptr;
         D3DPRESENT_PARAMETERS mParameters = {};
@@ -53,23 +55,29 @@ namespace renderengine
             if(!gNvApiDepthResourcesPC.Clear())return E_FAIL;
             CgsPC::Reflections::GetCubeHistory().Release();
             GpuFrameTimingPC::DeviceReset();
+            GpuMonitorTimingPC::DeviceReset();
             GeometryBindingsPC::gCache.Invalidate();
             gPCShaderBindingCache.Invalidate();
             D3DPRESENT_PARAMETERS lDesired=mParameters;
             lDesired.BackBufferWidth=luWidth;lDesired.BackBufferHeight=luHeight;lDesired.PresentationInterval=luInterval;
             D3DPRESENT_PARAMETERS lRequest=lDesired; // ResetEx overwrites size/count fields.
+            LifecyclePolicy::Invalidate(mpDevice);
             const HRESULT lResult=mpDevice->ResetEx(&lRequest,nullptr);
             ++muGeneration;
             if(SUCCEEDED(lResult))
             {
                 mParameters=lDesired;mbLost=false;muFailedWidth=muFailedHeight=0;
+                LifecyclePolicy::Resume(mpDevice);
                 return S_OK;
             }
             mbLost=true;
             lRequest=mParameters;
+            // The fallback is a distinct ResetEx attempt; discard any state again before it.
+            LifecyclePolicy::Invalidate(mpDevice);
             if(SUCCEEDED(mpDevice->ResetEx(&lRequest,nullptr)))
             {
                 mbLost=false;muFailedWidth=luWidth;muFailedHeight=luHeight;
+                LifecyclePolicy::Resume(mpDevice);
             }
             return lResult;
         }
@@ -83,5 +91,5 @@ namespace renderengine
             return lResult;
         }
     };
-    using FlipSwapChainPC=BasicFlipSwapChainPC<IDirect3DDevice9Ex>;
+    using FlipSwapChainPC=BasicFlipSwapChainPC<IDirect3DDevice9Ex, OcclusionQueryLifecyclePC>;
 }

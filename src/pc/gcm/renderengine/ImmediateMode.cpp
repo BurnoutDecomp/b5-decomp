@@ -1421,28 +1421,7 @@ namespace shadow
 
 namespace CgsGraphics
 {
-    // X360 dword_83010F9C. The immediate-mode layer's "which renderer owns the device
-    // right now" static; BeginRendering asserts it is null and claims it, EndRendering
-    // asserts it is this and releases it.
-    ImRendererBase* ImRendererBase::mgpActiveRenderer = nullptr;
+    // The original active-renderer static is defined once in CgsImRenderer.cpp.
+    // All native and fixed-function renderers share that owner bracket.
 
-    // Build the shared immediate-mode render-state library exactly once (X360 home
-    // CgsImRenderer.cpp, called behind a module-static guard from ImRenderer<V>::
-    // Construct).
-    //
-    // FLAG PC-platform leaf: the library's twenty entries are renderengine BlendState /
-    // RasterizerState / DepthStencilState / SamplerState / TextureState objects built
-    // through the rw resource pipeline, and that pipeline is not reconstructed on this
-    // backend (pc/gcm/renderengine/DepthStencilState.cpp and RasterizerState.cpp do not
-    // even compile against the committed renderstates.h -- `maState` / `mauFlagWords`
-    // are not members). Nothing in the mounted set READS the library: the sky binds its
-    // own four state objects through the ImDeviceSet*State appliers above, which take
-    // the state pointer directly. So this is a no-op until the state-object wave lands,
-    // and deliberately NOT an assert -- it runs on the first immediate-mode Construct.
-    //
-    // FLAG PC-platform leaf: the renderengine state-object resource pipeline this builds
-    // through has no PC backend yet, and nothing in the linked set reads the library.
-    void ImRendererBase::ConstructOnceOnly(rw::IResourceAllocator* /*lpAllocator*/)
-    {
-    }
 }

@@ -244,6 +244,14 @@ const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameSt
     return &mControllerToGameStateInterface;
 }
 
+// ARTIST 823B8EC0..823B8F60, original BrnGameStateModuleIO.h:144.
+// The assertion continues to the same canonical interface on failure.
+ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mControllerToGameStateInterface;
+}
+
 // =====================  PostWorldInputBuffer  =====================
 
 // The console's CreateIOBuffer<PostWorldInputBuffer> runs this on every buffer it stages. In
@@ -502,10 +510,8 @@ void OutputBuffer::Construct()
     //     TakedownEvent<..,8>::Construct(this + 16448)          // TakedownEventOutputQ @ +0x4040
     // was on the "STILL NOT MADE" list below; TakedownManager::ProcessTakedownEvent @0x82393D40
     // AddEvents onto it, and the first real takedown fired "mpEvents != NULL" and wrote through
-    // null. Made by name through the forwarder in EventQueue_TakedownEvent_8.cpp (the type is
-    // incomplete in this TU on purpose -- see the header).
-    ConstructTakedownEventOutputQueue(
-        reinterpret_cast<TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage));
+    // null. The real queue is now an embedded typed member, constructed by name.
+    mTakedownEventOutputQueue.Construct();
 
     //     DirtyTrickEvent<..,28>::Construct(this + 16784)
     //     GameStateToNetworkInterface::Clear(this + 16784)
@@ -629,8 +635,7 @@ void OutputBuffer::Construct()
 void OutputBuffer::Destruct()
 {
     reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage)->Destruct();
-    reinterpret_cast<CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>*>(
-        &mTakedownEventOutputQueueStorage)->Destruct();
+    mTakedownEventOutputQueue.Destruct();
 
     OnlineScoringOutputInterface* lpOnline =
         reinterpret_cast<OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
@@ -660,7 +665,7 @@ const GameActionQueue* OutputBuffer::GetGameActionQueue() const
 const TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage);
+    return &mTakedownEventOutputQueue;
 }
 
 // X360 0x823B9798 - read-lock accessor for the resource-request interface (this+0x3414).
@@ -674,7 +679,7 @@ const ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface() cons
 TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage);
+    return &mTakedownEventOutputQueue;
 }
 
 // X360 0x8231D4B8 - the SAME console accessor as GetGameActionQueue() above, reached under its

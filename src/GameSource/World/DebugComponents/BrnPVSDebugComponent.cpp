@@ -74,16 +74,18 @@ namespace BrnWorld
         const f32 KF_WORLD_TO_SCREEN_SCALE = 0.200000003f;  // flt_82F30E30 (world units AND sphere radius -> overlay pixels)
         const f32 KF_OVERLAY_HALF          = 0.5f;   // flt_82001DA0 (screen-centre origin + label-width halving)
 
+        // ARTIST RenderPVS indexes off_82F30CF4 directly. The raw table pins these eight strings,
+        // including the empty second entry and the abbreviated PENDLOAD / ABORTING / PENDUNLOAD.
         const char* const KAPC_ASSET_STATUS_NAMES[8] =
         {
             "UNKNOWN",
-            "NOT IN LIST",
-            "PENDING LOAD",
+            "",
+            "PENDLOAD",
             "LOADING",
             "READY",
-            "PENDING ABORT LOAD",
+            "ABORTING",
             "UNLOADING",
-            "PENDING UNLOAD",
+            "PENDUNLOAD",
         };
     }
 
@@ -261,9 +263,7 @@ namespace BrnWorld
                     lMinimum.y >= 0.0f && lMinimum.y <= 1000.0f)
                 {
                     char lacLabel[256];
-                    const s32 liStatus = static_cast<s32>(leStatus);
-                    const char* lpcStatus =
-                        (liStatus >= 0 && liStatus < 8) ? KAPC_ASSET_STATUS_NAMES[liStatus] : "UNKNOWN";
+                    const char* lpcStatus = KAPC_ASSET_STATUS_NAMES[static_cast<s32>(leStatus)];
                     CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "%d: %s",
                                      static_cast<s32>(static_cast<u32>(lrZone.GetId())), lpcStatus);
                     lpRender->DrawText(lacLabel, lMinimum.x, lMinimum.y, 15.0f, 0xFFFFFFFFu);
@@ -367,6 +367,7 @@ namespace BrnWorld
             0.0f,
             0.0f
         };
-        lpRender->DrawBox(lMinimum, lMaximum, 0xFFFFFFFFu);
+        // ARTIST 827BFC68 uses the scalar two-corner wrapper.
+        lpRender->DrawBox(lMinimum.x, lMinimum.y, lMaximum.x, lMaximum.y, 0xFFFFFFFFu);
     }
 }

@@ -38,6 +38,7 @@
 // accessor quartet (IsTipPending / GetProfile / GetTimeSinceLastTip / RequestTip).
 
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
+#include "GameSource/GameState/SharedIO/BrnGameStateModuleInputIOInterfaces.h"
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"       // the two mode clocks + current mode
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h" // GameMode::GetCurrentState (the boost-tip gate)
@@ -406,8 +407,9 @@ void TrainingManager::Construct(BrnProgression::ProgressionManager* lpProgressio
 // ⭐⭐ Update -- X360 0x823937D0. The training FSM tick; every arm transcribed from the
 // pseudocode/asm with the raw reads resolved to the named members listed in the file banner.
 // ---------------------------------------------------------------------------
-void TrainingManager::Update(GameStateModuleIO::GameActionQueue* lpGameActionQueue,
-                             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInputBuffer,
+                             GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                             BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
                                  lpcActiveRaceCarInterface,
                              f32 lfGameTimestep, bool lbAllowTimedTips)
 {
@@ -426,10 +428,9 @@ void TrainingManager::Update(GameStateModuleIO::GameActionQueue* lpGameActionQue
             BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
             CGS_ASSERT(lpProfile, "lpProfile");   // BrnTrainingManager.cpp:184
 
-            // [FLAG PC deviation, named in the header] the console reads the controller
-            // interface's user index off the PreWorldInputBuffer; the PC probes user 0
-            // (2 only on LAN, so mbIsOnlinePossible is false offline).
-            const u32 luSigninState = XUserGetSigninState(0);
+            // ARTIST 823938C4..823938D0 passes the active controller port as the user index.
+            const u32 luSigninState = XUserGetSigninState(static_cast<u32>(
+                lpInputBuffer->GetControllerToGameStateInterface()->GetActiveControllerPort()));
             mbIsOnlinePossible = (luSigninState == 2);
 
             // `v17 = ((mbInPictureParadise == 0) & a7) == 0; if (!v17) { ... }`

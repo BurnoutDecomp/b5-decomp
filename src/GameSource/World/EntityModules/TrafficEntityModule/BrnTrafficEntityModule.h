@@ -784,7 +784,9 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // distance to the target, v2 the param's linear velocity. Bodied in _wT3_02.cpp.
         VecFloat CalculateDriverGasBrake(u32 luVehicle, VecFloat lfDistToTarget,
                                          Vector3 lParamLinearVelocity);
-        void  DEBUG_AddFuzzyLogicData();                             // @ 0x82716040 (FLAG: debug)
+        // @0x82716040. The caller runs this after ProcessParamRules; the body gates ring writes
+        // on the original menu toggle and camera-distance check.
+        void  DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuzzyOutputs);
         // @0x827082B8 (51). DWARF h:1920 `void DEBUG_RenderContactPoint(const TrafficContact*)`.
         // HandleContactPoints' debug arrow, drawn only while mbDEBUGRenderContacts is set.
         void  DEBUG_RenderContactPoint(const BrnPhysics::ContactSpy::TrafficContact* lpContact);
@@ -1145,6 +1147,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // DWARF .cpp:7392. @0x827211B0 (export hole). The divergence dump.
         void DEBUGDumpHullPredictions();
         void DEBUGValidateSoaData();   // body in BrnTrafficEntityModule_wBT_01.cpp
+        void UpdateDEBUG();             // @0x8271DC78; ages fired-kill-zone entries, then validates SoA
         // DWARF .cpp:3905. @0x82741AF8, PreSceneUpdate's RUNNING arm (0x8274ABBC).
         void HandleIncomingNetworkData(const BrnTrafficIO::InputBuffer_PreScene* lpInput);
         void SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls);      // @ 0x82748A40

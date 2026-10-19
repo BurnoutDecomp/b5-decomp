@@ -27,15 +27,9 @@
 // EXACTLY on the X360-attested offsets, so they are modelled as honest typed structs
 // (sizeof pinned to the 128/64 stride with static_assert).
 //
-// The RESPONSE record is DELIBERATELY a 5136-byte, 4-byte-aligned OPAQUE image with a
-// typed Route* view aliased at +0x00 and the owner/event ids overlaid at +0x140C/+0x140E
-// -- NOT a value-typed `Route mRoute` member. Reason (X360-faithful): the committed
-// BrnAI::Route embeds Vector4 maNodes[320] (rw vpu Vector4 is alignas(16)), so sizeof(Route)
-// rounds up to 5136 and a value member would push RouteResponse to a 16-aligned 5152-byte
-// object -- which would (a) break the X360-attested 5136 stride and (b) move EventQueue
-// <RouteResponse,16>::maEvents off the committed +0xC (4-byte) landing onto +0x10. The
-// X360 instead reuses Route's trailing 4 alignment-pad bytes (5132..5135) for the two ids,
-// giving the tight 5136 image reproduced here. GetRoute() reinterprets the image start.
+// The response embeds the same scalar Route used by AICar. Its 0x140C extent
+// is followed by the two u16 ids, giving the original 5136-byte, four-aligned
+// event without a byte-image alias or reuse of SIMD alignment padding.
 
 #include "types.hpp"                                            // u8/u16/u32/s32
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"        // CgsModule::EventQueue<T,N>
@@ -194,48 +188,24 @@ namespace BrnAI
         };
 
         // =====================================================================
-        // Output response: a computed route. X360 stride 5136, 4-byte aligned.
-        // OPAQUE image + typed views (see header note: a value Route member would
-        // repad the record and move the committed EventQueue maEvents offset).
+        // Output response: DecFIGS BrnRouteMapModuleIO.h:158..180.
+        // ARTIST ProcessRaceRoute/ProcessExtrapolatedRoute attest the id stores
+        // at 0x140C/0x140E and the EventQueue copy stride of 5136.
         // =====================================================================
         struct RouteResponse : public CgsModule::Event
         {
-            // 5136-byte 4-byte-aligned image. The Route occupies [0x0000 .. 0x1407]
-            // (5132 bytes: maNodes[320] + miNodeCount + miDefaultStartNode + meStatus),
-            // and the owner/event ids reuse the trailing pad at +0x140C / +0x140E.
-            u32 maImage[1284];   // 5136 bytes
+            Route mRoute;
+            u16 muOwnerId;
+            u16 muEventId;
 
-            // Route view aliased at the image start (X360 BuildRoute / Route::Prepare
-            // operate directly on this; GetRoute() @ DWARF :172/:175).
-            Route*       GetRoute()       { return reinterpret_cast<Route*>(maImage); }
-            const Route* GetRoute() const { return reinterpret_cast<const Route*>(maImage); }
-
-            u16  GetOwnerId() const { return OwnerIdRef(); }
-            u16  GetEventId() const { return EventIdRef(); }
-
-            // Initialise the id tail (X360 ProcessRaceRoute stores the cached ids at
-            // +0x140C/+0x140E; ProcessExtrapolatedRoute writes them from the request).
+            Route* GetRoute() { return &mRoute; }
+            const Route* GetRoute() const { return &mRoute; }
+            u16 GetOwnerId() const { return muOwnerId; }
+            u16 GetEventId() const { return muEventId; }
             void Construct(u16 luOwnerId, u16 luEventId)
             {
-                OwnerIdRef() = luOwnerId;
-                EventIdRef() = luEventId;
-            }
-
-        private:
-            // muOwnerId @ +0x140C (5132), muEventId @ +0x140E (5134) inside the image.
-            u16&       OwnerIdRef()       { return ViewU16(0x140C); }
-            const u16& OwnerIdRef() const { return ViewU16(0x140C); }
-            u16&       EventIdRef()       { return ViewU16(0x140E); }
-            const u16& EventIdRef() const { return ViewU16(0x140E); }
-
-            u16&       ViewU16(size_t luByteOffset)
-            {
-                return *reinterpret_cast<u16*>(reinterpret_cast<u8*>(maImage) + luByteOffset);
-            }
-            const u16& ViewU16(size_t luByteOffset) const
-            {
-                return *reinterpret_cast<const u16*>(
-                    reinterpret_cast<const u8*>(maImage) + luByteOffset);
+                muOwnerId = luOwnerId;
+                muEventId = luEventId;
             }
         };
 
@@ -387,6 +357,10 @@ namespace BrnAI
             static_assert(offsetof(ExtrapolatedRouteRequest, meRouteType)                  == 0x34, "meRouteType @0x34");
 
             static_assert(sizeof(RouteResponse) == 5136, "RouteResponse stride must be 5136");
+            static_assert(alignof(RouteResponse) == 4, "RouteResponse scalar alignment");
+            static_assert(offsetof(RouteResponse, mRoute) == 0, "route @0");
+            static_assert(offsetof(RouteResponse, muOwnerId) == 0x140C, "owner id follows route");
+            static_assert(offsetof(RouteResponse, muEventId) == 0x140E, "event id follows owner");
         }
     }
 }

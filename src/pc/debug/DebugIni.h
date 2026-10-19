@@ -111,10 +111,20 @@ namespace CgsDev { namespace DebugUI
     inline bool DebugIniNeedsComponentPC(const char* lpcPath)
     {
         const std::string lPrefix = DebugIniPathPC(lpcPath ? lpcPath : "") + '/';
+        // ARTIST's Race Car Entity page also owns absolute Graphics/Vehicles...
+        // controls. Materialize that real owner for configured values instead
+        // of registering an early duplicate set of LOD variables.
+        const std::string lAbsolutePrefix = lPrefix == "race car entity/"
+            ? "graphics/vehicles.../" : "";
         auto& lrState = GetDebugIniStatePC();
         std::lock_guard<std::mutex> lLock(lrState.mMutex);
         return std::any_of(lrState.maEntries.begin(), lrState.maEntries.end(),
-            [&](const DebugIniEntryPC& lrEntry) { return lrEntry.mPath.compare(0, lPrefix.size(), lPrefix) == 0; });
+            [&](const DebugIniEntryPC& lrEntry)
+            {
+                return lrEntry.mPath.compare(0, lPrefix.size(), lPrefix) == 0 ||
+                    (!lAbsolutePrefix.empty() &&
+                     lrEntry.mPath.compare(0, lAbsolutePrefix.size(), lAbsolutePrefix) == 0);
+            });
     }
 
     inline void QueueDebugIniPC(const VariableManager* lpOwner, Variable* lpVariable,
@@ -124,12 +134,26 @@ namespace CgsDev { namespace DebugUI
                                                (lpcName ? lpcName : ""));
         auto& lrState = GetDebugIniStatePC();
         std::lock_guard<std::mutex> lLock(lrState.mMutex);
-        for (auto& lrEntry : lrState.maEntries)
+        auto lEntry = std::find_if(lrState.maEntries.begin(), lrState.maEntries.end(),
+            [&](const DebugIniEntryPC& lrEntry) { return lrEntry.mPath == lPath; });
+        // The Race Car owner registers these groups through MakeFullPath, so
+        // their real menu paths include its component prefix. Accept the same
+        // absolute vehicle settings alias that materialized this lazy owner.
+        // An explicitly configured full path takes precedence over the alias.
+        const std::string lOwnerPrefix = "race car entity/";
+        const std::string lVehiclePrefix = "graphics/vehicles.../";
+        if (lEntry == lrState.maEntries.end() &&
+            lPath.compare(0, lOwnerPrefix.size(), lOwnerPrefix) == 0 &&
+            lPath.compare(lOwnerPrefix.size(), lVehiclePrefix.size(), lVehiclePrefix) == 0)
         {
-            if (lrEntry.mPath != lPath) continue;
-            lrEntry.mbMatched = true;
-            lrState.maPending.push_back({ lpOwner, lpVariable, lPath, lrEntry.mValue });
-            break;
+            const std::string lAlias = lPath.substr(lOwnerPrefix.size());
+            lEntry = std::find_if(lrState.maEntries.begin(), lrState.maEntries.end(),
+                [&](const DebugIniEntryPC& lrEntry) { return lrEntry.mPath == lAlias; });
+        }
+        if (lEntry != lrState.maEntries.end())
+        {
+            lEntry->mbMatched = true;
+            lrState.maPending.push_back({ lpOwner, lpVariable, lEntry->mPath, lEntry->mValue });
         }
     }
 

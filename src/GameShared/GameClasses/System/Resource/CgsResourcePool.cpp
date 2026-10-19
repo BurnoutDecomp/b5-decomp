@@ -94,6 +94,47 @@ namespace CgsResource
                 luLength *= 2;
             return luLength;
         }
+
+        struct PoolManagementStorageLayout
+        {
+            size_t mSize;
+            size_t mAlignment;
+        };
+
+        void ReservePoolManagementStorage(size_t& luOffset, size_t luAlignment, size_t luSize)
+        {
+            luOffset = (luOffset + luAlignment - 1u) & ~(luAlignment - 1u);
+            luOffset += luSize;
+        }
+
+        PoolManagementStorageLayout CalculatePoolManagementStorageLayout(const Pool::InitOptions& lrOptions)
+        {
+            size_t luOffset = 0;
+            size_t luAlignment = alignof(s16);
+            if (alignof(Entry) > luAlignment) luAlignment = alignof(Entry);
+            if (alignof(u8) > luAlignment) luAlignment = alignof(u8);
+            if (alignof(s32) > luAlignment) luAlignment = alignof(s32);
+            if (alignof(HashTable::HashEntry) > luAlignment) luAlignment = alignof(HashTable::HashEntry);
+            if (alignof(Heap::HeapEntryNode) > luAlignment) luAlignment = alignof(Heap::HeapEntryNode);
+
+            const size_t luMaxResources = lrOptions.muMaxResources;
+            const size_t luHashLength = GetManagementHashLength(lrOptions.muMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(Entry), sizeof(Entry) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(u8), sizeof(u8) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(s32), sizeof(s32) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, alignof(HashTable::HashEntry),
+                                         sizeof(HashTable::HashEntry) * luHashLength);
+            for (s32 liMemType = 0; liMemType < Pool::KI_NUM_TYPES; ++liMemType)
+            {
+                if (lrOptions.maHeapInfo[liMemType].muHeapMemorySize != 0)
+                    ReservePoolManagementStorage(luOffset, alignof(Heap::HeapEntryNode),
+                        sizeof(Heap::HeapEntryNode) * lrOptions.maHeapInfo[liMemType].muMaxNodes);
+            }
+            PoolManagementStorageLayout lLayout = { luOffset, luAlignment };
+            return lLayout;
+        }
     }
 
     // ---- lookup -------------------------------------------------------------------
@@ -615,16 +656,72 @@ namespace CgsResource
         miNumResourcesInPurgatory = 0;
     }
 
+    // Calculate exactly the typed management region consumed by InitPool, including every
+    // LinearMalloc alignment transition and only the heap-node arrays Heap::Prepare allocates.
+    u32 Pool::GetOverheadMemoryRequired(const InitOptions* lpOptions)
+    {
+        const PoolManagementStorageLayout lLayout = CalculatePoolManagementStorageLayout(*lpOptions);
+        const size_t luHeapEnd = lpOptions->maHeapInfo[E_MEMTYPE_MAINMEMORY].muHeapMemorySize;
+        const size_t luStorageStart = (luHeapEnd + lLayout.mAlignment - 1u) & ~(lLayout.mAlignment - 1u);
+        return static_cast<u32>((luStorageStart - luHeapEnd) + lLayout.mSize);
+    }
+
+    // 0x828E0BB8 - report the original X360 management estimate and its three heap-node
+    // contributions. Keep its signed-extension and low-word arithmetic explicit: this is the
+    // console diagnostic consumed by the original InitPool path, not the NativePC host-layout
+    // requirement returned above.
+    u32 Pool::PrintOverheadMemoryRequired(const InitOptions* lpOptions)
+    {
+        const u32 luMaxResources = lpOptions->muMaxResources;
+        const s64 liSignedMaxResources = (luMaxResources & 0x80000000u) != 0
+            ? static_cast<s64>(luMaxResources) - 0x100000000ll
+            : static_cast<s64>(luMaxResources);
+
+        u64 luSpreadHashValue = static_cast<u64>(3 * liSignedMaxResources - 1);
+        luSpreadHashValue |= luSpreadHashValue >> 1;
+        luSpreadHashValue |= luSpreadHashValue >> 2;
+        luSpreadHashValue |= luSpreadHashValue >> 4;
+        luSpreadHashValue |= luSpreadHashValue >> 8;
+
+        const u32 luFoldedHashValue = static_cast<u32>(luSpreadHashValue)
+            | static_cast<u32>(luSpreadHashValue >> 16);
+        u32 luTotalOverhead = 16u * (luFoldedHashValue + 1u) + 100u * luMaxResources;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+        {
+            CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
+            lrStream << "    Entry management overhead: " << luTotalOverhead << "\n";
+        }
+
+        for (u32 luMemType = 0; luMemType < KI_NUM_TYPES; ++luMemType)
+        {
+            const u32 luHeapNodeOverhead = 16u * lpOptions->maHeapInfo[luMemType].muMaxNodes;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+            {
+                CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
+                lrStream << "Heap [" << luMemType << "] overhead: " << luHeapNodeOverhead << "\n";
+            }
+            luTotalOverhead += luHeapNodeOverhead;
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+        {
+            CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
+            lrStream << "    Total: " << luTotalOverhead << "\n";
+        }
+
+        return luTotalOverhead;
+    }
+
     // 0x82901BC0 - stand the pool up from InitOptions: build a LinearMalloc over each memory
     // pool's backing memory, carve each heap's managed region, reserve one overhead block for
     // the management arrays / hash / heap-node arrays, prepare the three Heaps, copy the deps,
     // then InitManagementData + mark valid.
     //
-    // PC MEMORY MODEL: the X360 sizes the overhead with hardcoded 88-byte entries + a 100*max
-    // slack; the x64 Entry/HeapEntryNode are wider, so the overhead is recomputed from sizeof
-    // (a bump allocator, so over-reserving is safe). This is the platform layer flagged for a
-    // PC variant -- see [[platform-builds-and-dumps]] (TUB is the PC reference). Debug-only
-    // bits (per-heap SPrintf name, PrintOverheadMemoryRequired) are reduced/omitted.
+    // NativePC management storage is sized from actual host sizeof/alignof values. The estimator
+    // and this carver share one ordered layout calculation. The original console diagnostic is
+    // recovered above but is not called here: its estimate uses console sizes, not host types;
+    // the original per-heap formatted-name lifetime remains unresolved.
     void Pool::InitPool(const InitOptions* lpOptions)
     {
         miId = lpOptions->miId;
@@ -655,17 +752,12 @@ namespace CgsResource
         const u32 luMax = lpOptions->muMaxResources;
 
         const u32 luHashLength = GetManagementHashLength(luMax);
+        const PoolManagementStorageLayout lStorageLayout = CalculatePoolManagementStorageLayout(*lpOptions);
+        const size_t luOverheadSize = lStorageLayout.mSize;
 
-        u32 luOverheadSize = static_cast<u32>(sizeof(Entry)) * luMax                       // mpResourceEntries
-                           + luMax                                                          // mpx8ResourceStatuses (u8)
-                           + 2u * luMax                                                     // mpiResourceRefCounts (s16)
-                           + 4u * luMax                                                     // mpiResourceImportCounts (s32)
-                           + 2u * luMax                                                     // mpnBatchIndices (s16)
-                           + static_cast<u32>(sizeof(HashTable::HashEntry)) * luHashLength; // mpHashEntries
-        for (u32 luMemType = 0; luMemType < KI_NUM_TYPES; ++luMemType)
-            luOverheadSize += static_cast<u32>(sizeof(Heap::HeapEntryNode)) * lpOptions->maHeapInfo[luMemType].muMaxNodes;
-        luOverheadSize += 16u * (KI_NUM_TYPES + 8);   // per-allocation alignment slack
-
+        // The heap starts at the caller's descriptor-aligned base. Align the following management
+        // block to the same maximum type alignment used by the shared requirement calculator.
+        laPoolAllocators[E_MEMTYPE_MAINMEMORY].SetAlignment(lStorageLayout.mAlignment);
         void* lpOverheadBlock = laPoolAllocators[E_MEMTYPE_MAINMEMORY].Malloc(luOverheadSize);
         CGS_ASSERT(lpOverheadBlock != 0, "Failed to allocate overhead memory for pool");   // :289
 
@@ -681,14 +773,21 @@ namespace CgsResource
         CgsMemory::LinearMalloc lOverheadAllocator;
         lOverheadAllocator.Construct();
         lOverheadAllocator.Create(lpOverheadBlock, luOverheadSize);
-        lOverheadAllocator.SetAlignment(4);
+        lOverheadAllocator.SetAlignment(lStorageLayout.mAlignment);
 
-        mpnBatchIndices         = static_cast<s16*>(lOverheadAllocator.Malloc(2u * luMax));
-        mpResourceEntries       = static_cast<Entry*>(lOverheadAllocator.Malloc(static_cast<u32>(sizeof(Entry)) * luMax));
-        mpx8ResourceStatuses    = static_cast<u8*>(lOverheadAllocator.Malloc(luMax));
-        mpiResourceRefCounts    = static_cast<s16*>(lOverheadAllocator.Malloc(2u * luMax));
-        mpiResourceImportCounts = static_cast<s32*>(lOverheadAllocator.Malloc(4u * luMax));
-        mpHashEntries           = static_cast<HashTable::HashEntry*>(lOverheadAllocator.Malloc(static_cast<u32>(sizeof(HashTable::HashEntry)) * luHashLength));
+        lOverheadAllocator.SetAlignment(alignof(s16));
+        mpnBatchIndices         = static_cast<s16*>(lOverheadAllocator.Malloc(sizeof(s16) * luMax));
+        lOverheadAllocator.SetAlignment(alignof(Entry));
+        mpResourceEntries       = static_cast<Entry*>(lOverheadAllocator.Malloc(sizeof(Entry) * luMax));
+        lOverheadAllocator.SetAlignment(alignof(u8));
+        mpx8ResourceStatuses    = static_cast<u8*>(lOverheadAllocator.Malloc(sizeof(u8) * luMax));
+        lOverheadAllocator.SetAlignment(alignof(s16));
+        mpiResourceRefCounts    = static_cast<s16*>(lOverheadAllocator.Malloc(sizeof(s16) * luMax));
+        lOverheadAllocator.SetAlignment(alignof(s32));
+        mpiResourceImportCounts = static_cast<s32*>(lOverheadAllocator.Malloc(sizeof(s32) * luMax));
+        lOverheadAllocator.SetAlignment(alignof(HashTable::HashEntry));
+        mpHashEntries           = static_cast<HashTable::HashEntry*>(
+            lOverheadAllocator.Malloc(sizeof(HashTable::HashEntry) * luHashLength));
 
         muMaxResources         = static_cast<u16>(luMax);
         muNumFreeResources     = static_cast<u16>(luMax);
@@ -713,6 +812,7 @@ namespace CgsResource
             if (lrHeapInfo.muHeapMemorySize == 0)
                 continue;
             CGS_ASSERT(lrHeapInfo.muHeapAlignment >= 16, "For performance reasons heaps must have a minimum alignment of 16 bytes!");   // :353
+            lOverheadAllocator.SetAlignment(alignof(Heap::HeapEntryNode));
             maHeaps[luMemType].Prepare(lrHeapInfo.muMaxNodes, &lOverheadAllocator, lapHeapMemory[luMemType],
                                        lrHeapInfo.muHeapMemorySize, lrHeapInfo.muHeapAlignment, macName);
         }

@@ -541,9 +541,69 @@ namespace CgsDev
         Draw2DLine(lStart.x, lStart.y, lEnd.x, lEnd.y, lColour);
     }
 
-    void DebugRender::Draw2DBox(Vector2 lMin, Vector2 lMax, RGBA lColour)
+    // X360 0x8282B340. The line angle is counter-clockwise in the logical screen plane;
+    // screen Y grows downward, so the endpoint subtracts sin(angle) from the starting Y.
+    void DebugRender::Draw2DLineAtAngle(Vector2 lv2Start, f32 lfAngleRad,
+                                        f32 lfLength, RGBA lColour)
     {
-        Draw2DBox(lMin.x, lMin.y, lMax.x, lMax.y, lColour);
+        const Vector2 lv2End =
+        {
+            lv2Start.x + (std::cos(lfAngleRad) * lfLength),
+            lv2Start.y - (std::sin(lfAngleRad) * lfLength),
+            0.0f, 0.0f
+        };
+        Draw2DLine(lv2Start, lv2End, lColour);
+    }
+
+    // X360 0x8282B5C8. Both wing lines start at the arrow tip and differ by +/-135 degrees.
+    void DebugRender::Draw2DArrowHead(Vector2 lv2Tip, f32 lfAngleRad,
+                                      f32 lfLength, RGBA lColour)
+    {
+        const f32 lfWingAngle = 2.3561945f; // ARTIST flt_820DD7D8
+        Draw2DLineAtAngle(lv2Tip, lfAngleRad + lfWingAngle, lfLength, lColour);
+        Draw2DLineAtAngle(lv2Tip, lfAngleRad - lfWingAngle, lfLength, lColour);
+    }
+
+    // X360 0x8282B658. Draw the shaft, then the arrow head at its endpoint; the original scales
+    // the head length by 0.25 (ARTIST flt_82003F40 == 0x3E800000).
+    void DebugRender::Draw2DArrow(Vector2 lv2Start, f32 lfAngleRad,
+                                  f32 lfLength, RGBA lColour)
+    {
+        const f32 lfDirectionX = std::cos(lfAngleRad);
+        const f32 lfDirectionY = std::sin(lfAngleRad);
+        const Vector2 lv2End =
+        {
+            lv2Start.x + lfLength * lfDirectionX,
+            lv2Start.y - lfLength * lfDirectionY,
+            0.0f, 0.0f
+        };
+
+        Draw2DLine(lv2Start, lv2End, lColour);
+        Draw2DArrowHead(lv2End, lfAngleRad, lfLength * 0.25f, lColour);
+    }
+
+    // X360 0x8282B940. Convert the endpoint displacement to the console's screen-space angle,
+    // then forward to the angle/length overload. The PPC body negates delta-Y before atan.
+    void DebugRender::Draw2DArrow(Vector2 lv2Start, Vector2 lv2End, RGBA lColour)
+    {
+        const f32 lfDeltaX = lv2End.x - lv2Start.x;
+        const f32 lfDeltaY = lv2End.y - lv2Start.y;
+        const f32 lfLength = std::sqrt(lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY);
+        const f32 lfAngleRad = std::atan2(-lfDeltaY, lfDeltaX);
+        Draw2DArrow(lv2Start, lfAngleRad, lfLength, lColour);
+    }
+
+    // ARTIST 8282B2D8: v1 is position and v2 is size, copied without subtraction.
+    void DebugRender::Draw2DBox(Vector2 lPosition, Vector2 lSize, RGBA lColour)
+    {
+        Internal::CInEventDrawBox2D lEvent;
+        lEvent.mfX      = lPosition.x;
+        lEvent.mfY      = lPosition.y;
+        lEvent.mfWidth  = lSize.x;
+        lEvent.mfHeight = lSize.y;
+        lEvent.mColour  = lColour;
+        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                              Internal::E_INEVENT_2D_BOX, static_cast<s32>(sizeof(lEvent)));
     }
 
     void DebugRender::Draw2DFrame(Vector2 lMin, Vector2 lMax, RGBA lColour)
@@ -631,18 +691,12 @@ namespace CgsDev
                               Internal::E_INEVENT_2D_LINE, static_cast<s32>(sizeof(lEvent)));
     }
 
-    // X360 Draw2DBox 0x8282B2D8 (CInEventDrawBox2D, ID 3): screen rect as origin + extent + colour.
-    // The record stores {mfX, mfY, mfWidth, mfHeight} (DWARF); the min/max interface converts here.
+    // FLAG PC-platform leaf: retain the existing native scalar min/max convenience
+    // API; ARTIST/DecFIGS expose the vector position/size publisher above.
     void DebugRender::Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
     {
-        Internal::CInEventDrawBox2D lEvent;
-        lEvent.mfX      = lfMinX;
-        lEvent.mfY      = lfMinY;
-        lEvent.mfWidth  = lfMaxX - lfMinX;
-        lEvent.mfHeight = lfMaxY - lfMinY;
-        lEvent.mColour  = lColour;
-        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                              Internal::E_INEVENT_2D_BOX, static_cast<s32>(sizeof(lEvent)));
+        Draw2DBox(Vector2{lfMinX, lfMinY, 0, 0},
+                  Vector2{lfMaxX - lfMinX, lfMaxY - lfMinY, 0, 0}, lColour);
     }
 
     void DebugRender::Draw2DFrame(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
@@ -698,7 +752,8 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawBox2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawBox2D*>(lpEvent);
-                    lpRenderer->DrawBox(lpEv->mfX, lpEv->mfY, lpEv->mfWidth, lpEv->mfHeight, lpEv->mColour);
+                    lpRenderer->DrawBox(Vector2{lpEv->mfX, lpEv->mfY, 0, 0},
+                                        Vector2{lpEv->mfWidth, lpEv->mfHeight, 0, 0}, lpEv->mColour);
                     break;
                 }
 

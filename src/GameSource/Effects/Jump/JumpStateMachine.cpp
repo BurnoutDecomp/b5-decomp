@@ -29,13 +29,14 @@
 //
 //   Gates (all must hold or the blend stays 0):
 //     speed = |mLinearVelocity| > 20.0                       (fast enough)
-//     mLinearVelocity.y >= speed                             (essentially moving up)
+//     mLinearVelocity.y >= 0.0                           (horizontal or rising)
 //     dot(normalize(mLinearVelocity), mTransform.zAxis) > 0  (facing into the jump)
 //   Then blend = SmoothStep(dir) * SmoothStep(time); the debug "Force State Blend"
 //   override replaces the computed blend when enabled.
 // =============================================================================
 
 #include "GameSource/Effects/Jump/JumpStateMachine.h"
+#include "pc/math/VmxFloat.h"
 #include "GameSource/Effects/EffectsModule.h"                 // BrnEffects::CarState, EffectsModule::ParticleModule()
 #include "GameSource/Effects/ActiveRaceCarData.h"             // mJumpEffectHandle / maJumpLandingWheelEffectHandles
 #include "GameSource/Effects/ParticleEffectHelper.h"          // RaceCarParticleEffectHelper
@@ -169,19 +170,20 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
     // speed = |mLinearVelocity| (X360: vmsum3fp128 + rsqrt Newton refine -> magnitude,
     // vsel-guarded so |v|^2 == 0 yields 0).
     const Vector3& lvVel = lpCar->mLinearVelocity;
-    const f32 lfSpeed = sqrtf(lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z);
+    namespace vmx = CgsPC::VmxFloat;
+    const f32 lfSquared = vmx::Dot3(lvVel, lvVel);
+    const f32 lfInverseSpeed = vmx::RefinedReciprocalSqrt(lfSquared, 2);
+    const f32 lfUnselectedSpeed = vmx::Multiply(lfSquared, lfInverseSpeed);
+    const f32 lfSpeed = lfSquared == 0.0f ? 0.0f : lfUnselectedSpeed;
 
     if (lfSpeed > KF_VAPOUR_MIN_SPEED)
     {
-        // Only fire while the velocity is (essentially) straight up: vel.y >= |vel|.
-        if (lvVel.y >= lfSpeed)
+        // ARTIST82288B10 writes zero before vcmpgefp: horizontal/rising motion is allowed.
+        if (vmx::Flush(lvVel.y) >= 0.0f)
         {
             // Direction alignment: dot(unit velocity, car world Z axis).
-            const f32 lfInvSpeed = 1.0f / lfSpeed;
             const Vector3& lvForward = lpCar->mTransform.zAxis;
-            const f32 lfDot = (lvVel.x * lfInvSpeed) * lvForward.x
-                            + (lvVel.y * lfInvSpeed) * lvForward.y
-                            + (lvVel.z * lfInvSpeed) * lvForward.z;
+            const f32 lfDot = vmx::Dot3(vmx::Multiply(lvVel, lfInverseSpeed), lvForward);
 
             if (lfDot > 0.0f)
             {
@@ -195,7 +197,7 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
 
                 // Ramp 2: fade time -> [0,0.5] over [delay, delay+ramp] (mid midpoint).
                 const Vector3 lvTimeParams = { lfVapourDelay,
-                                               ((lfVapourEnd - lfVapourDelay) * 0.5f) + lfVapourDelay,
+                                               std::fma(lfVapourEnd - lfVapourDelay, 0.5f, lfVapourDelay),
                                                lfVapourEnd, 0.0f };
                 const Vector2 lvTimeScale  = { 0.0f, 0.5f, 0.0f, 0.0f };
 

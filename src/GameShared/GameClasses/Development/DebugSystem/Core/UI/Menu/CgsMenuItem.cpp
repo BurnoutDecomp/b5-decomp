@@ -59,9 +59,9 @@ namespace CgsDev
             if (lbSelected)
             {
                 const f32 lfBorder = lrMetrics.mfWindowBorderSize;
-                lpRender->DrawBox(lfX - lfBorder, lfY - lfBorder,
-                                  lfItemWidth + lfBorder * 2.0f,
-                                  lfHeight + lfBorder * 2.0f,
+                lpRender->DrawBox(Vector2{lfX - lfBorder, lfY - lfBorder, 0, 0},
+                                  Vector2{lfItemWidth + lfBorder * 2.0f,
+                                          lfHeight + lfBorder * 2.0f, 0, 0},
                                   lrPalette.mColourHighlight);
                 lTextColour = lrPalette.mColourHighlightText;
             }
@@ -77,9 +77,9 @@ namespace CgsDev
                 return;
 
             const f32 lfBorder = GetMetrics().mfWindowBorderSize;
-            lpRender->DrawBox(lfX - lfBorder, lfY - lfBorder,
-                              lfItemWidth + lfBorder * 2.0f,
-                              lfHeight + lfBorder * 2.0f,
+            lpRender->DrawBox(Vector2{lfX - lfBorder, lfY - lfBorder, 0, 0},
+                              Vector2{lfItemWidth + lfBorder * 2.0f,
+                                      lfHeight + lfBorder * 2.0f, 0, 0},
                               GetPalette().mColourHighlight);
         }
 

@@ -5,6 +5,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"  // DebugComponent::RecordDownForce (UpdateDownForce's tail)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([tyre] bring-up probe only)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::Start/StopMonitor (Update's stage brackets)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"        // the car-asset wrapper (SetAttributes' key chase)
@@ -16,11 +17,12 @@
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::IsZero (SetWheelVelocities' per-axle power gates)
 #include "SDKs/XboxMath/XMVectorACos.h"              // XboxMath::XMVectorACos (X360 0x821F0980), the drift angles
 #include "SDKs/XboxMath/XMVectorSinCos.h"            // XboxMath::XMVectorSinCos (the steering angle's inlined SinCos)
+#include "SDKs/XboxMath/XMVectorSin.h"               // ARTIST's editable wheelie-angle threshold
 
 #include <cstdlib>    // getenv ([tyre] bring-up probe only)
 #include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
 #include <cstring>    // std::memcpy (controls/engine state copies)
-#include <cmath>      // std::sqrt / std::sin (boost-kick wheelie-angle limit: XMVectorSin gives the same bits at 11 deg) + speed magnitudes
+#include <cmath>      // speed magnitudes and scalar arithmetic
 
 // [DIAG] the host-side present counter ([air] rows only; FX-WITNESS).
 namespace renderengine { extern u32 guPresentCount; }
@@ -36,6 +38,95 @@ namespace BrnPhysics
 namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
+
+    namespace
+    {
+        // Scalar lowering of the takeoff ramp's VMX operations. Keep each
+        // binary32 boundary and VMX subnormal flush, including exceptional
+        // inputs from the editable thresholds.
+        f32 TakeoffFlush(f32 lfValue)
+        {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        }
+
+        f32 TakeoffMultiply(f32 lfA, f32 lfB)
+        {
+            return TakeoffFlush(TakeoffFlush(lfA) * TakeoffFlush(lfB));
+        }
+
+        f32 TakeoffSubtract(f32 lfA, f32 lfB)
+        {
+            return TakeoffFlush(TakeoffFlush(lfA) - TakeoffFlush(lfB));
+        }
+
+        f32 TakeoffMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+        {
+            return TakeoffFlush(std::fmaf(TakeoffFlush(lfA), TakeoffFlush(lfC), TakeoffFlush(lfB)));
+        }
+
+        f32 TakeoffNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+        {
+            const f32 lfDifference = TakeoffMultiplyAdd(lfA, lfC, -TakeoffFlush(lfB));
+            return lfDifference != lfDifference ? lfDifference : -lfDifference;
+        }
+
+        f32 TakeoffReciprocal(f32 lfValue)
+        {
+            lfValue = TakeoffFlush(lfValue);
+            // FLAG (estimate model): use the tree's rounded 1/x model for
+            // vrefp. The two ARTIST refinements below are unconditional;
+            // zero/infinite/NaN inputs must not fall back to the estimate.
+            f32 lfEstimate = TakeoffFlush(static_cast<f32>(1.0 / static_cast<f64>(lfValue)));
+            for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
+            {
+                const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
+                lfEstimate = TakeoffMultiplyAdd(lfEstimate, lfResidual, lfEstimate);
+            }
+            return lfEstimate;
+        }
+
+        // The suspension path uses the same VMX binary32/flush boundaries,
+        // but has its own rsqrt refinement sequence (825D1FD4..825D2024).
+        Vector3 SuspensionForce(Vector3 lUp, f32 lfMagnitude)
+        {
+            const f32 lfLengthSquared = TakeoffFlush(vpu::MagnitudeSquared(lUp));
+            // FLAG (estimate model): rounded 1/sqrt models vrsqrtefp. Retain
+            // both unconditional refinements, including zero/NaN outcomes.
+            f32 lfEstimate = TakeoffFlush(static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared))));
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfSquare = TakeoffMultiply(lfEstimate, lfEstimate);
+                const f32 lfHalf = TakeoffMultiply(lfEstimate, 0.5f);
+                const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
+                lfEstimate = TakeoffMultiplyAdd(lfHalf, lfResidual, lfEstimate);
+            }
+            return Vector3{
+                TakeoffMultiply(TakeoffMultiply(lUp.x, lfEstimate), lfMagnitude),
+                TakeoffMultiply(TakeoffMultiply(lUp.y, lfEstimate), lfMagnitude),
+                TakeoffMultiply(TakeoffMultiply(lUp.z, lfEstimate), lfMagnitude),
+                TakeoffMultiply(TakeoffMultiply(lUp.w, lfEstimate), lfMagnitude)};
+        }
+
+        void AssertSuspensionWheelPosition(Vector3 lPosition)
+        {
+            // Wheel.h:412 compares each XYZ lane with itself: infinity passes,
+            // NaN fails. The original performs this twice for a recorded push.
+            if (!(lPosition.x == lPosition.x && lPosition.y == lPosition.y && lPosition.z == lPosition.z))
+            {
+                CgsDev::Assert::BeginAssert();
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+                lMessage << "Invalid wheel position: ";
+                lMessage.AppendFormat("(%f, %f, %f)", static_cast<double>(lPosition.x),
+                                      static_cast<double>(lPosition.y), static_cast<double>(lPosition.z));
+                lMessage << ", please tell Graham D.";
+                CgsDev::Assert::FireAssert(lacMessage,
+                    "..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+    }
 
     // DecFIGS VehiclePhysics.cpp:103; Breaker unk_82FB9EC0, initialised by the
     // unmarked thunk at 0x82C5C3C0 from flt_8200473C (0.4f).
@@ -2198,6 +2289,25 @@ namespace Vehicle
         return vpu::Splat(lfSign);
     }
 
+    // X360 debug-menu storage shared with VehicleManagerDebugComponent::OnActivate. ARTIST's
+    // OnActivate export is the only reference to the three menu-only values; leave them as storage
+    // and do not invent simulation consumers for them.
+    bool gbEnableInAirRotation = true;                // 0x82F2A1A7; initial byte 1
+    f32 gfRollCorrectionFactor = 2.6f;                // 0x82F2A254; 0x40266666
+    f32 gfIncreaseRollFactor = 1.4f;                  // 0x82F2A25C; 0x3FB33333
+    f32 gfFullDampThreshold = 0.125f;                 // 0x82F2A26C; UpdateInAirBehaviour reads
+    f32 gfNoDampThreshold = 0.25f;                    // 0x82F2A270; UpdateInAirBehaviour reads
+    f32 gfMinRollFactor = 0.30000001f;                // 0x82F2A274; UpdateInAirBehaviour reads
+    f32 gfLandingAssistDamping = 0.14f;                // 0x82F2A258; UpdateInAirBehaviour reads
+    f32 gfMinRollToAllowCorrection = 0.30000001f;     // 0x82F2A260; UpdateInAirBehaviour reads
+    f32 gfMaxWheelieAngle = 11.0f;                    // 0x82F2A264; ApplyBoostKickForce reads
+    f32 gfWheelieLimitDamping = 0.15f;                 // 0x82F2A268; ApplyBoostKickForce reads
+    f32 gfForcedAcceleration = 0.0f;                  // 0x82FB7E24; UpdateEngine reads
+
+    // The static-init thunk @0x82C5C5E0 stores {6.5, 6.5, 6.5, 0} here. UpdateCrashing loads the
+    // full vector, and the Vehicle Manager menu registers its first three named float lanes.
+    Vector3 gvMaxCrashAngularVelocity{6.5f, 6.5f, 6.5f, 0.0f}; // 0x82FB9DA0
+
     // @0x82FB7E20, written at 0x825D0E34 (`stfs f29, kfRollDampingUsed@l`). A DEV WATCH ONLY:
     // VehicleManagerDebugComponent::OnActivate @0x825B5D90 registers this exact address with
     // CgsDev::DebugComponent::RegisterVariable under the label "Roll damping used". Nothing in the
@@ -2213,14 +2323,8 @@ namespace Vehicle
                                               VecFloat lvfTimeStep)
     {
         // ----- every constant image-read; NONE guessed, NONE flagged --------------------------
-        // .data tunables (a contiguous run at 0x82F2A258..0x82F2A274, image-read as
-        // 0.14/1.4/0.3/11.0/0.15/0.125/0.25/0.3; the PS3 DWARF names each as
-        // a file-scope `static float32_t` debug tunable, cited per line):
-        static const f32 KF_X_AXIS_Y_FULL_DAMP_THRESHOLD = 0.125f;      // kfFullDampThreshold @0x82F2A26C (0x3E000000); DWARF msfXAxisYFullDampThreshold (:166)
-        static const f32 KF_X_AXIS_Y_NO_DAMP_THRESHOLD   = 0.25f;       // kfNoDampThreshold   @0x82F2A270 (0x3E800000); DWARF msfXAxisYNoDampThreshold  (:167)
-        static const f32 KF_MIN_ROLL_FACTOR              = 0.30000001f; // kfMinRollFactor     @0x82F2A274 (0x3E99999A); DWARF msfMinRollFactor          (:168)
-        static const f32 KF_MIN_ROLL_TO_ALLOW_CORRECTION = 0.30000001f; // kfMinRollToAllowCorrection @0x82F2A260 (0x3E99999A); DWARF msfInAirMinRollToAllowCorrection (:154)
-        static const f32 KF_LANDING_ASSIST_DAMPING       = 0.14f;       // kfLandingAssistDamping     @0x82F2A258 (0x3E0F5C29); DWARF msfInAirLandingAssistDamping    (:148)
+        // These five .data variables are registered by VehicleManagerDebugComponent::OnActivate
+        // and read from the same global storage here, so menu edits affect the simulation.
         // .bss splats, each seeded once by the init-thunk bank (thunk address cited):
         static const f32 KF_YAW_DAMP_TARGET   = 0.050000001f;  // kYawDamp_Target @0x82FB8FF0 <- flt_820047C8 0.05 (thunk 0x82C5C938)
         static const f32 KF_YAW_DAMP_MIN      = 0.0099999998f; // kYawDamp_Min    @0x82FB91B0 <- flt_82002138 0.01 (thunk 0x82C5C910)
@@ -2267,29 +2371,35 @@ namespace Vehicle
             // How rolled the car is at the instant it leaves the ground: |right.y| is 0 when the
             // car is level and 1 when it is on its side.
             const VecFloat lvfAbsXAxisY = vpu::Splat(std::fabs(lvRight.y)); // `vandc` with sign-mask splat
-            const VecFloat lvfXAxisYFullDampThreshold = vpu::Splat(KF_X_AXIS_Y_FULL_DAMP_THRESHOLD);
-            const VecFloat lvfXAxisYNoDampThreshold   = vpu::Splat(KF_X_AXIS_Y_NO_DAMP_THRESHOLD);
-            const VecFloat lvfMinRollFactor           = vpu::Splat(KF_MIN_ROLL_FACTOR);
+            const VecFloat lvfXAxisYFullDampThreshold = vpu::Splat(gfFullDampThreshold);
+            const VecFloat lvfXAxisYNoDampThreshold   = vpu::Splat(gfNoDampThreshold);
+            const VecFloat lvfMinRollFactor           = vpu::Splat(gfMinRollFactor);
             const VecFloat lvfOne                     = vpu::GetVector4_One();
 
             // The two-segment ramp (0x825D0CD4 / 0x825D0D1C / 0x825D0D98). Level -> ramp 0 .. 0.3
             // over [0, 0.125]; then 0.3 .. 1.0 over [0.125, 0.25]; then flat 1.0.
-            // The asm re-tests `rollAmount > FULL` before the second segment; that test is the
-            // exact complement of the first branch (its only effect is to route NaN to the 1.0
-            // leg), so it is folded into the else-if chain here.
+            // ARTIST 825D0CD4..0D90 keeps both reciprocal refinements, each
+            // multiply/FMA boundary, and the ordered roll > FULL retest. The
+            // latter is not the complement of FULL >= roll for NaN inputs.
+            const f32 lfRollAmount = TakeoffFlush(lvfAbsXAxisY.x);
+            const f32 lfFullThreshold = TakeoffFlush(lvfXAxisYFullDampThreshold.x);
+            const f32 lfNoDampThreshold = TakeoffFlush(lvfXAxisYNoDampThreshold.x);
             VecFloat lvfRollFactor;
-            if (lvfXAxisYFullDampThreshold.x >= lvfAbsXAxisY.x)
+            if (lfFullThreshold >= lfRollAmount)
             {
-                const VecFloat lvfInterpParam = vpu::Splat(
-                    lvfAbsXAxisY.x / lvfXAxisYFullDampThreshold.x);
-                lvfRollFactor = lvfMinRollFactor * lvfInterpParam;
+                const f32 lfRange = TakeoffSubtract(lvfMinRollFactor.x, 0.0f);
+                const f32 lfReciprocal = TakeoffReciprocal(lfFullThreshold);
+                const f32 lfReciprocalScale = TakeoffMultiply(lfReciprocal, 1.0f);
+                const f32 lfInterpParam = TakeoffMultiply(lfRollAmount, lfReciprocalScale);
+                lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, 0.0f));
             }
-            else if (lvfXAxisYNoDampThreshold.x >= lvfAbsXAxisY.x)
+            else if (lfRollAmount > lfFullThreshold && lfNoDampThreshold >= lfRollAmount)
             {
-                const VecFloat lvfInterpParam = vpu::Splat(
-                    (lvfAbsXAxisY.x - lvfXAxisYFullDampThreshold.x)
-                    / (lvfXAxisYNoDampThreshold.x - lvfXAxisYFullDampThreshold.x));
-                lvfRollFactor = lvfMinRollFactor + (lvfOne - lvfMinRollFactor) * lvfInterpParam;
+                const f32 lfThresholdRange = TakeoffSubtract(lfNoDampThreshold, lfFullThreshold);
+                const f32 lfRollOffset = TakeoffSubtract(lfRollAmount, lfFullThreshold);
+                const f32 lfRange = TakeoffSubtract(1.0f, lvfMinRollFactor.x);
+                const f32 lfInterpParam = TakeoffMultiply(TakeoffReciprocal(lfThresholdRange), lfRollOffset);
+                lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, lvfMinRollFactor.x));
             }
             else
             {
@@ -2300,17 +2410,18 @@ namespace Vehicle
             // jump (it is parked in the member and re-read every later frame):
             // lerp Target -> Min by the roll factor, pre-multiplied by the blend rate and dt.
             // Only lane .x is written (`vrlimi128 v12, v13, 8, 0` -- the other three timers survive).
-            const VecFloat lBaseDampRollVel = vpu::Splat(KF_YAW_DAMP_TARGET)
-                + (vpu::Splat(KF_YAW_DAMP_MIN) - vpu::Splat(KF_YAW_DAMP_TARGET)) * lvfRollFactor;
+            const f32 lfBaseDampRollVel = TakeoffMultiplyAdd(
+                TakeoffSubtract(KF_YAW_DAMP_MIN, KF_YAW_DAMP_TARGET), lvfRollFactor.x, KF_YAW_DAMP_TARGET);
+            const f32 lfBlendStep = TakeoffMultiply(KF_DAMP_BLEND_RATE, lvfTimeStep.x);
             mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.x =
-                (lBaseDampRollVel * vpu::Splat(KF_DAMP_BLEND_RATE) * lvfTimeStep).x;
+                TakeoffMultiply(lfBaseDampRollVel, lfBlendStep);
 
             // The three damping values handed to the body are genuine VecFloats in DecFIGS. The
             // YAW value is the literal zero splatted in v126. DampPitchYawRoll subtracts
             // axis*dot*pow(damping, 60*dt), so a zero base yields a zero subtraction for positive
             // dt: it PRESERVES yaw on take-off; it does not annihilate it.
             const VecFloat lvfYawDamping  = vpu::Splat(0.0f); // v126 -- literal, not the yaw attrib
-            const VecFloat lvfRollDamping = lvfOne - lvfRollFactor;
+            const VecFloat lvfRollDamping = vpu::Splat(TakeoffMultiplyAdd(lvfRollFactor.x, -1.0f, 1.0f));
 
             gfRollDampingUsed = lvfRollDamping.x; // dev watch "Roll damping used" (@0x82FB7E20)
 
@@ -2361,7 +2472,7 @@ namespace Vehicle
             // =============================================================================
             const VecFloat lvfXAxisY = vpu::Splat(std::fabs(lvRight.y));
             const VecFloat lvfMinRollToAllowCorrection =
-                vpu::Splat(KF_MIN_ROLL_TO_ALLOW_CORRECTION);
+                vpu::Splat(gfMinRollToAllowCorrection);
 
             // Latch "the player has rolled this jump" once |right.y| passes the threshold...
             if (lvfXAxisY.x > lvfMinRollToAllowCorrection.x)
@@ -2385,7 +2496,7 @@ namespace Vehicle
                 if (InAirSelectSign(lvfRollVelocity).x != lfSteerSign)
                 {
                     const VecFloat lvfAssist = vpu::Splat(
-                        std::fabs(lfSteering) * KF_LANDING_ASSIST_DAMPING)
+                        std::fabs(lfSteering) * gfLandingAssistDamping)
                         * lvfTimeStep * vpu::Splat(KF_DAMP_RATE_SCALE);
                     mAngularVelocity = mAngularVelocity - lvAt * (lvfRollVelocity * lvfAssist);
                 }
@@ -2720,8 +2831,6 @@ namespace Vehicle
     void VehiclePhysics::ApplyBoostKickForce(VecFloat lvfTimeStep)
     {
         static const f32 KF_DEG_TO_RAD         = 0.017453292f;   // flt_8208F5F4 (deg->rad, findings)
-        static const f32 KF_MAX_WHEELIE_ANGLE  = 11.0f;          // kfMaxWheelieAngle @0x82F2A264
-        static const f32 KF_WHEELIE_LIMIT_DAMP = 0.15f;          // kfWheelieLimitDamping @0x82F2A268
         static const f32 KF_KICK_TIMER_SEED    = 0.0f;           // flt_82001CC0 (image: 0x00000000)
 
         Vector4& lrBoost = mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime;
@@ -2747,7 +2856,7 @@ namespace Vehicle
             // 0x825D3360 `bl XMVectorSin` @0x821F05E0 (out of line; NOT the SinCos inline: the two differ on
             // about 7% of angles). kfMaxWheelieAngle is a code static (0x41300000 = 11.0; only the dev debug
             // slider writes it), and at 11 deg XMVectorSin and std::sin give the same bits, 0x3E43636F.
-            const f32 lfWheelieSin = std::sin(KF_MAX_WHEELIE_ANGLE * KF_DEG_TO_RAD);   // XMVectorSin
+            const f32 lfWheelieSin = XboxMath::XMVectorSin(gfMaxWheelieAngle * KF_DEG_TO_RAD);
 
             // Pitch = dot(forward axis, the copied contact normal).
             const f32 lfPitch =
@@ -2765,17 +2874,17 @@ namespace Vehicle
 
                 const f32 lfRollVel = vpu::Dot(lvRight, mAngularVelocity);
                 if (0.0f > lfRollVel)
-                    mAngularVelocity = mAngularVelocity - lvRight * (lfRollVel * KF_WHEELIE_LIMIT_DAMP);
+                    mAngularVelocity = mAngularVelocity - lvRight * (lfRollVel * gfWheelieLimitDamping);
 
                 const f32 lfRollLin = vpu::Dot(lvRight, mTotalTorque);
                 if (0.0f > lfRollLin)
                     mTotalTorque =
-                        mTotalTorque - lvRight * (lfRollLin * KF_WHEELIE_LIMIT_DAMP);
+                        mTotalTorque - lvRight * (lfRollLin * gfWheelieLimitDamping);
 
                 const f32 lfRollAng = vpu::Dot(lvRight, mTotalAngularImpulse);
                 if (0.0f > lfRollAng)
                     mTotalAngularImpulse =
-                        mTotalAngularImpulse - lvRight * (lfRollAng * KF_WHEELIE_LIMIT_DAMP);
+                        mTotalAngularImpulse - lvRight * (lfRollAng * gfWheelieLimitDamping);
             }
         }
 
@@ -4858,61 +4967,56 @@ namespace Vehicle
     // acceleration -- so it IS the net spring force), gated > 0 by `fcmpu cr6,f0,f31 ; ble`.
     // The trailing ExternalPhysicsBody::CalculateNewVelocity(this+0x10) checkpoint stays a
     // faithful comment (base-owned, not declared on this slice), as before.
-    // The two per-wheel "Invalid wheel position" (Wheel.h:412) asserts are elided -- debug.
     //
     // ⭐ RE-VERIFIED 2026-09-03 (drive-spine 1:1 audit), instruction by instruction against the
     // 225-instruction body. Everything above holds: the two gate bytes, the mass x acceleration
     // magnitude and its `ble` on > 0, the vrsqrtefp + two-Newton normalise of the body up axis, the
     // WORLD force / BODY position argument pair, the wheel-position lever arm, the four-iteration
     // loop (r18 0x3B0..0x3E0 step 0x10, r27 += 0xE0, r16 += 0x30) and the tail CalculateNewVelocity.
-    // ONE FURTHER ELISION, named here so the list is complete: the console also records the frame's
-    // result into a debug/telemetry block behind a null-checked pointer at this+0x13E4 --
-    // `stvx128 v127, r18, r11` writes the force at block+0x3B0+i*0x10 (0x825D220C) and
-    // `stb 1, 0x3F0(r11+i)` / `stb 0, 0x3F0(r11+i)` sets or clears that wheel's applied flag
-    // (0x825D2210 / 0x825D2228). Nothing in the sim reads it; it is the debug component's buffer,
-    // elided on the same footing as the two asserts. NOT a silent drop -- recorded, not forgotten.
+    // The original debug records and both Wheel.h:412 position assertions are recovered below.
     // =============================================================================================
     void VehiclePhysics::ApplySuspensionForces(VecFloat lvfTimeStep)
     {
-        // The push direction: the body up axis, normalized (0x825D1FB4..0x825D2020). Hoisted --
-        // the console re-derives it per wheel, but it cannot change inside the loop.
-        const Vector3& lvUp = mTransform.Up();
-        const f32 lfUpMagSq = lvUp.x * lvUp.x + lvUp.y * lvUp.y + lvUp.z * lvUp.z;
-        const f32 lfRecipUpMag = 1.0f / std::sqrt(lfUpMagSq);
-        const Vector3 lvUpUnit{ lvUp.x * lfRecipUpMag, lvUp.y * lfRecipUpMag, lvUp.z * lfRecipUpMag, 0.0f };
-
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             Wheel& lrWheel = maWheels[liWheel];
 
             // 0x825D1F68 / 0x825D1F74: wheel+0xD6 (mbHasTraction) and wheel+0xD7 (mu8State).
-            if (!lrWheel.mbHasTraction)
+            if (!lrWheel.mbHasTraction || lrWheel.mu8State == 2)
+            {
+                if (mpDebugComponent)
+                    mpDebugComponent->mabSuspensionForceApplied[liWheel] = false;
                 continue;
-            if (lrWheel.mu8State == 2)
-                continue;
+            }
 
             // Push magnitude = maSprings[i].reg0.z (mass lane) * maSprings[i].reg1.y (acceleration
             // lane) -- i.e. the net spring force. (0x825D1F80..0x825D1F94, then `ble` on > 0.)
             const f32 lfMagnitude =
-                maSprings[liWheel].mvStiffness_Damping_Mass_Position.z *
-                maSprings[liWheel].mvVelocity_Acceleration_DampingForce_SpringForce.y;
+                TakeoffMultiply(maSprings[liWheel].mvStiffness_Damping_Mass_Position.z,
+                    maSprings[liWheel].mvVelocity_Acceleration_DampingForce_SpringForce.y);
 
             if (lfMagnitude <= 0.0f)
+            {
+                if (mpDebugComponent)
+                    mpDebugComponent->mabSuspensionForceApplied[liWheel] = false;
                 continue;   // no push this wheel
+            }
 
-            // (debug-only 'Invalid wheel position' assert on mPosition -- elided.)
-
-            const Vector3 lvForce{ lvUpUnit.x * lfMagnitude,
-                                   lvUpUnit.y * lfMagnitude,
-                                   lvUpUnit.z * lfMagnitude,
-                                   0.0f };
+            const Vector3 lvForce = SuspensionForce(mTransform.Up(), lfMagnitude);
+            AssertSuspensionWheelPosition(lrWheel.mPosition);
             // asm @0x825D2100/0x825D20FC: r4 = 0 (WORLD force), r5 = 1 (BODY position), and
             // 0x825D2104 loads the position from r27 == &maWheels[i].mPosition.
             AddLocalForce(lvForce, rw::physics::WORLD_SPACE,
                           lrWheel.mPosition, rw::physics::BODY_SPACE);
+            if (mpDebugComponent)
+            {
+                AssertSuspensionWheelPosition(lrWheel.mPosition);
+                mpDebugComponent->maSuspensionForces[liWheel] = lvForce;
+                mpDebugComponent->mabSuspensionForceApplied[liWheel] = true;
+            }
         }
 
-        // 0x825D211C-0x825D2124 restores the incoming v1 and tail-integrates after all wheel forces.
+        // 0x825D2248..0x825D224C restores the incoming v1 and tail-integrates after all wheel forces.
         CalculateNewVelocity(lvfTimeStep);
     }
 
@@ -6838,10 +6942,7 @@ namespace Vehicle
     void VehiclePhysics::UpdateEngine(const BrnPlayerDriverControls* lpControls,
                                       VecFloat lvfTimeStep)
     {
-        static const f32 KF_DEBUG_GAS_ADD = 0.0f;   // flt_82FB7E24 ships 0.0; dev-menu only
-
-
-        f32 lfGas = lpControls->mfGas + KF_DEBUG_GAS_ADD;
+        f32 lfGas = lpControls->mfGas + gfForcedAcceleration;
         if (lfGas < 0.0f) lfGas = 0.0f;             // vmaxfp v0(0)
         if (lfGas > 1.0f) lfGas = 1.0f;             // vminfp v13(1)
 
@@ -8725,9 +8826,8 @@ namespace Vehicle
     // estimate+Newton chain and a correctly-rounded CRT differ in the last ulp or two.
     //
     // The angular clamp: omega -> body axes (R^T via the vmrghw/vmrglw transpose), clamp each
-    // lane to +/-6.5, back to world (R). The 6.5 splat is unk_82FB9DA0 -- BSS, seeded by the
-    // static-init thunk @0x82C5C5B0 from flt_82054378 == 6.5 (image-read), and debug-registered
-    // as "Max X/Y/Z Angular Velocity" by VehicleManagerDebugComponent::OnActivate @0x825B61C4.
+    // lane against its X/Y/Z value in unk_82FB9DA0, then back to world (R). Its init thunk
+    // @0x82C5C5E0 stores {6.5,6.5,6.5,0}; OnActivate registers the first three lanes separately.
     //
     // The synthetic crash mass (the non-normal leg): t = clamp01((Mass - 721) / (3250 - 721));
     // mfMass = splat(1400 + t*(2100 - 1400)). All four scalars are BSS splats seeded by the
@@ -8746,7 +8846,6 @@ namespace Vehicle
         static const f32 KF_CRASH_LIN_DAMP_OTHER  = 0.9999f;   // flt_82F2A528 (0x3F7FF972)
         static const f32 KF_CRASH_ANG_DAMP_OTHER  = 0.992f;    // flt_82F2A524 (0x3F7DF3B6)
         static const f32 KF_DAMP_RATE_SCALE       = 60.0f;     // flt_82092BC4
-        static const f32 KF_MAX_CRASH_ANGVEL      = 6.5f;      // unk_82FB9DA0 <- flt_82054378
         static const f32 KF_CRASHMASS_IN_LO       = 721.0f;    // unk_82FB9270 <- 0x8209D710
         static const f32 KF_CRASHMASS_IN_HI       = 3250.0f;   // unk_82FB9DC0 <- 0x8209D714
         static const f32 KF_CRASHMASS_OUT_LO      = 1400.0f;   // unk_82FB9030 <- 0x8209D718
@@ -8760,7 +8859,7 @@ namespace Vehicle
         // ---- [rollcatch] NOT IN THE X360 BINARY. OPT-IN on the existing BRN_CRASH_RESPONSE_DIAG
         // latch so it lands in the same log as [crash-response]. THE QUESTION IT ANSWERS: the
         // previous wave measured 5.50 rad/s of body roll on an oblique wall hit -- 85% of this
-        // function's own +/-6.5 clamp -- and yet up.y never fell below 0.8049 and the verdict was
+        // function's default 6.5 clamp -- and yet up.y never fell below 0.8049 and the verdict was
         // DRIVE_AWAY. Something REVERSES a live roll. This samples the body roll rate
         // (omega . at) at every stage boundary of the crash update and prints the per-stage delta,
         // so the catcher is named by subtraction instead of by argument. mTransform is not
@@ -8820,19 +8919,22 @@ namespace Vehicle
             f32 lfLx = vpu::Dot(mTransform.xAxis, mAngularVelocity);   // R^T * omega, the
             f32 lfLy = vpu::Dot(mTransform.yAxis, mAngularVelocity);   // vmrghw/vmrglw transpose
             f32 lfLz = vpu::Dot(mTransform.zAxis, mAngularVelocity);
-            if (lfLx < -KF_MAX_CRASH_ANGVEL) lfLx = -KF_MAX_CRASH_ANGVEL;   // vmaxfp -limit
-            if (lfLx >  KF_MAX_CRASH_ANGVEL) lfLx =  KF_MAX_CRASH_ANGVEL;   // vminfp +limit
-            if (lfLy < -KF_MAX_CRASH_ANGVEL) lfLy = -KF_MAX_CRASH_ANGVEL;
-            if (lfLy >  KF_MAX_CRASH_ANGVEL) lfLy =  KF_MAX_CRASH_ANGVEL;
-            if (lfLz < -KF_MAX_CRASH_ANGVEL) lfLz = -KF_MAX_CRASH_ANGVEL;
-            if (lfLz >  KF_MAX_CRASH_ANGVEL) lfLz =  KF_MAX_CRASH_ANGVEL;
+            const f32 lfMaxCrashAngVelX = gvMaxCrashAngularVelocity.x;
+            const f32 lfMaxCrashAngVelY = gvMaxCrashAngularVelocity.y;
+            const f32 lfMaxCrashAngVelZ = gvMaxCrashAngularVelocity.z;
+            if (lfLx < -lfMaxCrashAngVelX) lfLx = -lfMaxCrashAngVelX;   // vmaxfp -limit
+            if (lfLx >  lfMaxCrashAngVelX) lfLx =  lfMaxCrashAngVelX;   // vminfp +limit
+            if (lfLy < -lfMaxCrashAngVelY) lfLy = -lfMaxCrashAngVelY;
+            if (lfLy >  lfMaxCrashAngVelY) lfLy =  lfMaxCrashAngVelY;
+            if (lfLz < -lfMaxCrashAngVelZ) lfLz = -lfMaxCrashAngVelZ;
+            if (lfLz >  lfMaxCrashAngVelZ) lfLz =  lfMaxCrashAngVelZ;
             mAngularVelocity = Vector3{
                 mTransform.xAxis.x * lfLx + mTransform.yAxis.x * lfLy + mTransform.zAxis.x * lfLz,
                 mTransform.xAxis.y * lfLx + mTransform.yAxis.y * lfLy + mTransform.zAxis.y * lfLz,
                 mTransform.xAxis.z * lfLx + mTransform.yAxis.z * lfLy + mTransform.zAxis.z * lfLz,
                 0.0f };
         }
-        BRN_ROLLCATCH_SAMPLE();   // 2: after the +/-6.5 rad/s per-body-axis clamp
+        BRN_ROLLCATCH_SAMPLE();   // 2: after the registered per-axis clamp
 
         // ----- the mass regime (asm 0x82638CF4..0x82638DA0) -----
         if (IsCrashingNormally())                  // vcall +0x18, second dispatch

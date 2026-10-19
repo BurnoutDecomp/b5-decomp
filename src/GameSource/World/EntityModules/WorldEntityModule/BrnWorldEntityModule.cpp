@@ -26,6 +26,7 @@
 #include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
 #include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
 #include "pc/gcm/renderengine/reflections/SceneSettingsDebug.h"
+#include "pc/math/VmxFloat.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -87,16 +88,41 @@ static const u64 gs_uSurfaceListKey = Attrib::StringToKey("340654");
 // across the four lanes of the sample-colour comparison.
 static const f32 KF_SURFACE_SANITY_EPSILON = 1.1920928955078125e-07f;
 
-// Maximum axis scale of an affine transform (the X360 inline: max of the three
-// basis-row magnitudes via the vrsqrte refinement pipeline).
+// ARTIST822D6588/65B0 first take the componentwise maximum of the
+// three basis vectors, then its magnitude (two rsqrt refinements and zero select).
 static f32 GetMaximumScale( const Matrix44Affine& lrTransform )
 {
-    f32 lfScale = rw::math::vpu::Magnitude( lrTransform.Right() );
-    const f32 lfUp = rw::math::vpu::Magnitude( lrTransform.Up() );
-    const f32 lfAt = rw::math::vpu::Magnitude( lrTransform.At() );
-    if ( lfUp > lfScale ) lfScale = lfUp;
-    if ( lfAt > lfScale ) lfScale = lfAt;
-    return lfScale;
+    using namespace CgsPC;
+    const Vector3 lRight = lrTransform.Right();
+    const Vector3 lUp = lrTransform.Up();
+    const Vector3 lAt = lrTransform.At();
+    const Vector3 lMaximum = {
+        VmxFloat::Maximum(VmxFloat::Maximum(lRight.x, lUp.x), lAt.x),
+        VmxFloat::Maximum(VmxFloat::Maximum(lRight.y, lUp.y), lAt.y),
+        VmxFloat::Maximum(VmxFloat::Maximum(lRight.z, lUp.z), lAt.z), 0.0f};
+    return VmxFloat::Magnitude3(lMaximum);
+}
+
+// ARTIST822BB150; DecFIGS BrnWorldEntityModule.h:632. The Surfaces element
+// is a 24-byte RefSpec; ld8 reads its full collection key, not the low word.
+void WorldEntityModule::GetSurface(u8 luSurfaceId, Attrib::Gen::surface* lpOutSurface) const
+{
+    if (lpOutSurface == nullptr)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpOutSurface != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\EntityModules/WorldEntityModule/BrnWorldEntityModule.h",
+            634);
+        CgsDev::Assert::EndAssert();
+    }
+    const Attrib::RefSpec* lpRef =
+        static_cast<const Attrib::RefSpec*>(mSurfaceList.Surfaces(luSurfaceId));
+    if (lpRef == nullptr)
+        lpRef = static_cast<const Attrib::RefSpec*>(Attrib::DefaultDataArea(0x18u));
+    Attrib::Collection* lpCollection = Attrib::FindCollectionWithDefault(
+        0x68428A3C7836CF50ull, lpRef->GetCollectionKey());
+    lpOutSurface->Change(lpCollection);
 }
 
 // =============================================================================
@@ -1142,22 +1168,6 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
     }
 
     return false;
-}
-
-// =============================================================================
-// GetSurface @ 0x822BB150 (inlined header helper emitted by ARTIST).
-// r3=this, r4=u8 surface id, r5=output; the ld at 822BB1C4 reads
-// RefSpec::mCollectionKey, then the full 64-bit surface class key is resolved.
-// =============================================================================
-void WorldEntityModule::GetSurface( u8 luSurfaceId, Attrib::Gen::surface* lpOutSurface ) const
-{
-    CGS_ASSERT( lpOutSurface != nullptr, "lpOutSurface != NULL" );
-    const void* lpRefData = mSurfaceList.Surfaces( luSurfaceId );
-    if ( !lpRefData )
-        lpRefData = Attrib::DefaultDataArea( sizeof( Attrib::RefSpec ) );
-    const auto& lrRef = *static_cast<const Attrib::RefSpec*>( lpRefData );
-    lpOutSurface->Change( Attrib::FindCollectionWithDefault(
-        0x68428A3C7836CF50ull, lrRef.GetCollectionKey() ) );
 }
 
 // =============================================================================

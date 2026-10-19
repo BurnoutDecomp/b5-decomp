@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // mReceiverQueue
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // canonical raw request FIFO payloads
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"    // Pool (128 embedded)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"    // Type (type table)
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h" // ScratchPool (defrag staging, embedded)
@@ -17,11 +18,10 @@
 #include "rw/rwcore_structs.h"                                          // rw::Resource / ResourceDescriptor (InitOptions)
 
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
-namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; } }
-namespace CgsResource { namespace PoolIO { struct OutputBuffer; } }   // SendCreatePoolMemoryRequest target
-namespace CgsResource { namespace Events { struct AcquireResourceRequest; } }   // DoAcquireResourceRequest
-namespace CgsResource { namespace Events { struct AcquireResourceListRequest; } } // DoAcquireResourceListRequest
-namespace CgsResource { namespace Events { struct InvalidatePoolRequest; struct ValidatePoolRequest; struct DeletePoolRequest; } }
+namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; struct DestroyBankResponse; } }
+namespace CgsResource { namespace PoolIO { struct InputBuffer; struct OutputBuffer; } }
+namespace CgsResource { namespace Events { struct CreatePoolRequest; struct AcquireResourceRequest; struct AcquireResourceListRequest; } }
+namespace CgsResource { namespace Events { struct CreatePoolResponse; struct UnacquireResourceRequest; struct InvalidatePoolRequest; struct ValidatePoolRequest; struct DeletePoolRequest; } }
 // Defrag distribution/relocation records (pointer members only; full layouts live in the deferred
 // defrag subsystem -- forward-declared to avoid a transitive cascade for pointer-only storage).
 namespace CgsResource { using RelocationEntry = CgsMemory::RelocateOp; }
@@ -44,12 +44,9 @@ namespace CgsResource { using RelocationEntry = CgsMemory::RelocateOp; }
 // separate integration work.
 namespace CgsResource
 {
-    // The CreatePool request payload CreatePools publishes to the ResourceModule input (event id 0).
-    // ProcessResourceRequests routes it to the pool input; PoolModule::ProcessInputBuffer dispatches it to
-    // SendCreatePoolMemoryRequest. [x64 payload deviation: carries the resolved InitOptions + bank/sizing.
-    // The X360 carries the raw 172B pool def and derives these via ConvertPoolRequestOptions /
-    // GetRequiredResourceDescriptor, whose byte counts are x360-width-specific -- so the resolved form is
-    // the faithful x64 choice; see the gamedatamodule-scoping notes.]
+    // NativePC bring-up request used by the current ResourceModule shuttle. It carries resolved host
+    // options and explicit bank sizing; the original raw CreatePoolRequest protocol is declared in
+    // CgsResourceIOEvents.h and is kept on separate typed PoolModule methods below.
     struct CreatePoolRequestEvent
     {
         Pool::InitOptions mOptions;
@@ -61,6 +58,8 @@ namespace CgsResource
 
     class PoolModule : public CgsModule::ModuleSingleBuffered
     {
+        friend class DebugPoolTypeList; //ARTIST828E4334..4388 reads the registered type names
+
     public:
         static const s32 KI_MAX_POOLS = 128;
         static const s32 KI_MAX_TYPES = 128;
@@ -137,31 +136,33 @@ namespace CgsResource
         s32         GetPoolIndex(s32 liPoolId);            // 0x828D80E8
         const Type* FindResourceType(u32 luTypeId);        // 0x828D8268
 
-        // @ 0x82904B20 - stand up a pool from InitOptions: validate the id, assert no duplicate, find a
-        // free slot (GetId()==-1), Pool::InitPool it. Returns the created pool (null if no free slot).
-        // The dispatch (DoCreatePoolRequest) calls this after allocating the pool's backing memory.
-        Pool* CreatePool(const Pool::InitOptions* lpOptions);
+        // ARTIST 0x82904B20 returns void: validate the id, assert on duplicates, initialize the first
+        // free slot and keep its assertion/continuation behavior. Original startup is still unactivated.
+        void CreatePool(const Pool::InitOptions* lpOptions);
 
-        // ---- async pool-create dispatch -----------------------------------------------
-        // @ 0x828F3A50 - SendCreatePoolMemoryRequest: queue the pending pool options (FIFO) and emit a
-        // CreateResource memory request (onto this module's PoolIO::OutputBuffer resource-request queue) so
-        // the ResourceModule shuttle forwards it to the MemoryModule, which carves the pool's backing bank.
-        // miBankId/region/align/parentBankId describe the bank. The output buffer must be write-locked by
-        // the caller (the X360 holds it locked across PoolModule::Update's ProcessInputBuffer).
-        void SendCreatePoolMemoryRequest(const Pool::InitOptions& lrOptions, s32 liBankId, s32 liParentBankId,
-                                         const u32 lauRegion[3], const u32 lauAlign[3],
+        // Current native bring-up helper. Its returned Pool* and bank-backed options are a separate
+        // NativePC contract; only the NativePC GDM fallback and NativePC response adapter call it.
+        Pool* CreatePoolNativePC(const Pool::InitOptions* lpOptions);
+
+        // ---- original asynchronous pool-create protocol ---------------------------------
+        // ARTIST 0x828F3A50 pushes the raw request to the 128-entry FIFO before asserting on output,
+        // derives a memory descriptor, then posts a CREATE_RESOURCE request on output tag 10.
+        void SendCreatePoolMemoryRequest(const Events::CreatePoolRequest* lpRequest,
                                          PoolIO::OutputBuffer* lpPoolOutput);
+        // Current native resolved-options transport; it has distinct queue/lifetime semantics.
+        void SendCreatePoolMemoryRequestNativePC(const Pool::InitOptions& lrOptions, s32 liBankId,
+            s32 liParentBankId, const u32 lauRegion[3], const u32 lauAlign[3],
+            PoolIO::OutputBuffer* lpPoolOutput);
 
-        // @ 0x82905000 - DoCreatePoolRequest: pop the matching pending options (FIFO), adopt the memory
-        // the MemoryModule allocated (the response's rw::Resource data pointers), and CreatePool. Reached
-        // via the receiver queue (event id 10) from ProcessReceiverQueue.
-        Pool* DoCreatePoolRequest(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse);
+        // ARTIST 0x82905000 pops the original raw request, adopts the response's RW resource/descriptor,
+        // resolves dependencies, creates the pool, then echoes PoolEvent on output tag 1. Return is void.
+        void DoCreatePoolRequest(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse,
+                                 PoolIO::OutputBuffer* lpPoolOutput);
+        // Current native response adapter, which returns the created pool and consumes resolved options.
+        Pool* DoCreatePoolRequestNativePC(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse);
 
-        // Per-response part of the ResourceModule memory-response shuttle: forward a CreateResource memory
-        // response onto its originating receiver queue (the request's reply target) as a CreatePool event
-        // (id 10), so ProcessReceiverQueue dispatches it to DoCreatePoolRequest. [the full multi-submodule
-        // ProcessMemoryResponses shuttle is still deferred -- this is its pool-create slice.]
-        void ProcessMemoryResponse(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse);
+        // NativePC-only per-response shuttle helper; original routing is owned by ResourceModule.
+        void ProcessMemoryResponseNativePC(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse);
 
         // Look up a created pool by id (null if absent). Lets the CreatePools driver fetch the pool the
         // receiver-queue path stood up (for cross-pool dependency wiring).
@@ -186,15 +187,22 @@ namespace CgsResource
         void DoAcquireResourceListRequest(const Events::AcquireResourceListRequest* lpRequest,
                                           PoolIO::OutputBuffer* lpOutput);
 
-        // ---- dispatch (deferred) ------------------------------------------------------
+        // ---- current two-argument native adapter ---------------------------------------
+        // The full ARTIST four-argument Update/Construct activation remains a separate boundary.
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
-        void ProcessReceiverQueue(void* lpOutputBuffer);
-        void ProcessInputBuffer(void* lpInputBuffer, void* lpOutputBuffer);
+        void ProcessReceiverQueueNativePC(void* lpOutputBuffer);
+        void ProcessInputBufferNativePC(void* lpInputBuffer, void* lpOutputBuffer);
 
-        // ---- request -> pool-options conversion (CgsPoolModule.cpp:1027) --------------
-        // @ 0x828E2ED0 -- copy a CreatePoolRequest into a Pool::InitOptions (id/name/heap sizing).
-        // ARTIST 828E2ED0 reads the request from r3 and options from r4; no this.
-        static void ConvertPoolRequestOptions(const void* lpRequest, void* lpOutOptions);
+        // ---- original typed event dispatch ---------------------------------------------
+        void ProcessReceiverQueue(PoolIO::OutputBuffer* lpOutputBuffer);
+        void ProcessInputBuffer(const PoolIO::InputBuffer* lpInputBuffer, PoolIO::OutputBuffer* lpOutputBuffer);
+
+        // ---- request -> pool-options conversion and descriptor -------------------------
+        // ARTIST 0x828E2ED0 and 0x828EC458 are static two-pointer procedures (r3=request, r4=output).
+        static void ConvertPoolRequestOptions(const Events::CreatePoolRequest* lpRequest,
+                                              Pool::InitOptions* lpOutOptions);
+        static void GetRequiredResourceDescriptor(const Events::CreatePoolRequest* lpRequest,
+                                                  rw::ResourceDescriptor* lpOutDescriptor);
 
         // @ 0x828F3CD0 -- DebugReport: visit every live pool (id != -1 && valid).
         void DebugReport(FPoolReportCallback lpfnCallback, void* lpUserData);
@@ -215,8 +223,13 @@ namespace CgsResource
             const Events::FixUpAndResolveResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
         void DoUnloadResourceListRequest(
             const Events::UnloadResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
-        // @ 0x828D81D0 -- DeletePool response handler (asserts on failure result).
-        void DoDeletePoolRequest(const void* lpResponse);
+        // ARTIST 0x828D81D0 receives both response and output; output is unused by its echo-free body.
+        void DoDeletePoolRequest(const CgsMemory::MemoryIO::DestroyBankResponse* lpResponse,
+                                 PoolIO::OutputBuffer* lpOutput);
+        void DoDeletePoolRequestNativePC(const void* lpResponse);
+        // ARTIST 0x828FD278: echo the PoolEvent + ID on output tag 9; no reference is released.
+        void DoUnacquireResourceRequest(const Events::UnacquireResourceRequest* lpRequest,
+                                        PoolIO::OutputBuffer* lpOutput);
 
         // CgsPoolModule.h (bodies in CgsPoolModule.cpp). Invalidate a
         // pool (reply with its memory + descriptor and whether it was free), validate it again
@@ -237,20 +250,21 @@ namespace CgsResource
         EPoolPrepareStage mePoolPrepareStage;        // +0x1A2C (a1[1675])
         EPoolReleaseStage mePoolReleaseStage;        // +0x1A30 (a1[1676])
         Pool              maPools[KI_MAX_POOLS];      // +0x1A38 the 128 resource pools (464B X360 stride)
+        // ARTIST CgsPoolModule.h:194 -- canonical raw CreatePoolRequest FIFO (128 entries),
+        // constructed with the module but driven only by the typed original methods above.
+        FifoQueue<Events::CreatePoolRequest, 128> mPendingCreateRequests;
         CgsModule::EventReceiverQueue<16384, 16> mReceiverQueue; // +0x15844 (a1[22033]) create/delete-pool events (CgsPoolModule.h)
         ScratchPool       mScratchPool;              // +0x198C0 (a1+104576) defrag staging (Construct'd; InitPool deferred)
         AllocListSet      mAllocListSet;             // +0x19B00; DWARF CgsPoolModule.h:198
         s32               mProcessState;             // +0x19B30 defrag/alloc state machine (0..6)
 
-        // CgsResource::Events::CreatePoolRequest_128 (X360 a1+66104): the FIFO of pool options awaiting
-        // their backing-memory allocation. SendCreatePoolMemoryRequest pushes; DoCreatePoolRequest pops
-        // when the matching memory response arrives. Modelled as a 128-slot ring of Pool::InitOptions
-        // (the X360 stores the raw 172B pool request; we carry the resolved InitOptions). [marked]
+        // NativePC resolved-options ring. This is intentionally separate from the original raw-request FIFO
+        // above; its in-class lifetime remains the current native provider's behavior.
         static const s32 KI_MAX_PENDING_CREATE = 128;
-        Pool::InitOptions maPendingCreate[KI_MAX_PENDING_CREATE];
-        s32               miPendingHead = 0;   // FIFO empty until CreatePool path drives it (not ctor-set)
-        s32               miPendingTail = 0;
-        s32               miPendingCount = 0;
+        Pool::InitOptions maPendingCreateNativePC[KI_MAX_PENDING_CREATE];
+        s32               miPendingHeadNativePC = 0;
+        s32               miPendingTailNativePC = 0;
+        s32               miPendingCountNativePC = 0;
 
         // ---- defrag / allocate state machine (DWARF CgsPoolModule.h:202-219) ----------------------
         // Added with the UpdateXxx defrag-state driver pass (CgsPoolModule.cpp). mProcessState above is

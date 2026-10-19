@@ -8,13 +8,17 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                       // GetGameStateModule / mpTriggerQueryManager
 #include "GameSource/GameState/BrnGameStateModule.h"                               // GetActivePlayerCarId / GetActivePlayerWheelId
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"       // GetTrafficData / traffic-light region
+#include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // Find-all-drive-thrus achievement
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"             // road-rules tallies / street data
 #include "GameSource/GameState/Offences/BrnStuntManager.h"                         // GetTotalStuntElementCount
 #include "SharedClasses/Progression/BrnProgressionData.h"
 #include "SharedClasses/Progression/BrnProgressionRankData.h"
+#include "SharedClasses/Progression/BrnTrophyUnlockData.h"
 #include "SharedClasses/Progression/BrnRival.h"
 #include "SharedClasses/Progression/BrnOpponentData.h"
 #include "SharedClasses/StreetData/BrnStreetData.h"
+#include "SharedClasses/Trigger/BrnGenericRegion.h"
+#include "SharedClasses/Trigger/BrnTriggerData.h"
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                      // TrafficData::GetJunctionLogicBoxForTrafficLight
 #include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"
 #include "SharedClasses/World/BrnWorldRegion.h"                                    // WorldRegion::DistrictToString
@@ -23,6 +27,9 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
+#include <cmath>
+#include <limits>
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
@@ -67,6 +74,27 @@ namespace BrnProgression
             lv2Result.w = 0.0f;
             return lv2Result;
         }
+
+        f32 AddRankBarVectorLane(f32 lfA, f32 lfB)
+        {
+            // ARTIST vaddfp: flush subnormal inputs and the rounded result.
+            const auto Flush = [](f32 lfValue)
+            {
+                return std::fpclassify(lfValue) == FP_SUBNORMAL
+                    ? std::copysign(0.0f, lfValue) : lfValue;
+            };
+            return Flush(Flush(lfA) + Flush(lfB));
+        }
+
+        s32 TruncateRankBarPercentage(f32 lfValue)
+        {
+            // ARTIST 8237EA2C fctiwz: truncate, saturate, and map NaN to INT_MIN.
+            if (std::isnan(lfValue) || lfValue <= -2147483648.0f)
+                return (std::numeric_limits<s32>::min)();
+            if (lfValue >= 2147483648.0f)
+                return (std::numeric_limits<s32>::max)();
+            return static_cast<s32>(lfValue);
+        }
     }
 
     const char* GetModeStringForEventData(u8 lu8EventDataMode)
@@ -81,6 +109,621 @@ namespace BrnProgression
             return "<none>";
         }
         return "<invalid>";
+    }
+
+    // X360 0x82371A30. The opening call is the COMDAT-folded base DebugComponent::Construct;
+    // the stores and six mode-name entries then follow ARTIST's exact order.
+    void ProgressionDebugComponent::Construct(ProgressionManager* lpProgressionManager,
+                                              BrnGameState::ModeManager* lpModeManager)
+    {
+        CgsDev::DebugComponent::Construct();
+
+        mpProgressionManager = lpProgressionManager;
+        mpModeManager = lpModeManager;
+        miEventStartIndex = 0;
+
+        mbShowRankData = false;
+        mbShowRaceData = false;
+        mbShowRivalData = false;
+        mbShowProfile = false;
+        mbShowProfileEventInfo = false;
+        mbShowProfileRivalInfo = false;
+        mbShowPlayerOpponents = false;
+        mbProfileReadyForDisplay = false;
+
+        miNumberOfRaceWinsToAdd = 1;
+        miNumberOfRoadRageWinsToAdd = 1;
+        miNumberOfMarkedManWinsToAdd = 1;
+        miNumberOfStuntWinsToAdd = 1;
+        miNumberOfSpecialEventWinsToAdd = 35;
+        miRankToSkipTo = 1;
+        miRivalIndex = 1;
+        meDebugGameModeType = static_cast<RaceEventData::EModeType>(6);
+
+        for (s32 liModeOption = 0; liModeOption < 6; ++liModeOption)
+        {
+            const s32 liGameMode = ProgressionManager::GetEvent(liModeOption);
+            const char* lpcModeName;
+            if (static_cast<u32>(liGameMode) <= 0x11u)
+            {
+                lpcModeName = KAPC_GAME_MODE_NAMES[liGameMode];
+            }
+            else if (liGameMode == -1)
+            {
+                lpcModeName = "<none>";
+            }
+            else
+            {
+                lpcModeName = "<invalid>";
+            }
+
+            maGameModeOptions[liModeOption].miValue = liModeOption;
+            maGameModeOptions[liModeOption].mpcName = lpcModeName;
+        }
+        maGameModeOptions[6].miValue = 6;
+        maGameModeOptions[6].mpcName = "DISABLED";
+    }
+
+    // X360 0x8235A1C0.
+    const char* ProgressionDebugComponent::GetName() const
+    {
+        return "Progression";
+    }
+
+    // ARTIST 8237E910: this=r3, display=r4, mode=r5, colour=r6, name=r7,
+    // position=v1. DecFIGS attests the by-value Vector2 declaration.
+    void ProgressionDebugComponent::DrawRankAsBar(
+        CgsDev::Debug2DImmediateRender* lpDisplay,
+        BrnGameState::GameStateModuleIO::EGameModeType leGameModeType,
+        CgsDev::RGBA lColour, Vector2 lv2Position, const char* lpcName)
+    {
+        const f32 lfRank = mpProgressionManager->GetProgressionRankForGameModeNormalised(leGameModeType);
+        lpDisplay->DrawText(lpcName, lv2Position, 16.0f, 0xFFFFFFFFu, false);
+
+        lv2Position.y = AddRankBarVectorLane(lv2Position.y, 15.0f);
+        char lacText[KI_HUD_TEXT_LENGTH];
+        CgsDev::StrStream lText(lacText, sizeof(lacText));
+        lText << "\nDifficulty : " << TruncateRankBarPercentage(lfRank * 100.0f) << "%\n";
+        lpDisplay->DrawText(lText.GetBuffer(), lv2Position, 16.0f, 0xFFFFFFFFu, false);
+
+        lv2Position.y = AddRankBarVectorLane(lv2Position.y, 15.0f);
+        const f32 lfMaxX = AddRankBarVectorLane(lv2Position.x, 140.0f);
+        const f32 lfMaxY = AddRankBarVectorLane(lv2Position.y, 10.0f);
+        // ARTIST vperm mask 82CDA350 selects {A.x, B.y, A.x, A.x}.
+        const Vector2 lv2Max = {lfMaxX, lfMaxY, lfMaxX, lfMaxX};
+        lpDisplay->DrawHorizontalBar(lv2Position, lv2Max, lfRank, 1.0f, lColour, 0xFF000000u);
+    }
+
+    // ARTIST 8235A1D0: append before checking the current character, retain the
+    // breaking newline/space, and always publish the final line (including empty).
+    void ProgressionDebugComponent::DrawTextWithOffsets(
+        CgsDev::Debug2DImmediateRender* lpDisplay, CgsDev::StrStream* lpStream, f32 lfX, f32 lfY)
+    {
+        char lacLine[4096];
+        CgsDev::StrStream lLine(lacLine, sizeof(lacLine));
+        s32 liIndex = 0;
+        s32 liLineLength = 0;
+        s8 liChar = static_cast<s8>(lpStream->GetBuffer()[liIndex]);
+        lLine.AppendFormat("%c", static_cast<s32>(liChar));
+
+        while (liChar != 0)
+        {
+            if (liChar == '\n' || (liLineLength > 128 && liChar == ' '))
+            {
+                MaybeDrawText(lpDisplay, lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu, false);
+                lLine.Reset();
+                lfY += 12.0f;
+                liLineLength = 0;
+            }
+            ++liIndex;
+            ++liLineLength;
+            liChar = static_cast<s8>(lpStream->GetBuffer()[liIndex]);
+            lLine.AppendFormat("%c", static_cast<s32>(liChar));
+        }
+
+        MaybeDrawText(lpDisplay, lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu, false);
+        lLine.Reset();
+    }
+
+    // X360 0x823A0638. Registration order, captions, ranges, option list and callback owners are
+    // reproduced from ARTIST. The registered signed indexes keep the retail bounds.
+    void ProgressionDebugComponent::OnActivate()
+    {
+        RegisterVariable(&mbShowProfile, "Show Profile");
+        RegisterVariable(&mbShowProfileEventInfo, "Show Profile Event Info");
+        RegisterVariable(&mbShowProfileRivalInfo, "Show Profile Rival Info");
+        RegisterVariable(&miEventStartIndex, "Show Profile Event Index");
+        RegisterVariable(&mbShowRaceData, "Show Race Data");
+        RegisterVariable(&mbShowRivalData, "Show Rival Data");
+        RegisterVariable(&mbShowPlayerOpponents, "Show player opponents");
+
+        RegisterFunction(&ProgressionDebugComponent::DiscoverAllEventsCallback, this,
+                         "Find All Events");
+        RegisterFunction(&ProgressionDebugComponent::FindAllDriveThrusCallback, this,
+                         "Find All Drive-Thrus");
+        RegisterFunction(&ProgressionDebugComponent::DefeatAllRivalsCallback, this,
+                         "Defeat All Rivals");
+
+        RegisterVariable(&miRivalIndex, "Defeat rival");
+        SetRange(&miRivalIndex, 1, 34);
+        SetSelectCallback(&miRivalIndex, &ProgressionDebugComponent::DefeatRivalCallback, this);
+
+        RegisterVariable(&miNumberOfRaceWinsToAdd, "Add race wins");
+        SetRange(&miNumberOfRaceWinsToAdd, 1, 200);
+        SetSelectCallback(&miNumberOfRaceWinsToAdd,
+                          &ProgressionDebugComponent::AddWinsRaceCallback, this);
+
+        RegisterVariable(&miNumberOfRoadRageWinsToAdd, "Add road rage wins");
+        SetRange(&miNumberOfRoadRageWinsToAdd, 1, 200);
+        SetSelectCallback(&miNumberOfRoadRageWinsToAdd,
+                          &ProgressionDebugComponent::AddWinsRoadRageCallback, this);
+
+        RegisterVariable(&miNumberOfStuntWinsToAdd, "Add stunt wins");
+        SetRange(&miNumberOfStuntWinsToAdd, 1, 200);
+        SetSelectCallback(&miNumberOfStuntWinsToAdd,
+                          &ProgressionDebugComponent::AddWinsStuntCallback, this);
+
+        RegisterVariable(&miNumberOfMarkedManWinsToAdd, "Add marked man wins");
+        SetRange(&miNumberOfMarkedManWinsToAdd, 1, 200);
+        SetSelectCallback(&miNumberOfMarkedManWinsToAdd,
+                          &ProgressionDebugComponent::AddWinsMarkedManCallback, this);
+
+        RegisterVariable(&miNumberOfSpecialEventWinsToAdd, "Add special event wins");
+        SetRange(&miNumberOfSpecialEventWinsToAdd, 1, 200);
+        SetSelectCallback(&miNumberOfSpecialEventWinsToAdd,
+                          &ProgressionDebugComponent::AddSpecialEventWinsCallback, this);
+
+        RegisterFunction(&ProgressionDebugComponent::ClearMedalsCallback, this,
+                         "Remove all wins");
+
+        RegisterVariable(&miRankToSkipTo, "Skip To Rank");
+        SetRange(&miRankToSkipTo, 0,
+                 static_cast<s32>(mpProgressionManager->GetProgressionData()->GetProgressionRankCount()));
+        SetSelectCallback(&miRankToSkipTo,
+                          &ProgressionDebugComponent::SkipToProgressionRankCallback, this);
+
+        RegisterVariable(reinterpret_cast<s32*>(&meDebugGameModeType), "Set Game Mode Type");
+        SetRange(reinterpret_cast<s32*>(&meDebugGameModeType), 0, 6);
+        SetOptions(reinterpret_cast<s32*>(&meDebugGameModeType), maGameModeOptions);
+
+        RegisterFunction(&ProgressionDebugComponent::UnlockAllCarsCallBack, this,
+                         "Unlock All Cars");
+        RegisterFunction(&ProgressionDebugComponent::GetToOneWinBelowBurnoutLicenseCallBack,
+                         this, "Pre Burnout License");
+        RegisterFunction(&ProgressionDebugComponent::GetToOneWinBelowEliteLicenseCallBack,
+                         this, "Pre Elite License (Race Event)");
+        RegisterFunction(&ProgressionDebugComponent::GetToOneWinBelowEliteBRLicenseCallBack,
+                         this, "Pre Elite License (Burning Route)");
+    }
+
+    void ProgressionDebugComponent::AddEventWinsForProfileEvents(
+        s32 liWinsToAdd, RaceEventData::EModeType leModeType)
+    {
+        Profile* lpProfile = &mpProgressionManager->mProfile;
+        CGS_ASSERT(lpProfile, "lpProfile");
+
+        s32 liEventsAdded = 0;
+        for (s32 liEventIndex = 0; liEventIndex < lpProfile->miEventCount; ++liEventIndex)
+        {
+            CGS_ASSERT(static_cast<u32>(liEventIndex) <
+                           static_cast<u32>(lpProfile->miEventCount),
+                       "luIndex < static_cast<uint32_t>(miEventCount)");
+            ProfileEvent& lrEvent = lpProfile->maEvents[liEventIndex];
+            const ProgressionData* lpProgressionData =
+                GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
+            const RaceEventData* lpRaceEventData =
+                lpProgressionData->FindOfflineEvent(lrEvent.GetID());
+            CGS_ASSERT(lpRaceEventData, "lpRaceEventData");
+
+            if (lpRaceEventData->GetMode() != static_cast<u8>(leModeType))
+            {
+                continue;
+            }
+
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "Adding event: " << liEventsAdded << "\n";
+            }
+
+            --liWinsToAdd;
+            ++liEventsAdded;
+            lrEvent.EnableFlags(static_cast<u16>(ProfileEvent::E_FLAG_DISCOVERED |
+                                                 ProfileEvent::E_FLAG_RANK_WIN));
+            if (liWinsToAdd == 0)
+            {
+                break;
+            }
+        }
+    }
+
+    // X360 0x82396420. The rank-fix pass follows every individual Profile win update.
+    void ProgressionDebugComponent::AddRaceWins()
+    {
+        Profile* lpProfile = &mpProgressionManager->mProfile;
+        CGS_ASSERT(lpProfile, "lpProfile");
+        ++lpProfile->muMedalCountFromTheStart;
+        mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
+
+        for (s32 liWin = 0; liWin < miNumberOfRaceWinsToAdd; ++liWin)
+        {
+            lpProfile->AddWinForGameMode(BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE);
+            mpProgressionManager->FixGameModeRanks();
+        }
+
+        AddEventWinsForProfileEvents(miNumberOfRaceWinsToAdd, RaceEventData::E_MODE_RACE);
+    }
+
+    // X360 0x82396500.
+    void ProgressionDebugComponent::AddRoadRageWins()
+    {
+        Profile* lpProfile = &mpProgressionManager->mProfile;
+        CGS_ASSERT(lpProfile, "lpProfile");
+        ++lpProfile->muMedalCountFromTheStart;
+        mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
+
+        for (s32 liWin = 0; liWin < miNumberOfRoadRageWinsToAdd; ++liWin)
+        {
+            lpProfile->AddWinForGameMode(BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE);
+            mpProgressionManager->FixGameModeRanks();
+        }
+
+        AddEventWinsForProfileEvents(miNumberOfRoadRageWinsToAdd, RaceEventData::E_MODE_ROAD_RAGE);
+    }
+
+    // X360 0x823965E0.
+    void ProgressionDebugComponent::AddMarkedManWins()
+    {
+        Profile* lpProfile = &mpProgressionManager->mProfile;
+        CGS_ASSERT(lpProfile, "lpProfile");
+        ++lpProfile->muMedalCountFromTheStart;
+        mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
+
+        for (s32 liWin = 0; liWin < miNumberOfMarkedManWinsToAdd; ++liWin)
+        {
+            lpProfile->AddWinForGameMode(BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN);
+            mpProgressionManager->FixGameModeRanks();
+        }
+
+        AddEventWinsForProfileEvents(miNumberOfMarkedManWinsToAdd, RaceEventData::E_MODE_SURVIVOR);
+    }
+
+    // X360 0x823966C0.
+    void ProgressionDebugComponent::AddStuntWins()
+    {
+        Profile* lpProfile = &mpProgressionManager->mProfile;
+        CGS_ASSERT(lpProfile, "lpProfile");
+        ++lpProfile->muMedalCountFromTheStart;
+        mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
+
+        for (s32 liWin = 0; liWin < miNumberOfStuntWinsToAdd; ++liWin)
+        {
+            lpProfile->AddWinForGameMode(BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK);
+            mpProgressionManager->FixGameModeRanks();
+        }
+
+        AddEventWinsForProfileEvents(miNumberOfStuntWinsToAdd, RaceEventData::E_MODE_STUNT_ATTACK);
+    }
+
+    // X360 0x8237EB58. Pass the original "already seen" sequence kind for every rival.
+    void ProgressionDebugComponent::DefeatAllRivals()
+    {
+        const ProgressionData* lpProgressionData =
+            GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
+        const s32 liRivalCount = static_cast<s32>(lpProgressionData->GetRivalCount());
+        for (s32 liRival = 0; liRival < liRivalCount; ++liRival)
+        {
+            mpProgressionManager->DefeatRivalAndUnlockCar(
+                liRival, E_UNLOCK_SEQUENCE_TYPE_NONE);
+        }
+    }
+
+    // X360 0x8239A240. FindAllDriveThrus deliberately sends all five final trophy checks even
+    // when the trigger table contains no newly discovered drive-thrus.
+    void ProgressionDebugComponent::FindAllDriveThrus()
+    {
+        const BrnTrigger::TriggerData* lpTriggerData =
+            static_cast<const BrnTrigger::TriggerData*>(mpProgressionManager->mpTriggerData);
+        Profile& lrProfile = mpProgressionManager->mProfile;
+
+        for (s32 liRegionIndex = 0;
+             liRegionIndex < lpTriggerData->GetGenericRegionCount();
+             ++liRegionIndex)
+        {
+            const BrnTrigger::GenericRegion* lpRegion =
+                lpTriggerData->GetGenericRegion(liRegionIndex);
+            const BrnTrigger::GenericRegion::Type leType = lpRegion->GetType();
+            if (!lpRegion->IsDriveThru())
+            {
+                continue;
+            }
+
+            const CgsID lRegionId = lpRegion->GetId();
+            if (lrProfile.IsDriveThruDiscoverd(lRegionId, leType))
+            {
+                continue;
+            }
+
+            const s32 liTrophyType = lrProfile.AddDriveThru(lRegionId, leType);
+            if (liTrophyType != TrophyUnlockData::E_UNLOCKTYPE_NONE)
+            {
+                mpProgressionManager->OnTrophyUnlock(liTrophyType);
+                if (lrProfile.AreAllDriveThrusCompleted())
+                {
+                    mpProgressionManager->OnTrophyUnlock(
+                        TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_DRIVE_THRUS);
+                }
+            }
+
+            if (lrProfile.AreAllDriveThrusCompleted())
+            {
+                mpProgressionManager->mpAchievementManager->OnFindAllDriveThrus();
+            }
+            mpProgressionManager->mbDriveThrusDirty = true;
+        }
+
+        mpProgressionManager->OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_PAINTSHOPS);
+        mpProgressionManager->OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_GASSTATIONS);
+        mpProgressionManager->OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_JUNKYARDS);
+        mpProgressionManager->OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_BODYSHOPS);
+        mpProgressionManager->OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_DRIVE_THRUS);
+    }
+
+    // X360 0x8237E790. Only colour-alt and silver entries are unlocked; their parent cars are
+    // added only when the Profile does not already contain them.
+    void ProgressionDebugComponent::UnlockAllCars()
+    {
+        const BrnResource::VehicleList* lpVehicleList = mpProgressionManager->mpVehicleList;
+        for (s32 liVehicle = 0; liVehicle < lpVehicleList->GetVehicleCount(); ++liVehicle)
+        {
+            const BrnResource::VehicleListEntry* lpVehicleEntry =
+                lpVehicleList->GetVehicleData(liVehicle);
+            CGS_ASSERT(lpVehicleEntry != nullptr, "lpVehicleListEntry != NULL");
+
+            const u8 lu8LiveryType = lpVehicleEntry->GetLiveryType();
+            if (lu8LiveryType != BrnResource::VehicleListEntry::E_LIVERY_TYPE_COLOUR_ALT &&
+                lu8LiveryType != BrnResource::VehicleListEntry::E_LIVERY_TYPE_SILVER)
+            {
+                continue;
+            }
+
+            CarData* lpCarData = mpProgressionManager->AddCar(
+                lpVehicleEntry->GetId(), CarData::E_UNLOCK_TYPE_GOLD_SILVER);
+            CGS_ASSERT(lpCarData != nullptr, "lpCarData != NULL");
+            lpCarData->SetUnlockSequenceAlreadyShown();
+
+            const CgsID lParentCarId = lpVehicleEntry->GetParentId();
+            if (mpProgressionManager->mProfile.FindCar(lParentCarId) == nullptr)
+            {
+                CarData* lpParentCarData = mpProgressionManager->AddCar(
+                    lParentCarId, CarData::E_UNLOCK_TYPE_GOLD_SILVER);
+                CGS_ASSERT(lpParentCarData != nullptr, "lpParentCarData != NULL");
+                lpParentCarData->SetUnlockSequenceAlreadyShown();
+            }
+        }
+    }
+
+    // X360 0x8237E690. Rank indexes start at one and stop before rank-1; each missing authored
+    // free car is added as a gift and receives the console's 0.85 unlock deformation.
+    void ProgressionDebugComponent::UnlockGiftCarsUpToRank(s32 liRank)
+    {
+        const s32 liLastRankExclusive = liRank - 1;
+        if (liLastRankExclusive <= 1)
+        {
+            return;
+        }
+
+        for (s32 liRankIndex = 1; liRankIndex < liLastRankExclusive; ++liRankIndex)
+        {
+            const ProgressionData* lpProgressionData =
+                GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
+            const ProgressionRankData* lpRankData =
+                lpProgressionData->GetProgressionRankData(static_cast<u32>(liRankIndex));
+            const CgsID lGiftCarId = lpRankData->GetFreeCarForRankUpID();
+
+            if (mpProgressionManager->mProfile.FindCar(lGiftCarId) == nullptr)
+            {
+                CarData* lpCarData = mpProgressionManager->AddCar(
+                    lGiftCarId, CarData::E_UNLOCK_TYPE_GIFT);
+                lpCarData->SetUnlockDeformationAmount(0.85f);
+            }
+        }
+    }
+
+    // X360 0x8239E4E0. The rank is narrowed to the signed byte the manager consumes; the two
+    // trailing stores clear the manager's rank-up latch and newly-unlocked-car id.
+    void ProgressionDebugComponent::SkipToProgressionRank()
+    {
+        const s32 liCurrentRank = mpProgressionManager->mi8ProgressionRank;
+        if (miRankToSkipTo != liCurrentRank)
+        {
+            if (miRankToSkipTo < liCurrentRank)
+            {
+                mpProgressionManager->DEBUG_ClearMedals();
+            }
+            mpProgressionManager->UnlockToProgressionRank(
+                static_cast<s8>(miRankToSkipTo), nullptr);
+            mpProgressionManager->CheckForSpecialCarUnlocks();
+        }
+
+        mpProgressionManager->mbHasJustRankedUp = false;
+        mpProgressionManager->mNewlyUnlockedCarID = 0;
+    }
+
+    // X360 0x8239E418.
+    void ProgressionDebugComponent::GetToOneWinBelowBurnoutLicense()
+    {
+        mpProgressionManager->DEBUG_ClearMedals();
+        mpProgressionManager->UnlockToProgressionRank(4, nullptr);
+        mpProgressionManager->CheckForSpecialCarUnlocks();
+        mpProgressionManager->mbHasJustRankedUp = false;
+        mpProgressionManager->mNewlyUnlockedCarID = 0;
+
+        miNumberOfRaceWinsToAdd = 14;
+        AddRaceWins();
+        miNumberOfRaceWinsToAdd = 0;
+        miNumberOfRoadRageWinsToAdd = 10;
+        AddRoadRageWins();
+        miNumberOfRoadRageWinsToAdd = 0;
+        miNumberOfMarkedManWinsToAdd = 10;
+        AddMarkedManWins();
+        miNumberOfMarkedManWinsToAdd = 0;
+        miNumberOfStuntWinsToAdd = 5;
+        AddStuntWins();
+        miNumberOfStuntWinsToAdd = 0;
+        UnlockGiftCarsUpToRank(4);
+    }
+
+    // X360 0x8239E300.
+    void ProgressionDebugComponent::GetToOneWinBelowEliteLicense()
+    {
+        mpProgressionManager->DEBUG_ClearMedals();
+        mpProgressionManager->UnlockToProgressionRank(5, nullptr);
+        mpProgressionManager->CheckForSpecialCarUnlocks();
+        mpProgressionManager->mbHasJustRankedUp = false;
+        mpProgressionManager->mNewlyUnlockedCarID = 0;
+
+        miNumberOfRaceWinsToAdd = 39;
+        AddRaceWins();
+        miNumberOfRaceWinsToAdd = 0;
+        miNumberOfRoadRageWinsToAdd = 16;
+        AddRoadRageWins();
+        miNumberOfRoadRageWinsToAdd = 0;
+        miNumberOfMarkedManWinsToAdd = 15;
+        AddMarkedManWins();
+        miNumberOfMarkedManWinsToAdd = 0;
+        miNumberOfStuntWinsToAdd = 14;
+        AddStuntWins();
+        miNumberOfStuntWinsToAdd = 0;
+        miNumberOfSpecialEventWinsToAdd = 35;
+        AddSpecialEventWins();
+        miNumberOfSpecialEventWinsToAdd = 0;
+        UnlockGiftCarsUpToRank(5);
+
+        Profile& lrProfile = mpProgressionManager->mProfile;
+        for (s32 liEvent = 0; liEvent < lrProfile.miEventCount; ++liEvent)
+        {
+            ProfileEvent& lrEvent = lrProfile.maEvents[liEvent];
+            lrEvent.EnableFlags(ProfileEvent::E_FLAG_DISCOVERED);
+        }
+    }
+
+    // X360 0x8239E1E8.
+    void ProgressionDebugComponent::GetToOneWinBelowEliteLicenseBR()
+    {
+        mpProgressionManager->DEBUG_ClearMedals();
+        mpProgressionManager->UnlockToProgressionRank(5, nullptr);
+        mpProgressionManager->CheckForSpecialCarUnlocks();
+        mpProgressionManager->mbHasJustRankedUp = false;
+        mpProgressionManager->mNewlyUnlockedCarID = 0;
+
+        miNumberOfRaceWinsToAdd = 40;
+        AddRaceWins();
+        miNumberOfRaceWinsToAdd = 0;
+        miNumberOfRoadRageWinsToAdd = 16;
+        AddRoadRageWins();
+        miNumberOfRoadRageWinsToAdd = 0;
+        miNumberOfMarkedManWinsToAdd = 15;
+        AddMarkedManWins();
+        miNumberOfMarkedManWinsToAdd = 0;
+        miNumberOfStuntWinsToAdd = 14;
+        AddStuntWins();
+        miNumberOfStuntWinsToAdd = 0;
+        miNumberOfSpecialEventWinsToAdd = 34;
+        AddSpecialEventWins();
+        miNumberOfSpecialEventWinsToAdd = 0;
+        UnlockGiftCarsUpToRank(5);
+
+        Profile& lrProfile = mpProgressionManager->mProfile;
+        for (s32 liEvent = 0; liEvent < lrProfile.miEventCount; ++liEvent)
+        {
+            ProfileEvent& lrEvent = lrProfile.maEvents[liEvent];
+            lrEvent.EnableFlags(ProfileEvent::E_FLAG_DISCOVERED);
+        }
+    }
+
+    void ProgressionDebugComponent::DiscoverAllEventsCallback(void* lpUserData)
+    {
+        ProgressionDebugComponent* lpThis =
+            static_cast<ProgressionDebugComponent*>(lpUserData);
+        Profile& lrProfile = lpThis->mpProgressionManager->mProfile;
+        for (s32 liEvent = 0; liEvent < lrProfile.miEventCount; ++liEvent)
+        {
+            ProfileEvent& lrEvent = lrProfile.maEvents[liEvent];
+            lrEvent.EnableFlags(ProfileEvent::E_FLAG_DISCOVERED);
+        }
+    }
+
+    void ProgressionDebugComponent::FindAllDriveThrusCallback(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->FindAllDriveThrus();
+    }
+
+    void ProgressionDebugComponent::DefeatAllRivalsCallback(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->DefeatAllRivals();
+    }
+
+    void ProgressionDebugComponent::DefeatRivalCallback(void*, void* lpUserData)
+    {
+        ProgressionDebugComponent* lpThis =
+            static_cast<ProgressionDebugComponent*>(lpUserData);
+        lpThis->mpProgressionManager->DefeatRivalAndUnlockCar(
+            lpThis->miRivalIndex - 1, E_UNLOCK_SEQUENCE_TYPE_NONE);
+    }
+
+    void ProgressionDebugComponent::AddWinsRaceCallback(void*, void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->AddRaceWins();
+    }
+
+    void ProgressionDebugComponent::AddWinsRoadRageCallback(void*, void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->AddRoadRageWins();
+    }
+
+    void ProgressionDebugComponent::AddWinsStuntCallback(void*, void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->AddStuntWins();
+    }
+
+    void ProgressionDebugComponent::AddWinsMarkedManCallback(void*, void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->AddMarkedManWins();
+    }
+
+    void ProgressionDebugComponent::AddSpecialEventWinsCallback(void*, void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->AddSpecialEventWins();
+    }
+
+    void ProgressionDebugComponent::ClearMedalsCallback(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->mpProgressionManager->DEBUG_ClearMedals();
+    }
+
+    void ProgressionDebugComponent::SkipToProgressionRankCallback(void*, void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->SkipToProgressionRank();
+    }
+
+    void ProgressionDebugComponent::UnlockAllCarsCallBack(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->UnlockAllCars();
+    }
+
+    void ProgressionDebugComponent::GetToOneWinBelowBurnoutLicenseCallBack(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->GetToOneWinBelowBurnoutLicense();
+    }
+
+    void ProgressionDebugComponent::GetToOneWinBelowEliteLicenseCallBack(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->GetToOneWinBelowEliteLicense();
+    }
+
+    void ProgressionDebugComponent::GetToOneWinBelowEliteBRLicenseCallBack(void* lpUserData)
+    {
+        static_cast<ProgressionDebugComponent*>(lpUserData)->GetToOneWinBelowEliteLicenseBR();
     }
 
     // The profile panel (completion, spawn and current car, rank, per-mode wins and ranks, road

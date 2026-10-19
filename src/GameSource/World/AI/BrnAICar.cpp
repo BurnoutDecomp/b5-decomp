@@ -472,7 +472,7 @@ namespace BrnAI
             return false;
 
         // mRoute.meStatus @+0x1408 == E_STATUS_BLOCKED(3) is the pursuit/extrapolated case.
-        const Route* lpRoute = reinterpret_cast<const Route*>(this);
+        const Route* lpRoute = GetRoute();
         if (lpRoute->GetStatus() != Route::E_STATUS_BLOCKED)
             return mbRouteRequested;
 
@@ -504,8 +504,8 @@ namespace BrnAI
 
         mbRouteRequested = false;
 
-        Route* lpThisRoute = reinterpret_cast<Route*>(this);
-        lpThisRoute->Construct(*lpRoute);
+        Route* lpThisRoute = GetRoute();
+        lpThisRoute->Construct(lpRoute);
 
         if (lpThisRoute->GetNodeCount() <= 0)
         {
@@ -635,7 +635,7 @@ namespace BrnAI
         }
 
         // mRoute.miNodeCount @+0x1400; miNextRouteNodeIndex @+0x1524.
-        const Route* lpThisRoute = reinterpret_cast<const Route*>(this);
+        const Route* lpThisRoute = GetRoute();
         if (miNextRouteNodeIndex >= lpThisRoute->GetNodeCount())
             mfTimeInInvalidSection = 1.0f;
 
@@ -646,7 +646,7 @@ namespace BrnAI
         if (!(lfNewTime < 1.0f))
         {
             mfWrongWayTime = 0.0f;
-            Route* lpMutableRoute = reinterpret_cast<Route*>(this);
+            Route* lpMutableRoute = GetRoute();
             lpMutableRoute->meStatus     = Route::E_STATUS_UNINITIALISED;
             lpMutableRoute->miNodeCount  = 0;
         }
@@ -668,7 +668,7 @@ namespace BrnAI
             return true;
 
         // HasValidRoute(): mRoute.meStatus != UNINITIALISED && mRoute.miNodeCount > 0.
-        const Route* lpThisRoute = reinterpret_cast<const Route*>(this);
+        const Route* lpThisRoute = GetRoute();
         const bool lbHasValidRoute = (lpThisRoute->GetStatus() != Route::E_STATUS_UNINITIALISED) &&
                                      (lpThisRoute->GetNodeCount() > 0);
         if (!lbHasValidRoute)
@@ -685,7 +685,7 @@ namespace BrnAI
     // ==================================================================================
     u16 AICar::GetSectionIndexOfLastSectionInRoute() const
     {
-        const Route* lpThisRoute = reinterpret_cast<const Route*>(this);
+        const Route* lpThisRoute = GetRoute();
 
         CGS_ASSERT(HasValidRoute(), "HasValidRoute()");
         CGS_ASSERT(lpThisRoute->GetNodeCount() > 0, "mRoute.GetNodeCount() > 0");

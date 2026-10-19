@@ -7,10 +7,12 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"               // CgsResource::Pool / Entry / Type / SmallResource
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"               // CgsResource::Type::GetCachedId
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                             // CgsGraphics::Model::UsesTexture
+#include "GameShared/GameClasses/Graphics/Instances/CgsInstance.h"               // serialized InstanceList / Instance / Ptr32
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"      // CgsDev::DebugUI::Metrics
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // Debug2DImmediateRender, RGBA
 #include "pc/gcm/renderengine/texture.h"                                          // renderengine::Texture::GetWidth/GetHeight
 #include "rw/rwcore_structs.h"                                                    // rw::IResourceAllocator / Resource / ResourceDescriptor
+#include "pc/math/VmxFloat.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Semantic parity, not byte-match. Source-of-truth is the
 // X360 pseudocode/asm for behaviour + calling convention; the DecFIGS DWARF for declaration shape.
@@ -44,34 +46,12 @@ namespace
 
     // Render layout constants (X360 .rdata floats).
     const f32 KF_TEXT_LINE_STEP = 12.0f;   // flt_82013FB0  vertical step between stat lines
-    const f32 KF_TEXT_SCALE     = 12.0f;   // flt_82004A20  stat-line text scale (== flt_82013FB0)
+    const f32 KF_TEXT_SCALE     = 10.0f;   // flt_82004A20  stat-line text scale
     const f32 KF_DISPLAY_INSET  = 100.0f;  // flt_820049E0  texture-display box inset from the window edges
 
     // The X360 packs an opaque-black text colour (li r8, 0xFF000000 == -16777216) for the stat lines.
     const CgsDev::RGBA KU_TEXT_COLOUR = 0xFF000000u;
 
-    // FLAG: minimal file-private slice of the (NOT committed) CgsGraphics::InstanceList element that
-    // CountInstancesThatUseTexture walks. The same three-field shape is already attested by the
-    // committed CgsInstance.cpp / CgsInstanceListResourceType.cpp reconstructions (an on-disk resource
-    // body whose 80-byte Instance element is not committed to a shared header); reproduced here at the
-    // X360 offsets so the count loop reads named fields rather than raw displacements. The instance's
-    // model pointer is the first word of each 80-byte element (X360 `*(*v8 + v10)`, v10 += 80).
-    struct InstanceListView
-    {
-        CgsGraphics::Model** mppaInstanceModels; // +0x00  base of the per-instance model-pointer buffer (stride 80)
-        u32                  muArraySize;        // +0x04  total slots (bounds-check bound: v9 >= v8[1])
-        u32                  muNumInstances;     // +0x08  live instances (iteration count: v9 < v8[2])
-    };
-    // The on-disk Instance element is 80 bytes; its model pointer is the first word (X360 v10 += 80).
-    const u32 KU_INSTANCE_STRIDE_BYTES = 80;
-
-    // Read the i-th instance's model: element base + i*80 bytes, first word = the model pointer.
-    inline CgsGraphics::Model* GetInstanceModel(const InstanceListView* lpList, u32 luIndex)
-    {
-        const u8* lpElement = reinterpret_cast<const u8*>(lpList->mppaInstanceModels)
-                            + luIndex * KU_INSTANCE_STRIDE_BYTES;
-        return *reinterpret_cast<CgsGraphics::Model* const*>(lpElement);
-    }
 }
 
 // MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper used by the HUD
@@ -92,6 +72,33 @@ namespace CgsResource
     // = 0x10 } on the stack, dispatches the allocator's resource-allocate virtual, takes the
     // main-memory base of the carved resource into mpTextureEntries (this+0x44), and asserts it.
     // ================================================================================================
+    // ARTIST828DAC68 (raw body): preserve the untouched entry byte-size
+    // and padding, and leave miTotalTextures for the original Update producer.
+    void DebugPoolTextures::Reset(const Pool* lpPool, DebugTextureRenderCallback lpCallback,
+                                  void* lpUserData, EDebugSortMode leSortMode,
+                                  EDebugTextureRenderMode leRenderMode)
+    {
+        CgsDev::DebugUI::Window::Prepare(612.0f, 512.0f, lpPool->GetName(), KX_FLAGNORMAL);
+        mpPool = lpPool;
+        mpRenderTextureCallback = lpCallback;
+        mpCallbackUserData = lpUserData;
+        meSortMode = leSortMode;
+        meRenderMode = leRenderMode;
+        mbDoFullAnalysisNextFrame = true;
+        miTextureIndex = 0;
+        muTextureEntryIndex = 0xFFFFu;
+        miNumModelsThatUseCurrentTexture = 0;
+        miNumInstancesThatUseCurrentTexture = 0;
+        for (s32 liIndex = 0; liIndex < KI_MAX_TEXTURE_ENTRIES; ++liIndex)
+        {
+            TextureEntry& lrEntry = mpTextureEntries[liIndex];
+            lrEntry.mpTexture = nullptr;
+            lrEntry.muEntryIndex = 0xFFFFu;
+            lrEntry.muInstancesThatUseTexture = 0xFFFFu;
+            lrEntry.muModelsThatUseTexture = 0xFFFFu;
+        }
+    }
+
     void DebugPoolTextures::AllocateDebugMemory(rw::IResourceAllocator* lpAllocator)
     {
         rw::ResourceDescriptor lDescriptor;
@@ -131,8 +138,8 @@ namespace CgsResource
             if (lpEntry->mpResourceType->GetCachedId() != KU_TYPEID_INSTANCE)
                 continue;
 
-            const InstanceListView* lpList =
-                static_cast<const InstanceListView*>(lpEntry->mResource.m_baseResources[0]);
+            const CgsGraphics::InstanceList* lpList =
+                static_cast<const CgsGraphics::InstanceList*>(lpEntry->mResource.m_baseResources[0]);
             if (lpList->muNumInstances == 0)
                 continue;
 
@@ -141,7 +148,11 @@ namespace CgsResource
                 CGSDPT_FIRE_ASSERT(luInstance < lpList->muArraySize, "Instance index out of range",
                                    "..\\..\\..\\GameShared\\GameClasses\\Graphics/Instances/CgsInstance.h", 288);
 
-                const CgsGraphics::Model* lpModel = GetInstanceModel(lpList, luInstance);
+                // Keep the inlined accessor's original assertion coordinates above,
+                // resolving both serialized four-byte slots through the shared types.
+                const CgsGraphics::Ptr32<CgsGraphics::Instance> lInstances = { lpList->muaInstances };
+                const CgsGraphics::Instance& lrInstance = lInstances[luInstance];
+                const CgsGraphics::Model* lpModel = lrInstance.mpModel.Get();
                 if (lpModel->UsesTexture(lpTexture))
                     ++liCount;
             }
@@ -433,9 +444,8 @@ namespace CgsResource
         const s32 liCellInPage   = (liCellsPerPage != 0) ? (liSelected % liCellsPerPage) : 0;
         const s32 liPageStart    = liPage * liCellsPerPage;
 
-        // The whole grid lives in the box inset by an 8px outer border (flt_82004C88, X360
-        // `vsubfp128 v125,v2,{8,8}`) for the framing extent, and the top-left is pushed in by the 4px
-        // inter-cell gap (flt_82004270, X360 `vaddfp v1,v1,{4,4}`) for the first cell's origin.
+        // The outer frame deducts 8 from its extent (82004C88) and adds 4 to its
+        // origin (82004EF4). The separate inter-cell gap at 82004270 is 3.
         const Vector2 lv2FrameSize =
         {
             lv2Size.x - 8.0f,
@@ -449,24 +459,38 @@ namespace CgsResource
             0.0f, 0.0f,
         };
 
-        // Per-cell stride (X360 v52 = `(Size-{8,8}) * (1/grid)`): the framed extent divided by the grid
-        // count (the X360 reciprocal of the grid count). The cell box is the stride shrunk by the 4px
-        // gap (X360 v127 = stride - {4,4}); the texture is then centred in its stride region by the 2px
-        // half-gap inset (X360 v126, which the VMX `(1/2)*stride - (1/2)*cellSize` collapses to {2,2}).
+        // ARTIST 828E61E4 subtracts the three-unit gap. Keep the separate half-
+        // stride/half-cell products and subtraction at 828E6230..6264, rather
+        // than replacing the rounded inset calculation with a fixed constant.
         const f32 lfInvGrid = (liGridSize != 0) ? (1.0f / static_cast<f32>(liGridSize)) : 0.0f;
         const Vector2 lv2CellStride =
         {
-            lv2FrameSize.x * lfInvGrid,
-            lv2FrameSize.y * lfInvGrid,
+            CgsPC::VmxFloat::Multiply(lv2FrameSize.x, lfInvGrid),
+            CgsPC::VmxFloat::Multiply(lv2FrameSize.y, lfInvGrid),
             0.0f, 0.0f,
         };
         const Vector2 lv2CellSize =
         {
-            lv2CellStride.x - 4.0f,
-            lv2CellStride.y - 4.0f,
+            CgsPC::VmxFloat::Subtract(lv2CellStride.x, 3.0f),
+            CgsPC::VmxFloat::Subtract(lv2CellStride.y, 3.0f),
             0.0f, 0.0f,
         };
-        const Vector2 lv2CellInset = { 2.0f, 2.0f, 0.0f, 0.0f };
+        // The original refines vrefp(2) twice. The host seed is correctly rounded;
+        // exact hardware estimate bits/status retain the shared VMX model limits.
+        f32 lfHalfStrideScale = 1.0f / 2.0f;
+        for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
+        {
+            const f32 lfError = CgsPC::VmxFloat::NegativeMultiplySubtract(lfHalfStrideScale, 2.0f, 1.0f);
+            lfHalfStrideScale = CgsPC::VmxFloat::MultiplyAdd(lfHalfStrideScale, lfError, lfHalfStrideScale);
+        }
+        const Vector2 lv2CellInset =
+        {
+            CgsPC::VmxFloat::Subtract(CgsPC::VmxFloat::Multiply(lfHalfStrideScale, lv2CellStride.x),
+                                      CgsPC::VmxFloat::Multiply(0.5f, lv2CellSize.x)),
+            CgsPC::VmxFloat::Subtract(CgsPC::VmxFloat::Multiply(lfHalfStrideScale, lv2CellStride.y),
+                                      CgsPC::VmxFloat::Multiply(0.5f, lv2CellSize.y)),
+            0.0f, 0.0f,
+        };
 
         // Background frame for the whole grid (the X360's first RenderTexture call before the loop):
         // position = Position+{4,4}, size = Size-{8,8}, flags (true,false).
@@ -505,7 +529,7 @@ namespace CgsResource
                                           lv2CellOrigin.y + lv2CellStride.y, 0xFF0000FFu);
                     }
 
-                    // Draw this cell's texture, centred in its stride region (origin + {2,2}, size =
+                    // Draw this cell's texture, centred in its stride region (origin + inset, size =
                     // cellSize); X360 `vaddfp128 v1,v0,v126` for the position, `vmr128 v2,v127` size.
                     const Vector2 lv2CellPosition =
                     {

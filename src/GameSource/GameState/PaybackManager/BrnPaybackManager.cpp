@@ -3,7 +3,7 @@
 //
 // The online payback / dirty-trick manager. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (semantic parity, not byte-matching). The manager's functions that live here are listed at
-// each body; the remaining declared members (Prepare/Release/ShowDTAvailableHudNotification/
+// each body; the remaining declared members (Release/ShowDTAvailableHudNotification/
 // UpdateFSMTimers/SetDirtyTrickButtonState/SetTimerInterface) have no body in the tree yet and no
 // caller here.
 //
@@ -157,6 +157,15 @@ namespace BrnGameState
         // Wire + register the embedded debug component (X360: ctor, *(this+632)=this, Register).
         mDebugComponent.mpPaybackManager = this;
         mDebugComponent.Register();
+    }
+
+    // Inlined into GameStateModule::Prepare at ARTIST 0x8239EAEC: the only store is
+    // zero to this+0x38, the existing dirty-trick queue's length. DWARF declares
+    // bool Prepare(); there are no timer, FSM or backing-storage resets here.
+    bool PaybackManager::Prepare()
+    {
+        mDirtyTrickOutputQueue.Clear();
+        return true;
     }
 
     // -----------------------------------------------------------------------------------

@@ -2,16 +2,17 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include <windows.h>
 
 // CgsDev::Log::LogFileBuffered - a StrStreamBase whose char* sink buffers text in a caller-supplied
-// scratch buffer and flushes it to an open file handle. Used by the resource/allocator debug dump
+// scratch buffer and reopens the named file for each flush. Used by the resource/allocator debug dump
 // paths (BrnResource::GameDataIO::AllocatorList::DebugDumpStats, CgsResource::DebugComponent::DumpStats)
 // to write stats to a log file via `stream << ...`. Reconstructed from the DecFIGS DWARF
-// (Development/Log/CgsLogFileBuffered.h) + the X360 default-ctor at 0x826613A8.
+// (Development/Log/CgsLogFileBuffered.h) + ARTIST826613A8,82820978,82820B90,828270C8,82827110.
 //
 // Layout (X360, from DWARF): StrStreamBase (vtable + mePrintMode) then miFile, mpcBuffer,
 // miBufferLength, macFileName[512], miBufferPosition, mbAppend. The default ctor leaves the stream
-// closed (miFile = -1) with no buffer attached; Open() (its own TU) binds a file + buffer before use.
+// closed (miFile = -1) with no buffer attached; Open() binds a file + buffer before use.
 namespace CgsDev
 {
 namespace Log
@@ -24,20 +25,25 @@ namespace Log
         // remaining members word-for-word (the `BasePriorityQueue::Clear` the decompiler attributes
         // is the folded mePrintMode=0 store, already covered by the base ctor).
         LogFileBuffered();
+        ~LogFileBuffered();
 
-        // The buffer sink. COMPILE-REQUIRED override of the pure-virtual base sink (not this TU's
-        // ledger func; no asm in this TU): on a bound stream it would buffer text into mpcBuffer and
-        // flush to miFile (real Append/Flush logic owned by their own not-yet-done TUs). While the
-        // stream is closed (the default-constructed state this TU produces) it is a no-op.
+        bool Open(const char* lpcFileName, char* lpcBuffer, s32 liBufferLength);
+        void Close();
+        void Flush();
+        using StrStreamBase::operator<<;
+
+        // The char sink forwards to the recovered Append body; Open() is required.
         StrStreamBase& operator<<(const char* lpcText) override;
 
     protected:
-        s32   miFile;             // open file handle (-1 = closed)
+        void Append(const char* lpcText);
+        // FLAG PC-platform leaf: widen the original Win32 handle to the host HANDLE.
+        HANDLE miFile;
         char* mpcBuffer;          // caller-supplied flush scratch
         s32   miBufferLength;     // capacity of mpcBuffer
         char  macFileName[512];   // file path this stream writes to
         s32   miBufferPosition;   // bytes currently buffered in mpcBuffer
-        bool  mbAppend;           // open in append mode vs truncate
+        bool  mbAppend;           // declared by DecFIGS; untouched by these ARTIST bodies
     };
 }
 }

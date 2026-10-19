@@ -1,7 +1,8 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include <Windows.h>   // QueryPerformanceCounter / QueryPerformanceFrequency (high-res timer)
-#include <new>         // ::operator new[] (monitor array backing)
+#include "rw/rwcore_structs.h"
+#include <cstring>
 #include <atomic>
 #include <mutex>
 
@@ -27,6 +28,10 @@ namespace CgsDev
         namespace
         {
             PerfMonCpuInstance* gpMonitorsArray   = nullptr;
+            // FLAG PC-platform leaf: retain the original resource and its producer
+            // for the existing host teardown API. Registry records remain engine data.
+            rw::IResourceAllocator* gpRegistryAllocatorPC = nullptr;
+            rw::Resource        gRegistryResourcePC;
             s32                 giMaxMonitorCount  = 0;
             std::atomic<s32>    giMonitorCount{0};
             std::mutex         gMonitorRegistration;
@@ -63,57 +68,61 @@ namespace CgsDev
             }
         }
 
-        bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* /*lpAllocator*/)
+        bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator)
         {
+            static_assert(sizeof(PerfMonCpuInstance) == 96, "ARTIST CPU monitor record stride");
             LARGE_INTEGER liFreq;
             QueryPerformanceFrequency(&liFreq);
             gi64TimerFrequency = liFreq.QuadPart;
 
             giMaxMonitorCount = liMaxMonitorCount;
+            rw::ResourceDescriptor lDescriptor;
+            for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+            {
+                lDescriptor.m_baseResourceDescriptors[luLane].m_size = 0;
+                lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
+            }
+            const u32 luBytes = static_cast<u32>(liMaxMonitorCount) *
+                                static_cast<u32>(sizeof(PerfMonCpuInstance));
+            lDescriptor.m_baseResourceDescriptors[0].m_size = luBytes;
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+            gRegistryResourcePC = lpAllocator->DoAllocate(lDescriptor, nullptr);
+            gpRegistryAllocatorPC = lpAllocator;
+            gpMonitorsArray = static_cast<PerfMonCpuInstance*>(gRegistryResourcePC.m_baseResources[0]);
+            if (!gpMonitorsArray)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mpMonitorsArray",
+                    "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/Cpu/CgsPerfMonCpu.cpp", 71);
+                CgsDev::Assert::EndAssert();
+            }
+
             giMonitorCount    = 0;
             giNumIterations   = 1;
             geGameFrequency   = E_PMF_60HZ;
             gbResetAllValues  = true;
             mbIgnoreZeroCallsInAverage = false;
 
-            gpMonitorsArray = static_cast<PerfMonCpuInstance*>(
-                ::operator new[](static_cast<size_t>(liMaxMonitorCount) * sizeof(PerfMonCpuInstance)));
+            std::memset(gpMonitorsArray, 0, luBytes);
+            // FLAG PC-platform leaf: last-completed call counts accompany the
+            // native worker snapshot; this sidecar is not the engine registry.
             gpCompletedCallsPC = new s32[liMaxMonitorCount]();
-
-            for (s32 liIndex = 0; liIndex < liMaxMonitorCount; ++liIndex)
-            {
-                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
-                lrInstance.mu64StartValue      = 0;
-                lrInstance.mu64Value           = 0;
-                lrInstance.miFrameCounter      = 0;
-                lrInstance.miNumCalls          = 0;
-                lrInstance.miMaxCalls          = 0;
-                lrInstance.macName[0]          = '\0';
-                lrInstance.mbActive            = false;
-                lrInstance.mbMinimum           = false;
-                lrInstance.mbScaled            = false;
-                lrInstance.mbLibPerfTagged     = false;
-                lrInstance.mePage              = E_PMP_GENERAL;
-                lrInstance.mfCurrentValue      = 0.0f;
-                lrInstance.mfMinMaxValue       = 0.0f;
-                lrInstance.mfAverageValue      = 0.0f;
-                lrInstance.mfAverageAccumulator= 0.0f;
-                lrInstance.mfCpuBudget         = 0.0f;
-                lrInstance.miOrigLibPerfTraceId= 0;
-                lrInstance.miLibPerfTraceId    = 0;
-            }
             return true;
         }
 
+        // FLAG PC-platform leaf: existing host-only teardown returns the registry
+        // resource to the allocator that produced it; ARTIST has no Destruct symbol.
         void Destruct()
         {
             delete[] gpCompletedCallsPC;
             gpCompletedCallsPC = nullptr;
             if (gpMonitorsArray)
             {
-                ::operator delete[](gpMonitorsArray);
+                gpRegistryAllocatorPC->DoFree(gRegistryResourcePC);
                 gpMonitorsArray = nullptr;
             }
+            gpRegistryAllocatorPC = nullptr;
+            gRegistryResourcePC = rw::Resource();
             giMonitorCount    = 0;
             giMaxMonitorCount = 0;
         }

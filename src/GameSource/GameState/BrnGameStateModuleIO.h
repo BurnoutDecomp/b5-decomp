@@ -20,6 +20,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"      // CgsModule::IOBuffer (base; lock state)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> (mTrafficTypeResponseQueue)
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<N,16> (GUI output / dirty-trick HUD events)
 #include "GameSource/BurnoutConstants.h"                    // EActiveRaceCarIndex (enum : s32)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (enum : s32)
@@ -243,11 +244,7 @@ namespace GameStateModuleIO
     // buffer plus a 16-byte {bool, 3*s32} header), so this is a pure type re-home -- no
     // layout change. Asserted in the .cpp.
     typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
-    class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
-    // The console's `TakedownEvent<..,8>::Construct(this + 16448)` line of OutputBuffer::Construct.
-    // The complete type is confined to the takedown TUs, so the Construct is reached through this
-    // forwarder, defined in TakedownManager/EventQueue_TakedownEvent_8.cpp.
-    void ConstructTakedownEventOutputQueue(TakedownEventOutputQueueType* lpQueue);
+    using TakedownEventOutputQueueType = CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>;
     // GameStateToGuiInterface (OutputBuffer +0x4450) used to be forward-declared here and carried
     // as an opaque span. It is a REAL TYPED MEMBER as of 2026-08-27 -- its complete definition
     // arrives with the BrnGameStateToGuiIOInterfaces.h include at the top of this file, because
@@ -426,6 +423,9 @@ namespace GameStateModuleIO
         // interface (console this+0x2BE8). Readers: AchievementManagerX360::Update,
         // RichPresenceManagerBase::Update, TrainingManager::Update, GameStateModule::PreWorldUpdate.
         const ControllerToGameStateInterface* GetControllerToGameStateInterface() const;
+        // ARTIST 823B8EC0, original h:144: write-checked access to the same
+        // interface for BridgeControllerToGameState's result queues and port.
+        ControllerToGameStateInterface* GetControllerToGameStateInterface();
 
         // ---- this TU's 5 functions ----
         // X360 0x8231CE28 (read-lock; "Not locked for reading", line 133) -- read-side accessor for
@@ -782,7 +782,7 @@ namespace GameStateModuleIO
         // viewed through a 540-byte blob, overlapping mGameStateToControllerInterface.
         // _AssertLayout carries the static_assert that keeps that claim honest.
         static const s32 KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE = 544; // console span is 0x43AC - 0x4190 == 540
-        u8  mTakedownEventOutputQueueStorage[0x4190 - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448, 336)
+        TakedownEventOutputQueueType mTakedownEventOutputQueue;          // console +0x4040, host size336
         // Typed by value so Construct can build it by name (its dirty-trick queue Construct
         // and its Clear are on the console's construct list); host size pinned to the seat
         // width above in _AssertLayout.

@@ -131,11 +131,9 @@ namespace
         Route* lpRoute = lrCar.GetRoute();
         for (s32 li = 0; li < liCount; ++li)
         {
-            Vector4 lNode{};
-            lNode.x = 0.0f;
-            lNode.y = 10.0f * static_cast<f32>(li);
-            lNode.z = 10.0f * static_cast<f32>(liCount - 1 - li);
-            lNode.w = 0.0f;
+            RouteNode lNode{};
+            lNode.Construct(0.0f, 10.0f * static_cast<f32>(li), 0, 0);
+            lNode.SetDistanceLeft(10.0f * static_cast<f32>(liCount - 1 - li));
             lpRoute->maNodes[li] = lNode;
         }
         lpRoute->miNodeCount = liCount;
@@ -187,7 +185,7 @@ static void GroupRaceDistance()
     // comes out NaN on both spellings.
     Reset();
     BuildRoute(gCar, 3, Route::E_STATUS_COMPLETE);
-    gCar.GetRoute()->maNodes[1].z = KF_NAN;
+    gCar.GetRoute()->maNodes[1].mfDistanceLeft = KF_NAN;
     gCar.miNextRouteNodeIndex = 1;
     gCar.mbIsDrivenByPlayer = true;
     gCar.mbIsInGameMode = true;

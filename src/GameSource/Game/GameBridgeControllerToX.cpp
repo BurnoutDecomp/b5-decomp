@@ -497,7 +497,48 @@ namespace BrnGame
     // FLAG: ledger dest is GameSource/GameState/BrnGameStateModuleIO.h. Body co-located here with
     // its sibling bridges + the shared GetPadInfoForPlayer0 helper (it IS a BrnGameModule method).
     // =========================================================================
+    // ARTIST 823CD738..823CD888; DecFIGS GameBridgeControllerToX.cpp:781.
+    // Input/output locks belong to DoUpdate_GameStatePreWorld. Both result
+    // queues are transported even when player zero has no available pad.
     void BrnGameModule::BridgeControllerToGameState(
+        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
+        const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+        bool lbIsPlaying)
+    {
+        const CgsInput::InputIO::OutputBuffer::BindResultQueue* const lpInputBindResultQueue =
+            lpInputOutputBuffer->GetBindResultQueue();
+        const CgsInput::InputIO::OutputBuffer::UnBindResultQueue* const lpInputUnbindResultQueue =
+            lpInputOutputBuffer->GetUnbindResultQueue();
+        BrnGameState::GameStateModuleIO::ControllerToGameStateInterface::BindResultQueue* const
+            lpGameStateInputBindResultQueue =
+                lpGameStateInput->GetControllerToGameStateInterface()->GetBindResultsQueue();
+        BrnGameState::GameStateModuleIO::ControllerToGameStateInterface::UnBindResultQueue* const
+            lpGameStateInputUnbindResultQueue =
+                lpGameStateInput->GetControllerToGameStateInterface()->GetUnBindResultsQueue();
+        CGS_ASSERT(lpInputBindResultQueue != 0, "lpInputBindResultQueue");
+        CGS_ASSERT(lpInputUnbindResultQueue != 0, "lpInputUnbindResultQueue");
+        CGS_ASSERT(lpGameStateInputBindResultQueue != 0, "lpGameStateInputBindResultQueue");
+        CGS_ASSERT(lpGameStateInputUnbindResultQueue != 0, "lpGameStateInputUnbindResultQueue");
+        lpGameStateInputBindResultQueue->Append(*lpInputBindResultQueue);
+        lpGameStateInputUnbindResultQueue->Append(*lpInputUnbindResultQueue);
+
+        s32 liPort = 0;
+        const CgsInput::InputIO::PadOutputInformation* const lpPad =
+            GetPadInfoForPlayer0(lpInputOutputBuffer, &liPort);
+        if (lpPad != 0)
+        {
+            // ARTIST 823BA240 consumes only this and the action source; the
+            // extra caller registers carrying playing/pad type are unused.
+            lpGameStateInput->SetButtonPressed(
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::ControllerActionSource*>(lpPad->maActionInfo));
+            lpGameStateInput->GetControllerToGameStateInterface()->SetActiveControllerPort(liPort);
+        }
+        (void)lbIsPlaying;
+    }
+
+    // FLAG PC-platform leaf: preserve the existing persistent-input/button-only
+    // adapter while the original staged caller remains outside native startup.
+    void BrnGameModule::BridgeControllerToGameStateNativePC(
         BrnGameState::GameStateModule* lpGameStateModule,
         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
         s32 liActionContext)

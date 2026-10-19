@@ -24,6 +24,8 @@ namespace rw { struct IResourceAllocator; }
 
 namespace CgsGraphics
 {
+    struct OcclusionCullManager;
+
     class BlendState;
     class DepthStencilState;
     class RasterizerState;
@@ -79,26 +81,34 @@ namespace CgsGraphics
         };
 
     protected:
-        // Build the shared render-state library exactly once (DWARF CgsImRenderer.h:170; X360 home is
-        // CgsImRenderer.cpp -- declaration-only here, the dep TU bodies it). The typed ImRenderer<V>::
-        // Construct paths call this behind a module-static guard the first time any renderer is built.
-        void ConstructOnceOnly(rw::IResourceAllocator* lpAllocator);
+        // X360 shared data (DWARF CgsImRenderer.h:173/176). The typed ImRenderer<V>::Construct
+        // callers test/set mgbStateLibraryConstructed around ConstructOnceOnly; the helper body
+        // itself always rebuilds the library and does not touch the guard.
+        static StateLibrary mgStateLibrary;
+        static bool mgbStateLibraryConstructed;
+
+        // @0x827F1C20. Static: ARTIST callers pass the allocator in r3 and own the one-time guard.
+        static void ConstructOnceOnly(rw::IResourceAllocator* lpAllocator);
 
     private:
         // The state-library builders (each sizes / allocates / initialises one render state). Only
         // the ones the X360 ARTIST attests for this TU are reconstructed; the rest stay declared.
-        const BlendState*        ConstructNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
-        const BlendState*        ConstructNoBlendNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
+        static const BlendState* ConstructNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
+        static const BlendState* ConstructNoBlendNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
         // X360 @ 0x827ED118. Build a parameterised blend state using 'this' as the ResourceAllocator.
         // luMode = 5-bit source-blend enum (v8[0] bits 0..4); liBlendA / liBlendB feed the
         // blend-op and destination-factor via the per-channel param word.
         const BlendState*        ConstructBlendState(u8 luMode, int liBlendA, int liBlendB);
-        const RasterizerState*   ConstructRasteriserState(
+        static const RasterizerState* ConstructRasteriserState(
             rw::IResourceAllocator* lpAllocator, renderengine::RasterizerState::CullMode leCullMode);
-        const DepthStencilState* ConstructDepthStencilState(
+        static const DepthStencilState* ConstructDepthStencilState(
             rw::IResourceAllocator* lpAllocator, bool lbDepthTestEnable, bool lbDepthWriteEnable,
             renderengine::DepthStencilState::Function leFunction);
-        const TextureState*      ConstructDefaultTextureState(
+        static const SamplerState* ConstructSamplerState(rw::IResourceAllocator* lpAllocator,
+                                                         u32 luArg2, u32 luArg3,
+                                                         u32 luArg4, u32 luArg5);
+        static renderengine::Texture* ConstructWhiteTexture(rw::IResourceAllocator* lpAllocator);
+        static const TextureState* ConstructDefaultTextureState(
             rw::IResourceAllocator* lpAllocator, renderengine::Texture* lpTexture);
 
         // The shared low-level shadow-state setters (the single X360 bodies the typed SetState /
@@ -138,11 +148,15 @@ namespace CgsGraphics
     template <typename V>
     struct ImRenderer : public ImRendererBase
     {
+        // OcclusionCullManager::Construct records this existing position-only descriptor for its
+        // query-box vertex upload; the relationship adds no renderer storage or cache state.
+        friend struct OcclusionCullManager;
+
         void BeginRendering();
-        // X360-attested signed-char overload (DWARF CgsImRenderer.h attests BOTH `void BeginRendering();`
-        // and `void BeginRendering(signed char);` on the ImRenderer<V> template). Bodied per vertex type
-        // (the LionBlend path @ X360 0x8227C3A8 supplies the LionBlendVertex instantiation). Distinct from
-        // the no-arg PC-fold BeginRendering().
+        // X360 signed-char overload for the per-program renderer specializations (the LionBlend path
+        // @ X360 0x8227C3A8 supplies the LionBlendVertex instantiation). It is bodied only for vertex
+        // types with a matching ARTIST function. The DecFIGS Basic2dColouredTexturedVertex specialization
+        // declares only the no-argument overload, which is the loading/debug/blit path used by CgsIm2d.cpp.
         void BeginRendering(s8 li8Program);
         void EndRendering();
         void Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount);

@@ -42,6 +42,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    class DebugComponent;
     // The canonical EngineAttribs is VehicleAttribs::EngineAttribs (VehicleAttribs.h). The old
     // namespace-scope slice that lived here is retired; this alias keeps the Engine TU's spelling
     // (`EngineAttribs`) while binding it to the console's nested type, so Engine::Construct emits
@@ -56,6 +57,8 @@ namespace Vehicle
 
     class Engine
     {
+        // ARTIST handling Update reads the FA0/FB0 engine register lanes.
+        friend class DebugComponent;
     public:
         // --- This group's two ledger functions (bodied in Engine.cpp) ---
 

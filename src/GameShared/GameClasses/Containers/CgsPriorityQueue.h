@@ -99,6 +99,13 @@ public:
         return true;
     }
 
+    // DecFIGS CgsPriorityQueue.h:371. ARTIST RenderHUD828E3844 first
+    // resolves the priority-order index, then reads mpData[that index].
+    const T& GetEntry(s32 liIndex) const
+    {
+        return mpData[GetEntryIndex(liIndex)];
+    }
+
 private:
     T*  mpData;               // +0x14  element ring buffer base (points at maData after Construct)
     T   maData[N];            // inline element ring buffer

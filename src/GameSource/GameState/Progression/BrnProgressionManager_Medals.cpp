@@ -111,7 +111,6 @@ namespace
             *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
     }
-    bool gbSaidProfileReadyForDisplay = false;
     bool gbSaidNoAchievementManager   = false;
 }
 
@@ -600,26 +599,8 @@ void ProgressionManager::UnlockToProgressionRankTail(s8 li8Rank)
         mbHasJustRankedUp = true;
     }
 
-    // ⛔ PARK -- console: `stbx 1, this, 0x207FF` @0x8239E1DC.
-    // WHAT THAT BYTE IS. mDebugComponent sits at this+133000 and mQueueOfTrophyCarUnLocks at
-    // this+133128, so the store lands at mDebugComponent + 119 -- the LAST byte of
-    // ProgressionDebugComponent, which the DecFIGS DWARF ends with eight adjacent bools
-    // (mbShowProfile .. mbProfileReadyForDisplay at +112..+119) and for which it declares
-    // `void SetProfileReadyForDisplay();`. So the console line is
-    // `mDebugComponent.SetProfileReadyForDisplay();`.
-    // WHY IT IS PARKED: this tree models mDebugComponent as an opaque DebugComponentSlot
-    // (a vtable pointer plus 60 unmodelled bytes), so the flag has no name to reach, and
-    // ProgressionDebugComponent is not reconstructed, registered or rendered on PC -- the flag
-    // gates a debug HUD readout and nothing else. Poking byte 119 of an unmodelled blob to
-    // reproduce a debug-overlay gate is exactly the raw-offset trap this campaign bans.
-    // It is the ONLY reference to that offset in the whole XEX (verified by scanning every
-    // export for 0x207FF / 133119), so nothing else observes it either.
-    // DELETE-WHEN ProgressionDebugComponent has a reconstructed layout in this header.
-    ParkOnce(gbSaidProfileReadyForDisplay,
-             "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank tail: "
-             "mDebugComponent.SetProfileReadyForDisplay() (this+0x207FF) is NOT reproduced -- "
-             "ProgressionDebugComponent's layout is not modelled and the component is not "
-             "constructed on PC. Debug-overlay only.\n");
+    // X360 0x8239E1DC writes one to mDebugComponent.mbProfileReadyForDisplay (+0x77).
+    mDebugComponent.SetProfileReadyForDisplay();
 }
 
 // ============================================================================================

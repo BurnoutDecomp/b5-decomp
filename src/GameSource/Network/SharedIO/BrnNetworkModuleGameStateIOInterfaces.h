@@ -102,11 +102,13 @@ namespace BrnNetwork
             // ---- declared-only API (bodies are separate TUs) ----
             void                AddDirtyTrickEvent(EActiveRaceCarIndex leAggressor, EActiveRaceCarIndex leVictim,
                                                    u8 luType, u8 luStatus);
-            void                SetIsInOnlineGameMode(bool lbIsOnline);
+            // ARTIST PreWorldUpdate 823A5D98; the original header-inline store.
+            void                SetIsInOnlineGameMode(bool lbIsOnline) { mbIsInOnlineGameMode = lbIsOnline; }
             // Header-inline on the console: the update-message sender reads the byte at +0x219.
             bool                GetIsInCarSelect() const { return mbIsInCarSelect; }
-            void                SetIsCarSelect(bool lbIsInCarSelect);
-            void                SetCurrentGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode);
+            // ARTIST PreWorldUpdate 823A5DE0/823A5DF0.
+            void                SetIsCarSelect(bool lbIsInCarSelect) { mbIsInCarSelect = lbIsInCarSelect; }
+            void                SetCurrentGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode) { meCurrentGameMode = leGameMode; }
             void                SetPlayerInFreeburnChallenge(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbInChallenge);
 
         private:
