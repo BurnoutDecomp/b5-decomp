@@ -3,7 +3,7 @@
 	url = https://github.com/BPDecomp/EAThread
 [submodule "vendor/EASTL"]
 	path = vendor/EASTL
-	url = https://github.com/electronicarts/EASTL.git
+	url = https://github.com/BurnoutDecomp/EASTL.git
 [submodule "vendor/FFmpeg"]
 	path = vendor/FFmpeg
 	url = https://github.com/BurnoutDecomp/FFmpeg-Xenia-new.git
