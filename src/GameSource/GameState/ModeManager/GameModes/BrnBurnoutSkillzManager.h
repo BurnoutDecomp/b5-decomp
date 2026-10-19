@@ -45,9 +45,9 @@ namespace BrnPhysics { namespace Vehicle { struct RaceCarState; } }
 namespace BrnGameState
 {
 class ScoringSystem;
-class MugshotManager;
+struct MugshotManager;
 class ModeManager;
-class StreetManager;
+struct StreetManager;
 
 namespace GameStateModuleIO
 {
