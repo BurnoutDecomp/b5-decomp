@@ -36,6 +36,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h" // ProgressionManager / Profile (case 180)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"                  // GenericRegion::Type (the drive-thru set query)
 #include "GameSource/GameState/BrnGameActions.h"                   // the action payload homes
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // InviteOrJoinParams (action 92)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // OutputBuffer / GameActionQueue
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"               // streaming handshake publishers
@@ -411,6 +412,120 @@ namespace
             case 66:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 565, sizeof(CgsID));
                 break;
+
+            // ARTIST 0x823EC5C8..0x823EC610, action 11: preserve the two setter calls and their
+            // order. The 8-byte GUI record is {active-car index, network player id} (event 267).
+            case BrnGameState::GameStateModuleIO::E_ACTION_REMOTE_PLAYER_DISCONNECTED:
+            {
+                CGS_ASSERT(lpAction != 0, "lpNetworkRemotePlayerDisconnectAction");
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction*>(lpAction);
+                BrnGui::GuiNetworkRemotePlayerDisconnectEvent lEvent = {};
+                lEvent.SetNetworkPlayerID(lrAction.mPlayerID);
+                lEvent.SetActiveRaceCarIndex(lrAction.meActiveRaceCarIndex);
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EB074..0x823EB0E4, action 15 -> GUI 390 / 32 bytes. The final three
+            // source bytes are unwritten stack tail in the console's local; the typed event's
+            // padding stays zero here, while every defined field follows the original stores.
+            case 15:
+            {
+                CGS_ASSERT(lpAction != 0, "lpCompletedStuntAction != NULL");
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::CompletedStuntAction*>(lpAction);
+                BrnGui::GuiCompletedStuntEvent lEvent = {};
+                lEvent.muStuntActionComplete = lrAction.muStuntActionComplete;
+                lEvent.mfCompletedBarrelRollAngle = lrAction.mfCompletedBarrelRollAngle;
+                lEvent.mfCompletedAirSpinAngle = lrAction.mfCompletedAirSpinAngle;
+                lEvent.mfCompletedHandbreakTurnAngle = lrAction.mfCompletedHandbreakTurnAngle;
+                std::memcpy(&lEvent.mbSuccessfulLanding, &lrAction.mbSuccessfulLanding,
+                            sizeof(lEvent.mbSuccessfulLanding));
+                lEvent.mfCompletedDriftTime = lrAction.mfCompletedDriftTime;
+                lEvent.mfCompletedDriftDistance = lrAction.mfCompletedDriftDistance;
+                lEvent.miCompletedBarrelRolls = lrAction.miCompletedBarrelRolls;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EB104..0x823EB148, action 16 -> GUI 391 / 24 bytes. The action's
+            // console-only tail (+0x18/+0x1C) is not part of the GUI record and is not forwarded.
+            case 16:
+            {
+                CGS_ASSERT(lpAction != 0, "lpInProgressStuntAction != NULL");
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::InProgressStuntAction*>(lpAction);
+                BrnGui::GuiInProgressStuntEvent lEvent = {};
+                lEvent.muStuntActionInProgress = lrAction.muStuntActionInProgress;
+                lEvent.mfInProgressBarrelRollAngle = lrAction.mfInProgressBarrelRollAngle;
+                lEvent.mfInProgressAirSpinAngle = lrAction.mfInProgressAirSpinAngle;
+                lEvent.mfInProgressHandbreakTurnAngle = lrAction.mfInProgressHandbreakTurnAngle;
+                lEvent.mfInProgressDriftTime = lrAction.mfInProgressDriftTime;
+                lEvent.mfInProgressDriftDistance = lrAction.mfInProgressDriftDistance;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EACBC..0x823EAD1C, case 26 gates on words {2 or 16, not 10}, then
+            // posts RunFsm (GUI 144 / 24).
+            case 26:
+            {
+                const s32* lpActionWords = reinterpret_cast<const s32*>(lpAction);
+                if ((lpActionWords[0] == 2 || lpActionWords[0] == 16) && lpActionWords[1] != 10)
+                {
+                    BrnGui::GuiEventRunFsm lEvent = {};
+                    lEvent.mFsmId = CgsIDCompress("BRNEVENTFSM");
+                    lEvent.mInitialStateId = 0;
+                    lEvent.meFsmToRun = BrnGui::E_GUI_HUD_EVENT;
+                    lEvent.meFlowToUse = BrnGui::E_GUIFLOW_HUD;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                }
+                break;
+            }
+
+            // ARTIST 0x823EB390..0x823EB3A0, action 32 reaches the shared label that writes
+            // E_SPLASH_STATE_STOP (1), then posts GUI 269 / 4 bytes.
+            case 32:
+            {
+                BrnGui::GuiEventNetworkSplashEvent lEvent = {};
+                lEvent.meSplashState = BrnGui::GuiEventNetworkSplashEvent::E_SPLASH_STATE_STOP;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EAC60..0x823EACAC, case 41: byte +4 enables the post; byte +5 selects
+            // the optional PAUSED state.
+            case 41:
+            {
+                const u8* lpActionBytes = reinterpret_cast<const u8*>(lpAction);
+                if (lpActionBytes[4] != 0)
+                {
+                    BrnGui::GuiEventRunFsm lEvent = {};
+                    lEvent.mFsmId = CgsIDCompress("BRNFBFSM");
+                    lEvent.mInitialStateId = 0;
+                    if (lpActionBytes[5] == 1)
+                        lEvent.mInitialStateId = CgsIDCompress("PAUSED");
+                    lEvent.meFsmToRun = BrnGui::E_GUI_HUD_FREEBURN;
+                    lEvent.meFlowToUse = BrnGui::E_GUIFLOW_HUD;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                }
+                break;
+            }
+
+            // ARTIST 0x823ED8E0..0x823ED920, action 49: the leading qword is an already-compressed
+            // overlay id. Do not call the string overload or compress it a second time.
+            case 49:
+            {
+                CGS_ASSERT(lpAction != 0, "lpPopupRequestAction");
+                CgsID lOverlayId = 0;
+                std::memcpy(&lOverlayId, lpAction, sizeof(lOverlayId));
+                BrnGui::GuiOverlayRequest lRequest;
+                lRequest.Construct(lOverlayId);
+                PushGuiEvent(lRequest, lpGuiInput);
+                break;
+            }
+
             // ARTIST 0x823ED854..0x823ED86C: online car id -> GUI 566 (8 bytes).
             case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_ONLINE:
             {
@@ -541,6 +656,20 @@ namespace
                 BrnGui::GuiOverlayRequest lRequest;
                 lRequest.Construct("GMInvAccept");
                 PushGuiEvent(lRequest, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EBF74..0x823EBF8C, case 92 reads InviteOrJoinParams+0x98 and posts the
+            // one-byte GUI 128 event.
+            // Its real producer copies that same 0x9C-byte record from mInviteOrJoinParams.
+            case 92:
+            {
+                const auto* lpParams = reinterpret_cast<const
+                    BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams*>(lpAction);
+                BrnGui::GuiEventPrepareForInvite lEvent = {};
+                std::memcpy(lEvent.maData, &lpParams->mbIsLocalUserChangeNeeded,
+                            sizeof(lEvent.maData));
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
