@@ -1,0 +1,54 @@
+{
+  "baseline_commit": "4d2bb2e607e6a2455e3d26e2ae1210fe051dc5d3",
+  "branch": "codex/debug-menu-gamestate-lifecycle-20261019",
+  "change": "Use the X360 ARTIST AchievementManagerX360 as the preserved StuntModeScoring::AchievementManager alias target.",
+  "edited_file_preimage": {
+    "path": "src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+    "snapshot": "preimage/src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+    "sha256": "5376a60bdc008cd17e76ee977d7bd0a658e1794b237f75c8b4bd627864303889",
+    "git_blob": "65c6696b08af798f59068b6050731453056a9d48"
+  },
+  "edited_file_postimage": {
+    "path": "src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+    "snapshot": "source/src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+    "sha256": "5ecb1a5cdbe7af0c32d279c012fed87df6564beca8dbfafceee0da84ae286e0b",
+    "git_blob": "f55391141af27a7ccfe87a886db8fb951a76fb8b",
+    "staged_blob_sha256": "c1df7f1f880bf79d3dde18a94331bdec1c7dba33b893656d3960396f24b8196f"
+  },
+  "artist_export": {
+    "address": "0x82337FE0",
+    "snapshot": "ARTIST/0x82337FE0.json",
+    "sha256": "056baf9ca8062336513bf122a07e3ce3b5b24d1a0794589020d3e24a9ed26457",
+    "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x82337FE0.json"
+  },
+  "decfigs_declaration": {
+    "path": "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+    "snapshot": "DecFIGS/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+    "sha256": "6d551da2f2e6676ecaef3762be54a0cab019a3744ca637d02742843d60300ad4",
+    "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\ModeManager\\Scoring\\BrnStuntModeScoring.h"
+  },
+  "reused_parent_packet_artifacts": [
+    {
+      "address": "0x82380388",
+      "path": "../ARTIST/0x82380388.json"
+    },
+    {
+      "address": "0x82340008",
+      "path": "../ARTIST/0x82340008.json"
+    },
+    {
+      "path": "../source/src/GameSource/GameState/ModeManager/BrnModeManager_Lifecycle.cpp"
+    },
+    {
+      "path": "../source/src/GameSource/GameState/ModeManager/ModeManager_gUI_00.cpp"
+    },
+    {
+      "path": "../source/src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
+    }
+  ],
+  "verification": "Source-only ARTIST argument-chain audit; no compile/native or caller activation.",
+  "report": {
+    "path": "REPORT.md",
+    "sha256": "58f590b604dcbd91a641a0dceb2959ac97076e24b2c967f69d2b47155e03e204"
+  }
+}
