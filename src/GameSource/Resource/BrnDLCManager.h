@@ -235,8 +235,9 @@ private:
 // BURNOUT_X360_ARTIST.XEX. Holds an inline array of DLC package records + a small
 // version-check/monitor state machine. Construct @0x826659E8 owns initialization
 // of the shared availability table before the DLC debug page is constructed.
-// The one-shot XContent monitor's Start/worker bodies are recovered, but Prepare
-// remains unactivated while the PC content discovery/mount backend is unresolved.
+// The original monitor Start/worker bodies are recovered in BrnDLCManagerMonitor.cpp,
+// deliberately unmounted while the PC content discovery/mount backend is unresolved.
+// Full DLC Prepare remains unactivated; these declarations do not start the worker.
 //
 // Capacity is an inference from floor(0x500 / 0x4C); the asm never attests the array bound.
 enum { KU_DLC_PACKAGE_CAPACITY = 16 };
