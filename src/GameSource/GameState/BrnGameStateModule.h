@@ -286,10 +286,8 @@ public:
     TriggerQueryManager*       GetTriggerQueryManager()       { return &mTriggerQueryManager; }
     const TriggerQueryManager* GetTriggerQueryManager() const { return &mTriggerQueryManager; }
 
-    // [stuntrace 2026-08-26] The embedded progression manager (by value, :1171). Named accessor
-    // added for ModeManager's back-pointer wiring (ConstructInterModeStateBringUp): the console
-    // passes &mProgressionManager as ModeManager::Construct's argument at the sole call site;
-    // the bring-up seam reaches it through this accessor instead of a raw offset.
+    // The embedded progression manager (by value, :1171). ModeManager::Construct receives
+    // &mProgressionManager directly at GameStateModule::Construct's original call position.
     // [PC bring-up observer -- NOT an X360 method.] See mbPrepare2Complete's note: true once
     // Prepare2's progression AND street legs have both completed, i.e. once the two bundles the
     // GUI lane's WorldDataController::Prepare2 acquires by name are resident in pool 5.
@@ -319,7 +317,7 @@ public:
     // console's, held BY VALUE exactly as the console holds it.
     CarSelectManager*       GetCarSelectManager()       { return &mCarSelectManager; }
     const CarSelectManager* GetCarSelectManager() const { return &mCarSelectManager; }
-    // ModeManager::Construct's street / mugshot manager arguments (the ModeManager bring-up seam).
+    // ModeManager::Construct's street / mugshot manager arguments.
     StreetManager*          GetStreetManager()          { return &mStreetManager; }
     MugshotManager*         GetMugshotManager() const   { return mpMugshotManager; }
 

@@ -168,9 +168,8 @@ void GameStateModule::Construct()
     // TrainingManager::Construct (DecFIGS 0x241DE0; the X360 inlines it -- no export exists).
     mpTrainingManager->Construct(&mProgressionManager, this);
 
-    // ⭐ [tut-ticker] the console's ModeManager::Construct runs from this Construct
-    // (@0x82340008's sole caller); its inter-mode seed stores are extracted --
-    // meCurrentGameModeType = E_MODE_NONE (-1) is load-bearing, see the ModeManager banner.
+    // X360 GameStateModule::Construct calls ModeManager::Construct here, after the invite
+    // manager and before ProgressionManager::Construct. Preserve the original owner argument order.
     // [takedown wave 2026-09-02] X360 Construct @0x82380388 inlines TakedownManager::Construct
     // (the two manager pointers into gsm+568, its back-pointer at gsm+1256) BEFORE the
     // TriggerQueryManager / RoadRules / DriveThru constructs; the queue constructs follow at
@@ -186,7 +185,9 @@ void GameStateModule::Construct()
     }
     mpGameStateInviteManager->Construct();
 
-    mModeManager.ConstructInterModeStateBringUp(this);
+    mModeManager.Construct(this, &mProgressionManager, &mTriggerQueryManager,
+                           &mNetworkRoundManager, &mStreetManager, mpMugshotManager,
+                           &mRoadRulesManager, &mAchievementManager);
 
     // ⭐⭐ [progression wave: lifecycle, 2026-09-06] THE PROGRESSION MANAGER'S CONSTRUCT, at the
     // console's own position. X360 0x82380388, the call IMMEDIATELY AFTER ModeManager::Construct
@@ -202,7 +203,7 @@ void GameStateModule::Construct()
     // every scalar seed the manager owns, of Profile::Construct's first call, and of the two
     // PerfMonCpu handles PreWorldUpdate brackets itself with.
     //
-    // ⓘ It is placed here, after the ModeManager bring-up and BEFORE mStuntManager.Construct, to
+    // ⓘ It is placed here, after ModeManager::Construct and BEFORE mStuntManager.Construct, to
     // match the console's ordering as closely as this function's existing (documented) order
     // deviation allows. The three sub-objects whose addresses it takes -- mCarSelectManager,
     // mStreetManager, mStuntManager -- are only STORED, never dereferenced, so taking the address
@@ -2340,9 +2341,9 @@ ModeManager* GameStateModule::GetModeManager()
 
 // --------------------------------------------------------------------------------------------
 // ⭐⭐ [tut-ticker] PreWorldUpdateTrainingBringUp -- the extracted TRAINING leg of PreWorldUpdate
-// @0x823A5328 (see the header banner for the console asm). Runs the ModeManager clock leg first
-// (the console ticks the clocks earlier in the same PreWorldUpdate body, @0x823537B8 via
-// ModeManager::PreWorldUpdate), then the console's own pair:
+// @0x823A5328 (see the header banner for the console asm). ModeManager::PreWorldUpdate is selected
+// separately through the GameState EMM path and owns the clock updates; this helper handles the
+// console's own pair:
 //     r8 = ShouldAllowTimedTutorialTips();
 //     TrainingManager::Update(mpTrainingManager, <preWorldInput>, actionQueue,
 //                             &mLastActiveRaceCarInterface, lfGameTimestep, r8);
@@ -2356,23 +2357,10 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
         return;
     }
 
-    // ⭐⭐ [D4 stuntrace WAVE D] THE CLOCK BRING-UP LEG IS RETIRED HERE -- DO NOT PUT IT BACK.
-    // This call used to read:
-    //     mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
-    // and it was the ONLY thing accumulating mfTimeInFreeBurn / mfTimeInMode / mfTimeInOnline while
-    // the full ModeManager::PreWorldUpdate had no caller. It has one now:
-    // GameStateModule::PreWorldUpdateStuntBringUp stages ModeManager::PreWorldUpdate @0x823537B8
-    // at the console's own position (#86, via the EmmPreWorldUpdate hop), and that function
-    // CONTAINS the whole of PreWorldUpdateClocksBringUp -- the identical mode/online/free-burn
-    // if/else, over the identical members.
-    // ⛔ THE TWO MUST NEVER BE ARMED TOGETHER (the supersession rule stated in
-    // ModeManager_gUI_00.cpp's own banner and in BrnModeManager_WorldTick.cpp:40): with both
-    // running, every clock would advance at DOUBLE rate, which is silent -- no assert, no link
-    // error, just a free-burn timer that runs 2x and a mode timer that expires at half the
-    // authored limit.
-    // The method itself is left in place (it is still the documented bring-up seam and it is
-    // referenced by both banners); only this CALL is removed. Delete the method with its
-    // declaration when the supersession is consolidated.
+    // The extracted PreWorldUpdateClocksBringUp helper has no current caller in this source tree;
+    // retain it for separate cleanup. The active GameState EMM pre-world path calls the full
+    // ModeManager::PreWorldUpdate, which already includes the same clock updates. Do not restore
+    // a second clock path here, or the mode and freeburn timers would advance twice.
 
     GetPreWorldInputBuffer()->LockForRead();
     mpOutputBuffer->LockForWrite();

@@ -235,7 +235,8 @@ private:
 // BURNOUT_X360_ARTIST.XEX. Holds an inline array of DLC package records + a small
 // version-check/monitor state machine. Construct @0x826659E8 owns initialization
 // of the shared availability table before the DLC debug page is constructed.
-// Prepare/monitor methods are declared only; this constructor slice does not activate them.
+// The one-shot XContent monitor's Start/worker bodies are recovered, but Prepare
+// remains unactivated while the PC content discovery/mount backend is unresolved.
 //
 // Capacity is an inference from floor(0x500 / 0x4C); the asm never attests the array bound.
 enum { KU_DLC_PACKAGE_CAPACITY = 16 };
@@ -291,6 +292,9 @@ public:
     int DLCVersionCheckFailed();
 
 private:
+    // ARTIST 0x82665A58. Thread entry receives this DLCManager through context.
+    static intptr_t X360DLCEnumerationThreadProc(void* lpContext);
+
     // Comments identify X360 fields; native AsyncOp, queue and thread widths
     // are supplied by their real types rather than console offsets.
     DLCPackage  maPackages[KU_DLC_PACKAGE_CAPACITY];  // X360 +0x000; capacity inferred
@@ -304,7 +308,8 @@ private:
     s32         miCurrentPackage;                     // X360 +0x624
     EA::Thread::Thread mDLCMonitorThread;             // X360 +0x628
     bool        mbDLCMonitorThreadStarted;            // X360 +0x62C
-    u8          mPad062D[0x650 - 0x62D];              // X360 producer-owned monitor state
+    u8          mPad062D[3];                          // X360 +0x62D..+0x62F
+    EA::Thread::Futex mMonitorLock;                   // X360 +0x630; C++ member lifecycle
     s32         muMonitorPackageCount;                // X360 +0x650
 };
 
