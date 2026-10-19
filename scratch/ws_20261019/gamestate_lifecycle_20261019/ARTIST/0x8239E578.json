@@ -1,0 +1,374 @@
+{
+  "address": "0x8239E578",
+  "name": "BrnGameState::GameStateModule::Prepare",
+  "prototype": "int BrnGameState::GameStateModule::Prepareint __fastcall(int a1, int a2, int a3, int a4)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a3",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a4",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v5",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v6",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v7",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v8",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v9",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v10",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v11",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v12",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v13",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v14",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v15",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v16",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v17",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v18",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v19",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v20",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v21",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "HeapAllocator",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v23",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "Memor",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v25",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v26",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v27",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v29",
+      "type": "unsigned __int8",
+      "is_reg": false,
+      "size": 1
+    },
+    {
+      "name": "v30",
+      "type": "_BYTE *",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v31",
+      "type": "_DWORD[4]",
+      "is_reg": false,
+      "size": 16
+    },
+    {
+      "name": "v32",
+      "type": "__int64",
+      "is_reg": false,
+      "size": 8
+    },
+    {
+      "name": "v33",
+      "type": "_BYTE[192]",
+      "is_reg": false,
+      "size": 192
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    }
+  ],
+  "pseudocode": "int __fastcall BrnGameState::GameStateModule::Prepare(int a1, int a2, int a3, int a4)\n{\n  __int64 v5; // r20\n  int v6; // r3\n  int v7; // r11\n  _DWORD *v8; // r11\n  _DWORD *v9; // r29\n  int v10; // r3\n  int v11; // r11\n  _DWORD *v12; // r11\n  _DWORD *v13; // r29\n  int v14; // r3\n  int v15; // r11\n  _DWORD *v16; // r11\n  _DWORD *v17; // r29\n  int v18; // r29\n  int v19; // r3\n  int v20; // r10\n  int v21; // r11\n  int HeapAllocator; // r3\n  int v23; // r3\n  int Memor; // r30\n  int v25; // r3\n  int v26; // r6\n  int v27; // r10\n  unsigned __int8 v29; // [sp+50h] [-F0h]\n  _BYTE *v30; // [sp+54h] [-ECh]\n  _DWORD v31[4]; // [sp+60h] [-E0h] BYREF\n  __int64 v32; // [sp+70h] [-D0h]\n  _BYTE v33[192]; // [sp+80h] [-C0h] BYREF\n\n  _savegprlr_14();\n  LODWORD(v5) = 0;\n  HIDWORD(v5) = a2;\n  v29 = 0;\n  v30 = (a1 + 292289);\n  *(a1 + 292289) = 1;\n  CgsModule::IOBuffer::LockForWrite(a2);\n  switch ( *(a1 + 552) )\n  {\n    case 0:\n      BrnGameState::GameStateModule::ClearData(a1);\n      CgsDev::DebugComponent::Register(a1 + 208544);\n      CgsDev::DebugComponent::Register(a1 + 208376);\n      goto LABEL_3;\n    case 1:\nLABEL_3:\n      *(a1 + 552) = 1;\n      if ( CgsModule::ModuleSingleBuffered::Prepare(a1) )\n        goto LABEL_4;\n      goto LABEL_56;\n    case 2:\nLABEL_4:\n      *(a1 + 552) = 3;\n      goto LABEL_5;\n    case 3:\nLABEL_5:\n      if ( !BrnGameState::TriggerQueryManager::Prepare(a1 + 42320, SHIDWORD(v5), (a1 + 232384)) )\n        goto LABEL_56;\n      *(a1 + 552) = 4;\nLABEL_7:\n      if ( !BrnGameState::StuntManager::Prepare(a1 + 183952, HIDWORD(v5)) )\n        goto LABEL_56;\nLABEL_8:\n      *(a1 + 552) = 6;\n      v6 = BrnGameState::GameStateModuleIO::OutputBuffer::(HIDWORD(v5));\n      BrnResource::GameDataIO::RequestInterface<3072>::GetFreeburnChallengeList(v6, a1 + 232384, 0);\n      CgsModule::BaseEventReceiverQueue::Clear((a1 + 232384));\nLABEL_9:\n      v7 = *(a1 + 232392);\n      *(a1 + 552) = 6;\n      if ( v7 < 1 )\n        goto LABEL_56;\n      if ( *(a1 + 232392) <= 0 )\n      {\n        v9 = 0;\n      }\n      else\n      {\n        v8 = (*(a1 + 232396) + *(a1 + 232384));\n        v9 = v8 + 2;\n        if ( *v8 == 53 )\n          goto LABEL_13;\n      }\n      CgsDev::Assert::BeginAssert();\n      CgsDev::StrStream::StrStream(v31, CgsDev::Assert::gpcMessageBuffer, dword_82F32264);\n      CgsDev::StrStreamBase::operator__(v31, \"Invalid event id received\\n\");\n      CgsDev::Assert::FireAssert(\n        CgsDev::Assert::gpcMessageBuffer,\n        \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n        516);\n      CgsDev::Assert::EndAssert();\nLABEL_13:\n      if ( *v9 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::StrStream::StrStream(v31, CgsDev::Assert::gpcMessageBuffer, dword_82F32264);\n        CgsDev::StrStreamBase::operator__(v31, \"Invalid event id received\\n\");\n        CgsDev::Assert::FireAssert(\n          CgsDev::Assert::gpcMessageBuffer,\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n          521);\n        CgsDev::Assert::EndAssert();\n      }\n      *(a1 + 284432) = v9[8];\nLABEL_16:\n      *(a1 + 552) = 8;\n      v10 = BrnGameState::GameStateModuleIO::OutputBuffer::(HIDWORD(v5));\n      BrnResource::GameDataIO::RequestInterface<3072>::GetVehicleList(v10, a1 + 232384, 0);\n      CgsModule::BaseEventReceiverQueue::Clear((a1 + 232384));\nLABEL_17:\n      v11 = *(a1 + 232392);\n      *(a1 + 552) = 8;\n      if ( v11 < 1 )\n        goto LABEL_56;\n      if ( *(a1 + 232392) <= 0 )\n      {\n        v13 = 0;\n      }\n      else\n      {\n        v12 = (*(a1 + 232396) + *(a1 + 232384));\n        v13 = v12 + 2;\n        if ( *v12 == 52 )\n          goto LABEL_21;\n      }\n      CgsDev::Assert::BeginAssert();\n      CgsDev::StrStream::StrStream(v31, CgsDev::Assert::gpcMessageBuffer, dword_82F32264);\n      CgsDev::StrStreamBase::operator__(v31, \"Invalid event id received\\n\");\n      CgsDev::Assert::FireAssert(\n        CgsDev::Assert::gpcMessageBuffer,\n        \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n        556);\n      CgsDev::Assert::EndAssert();\nLABEL_21:\n      if ( *v13 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::StrStream::StrStream(v31, CgsDev::Assert::gpcMessageBuffer, dword_82F32264);\n        CgsDev::StrStreamBase::operator__(v31, \"Invalid event id received\\n\");\n        CgsDev::Assert::FireAssert(\n          CgsDev::Assert::gpcMessageBuffer,\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n          561);\n        CgsDev::Assert::EndAssert();\n      }\n      *(a1 + 284392) = v13[8];\n      BrnProgression::ProgressionManager::ApplyVehicleList(a1 + 47920);\n      BrnGameState::ModeManager::ApplyVehicleList(a1 + 4128, *(a1 + 284392));\nLABEL_24:\n      *(a1 + 552) = 10;\n      v14 = BrnGameState::GameStateModuleIO::OutputBuffer::(HIDWORD(v5));\n      BrnResource::GameDataIO::RequestInterface<3072>::GetWheelList(v14, a1 + 232384, 0);\n      CgsModule::BaseEventReceiverQueue::Clear((a1 + 232384));\nLABEL_25:\n      v15 = *(a1 + 232392);\n      *(a1 + 552) = 10;\n      if ( v15 < 1 )\n        goto LABEL_56;\n      if ( *(a1 + 232392) <= 0 )\n      {\n        v17 = 0;\n      }\n      else\n      {\n        v16 = (*(a1 + 232396) + *(a1 + 232384));\n        v17 = v16 + 2;\n        if ( *v16 == 59 )\n          goto LABEL_29;\n      }\n      CgsDev::Assert::BeginAssert();\n      CgsDev::StrStream::StrStream(v31, CgsDev::Assert::gpcMessageBuffer, dword_82F32264);\n      CgsDev::StrStreamBase::operator__(v31, \"Invalid event id received\\n\");\n      CgsDev::Assert::FireAssert(\n        CgsDev::Assert::gpcMessageBuffer,\n        \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n        599);\n      CgsDev::Assert::EndAssert();\nLABEL_29:\n      if ( *v17 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::StrStream::StrStream(v31, CgsDev::Assert::gpcMessageBuffer, dword_82F32264);\n        CgsDev::StrStreamBase::operator__(v31, \"Invalid event id received\\n\");\n        CgsDev::Assert::FireAssert(\n          CgsDev::Assert::gpcMessageBuffer,\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n          604);\n        CgsDev::Assert::EndAssert();\n      }\n      *(a1 + 284396) = v17[8];\nLABEL_32:\n      *(a1 + 552) = 11;\n      v18 = BrnGameState::GameStateModuleIO::OutputBuffer::(HIDWORD(v5));\n      v19 = CgsResource::ID::HashString(\"CarColours\");\n      v31[1] = 0;\n      v32 = v19 | 0x500000000LL;\n      v31[2] = 5;\n      v31[0] = a1 + 232384;\n      CgsModule::VariableEventQueue<3072,16>::AddEvent(v18, v31, 4, 24);\n      CgsModule::BaseEventReceiverQueue::Clear((a1 + 232384));\nLABEL_33:\n      v20 = *(a1 + 232392);\n      *(a1 + 552) = 12;\n      if ( v20 >= 1 )\n      {\n        v21 = *(a1 + 232392) <= 0 ? 0 : *(a1 + 232396) + *(a1 + 232384) + 8;\n        CgsResource::BaseResourcePtr::CreateFromHandle(a1 + 284400, v21 + 24);\nLABEL_41:\n        *(a1 + 552) = 13;\n        HeapAllocator = BrnResource::GameDataIO::AllocatorList::GetHeapAllocator(a4, 0x1Bu);\n        if ( BrnGameState::ModeManager::Prepare(a1 + 4128, *(a1 + 284432), HeapAllocator) )\n        {\nLABEL_42:\n          *(a1 + 552) = 14;\n          if ( BrnGameState::TakedownManager::Prepare(a1 + 568) )\n          {\nLABEL_43:\n            *(a1 + 552) = 15;\nLABEL_44:\n            *(a1 + 1448) = 0;\n            *(a1 + 552) = 16;\nLABEL_45:\n            *(a1 + 552) = 17;\n            CgsModule::VariableEventQueue<1536,16>::Prepare(a1 + 2032);\n            *(a1 + 3952) = v5;\n            CgsModule::VariableEventQueue<1536,16>::Clear((a1 + 2032));\nLABEL_46:\n            *(a1 + 552) = 18;\n            *(a1 + 186576) = v5;\n            *(a1 + 189808) = v5;\n            BrnGameState::GameStateModuleIO::FlybyData::Prepare(a1 + 186608);\nLABEL_47:\n            *(a1 + 552) = 19;\n            CgsModule::BaseEventReceiverQueue::Clear((a1 + 232384));\nLABEL_48:\n            *(a1 + 552) = 20;\n            if ( BrnProgression::ProgressionManager::Prepare(a1 + 47920) )\n            {\nLABEL_49:\n              *(a1 + 552) = 21;\n              *(a1 + 181664) = 0;\n              *(a1 + 181668) = -1;\n              if ( BrnGameState::RichPresenceManagerBase::Prepare() )\n              {\nLABEL_50:\n                *(a1 + 552) = 22;\n                if ( BrnGameState::AchievementManagerX360::Prepare(a1 + 181680) )\n                {\nLABEL_51:\n                  *(a1 + 552) = 23;\n                  if ( BrnGameState::StreetManager::Prepare(a1 + 284520, HIDWORD(v5), a1 + 232384) )\n                  {\nLABEL_52:\n                    *(a1 + 552) = 24;\n                    v23 = BrnResource::GameDataIO::AllocatorList::GetHeapAllocator(a4, 0x1Bu);\n                    if ( BrnGameState::GameStateImageManagerBase::Prepare(a1 + 185520, v23) )\n                    {\nLABEL_53:\n                      *(a1 + 552) = 25;\n                      if ( BrnGameState::RumbleManager::Prepare(a1 + 46680) )\n                      {\nLABEL_54:\n                        *(a1 + 552) = 26;\n                        *(a1 + 185864) = v5;\n                        *(a1 + 185840) = v5;\n                        *(a1 + 185844) = v5;\n                        *(a1 + 185848) = v5;\n                        *(a1 + 185792) = v5;\n                        *(a1 + 185856) = v5;\nLABEL_55:\n                        Memor = BrnTrigger::TriggerData_::GetMemor((a1 + 43888));\n                        v25 = BrnWorld::GlobalColour(v33, a1 + 284400);\n                        BrnGameState::DriveThruManager::Prepare(a1 + 44240, Memor, v25);\n                        v29 = 1;\n                        v26 = *(a1 + 284392);\n                        *(a1 + 183736) = *(a1 + 284396);\n                        *(a1 + 183732) = v26;\n                        v27 = *(a1 + 284392);\n                        *(a1 + 183856) = *(a1 + 284396);\n                        *(a1 + 183852) = v27;\n                        *(a1 + 552) = 1;\n                        *(a1 + 560) = 0;\n                      }\n                    }\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\nLABEL_56:\n      CgsModule::IOBuffer::UnlockForWrite(HIDWORD(v5));\n      *v30 = 0;\n      _restgprlr();\n      return v29;\n    case 4:\n      goto LABEL_7;\n    case 5:\n      goto LABEL_8;\n    case 6:\n      goto LABEL_9;\n    case 7:\n      goto LABEL_16;\n    case 8:\n      goto LABEL_17;\n    case 9:\n      goto LABEL_24;\n    case 0xA:\n      goto LABEL_25;\n    case 0xB:\n      goto LABEL_32;\n    case 0xC:\n      goto LABEL_33;\n    case 0xD:\n      goto LABEL_41;\n    case 0xE:\n      goto LABEL_42;\n    case 0xF:\n      goto LABEL_43;\n    case 0x10:\n      goto LABEL_44;\n    case 0x11:\n      goto LABEL_45;\n    case 0x12:\n      goto LABEL_46;\n    case 0x13:\n      goto LABEL_47;\n    case 0x14:\n      goto LABEL_48;\n    case 0x15:\n      goto LABEL_49;\n    case 0x16:\n      goto LABEL_50;\n    case 0x17:\n      goto LABEL_51;\n    case 0x18:\n      goto LABEL_52;\n    case 0x19:\n      goto LABEL_53;\n    case 0x1A:\n      goto LABEL_54;\n    case 0x1B:\n      goto LABEL_55;\n    default:\n      CgsDev::Assert::BeginAssert();\n      CgsDev::Assert::FireAssert(\n        \"Invalid Stage\\n\",\n        \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n        825);\n      CgsDev::Assert::EndAssert();\n      goto LABEL_56;\n  }\n}\n",
+  "assembly": "0x8239E578  mflr      r12\n0x8239E57C  bl        __savegprlr_14\n0x8239E580  stwu      r1, back_chain(r1)\n0x8239E584  mr        r31, r3\n0x8239E588  stw       r6, 0x140+arg_2C(r1)\n0x8239E58C  li        r20, 0\n0x8239E590  addis     r11, r31, 4\n0x8239E594  li        r29, 1\n0x8239E598  addi      r11, r11, 0x75C1\n0x8239E59C  mr        r19, r4\n0x8239E5A0  stb       r20, 0x140+var_F0(r1)\n0x8239E5A4  mr        r3, r19\n0x8239E5A8  stw       r11, 0x140+var_EC(r1)\n0x8239E5AC  stb       r29, 0(r11)\n0x8239E5B0  bl        CgsModule__IOBuffer__LockForWrite\n0x8239E5B4  lwz       r10, 0x228(r31)\n0x8239E5B8  cmplwi    cr6, r10, 0x1B# switch 28 cases  ; switch 28 cases\n0x8239E5BC  bgt       cr6, def_8239E630# jumptable 8239E630 default case\n0x8239E5C0  lis       r11, aDP4B5MainBurno_552@ha\n0x8239E5C4  lis       r30, CgsDev__Assert__gpcMessageBuffer@ha\n0x8239E5C8  addi      r27, r11, aDP4B5MainBurno_552@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x8239E5CC  lis       r11, aInvalidEventId@ha\n0x8239E5D0  lis       r25, dword_82F32264@ha\n0x8239E5D4  addi      r26, r11, aInvalidEventId@l# \"Invalid event id received\\n\"\n0x8239E5D8  lis       r11, 4\n0x8239E5DC  li        r22, 0xA\n0x8239E5E0  ori       r17, r11, 0x56E8 # 0x456E8\n0x8239E5E4  lis       r11, 4\n0x8239E5E8  li        r23, 8\n0x8239E5EC  ori       r14, r11, 0x56EC # 0x456EC\n0x8239E5F0  lis       r11, 4\n0x8239E5F4  li        r28, 6\n0x8239E5F8  ori       r15, r11, 0x56F0 # 0x456F0\n0x8239E5FC  lis       r11, 3\n0x8239E600  ori       r24, r11, 0x8BC0 # 0x38BC0\n0x8239E604  lis       r11, 0\n0x8239E608  ori       r16, r11, 0xBB30 # 0xBB30\n0x8239E60C  lis       r11, 4\n0x8239E610  ori       r18, r11, 0x5710 # 0x45710\n0x8239E614  lis       r11, 3\n0x8239E618  ori       r21, r11, 0x8BC8 # 0x38BC8\n0x8239E61C  lis       r12, jpt_8239E630@ha\n0x8239E620  addi      r12, r12, jpt_8239E630@l\n0x8239E624  slwi      r0, r10, 2\n0x8239E628  lwzx      r0, r12, r0\n0x8239E62C  mtctr     r0\n0x8239E630  bctr# switch jump  ; switch jump\n0x8239E634  .long loc_8239E6A4# jump table for switch statement  ; jump table for switch statement\n0x8239E6A4  mr        r3, r31# jumptable 8239E630 case 0  ; jumptable 8239E630 case 0\n0x8239E6A8  bl        BrnGameState__GameStateModule__ClearData\n0x8239E6AC  addis     r3, r31, 3\n0x8239E6B0  addi      r3, r3, 0x2EA0\n0x8239E6B4  bl        CgsDev__DebugComponent__Register\n0x8239E6B8  addis     r3, r31, 3\n0x8239E6BC  addi      r3, r3, 0x2DF8\n0x8239E6C0  bl        CgsDev__DebugComponent__Register\n0x8239E6C4  mr        r3, r31# jumptable 8239E630 case 1  ; jumptable 8239E630 case 1\n0x8239E6C8  stw       r29, 0x228(r31)\n0x8239E6CC  bl        CgsModule__ModuleSingleBuffered__Prepare\n0x8239E6D0  clrlwi    r11, r3, 24\n0x8239E6D4  cmplwi    cr6, r11, 0\n0x8239E6D8  beq       cr6, loc_8239ECF4\n0x8239E6DC  li        r11, 3# jumptable 8239E630 case 2  ; jumptable 8239E630 case 2\n0x8239E6E0  stw       r11, 0x228(r31)\n0x8239E6E4  addis     r3, r31, 1# jumptable 8239E630 case 3  ; jumptable 8239E630 case 3\n0x8239E6E8  add       r5, r31, r24\n0x8239E6EC  mr        r4, r19\n0x8239E6F0  addi      r3, r3, -0x5AB0\n0x8239E6F4  bl        BrnGameState__TriggerQueryManager__Prepare\n0x8239E6F8  clrlwi    r11, r3, 24\n0x8239E6FC  cmplwi    cr6, r11, 0\n0x8239E700  beq       cr6, loc_8239ECF4\n0x8239E704  li        r11, 4\n0x8239E708  stw       r11, 0x228(r31)\n0x8239E70C  addis     r3, r31, 3# jumptable 8239E630 case 4  ; jumptable 8239E630 case 4\n0x8239E710  mr        r4, r19\n0x8239E714  addi      r3, r3, -0x3170\n0x8239E718  bl        BrnGameState__StuntManager__Prepare\n0x8239E71C  clrlwi    r11, r3, 24\n0x8239E720  cmplwi    cr6, r11, 0\n0x8239E724  beq       cr6, loc_8239ECF4\n0x8239E728  mr        r3, r19# jumptable 8239E630 case 5  ; jumptable 8239E630 case 5\n0x8239E72C  stw       r28, 0x228(r31)\n0x8239E730  add       r29, r31, r24\n0x8239E734  bl        BrnGameState__GameStateModuleIO__OutputBuffer__\n0x8239E738  mr        r4, r29\n0x8239E73C  li        r5, 0\n0x8239E740  bl        BrnResource__GameDataIO__RequestInterface_3072___GetFreeburnChallengeList\n0x8239E744  mr        r3, r29\n0x8239E748  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x8239E74C  lwzx      r11, r31, r21# jumptable 8239E630 case 6  ; jumptable 8239E630 case 6\n0x8239E750  stw       r28, 0x228(r31)\n0x8239E754  cmpwi     cr6, r11, 1\n0x8239E758  blt       cr6, loc_8239ECF4\n0x8239E75C  add       r11, r31, r24\n0x8239E760  lwz       r10, 8(r11)\n0x8239E764  cmpwi     cr6, r10, 0\n0x8239E768  ble       cr6, loc_8239EA6C\n0x8239E76C  lwz       r10, 0xC(r11)\n0x8239E770  lwz       r11, 0(r11)\n0x8239E774  add       r11, r10, r11\n0x8239E778  addi      r29, r11, 8\n0x8239E77C  lwz       r10, 0(r11)\n0x8239E780  cmplwi    cr6, r10, 0x35 # '5'\n0x8239E784  beq       cr6, loc_8239E7BC\n0x8239E788  bl        CgsDev__Assert__BeginAssert\n0x8239E78C  addi      r3, r1, 0x140+var_E0\n0x8239E790  lwz       r5, dword_82F32264@l(r25)\n0x8239E794  lwz       r4, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E798  bl        CgsDev__StrStream__StrStream\n0x8239E79C  addi      r3, r1, 0x140+var_E0\n0x8239E7A0  mr        r4, r26\n0x8239E7A4  bl        CgsDev__StrStreamBase__operator__\n0x8239E7A8  li        r5, 0x204\n0x8239E7AC  mr        r4, r27\n0x8239E7B0  lwz       r3, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E7B4  bl        CgsDev__Assert__FireAssert\n0x8239E7B8  bl        CgsDev__Assert__EndAssert\n0x8239E7BC  lwz       r11, 0(r29)\n0x8239E7C0  cmpwi     cr6, r11, 0\n0x8239E7C4  beq       cr6, loc_8239E7FC\n0x8239E7C8  bl        CgsDev__Assert__BeginAssert\n0x8239E7CC  addi      r3, r1, 0x140+var_E0\n0x8239E7D0  lwz       r5, dword_82F32264@l(r25)\n0x8239E7D4  lwz       r4, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E7D8  bl        CgsDev__StrStream__StrStream\n0x8239E7DC  addi      r3, r1, 0x140+var_E0\n0x8239E7E0  mr        r4, r26\n0x8239E7E4  bl        CgsDev__StrStreamBase__operator__\n0x8239E7E8  li        r5, 0x209\n0x8239E7EC  mr        r4, r27\n0x8239E7F0  lwz       r3, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E7F4  bl        CgsDev__Assert__FireAssert\n0x8239E7F8  bl        CgsDev__Assert__EndAssert\n0x8239E7FC  lwz       r11, 0x20(r29)\n0x8239E800  stwx      r11, r31, r18\n0x8239E804  mr        r3, r19# jumptable 8239E630 case 7  ; jumptable 8239E630 case 7\n0x8239E808  stw       r23, 0x228(r31)\n0x8239E80C  add       r29, r31, r24\n0x8239E810  bl        BrnGameState__GameStateModuleIO__OutputBuffer__\n0x8239E814  mr        r4, r29\n0x8239E818  li        r5, 0\n0x8239E81C  bl        BrnResource__GameDataIO__RequestInterface_3072___GetVehicleList\n0x8239E820  mr        r3, r29\n0x8239E824  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x8239E828  lwzx      r11, r31, r21# jumptable 8239E630 case 8  ; jumptable 8239E630 case 8\n0x8239E82C  stw       r23, 0x228(r31)\n0x8239E830  cmpwi     cr6, r11, 1\n0x8239E834  blt       cr6, loc_8239ECF4\n0x8239E838  add       r11, r31, r24\n0x8239E83C  lwz       r10, 8(r11)\n0x8239E840  cmpwi     cr6, r10, 0\n0x8239E844  ble       cr6, loc_8239EA74\n0x8239E848  lwz       r10, 0xC(r11)\n0x8239E84C  lwz       r11, 0(r11)\n0x8239E850  add       r11, r10, r11\n0x8239E854  addi      r29, r11, 8\n0x8239E858  lwz       r10, 0(r11)\n0x8239E85C  cmplwi    cr6, r10, 0x34 # '4'\n0x8239E860  beq       cr6, loc_8239E898\n0x8239E864  bl        CgsDev__Assert__BeginAssert\n0x8239E868  addi      r3, r1, 0x140+var_E0\n0x8239E86C  lwz       r5, dword_82F32264@l(r25)\n0x8239E870  lwz       r4, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E874  bl        CgsDev__StrStream__StrStream\n0x8239E878  addi      r3, r1, 0x140+var_E0\n0x8239E87C  mr        r4, r26\n0x8239E880  bl        CgsDev__StrStreamBase__operator__\n0x8239E884  li        r5, 0x22C\n0x8239E888  mr        r4, r27\n0x8239E88C  lwz       r3, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E890  bl        CgsDev__Assert__FireAssert\n0x8239E894  bl        CgsDev__Assert__EndAssert\n0x8239E898  lwz       r11, 0(r29)\n0x8239E89C  cmpwi     cr6, r11, 0\n0x8239E8A0  beq       cr6, loc_8239E8D8\n0x8239E8A4  bl        CgsDev__Assert__BeginAssert\n0x8239E8A8  addi      r3, r1, 0x140+var_E0\n0x8239E8AC  lwz       r5, dword_82F32264@l(r25)\n0x8239E8B0  lwz       r4, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E8B4  bl        CgsDev__StrStream__StrStream\n0x8239E8B8  addi      r3, r1, 0x140+var_E0\n0x8239E8BC  mr        r4, r26\n0x8239E8C0  bl        CgsDev__StrStreamBase__operator__\n0x8239E8C4  li        r5, 0x231\n0x8239E8C8  mr        r4, r27\n0x8239E8CC  lwz       r3, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E8D0  bl        CgsDev__Assert__FireAssert\n0x8239E8D4  bl        CgsDev__Assert__EndAssert\n0x8239E8D8  lwz       r4, 0x20(r29)\n0x8239E8DC  add       r29, r31, r17\n0x8239E8E0  add       r3, r31, r16\n0x8239E8E4  stw       r4, 0(r29)\n0x8239E8E8  bl        BrnProgression__ProgressionManager__ApplyVehicleList\n0x8239E8EC  addi      r3, r31, 0x1020\n0x8239E8F0  lwz       r4, 0(r29)\n0x8239E8F4  bl        BrnGameState__ModeManager__ApplyVehicleList\n0x8239E8F8  mr        r3, r19# jumptable 8239E630 case 9  ; jumptable 8239E630 case 9\n0x8239E8FC  stw       r22, 0x228(r31)\n0x8239E900  add       r29, r31, r24\n0x8239E904  bl        BrnGameState__GameStateModuleIO__OutputBuffer__\n0x8239E908  mr        r4, r29\n0x8239E90C  li        r5, 0\n0x8239E910  bl        BrnResource__GameDataIO__RequestInterface_3072___GetWheelList\n0x8239E914  mr        r3, r29\n0x8239E918  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x8239E91C  lwzx      r11, r31, r21# jumptable 8239E630 case 10  ; jumptable 8239E630 case 10\n0x8239E920  stw       r22, 0x228(r31)\n0x8239E924  cmpwi     cr6, r11, 1\n0x8239E928  blt       cr6, loc_8239ECF4\n0x8239E92C  add       r11, r31, r24\n0x8239E930  lwz       r10, 8(r11)\n0x8239E934  cmpwi     cr6, r10, 0\n0x8239E938  ble       cr6, loc_8239EA7C\n0x8239E93C  lwz       r10, 0xC(r11)\n0x8239E940  lwz       r11, 0(r11)\n0x8239E944  add       r11, r10, r11\n0x8239E948  addi      r29, r11, 8\n0x8239E94C  lwz       r10, 0(r11)\n0x8239E950  cmplwi    cr6, r10, 0x3B # ';'\n0x8239E954  beq       cr6, loc_8239E98C\n0x8239E958  bl        CgsDev__Assert__BeginAssert\n0x8239E95C  addi      r3, r1, 0x140+var_E0\n0x8239E960  lwz       r5, dword_82F32264@l(r25)\n0x8239E964  lwz       r4, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E968  bl        CgsDev__StrStream__StrStream\n0x8239E96C  addi      r3, r1, 0x140+var_E0\n0x8239E970  mr        r4, r26\n0x8239E974  bl        CgsDev__StrStreamBase__operator__\n0x8239E978  li        r5, 0x257\n0x8239E97C  mr        r4, r27\n0x8239E980  lwz       r3, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E984  bl        CgsDev__Assert__FireAssert\n0x8239E988  bl        CgsDev__Assert__EndAssert\n0x8239E98C  lwz       r11, 0(r29)\n0x8239E990  cmpwi     cr6, r11, 0\n0x8239E994  beq       cr6, loc_8239E9CC\n0x8239E998  bl        CgsDev__Assert__BeginAssert\n0x8239E99C  addi      r3, r1, 0x140+var_E0\n0x8239E9A0  lwz       r5, dword_82F32264@l(r25)\n0x8239E9A4  lwz       r4, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E9A8  bl        CgsDev__StrStream__StrStream\n0x8239E9AC  addi      r3, r1, 0x140+var_E0\n0x8239E9B0  mr        r4, r26\n0x8239E9B4  bl        CgsDev__StrStreamBase__operator__\n0x8239E9B8  li        r5, 0x25C\n0x8239E9BC  mr        r4, r27\n0x8239E9C0  lwz       r3, CgsDev__Assert__gpcMessageBuffer@l(r30)# byte_83018150\n0x8239E9C4  bl        CgsDev__Assert__FireAssert\n0x8239E9C8  bl        CgsDev__Assert__EndAssert\n0x8239E9CC  lwz       r11, 0x20(r29)\n0x8239E9D0  stwx      r11, r31, r14\n0x8239E9D4  li        r11, 0xB# jumptable 8239E630 case 11  ; jumptable 8239E630 case 11\n0x8239E9D8  mr        r3, r19\n0x8239E9DC  stw       r11, 0x228(r31)\n0x8239E9E0  bl        BrnGameState__GameStateModuleIO__OutputBuffer__\n0x8239E9E4  lis       r11, aCarcolours@ha\n0x8239E9E8  mr        r29, r3\n0x8239E9EC  addi      r11, r11, aCarcolours@l# \"CarColours\"\n0x8239E9F0  mr        r3, r11\n0x8239E9F4  bl        CgsResource__ID__HashString\n0x8239E9F8  mr        r11, r3\n0x8239E9FC  li        r10, 5\n0x8239EA00  stw       r20, 0x140+var_DC(r1)\n0x8239EA04  add       r30, r31, r24\n0x8239EA08  li        r6, 0x18\n0x8239EA0C  li        r5, 4\n0x8239EA10  addi      r4, r1, 0x140+var_E0\n0x8239EA14  std       r11, 0x140+var_D0(r1)\n0x8239EA18  mr        r3, r29\n0x8239EA1C  stw       r10, 0x140+var_D8(r1)\n0x8239EA20  stw       r30, 0x140+var_E0(r1)\n0x8239EA24  bl        CgsModule__VariableEventQueue_3072_16___AddEvent\n0x8239EA28  mr        r3, r30\n0x8239EA2C  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x8239EA30  li        r29, 1\n0x8239EA34  li        r11, 0xC# jumptable 8239E630 case 12  ; jumptable 8239E630 case 12\n0x8239EA38  lwzx      r10, r31, r21\n0x8239EA3C  cmpwi     cr6, r10, 1\n0x8239EA40  stw       r11, 0x228(r31)\n0x8239EA44  blt       cr6, loc_8239ECF4\n0x8239EA48  add       r11, r31, r24\n0x8239EA4C  lwz       r10, 8(r11)\n0x8239EA50  cmpwi     cr6, r10, 0\n0x8239EA54  ble       cr6, loc_8239EA84\n0x8239EA58  lwz       r10, 0xC(r11)\n0x8239EA5C  lwz       r11, 0(r11)\n0x8239EA60  add       r11, r10, r11\n0x8239EA64  addi      r11, r11, 8\n0x8239EA68  b         loc_8239EA88\n0x8239EA6C  mr        r29, r20\n0x8239EA70  b         loc_8239E788\n0x8239EA74  mr        r29, r20\n0x8239EA78  b         loc_8239E864\n0x8239EA7C  mr        r29, r20\n0x8239EA80  b         loc_8239E958\n0x8239EA84  mr        r11, r20\n0x8239EA88  addi      r4, r11, 0x18\n0x8239EA8C  add       r3, r31, r15\n0x8239EA90  bl        CgsResource__BaseResourcePtr__CreateFromHandle\n0x8239EA94  li        r11, 0xD# jumptable 8239E630 case 13  ; jumptable 8239E630 case 13\n0x8239EA98  lwz       r3, 0x140+arg_2C(r1)\n0x8239EA9C  li        r4, 0x1B\n0x8239EAA0  stw       r11, 0x228(r31)\n0x8239EAA4  bl        BrnResource__GameDataIO__AllocatorList__GetHeapAllocator\n0x8239EAA8  mr        r5, r3\n0x8239EAAC  lwzx      r4, r31, r18\n0x8239EAB0  addi      r3, r31, 0x1020\n0x8239EAB4  bl        BrnGameState__ModeManager__Prepare\n0x8239EAB8  clrlwi    r11, r3, 24\n0x8239EABC  cmplwi    cr6, r11, 0\n0x8239EAC0  beq       cr6, loc_8239ECF4\n0x8239EAC4  li        r11, 0xE# jumptable 8239E630 case 14  ; jumptable 8239E630 case 14\n0x8239EAC8  addi      r3, r31, 0x238\n0x8239EACC  stw       r11, 0x228(r31)\n0x8239EAD0  bl        BrnGameState__TakedownManager__Prepare\n0x8239EAD4  clrlwi    r11, r3, 24\n0x8239EAD8  cmplwi    cr6, r11, 0\n0x8239EADC  beq       cr6, loc_8239ECF4\n0x8239EAE0  li        r11, 0xF# jumptable 8239E630 case 15  ; jumptable 8239E630 case 15\n0x8239EAE4  stw       r11, 0x228(r31)\n0x8239EAE8  li        r11, 0x10# jumptable 8239E630 case 16  ; jumptable 8239E630 case 16\n0x8239EAEC  stw       r20, 0x5A8(r31)\n0x8239EAF0  stw       r11, 0x228(r31)\n0x8239EAF4  li        r11, 0x11# jumptable 8239E630 case 17  ; jumptable 8239E630 case 17\n0x8239EAF8  addi      r30, r31, 0x7F0\n0x8239EAFC  mr        r3, r30\n0x8239EB00  stw       r11, 0x228(r31)\n0x8239EB04  bl        CgsModule__VariableEventQueue_1536_16___Prepare\n0x8239EB08  mr        r3, r30\n0x8239EB0C  std       r20, 0x780(r30)\n0x8239EB10  bl        CgsModule__VariableEventQueue_1536_16___Clear\n0x8239EB14  addis     r10, r31, 3# jumptable 8239E630 case 18  ; jumptable 8239E630 case 18\n0x8239EB18  li        r9, 0x12\n0x8239EB1C  addis     r11, r31, 3\n0x8239EB20  addi      r10, r10, -0x2730\n0x8239EB24  addi      r11, r11, -0x2720\n0x8239EB28  stw       r9, 0x228(r31)\n0x8239EB2C  addi      r3, r11, 0x10\n0x8239EB30  std       r20, 0(r10)\n0x8239EB34  std       r20, 0xC90(r11)\n0x8239EB38  bl        BrnGameState__GameStateModuleIO__FlybyData__Prepare\n0x8239EB3C  li        r11, 0x13# jumptable 8239E630 case 19  ; jumptable 8239E630 case 19\n0x8239EB40  add       r3, r31, r24\n0x8239EB44  stw       r11, 0x228(r31)\n0x8239EB48  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x8239EB4C  li        r11, 0x14# jumptable 8239E630 case 20  ; jumptable 8239E630 case 20\n0x8239EB50  add       r5, r31, r24\n0x8239EB54  mr        r4, r19\n0x8239EB58  add       r3, r31, r16\n0x8239EB5C  stw       r11, 0x228(r31)\n0x8239EB60  bl        BrnProgression__ProgressionManager__Prepare\n0x8239EB64  clrlwi    r11, r3, 24\n0x8239EB68  cmplwi    cr6, r11, 0\n0x8239EB6C  beq       cr6, loc_8239ECF4\n0x8239EB70  addis     r3, r31, 3# jumptable 8239E630 case 21  ; jumptable 8239E630 case 21\n0x8239EB74  li        r11, 0x15\n0x8239EB78  addi      r3, r3, -0x3B30\n0x8239EB7C  li        r10, -1\n0x8239EB80  stw       r11, 0x228(r31)\n0x8239EB84  stw       r20, 0xD0(r3)\n0x8239EB88  stw       r10, 0xD4(r3)\n0x8239EB8C  bl        BrnGameState__RichPresenceManagerBase__Prepare\n0x8239EB90  clrlwi    r11, r3, 24\n0x8239EB94  cmplwi    cr6, r11, 0\n0x8239EB98  beq       cr6, loc_8239ECF4\n0x8239EB9C  li        r11, 0x16# jumptable 8239E630 case 22  ; jumptable 8239E630 case 22\n0x8239EBA0  addis     r3, r31, 3\n0x8239EBA4  addi      r3, r3, -0x3A50\n0x8239EBA8  stw       r11, 0x228(r31)\n0x8239EBAC  bl        BrnGameState__AchievementManagerX360__Prepare\n0x8239EBB0  clrlwi    r11, r3, 24\n0x8239EBB4  cmplwi    cr6, r11, 0\n0x8239EBB8  beq       cr6, loc_8239ECF4\n0x8239EBBC  li        r11, 0x17# jumptable 8239E630 case 23  ; jumptable 8239E630 case 23\n0x8239EBC0  addis     r3, r31, 4\n0x8239EBC4  add       r5, r31, r24\n0x8239EBC8  mr        r4, r19\n0x8239EBCC  addi      r3, r3, 0x5768\n0x8239EBD0  stw       r11, 0x228(r31)\n0x8239EBD4  bl        BrnGameState__StreetManager__Prepare\n0x8239EBD8  clrlwi    r11, r3, 24\n0x8239EBDC  cmplwi    cr6, r11, 0\n0x8239EBE0  beq       cr6, loc_8239ECF4\n0x8239EBE4  li        r11, 0x18# jumptable 8239E630 case 24  ; jumptable 8239E630 case 24\n0x8239EBE8  lwz       r3, 0x140+arg_2C(r1)\n0x8239EBEC  li        r4, 0x1B\n0x8239EBF0  stw       r11, 0x228(r31)\n0x8239EBF4  bl        BrnResource__GameDataIO__AllocatorList__GetHeapAllocator\n0x8239EBF8  mr        r4, r3\n0x8239EBFC  addis     r3, r31, 3\n0x8239EC00  addi      r3, r3, -0x2B50\n0x8239EC04  bl        BrnGameState__GameStateImageManagerBase__Prepare\n0x8239EC08  clrlwi    r11, r3, 24\n0x8239EC0C  cmplwi    cr6, r11, 0\n0x8239EC10  beq       cr6, loc_8239ECF4\n0x8239EC14  li        r11, 0x19# jumptable 8239E630 case 25  ; jumptable 8239E630 case 25\n0x8239EC18  addis     r3, r31, 1\n0x8239EC1C  addi      r3, r3, -0x49A8\n0x8239EC20  stw       r11, 0x228(r31)\n0x8239EC24  bl        BrnGameState__RumbleManager__Prepare\n0x8239EC28  clrlwi    r11, r3, 24\n0x8239EC2C  cmplwi    cr6, r11, 0\n0x8239EC30  beq       cr6, loc_8239ECF4\n0x8239EC34  addis     r11, r31, 3# jumptable 8239E630 case 26  ; jumptable 8239E630 case 26\n0x8239EC38  li        r10, 0x1A\n0x8239EC3C  addi      r11, r11, -0x2A90\n0x8239EC40  stw       r10, 0x228(r31)\n0x8239EC44  std       r20, 0x98(r11)\n0x8239EC48  stw       r20, 0x80(r11)\n0x8239EC4C  stw       r20, 0x84(r11)\n0x8239EC50  stw       r20, 0x88(r11)\n0x8239EC54  stw       r20, 0x50(r11)\n0x8239EC58  std       r20, 0x90(r11)\n0x8239EC5C  addis     r3, r31, 1# jumptable 8239E630 case 27  ; jumptable 8239E630 case 27\n0x8239EC60  addi      r3, r3, -0x5490\n0x8239EC64  bl        BrnTrigger__TriggerData___GetMemor\n0x8239EC68  mr        r30, r3\n0x8239EC6C  add       r4, r31, r15\n0x8239EC70  addi      r3, r1, 0x140+var_C0\n0x8239EC74  bl        BrnWorld__GlobalColour\n0x8239EC78  mr        r5, r3\n0x8239EC7C  addis     r3, r31, 1\n0x8239EC80  mr        r4, r30\n0x8239EC84  addi      r3, r3, -0x5330\n0x8239EC88  bl        BrnGameState__DriveThruManager__Prepare\n0x8239EC8C  add       r11, r31, r14\n0x8239EC90  add       r10, r31, r17\n0x8239EC94  stb       r29, 0x140+var_F0(r1)\n0x8239EC98  addis     r9, r31, 3\n0x8239EC9C  addis     r8, r31, 3\n0x8239ECA0  addi      r9, r9, -0x3260\n0x8239ECA4  lwz       r7, 0(r11)\n0x8239ECA8  addi      r8, r8, -0x31E0\n0x8239ECAC  lwz       r6, 0(r10)\n0x8239ECB0  stw       r7, 0x18(r9)\n0x8239ECB4  stw       r6, 0x14(r9)\n0x8239ECB8  lwz       r11, 0(r11)\n0x8239ECBC  lwz       r10, 0(r10)\n0x8239ECC0  stw       r11, 0x10(r8)\n0x8239ECC4  stw       r10, 0xC(r8)\n0x8239ECC8  stw       r29, 0x228(r31)\n0x8239ECCC  stw       r20, 0x230(r31)\n0x8239ECD0  b         loc_8239ECF4\n0x8239ECD4  bl        CgsDev__Assert__BeginAssert# jumptable 8239E630 default case  ; jumptable 8239E630 default case\n0x8239ECD8  lis       r11, aDP4B5MainBurno_552@ha\n0x8239ECDC  li        r5, 0x339\n0x8239ECE0  addi      r4, r11, aDP4B5MainBurno_552@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x8239ECE4  lis       r11, aInvalidStage@ha\n0x8239ECE8  addi      r3, r11, aInvalidStage@l# \"Invalid Stage\\n\"\n0x8239ECEC  bl        CgsDev__Assert__FireAssert\n0x8239ECF0  bl        CgsDev__Assert__EndAssert\n0x8239ECF4  mr        r3, r19\n0x8239ECF8  bl        CgsModule__IOBuffer__UnlockForWrite\n0x8239ECFC  lwz       r11, 0x140+var_EC(r1)\n0x8239ED00  lbz       r3, 0x140+var_F0(r1)\n0x8239ED04  stb       r20, 0(r11)\n0x8239ED08  addi      r1, r1, 0x140\n0x8239ED0C  b         __restgprlr",
+  "xrefs_to": [],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EB0",
+      "name": "__savegprlr_14"
+    },
+    {
+      "address": "0x82204A18",
+      "name": "CgsModule::IOBuffer::LockForWrite"
+    },
+    {
+      "address": "0x8236B3A8",
+      "name": "BrnGameState::GameStateModule::ClearData"
+    },
+    {
+      "address": "0x828331D8",
+      "name": "CgsDev::DebugComponent::Register"
+    },
+    {
+      "address": "0x8286E7A0",
+      "name": "CgsModule::ModuleSingleBuffered::Prepare"
+    },
+    {
+      "address": "0x82398218",
+      "name": "BrnGameState::TriggerQueryManager::Prepare"
+    },
+    {
+      "address": "0x8239C9C0",
+      "name": "BrnGameState::StuntManager::Prepare"
+    },
+    {
+      "address": "0x8231D560",
+      "name": "BrnGameState::GameStateModuleIO::OutputBuffer::"
+    },
+    {
+      "address": "0x82396AB8",
+      "name": "BrnResource::GameDataIO::RequestInterface<3072>::GetFreeburnChallengeList"
+    },
+    {
+      "address": "0x821F1D50",
+      "name": "CgsModule::BaseEventReceiverQueue::Clear"
+    },
+    {
+      "address": "0x82817548",
+      "name": "CgsDev::Assert::BeginAssert"
+    },
+    {
+      "address": "0x821F0158",
+      "name": "CgsDev::StrStream::StrStream"
+    },
+    {
+      "address": "0x821F01A8",
+      "name": "CgsDev::StrStreamBase::operator<<"
+    },
+    {
+      "address": "0x82820810",
+      "name": "CgsDev::Assert::FireAssert"
+    },
+    {
+      "address": "0x82817558",
+      "name": "CgsDev::Assert::EndAssert"
+    },
+    {
+      "address": "0x82396A50",
+      "name": "BrnResource::GameDataIO::RequestInterface<3072>::GetVehicleList"
+    },
+    {
+      "address": "0x82359A20",
+      "name": "BrnProgression::ProgressionManager::ApplyVehicleList"
+    },
+    {
+      "address": "0x8231E5D8",
+      "name": "BrnGameState::ModeManager::ApplyVehicleList"
+    },
+    {
+      "address": "0x82396B20",
+      "name": "BrnResource::GameDataIO::RequestInterface<3072>::GetWheelList"
+    },
+    {
+      "address": "0x828D84A8",
+      "name": "CgsResource::ID::HashString"
+    },
+    {
+      "address": "0x8233FD78",
+      "name": "CgsModule::VariableEventQueue<3072,16>::AddEvent"
+    },
+    {
+      "address": "0x828D93A0",
+      "name": "CgsResource::BaseResourcePtr::CreateFromHandle"
+    },
+    {
+      "address": "0x822773E0",
+      "name": "BrnResource::GameDataIO::AllocatorList::GetHeapAllocator"
+    },
+    {
+      "address": "0x823407A0",
+      "name": "BrnGameState::ModeManager::Prepare"
+    },
+    {
+      "address": "0x823595B8",
+      "name": "BrnGameState::TakedownManager::Prepare"
+    },
+    {
+      "address": "0x82367FE0",
+      "name": "CgsModule::VariableEventQueue<1536,16>::Prepare"
+    },
+    {
+      "address": "0x822AC080",
+      "name": "CgsModule::VariableEventQueue<1536,16>::Clear"
+    },
+    {
+      "address": "0x82363A08",
+      "name": "BrnGameState::GameStateModuleIO::FlybyData::Prepare"
+    },
+    {
+      "address": "0x8239DC38",
+      "name": "BrnProgression::ProgressionManager::Prepare"
+    },
+    {
+      "address": "0x8235A4C8",
+      "name": "BrnGameState::RichPresenceManagerBase::Prepare"
+    },
+    {
+      "address": "0x82372DD0",
+      "name": "BrnGameState::AchievementManagerX360::Prepare"
+    },
+    {
+      "address": "0x82350900",
+      "name": "BrnGameState::StreetManager::Prepare"
+    },
+    {
+      "address": "0x8236D858",
+      "name": "BrnGameState::GameStateImageManagerBase::Prepare"
+    },
+    {
+      "address": "0x823648D0",
+      "name": "BrnGameState::RumbleManager::Prepare"
+    },
+    {
+      "address": "0x82211E40",
+      "name": "BrnTrigger::TriggerData>::GetMemor"
+    },
+    {
+      "address": "0x82368FC8",
+      "name": "BrnWorld::GlobalColour"
+    },
+    {
+      "address": "0x8236E3C0",
+      "name": "BrnGameState::DriveThruManager::Prepare"
+    },
+    {
+      "address": "0x82204BB8",
+      "name": "CgsModule::IOBuffer::UnlockForWrite"
+    }
+  ]
+}

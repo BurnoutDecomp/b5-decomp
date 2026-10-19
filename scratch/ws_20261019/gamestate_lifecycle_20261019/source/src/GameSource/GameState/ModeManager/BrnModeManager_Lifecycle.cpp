@@ -1,0 +1,433 @@
+// ============================================================================
+// b5-decomp/src/GameSource/GameState/ModeManager/BrnModeManager_Lifecycle.cpp
+// ============================================================================
+// Partfile of the BrnGameState::ModeManager TU (owning header BrnModeManager.h).
+// Wave-B keystone, agent 1. Bodies the four lifecycle/dispatch functions:
+//
+//   ModeManager::Construct                      X360 0x82340008   (THE layout oracle)
+//   ModeManager::Prepare                        X360 0x823407A0
+//   ModeManager::ClearLandmarkAndFinishLineData X360 0x82328590
+//   ModeManager::ProcessEvent                   X360 0x82340AB8
+//
+// Every store below is reconstructed from that export's ASSEMBLY, not from the Hex-Rays
+// pseudocode: Construct's IDA prototype is "local variable allocation has failed" garbage
+// (28 int arguments -- hazards H9), it merges unrelated 32-bit stores into fake 64-bit
+// constants, and it renders the inlined CgsNumeric::Random::Construct() as forty lines of
+// __int128 shuffling. The real shapes are noted at each site.
+//
+// [X] DO NOT re-implement anything from hazards H2's list of 16 committed bodies -- call them.
+
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"
+
+#include "GameSource/GameState/BrnGameStateModule.h"                 // GameStateModule::GetPlayerActiveRaceCarIndex (ProcessEvent)
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::DealWithInProgressStunt
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::AddMonitor
+
+namespace BrnGameState
+{
+
+// ----------------------------------------------------------------------------
+// TU-local constants, all image- or asm-cited. No invented values.
+// ----------------------------------------------------------------------------
+
+// The landmark "none" sentinel. ClearLandmarkAndFinishLineData loads it as a half-word from the
+// global at X360 0x82CDB7D4 and stores it into mPlayerCurrentLandmark and every maLandmarkIndices
+// slot. DUMPED FROM THE IMAGE THIS SESSION (scratch/postfx_step9_final/envfix/work/image.bin,
+// offset 0xCDB7D4 == VA - 0x82000000, big-endian): the half-word reads FF FF, i.e. -1 as s16.
+// That is the canonical BrnGameState::K_INVALID_LANDMARK the DecFIGS BrnGameStateTypes.h banner
+// names but this tree has not homed yet. (Its neighbour at 0x82CDB7D8 reads FF FE == -2, which is
+// K_MULTIPLE_LANDMARKS -- recorded here so nobody has to re-dump it.)
+// [!] A .bss ZERO WOULD HAVE BEEN A LIE HERE: clearing these to 0 makes landmark/region 0 look like
+// a live checkpoint. The image says -1.
+static const s32 KI_INVALID_LANDMARK = -1;
+
+// The CgsID "none" sentinel ClearLandmarkAndFinishLineData stores into maLandmarkCgsIDs: the asm is
+// `li r7, -1` followed by `std r7, 0(r9)`, i.e. a sign-extended 64-bit all-ones, NOT zero.
+static const CgsID KU_INVALID_CGS_ID = 0xFFFFFFFFFFFFFFFFull;
+
+// ----------------------------------------------------------------------------
+// The two PerfMon handles Construct registers.
+//
+// On console these are FILE STATICS of BrnModeManager.cpp (dword_82CDB6F4 / dword_82CDB6F8; the
+// DecFIGS dump lists them as `extern int32_t miPreWorldUpdatePM / miPostWorldUpdatePM` precisely
+// because they are not members). The host TU is split across partfiles, so they sit at namespace
+// scope here and agent 7a's PreWorldUpdate partfile reaches them with:
+//     namespace BrnGameState { extern s32 miPreWorldUpdatePM; extern s32 miPostWorldUpdatePM; }
+//
+// [!] INITIALISER DIVERGENCE, DELIBERATE AND NARROW: the console's .bss starts both at 0 and
+// AddMonitor overwrites them during Construct. Here they start at -1, which is exactly what
+// PerfMonCpu::AddMonitor returns for "no monitor" (see AddMonitor in CgsPerfMonCpu.h), because on this build
+// Construct is NOT YET CALLED (see its banner) -- a 0 would make the first PreWorldUpdate bracket
+// monitor handle 0, i.e. silently attribute ModeManager time to whatever registered first.
+// Restore 0 only if Construct becomes the armed path AND that risk is gone.
+// ----------------------------------------------------------------------------
+s32 miPreWorldUpdatePM  = -1;
+s32 miPostWorldUpdatePM = -1;
+
+// ARTIST 0x8231E5D8. The compiler inlined this forwarding method and the
+// ChallengeManager installer: Mode +0x73C0 is ChallengeManager +0x5C0.
+void ModeManager::ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList)
+{
+    mChallengeManager.ApplyVehicleList(lpVehicleList);
+}
+
+// ============================================================================
+// ModeManager::Construct -- X360 0x82340008
+// ============================================================================
+// [!!] THIS BODY HAS NO CALLER ON THIS BUILD, AND THAT IS THE DECIDED STATE (conductor decision #1,
+// branch (b)). The investigation it asked for, done against GameStateModule::Construct's call
+// position (BrnGameStateModule.cpp:134, where ConstructInterModeStateBringUp is called today):
+//
+//   arg                                        reachable there?
+//   1 GameStateModule*                         YES -- `this`
+//   2 BrnProgression::ProgressionManager*      YES -- &mProgressionManager (BrnGameStateModule.h:842)
+//   3 TriggerQueryManager*                     YES -- &mTriggerQueryManager (:965)
+//   4 NetworkRoundManager*                     NO  -- GameStateModule has no such member
+//   5 StreetManager*                           YES -- &mStreetManager (:868)
+//   6 MugshotManager*                          NO  -- GameStateModule has no such member
+//   7 const RoadRulesManager*                  NO  -- DWARF declares mRoadRulesManager between
+//                                                     mAchievementManager and mStreetManager, but it
+//                                                     is NOT reconstructed (see the note at :856)
+//   8 StuntModeScoring::AchievementManager*    NO (TYPE) -- the member exists (mAchievementManager,
+//                                                     :854) but it is an AchievementManagerX360,
+//                                                     while StuntModeScoring::AchievementManager is
+//                                                     typedef'd to AchievementManagerPS3
+//                                                     (BrnStuntModeScoring.h:194). Those two are
+//                                                     SIBLINGS under AchievementManagerBase, so the
+//                                                     address does not convert.
+//
+// FOUR OF EIGHT ARE UNREACHABLE, so wiring this in would mean passing nulls through four asserts the
+// console fires on exactly those pointers. The bring-up seam therefore stays, and it stays the ONLY
+// ARMED PATH -- both paths are never armed at once.
+// DELETE-WHEN, precisely: (a) GameStateModule grows a NetworkRoundManager member/accessor, (b) it
+// grows a MugshotManager one, (c) RoadRulesManager is reconstructed and embedded, and (d) the
+// StuntModeScoring::AchievementManager typedef is re-pointed at the base (or at the X360 flavour) so
+// &mAchievementManager converts. On that day: replace the ConstructInterModeStateBringUp call site
+// with this Construct and DELETE the seam and its two bring-up methods.
+// ============================================================================
+void ModeManager::Construct(GameStateModule*                      lpGameStateModule,
+                            BrnProgression::ProgressionManager*   lpProgressionManager,
+                            TriggerQueryManager*                  lpTriggerQueryManager,
+                            NetworkRoundManager*                  lpNetworkRoundManager,
+                            StreetManager*                        lpStreetManager,
+                            MugshotManager*                       lpMugshotManager,
+                            const RoadRulesManager*               lpRoadRulesManager,
+                            StuntModeScoring::AchievementManager* lpAchievementManager)
+{
+    mModeManagerDebugComponent.Construct(this);
+    mModeManagerDebugComponent.Register();
+
+    ScoringSystem* lpScoringSystem = GetScoringSystem();
+    CGS_ASSERT(lpScoringSystem != nullptr, "lpScoringSystem");
+    mScoringSystemDebugComponent.Construct(lpScoringSystem);
+    mScoringSystemDebugComponent.Register();
+
+    // Console orders this store BEFORE the ChallengeManager call; kept in place.
+    miDebugFinishPosition = 0;                                          // +38168 (0x9518)
+
+    // ------------------------------------------------------------------------
+    // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). Console, register-attested at
+    // 0x8234009C-0x823400C0:
+    //   r3 = this + 0x6E00 (== +28160, mChallengeManager)
+    //   r4 = r28 (a2, lpGameStateModule)      r5 = r31 (this)
+    //   r6 = r26 (a3, lpProgressionManager)   r7 = r25 (a8, lpRoadRulesManager)
+    //   r8 = r24 (a4, lpTriggerQueryManager)
+    // -- i.e. exactly the call below, in the console's argument order.
+    // It had been parked while the 27 ChallengeManager TUs were off the exe mount: measured
+    // 2026-09-07 by compiling all 27 and diffing their UNDEF externals against the tree, TWELVE
+    // symbols they referenced had no definition anywhere (the ChallengeListEntry/
+    // ChallengeListEntryAction blob accessors GetCarID/GetCarType/GetCgsIDTarget/GetCoopType/
+    // GetModifier/GetNumLocations/HasConvoyTime, GameStateModuleIO::OutputBuffer::
+    // GetGuiOutputQueue/GetGameStateToNetworkInterface, GameStateModule::GetActiveRaceCarIndex
+    // @0x82363978, GameStateToNetworkInterface::SetPlayerInFreeburnChallenge, and
+    // ChallengeManagerDebugComponent::StartChallenge). All twelve are bodied in this same change
+    // -- see the roll-call at BrnModeManager.h's +28160 member -- and the 27 TUs join the mount
+    // with it, so this call and the four below now cost ZERO unresolved externals.
+    // lpRoadRulesManager exists ONLY to be forwarded here -- it is consumed nowhere else in this
+    // body.
+    // ------------------------------------------------------------------------
+    mChallengeManager.Construct(lpGameStateModule, this, lpProgressionManager,
+                                lpRoadRulesManager, lpTriggerQueryManager);
+
+    CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule");      // BrnModeManager.cpp:202
+    mpGameStateModule = lpGameStateModule;                              // +27992
+
+    CGS_ASSERT(lpProgressionManager != nullptr, "lpProgressionManager");// BrnModeManager.cpp:205
+    mpProgressionManager = lpProgressionManager;                        // +27996
+
+    mpTriggerQueryManager = lpTriggerQueryManager;                      // +28000 (no assert on console)
+
+    CGS_ASSERT(lpNetworkRoundManager != nullptr, "lpNetworkRoundManager"); // BrnModeManager.cpp:210
+    mpNetworkRoundManager = lpNetworkRoundManager;                      // +28004
+
+    // ------------------------------------------------------------------------
+    // The mode-pointer table. Console: an 18-iteration `*v38++ = 0` loop over this+0, then SIXTEEN
+    // stores (slots 6 and 9 are never written -- ORDER NOTE 3, authored NULLs), then an 18-iteration
+    // loop calling vtable slot 0 on every non-null slot.
+    // ------------------------------------------------------------------------
+    for (s32 liSlot = 0; liSlot < KI_GAME_MODE_SLOTS; ++liSlot)
+    {
+        mapGameModes[liSlot] = nullptr;
+    }
+
+    mapGameModes[0]  = &mRace;                   // console *(this+0)  = this+72
+    mapGameModes[1]  = &mFaceOff;                //         *(this+4)  = this+268
+    mapGameModes[2]  = &mCrashMode;              //         *(this+8)  = this+464
+    mapGameModes[3]  = &mRoadRage;               //         *(this+12) = this+652
+    mapGameModes[4]  = &mPursuit;                //         *(this+16) = this+908
+    mapGameModes[5]  = &mBurningRoute;           //         *(this+20) = this+1096
+    // slot 6  == E_MODE_ELIMINATOR      -- AUTHORED NULL, never stored by the console.
+    mapGameModes[7]  = &mStuntAttackMode;        //         *(this+28) = this+1328
+    mapGameModes[8]  = &mSurvivor;               //         *(this+32) = this+1552
+    // slot 9  == E_MODE_TRAFFIC_ATTACK  -- AUTHORED NULL, never stored by the console.
+    mapGameModes[10] = &mOnlineRace;             //         *(this+40) = this+1776
+    mapGameModes[11] = &mOnlineRoadRage;         //         *(this+44) = this+2016
+    mapGameModes[12] = &mOnlineStuntRun;         //         *(this+48) = this+2256  ] ORDER NOTE 2:
+    mapGameModes[13] = &mOnlineBurningHomeRun;   //         *(this+52) = this+2512  ] ONE object,
+    mapGameModes[14] = &mOnlineStuntRun;         //         *(this+56) = this+2256  ] THREE slots.
+    mapGameModes[15] = &mOnlineFreeBurnLobby;    //         *(this+60) = this+2952  ] Its Construct
+    mapGameModes[16] = &mOnlineShowtime;         //         *(this+64) = this+3296  ] therefore runs
+    mapGameModes[17] = &mOnlineStuntRun;         //         *(this+68) = this+2256  ] three times.
+
+    // Console: `do { if (*v40) (***v40)(*v40, this); ... } while (--v41);` over all 18 slots --
+    // vtable slot 0 == GameMode::Construct(ModeManager*). The three aliased slots invoke it three
+    // times on the same OnlineStuntRunMode; that is idempotent on console and MUST stay that way.
+    for (s32 liSlot = 0; liSlot < KI_GAME_MODE_SLOTS; ++liSlot)
+    {
+        if (mapGameModes[liSlot] != nullptr)
+        {
+            mapGameModes[liSlot]->Construct(this);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // The free-burn-lobby manager pointers, through the lobby's two inlined setters (each fires
+    // its own assert, then the skillz manager's setter fires its own and stores the pointer).
+    // ------------------------------------------------------------------------
+    mOnlineFreeBurnLobby.SetStreetManager(lpStreetManager);
+    mOnlineFreeBurnLobby.SetMugshotManager(lpMugshotManager);
+
+    // ------------------------------------------------------------------------
+    // The scalar / sentinel seeds, in console store order.
+    // [!] THE -1s ARE LOAD-BEARING: meCurrentGameModeType idling at 0 instead of -1 is
+    // E_MODE_OFFLINE_RACE, which is the tut-ticker bug (hazards H3).
+    // ------------------------------------------------------------------------
+    miNumUnsucessfulGameModeAttempts = 0;                                // +3496
+    mpCurrentGameMode                = nullptr;                          // +3480
+    mbFinishedOnlineEvent            = false;                            // +38151
+    mbInstantIntroSplash             = false;                            // +38152
+    meCurrentGameModeType            = GameStateModuleIO::E_MODE_NONE;   // +3476  = -1
+    mePreviousGameModeType           = GameStateModuleIO::E_MODE_NONE;   // +3484  = -1
+    meLastAttemptedGameModeType      = GameStateModuleIO::E_MODE_NONE;   // +3492  = -1
+    mePreviousGameModeState          = GameStateModuleIO::E_GMS_INVALID; // +3488  = -1
+    mbEventJustFinished              = false;                            // +38153
+    miFramesUntilModeSwitchSend      = 0;                                // +38160
+    muUnkByte_0x950B                 = 0;                                // +38155
+    mbPlayerCrashedLastFrame         = false;                            // +38154
+    mbIsInTimeUpOutro                = false;                            // +38156
+    mfTimeUpStateTimer               = 0.0f;                             // +38164
+
+    // The embedded ScoringSystem. Console: ScoringSystem::Construct(this + 3504, lpAchievementManager).
+    mScoringSystem.Construct(lpAchievementManager);
+
+    // ------------------------------------------------------------------------
+    // [x] UN-PARKED 2026-08-27 (stunt-scorer latch-drain fix) -- LEG 3, HUDMessageLogic.
+    // Console 0x82340008: BrnGameState::HUDMessageLogic::Construct(this + 27392).
+    //
+    // It was PARKED PER CONDUCTOR DECISION #4 (the HUD-message lifecycle belonged to the event-GUI
+    // wave). The park turned out to be load-bearing in the worst way: HUDMessageLogic::
+    // GenerateStuntMessage is the image's ONLY consumer of StuntModeScoring's one-shot
+    // mbRecentStunt latch, so with the whole lifecycle parked the latch was armed on every banked
+    // stunt and never drained, and StuntModeScoring::UpdateBufferedScore's opening
+    // CGS_ASSERT(!mbRecentStunt) fired mid-run in every offline stunt race.
+    // Construct binds mActionQueue's buffer (an un-Constructed VariableEventQueue has none) and
+    // seeds meCurrentGameModeType to E_MODE_NONE, so it is the prerequisite for the drain.
+    // ------------------------------------------------------------------------
+    mHUDMessageLogic.Construct();
+
+    mbFinishCurrentModeNextUpdate = false;                               // +38135 (0x94F7)
+    mbOnlineFinalStandingsShown   = false;                               // +38136 (0x94F8)
+
+    // ------------------------------------------------------------------------
+    // The random generator. The console INLINES CgsNumeric::Random::Construct() here, which is why
+    // Hex-Rays renders ~55 lines of __int128 shuffling: seed <- KU_RANDOM_DEFAULT_SEED
+    // (the pseudocode's `0x3F8000001AD0891B` is IDA merging the ring[0] = 0x3F800000 == 1.0f store
+    // with the seed's low half 0x1AD0891B), ring[0] <- 1.0f, then seven AddRandomFloatToBuffer steps
+    // (each `seed = seed * 0x5851F42D4C957F2D + 1`, `(seed >> 32) >> 9 | 0x3F800000` into the next
+    // ring slot -- the recurring 1284865837 in the pseudocode is that multiplier's low word), then
+    // `muOldestBufferIndex = (muOldestBufferIndex + 1) & 7`. That is exactly Random::Construct().
+    // ------------------------------------------------------------------------
+    mRandom.Construct();                                                 // +28016
+
+    ClearLandmarkAndFinishLineData();
+
+    mfPlayerTotalledTime               = 0.0f;                           // +32808
+    mbWinIfSecond                      = false;                          // +38137
+    mfPFMSecondPhaseTimer              = 0.0f;                           // +38128
+    mbModeDataIsLoading                = false;                          // +38145
+    mbIsModePrepared                   = false;                          // +38147
+    mbIsWaitingForSecondPFM            = false;                          // +38132
+    mbHasAbortedDueToDisconnect       = false;                          // +38144
+    mbStuntChallengeActive             = false;                          // +38157
+    mbInModeStartRegion                = false;                          // +38133
+    mbLastInModeStartRegion            = false;                          // +38134
+    mbHasCrashedOut                    = false;                          // +38140
+    mbPlayerFinishedTimedOut                   = false;                          // +38141
+    mbDistanceToFinishLineTransmitted  = false;                          // +38148
+    mbModeIntroStarted                 = false;                          // +38149
+    mbReadyForModeIntro                = false;                          // +38146
+    mbHasTimedOut                      = false;                          // +38139
+    mbHasPlayerFinished                = false;                          // +38143
+    mbPlayerFinishedCarDestroyed        = false;                          // +38142
+
+    // Console: `std r30, 0(this+0x8BF0)` / `std r30, 0(this+0x8BF8)` with r30 == 0 -- two 8-byte
+    // zero stores. (Hex-Rays shows `*(a1+35824) = v29` with a bogus 64-bit v29 whose high half it
+    // filled from an unrelated address register; the asm has no such value.)
+    // (BitArray<35>::UnSetAll and ::Prepare are byte-identical whole-field zero loops and the asm
+    //  cannot tell them apart -- one `std` of zero either way. UnSetAll is used here because this is
+    //  a plain clear, not a per-mode prepare.)
+    mRaceCarReachedCheckpoint.UnSetAll();                                // +35824
+    mRaceCarReachedFinish.UnSetAll();                                    // +35832
+
+    mfTimeInFreeBurn = 0.0f;                                             // +38172
+    mfTimeInMode     = 0.0f;                                             // +38176
+    mpGameActionQueue = nullptr;                                         // +28008
+    mfTimeInOnline   = 0.0f;                                             // +38180
+
+    mbNeedToSendNextRequest            = false;                          // +35852
+    mbIsCalculatingCheckpointDistances = false;                          // +35853
+    muNextDistanceRequestCheckpoint    = 0;                              // +35848
+
+    // ------------------------------------------------------------------------
+    // The two PerfMon monitors. Console:
+    //   r3 = "ModeManager PreWorld" / "ModeManager PostWorld", r4 = 5, r5 = 0,
+    //   f1 = flt_82001C98, r7 = 1  -- r6 is NEVER WRITTEN.
+    // r6 is the integer slot the f32 argument consumes on the PPC ABI; Hex-Rays sees the hole and
+    // invents a sixth argument for it (the "38176" and "v47" in the pseudocode are leftover address
+    // registers, not arguments). CgsPerfMonCpu.h already documents this trap in full.
+    // flt_82001C98 == 1.0f, dumped from the image at offset 0x1C98 this session.
+    // [OK] PAGE 5 NOW HAS A NAMED ENUMERATOR: the header_request was applied 2026-08-26 by the
+    // wave-B fix round (E_PMP_5 = 5 in CgsPerfMonCpu.h), after re-reading the console's `li r4, 5`
+    // at 0x823406BC. The value-cast is gone; the page is named.
+    // ------------------------------------------------------------------------
+    miPreWorldUpdatePM  = CgsDev::PerfMonCpu::AddMonitor(
+        "ModeManager PreWorld",  CgsDev::E_PMP_5, false, 1.0f, true);
+    miPostWorldUpdatePM = CgsDev::PerfMonCpu::AddMonitor(
+        "ModeManager PostWorld", CgsDev::E_PMP_5, false, 1.0f, true);
+}
+
+// ============================================================================
+// ModeManager::Prepare -- X360 0x823407A0
+// ============================================================================
+// Console, verbatim (the whole body):
+//     if (ChallengeManager::Prepare(this + 0x6E00 /* +28160 */, lpFreeburnChallengeList))
+//         return ScoringSystem::Prepare(this + 0xDB0 /* +3504 */, lpHeapMalloc);
+//     return false;
+// (IDA shows ChallengeManager::Prepare taking one argument because of its own prototype; the asm
+//  leaves r4 == lpFreeburnChallengeList untouched across the call, so the list IS forwarded.)
+bool ModeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChallengeList,
+                          CgsMemory::HeapMalloc*            lpHeapMalloc)
+{
+    // ------------------------------------------------------------------------
+    // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). The console's own gate
+    // (`clrlwi/cmplwi/bne` on the returned byte at 0x823407C4): a FAILED challenge-list prepare
+    // short-circuits the whole method and leaves the ScoringSystem un-prepared. That is the
+    // console's behaviour, not a defensive addition. On the normal path nothing changes --
+    // ChallengeManager::Prepare @0x8233AAF8 returns true unconditionally; the only way it fails is
+    // an unusable challenge list.
+    // ------------------------------------------------------------------------
+    if (!mChallengeManager.Prepare(lpFreeburnChallengeList))
+    {
+        return false;
+    }
+
+    return mScoringSystem.Prepare(lpHeapMalloc);
+}
+
+// ============================================================================
+// ModeManager::ClearLandmarkAndFinishLineData -- X360 0x82328590
+// ============================================================================
+// Called by Construct and by ExitCurrentMode. Asm shape:
+//     *(this + 0x801C) = 0;                       // muNumLandmarks  (stwx of r29 == 0)
+//     *(this + 0x8020) = word_82CDB7D4;           // mPlayerCurrentLandmark (sthx)
+//     ResetNextLandmarks(this, 1);
+//     r11 = this + 0x7EC0; r9 = this + 0x7E40; r7 = -1; 16 iterations:
+//         sth r8(word_82CDB7D4), -0xA0(r11)       // maLandmarkIndices[i]        (0x7EC0-0xA0 == 0x7E20)
+//         std r7,               0(r9); r9 += 8    // maLandmarkCgsIDs[i] = -1
+//         sth r29(0),           0(r11); r11 += 2  // mauLandmarkSectionIndices[i] = 0
+void ModeManager::ClearLandmarkAndFinishLineData()
+{
+    muNumLandmarks         = 0;                                          // +32796
+    mPlayerCurrentLandmark = LandmarkIndex(KI_INVALID_LANDMARK);         // +32800
+
+    ResetNextLandmarks(true);
+
+    for (s32 liLandmark = 0; liLandmark < GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE; ++liLandmark)
+    {
+        maLandmarkIndices[liLandmark]           = static_cast<u16>(KI_INVALID_LANDMARK); // 0xFFFF, not 0
+        maLandmarkCgsIDs[liLandmark]            = KU_INVALID_CGS_ID;
+        mauLandmarkSectionIndices[liLandmark]   = 0;
+    }
+}
+
+// ============================================================================
+// ModeManager::ProcessEvent -- X360 0x82340AB8
+// ============================================================================
+// The whole body is the ChallengeManager forward plus ONE event case. Asm shape:
+//     r3 = this + 0x6E00; bl ChallengeManager::ProcessEvent   (r4/r5/f1 untouched -> all forwarded)
+//     cmpwi r31(leEventType), 0x78 (== 120); bne out
+//     r11 = mpCurrentGameMode (0xD98); r11 = r11 ? *(r11 + 0xAC) : 0     // GameMode::mbIsOnline
+//     r11 = this + 0xDB0 (mScoringSystem)
+//     r31 = r11 + 0x2620  (online stunt scorer)      if that byte is set
+//     r31 = r11 + 0x350   (offline stunt scorer)     otherwise
+//     r3 = mpGameStateModule (0x6D58); bl GameStateModule::GetPlayerActiveRaceCarIndex
+//     r6 = result; f1 = the incoming delta; r4 = the incoming Event*; r3 = r31
+//     bl StuntModeScoring::DealWithInProgressStunt
+// [!] r5 IS NEVER WRITTEN -- it is the integer slot the f32 argument consumes on the PPC ABI, which
+// is why Hex-Rays invents an uninitialised `v13` fourth argument. Three real arguments.
+void ModeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventType,
+                               const CgsModule::Event*           lpEvent,
+                               f32                               lfDelta)
+{
+    // ------------------------------------------------------------------------
+    // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). Console: UNCONDITIONALLY and as the FIRST
+    // statement, ahead of the event-type test below (`r3 = this + 0x6E00 ; bl
+    // ChallengeManager::ProcessEvent`, with r4/r5 forwarded untouched).
+    // [!] THIS IS THE ARM THAT CHANGES BEHAVIOUR, not just layout: every freeburn-challenge event
+    // (start / trigger / cancel / success / status) reaches the ChallengeManager through here and
+    // through here only. While it was parked, freeburn challenges received NOTHING.
+    // ------------------------------------------------------------------------
+    mChallengeManager.ProcessEvent(leEventType, lpEvent);
+
+    if (leEventType != GameStateModuleIO::E_EVENT_INPROGRESS_STUNT)      // console `cmpwi r31, 0x78` (120)
+    {
+        return;
+    }
+
+    // The scorer choice is the CURRENT MODE's online flag, not the module's: a null current mode
+    // reads as offline (the console's `beq` arm loads a literal 0 rather than dereferencing).
+    const bool lbOnlineMode = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+
+    // this+13264 == mScoringSystem(+3504) + 0x2620 == the ONLINE stunt scorer;
+    // this+4352  == mScoringSystem(+3504) + 0x350  == the OFFLINE stunt scorer.
+    StuntModeScoring* lpStuntModeScoring =
+        lbOnlineMode ? mScoringSystem.GetOnlineStuntScorer() : mScoringSystem.GetStuntScorer();
+    CGS_ASSERT(lpStuntModeScoring != nullptr, "lpStuntModeScoring");
+
+    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    const s32 liPlayerActiveRaceCarIndex =
+        static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex());
+
+    // The console hands r5 (the raw Event*) straight through: for E_EVENT_INPROGRESS_STUNT the
+    // queued payload IS an OnStuntElementCompleteAction (the record DealWithInProgressStunt walks at
+    // +0x24 / +0x44 / +0x64 -- see the reconciliation note at BrnStuntModeScoring.h:355). The cast is
+    // reinterpret_ rather than static_ because GameAction<T> is an empty tag base
+    // (BrnGameActions.h:234) and is deliberately NOT derived from CgsModule::Event, so the two
+    // hierarchies are unrelated on the host even though the console has one pointer.
+    lpStuntModeScoring->DealWithInProgressStunt(
+        reinterpret_cast<const GameStateModuleIO::OnStuntElementCompleteAction*>(lpEvent),
+        lfDelta,
+        liPlayerActiveRaceCarIndex);
+}
+
+} // namespace BrnGameState

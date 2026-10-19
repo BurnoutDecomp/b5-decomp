@@ -1,0 +1,279 @@
+{
+  "baseline_commit": "2aadf4362005479c23a6c8b7c8d245ad8c5b7a54",
+  "branch": "codex/debug-menu-gamestate-lifecycle-20261019",
+  "source_preimages_and_context": [
+    {
+      "path": "src/GameSource/GameState/BrnGameStateModule.cpp",
+      "snapshot": "preimage/src/GameSource/GameState/BrnGameStateModule.cpp",
+      "sha256": "528c33d0fd30589deef809996f8b6bc4f4a37b727bd9c6c7e9fc30675be314a5",
+      "git_blob": "beb4d73b4ee22944b88e1262786b7e39de858e52"
+    },
+    {
+      "path": "src/GameSource/GameState/BrnGameStateModule.h",
+      "snapshot": "source/src/GameSource/GameState/BrnGameStateModule.h",
+      "sha256": "73649c88082fc1417700dcb77e16d9ea9271584a3971acd60cc2b59711903413",
+      "git_blob": "247867755860b301174251a3f70d4e0d06aa3fcf"
+    },
+    {
+      "path": "src/GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.cpp",
+      "snapshot": "source/src/GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.cpp",
+      "sha256": "4e058248593680d9f65ff47c2b3fd1071dbd76d0286daf82307044f4446283e3",
+      "git_blob": "2357f03660cd2adab71436ba28bf9585e5b70a48"
+    },
+    {
+      "path": "src/GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h",
+      "snapshot": "source/src/GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h",
+      "sha256": "57ba4a61b445757894db96e9ffd14546ed21e3914adf7e74000bbd9bbc995344",
+      "git_blob": "32d2a1553a7b0c856ac4466b0b9da5ebf51492be"
+    },
+    {
+      "path": "src/GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.cpp",
+      "snapshot": "source/src/GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.cpp",
+      "sha256": "b4bfb136b184096cd908759be301929ad7ce2795b8beb8fddadaf9f8ef41c96e",
+      "git_blob": "912a061296af2462c36f601062d6068357362697"
+    },
+    {
+      "path": "src/GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h",
+      "snapshot": "source/src/GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h",
+      "sha256": "18934ea2aeb48c129a07f8735ffc021306f6c181c4030a200951028de2e5bfe4",
+      "git_blob": "72b8dc59e6dfb306bc5bb93206b14193c6d8b235"
+    },
+    {
+      "path": "src/GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h",
+      "snapshot": "source/src/GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h",
+      "sha256": "f71e6e6c3a17ccbff656b15d74ff8e36f8d7da885ebf9ae9c23359003996d204",
+      "git_blob": "dca0836fb960a6e5e00b13448f981ca1e79585ef"
+    },
+    {
+      "path": "src/GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp",
+      "snapshot": "source/src/GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp",
+      "sha256": "b5c72a7fbe6255addb22aec8140caf8c311f2a7c1f57ed722ec712c815a10530",
+      "git_blob": "1fb1ba398cff6d3561832f68d0b8a01f78d65d99"
+    },
+    {
+      "path": "src/GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h",
+      "snapshot": "source/src/GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h",
+      "sha256": "bbe1372918c3e0c0c7e170ce20c9c8b9e46072a8480813026010ed0616a299bc",
+      "git_blob": "c2b107ec061615339babaccc884a6181ef996999"
+    },
+    {
+      "path": "src/GameSource/Game/BrnGameModule.cpp",
+      "snapshot": "source/src/GameSource/Game/BrnGameModule.cpp",
+      "sha256": "d55bdf1215d4f4c466892fb56c8dbe397f5fb94b143ce1df3742ebcaa115da64",
+      "git_blob": "ee4eb606048d087c0f11042c4d586252255c6088"
+    }
+  ],
+  "artist_exports": [
+    {
+      "address": "0x82380388",
+      "snapshot": "ARTIST/0x82380388.json",
+      "sha256": "bfbabcfb07f283da540b1829c356096a085daafb3b5f97bc63761156a17e4b68",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x82380388.json"
+    },
+    {
+      "address": "0x823565C0",
+      "snapshot": "ARTIST/0x823565C0.json",
+      "sha256": "eb22b41195a7b3cc3baa4d30a43b5ddeba0f9d59f9ddb85898b4bffa44125601",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x823565C0.json"
+    },
+    {
+      "address": "0x8239E578",
+      "snapshot": "ARTIST/0x8239E578.json",
+      "sha256": "c64432c9bc4a5f31947fd54aae38cbcd06a6293831e6e80e79bf3e891d93da87",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x8239E578.json"
+    },
+    {
+      "address": "0x8239ED10",
+      "snapshot": "ARTIST/0x8239ED10.json",
+      "sha256": "583c3be22ef993d3b3db98c1a71541d2b7f9d58cff3c82489c2c9d6912326470",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x8239ED10.json"
+    },
+    {
+      "address": "0x823A5328",
+      "snapshot": "ARTIST/0x823A5328.json",
+      "sha256": "65fb3700c2cdae89319416c1a2b7c62684499eb92b4c24b06aea6efd346e4b35",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x823A5328.json"
+    },
+    {
+      "address": "0x8238EF50",
+      "snapshot": "ARTIST/0x8238EF50.json",
+      "sha256": "f450a482bbfaffd43bfa4804621bc1f7c9806cf183b178e2e0989d73e9a4d296",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x8238EF50.json"
+    },
+    {
+      "address": "0x823EFBD0",
+      "snapshot": "ARTIST/0x823EFBD0.json",
+      "sha256": "738065dedd1c2b7fc007c28b5bf243702c5f607299f391fe8a3c8b2a36dc48a2",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x823EFBD0.json"
+    },
+    {
+      "address": "0x823EF4D8",
+      "snapshot": "ARTIST/0x823EF4D8.json",
+      "sha256": "6665278427b0ec049e0a953223a4b117a9d193fd174536660507839ee185cdb4",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x823EF4D8.json"
+    }
+  ],
+  "decfigs_declarations": [
+    {
+      "path": "GameSource/GameState/BrnGameStateModule.h",
+      "snapshot": "DecFIGS/GameSource/GameState/BrnGameStateModule.h",
+      "sha256": "18c8e974d3b7c82180d30512a53b9da36efdbbc2d261b41c3d6a05f85c8fe67b",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\BrnGameStateModule.h"
+    },
+    {
+      "path": "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h",
+      "snapshot": "DecFIGS/GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h",
+      "sha256": "c7408bd3091b35fe431bfb4084dbf72f5c99a66180351981ceda59ea89e6375c",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\CarSelect\\BrnOnlineCarSelectManager.h"
+    },
+    {
+      "path": "GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h",
+      "snapshot": "DecFIGS/GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h",
+      "sha256": "19b0acbe1e5d199f0d67798a80272088e6b001fe0f142413f7e36def04587110",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\FlybyManager\\BrnGameStateFlybyManager.h"
+    },
+    {
+      "path": "GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h",
+      "snapshot": "DecFIGS/GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h",
+      "sha256": "a27a78af1a48f8679bde81ed6bbb4404b99bfbc0bae1467e996e648ed337a985",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\FlybyManager\\BrnGameStateOfflineFlybyManager.h"
+    },
+    {
+      "path": "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h",
+      "snapshot": "DecFIGS/GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h",
+      "sha256": "6bbbe2a82b974e20d2c118cfb10dd3ff1e0e5d47cca8882b2f97e363f6bccdb4",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\FlybyManager\\BrnGameStateOnlineFlybyManager.h"
+    }
+  ],
+  "existing_graphics_allocator_packet": {
+    "path": "D:\\Reverse\\BP-Decomp_Workflow\\scratch\\DEBUG_MENU_1011\\graphics_allocator_provider_20261015\\REPORT.md",
+    "sha256": "987a31558441635d8211f127420430da6fecf469d771a2bb82bb7698136d0c77",
+    "provider_commit": "55790e71bac80b6a3e23d20d8addcb5430b1b24f"
+  },
+  "note": "Source snapshots only; no compile, native helper, IDA export, or bulk scan.",
+  "additional_source_context": [
+    {
+      "path": "src/GameSource/GameState/ModeManager/ModeManager_gUI_00.cpp",
+      "snapshot": "source/src/GameSource/GameState/ModeManager/ModeManager_gUI_00.cpp",
+      "sha256": "76c89a31b1e7872fa43a2b7fba315ad507ddc225c4ec2b1faa8278e934f1606a",
+      "baseline_git_blob": "7e25e76f69e5f0bbab25d4e74ea85fbf7a6b49c0"
+    },
+    {
+      "path": "src/GameSource/GameState/ModeManager/BrnModeManager_Lifecycle.cpp",
+      "snapshot": "source/src/GameSource/GameState/ModeManager/BrnModeManager_Lifecycle.cpp",
+      "sha256": "c512e03a734d1912fde4debceb093466e28826576166e9581d468dbdd9acd7e6",
+      "baseline_git_blob": "243d8bb9fc2fd062793694d0c3136868da15fec5"
+    },
+    {
+      "path": "src/GameSource/GameState/ModeManager/BrnModeManager.h",
+      "snapshot": "source/src/GameSource/GameState/ModeManager/BrnModeManager.h",
+      "sha256": "d1344f0f3ae1fc87a09b9c8948795b718595066b425e475a987de6f17bcd668c",
+      "baseline_git_blob": "7c45bffde7fc28f19c9a92021ecd802dbb8534d4"
+    },
+    {
+      "path": "src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+      "snapshot": "source/src/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+      "sha256": "65b5c7bb0215cc3dc0e1dc923423169be51bbfd99ceec142df260e14ce535663",
+      "baseline_git_blob": "65c6696b08af798f59068b6050731453056a9d48"
+    },
+    {
+      "path": "src/GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h",
+      "snapshot": "source/src/GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h",
+      "sha256": "2322f15413f822d55cff6d2d61263e1a1d9dfd3e37edd31e4bb44a5abfd333b2",
+      "baseline_git_blob": "fb06a58c8f1b712f396a91e53b2fec3e1d19b7a5"
+    },
+    {
+      "path": "src/GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h",
+      "snapshot": "source/src/GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h",
+      "sha256": "a385edf04b28e17548b422d20fb37c1567a4cad66ccf0737c95bbc08c13d5c0c",
+      "baseline_git_blob": "edc6317e5293df5fe5ccdfd564380c2f36f5edb1"
+    },
+    {
+      "path": "src/GameSource/GameState/GameStateModule_gTD_00.cpp",
+      "snapshot": "source/src/GameSource/GameState/GameStateModule_gTD_00.cpp",
+      "sha256": "201cb5bb0cff34917f145df83e1bcc417e1c4f404c68490d1e903a56741026a1",
+      "baseline_git_blob": "485d299bb22f788d1f6147701a1ce9d7f00a6e83"
+    },
+    {
+      "path": "src/GameSource/GameState/InviteManager/BrnGameStateInviteManager_wBT_01.cpp",
+      "snapshot": "source/src/GameSource/GameState/InviteManager/BrnGameStateInviteManager_wBT_01.cpp",
+      "sha256": "8bc774d63eaa39bb436a00a09b95345e7826a680e0cb9bad5c76fef116361ecd",
+      "baseline_git_blob": "db21a83ddf873a3b98256740aabc7278cd443358"
+    },
+    {
+      "path": "src/GameSource/GameState/BrnGameStateTakedownCache.h",
+      "snapshot": "source/src/GameSource/GameState/BrnGameStateTakedownCache.h",
+      "sha256": "0fc78736ad64908e6e09dc5bc38404dd293b4c23d5237ee760b31ba91a7d998c",
+      "baseline_git_blob": "706d74af520ecefeb0710cc4961f86baaeab90b5"
+    },
+    {
+      "path": "src/GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.cpp",
+      "snapshot": "source/src/GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.cpp",
+      "sha256": "287964a190c6c1c0e453c25b2e76934e63681433dc07e3db9d395a56fb841904",
+      "baseline_git_blob": "f96ad18861e0a3f5fa327e1d5bd04e176c0d4d7c"
+    },
+    {
+      "path": "src/GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h",
+      "snapshot": "source/src/GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h",
+      "sha256": "8d54b7f7d2f4d4682fa8397943b2bd76d5bd97b40e182238c0e3e13543d72f20",
+      "baseline_git_blob": "0afec7dfed4c5d232434996dbdc067a61a848906"
+    }
+  ],
+  "additional_artist_exports": [
+    {
+      "address": "0x82340008",
+      "snapshot": "ARTIST/0x82340008.json",
+      "sha256": "f746f1e76becaac98230981953a5de846afbd63ab0af15ab878190164ddd274f",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\.ida-exports\\BURNOUT_X360_ARTIST.XEX\\0x82340008.json"
+    }
+  ],
+  "additional_decfigs_declarations": [
+    {
+      "path": "GameSource/GameState/ModeManager/BrnModeManager.h",
+      "snapshot": "DecFIGS/GameSource/GameState/ModeManager/BrnModeManager.h",
+      "sha256": "0cc5f1ce4c6637809be220997ac8ed00987db9b7cf7e8ef3d6b4207b508532c5",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\ModeManager\\BrnModeManager.h"
+    },
+    {
+      "path": "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+      "snapshot": "DecFIGS/GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h",
+      "sha256": "6d551da2f2e6676ecaef3762be54a0cab019a3744ca637d02742843d60300ad4",
+      "source": "D:\\Reverse\\BP-Decomp_Workflow\\references\\DecFIGS\\dwarfdump\\GameSource\\GameState\\ModeManager\\Scoring\\BrnStuntModeScoring.h"
+    }
+  ],
+  "edited_file_preimages": [
+    {
+      "path": "src/GameSource/GameState/BrnGameStateModule.cpp",
+      "snapshot": "preimage/src/GameSource/GameState/BrnGameStateModule.cpp",
+      "sha256": "370741cf244b3e3d848b5649f499038fb716059d2143d24e55d6e5db92c37171",
+      "git_blob": "beb4d73b4ee22944b88e1262786b7e39de858e52"
+    },
+    {
+      "path": "src/GameSource/GameState/BrnGameStateModule.h",
+      "snapshot": "preimage/src/GameSource/GameState/BrnGameStateModule.h",
+      "sha256": "a876360a5d8aae6efd342bab14d2426986883abdf09577d4b5797025fe3a923a",
+      "git_blob": "247867755860b301174251a3f70d4e0d06aa3fcf"
+    },
+    {
+      "path": "src/GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp",
+      "snapshot": "preimage/src/GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp",
+      "sha256": "4f0e19bcc30500a7b928ec0288b3e8a406796f916d59b823520e76b6d5f46691",
+      "git_blob": "49cdb4de3f3dd2964f8f64a7c2aaaa332eed03fa"
+    },
+    {
+      "path": "src/GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h",
+      "snapshot": "preimage/src/GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h",
+      "sha256": "fd4cc13cbd29f31514cdfd740825c939fb898e3baa0df6d5cd36a88b932d7ef7",
+      "git_blob": "fb06a58c8f1b712f396a91e53b2fec3e1d19b7a5"
+    }
+  ],
+  "activation_handoff": {
+    "path": "D:\\Reverse\\BP-Decomp_Workflow\\scratch\\DEBUG_MENU_1011\\gamestate_pc_caller_20261014\\06_pre_world_prerequisites\\ACTIVATION_HANDOFF_0f2a6f374.md",
+    "snapshot": "inputs/ACTIVATION_HANDOFF_0f2a6f374.md",
+    "sha256": "ef1c2c7a074a4525fd8bf08e760dfe32da35a69bd84159d9c60e325aec7f2c1b"
+  },
+  "report": {
+    "path": "REPORT.md",
+    "sha256": "58eb32a983735c23d4499deee247a90c049f86ee2a7677d4b985a0d7619b2d0c"
+  }
+}

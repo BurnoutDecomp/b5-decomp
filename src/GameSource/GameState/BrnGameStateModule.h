@@ -1644,12 +1644,10 @@ private:
     // CarSelectManager::Construct.
     CarSelectManager                        mCarSelectManager;
 
-    // Reference header :783 (console +0x2CE20), by value, right after the junkyard
-    // manager. ProcessGameEvents' case 123 reads IsInOnlineCarSelect() and calls
-    // ExitOnlineCarSelect on it, case 119 tests it; Prepare's terminal stage hands it the two lists.
-    // [FLAG PC] not Construct()ed: OnlineCarSelectManager::Construct sits in an unmounted TU.
-    // The module lives in static storage, so the manager starts zeroed (not in online car select),
-    // the state the console's Construct also leaves it in.
+    // Reference header :783 (console +0x2CE20), by value, right after the junkyard manager.
+    // GameStateModule::Construct calls OnlineCarSelectManager::Construct at X360 0x823805F0;
+    // ProcessGameEvents' case 123 reads IsInOnlineCarSelect() and calls ExitOnlineCarSelect on it,
+    // case 119 tests it, and Prepare's terminal stage hands it the two lists.
     OnlineCarSelectManager                  mOnlineCarSelectManager;
 
     // Console gsm +0xB9F8. The online round bookkeeper, by value.
