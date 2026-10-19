@@ -4903,6 +4903,13 @@ namespace BrnGame
                         // TranslateGuiInterfaceToGuiEvents, has already run in the GUI leg above
                         // (G10-D11 part 2), so each record is posted in the sub-step that produced
                         // it -- or dropped with the buffer while frame-stepping, as on the console.
+                        // FLAG PC-platform leaf: retire the persistent output after all
+                        // frame consumers, matching the next OutputBuffer::Construct
+                        // (82382940). Raw GUI responses and both validity flags are
+                        // one-shot; the bridge copies them without clearing its source.
+                        lpGameStateOutput->GetGuiEventQueue()->Clear();
+                        lpGameStateOutput->SetSetUpAllEventStartsInterfaceIsValid(false);
+                        lpGameStateOutput->SetSpecificGameModeEventInterfaceIsValid(false);
                         lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
                         lpGameStateOutput->UnlockForWrite();
                     }
