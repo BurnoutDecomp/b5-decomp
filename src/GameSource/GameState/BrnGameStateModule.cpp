@@ -89,12 +89,11 @@ enum EGsmGameAction
 // ----------------------------------------------------------------------------
 // Construct / Destruct.
 //
-// The console's GameStateModule is a CgsModule::ModuleSingleBuffered, so its
-// GameStateModuleIO::OutputBuffer is the DataStructure the base allocates from the module's
-// own DataBuffer inside Prepare() -> CreateOutputDataStructure(). The PC calls the original Prepare
-// stage ladder, but the host's new-style base Prepare does not create that per-pass DataStructure.
-// Keep a stable typed OutputBuffer allocated here for GamePrepare's persistent request transport;
-// the buffer type, Construct (X360 0x82382940) and accessors are the console ones.
+// ARTIST GamePrepare creates a fresh GameStateModuleIO::OutputBuffer on its update-output
+// IOBufferStack for each Prepare pass. The PC instead allocates a stable typed OutputBuffer
+// here for its persistent transport, and clears forwarded requests after each pass. The buffer
+// type, Construct (X360 0x82382940) and accessors are recovered; the allocation site is host-only.
+// This IOBuffer lifetime is separate from the unresolved legacy base DataStructure route below.
 //
 // Constructing it is what makes the game-state -> director game-action route exist at all:
 // BrnGameModule::BridgeGameStateToDirector @0x823CD170 Appends this buffer's +0x04 queue into
@@ -901,11 +900,12 @@ void GameStateModule::Destruct()
 // ModuleSingleBuffered::Construct leaves it FALSE, and with it false the base walks the
 // old-style DataStructure path -- CreateInputDataStructure() fires its own
 // "This is a new module type" assert and returns null, so Prepare would return false FOR EVER
-// and GamePrepare would wedge. The GameState module is a new-style (IOBuffer) module on the
-// console, and the committed GameDataModule::Prepare carries the identical line with the same
-// reasoning (BrnGameDataModule.cpp:51, "[reliable] set before base Prepare"). ⓘ It is NOT set
-// by ClearData @0x8236B3A8, as this line used to say (every one of ClearData's stores is listed at
-// its body; none is a base-class word); the console's writer of the flag is not traced here.
+// and GamePrepare would wedge. This is the previous PC adapter's compatibility store, not an
+// attested GameState operation: ARTIST base Construct (0x8286E768) clears the flag, GameState
+// Construct (0x82380388) has no later local write, and Prepare stage 1 (0x8239E6C4..CC) only
+// selects its stage and calls base Prepare. No GameState DataStructure-hook override or external
+// flag writer is established. The original base route remains unresolved. GameData differs:
+// its ARTIST Construct (0x82671B90) explicitly sets the flag. Keep these provenances separate.
 // ----------------------------------------------------------------------------
 // The GameData reply ids the two live list stages match (BrnGameDataModule's dispatch stages
 // them at the slot: ProcessGetVehicleListRequest -> 52, ProcessGetWheelListRequest -> 59).

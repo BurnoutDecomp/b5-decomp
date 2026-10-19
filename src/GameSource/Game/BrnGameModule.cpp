@@ -3902,12 +3902,12 @@ namespace BrnGame
             // carves a FRESH GameStateModuleIO::OutputBuffer off the update-output IOBufferStack
             // on every pass, so its request queue starts empty each time and the append moves
             // exactly that pass's requests. The PC module owns ONE persistent buffer (see
-            // GameStateModule::GetOutputBuffer's FLAG): PC runs the original stage ladder, but the
-            // host base Prepare does not create the console's per-pass DataStructure.
+            // GameStateModule::GetOutputBuffer's FLAG); its allocation site is host-only and
+            // separate from the unresolved legacy base DataStructure initialization.
             // Re-appending a persistent queue every pass would re-issue every request already
             // sent, so the queue is CLEARED after the append -- which is exactly the state the
-            // console's next pass starts in. DELETE-WHEN the module's real
-            // CreateOutputDataStructure path lands and the buffer becomes per-pass again.
+            // console's next pass starts in. Retire this adaptation when the caller restores
+            // the original per-pass IOBufferStack allocation/lifetime.
             meGamePrepareStage = E_GAMEPREPARESTAGE_GAMESTATE;
 
             BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =

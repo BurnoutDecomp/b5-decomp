@@ -140,19 +140,17 @@ public:
     // ------------------------------------------------------------------------
     // ⭐ THE MODULE'S OUTPUT BUFFER.
     //
-    // On the console the GameState module is a CgsModule::ModuleSingleBuffered: its
-    // GameStateModuleIO::OutputBuffer is the DataStructure the base allocates through
-    // CreateOutputDataStructure() during Prepare(), and EVERY producer in the game-state
-    // tree publishes through it -- CarSelectManager, DriveThruManager, StuntManager,
+    // The GameStateModuleIO::OutputBuffer receives the game-state producers' output --
+    // CarSelectManager, DriveThruManager, StuntManager,
     // PaybackManager, the mode managers -- by posting onto its +0x04 game-action queue.
     // BrnGameModule::BridgeGameStateToDirector @0x823CD170 then bulk-Appends that queue
     // into the director input buffer's own <13312,16> queue once a frame. That Append is
     // the ONLY route by which a game action ever reaches MainDirector::ProcessInputQueue.
     //
-    // PC runs the original Prepare stage ladder, but its host ModuleSingleBuffered::Prepare does
-    // not create the console's DataStructure-backed per-pass output buffer. Construct() allocates
-    // this stable buffer for GamePrepare's request transport; the buffer type and accessors remain
-    // the console ones.
+    // ARTIST GamePrepare creates a fresh typed output on its IOBufferStack each pass.
+    // PC Construct() allocates this stable buffer and GamePrepare clears forwarded requests
+    // after each pass. This host allocation site does not establish the separate base-module
+    // DataStructure/flag route; that original initialization remains unresolved.
     GameStateModuleIO::OutputBuffer* GetOutputBuffer() { return mpOutputBuffer; }
 
     // ------------------------------------------------------------------------
