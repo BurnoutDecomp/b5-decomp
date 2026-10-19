@@ -1882,12 +1882,14 @@ void GuiModule::Destruct()
                 case 428:   // [E1] GuiAttackScoreUpdate   -- THE STUNT SCORE (current/target/combo/multiplier)
                 case 434:   // [showtime] GuiCrashScoreUpdate -- THE SHOWTIME SCORE (cars crashed + distance)
                 case 426:   // [road-rage] GuiRoadRageScoreUpdate -- THE TAKEDOWN COUNT (current/target)
+                case 194:   // Specific preset races; the cache adopts the per-mode table.
                 case 203:   // [event-starts] GuiEventUpdateEventStarts -- THE EVENT-START TABLE
                 case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
                 case 159:   // Pre-race messages and the in-event map colouring gate.
                 case 162:   // Clear the pre-race message count.
                 case 170:   // Landmark race list and its navigation tracker.
                 case 289:   // [results] GuiEventOfflinePostEvent -- THE OFFLINE RESULT RECORD
+                case 318:   // Online post-event record, adopted by the existing cache arm.
                 case 292:   // [results] post-event teardown (clears the record + suppress byte)
                 case 307:   // Medal totals and wins remaining on the licence.
                 case 304:   // [results] raises the presentation-suppressed byte
