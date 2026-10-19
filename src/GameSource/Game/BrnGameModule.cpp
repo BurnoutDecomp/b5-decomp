@@ -895,20 +895,6 @@ namespace BrnGame
                         mDispatchThreadInputBufferManager.GetWriteBuffer()->HideLoadingScreen();
                         CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
                                                 "loading screen retired (world-load stand-in).\n");
-                        // [FLAG world-load stand-in, the same seat as the retirement above] X360:
-                        // FinishStreaming @0x82382258 -> RequestUnpause(1) releases the pause
-                        // WaitForStreaming took at the MemoryCard exit once all four
-                        // StreamingCompleteEvents (9) have landed after PreWorldUpdate's 192
-                        // countdown (@0x823A5328). Neither the countdown nor the four-slot tally is
-                        // landed on this build (the world side answers 192 -- BrnWorldEntityModule
-                        // .cpp:1332 -- but nothing posts it yet), so the reason-1 pause is released
-                        // at the same observable point the loading screen is retired. The real
-                        // FinishStreaming replaces this when that slice lands.
-                        // The unpause itself is posted at the next game-state pre-world pass (the
-                        // seat FinishStreaming's action has on the console, where CheckGameActions
-                        // drains it in the same pass): this GUI leg runs after the sub-step's last
-                        // game-action consumer, so an action posted here would be retired unread.
-                        mbPcStreamingFinishPending = true;
                         break;
                     case 405:
                         // ⭐ THE CAR-SELECT SCREEN'S OWN DATA REQUEST. Every car-select screen
@@ -1427,22 +1413,6 @@ namespace BrnGame
                                         "OnProfileLoaded + WaitForStreaming (reason 1)\n");
             }
         }
-        // [FLAG world-load stand-in] the FinishStreaming seat for BridgeGuiToGame case 65.
-        if (mbPcStreamingFinishPending)
-        {
-            mbPcStreamingFinishPending = false;
-            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                mGameStateModule.GetOutputBuffer();
-            if (lpGameStateOutput != 0)
-            {
-                lpGameStateOutput->LockForWrite();
-                mGameStateModule.RequestUnpause(1, lpGameStateOutput->GetGameActionQueue());
-                lpGameStateOutput->UnlockForWrite();
-                CgsDev::Log::WriteToLog("[sim-pause] in-game screen entered (65) -> "
-                                        "RequestUnpause(1) (FinishStreaming stand-in)\n");
-            }
-        }
-
         if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
         {
             // The selected world drive publishes the original ImmediateStreamed latch
@@ -4847,10 +4817,10 @@ namespace BrnGame
                 CreateStaticIOBuffers();
 
                 // The PC host drives the active flow state's sound slice before it drives
-                // GuiModule::Update below. Publish the GUI records retained from the previous
-                // sub-step into the newly-created scheduler output so that sound sees every
-                // event once. The GUI leg clears the retained model queue before producing the
-                // next batch, giving this hand-off exactly one sub-step of latency.
+                // GuiModule::Update below. Copy the previous GUI batch into the scheduler
+                // output for the existing one-sub-step sound/network hand-off, then retire
+                // that batch. The current step starts with empty GUI output even when the
+                // frame-step guard skips GuiModule::Update, as with ARTIST's fresh output.
                 if (mGuiModule.IsPrepared())
                 {
                     CGS_ASSERT(mpGuiOutputBuffer != 0, "GUI output buffer was not created");
@@ -4859,6 +4829,7 @@ namespace BrnGame
                     mpGuiOutputBuffer->LockForWrite();
                     mpGuiOutputBuffer->AddGuiOutEvents(lpRetainedGuiEvents);
                     mpGuiOutputBuffer->UnlockForWrite();
+                    mGuiModule.GetGuiOutQueue()->Clear();
                 }
 
                 mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;

@@ -1210,10 +1210,6 @@ namespace BrnGame
         bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
         bool mbRequestStreamingWait = false;   // @ +10094117 (see RequestStreamingWait)
         bool mbSkipVideos;              // TUB WinMain's "-skipvideos" latch (boot audit F-P0-10)
-        // [FLAG world-load stand-in] the in-game screen notice (GUI command 65) arrived: the
-        // reason-1 streaming pause is released at the next game-state pre-world pass (see
-        // BridgeGuiToGame case 65). PC only.
-        bool mbPcStreamingFinishPending = false;
         // X360 gm+0x9A0630 -- the reusable loading-screen allocator the renderer lends us
         // through RendererIO::OutputBuffer each GamePrepare pass (boot audit F-P2-4). Null
         // until the first pass runs.
