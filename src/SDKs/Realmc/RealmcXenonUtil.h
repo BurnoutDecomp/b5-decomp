@@ -33,6 +33,7 @@
 #include "types.hpp"
 
 #include <windows.h>   // HANDLE / DWORD / WCHAR (the X360 wraps Win32 file/handle types; host Win32 on PC)
+#include <cstddef>     // offsetof
 
 #include "SDKs/Realmc/RealmcCardData.h"       // RealmcIface::CardData (embedded in State at +0x08)
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"  // RealmcIface::LoadEntryInfo (the 48-byte save entry)
@@ -55,6 +56,30 @@ struct XCONTENT_DATA
     WCHAR szDisplayName[128];   // +0x008  wide display name (wcsncpy 127)
     CHAR  szFileName[42];       // +0x108  ascii file name (strncpy 41)
 };
+
+// XCONTENT_DEVICE_DATA -- the output record for XContentGetDeviceData. The
+// X360 worker uses only dwDeviceType (+0x04); the remaining members preserve
+// the SDK's 0x50-byte record stride from the primary XContent ABI evidence.
+struct XCONTENT_DEVICE_DATA
+{
+    DWORD      dwDeviceID;       // +0x00
+    DWORD      dwDeviceType;     // +0x04
+    ULONGLONG  ullDeviceBytes;   // +0x08
+    ULONGLONG  ullFreeBytes;     // +0x10
+    WCHAR      szDisplayName[28];// +0x18
+};
+
+static_assert(sizeof(XCONTENT_DATA) == 0x134, "XCONTENT_DATA size");
+static_assert(offsetof(XCONTENT_DATA, DeviceID) == 0x000, "XCONTENT_DATA device id offset");
+static_assert(offsetof(XCONTENT_DATA, dwContentType) == 0x004, "XCONTENT_DATA content type offset");
+static_assert(offsetof(XCONTENT_DATA, szDisplayName) == 0x008, "XCONTENT_DATA display name offset");
+static_assert(offsetof(XCONTENT_DATA, szFileName) == 0x108, "XCONTENT_DATA file name offset");
+static_assert(sizeof(XCONTENT_DEVICE_DATA) == 0x50, "XCONTENT_DEVICE_DATA size");
+static_assert(offsetof(XCONTENT_DEVICE_DATA, dwDeviceID) == 0x00, "XCONTENT_DEVICE_DATA device id offset");
+static_assert(offsetof(XCONTENT_DEVICE_DATA, dwDeviceType) == 0x04, "XCONTENT_DEVICE_DATA device type offset");
+static_assert(offsetof(XCONTENT_DEVICE_DATA, ullDeviceBytes) == 0x08, "XCONTENT_DEVICE_DATA capacity offset");
+static_assert(offsetof(XCONTENT_DEVICE_DATA, ullFreeBytes) == 0x10, "XCONTENT_DEVICE_DATA free space offset");
+static_assert(offsetof(XCONTENT_DEVICE_DATA, szDisplayName) == 0x18, "XCONTENT_DEVICE_DATA name offset");
 
 // ---------------------------------------------------------------------------
 // XOVERLAPPED -- the X360 async-op descriptor the device-selector UI / content
