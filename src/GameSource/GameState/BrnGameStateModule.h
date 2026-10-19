@@ -149,8 +149,8 @@ public:
     //
     // ARTIST GamePrepare creates a fresh typed output on its IOBufferStack each pass.
     // PC Construct() allocates this stable buffer and GamePrepare clears forwarded requests
-    // after each pass. This host allocation site does not establish the separate base-module
-    // DataStructure/flag route; that original initialization remains unresolved.
+    // after each pass. This host allocation site is separate from the base-module flag,
+    // which ARTIST GameState Construct sets true at 0x82380944.
     GameStateModuleIO::OutputBuffer* GetOutputBuffer() { return mpOutputBuffer; }
 
     // ------------------------------------------------------------------------
