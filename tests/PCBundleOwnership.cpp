@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"
 #include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
@@ -315,6 +316,62 @@ int main() {
         header.meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
         Check(header.mpConstData == 0x1122334455667788ull && header.muSizeOfHeader == 0x12345678,
               "LoadAnimation and FreeAnimation state writes preserve const offset and span size");
+    }
+    {
+        using namespace CgsResource::PCAptOwnership;
+        FixturePool pool;
+        const char* path = "GuiApt\\resume.bundle";
+        File(path, {741, 742}, 30);
+        const s32 initial = loader.LoadBundle(path, &pool, Resolve);
+        CgsGui::RecordAptBundleLoadResult(&pool, path, initial);
+        const u32 request = static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>("resume.swf")));
+        ResourceHandle first = CgsGui::AcquireStreamedAptResource(request);
+        Entry* originalEntry = &pool.entries[pool.Slot(741)];
+        void* originalHeader = originalEntry->mResource.m_baseResources[0];
+        Check(initial == 2 && first.mpSourceEntry == originalEntry,
+              "GUI initial load records the production streamed acquire lead");
+        Check(first.mpResourceMemory == &originalEntry->mResource.m_baseResources[0]
+              && *static_cast<void**>(first.mpResourceMemory) == originalHeader
+              && CgsGui::GetLoadedAptBundleLeadHeader("resume") == originalHeader,
+              "GUI acquire and named host lookup expose the actual resource slot");
+        int fileA = 0;
+        Check(Retain(originalHeader, &fileA) == RetainResult::Acquired,
+              "GUI regression holds a real Apt file acquisition");
+        Check(loader.UnloadBundle(path, &pool) == 0 && pool.Refs(741) == 1,
+              "GUI logical unload leaves imported bytes alive under the Apt pin");
+        CgsGui::RetireUnloadedAptRegistrations(&pool);
+        ResourceHandle detached = CgsGui::AcquireStreamedAptResource(request);
+        Check(CgsGui::s_uAptBundleLeadCount == 0 && detached.mpResourceMemory == nullptr
+              && detached.mpSourceEntry == nullptr
+              && CgsGui::GetLoadedAptBundleLeadHeader("resume") == nullptr,
+              "production GUI retirement makes logical unload miss both acquire paths");
+        const size_t fixedBeforeReload = fixups.size();
+        const s32 shared = loader.LoadBundle(path, &pool, Resolve);
+        Check(shared == 0 && pool.Refs(741) == 2 && fixups.size() == fixedBeforeReload,
+              "GUI reload succeeds with zero new resources and no repeated fixups");
+        CgsGui::RecordAptBundleLoadResult(&pool, path, shared);
+        ResourceHandle reloaded = CgsGui::AcquireStreamedAptResource(request);
+        Check(CgsGui::s_uAptBundleLeadCount == 1 && reloaded.mpSourceEntry == originalEntry,
+              "successful zero-resource reload restores the production GUI acquire lead");
+        Check(reloaded.mpResourceMemory != nullptr && reloaded.mpResourceMemory == first.mpResourceMemory
+              && *static_cast<void**>(reloaded.mpResourceMemory) == originalHeader
+              && CgsGui::GetLoadedAptBundleLeadHeader("resume") == originalHeader,
+              "shared-only reload reacquires the same header through the same GUI slot");
+        CgsGui::RecordAptBundleLoadResult(&pool, path, shared);
+        Check(CgsGui::s_uAptBundleLeadCount == 1 && pool.Refs(741) == 2,
+              "repeated successful registration neither duplicates leads nor acquires resources");
+        CgsGui::RecordAptBundleLoadResult(&pool, "GuiApt\\missing.bundle", BundleLoader::KI_LOAD_FILE_MISSING);
+        Check(CgsGui::s_uAptBundleLeadCount == 1,
+              "failed load result publishes no extra GUI lead");
+        Check(Release(&fileA) && pool.Refs(741) == 1,
+              "old Apt teardown preserves the newly reloaded GUI logical owner");
+        Check(loader.UnloadBundle(path, &pool) == 2 && pool.Used() == 0,
+              "final GUI unload balances the shared-only logical reload");
+        CgsGui::RetireUnloadedAptRegistrations(&pool);
+        ResourceHandle gone = CgsGui::AcquireStreamedAptResource(request);
+        Check(gone.mpResourceMemory == nullptr && CgsGui::s_uAptBundleLeadCount == 0
+              && CgsGui::s_uAttributedAptDataCount == 0,
+              "final GUI registry retirement drops the released lead and attributed bytes");
     }
     std::printf("PCBundleOwnership: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
