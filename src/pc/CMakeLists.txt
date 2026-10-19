@@ -1,1 +1,6 @@
+add_subdirectory(debug)
 add_subdirectory(gcm)
+add_subdirectory(geometric)
+add_subdirectory(input)
+add_subdirectory(math)
+add_subdirectory(scene)
