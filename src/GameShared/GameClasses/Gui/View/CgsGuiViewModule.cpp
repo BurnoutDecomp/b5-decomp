@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
 #include <cstring>
 
