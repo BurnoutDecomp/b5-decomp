@@ -254,17 +254,19 @@ void GameStateModule::Construct()
     // mpEvents, and the first AddEventSafe on it fires "mpEvents != NULL").
     mRumbleManager.Construct();
 
-    // CarSelectManager::Construct and StuntManager::Construct, the console's next two calls after
-    // RumbleManager::Construct (the OnlineCarSelectManager's between them is not made here).
-    // CarSelectManager keeps (&mTriggerQueryManager, this, &mProgressionManager) for the junkyard
-    // FSM's whole life.
+    // X360 0x82380388 calls CarSelectManager @0x823805DC, OnlineCarSelectManager @0x823805F0,
+    // and StuntManager @0x8238060C in this order after RumbleManager::Construct. The online
+    // manager stores this module and the progression manager before its first update.
     mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
+    mOnlineCarSelectManager.Construct(this, &mProgressionManager);
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
                             mpTrainingManager, this);
 
-    // [PGEP] The console's next calls: FlybyManager::Construct on the offline manager, then the
-    // online manager's inlined Construct (gsm+0x2D8E0) -- both with (this, the ScoringSystem).
-    // This build carries no offline flyby manager member; the online one is held by pointer.
+    // X360 0x82380628 constructs the embedded OfflineFlybyManager at gsm+0x2D630 through its
+    // FlybyManager base; 0x82380634 clears its two-bit message set. The typed owner body below
+    // reproduces both operations. The following X360 call @0x82380644 constructs the online
+    // manager at gsm+0x2D8E0; this PC source retains that manager behind a stable pointer.
+    mOfflineFlybyManager.Construct(this, mModeManager.GetScoringSystem());
     if (mpOnlineFlybyManager == 0)
     {
         mpOnlineFlybyManager = new OnlineFlybyManager();
@@ -323,6 +325,8 @@ void GameStateModule::Construct()
     }
     mpRichPresenceManager->Construct(this, &mNetworkRoundManager, &mModeManager);
 
+    // AchievementManagerX360::Construct also reproduces the X360-only inline tail at
+    // 0x82380740..764: user/state/handle stores, CgsXOverlapped::Construct, and both zeroed bits.
     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
                                   mModeManager.GetScoringSystem(), this);
 

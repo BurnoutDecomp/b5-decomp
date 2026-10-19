@@ -1,0 +1,83 @@
+{
+  "address": "0x8239ED10",
+  "name": "BrnGameState::GameStateModule::Prepare2",
+  "prototype": "int BrnGameState::GameStateModule::Prepare2int __fastcall(int a1, int a2)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v4",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "Memor",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    }
+  ],
+  "pseudocode": "int __fastcall BrnGameState::GameStateModule::Prepare2(int a1, int a2)\n{\n  int v4; // r28\n  int Memor; // r3\n\n  _savegprlr_28();\n  v4 = 0;\n  CgsModule::IOBuffer::LockForWrite(a2);\n  switch ( *(a1 + 556) )\n  {\n    case 0:\n    case 1:\n      *(a1 + 556) = 1;\n      Memor = BrnTrigger::TriggerData_::GetMemor((a1 + 43888));\n      if ( BrnProgression::ProgressionManager::Prepare2(a1 + 47920, a2, a1 + 4128, a1 + 232384, Memor, a1 + 181680) )\n        goto LABEL_3;\n      break;\n    case 2:\nLABEL_3:\n      *(a1 + 556) = 2;\n      if ( BrnGameState::StreetManager::Prepare2(a1 + 284520, a2, a1 + 232384, a1 + 42320) )\n        goto LABEL_4;\n      break;\n    case 3:\nLABEL_4:\n      v4 = 1;\n      break;\n    default:\n      break;\n  }\n  CgsModule::IOBuffer::UnlockForWrite(a2);\n  _restgprlr_28();\n  return v4;\n}\n",
+  "assembly": "0x8239ED10  mflr      r12\n0x8239ED14  bl        __savegprlr_28\n0x8239ED18  stwu      r1, back_chain(r1)\n0x8239ED1C  mr        r29, r4\n0x8239ED20  mr        r31, r3\n0x8239ED24  mr        r3, r29\n0x8239ED28  li        r28, 0\n0x8239ED2C  bl        CgsModule__IOBuffer__LockForWrite\n0x8239ED30  lwz       r11, 0x22C(r31)\n0x8239ED34  cmplwi    cr6, r11, 3# switch 4 cases  ; switch 4 cases\n0x8239ED38  bgt       cr6, def_8239ED58# jumptable 8239ED58 default case\n0x8239ED3C  lis       r10, 3\n0x8239ED40  ori       r30, r10, 0x8BC0 # 0x38BC0\n0x8239ED44  lis       r12, jpt_8239ED58@ha\n0x8239ED48  addi      r12, r12, jpt_8239ED58@l\n0x8239ED4C  slwi      r0, r11, 2\n0x8239ED50  lwzx      r0, r12, r0\n0x8239ED54  mtctr     r0\n0x8239ED58  bctr# switch jump  ; switch jump\n0x8239ED5C  .long loc_8239ED6C# jump table for switch statement  ; jump table for switch statement\n0x8239ED6C  li        r11, 1# jumptable 8239ED58 cases 0,1  ; jumptable 8239ED58 cases 0,1\n0x8239ED70  addis     r3, r31, 1\n0x8239ED74  addi      r3, r3, -0x5490\n0x8239ED78  stw       r11, 0x22C(r31)\n0x8239ED7C  bl        BrnTrigger__TriggerData___GetMemor\n0x8239ED80  mr        r7, r3\n0x8239ED84  addis     r8, r31, 3\n0x8239ED88  addis     r3, r31, 1\n0x8239ED8C  addi      r8, r8, -0x3A50\n0x8239ED90  add       r6, r31, r30\n0x8239ED94  addi      r5, r31, 0x1020\n0x8239ED98  mr        r4, r29\n0x8239ED9C  addi      r3, r3, -0x44D0\n0x8239EDA0  bl        BrnProgression__ProgressionManager__Prepare2\n0x8239EDA4  clrlwi    r11, r3, 24\n0x8239EDA8  cmplwi    cr6, r11, 0\n0x8239EDAC  beq       cr6, def_8239ED58# jumptable 8239ED58 default case\n0x8239EDB0  li        r11, 2# jumptable 8239ED58 case 2  ; jumptable 8239ED58 case 2\n0x8239EDB4  addis     r6, r31, 1\n0x8239EDB8  addis     r3, r31, 4\n0x8239EDBC  addi      r6, r6, -0x5AB0\n0x8239EDC0  add       r5, r31, r30\n0x8239EDC4  mr        r4, r29\n0x8239EDC8  stw       r11, 0x22C(r31)\n0x8239EDCC  addi      r3, r3, 0x5768\n0x8239EDD0  bl        BrnGameState__StreetManager__Prepare2\n0x8239EDD4  clrlwi    r11, r3, 24\n0x8239EDD8  cmplwi    cr6, r11, 0\n0x8239EDDC  beq       cr6, def_8239ED58# jumptable 8239ED58 default case\n0x8239EDE0  li        r28, 1# jumptable 8239ED58 case 3  ; jumptable 8239ED58 case 3\n0x8239EDE4  mr        r3, r29# jumptable 8239ED58 default case  ; jumptable 8239ED58 default case\n0x8239EDE8  bl        CgsModule__IOBuffer__UnlockForWrite\n0x8239EDEC  mr        r3, r28\n0x8239EDF0  addi      r1, r1, 0x80\n0x8239EDF4  b         __restgprlr_28",
+  "xrefs_to": [
+    {
+      "address": "0x823EF4D8",
+      "name": "LoadingScriptedState::LoadGameState2"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EE8",
+      "name": "__savegprlr_28"
+    },
+    {
+      "address": "0x82204A18",
+      "name": "CgsModule::IOBuffer::LockForWrite"
+    },
+    {
+      "address": "0x82211E40",
+      "name": "BrnTrigger::TriggerData>::GetMemor"
+    },
+    {
+      "address": "0x8239DC98",
+      "name": "BrnProgression::ProgressionManager::Prepare2"
+    },
+    {
+      "address": "0x823509D8",
+      "name": "BrnGameState::StreetManager::Prepare2"
+    },
+    {
+      "address": "0x82204BB8",
+      "name": "CgsModule::IOBuffer::UnlockForWrite"
+    }
+  ]
+}

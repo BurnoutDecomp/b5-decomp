@@ -1,0 +1,91 @@
+{
+  "address": "0x823EF4D8",
+  "name": "LoadingScriptedState::LoadGameState2",
+  "prototype": "int LoadingScriptedState::LoadGameState2int __fastcall(int a1, int a2)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v3",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v4",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "result",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v6",
+      "type": "int[12]",
+      "is_reg": false,
+      "size": 48
+    }
+  ],
+  "pseudocode": "int __fastcall LoadingScriptedState::LoadGameState2(int a1, int a2)\n{\n  unsigned __int8 *v3; // r29\n  unsigned __int8 *v4; // r3\n  int result; // r3\n  int v6[12]; // [sp+50h] [-30h] BYREF\n\n  _savegprlr_28();\n  CgsModule::IOBufferStack::CreateIOBuffer<BrnGameState::GameStateModuleIO::OutputBuffer>(\n    *(off_830102D0 + 2513857),\n    v6,\n    \"GameState\");\n  v3 = v6[0];\n  if ( BrnGameState::GameStateModule::Prepare2(off_830102D0 + 6722816, v6[0]) )\n  {\n    CgsModule::IOBufferStack::DestroyIOBuffer<BrnGameState::GameStateModuleIO::OutputBuffer>(\n      *(off_830102D0 + 2513857),\n      v6);\n    result = 1;\n  }\n  else\n  {\n    CgsModule::IOBuffer::LockForRead(v3);\n    v4 = BrnGameState::GameStateModuleIO::OutputBu(v3);\n    BrnResource::GameDataIO::InputBuffer::AppendRequestInterface<3072>(a2, v4);\n    CgsModule::IOBuffer::UnlockForRead(v3);\n    CgsModule::IOBufferStack::DestroyIOBuffer<BrnGameState::GameStateModuleIO::OutputBuffer>(\n      *(off_830102D0 + 2513857),\n      v6);\n    result = 0;\n  }\n  _restgprlr_28();\n  return result;\n}\n",
+  "assembly": "0x823EF4D8  mflr      r12\n0x823EF4DC  bl        __savegprlr_28\n0x823EF4E0  stwu      r1, back_chain(r1)\n0x823EF4E4  lis       r11, 0x99\n0x823EF4E8  lis       r31, off_830102D0@ha\n0x823EF4EC  ori       r30, r11, 0x6F04 # 0x996F04\n0x823EF4F0  lis       r11, aGamestate@ha\n0x823EF4F4  mr        r28, r4\n0x823EF4F8  addi      r5, r11, aGamestate@l# \"GameState\"\n0x823EF4FC  lwz       r11, off_830102D0@l(r31)\n0x823EF500  addi      r4, r1, 0x80+var_30\n0x823EF504  lwzx      r3, r11, r30\n0x823EF508  bl        ___CreateIOBuffer_VOutputBuffer_GameStateModuleIO_BrnGameState___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_GameSt\n0x823EF50C  lwz       r11, off_830102D0@l(r31)\n0x823EF510  lwz       r29, 0x80+var_30(r1)\n0x823EF514  addis     r3, r11, 0x67 # 'g'\n0x823EF518  mr        r4, r29\n0x823EF51C  addi      r3, r3, -0x6B00\n0x823EF520  bl        BrnGameState__GameStateModule__Prepare2\n0x823EF524  clrlwi    r11, r3, 24\n0x823EF528  cmplwi    cr6, r11, 0\n0x823EF52C  bne       cr6, loc_823EF570\n0x823EF530  mr        r3, r29\n0x823EF534  bl        CgsModule__IOBuffer__LockForRead\n0x823EF538  mr        r3, r29\n0x823EF53C  bl        BrnGameState__GameStateModuleIO__OutputBu\n0x823EF540  mr        r4, r3\n0x823EF544  mr        r3, r28\n0x823EF548  bl        ___AppendRequestInterface__0MAA__InputBuffer_GameDataIO_BrnResource__QAAXPBV__RequestInterface__0MAA__12__Z# BrnResource::GameDataIO::InputBuffer::AppendRequestInterface<3072>(BrnResource::GameDataIO::RequestInterface<3072> const *)\n0x823EF54C  mr        r3, r29\n0x823EF550  bl        CgsModule__IOBuffer__UnlockForRead\n0x823EF554  lwz       r11, off_830102D0@l(r31)\n0x823EF558  addi      r4, r1, 0x80+var_30\n0x823EF55C  lwzx      r3, r11, r30\n0x823EF560  bl        ___DestroyIOBuffer_VOutputBuffer_GameStateModuleIO_BrnGameState___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_GameS\n0x823EF564  li        r3, 0\n0x823EF568  addi      r1, r1, 0x80\n0x823EF56C  b         __restgprlr_28\n0x823EF570  lwz       r11, off_830102D0@l(r31)\n0x823EF574  addi      r4, r1, 0x80+var_30\n0x823EF578  lwzx      r3, r11, r30\n0x823EF57C  bl        ___DestroyIOBuffer_VOutputBuffer_GameStateModuleIO_BrnGameState___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_GameS\n0x823EF580  li        r3, 1\n0x823EF584  addi      r1, r1, 0x80\n0x823EF588  b         __restgprlr_28",
+  "xrefs_to": [
+    {
+      "address": "0x823F22D8",
+      "name": "LoadingScriptedState::Update"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EE8",
+      "name": "__savegprlr_28"
+    },
+    {
+      "address": "0x823AC6E8",
+      "name": "??$CreateIOBuffer@VOutputBuffer@GameStateModuleIO@BrnGameState@@@IOBufferStack@CgsModule@@QAA_NPAPAVOutputBuffer@GameSt"
+    },
+    {
+      "address": "0x8239ED10",
+      "name": "BrnGameState::GameStateModule::Prepare2"
+    },
+    {
+      "address": "0x82204C88",
+      "name": "CgsModule::IOBuffer::LockForRead"
+    },
+    {
+      "address": "0x823B9798",
+      "name": "BrnGameState::GameStateModuleIO::OutputBu"
+    },
+    {
+      "address": "0x823EDF88",
+      "name": "??$AppendRequestInterface@$0MAA@@InputBuffer@GameDataIO@BrnResource@@QAAXPBV?$RequestInterface@$0MAA@@12@@Z"
+    },
+    {
+      "address": "0x82204D50",
+      "name": "CgsModule::IOBuffer::UnlockForRead"
+    },
+    {
+      "address": "0x823AC7C0",
+      "name": "??$DestroyIOBuffer@VOutputBuffer@GameStateModuleIO@BrnGameState@@@IOBufferStack@CgsModule@@QAA_NPAPAVOutputBuffer@GameS"
+    }
+  ]
+}

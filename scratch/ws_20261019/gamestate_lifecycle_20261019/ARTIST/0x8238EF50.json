@@ -1,0 +1,571 @@
+{
+  "address": "0x8238EF50",
+  "name": "BrnGameState::GameStateModule::EmmPreWorldUpdate",
+  "prototype": "BOOL BrnGameState::GameStateModule::EmmPreWorldUpdateBOOL __fastcall(int a1, int a2, unsigned __int8 *a3, int a4, int a5)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a3",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a4",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a5",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v8",
+      "type": "int *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "IsSimPaused",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v11",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v12",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v13",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v14",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "PlayerActiveRaceCarIndex",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R11",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R10",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R7",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R8",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R9",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R0",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v22",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v23",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "PlayerGlobalRaceCarIndex",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v25",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v26",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v27",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v28",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v29",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v30",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v31",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v32",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v33",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "RaceCarTotalTime",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v35",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v36",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v37",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v38",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v39",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v40",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v41",
+      "type": "bool",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v42",
+      "type": "unsigned int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "CarData",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v44",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v45",
+      "type": "float",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v46",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "CarRacePosition",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v48",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "result",
+      "type": "BOOL",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v50",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v51",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v52",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v53",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v54",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v55",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v56",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v57",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v58",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v59",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v60",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v61",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v62",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v63",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v64",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v65",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v66",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v67",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v68",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v69",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v70",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v71",
+      "type": "float",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v72",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v73",
+      "type": "float",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v74",
+      "type": "_BYTE[8]",
+      "is_reg": false,
+      "size": 8
+    }
+  ],
+  "pseudocode": "BOOL __fastcall BrnGameState::GameStateModule::EmmPreWorldUpdate(int a1, int a2, unsigned __int8 *a3, int a4, int a5)\n{\n  int *v8; // r22\n  char IsSimPaused; // r28\n  unsigned __int8 *v11; // r3\n  int v12; // r10\n  int v13; // r24\n  char v14; // r11\n  int PlayerActiveRaceCarIndex; // r3\n  int v22; // r3\n  int v23; // r11\n  int PlayerGlobalRaceCarIndex; // r19\n  int v25; // r3\n  __int64 v26; // r10\n  int v27; // r8\n  int v28; // r7\n  int v29; // r6\n  int v30; // r5\n  int v31; // r4\n  int v32; // r3\n  int v33; // r3\n  int RaceCarTotalTime; // r3\n  int v35; // r11\n  int v36; // r28\n  int v37; // r11\n  int v38; // r30\n  int v39; // r29\n  _DWORD *v40; // r3\n  bool v41; // cr56\n  unsigned int v42; // r30\n  int CarData; // r3\n  char v44; // r11\n  float v45; // r30\n  int v46; // r3\n  char CarRacePosition; // r31\n  int v48; // r3\n  BOOL result; // r3\n  int v50; // [sp+8h] [-F8h]\n  int v51; // [sp+Ch] [-F4h]\n  int v52; // [sp+10h] [-F0h]\n  int v53; // [sp+14h] [-ECh]\n  int v54; // [sp+18h] [-E8h]\n  int v55; // [sp+1Ch] [-E4h]\n  int v56; // [sp+20h] [-E0h]\n  int v57; // [sp+24h] [-DCh]\n  int v58; // [sp+28h] [-D8h]\n  int v59; // [sp+2Ch] [-D4h]\n  int v60; // [sp+30h] [-D0h]\n  int v61; // [sp+34h] [-CCh]\n  int v62; // [sp+38h] [-C8h]\n  int v63; // [sp+3Ch] [-C4h]\n  int v64; // [sp+40h] [-C0h]\n  int v65; // [sp+44h] [-BCh]\n  int v66; // [sp+48h] [-B8h]\n  int v67; // [sp+4Ch] [-B4h]\n  int v68; // [sp+50h] [-B0h]\n  int v69; // [sp+58h] [-A8h]\n  int v70; // [sp+70h] [-90h] BYREF\n  float v71; // [sp+74h] [-8Ch]\n  int v72; // [sp+78h] [-88h] BYREF\n  float v73; // [sp+7Ch] [-84h]\n  _BYTE v74[8]; // [sp+80h] [-80h] BYREF\n\n  _savegprlr_19();\n  v8 = (a1 + 292336);\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292336));\n  IsSimPaused = BrnGameState::GameStateModule::IsSimPaused(a1, 1, 0);\n  v11 = BrnGameState::GameStateModuleIO::Ou(a3);\n  v12 = *(a1 + 245816);\n  v13 = v11;\n  v70 = 0;\n  v71 = 0.0;\n  if ( v12 >= 8 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT\",\n      \"..\\\\..\\\\..\\\\GameSource\\\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h\",\n      967);\n    CgsDev::Assert::EndAssert();\n  }\n  v14 = 0;\n  if ( *(a1 + 245816) != -1 )\n    v14 = *(a1 + 245824);\n  if ( v14 )\n  {\n    PlayerActiveRaceCarIndex = BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1);\n    _R11 = BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarO(a1 + 235488, PlayerActiveRaceCarIndex) + 496;\n    _R10 = a1 + 292208;\n    _R7 = 16;\n    _R8 = 32;\n    _R9 = 48;\n    __asm\n    {\n      lvx128    v0, r0, r11\n      stvx128   v0, r0, r10\n      lvx128    v0, r11, r7\n      stvx128   v0, r10, r7\n      lvx128    v0, r11, r8\n      stvx128   v0, r10, r8\n      lvx128    v0, r11, r9\n      stvx128   v0, r10, r9\n    }\n  }\n  v22 = BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get(a2);\n  *(a1 + 208328) = *v22;\n  *(a1 + 208332) = *(v22 + 4);\n  *(a1 + 208336) = *(v22 + 8);\n  *(a1 + 208340) = *(v22 + 12);\n  *(a1 + 208344) = *(v22 + 16);\n  *(a1 + 208348) = *(v22 + 20);\n  *(a1 + 208352) = *(v22 + 24);\n  *(a1 + 208356) = *(v22 + 28);\n  *(a1 + 208360) = *(v22 + 32);\n  *(a1 + 208364) = *(v22 + 36);\n  *(a1 + 208368) = *(v22 + 40);\n  *(a1 + 208372) = *(v22 + 44);\n  v23 = *(a1 + 208368);\n  v71 = *(a1 + 208372);\n  v70 = v23;\n  if ( IsSimPaused )\n  {\n    BrnGameState::ModeManager::PausedUpdate(a1 + 4128, a3);\n  }\n  else\n  {\n    CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292340));\n    PlayerGlobalRaceCarIndex = BrnGameState::GameStateModule::GetPlayerGlobalRaceCarIndex(a1);\n    v25 = BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1);\n    BrnGameState::ModeManager::PreWorldUpdate(\n      a1 + 4128,\n      a3,\n      a2,\n      a1 + 208328,\n      v25,\n      PlayerGlobalRaceCarIndex,\n      a5,\n      v13,\n      v50,\n      v51,\n      v52,\n      v53,\n      v54,\n      v55,\n      v56,\n      v57,\n      v58,\n      v59,\n      v60,\n      v61,\n      v62,\n      v63,\n      v64,\n      v65,\n      v66,\n      v67,\n      v68,\n      a1 + 245968,\n      v69,\n      a1 + 235488);\n    CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292340));\n  }\n  if ( !IsSimPaused )\n  {\n    CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292324));\n    v32 = BrnGameState::GameStateModuleIO::PreWorl(a2);\n    BrnGameState::GameStateModule::UpdateRoadRulesManager(a1, a3, v32);\n    CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292324));\n  }\n  CgsSystem::Time::Time(&v72, 0.0, v31, v30, v29, v28, v27, v26);\n  if ( BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1) != -1 )\n  {\n    v33 = BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1);\n    RaceCarTotalTime = BrnGameState::ScoringSystem::GetRaceCarTotalTime(v74, a1 + 7632, v33, &v70);\n    v35 = *RaceCarTotalTime;\n    v73 = *(RaceCarTotalTime + 4);\n    v72 = v35;\n  }\n  BrnGameState::GameStateModuleIO::OutputBuffer::SetGameModeElapsedTime(a3, &v72);\n  v36 = 0;\n  do\n  {\n    v37 = sub_8231DCD0(a1 + 7632, v36);\n    if ( v37 )\n    {\n      v38 = *(v37 + 324);\n      v39 = *(v37 + 328);\n      v40 = sub_8231D800(a3);\n      BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface::SetActiveRaceCarIndex(v40, v39, v38);\n    }\n    v41 = ++v36 < 8;\n    if ( v36 > 8 )\n    {\n      CgsDev::Assert::BeginAssert();\n      CgsDev::Assert::FireAssert(\n        \"leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT\",\n        \"..\\\\..\\\\..\\\\GameSource\\\\BurnoutConstants.h\",\n        39);\n      CgsDev::Assert::EndAssert();\n      v41 = v36 < 8;\n    }\n  }\n  while ( v41 );\n  if ( BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1) != -1 )\n  {\n    v42 = BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1);\n    if ( v42 >= 8 )\n    {\n      CgsDev::Assert::BeginAssert();\n      CgsDev::Assert::FireAssert(\n        \"(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)\",\n        \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\gamestate\\\\modemanager\\\\Scoring/BrnScoringSystem.h\",\n        2227);\n      CgsDev::Assert::EndAssert();\n    }\n    CarData = BrnGameState::ScoringSystem::GetCarData(a1 + 7632, v42);\n    v44 = 0;\n    if ( CarData )\n      v44 = *(CarData + 68);\n    if ( v44 )\n    {\n      v45 = COERCE_FLOAT(BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1));\n      v46 = BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1);\n      CarRacePosition = BrnGameState::ScoringSystem::GetCarRacePosition(a1 + 7632, v46);\n      v48 = BrnGameState::GameStateModuleIO::Outpu(a3);\n      HIBYTE(v72) = CarRacePosition;\n      v73 = v45;\n      BrnGameState::GameStateToGuiOvertakeEvent_::AddEvent((v48 + 200), &v72);\n    }\n  }\n  result = CgsDev::PerfMonCpu::StopMonitor(*v8);\n  _restgprlr_19();\n  return result;\n}\n",
+  "assembly": "0x8238EF50  mflr      r12\n0x8238EF54  bl        __savegprlr_19\n0x8238EF58  stfd      f31, var_78(r1)\n0x8238EF5C  stwu      r1, back_chain(r1)\n0x8238EF60  mr        r31, r3\n0x8238EF64  mr        r27, r4\n0x8238EF68  addis     r22, r31, 4\n0x8238EF6C  mr        r23, r5\n0x8238EF70  addi      r22, r22, 0x75F0\n0x8238EF74  mr        r25, r7\n0x8238EF78  lwz       r3, 0(r22)\n0x8238EF7C  bl        CgsDev__PerfMonCpu__StartMonitor\n0x8238EF80  li        r5, 0\n0x8238EF84  li        r4, 1\n0x8238EF88  mr        r3, r31\n0x8238EF8C  bl        BrnGameState__GameStateModule__IsSimPaused\n0x8238EF90  mr        r28, r3\n0x8238EF94  addis     r29, r31, 4\n0x8238EF98  mr        r3, r23\n0x8238EF9C  addi      r29, r29, -0x6820\n0x8238EFA0  bl        BrnGameState__GameStateModuleIO__Ou\n0x8238EFA4  li        r11, 0\n0x8238EFA8  lwz       r10, 0x2858(r29)\n0x8238EFAC  mr        r24, r3\n0x8238EFB0  cmpwi     cr6, r10, 8\n0x8238EFB4  stw       r11, 0x100+var_90(r1)\n0x8238EFB8  lis       r11, flt_82001CC0@ha\n0x8238EFBC  lfs       f31, flt_82001CC0@l(r11)\n0x8238EFC0  stfs      f31, 0x100+var_8C(r1)\n0x8238EFC4  blt       cr6, loc_8238EFE8\n0x8238EFC8  bl        CgsDev__Assert__BeginAssert\n0x8238EFCC  lis       r11, aGamesourceWorl_0@ha\n0x8238EFD0  li        r5, 0x3C7\n0x8238EFD4  addi      r4, r11, aGamesourceWorl_0@l# \"..\\\\..\\\\..\\\\GameSource\\\\World/EntityMod\"...\n0x8238EFD8  lis       r11, aMeplayeractive_5@ha\n0x8238EFDC  addi      r3, r11, aMeplayeractive_5@l# \"mePlayerActiveRaceCarIndex < E_ACTIVE_R\"...\n0x8238EFE0  bl        CgsDev__Assert__FireAssert\n0x8238EFE4  bl        CgsDev__Assert__EndAssert\n0x8238EFE8  lwz       r11, 0x2858(r29)\n0x8238EFEC  cmpwi     cr6, r11, -1\n0x8238EFF0  li        r11, 0\n0x8238EFF4  beq       cr6, loc_8238EFFC\n0x8238EFF8  lbz       r11, 0x2860(r29)\n0x8238EFFC  clrlwi    r11, r11, 24\n0x8238F000  cmplwi    cr6, r11, 0\n0x8238F004  beq       cr6, loc_8238F054\n0x8238F008  mr        r3, r31\n0x8238F00C  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F010  mr        r4, r3\n0x8238F014  mr        r3, r29\n0x8238F018  bl        BrnWorld__RaceCarEntityModuleIO__RCEntityActiveRaceCarO\n0x8238F01C  addis     r10, r31, 4\n0x8238F020  addi      r11, r3, 0x1F0\n0x8238F024  addi      r10, r10, 0x7570\n0x8238F028  li        r7, 0x10\n0x8238F02C  li        r8, 0x20 # ' '\n0x8238F030  li        r9, 0x30 # '0'\n0x8238F034  lvx128    v0, r0, r11\n0x8238F038  stvx128   v0, r0, r10\n0x8238F03C  lvx128    v0, r11, r7\n0x8238F040  stvx128   v0, r10, r7\n0x8238F044  lvx128    v0, r11, r8\n0x8238F048  stvx128   v0, r10, r8\n0x8238F04C  lvx128    v0, r11, r9\n0x8238F050  stvx128   v0, r10, r9\n0x8238F054  mr        r3, r27\n0x8238F058  bl        BrnGameState__GameStateModuleIO__PreWorldInputBuffer__Get\n0x8238F05C  addis     r30, r31, 3\n0x8238F060  lwz       r8, 0(r3)\n0x8238F064  addi      r11, r3, 0x18\n0x8238F068  addi      r30, r30, 0x2DC8\n0x8238F06C  addis     r9, r31, 3\n0x8238F070  addi      r10, r30, 0x18\n0x8238F074  addi      r9, r9, 0x2DF0\n0x8238F078  clrlwi    r26, r28, 24\n0x8238F07C  stw       r8, 0(r30)\n0x8238F080  lfs       f0, 4(r3)\n0x8238F084  stfs      f0, 4(r30)\n0x8238F088  cmplwi    cr6, r26, 0\n0x8238F08C  lfs       f0, 8(r3)\n0x8238F090  stfs      f0, 8(r30)\n0x8238F094  lbz       r8, 0xC(r3)\n0x8238F098  stb       r8, 0xC(r30)\n0x8238F09C  lwz       r8, 0x10(r3)\n0x8238F0A0  stw       r8, 0x10(r30)\n0x8238F0A4  lfs       f0, 0x14(r3)\n0x8238F0A8  stfs      f0, 0x14(r30)\n0x8238F0AC  lwz       r8, 0(r11)\n0x8238F0B0  stw       r8, 0(r10)\n0x8238F0B4  lfs       f0, 4(r11)\n0x8238F0B8  stfs      f0, 4(r10)\n0x8238F0BC  lfs       f0, 8(r11)\n0x8238F0C0  stfs      f0, 8(r10)\n0x8238F0C4  lbz       r8, 0xC(r11)\n0x8238F0C8  stb       r8, 0xC(r10)\n0x8238F0CC  lwz       r8, 0x10(r11)\n0x8238F0D0  stw       r8, 0x10(r10)\n0x8238F0D4  lfs       f0, 0x14(r11)\n0x8238F0D8  stfs      f0, 0x14(r10)\n0x8238F0DC  lwz       r11, 0(r9)\n0x8238F0E0  lfs       f0, 4(r9)\n0x8238F0E4  stfs      f0, 0x100+var_8C(r1)\n0x8238F0E8  stw       r11, 0x100+var_90(r1)\n0x8238F0EC  bne       cr6, loc_8238F178\n0x8238F0F0  addis     r28, r31, 4\n0x8238F0F4  addi      r28, r28, 0x75F4\n0x8238F0F8  lwz       r3, 0(r28)\n0x8238F0FC  bl        CgsDev__PerfMonCpu__StartMonitor\n0x8238F100  lis       r11, flt_820037C8@ha\n0x8238F104  lfs       f13, 0x4B8(r31)\n0x8238F108  lfs       f0, flt_820037C8@l(r11)\n0x8238F10C  li        r11, 1\n0x8238F110  fcmpu     cr6, f13, f0\n0x8238F114  bne       cr6, loc_8238F11C\n0x8238F118  li        r11, 0\n0x8238F11C  addis     r20, r31, 4\n0x8238F120  mr        r3, r31\n0x8238F124  mr        r21, r11\n0x8238F128  addi      r20, r20, -0x3F30\n0x8238F12C  bl        BrnGameState__GameStateModule__GetPlayerGlobalRaceCarIndex\n0x8238F130  mr        r19, r3\n0x8238F134  mr        r3, r31\n0x8238F138  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F13C  mr        r7, r3\n0x8238F140  mr        r6, r30\n0x8238F144  stw       r20, 0x100+var_AC(r1)\n0x8238F148  mr        r5, r27\n0x8238F14C  stw       r29, 0x100+var_A4(r1)\n0x8238F150  mr        r4, r23\n0x8238F154  stb       r21, 0x100+var_99(r1)\n0x8238F158  addi      r3, r31, 0x1020\n0x8238F15C  mr        r8, r19\n0x8238F160  mr        r9, r25\n0x8238F164  mr        r10, r24\n0x8238F168  bl        BrnGameState__ModeManager__PreWorldUpdate\n0x8238F16C  lwz       r3, 0(r28)\n0x8238F170  bl        CgsDev__PerfMonCpu__StopMonitor\n0x8238F174  b         loc_8238F184\n0x8238F178  mr        r4, r23\n0x8238F17C  addi      r3, r31, 0x1020\n0x8238F180  bl        BrnGameState__ModeManager__PausedUpdate\n0x8238F184  cmplwi    cr6, r26, 0\n0x8238F188  bne       cr6, loc_8238F1BC\n0x8238F18C  addis     r30, r31, 4\n0x8238F190  addi      r30, r30, 0x75E4\n0x8238F194  lwz       r3, 0(r30)\n0x8238F198  bl        CgsDev__PerfMonCpu__StartMonitor\n0x8238F19C  mr        r3, r27\n0x8238F1A0  bl        BrnGameState__GameStateModuleIO__PreWorl\n0x8238F1A4  mr        r5, r3\n0x8238F1A8  mr        r4, r23\n0x8238F1AC  mr        r3, r31\n0x8238F1B0  bl        BrnGameState__GameStateModule__UpdateRoadRulesManager\n0x8238F1B4  lwz       r3, 0(r30)\n0x8238F1B8  bl        CgsDev__PerfMonCpu__StopMonitor\n0x8238F1BC  addi      r3, r1, 0x100+var_88\n0x8238F1C0  fmr       f1, f31\n0x8238F1C4  addi      r25, r31, 0x1DD0\n0x8238F1C8  bl        CgsSystem__Time__Time\n0x8238F1CC  mr        r3, r31\n0x8238F1D0  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F1D4  cmpwi     cr6, r3, -1\n0x8238F1D8  beq       cr6, loc_8238F20C\n0x8238F1DC  mr        r3, r31\n0x8238F1E0  addi      r30, r1, 0x100+var_90\n0x8238F1E4  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F1E8  mr        r5, r3\n0x8238F1EC  mr        r4, r25\n0x8238F1F0  addi      r3, r1, 0x100+var_80\n0x8238F1F4  mr        r6, r30\n0x8238F1F8  bl        BrnGameState__ScoringSystem__GetRaceCarTotalTime\n0x8238F1FC  lwz       r11, 0(r3)\n0x8238F200  lfs       f0, 4(r3)\n0x8238F204  stfs      f0, 0x100+var_84(r1)\n0x8238F208  stw       r11, 0x100+var_88(r1)\n0x8238F20C  addi      r4, r1, 0x100+var_88\n0x8238F210  mr        r3, r23\n0x8238F214  bl        BrnGameState__GameStateModuleIO__OutputBuffer__SetGameModeElapsedTime\n0x8238F218  lis       r11, aLeenumindexEAc@ha\n0x8238F21C  li        r28, 0\n0x8238F220  addi      r27, r11, aLeenumindexEAc@l# \"leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_\"...\n0x8238F224  lis       r11, aGamesourceBurn@ha\n0x8238F228  addi      r26, r11, aGamesourceBurn@l# \"..\\\\..\\\\..\\\\GameSource\\\\BurnoutConstant\"...\n0x8238F22C  mr        r4, r28\n0x8238F230  mr        r3, r25\n0x8238F234  bl        sub_8231DCD0\n0x8238F238  mr        r11, r3\n0x8238F23C  cmplwi    cr6, r11, 0\n0x8238F240  beq       cr6, loc_8238F260\n0x8238F244  mr        r3, r23\n0x8238F248  lwz       r30, 0x144(r11)\n0x8238F24C  lwz       r29, 0x148(r11)\n0x8238F250  bl        sub_8231D800\n0x8238F254  mr        r4, r29\n0x8238F258  mr        r5, r30\n0x8238F25C  bl        BrnNetwork__BrnNetworkModuleIO__GameStateToNetworkInterface__SetActiveRaceCarIndex\n0x8238F260  addi      r28, r28, 1\n0x8238F264  cmpwi     cr6, r28, 8\n0x8238F268  ble       cr6, loc_8238F288\n0x8238F26C  bl        CgsDev__Assert__BeginAssert\n0x8238F270  li        r5, 0x27 # '''\n0x8238F274  mr        r4, r26\n0x8238F278  mr        r3, r27\n0x8238F27C  bl        CgsDev__Assert__FireAssert\n0x8238F280  bl        CgsDev__Assert__EndAssert\n0x8238F284  cmpwi     cr6, r28, 8\n0x8238F288  blt       cr6, loc_8238F22C\n0x8238F28C  mr        r3, r31\n0x8238F290  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F294  cmpwi     cr6, r3, -1\n0x8238F298  beq       cr6, loc_8238F340\n0x8238F29C  mr        r3, r31\n0x8238F2A0  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F2A4  mr        r30, r3\n0x8238F2A8  cmpwi     cr6, r30, -1\n0x8238F2AC  ble       cr6, loc_8238F2B8\n0x8238F2B0  cmpwi     cr6, r30, 8\n0x8238F2B4  blt       cr6, loc_8238F2D8\n0x8238F2B8  bl        CgsDev__Assert__BeginAssert\n0x8238F2BC  lis       r11, aDP4B5MainBurno_544@ha\n0x8238F2C0  li        r5, 0x8B3\n0x8238F2C4  addi      r4, r11, aDP4B5MainBurno_544@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x8238F2C8  lis       r11, aLeactiveraceca_4@ha\n0x8238F2CC  addi      r3, r11, aLeactiveraceca_4@l# \"(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR\"...\n0x8238F2D0  bl        CgsDev__Assert__FireAssert\n0x8238F2D4  bl        CgsDev__Assert__EndAssert\n0x8238F2D8  mr        r4, r30\n0x8238F2DC  mr        r3, r25\n0x8238F2E0  bl        BrnGameState__ScoringSystem__GetCarData\n0x8238F2E4  cmplwi    cr6, r3, 0\n0x8238F2E8  li        r11, 0\n0x8238F2EC  beq       cr6, loc_8238F2F4\n0x8238F2F0  lbz       r11, 0x44(r3)\n0x8238F2F4  clrlwi    r11, r11, 24\n0x8238F2F8  cmplwi    cr6, r11, 0\n0x8238F2FC  beq       cr6, loc_8238F340\n0x8238F300  mr        r3, r31\n0x8238F304  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F308  mr        r30, r3\n0x8238F30C  mr        r3, r31\n0x8238F310  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x8238F314  mr        r4, r3\n0x8238F318  mr        r3, r25\n0x8238F31C  bl        BrnGameState__ScoringSystem__GetCarRacePosition\n0x8238F320  mr        r31, r3\n0x8238F324  mr        r3, r23\n0x8238F328  bl        BrnGameState__GameStateModuleIO__Outpu\n0x8238F32C  addi      r4, r1, 0x100+var_88\n0x8238F330  addi      r3, r3, 0xC8\n0x8238F334  stb       r31, 0x100+var_88(r1)\n0x8238F338  stw       r30, 0x100+var_84(r1)\n0x8238F33C  bl        BrnGameState__GameStateToGuiOvertakeEvent___AddEvent\n0x8238F340  lwz       r3, 0(r22)\n0x8238F344  bl        CgsDev__PerfMonCpu__StopMonitor\n0x8238F348  addi      r1, r1, 0x100\n0x8238F34C  lfd       f31, var_78(r1)\n0x8238F350  b         __restgprlr_19",
+  "xrefs_to": [
+    {
+      "address": "0x823A5328",
+      "name": "BrnGameState::GameStateModule::PreWorldUpdate"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EC4",
+      "name": "__savegprlr_19"
+    },
+    {
+      "address": "0x821F1198",
+      "name": "CgsDev::PerfMonCpu::StartMonitor"
+    },
+    {
+      "address": "0x82356978",
+      "name": "BrnGameState::GameStateModule::IsSimPaused"
+    },
+    {
+      "address": "0x8231D4B8",
+      "name": "BrnGameState::GameStateModuleIO::Ou"
+    },
+    {
+      "address": "0x82817548",
+      "name": "CgsDev::Assert::BeginAssert"
+    },
+    {
+      "address": "0x82820810",
+      "name": "CgsDev::Assert::FireAssert"
+    },
+    {
+      "address": "0x82817558",
+      "name": "CgsDev::Assert::EndAssert"
+    },
+    {
+      "address": "0x82311570",
+      "name": "BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex"
+    },
+    {
+      "address": "0x8227D690",
+      "name": "BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarO"
+    },
+    {
+      "address": "0x8231CE28",
+      "name": "BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get"
+    },
+    {
+      "address": "0x82311620",
+      "name": "BrnGameState::GameStateModule::GetPlayerGlobalRaceCarIndex"
+    },
+    {
+      "address": "0x823537B8",
+      "name": "BrnGameState::ModeManager::PreWorldUpdate"
+    },
+    {
+      "address": "0x821F1308",
+      "name": "CgsDev::PerfMonCpu::StopMonitor"
+    },
+    {
+      "address": "0x82350DE0",
+      "name": "BrnGameState::ModeManager::PausedUpdate"
+    },
+    {
+      "address": "0x823632F8",
+      "name": "BrnGameState::GameStateModuleIO::PreWorl"
+    },
+    {
+      "address": "0x82381258",
+      "name": "BrnGameState::GameStateModule::UpdateRoadRulesManager"
+    },
+    {
+      "address": "0x821F1FA0",
+      "name": "CgsSystem::Time::Time"
+    },
+    {
+      "address": "0x8231F480",
+      "name": "BrnGameState::ScoringSystem::GetRaceCarTotalTime"
+    },
+    {
+      "address": "0x82362F80",
+      "name": "BrnGameState::GameStateModuleIO::OutputBuffer::SetGameModeElapsedTime"
+    },
+    {
+      "address": "0x8231DCD0",
+      "name": "sub_8231DCD0"
+    },
+    {
+      "address": "0x8231D800",
+      "name": "sub_8231D800"
+    },
+    {
+      "address": "0x823558A0",
+      "name": "BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface::SetActiveRaceCarIndex"
+    },
+    {
+      "address": "0x8231DC18",
+      "name": "BrnGameState::ScoringSystem::GetCarData"
+    },
+    {
+      "address": "0x82326980",
+      "name": "BrnGameState::ScoringSystem::GetCarRacePosition"
+    },
+    {
+      "address": "0x8231D8A8",
+      "name": "BrnGameState::GameStateModuleIO::Outpu"
+    },
+    {
+      "address": "0x82368BF0",
+      "name": "BrnGameState::GameStateToGuiOvertakeEvent>::AddEvent"
+    }
+  ]
+}

@@ -1,0 +1,451 @@
+{
+  "address": "0x823EFBD0",
+  "name": "BrnGame::BrnGameModule::GamePrepare",
+  "prototype": "int BrnGame::BrnGameModule::GamePrepareint __fastcall(int a1)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v3",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v4",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v5",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "Reque",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v7",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v8",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v9",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v10",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v11",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v12",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v13",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v14",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v15",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v16",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v17",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v18",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v19",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v20",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v21",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v22",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v23",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v24",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v25",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v26",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v27",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v28",
+      "type": "int *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v29",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v30",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "NextEvent",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v32",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "DefaultAllocator",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v34",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v35",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v36",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "Allocato",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v38",
+      "type": "unsigned __int8 (__fastcall *)(int, _DWORD, _DWORD, int)",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v39",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v40",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "result",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v42",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v43",
+      "type": "_DWORD[2]",
+      "is_reg": false,
+      "size": 8
+    },
+    {
+      "name": "v44",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v45",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v46",
+      "type": "int[4]",
+      "is_reg": false,
+      "size": 16
+    },
+    {
+      "name": "v47",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v48",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v49",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v50",
+      "type": "__int64",
+      "is_reg": false,
+      "size": 8
+    }
+  ],
+  "pseudocode": "int __fastcall BrnGame::BrnGameModule::GamePrepare(int a1)\n{\n  int v2; // r21\n  int v3; // r28\n  _DWORD *v4; // r14\n  int v5; // r25\n  int Reque; // r3\n  int v7; // r3\n  int v8; // r3\n  int v9; // r11\n  int v10; // r30\n  __int64 v11; // r11\n  int v12; // r26\n  __int64 v13; // r11\n  int v14; // r26\n  __int64 v15; // r11\n  int v16; // r26\n  __int64 v17; // r11\n  int v18; // r26\n  __int64 v19; // r3\n  int v20; // r30\n  int v21; // r3\n  int v22; // r11\n  _DWORD *v23; // r22\n  int v24; // r17\n  int v25; // r18\n  int v26; // r19\n  int v27; // r20\n  int *v28; // r11\n  _DWORD *v29; // r30\n  int v30; // r10\n  int NextEvent; // r3\n  int v32; // r10\n  int DefaultAllocator; // r27\n  int v34; // r3\n  _DWORD *v35; // r31\n  int v36; // r27\n  int Allocato; // r3\n  unsigned __int8 (__fastcall *v38)(int, _DWORD, _DWORD, int); // r11\n  int v39; // r27\n  int v40; // r3\n  int result; // r3\n  int v42; // r31\n  _DWORD v43[2]; // [sp+50h] [-D0h] BYREF\n  int v44; // [sp+58h] [-C8h]\n  int v45; // [sp+5Ch] [-C4h] BYREF\n  int v46[4]; // [sp+60h] [-C0h] BYREF\n  int v47; // [sp+70h] [-B0h] BYREF\n  int v48; // [sp+74h] [-ACh]\n  int v49; // [sp+78h] [-A8h]\n  __int64 v50; // [sp+80h] [-A0h]\n\n  _savegprlr_14();\n  v2 = *(a1 + 10055444);\n  v3 = *(a1 + 10055440);\n  v44 = v2;\n  CgsModule::IOBuffer::LockForWrite(v3);\n  CgsModule::IOBuffer::LockForRead(v2);\n  v4 = (a1 + 10094164);\n  v5 = 0;\n  switch ( *(a1 + 10094164) )\n  {\n    case 0:\n    case 1:\n      *v4 = 1;\n      Reque = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      BrnResource::GameDataIO::RequestInterface<32768>::LoadBundle(Reque, a1 + 10094268, 2, 10, \"shaders.bndl\", 1);\n      v7 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      BrnResource::GameDataIO::RequestInterface<32768>::LoadBundle(\n        v7,\n        a1 + 10094268,\n        1,\n        10,\n        \"GlobalTextureDictionary.bin\",\n        0);\n      v8 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      BrnResource::GameDataIO::RequestInterface<32768>::LoadBundle(\n        v8,\n        a1 + 10094268,\n        0,\n        0,\n        \"Language\\\\Fonts\\\\Default.font\",\n        0);\n      goto LABEL_3;\n    case 2:\nLABEL_3:\n      v9 = *(a1 + 10094276);\n      *v4 = 2;\n      if ( v9 < 3 )\n        goto LABEL_36;\n      CgsModule::BaseEventReceiverQueue::Clear((a1 + 10094268));\n      v10 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      LODWORD(v11) = CgsResource::ID::HashString(\"gamedb://burnout5/Playground/GlobalTextures/blobbyshadow.TextureConfig2d?ID=240931\");\n      v47 = a1 + 10094268;\n      v48 = 0;\n      v50 = v11;\n      v49 = 10;\n      CgsModule::VariableEventQueue<32768,16>::AddEvent(v10, &v47, 4, 24);\n      v12 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      LODWORD(v13) = CgsResource::ID::HashString(\"gamedb://burnout5/Playground/GlobalTextures/cloud1density.TextureConfig2d?ID=381388\");\n      v47 = a1 + 10094268;\n      v48 = 1;\n      v49 = 10;\n      v50 = v13;\n      CgsModule::VariableEventQueue<32768,16>::AddEvent(v12, &v47, 4, 24);\n      v14 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      LODWORD(v15) = CgsResource::ID::HashString(\"gamedb://burnout5/Playground/GlobalTextures/cloud1quadrant.TextureConfig2d?ID=381382\");\n      v47 = a1 + 10094268;\n      v48 = 2;\n      v49 = 10;\n      v50 = v15;\n      CgsModule::VariableEventQueue<32768,16>::AddEvent(v14, &v47, 4, 24);\n      v16 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      LODWORD(v17) = CgsResource::ID::HashString(\"gamedb://burnout5/Playground/GlobalTextures/corona_atlas.TextureConfig2d?ID=297312\");\n      v47 = a1 + 10094268;\n      v48 = 3;\n      v49 = 10;\n      v50 = v17;\n      CgsModule::VariableEventQueue<32768,16>::AddEvent(v16, &v47, 4, 24);\n      v18 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      LODWORD(v19) = CgsResource::ID::HashString(\"gamedb://burnout5/Playground/GlobalTextures/glass_fracture.TextureConfig2d?ID=440917\");\n      v47 = a1 + 10094268;\n      v48 = 4;\n      v50 = v19;\n      v49 = 10;\n      CgsModule::VariableEventQueue<32768,16>::AddEvent(v18, &v47, 4, 24);\n      v20 = BrnResource::GameDataIO::InputBuffer::GetReque(v3);\n      v21 = CgsResource::ID::HashString(\"default\");\n      v47 = a1 + 10094268;\n      v49 = 0;\n      v50 = v21 | 0x500000000LL;\n      v48 = 5;\n      CgsModule::VariableEventQueue<32768,16>::AddEvent(v20, &v47, 4, 24);\nLABEL_5:\n      v22 = *(a1 + 10094276);\n      *v4 = 3;\n      if ( v22 < 5 )\n        goto LABEL_36;\n      v23 = (a1 + 10094268);\n      v24 = 0;\n      v25 = 0;\n      v26 = 0;\n      v27 = 0;\n      if ( *(a1 + 10094276) <= 0 )\n        goto LABEL_19;\n      v28 = (*(a1 + 10094280) + *(a1 + 10094268));\n      v29 = v28 + 2;\n      v30 = v28[1];\n      NextEvent = *v28;\n      v43[0] = v28 + 2;\n      v46[0] = v30;\n      if ( v28 == -8 )\n        goto LABEL_19;\n      do\n      {\n        if ( NextEvent == 4 )\n        {\n          switch ( v29[1] )\n          {\n            case 0:\n              *v46 = *(v29 + 3);\n              v24 = *v46[0];\n              break;\n            case 1:\n              *v46 = *(v29 + 3);\n              v25 = *v46[0];\n              break;\n            case 2:\n              *v46 = *(v29 + 3);\n              v26 = *v46[0];\n              break;\n            case 3:\n              *v46 = *(v29 + 3);\n              v27 = *v46[0];\n              break;\n            case 4:\n              *v46 = *(v29 + 3);\n              v5 = *v46[0];\n              break;\n            case 5:\n              v32 = v29[6];\n              *(a1 + 10088788) = v29[7];\n              *(a1 + 10088784) = v32;\n              DefaultAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator(4);\n              v34 = CgsResource::Font_::operator-_((a1 + 10088784));\n              CgsResource::Font::CreateTextureState(v34, DefaultAllocator);\n              CgsDev::DebugManager::SetDebugFont(a1 + 10055608, (a1 + 10088784));\n              break;\n            default:\n              CgsDev::Assert::BeginAssert();\n              CgsDev::Assert::FireAssert(\n                \"Unexpected Event Id in BrnGameModule::GamePrepare\",\n                \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n                1741);\n              CgsDev::Assert::EndAssert();\n              break;\n          }\n        }\n        NextEvent = CgsModule::BaseEventReceiverQueue::GetNextEvent(v23, v29, v43, v46);\n        v29 = v43[0];\n      }\n      while ( v43[0] );\n      v2 = v44;\n      if ( !v24 )\n      {\nLABEL_19:\n        CgsDev::Assert::BeginAssert();\n        CgsDev::Assert::FireAssert(\n          \"lpBlobbyShadow\",\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n          1751);\n        CgsDev::Assert::EndAssert();\n      }\n      if ( !v25 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::Assert::FireAssert(\n          \"lpCloudDensityTexture\",\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n          1752);\n        CgsDev::Assert::EndAssert();\n      }\n      if ( !v26 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::Assert::FireAssert(\n          \"lpCloudLightingTexture\",\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n          1753);\n        CgsDev::Assert::EndAssert();\n      }\n      if ( !v27 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::Assert::FireAssert(\n          \"lpCoronaAtlas != NULL\",\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n          1754);\n        CgsDev::Assert::EndAssert();\n      }\n      if ( !v5 )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::Assert::FireAssert(\n          \"lpGlassFractureTexture != NULL\",\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n          1755);\n        CgsDev::Assert::EndAssert();\n      }\n      if ( !BrnRendererModule::PrepareAgain(a1 + 17408, v24, v25, v26, v27, v5) )\n      {\n        CgsDev::Assert::BeginAssert();\n        CgsDev::Assert::FireAssert(\n          \"mRenderModule.PrepareAgain ( lpBlobbyShadow, lpCloudDensityTexture, lpCloudLightingTexture, lpCoronaAtlas, lpG\"\n          \"lassFractureTexture )\",\n          \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n          1761);\n        CgsDev::Assert::EndAssert();\n      }\n      CgsModule::BaseEventReceiverQueue::Clear(v23);\nLABEL_31:\n      *v4 = 4;\n      v35 = (a1 + 10055428);\n      CgsModule::IOBufferStack::CreateIOBuffer<BrnGameState::GameStateModuleIO::OutputBuffer>(\n        *(a1 + 10055428),\n        v43,\n        \"GameState\");\n      v36 = *(a1 + 6722816);\n      Allocato = BrnResource::GameDataIO::OutputBuffer::GetAllocato(v2);\n      v38 = *(v36 + 64);\n      v39 = v43[0];\n      if ( v38(a1 + 6722816, v43[0], *(a1 + 10055428), Allocato) )\n      {\n        CgsModule::IOBufferStack::DestroyIOBuffer<BrnGameState::GameStateModuleIO::OutputBuffer>(*v35, v43);\n        CgsModule::IOBuffer::UnlockForWrite(v3);\n        CgsModule::IOBuffer::UnlockForRead(v2);\n        result = 1;\n      }\n      else\n      {\n        CgsModule::IOBuffer::LockForRead(v39);\n        v40 = BrnGameState::GameStateModuleIO::OutputBu(v39);\n        BrnResource::GameDataIO::InputBuffer::AppendRequestInterface<3072>(v3, v40);\n        CgsModule::IOBuffer::UnlockForRead(v39);\n        CgsModule::IOBufferStack::DestroyIOBuffer<BrnGameState::GameStateModuleIO::OutputBuffer>(*v35, v43);\nLABEL_36:\n        v44 = *(a1 + 10055424);\n        if ( !CgsModule::IOBufferStack::CreateIOBuffer<RendererIO::InputBuffer>() )\n        {\n          CgsDev::Assert::BeginAssert();\n          CgsDev::Assert::FireAssert(\n            \"mpStack->CreateIOBuffer( &mpBuffer, lpcName )\",\n            \"..\\\\..\\\\..\\\\GameShared\\\\GameClasses\\\\Module/CgsModuleIOHelper.h\",\n            52);\n          CgsDev::Assert::EndAssert();\n        }\n        v46[0] = *(a1 + 10055428);\n        if ( !CgsModule::IOBufferStack::CreateIOBuffer<RendererIO::OutputBuffer>() )\n        {\n          CgsDev::Assert::BeginAssert();\n          CgsDev::Assert::FireAssert(\n            \"mpStack->CreateIOBuffer( &mpBuffer, lpcName )\",\n            \"..\\\\..\\\\..\\\\GameShared\\\\GameClasses\\\\Module/CgsModuleIOHelper.h\",\n            52);\n          CgsDev::Assert::EndAssert();\n        }\n        v42 = v46[1];\n        BrnRendererModule::Update(a1 + 17408, *(a1 + 10055424), *(a1 + 10055428), v45, v46[1]);\n        CgsModule::IOBuffer::LockForRead(v42);\n        *(a1 + 10094128) = RendererIO::OutputBuffer::GetReusableLoadingScreenAllocator(v42);\n        CgsModule::IOBuffer::UnlockForRead(v42);\n        CgsModule::IOBuffer::LockForWrite(*(a1 + 10097072));\n        *(*(a1 + 10097072) + 39312) = 1;\n        BrnGame::DispatchThreadInputBuffer::SetIsDiskError(*(a1 + 10097072), *(a1 + 10094114));\n        CgsModule::IOBuffer::UnlockForWrite(*(a1 + 10097072));\n        CgsModule::IOBuffer::UnlockForWrite(v3);\n        CgsModule::IOBuffer::UnlockForRead(v2);\n        BrnGame::BrnGameModule::CheckDiskError(a1, v2);\n        if ( !CgsModule::IOBufferStack::DestroyIOBuffer<RendererIO::OutputBuffer>(v46[0], &v46[1]) )\n        {\n          CgsDev::Assert::BeginAssert();\n          CgsDev::Assert::FireAssert(\n            \"mpStack->DestroyIOBuffer( &mpBuffer )\",\n            \"..\\\\..\\\\..\\\\GameShared\\\\GameClasses\\\\Module/CgsModuleIOHelper.h\",\n            57);\n          CgsDev::Assert::EndAssert();\n        }\n        if ( !CgsModule::IOBufferStack::DestroyIOBuffer<RendererIO::InputBuffer>(v44, &v45) )\n        {\n          CgsDev::Assert::BeginAssert();\n          CgsDev::Assert::FireAssert(\n            \"mpStack->DestroyIOBuffer( &mpBuffer )\",\n            \"..\\\\..\\\\..\\\\GameShared\\\\GameClasses\\\\Module/CgsModuleIOHelper.h\",\n            57);\n          CgsDev::Assert::EndAssert();\n        }\n        result = 0;\n      }\n      _restgprlr();\n      return result;\n    case 3:\n      goto LABEL_5;\n    case 4:\n      goto LABEL_31;\n    default:\n      CgsDev::Assert::BeginAssert();\n      CgsDev::Assert::FireAssert(\n        \"Got into an unknown state\",\n        \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../Game/BrnGameModule.cpp\",\n        1807);\n      CgsDev::Assert::EndAssert();\n      goto LABEL_36;\n  }\n}\n",
+  "assembly": "0x823EFBD0  mflr      r12\n0x823EFBD4  bl        __savegprlr_14\n0x823EFBD8  stwu      r1, back_chain(r1)\n0x823EFBDC  lis       r10, 0x99\n0x823EFBE0  lis       r11, 0x99\n0x823EFBE4  mr        r29, r3\n0x823EFBE8  ori       r10, r10, 0x6F14 # 0x996F14\n0x823EFBEC  ori       r11, r11, 0x6F10 # 0x996F10\n0x823EFBF0  lwzx      r21, r29, r10\n0x823EFBF4  lwzx      r28, r29, r11\n0x823EFBF8  mr        r3, r28\n0x823EFBFC  stw       r21, 0x120+var_C8(r1)\n0x823EFC00  bl        CgsModule__IOBuffer__LockForWrite\n0x823EFC04  mr        r3, r21\n0x823EFC08  bl        CgsModule__IOBuffer__LockForRead\n0x823EFC0C  addis     r14, r29, 0x9A\n0x823EFC10  li        r15, 1\n0x823EFC14  addi      r14, r14, 0x654\n0x823EFC18  lwz       r11, 0(r14)\n0x823EFC1C  cmplwi    cr6, r11, 4# switch 5 cases  ; switch 5 cases\n0x823EFC20  bgt       cr6, def_823EFC54# jumptable 823EFC54 default case\n0x823EFC24  lis       r10, 0x9A\n0x823EFC28  li        r16, 4\n0x823EFC2C  ori       r27, r10, 0x6BC # 0x9A06BC\n0x823EFC30  lis       r10, 0x9A\n0x823EFC34  li        r25, 0\n0x823EFC38  ori       r22, r10, 0x6C4 # 0x9A06C4\n0x823EFC3C  li        r23, 3\n0x823EFC40  lis       r12, jpt_823EFC54@ha\n0x823EFC44  addi      r12, r12, jpt_823EFC54@l\n0x823EFC48  slwi      r0, r11, 2\n0x823EFC4C  lwzx      r0, r12, r0\n0x823EFC50  mtctr     r0\n0x823EFC54  bctr# switch jump  ; switch jump\n0x823EFC58  .long loc_823EFC6C# jump table for switch statement  ; jump table for switch statement\n0x823EFC6C  lis       r11, aShadersBndl@ha# jumptable 823EFC54 cases 0,1  ; jumptable 823EFC54 cases 0,1\n0x823EFC70  stw       r15, 0(r14)\n0x823EFC74  mr        r3, r28\n0x823EFC78  addi      r30, r11, aShadersBndl@l# \"shaders.bndl\"\n0x823EFC7C  add       r31, r29, r27\n0x823EFC80  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFC84  mr        r4, r31\n0x823EFC88  li        r5, 2\n0x823EFC8C  li        r6, 0xA\n0x823EFC90  mr        r7, r30\n0x823EFC94  li        r8, 1\n0x823EFC98  bl        BrnResource__GameDataIO__RequestInterface_32768___LoadBundle\n0x823EFC9C  lis       r11, aGlobaltextured@ha\n0x823EFCA0  mr        r3, r28\n0x823EFCA4  addi      r30, r11, aGlobaltextured@l# \"GlobalTextureDictionary.bin\"\n0x823EFCA8  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFCAC  mr        r4, r31\n0x823EFCB0  li        r5, 1\n0x823EFCB4  li        r6, 0xA\n0x823EFCB8  mr        r7, r30\n0x823EFCBC  li        r8, 0\n0x823EFCC0  bl        BrnResource__GameDataIO__RequestInterface_32768___LoadBundle\n0x823EFCC4  lis       r11, aLanguageFontsD@ha\n0x823EFCC8  mr        r3, r28\n0x823EFCCC  addi      r30, r11, aLanguageFontsD@l# \"Language\\\\Fonts\\\\Default.font\"\n0x823EFCD0  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFCD4  mr        r4, r31\n0x823EFCD8  li        r5, 0\n0x823EFCDC  li        r6, 0\n0x823EFCE0  mr        r7, r30\n0x823EFCE4  li        r8, 0\n0x823EFCE8  bl        BrnResource__GameDataIO__RequestInterface_32768___LoadBundle\n0x823EFCEC  li        r24, 2# jumptable 823EFC54 case 2  ; jumptable 823EFC54 case 2\n0x823EFCF0  lwzx      r11, r29, r22\n0x823EFCF4  cmpwi     cr6, r11, 3\n0x823EFCF8  stw       r24, 0(r14)\n0x823EFCFC  blt       cr6, loc_823F021C\n0x823EFD00  add       r31, r29, r27\n0x823EFD04  mr        r3, r31\n0x823EFD08  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x823EFD0C  mr        r3, r28\n0x823EFD10  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFD14  lis       r11, aGamedbBurnout5_17@ha\n0x823EFD18  mr        r30, r3\n0x823EFD1C  addi      r11, r11, aGamedbBurnout5_17@l# \"gamedb://burnout5/Playground/GlobalText\"...\n0x823EFD20  mr        r3, r11\n0x823EFD24  bl        CgsResource__ID__HashString\n0x823EFD28  mr        r11, r3\n0x823EFD2C  mr        r3, r30\n0x823EFD30  stw       r31, 0x120+var_B0(r1)\n0x823EFD34  li        r30, 0xA\n0x823EFD38  stw       r25, 0x120+var_AC(r1)\n0x823EFD3C  li        r6, 0x18\n0x823EFD40  li        r5, 4\n0x823EFD44  addi      r4, r1, 0x120+var_B0\n0x823EFD48  std       r11, 0x120+var_A0(r1)\n0x823EFD4C  stw       r30, 0x120+var_A8(r1)\n0x823EFD50  bl        CgsModule__VariableEventQueue_32768_16___AddEvent\n0x823EFD54  mr        r3, r28\n0x823EFD58  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFD5C  lis       r11, aGamedbBurnout5_16@ha\n0x823EFD60  mr        r26, r3\n0x823EFD64  addi      r11, r11, aGamedbBurnout5_16@l# \"gamedb://burnout5/Playground/GlobalText\"...\n0x823EFD68  mr        r3, r11\n0x823EFD6C  bl        CgsResource__ID__HashString\n0x823EFD70  mr        r11, r3\n0x823EFD74  li        r6, 0x18\n0x823EFD78  stw       r31, 0x120+var_B0(r1)\n0x823EFD7C  li        r5, 4\n0x823EFD80  stw       r15, 0x120+var_AC(r1)\n0x823EFD84  addi      r4, r1, 0x120+var_B0\n0x823EFD88  stw       r30, 0x120+var_A8(r1)\n0x823EFD8C  mr        r3, r26\n0x823EFD90  std       r11, 0x120+var_A0(r1)\n0x823EFD94  bl        CgsModule__VariableEventQueue_32768_16___AddEvent\n0x823EFD98  mr        r3, r28\n0x823EFD9C  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFDA0  lis       r11, aGamedbBurnout5_15@ha\n0x823EFDA4  mr        r26, r3\n0x823EFDA8  addi      r11, r11, aGamedbBurnout5_15@l# \"gamedb://burnout5/Playground/GlobalText\"...\n0x823EFDAC  mr        r3, r11\n0x823EFDB0  bl        CgsResource__ID__HashString\n0x823EFDB4  mr        r11, r3\n0x823EFDB8  li        r6, 0x18\n0x823EFDBC  stw       r31, 0x120+var_B0(r1)\n0x823EFDC0  li        r5, 4\n0x823EFDC4  stw       r24, 0x120+var_AC(r1)\n0x823EFDC8  addi      r4, r1, 0x120+var_B0\n0x823EFDCC  stw       r30, 0x120+var_A8(r1)\n0x823EFDD0  mr        r3, r26\n0x823EFDD4  std       r11, 0x120+var_A0(r1)\n0x823EFDD8  bl        CgsModule__VariableEventQueue_32768_16___AddEvent\n0x823EFDDC  mr        r3, r28\n0x823EFDE0  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFDE4  lis       r11, aGamedbBurnout5_14@ha\n0x823EFDE8  mr        r26, r3\n0x823EFDEC  addi      r11, r11, aGamedbBurnout5_14@l# \"gamedb://burnout5/Playground/GlobalText\"...\n0x823EFDF0  mr        r3, r11\n0x823EFDF4  bl        CgsResource__ID__HashString\n0x823EFDF8  mr        r11, r3\n0x823EFDFC  li        r6, 0x18\n0x823EFE00  stw       r31, 0x120+var_B0(r1)\n0x823EFE04  li        r5, 4\n0x823EFE08  stw       r23, 0x120+var_AC(r1)\n0x823EFE0C  addi      r4, r1, 0x120+var_B0\n0x823EFE10  stw       r30, 0x120+var_A8(r1)\n0x823EFE14  mr        r3, r26\n0x823EFE18  std       r11, 0x120+var_A0(r1)\n0x823EFE1C  bl        CgsModule__VariableEventQueue_32768_16___AddEvent\n0x823EFE20  mr        r3, r28\n0x823EFE24  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFE28  lis       r11, aGamedbBurnout5_13@ha\n0x823EFE2C  mr        r26, r3\n0x823EFE30  addi      r11, r11, aGamedbBurnout5_13@l# \"gamedb://burnout5/Playground/GlobalText\"...\n0x823EFE34  mr        r3, r11\n0x823EFE38  bl        CgsResource__ID__HashString\n0x823EFE3C  stw       r31, 0x120+var_B0(r1)\n0x823EFE40  stw       r16, 0x120+var_AC(r1)\n0x823EFE44  std       r3, 0x120+var_A0(r1)\n0x823EFE48  li        r6, 0x18\n0x823EFE4C  li        r5, 4\n0x823EFE50  stw       r30, 0x120+var_A8(r1)\n0x823EFE54  addi      r4, r1, 0x120+var_B0\n0x823EFE58  mr        r3, r26\n0x823EFE5C  bl        CgsModule__VariableEventQueue_32768_16___AddEvent\n0x823EFE60  mr        r3, r28\n0x823EFE64  bl        BrnResource__GameDataIO__InputBuffer__GetReque\n0x823EFE68  lis       r11, aDefault@ha\n0x823EFE6C  mr        r30, r3\n0x823EFE70  addi      r11, r11, aDefault@l# \"default\"\n0x823EFE74  mr        r3, r11\n0x823EFE78  bl        CgsResource__ID__HashString\n0x823EFE7C  mr        r11, r3\n0x823EFE80  li        r10, 5\n0x823EFE84  stw       r31, 0x120+var_B0(r1)\n0x823EFE88  li        r6, 0x18\n0x823EFE8C  stw       r25, 0x120+var_A8(r1)\n0x823EFE90  li        r5, 4\n0x823EFE94  addi      r4, r1, 0x120+var_B0\n0x823EFE98  mr        r3, r30\n0x823EFE9C  std       r11, 0x120+var_A0(r1)\n0x823EFEA0  stw       r10, 0x120+var_AC(r1)\n0x823EFEA4  bl        CgsModule__VariableEventQueue_32768_16___AddEvent\n0x823EFEA8  lwzx      r11, r29, r22# jumptable 823EFC54 case 3  ; jumptable 823EFC54 case 3\n0x823EFEAC  stw       r23, 0(r14)\n0x823EFEB0  cmpwi     cr6, r11, 5\n0x823EFEB4  blt       cr6, loc_823F021C\n0x823EFEB8  add       r22, r29, r27\n0x823EFEBC  mr        r17, r25\n0x823EFEC0  mr        r18, r25\n0x823EFEC4  mr        r19, r25\n0x823EFEC8  mr        r20, r25\n0x823EFECC  lwz       r11, 8(r22)\n0x823EFED0  cmpwi     cr6, r11, 0\n0x823EFED4  lis       r11, aDP4B5MainBurno_131@ha\n0x823EFED8  addi      r23, r11, aDP4B5MainBurno_131@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x823EFEDC  ble       cr6, loc_823F0048\n0x823EFEE0  lwz       r10, 0(r22)\n0x823EFEE4  lwz       r11, 0xC(r22)\n0x823EFEE8  add       r11, r11, r10\n0x823EFEEC  addi      r30, r11, 8\n0x823EFEF0  cmplwi    cr6, r30, 0\n0x823EFEF4  lwz       r10, 4(r11)\n0x823EFEF8  lwz       r3, 0(r11)\n0x823EFEFC  stw       r30, 0x120+var_D0(r1)\n0x823EFF00  stw       r10, 0x120+var_C0(r1)\n0x823EFF04  beq       cr6, loc_823F0048\n0x823EFF08  lis       r11, aUnexpectedEven_0@ha\n0x823EFF0C  addi      r21, r11, aUnexpectedEven_0@l# \"Unexpected Event Id in BrnGameModule::G\"...\n0x823EFF10  lis       r11, 0x99\n0x823EFF14  ori       r24, r11, 0xF150 # 0x99F150\n0x823EFF18  lis       r11, 0x99\n0x823EFF1C  ori       r26, r11, 0x6FB8 # 0x996FB8\n0x823EFF20  cmpwi     cr6, r3, 4\n0x823EFF24  bne       cr6, loc_823F001C\n0x823EFF28  lwz       r11, 4(r30)\n0x823EFF2C  cmplwi    cr6, r11, 5# switch 6 cases  ; switch 6 cases\n0x823EFF30  bgt       cr6, def_823EFF48# jumptable 823EFF48 default case\n0x823EFF34  lis       r12, jpt_823EFF48@ha\n0x823EFF38  addi      r12, r12, jpt_823EFF48@l\n0x823EFF3C  slwi      r0, r11, 2\n0x823EFF40  lwzx      r0, r12, r0\n0x823EFF44  mtctr     r0\n0x823EFF48  bctr# switch jump  ; switch jump\n0x823EFF4C  .long loc_823EFF64# jump table for switch statement  ; jump table for switch statement\n0x823EFF64  ld        r11, 0x18(r30)# jumptable 823EFF48 case 0  ; jumptable 823EFF48 case 0\n0x823EFF68  std       r11, 0x120+var_C0(r1)\n0x823EFF6C  lwz       r11, 0x120+var_C0(r1)\n0x823EFF70  lwz       r17, 0(r11)\n0x823EFF74  b         loc_823F001C\n0x823EFF78  ld        r11, 0x18(r30)# jumptable 823EFF48 case 1  ; jumptable 823EFF48 case 1\n0x823EFF7C  std       r11, 0x120+var_C0(r1)\n0x823EFF80  lwz       r11, 0x120+var_C0(r1)\n0x823EFF84  lwz       r18, 0(r11)\n0x823EFF88  b         loc_823F001C\n0x823EFF8C  ld        r11, 0x18(r30)# jumptable 823EFF48 case 2  ; jumptable 823EFF48 case 2\n0x823EFF90  std       r11, 0x120+var_C0(r1)\n0x823EFF94  lwz       r11, 0x120+var_C0(r1)\n0x823EFF98  lwz       r19, 0(r11)\n0x823EFF9C  b         loc_823F001C\n0x823EFFA0  ld        r11, 0x18(r30)# jumptable 823EFF48 case 3  ; jumptable 823EFF48 case 3\n0x823EFFA4  std       r11, 0x120+var_C0(r1)\n0x823EFFA8  lwz       r11, 0x120+var_C0(r1)\n0x823EFFAC  lwz       r20, 0(r11)\n0x823EFFB0  b         loc_823F001C\n0x823EFFB4  ld        r11, 0x18(r30)# jumptable 823EFF48 case 4  ; jumptable 823EFF48 case 4\n0x823EFFB8  std       r11, 0x120+var_C0(r1)\n0x823EFFBC  lwz       r11, 0x120+var_C0(r1)\n0x823EFFC0  lwz       r25, 0(r11)\n0x823EFFC4  b         loc_823F001C\n0x823EFFC8  lwz       r11, 0x1C(r30)# jumptable 823EFF48 case 5  ; jumptable 823EFF48 case 5\n0x823EFFCC  add       r31, r29, r24\n0x823EFFD0  lwz       r10, 0x18(r30)\n0x823EFFD4  stw       r11, 4(r31)\n0x823EFFD8  stw       r10, 0(r31)\n0x823EFFDC  bl        rw__ResourceAllocatorRegistry__GetDefaultAllocator\n0x823EFFE0  mr        r27, r3\n0x823EFFE4  mr        r3, r31\n0x823EFFE8  bl        CgsResource__Font___operator__\n0x823EFFEC  mr        r4, r27\n0x823EFFF0  bl        CgsResource__Font__CreateTextureState\n0x823EFFF4  mr        r4, r31\n0x823EFFF8  add       r3, r29, r26\n0x823EFFFC  bl        CgsDev__DebugManager__SetDebugFont\n0x823F0000  b         loc_823F001C\n0x823F0004  bl        CgsDev__Assert__BeginAssert# jumptable 823EFF48 default case  ; jumptable 823EFF48 default case\n0x823F0008  li        r5, 0x6CD\n0x823F000C  mr        r4, r23\n0x823F0010  mr        r3, r21\n0x823F0014  bl        CgsDev__Assert__FireAssert\n0x823F0018  bl        CgsDev__Assert__EndAssert\n0x823F001C  addi      r6, r1, 0x120+var_C0\n0x823F0020  addi      r5, r1, 0x120+var_D0\n0x823F0024  mr        r4, r30\n0x823F0028  mr        r3, r22\n0x823F002C  bl        CgsModule__BaseEventReceiverQueue__GetNextEvent\n0x823F0030  lwz       r30, 0x120+var_D0(r1)\n0x823F0034  cmplwi    cr6, r30, 0\n0x823F0038  bne       cr6, loc_823EFF20\n0x823F003C  lwz       r21, 0x120+var_C8(r1)\n0x823F0040  cmplwi    cr6, r17, 0\n0x823F0044  bne       cr6, loc_823F0064\n0x823F0048  bl        CgsDev__Assert__BeginAssert\n0x823F004C  lis       r11, aLpblobbyshadow_0@ha\n0x823F0050  li        r5, 0x6D7\n0x823F0054  addi      r3, r11, aLpblobbyshadow_0@l# \"lpBlobbyShadow\"\n0x823F0058  mr        r4, r23\n0x823F005C  bl        CgsDev__Assert__FireAssert\n0x823F0060  bl        CgsDev__Assert__EndAssert\n0x823F0064  cmplwi    cr6, r18, 0\n0x823F0068  bne       cr6, loc_823F0088\n0x823F006C  bl        CgsDev__Assert__BeginAssert\n0x823F0070  lis       r11, aLpclouddensity@ha\n0x823F0074  li        r5, 0x6D8\n0x823F0078  addi      r3, r11, aLpclouddensity@l# \"lpCloudDensityTexture\"\n0x823F007C  mr        r4, r23\n0x823F0080  bl        CgsDev__Assert__FireAssert\n0x823F0084  bl        CgsDev__Assert__EndAssert\n0x823F0088  cmplwi    cr6, r19, 0\n0x823F008C  bne       cr6, loc_823F00AC\n0x823F0090  bl        CgsDev__Assert__BeginAssert\n0x823F0094  lis       r11, aLpcloudlightin@ha\n0x823F0098  li        r5, 0x6D9\n0x823F009C  addi      r3, r11, aLpcloudlightin@l# \"lpCloudLightingTexture\"\n0x823F00A0  mr        r4, r23\n0x823F00A4  bl        CgsDev__Assert__FireAssert\n0x823F00A8  bl        CgsDev__Assert__EndAssert\n0x823F00AC  cmplwi    cr6, r20, 0\n0x823F00B0  bne       cr6, loc_823F00D0\n0x823F00B4  bl        CgsDev__Assert__BeginAssert\n0x823F00B8  lis       r11, aLpcoronaatlasN@ha\n0x823F00BC  li        r5, 0x6DA\n0x823F00C0  addi      r3, r11, aLpcoronaatlasN@l# \"lpCoronaAtlas != NULL\"\n0x823F00C4  mr        r4, r23\n0x823F00C8  bl        CgsDev__Assert__FireAssert\n0x823F00CC  bl        CgsDev__Assert__EndAssert\n0x823F00D0  cmplwi    cr6, r25, 0\n0x823F00D4  bne       cr6, loc_823F00F4\n0x823F00D8  bl        CgsDev__Assert__BeginAssert\n0x823F00DC  lis       r11, aLpglassfractur@ha\n0x823F00E0  li        r5, 0x6DB\n0x823F00E4  addi      r3, r11, aLpglassfractur@l# \"lpGlassFractureTexture != NULL\"\n0x823F00E8  mr        r4, r23\n0x823F00EC  bl        CgsDev__Assert__FireAssert\n0x823F00F0  bl        CgsDev__Assert__EndAssert\n0x823F00F4  mr        r8, r25\n0x823F00F8  mr        r7, r20\n0x823F00FC  mr        r6, r19\n0x823F0100  mr        r5, r18\n0x823F0104  mr        r4, r17\n0x823F0108  addi      r3, r29, 0x4400\n0x823F010C  bl        BrnRendererModule__PrepareAgain\n0x823F0110  clrlwi    r11, r3, 24\n0x823F0114  cmplwi    cr6, r11, 0\n0x823F0118  bne       cr6, loc_823F0138\n0x823F011C  bl        CgsDev__Assert__BeginAssert\n0x823F0120  lis       r11, aMrendermoduleP@ha\n0x823F0124  li        r5, 0x6E1\n0x823F0128  addi      r3, r11, aMrendermoduleP@l# \"mRenderModule.PrepareAgain ( lpBlobbySh\"...\n0x823F012C  mr        r4, r23\n0x823F0130  bl        CgsDev__Assert__FireAssert\n0x823F0134  bl        CgsDev__Assert__EndAssert\n0x823F0138  mr        r3, r22\n0x823F013C  bl        CgsModule__BaseEventReceiverQueue__Clear\n0x823F0140  addis     r31, r29, 0x99# jumptable 823EFC54 case 4  ; jumptable 823EFC54 case 4\n0x823F0144  stw       r16, 0(r14)\n0x823F0148  lis       r11, aGamestate@ha\n0x823F014C  addi      r31, r31, 0x6F04\n0x823F0150  addi      r5, r11, aGamestate@l# \"GameState\"\n0x823F0154  addi      r4, r1, 0x120+var_D0\n0x823F0158  lwz       r3, 0(r31)\n0x823F015C  bl        ___CreateIOBuffer_VOutputBuffer_GameStateModuleIO_BrnGameState___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_GameSt\n0x823F0160  addis     r30, r29, 0x67 # 'g'\n0x823F0164  mr        r3, r21\n0x823F0168  addi      r30, r30, -0x6B00\n0x823F016C  lwz       r27, 0(r30)\n0x823F0170  bl        BrnResource__GameDataIO__OutputBuffer__GetAllocato\n0x823F0174  lwz       r11, 0x40(r27)\n0x823F0178  mr        r6, r3\n0x823F017C  lwz       r27, 0x120+var_D0(r1)\n0x823F0180  mr        r3, r30\n0x823F0184  lwz       r5, 0(r31)\n0x823F0188  mr        r4, r27\n0x823F018C  mtctr     r11\n0x823F0190  bctrl\n0x823F0194  clrlwi    r11, r3, 24\n0x823F0198  cmplwi    cr6, r11, 0\n0x823F019C  bne       cr6, loc_823F01D4\n0x823F01A0  mr        r3, r27\n0x823F01A4  bl        CgsModule__IOBuffer__LockForRead\n0x823F01A8  mr        r3, r27\n0x823F01AC  bl        BrnGameState__GameStateModuleIO__OutputBu\n0x823F01B0  mr        r4, r3\n0x823F01B4  mr        r3, r28\n0x823F01B8  bl        ___AppendRequestInterface__0MAA__InputBuffer_GameDataIO_BrnResource__QAAXPBV__RequestInterface__0MAA__12__Z# BrnResource::GameDataIO::InputBuffer::AppendRequestInterface<3072>(BrnResource::GameDataIO::RequestInterface<3072> const *)\n0x823F01BC  mr        r3, r27\n0x823F01C0  bl        CgsModule__IOBuffer__UnlockForRead\n0x823F01C4  addi      r4, r1, 0x120+var_D0\n0x823F01C8  lwz       r3, 0(r31)\n0x823F01CC  bl        ___DestroyIOBuffer_VOutputBuffer_GameStateModuleIO_BrnGameState___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_GameS\n0x823F01D0  b         loc_823F021C\n0x823F01D4  addi      r4, r1, 0x120+var_D0\n0x823F01D8  lwz       r3, 0(r31)\n0x823F01DC  bl        ___DestroyIOBuffer_VOutputBuffer_GameStateModuleIO_BrnGameState___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_GameS\n0x823F01E0  mr        r3, r28\n0x823F01E4  bl        CgsModule__IOBuffer__UnlockForWrite\n0x823F01E8  mr        r3, r21\n0x823F01EC  bl        CgsModule__IOBuffer__UnlockForRead\n0x823F01F0  li        r3, 1\n0x823F01F4  addi      r1, r1, 0x120\n0x823F01F8  b         __restgprlr\n0x823F01FC  bl        CgsDev__Assert__BeginAssert# jumptable 823EFC54 default case  ; jumptable 823EFC54 default case\n0x823F0200  lis       r11, aDP4B5MainBurno_131@ha\n0x823F0204  li        r5, 0x70F\n0x823F0208  addi      r4, r11, aDP4B5MainBurno_131@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x823F020C  lis       r11, aGotIntoAnUnkno@ha\n0x823F0210  addi      r3, r11, aGotIntoAnUnkno@l# \"Got into an unknown state\"\n0x823F0214  bl        CgsDev__Assert__FireAssert\n0x823F0218  bl        CgsDev__Assert__EndAssert\n0x823F021C  addis     r30, r29, 0x99\n0x823F0220  lis       r11, aRender@ha\n0x823F0224  addi      r30, r30, 0x6F00\n0x823F0228  addi      r31, r11, aRender@l# \"Render\"\n0x823F022C  addi      r4, r1, 0x120+var_C4\n0x823F0230  mr        r5, r31\n0x823F0234  lwz       r3, 0(r30)\n0x823F0238  stw       r3, 0x120+var_C8(r1)\n0x823F023C  bl        ___CreateIOBuffer_VInputBuffer_RendererIO___IOBufferStack_CgsModule__QAA_NPAPAVInputBuffer_RendererIO__PBD_Z# CgsModule::IOBufferStack::CreateIOBuffer<RendererIO::InputBuffer>(RendererIO::InputBuffer * *,char const *)\n0x823F0240  clrlwi    r11, r3, 24\n0x823F0244  cmplwi    cr6, r11, 0\n0x823F0248  lis       r11, aMpstackCreatei@ha\n0x823F024C  addi      r26, r11, aMpstackCreatei@l# \"mpStack->CreateIOBuffer( &mpBuffer, lpc\"...\n0x823F0250  lis       r11, aGamesharedGame_16@ha\n0x823F0254  addi      r25, r11, aGamesharedGame_16@l# \"..\\\\..\\\\..\\\\GameShared\\\\GameClasses\\\\Mo\"...\n0x823F0258  bne       cr6, loc_823F0274\n0x823F025C  bl        CgsDev__Assert__BeginAssert\n0x823F0260  li        r5, 0x34 # '4'\n0x823F0264  mr        r4, r25\n0x823F0268  mr        r3, r26\n0x823F026C  bl        CgsDev__Assert__FireAssert\n0x823F0270  bl        CgsDev__Assert__EndAssert\n0x823F0274  addis     r27, r29, 0x99\n0x823F0278  mr        r5, r31\n0x823F027C  addi      r27, r27, 0x6F04\n0x823F0280  addi      r4, r1, 0x120+var_C0+4\n0x823F0284  lwz       r3, 0(r27)\n0x823F0288  stw       r3, 0x120+var_C0(r1)\n0x823F028C  bl        ___CreateIOBuffer_VOutputBuffer_RendererIO___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_RendererIO__PBD_Z# CgsModule::IOBufferStack::CreateIOBuffer<RendererIO::OutputBuffer>(RendererIO::OutputBuffer * *,char const *)\n0x823F0290  clrlwi    r11, r3, 24\n0x823F0294  cmplwi    cr6, r11, 0\n0x823F0298  bne       cr6, loc_823F02B4\n0x823F029C  bl        CgsDev__Assert__BeginAssert\n0x823F02A0  li        r5, 0x34 # '4'\n0x823F02A4  mr        r4, r25\n0x823F02A8  mr        r3, r26\n0x823F02AC  bl        CgsDev__Assert__FireAssert\n0x823F02B0  bl        CgsDev__Assert__EndAssert\n0x823F02B4  lwz       r31, 0x120+var_C0+4(r1)\n0x823F02B8  addi      r3, r29, 0x4400\n0x823F02BC  lwz       r5, 0(r27)\n0x823F02C0  mr        r7, r31\n0x823F02C4  lwz       r6, 0x120+var_C4(r1)\n0x823F02C8  lwz       r4, 0(r30)\n0x823F02CC  bl        BrnRendererModule__Update\n0x823F02D0  mr        r3, r31\n0x823F02D4  bl        CgsModule__IOBuffer__LockForRead\n0x823F02D8  mr        r3, r31\n0x823F02DC  bl        RendererIO__OutputBuffer__GetReusableLoadingScreenAllocator\n0x823F02E0  lis       r10, 0x9A\n0x823F02E4  mr        r11, r3\n0x823F02E8  ori       r10, r10, 0x630 # 0x9A0630\n0x823F02EC  mr        r3, r31\n0x823F02F0  stwx      r11, r29, r10\n0x823F02F4  bl        CgsModule__IOBuffer__UnlockForRead\n0x823F02F8  addis     r31, r29, 0x9A\n0x823F02FC  addi      r31, r31, 0x11B0\n0x823F0300  lwz       r3, 0(r31)\n0x823F0304  bl        CgsModule__IOBuffer__LockForWrite\n0x823F0308  lis       r10, 0\n0x823F030C  lwz       r11, 0(r31)\n0x823F0310  lis       r9, 0x9A\n0x823F0314  ori       r10, r10, 0x9990 # 0x9990\n0x823F0318  ori       r9, r9, 0x622 # 0x9A0622\n0x823F031C  stwx      r15, r11, r10\n0x823F0320  lbzx      r4, r29, r9\n0x823F0324  lwz       r3, 0(r31)\n0x823F0328  bl        BrnGame__DispatchThreadInputBuffer__SetIsDiskError\n0x823F032C  lwz       r3, 0(r31)\n0x823F0330  bl        CgsModule__IOBuffer__UnlockForWrite\n0x823F0334  mr        r3, r28\n0x823F0338  bl        CgsModule__IOBuffer__UnlockForWrite\n0x823F033C  mr        r3, r21\n0x823F0340  bl        CgsModule__IOBuffer__UnlockForRead\n0x823F0344  mr        r4, r21\n0x823F0348  mr        r3, r29\n0x823F034C  bl        BrnGame__BrnGameModule__CheckDiskError\n0x823F0350  addi      r4, r1, 0x120+var_C0+4\n0x823F0354  lwz       r3, 0x120+var_C0(r1)\n0x823F0358  bl        ___DestroyIOBuffer_VOutputBuffer_RendererIO___IOBufferStack_CgsModule__QAA_NPAPAVOutputBuffer_RendererIO___Z# CgsModule::IOBufferStack::DestroyIOBuffer<RendererIO::OutputBuffer>(RendererIO::OutputBuffer * *)\n0x823F035C  clrlwi    r11, r3, 24\n0x823F0360  cmplwi    cr6, r11, 0\n0x823F0364  lis       r11, aMpstackDestroy@ha\n0x823F0368  addi      r31, r11, aMpstackDestroy@l# \"mpStack->DestroyIOBuffer( &mpBuffer )\"\n0x823F036C  bne       cr6, loc_823F0388\n0x823F0370  bl        CgsDev__Assert__BeginAssert\n0x823F0374  li        r5, 0x39 # '9'\n0x823F0378  mr        r4, r25\n0x823F037C  mr        r3, r31\n0x823F0380  bl        CgsDev__Assert__FireAssert\n0x823F0384  bl        CgsDev__Assert__EndAssert\n0x823F0388  addi      r4, r1, 0x120+var_C4\n0x823F038C  lwz       r3, 0x120+var_C8(r1)\n0x823F0390  bl        ___DestroyIOBuffer_VInputBuffer_RendererIO___IOBufferStack_CgsModule__QAA_NPAPAVInputBuffer_RendererIO___Z# CgsModule::IOBufferStack::DestroyIOBuffer<RendererIO::InputBuffer>(RendererIO::InputBuffer * *)\n0x823F0394  clrlwi    r11, r3, 24\n0x823F0398  cmplwi    cr6, r11, 0\n0x823F039C  bne       cr6, loc_823F03B8\n0x823F03A0  bl        CgsDev__Assert__BeginAssert\n0x823F03A4  li        r5, 0x39 # '9'\n0x823F03A8  mr        r4, r25\n0x823F03AC  mr        r3, r31\n0x823F03B0  bl        CgsDev__Assert__FireAssert\n0x823F03B4  bl        CgsDev__Assert__EndAssert\n0x823F03B8  li        r3, 0\n0x823F03BC  addi      r1, r1, 0x120\n0x823F03C0  b         __restgprlr",
+  "xrefs_to": [
+    {
+      "address": "0x823F0A30",
+      "name": "BrnGame::BrnGameModule::UpdateThread"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EB0",
+      "name": "__savegprlr_14"
+    },
+    {
+      "address": "0x82204A18",
+      "name": "CgsModule::IOBuffer::LockForWrite"
+    },
+    {
+      "address": "0x82204C88",
+      "name": "CgsModule::IOBuffer::LockForRead"
+    },
+    {
+      "address": "0x823B1788",
+      "name": "BrnResource::GameDataIO::InputBuffer::GetReque"
+    },
+    {
+      "address": "0x823CE558",
+      "name": "BrnResource::GameDataIO::RequestInterface<32768>::LoadBundle"
+    },
+    {
+      "address": "0x821F1D50",
+      "name": "CgsModule::BaseEventReceiverQueue::Clear"
+    },
+    {
+      "address": "0x828D84A8",
+      "name": "CgsResource::ID::HashString"
+    },
+    {
+      "address": "0x823C79F0",
+      "name": "CgsModule::VariableEventQueue<32768,16>::AddEvent"
+    },
+    {
+      "address": "0x82BBD1E0",
+      "name": "rw::ResourceAllocatorRegistry::GetDefaultAllocator"
+    },
+    {
+      "address": "0x823C1C20",
+      "name": "CgsResource::Font>::operator->"
+    },
+    {
+      "address": "0x82835658",
+      "name": "CgsResource::Font::CreateTextureState"
+    },
+    {
+      "address": "0x823B14E8",
+      "name": "CgsDev::DebugManager::SetDebugFont"
+    },
+    {
+      "address": "0x82817548",
+      "name": "CgsDev::Assert::BeginAssert"
+    },
+    {
+      "address": "0x82820810",
+      "name": "CgsDev::Assert::FireAssert"
+    },
+    {
+      "address": "0x82817558",
+      "name": "CgsDev::Assert::EndAssert"
+    },
+    {
+      "address": "0x82204690",
+      "name": "CgsModule::BaseEventReceiverQueue::GetNextEvent"
+    },
+    {
+      "address": "0x823FF8F8",
+      "name": "BrnRendererModule::PrepareAgain"
+    },
+    {
+      "address": "0x823AC6E8",
+      "name": "??$CreateIOBuffer@VOutputBuffer@GameStateModuleIO@BrnGameState@@@IOBufferStack@CgsModule@@QAA_NPAPAVOutputBuffer@GameSt"
+    },
+    {
+      "address": "0x823B18D8",
+      "name": "BrnResource::GameDataIO::OutputBuffer::GetAllocato"
+    },
+    {
+      "address": "0x823B9798",
+      "name": "BrnGameState::GameStateModuleIO::OutputBu"
+    },
+    {
+      "address": "0x823EDF88",
+      "name": "??$AppendRequestInterface@$0MAA@@InputBuffer@GameDataIO@BrnResource@@QAAXPBV?$RequestInterface@$0MAA@@12@@Z"
+    },
+    {
+      "address": "0x82204D50",
+      "name": "CgsModule::IOBuffer::UnlockForRead"
+    },
+    {
+      "address": "0x823AC7C0",
+      "name": "??$DestroyIOBuffer@VOutputBuffer@GameStateModuleIO@BrnGameState@@@IOBufferStack@CgsModule@@QAA_NPAPAVOutputBuffer@GameS"
+    },
+    {
+      "address": "0x82204BB8",
+      "name": "CgsModule::IOBuffer::UnlockForWrite"
+    },
+    {
+      "address": "0x823ADF30",
+      "name": "??$CreateIOBuffer@VInputBuffer@RendererIO@@@IOBufferStack@CgsModule@@QAA_NPAPAVInputBuffer@RendererIO@@PBD@Z"
+    },
+    {
+      "address": "0x823AE000",
+      "name": "??$CreateIOBuffer@VOutputBuffer@RendererIO@@@IOBufferStack@CgsModule@@QAA_NPAPAVOutputBuffer@RendererIO@@PBD@Z"
+    },
+    {
+      "address": "0x82405E28",
+      "name": "BrnRendererModule::Update"
+    },
+    {
+      "address": "0x823B4088",
+      "name": "RendererIO::OutputBuffer::GetReusableLoadingScreenAllocator"
+    },
+    {
+      "address": "0x823B45E0",
+      "name": "BrnGame::DispatchThreadInputBuffer::SetIsDiskError"
+    },
+    {
+      "address": "0x823BC798",
+      "name": "BrnGame::BrnGameModule::CheckDiskError"
+    },
+    {
+      "address": "0x823AE1A8",
+      "name": "??$DestroyIOBuffer@VOutputBuffer@RendererIO@@@IOBufferStack@CgsModule@@QAA_NPAPAVOutputBuffer@RendererIO@@@Z"
+    },
+    {
+      "address": "0x823AE0D0",
+      "name": "??$DestroyIOBuffer@VInputBuffer@RendererIO@@@IOBufferStack@CgsModule@@QAA_NPAPAVInputBuffer@RendererIO@@@Z"
+    }
+  ]
+}

@@ -1,0 +1,923 @@
+{
+  "address": "0x823A5328",
+  "name": "BrnGameState::GameStateModule::PreWorldUpdate",
+  "prototype": "int BrnGameState::GameStateModule::PreWorldUpdateint __fastcall(int a1, int a2, int a3, int a4, unsigned __int8 *a5, char a6)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a3",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a4",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a5",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a6",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v11",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v12",
+      "type": "float *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v13",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v14",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v15",
+      "type": "double",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v16",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v17",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v18",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "PlayerActiveRaceCarIndex",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v20",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v21",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v22",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v23",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v24",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v25",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v26",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v27",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v28",
+      "type": "double",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "TimerRequest",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v30",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v31",
+      "type": "int *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v32",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "ControllerToGameStateInterface",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v34",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v35",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v36",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v37",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v38",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v39",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v40",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v41",
+      "type": "unsigned int *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v42",
+      "type": "BOOL",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v43",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v44",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v45",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v46",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v47",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v48",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v49",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v50",
+      "type": "double",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v51",
+      "type": "unsigned __int8 *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v52",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v53",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v54",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v55",
+      "type": "BOOL",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "IsOnlineGameMode",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v57",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v58",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v59",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v60",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v61",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v62",
+      "type": "unsigned __int8",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v63",
+      "type": "bool",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "v64",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v65",
+      "type": "char",
+      "is_reg": true,
+      "size": 1
+    },
+    {
+      "name": "GuiEventQ",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v67",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v68",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "result",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v70",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v71",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v72",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v73",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v74",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v75",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v76",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v77",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v78",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v79",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v80",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v81",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v82",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v83",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v84",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v85",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v86",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v87",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v88",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "IsSimPaused",
+      "type": "char",
+      "is_reg": false,
+      "size": 1
+    },
+    {
+      "name": "v90",
+      "type": "_BYTE[3]",
+      "is_reg": false,
+      "size": 3
+    },
+    {
+      "name": "v91",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v92",
+      "type": "unsigned int *",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v93",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v94",
+      "type": "_BYTE *",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v95",
+      "type": "const char *",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v96",
+      "type": "_DWORD[2]",
+      "is_reg": false,
+      "size": 8
+    },
+    {
+      "name": "v97",
+      "type": "char",
+      "is_reg": false,
+      "size": 1
+    },
+    {
+      "name": "v98",
+      "type": "int *",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "v99",
+      "type": "_BYTE[1560]",
+      "is_reg": false,
+      "size": 1560
+    },
+    {
+      "name": "",
+      "type": "char",
+      "is_reg": false,
+      "size": 1
+    }
+  ],
+  "pseudocode": "int __fastcall BrnGameState::GameStateModule::PreWorldUpdate(\n        int a1,\n        int a2,\n        int a3,\n        int a4,\n        unsigned __int8 *a5,\n        char a6)\n{\n  int v11; // r3\n  float *v12; // r15\n  int v13; // r3\n  int v14; // r3\n  double v15; // fp31\n  unsigned __int8 *v16; // r16\n  int v17; // r11\n  char v18; // r11\n  int PlayerActiveRaceCarIndex; // r28\n  int v20; // r3\n  int v21; // r10\n  char v22; // r11\n  int v23; // r22\n  char v24; // r11\n  int v25; // r24\n  int v26; // r10\n  int v27; // r28\n  double v28; // fp30\n  int TimerRequest; // r3\n  int v30; // r6\n  int *v31; // r28\n  int v32; // r3\n  int ControllerToGameStateInterface; // r3\n  int v34; // r3\n  int v35; // r3\n  int v36; // r11\n  int v37; // r11\n  int v38; // r3\n  int v39; // r3\n  unsigned __int8 *v40; // r3\n  unsigned int *v41; // r14\n  BOOL v42; // r26\n  unsigned __int8 *v43; // r3\n  int v44; // r10\n  int v45; // r9\n  int v46; // r8\n  int v47; // r7\n  int v48; // r6\n  int v49; // r10\n  double v50; // fp31\n  unsigned __int8 *v51; // r3\n  int v52; // r5\n  __int64 v53; // r11\n  char v54; // r9\n  BOOL v55; // r10\n  char IsOnlineGameMode; // r30\n  int v57; // r3\n  int v58; // r11\n  char v59; // r30\n  int v60; // r30\n  int v61; // r11\n  unsigned __int8 v62; // r11\n  bool v63; // zf\n  int v64; // r3\n  char v65; // r11\n  int GuiEventQ; // r3\n  int v67; // r30\n  int v68; // r3\n  int result; // r3\n  int v70; // [sp+8h] [-758h]\n  int v71; // [sp+Ch] [-754h]\n  int v72; // [sp+10h] [-750h]\n  int v73; // [sp+14h] [-74Ch]\n  int v74; // [sp+18h] [-748h]\n  int v75; // [sp+1Ch] [-744h]\n  int v76; // [sp+20h] [-740h]\n  int v77; // [sp+24h] [-73Ch]\n  int v78; // [sp+28h] [-738h]\n  int v79; // [sp+2Ch] [-734h]\n  int v80; // [sp+30h] [-730h]\n  int v81; // [sp+34h] [-72Ch]\n  int v82; // [sp+38h] [-728h]\n  int v83; // [sp+3Ch] [-724h]\n  int v84; // [sp+40h] [-720h]\n  int v85; // [sp+44h] [-71Ch]\n  int v86; // [sp+48h] [-718h]\n  int v87; // [sp+4Ch] [-714h]\n  int v88; // [sp+50h] [-710h]\n  char IsSimPaused; // [sp+70h] [-6F0h]\n  _BYTE v90[3]; // [sp+71h] [-6EFh] BYREF\n  int v91; // [sp+74h] [-6ECh]\n  unsigned int *v92; // [sp+78h] [-6E8h]\n  int v93; // [sp+7Ch] [-6E4h]\n  _BYTE *v94; // [sp+80h] [-6E0h]\n  const char *v95; // [sp+84h] [-6DCh]\n  _DWORD v96[2]; // [sp+88h] [-6D8h] BYREF\n  char v97; // [sp+90h] [-6D0h]\n  int *v98; // [sp+94h] [-6CCh]\n  _BYTE v99[1560]; // [sp+A0h] [-6C0h] BYREF\n\n  _savegprlr_14();\n  IsSimPaused = BrnGameState::GameStateModule::IsSimPaused(a1, 1, 0);\n  v11 = *(a1 + 292308);\n  v98 = (a1 + 292308);\n  CgsDev::PerfMonCpu::StartMonitor(v11);\n  v94 = (a1 + 292289);\n  *(a1 + 292289) = 1;\n  v95 = \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\";\n  if ( !a2 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpInputBufferStack != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1128);\n    CgsDev::Assert::EndAssert();\n  }\n  if ( !a3 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpOutputBufferStack != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1129);\n    CgsDev::Assert::EndAssert();\n  }\n  if ( !a4 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpInput != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1130);\n    CgsDev::Assert::EndAssert();\n  }\n  if ( !a5 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpOutput != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1131);\n    CgsDev::Assert::EndAssert();\n  }\n  CgsModule::IOBuffer::LockForRead(a4);\n  CgsModule::IOBuffer::LockForWrite(a5);\n  if ( !BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get(a4) )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpInput->GetTimerStatusInterface() != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1138);\n    CgsDev::Assert::EndAssert();\n  }\n  if ( BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get(a4) == -24 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpInput->GetTimerStatusInterface()->GetSimTimerStatus() != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1139);\n    CgsDev::Assert::EndAssert();\n  }\n  v12 = (a1 + 292284);\n  *(a1 + 292284) = 0.0;\n  v13 = BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get(a4);\n  *(a1 + 292284) = *(v13 + 32) * *(v13 + 28);\n  BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get(a4);\n  v14 = BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get(a4);\n  v15 = (*(v14 + 8) * *(v14 + 4));\n  v16 = BrnGameState::GameStateModuleIO::Ou(a5);\n  if ( !v16 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpActionQueue != NULL\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/BrnGameStateModule.cpp\",\n      1149);\n    CgsDev::Assert::EndAssert();\n  }\n  if ( *(a1 + 208324) )\n  {\n    BrnGameState::GameStateModule::SendSetupPlayerCarEvent(a1, v16);\n    BrnGameState::GameStateModule::SendSetUpAllEventStartsMessage(a1, a5);\n    *(a1 + 208324) = 0;\n  }\n  v17 = *(a1 + 7608);\n  if ( v17 )\n    v18 = *(v17 + 172);\n  else\n    v18 = 0;\n  if ( v18 )\n  {\n    PlayerActiveRaceCarIndex = BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex(a1);\n    *BrnGameState::GameStateModuleIO::Outpu(a5) = PlayerActiveRaceCarIndex;\n    v20 = BrnGameState::GameStateModuleIO::Outpu(a5);\n    BrnGameState::GameStateModuleIO::GameStateToGuiInterface::AppendRaceCarCrashes(v20, a1 + 250272);\n  }\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292328));\n  v21 = *(a1 + 7604);\n  if ( v21 == 2 || (v22 = 0, v21 == 16) )\n    v22 = 1;\n  if ( v22 || (v23 = 0, *(a1 + 284448) > 0.0) )\n    v23 = 1;\n  if ( !*(a1 + 7608) )\n    goto LABEL_33;\n  if ( v21 == 15 || (v24 = 0, v21 == 16) )\n    v24 = 1;\n  v25 = 0;\n  if ( v24 )\nLABEL_33:\n    v25 = 1;\n  v91 = *(a1 + 183744);\n  v26 = *(a1 + 7608);\n  v92 = (a1 + 232288);\n  if ( v26 )\n    v27 = *(v26 + 172);\n  else\n    v27 = 0;\n  v28 = *v12;\n  TimerRequest = BrnGameState::GameStateModuleIO::OutputBuffer::GetTimerRequest(a5);\n  BrnGameState::DriveThruManager::Update(a1 + 44240, v16, TimerRequest, v30, a1 + 235488, v27, v25, v23, v28);\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292328));\n  v31 = (a1 + 292348);\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292348));\n  BrnGameState::GameStateModule::CopyInputDataToPaybackManager(a1, a4);\n  v32 = sub_8231CF78(a4);\n  BrnNetwork::BrnNetworkModuleIO::InG(a1 + 187264, v32);\n  *(a1 + 3744) = 0;\n  *(a1 + 3852) = 0;\n  ControllerToGameStateInterface = BrnGameState::GameStateModule::GetControllerToGameStateInterface(a4);\n  CgsInput::InputIO::BindResult_::Append(a1 + 3736, ControllerToGameStateInterface);\n  v34 = BrnGameState::GameStateModule::GetControllerToGameStateInterface(a4);\n  CgsInput::InputIO::UnBindResult_::Append(a1 + 3844, v34 + 108);\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292348));\n  BrnGameState::GameStateModule::CheckForTailingRivals(a1, a5, a1 + 250816, v15);\n  BrnGameState::GameStateModule::ShouldAllowTimedTutorialTips(a1);\n  BrnGameState::TrainingManager::Update(a1 + 46640, a4, v16, a1 + 235488, v15);\n  BrnGameState::RumbleManager::Update(a1 + 46680, a1 + 235488, a1 + 250272, *(a1 + 208304), a1 + 250800, v15);\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292348));\n  v99[0] = 0;\n  CgsModule::VariableEventQueue<1536,16>::Construct(v99);\n  CgsModule::VariableEventQueue<1536,16>::Append<1536,16>(v99, a1 + 248384);\n  v35 = BrnGameState::GameStateModuleIO::PreWorld(a4);\n  CgsModule::VariableEventQueue<1536,16>::Append<1536,16>(v99, v35);\n  CgsModule::VariableEventQueue<1536,16>::Append<1536,16>(v99, a1 + 2032);\n  CgsModule::VariableEventQueue<1536,16>::Clear((a1 + 248384));\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292348));\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292300));\n  BrnGameState::GameStateModule::UpdateShowtimeMode(a1, a4, a5, a1 + 250800, a1 + 278480);\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292300));\n  v93 = a1 + 189824;\n  CgsModule::VariableEventQueue<18432,16>::Clear(a1 + 189824);\n  BrnGameState::GameStateModule::ProcessGameEvents(a1, v99, v16, a4, a5);\n  if ( *(a1 + 232305) )\n  {\n    v36 = *(a1 + 232300);\n    if ( v36 > 0 )\n    {\n      v37 = v36 - 1;\n      *(a1 + 232300) = v37;\n      if ( !v37 )\n        CgsModule::VariableEventQueue<13312,16>::AddEvent(v16, v90, 192, 1);\n    }\n  }\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292304));\n  if ( *(v91 + 4) )\n  {\n    v38 = BrnGameState::GameStateModuleIO::PreWorl(a4);\n    BrnGameState::CarSelectManager::Update(a1 + 183712, v16, v38, v15);\n  }\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292304));\n  v39 = BrnGameState::GameStateModuleIO::PreWorl(a4);\n  BrnGameState::OnlineCarSelectManager::Update(a1 + 183840, v16, v39, v15);\n  BrnGameState::GameStateImageManagerBase::PreWorldUpdate(a1 + 185520, *(a1 + 208304), a1 + 249936, a5);\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292316));\n  *(a1 + 249944) = 0;\n  if ( IsSimPaused )\n  {\n    v41 = v92;\n  }\n  else\n  {\n    BrnPhysics::Vehicle::CrashingRaceCarInterface::SetFromVehicleOutputInterface(v96, a1 + 250816);\n    BrnGameState::TakedownManager::Update(a1 + 568, a1 + 235488, *v12);\n    v40 = BrnGameState::GameStateModuleIO::Out(a5);\n    *(a1 + 249944) = 0;\n    BrnGameState::TakedownEvent_::Append(a1 + 249936, v40);\n    v41 = v92;\n    BrnGameState::MugshotManager::Update(\n      a1 + 1280,\n      a4,\n      a5,\n      a1 + 250816,\n      a1 + 249936,\n      *(a1 + 7604),\n      (_cntlzw(*v92) & 0x20) == 0);\n    BrnGameState::PaybackManager::Update(a1 + 1392, a4, a5, a1 + 250816, a1 + 249936, *(a1 + 7604));\n    BrnGameState::GameStateModule::ProcessTakedownEvents(a1, v16, a1 + 249936, a5);\n  }\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292316));\n  BrnGameState::GameStateModule::EmmPreWorldUpdate(a1, a4, a5, v99, *(a1 + 245825));\n  v42 = *v41 != 0;\n  v43 = BrnGameState::GameStateModuleIO::Ou(a5);\n  BrnGameState::RumbleManager::UpdatePauseState(a1 + 46680, v42, v43);\n  CgsDev::PerfMonCpu::StartMonitor(*v31);\n  BrnGameState::GameStateModule::CopyScoringDataToOutput(a1, a5);\n  CgsDev::PerfMonCpu::StopMonitor(*v31);\n  if ( (a6 & 8) != 0 )\n  {\n    CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292296));\n    BrnGameState::TriggerQueryManager::PreWorldUpdate(\n      a1 + 42320,\n      a4,\n      a5,\n      a1 + 183952,\n      a1 + 44240,\n      a1 + 235488,\n      *(a1 + 284392));\n    CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292296));\n    BrnProgression::ProgressionManager::PreWorldUpdate(a1 + 47920, *v12, v15);\n    BrnGameState::GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(a1, a4, a5, v48, v47, v46, v45, v44);\n  }\n  v49 = *(a1 + 181432);\n  *(a1 + 181432) = 0;\n  if ( v49 )\n    BrnGameState::GameStateModule::SendSetUpAllDriveThrusMessage(a1, v16);\n  BrnGameState::GameStateModule::DetectModeStarts(a1, a4, a5);\n  CgsModule::VariableEventQueue<1536,16>::Destruct(v99);\n  BrnGameState::GameStateInviteManager::Update((a1 + 2032), a5, v16);\n  BrnGameState::ModeManager::HandleOnlineTeamModes(a1 + 4128, a4, a5, a1 + 249936);\n  v50 = *v12;\n  v51 = BrnGameState::GameStateModuleIO::Ou(a5);\n  BrnGameState::StuntManager::Update(a1 + 183952, v51, a1 + 235488, v50);\n  BrnGameState::RichPresenceManagerBase::Update(a1 + 181456, a4, a5);\n  BrnGameState::AchievementManagerX360::Update((a1 + 181680), a4, a5);\n  BrnGameState::DeveloperChallengeManager::PreWorldUpdate(a1 + 185712, a4, a5);\n  CgsDev::PerfMonCpu::StartMonitor(*(a1 + 292356));\n  if ( (a6 & 8) != 0 )\n  {\n    HIDWORD(v53) = 35808;\n    if ( *(a1 + 7608) )\n    {\n      v53 = *(a1 + 39936);\n      v54 = (v53 & 0x100000) != 0;\n    }\n    else\n    {\n      v54 = 0;\n    }\n    if ( *(a1 + 7608) )\n      v55 = (*(a1 + 4128 + HIDWORD(v53) + 4) & 0x20000000) != 0;\n    else\n      v55 = 0;\n    BrnGameState::StreetManager::Update(\n      a1 + 284520,\n      (_cntlzw(*v41) & 0x20) == 0,\n      *v12,\n      *(a1 + 31420),\n      v52,\n      a4,\n      a5,\n      a1 + 235488,\n      a1 + 279008,\n      v55,\n      v70,\n      v71,\n      v72,\n      v73,\n      v74,\n      v75,\n      v76,\n      v77,\n      v78,\n      v79,\n      v80,\n      v81,\n      v82,\n      v83,\n      v84,\n      v85,\n      v86,\n      v87,\n      v88,\n      v54);\n  }\n  CgsDev::PerfMonCpu::StopMonitor(*(a1 + 292356));\n  CgsModule::IOBuffer::UnlockForRead(a4);\n  IsOnlineGameMode = BrnGameState::GameStateModule::IsOnlineGameMode(a1);\n  v57 = sub_8231D800(a5);\n  v58 = v91;\n  *(v57 + 536) = IsOnlineGameMode;\n  if ( *(v58 + 4) || (v59 = 0, *(a1 + 183860)) )\n    v59 = 1;\n  *(sub_8231D800(a5) + 537) = v59;\n  v60 = *(a1 + 7604);\n  *(sub_8231D800(a5) + 532) = v60;\n  v61 = *(a1 + 232292);\n  if ( v61 == 3 || (v63 = v61 != 0, v62 = 0, !v63) )\n    v62 = 1;\n  BrnGameState::GameStateModuleIO::OutputBuffer::SetControllerActive(a5, v62);\n  v96[0] = a1 + 48288;\n  if ( *(a1 + 181268) )\n    v64 = BrnProgression::ProgressionData((a1 + 181268));\n  else\n    v64 = 0;\n  v96[1] = v64;\n  if ( *(a1 + 90800) >= 4u || *(a1 + 181376) || (v65 = 0, *(a1 + 181380)) )\n    v65 = 1;\n  v97 = v65;\n  CgsModule::VariableEventQueue<13312,16>::AddEvent(v16, v96, 193, 12);\n  GuiEventQ = BrnGameState::GameStateModuleIO::OutputBuffer::GetGuiEventQ(a5);\n  CgsModule::VariableEventQueue<18432,16>::Append<18432,16>(GuiEventQ, v93);\n  v67 = BrnGameState::GameStateModuleIO::(a5);\n  if ( !v67 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\"lpRaceCarRaceDistInterface != NULL\", v95, 1426);\n    CgsDev::Assert::EndAssert();\n  }\n  BrnGameState::ModeManager::FillInRaceDistanceInterface(a1 + 4128, v67);\n  BrnGameState::GameStateDebugComponent::RenderLandmarkDebug(a1 + 208376);\n  CgsModule::IOBuffer::UnlockForWrite(a5);\n  v68 = *v98;\n  *v94 = 0;\n  result = CgsDev::PerfMonCpu::StopMonitor(v68);\n  _restgprlr();\n  return result;\n}\n",
+  "assembly": "0x823A5328  mflr      r12\n0x823A532C  bl        __savegprlr_14\n0x823A5330  stfd      f30, var_A8(r1)\n0x823A5334  stfd      f31, var_A0(r1)\n0x823A5338  stwu      r1, back_chain(r1)\n0x823A533C  mr        r28, r4\n0x823A5340  sth       r8, 0x760+arg_3E(r1)\n0x823A5344  mr        r27, r5\n0x823A5348  li        r5, 0\n0x823A534C  li        r4, 1\n0x823A5350  mr        r31, r3\n0x823A5354  mr        r30, r6\n0x823A5358  mr        r29, r7\n0x823A535C  bl        BrnGameState__GameStateModule__IsSimPaused\n0x823A5360  addis     r11, r31, 4\n0x823A5364  stb       r3, 0x760+var_6F0(r1)\n0x823A5368  addi      r11, r11, 0x75D4\n0x823A536C  lwz       r3, 0(r11)\n0x823A5370  stw       r11, 0x760+var_6CC(r1)\n0x823A5374  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A5378  addis     r11, r31, 4\n0x823A537C  li        r10, 1\n0x823A5380  addi      r11, r11, 0x75C1\n0x823A5384  cmplwi    cr6, r28, 0\n0x823A5388  stw       r11, 0x760+var_6E0(r1)\n0x823A538C  stb       r10, 0(r11)\n0x823A5390  lis       r11, aDP4B5MainBurno_552@ha\n0x823A5394  addi      r28, r11, aDP4B5MainBurno_552@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x823A5398  stw       r28, 0x760+var_6DC(r1)\n0x823A539C  bne       cr6, loc_823A53BC\n0x823A53A0  bl        CgsDev__Assert__BeginAssert\n0x823A53A4  lis       r11, aLpinputbuffers@ha\n0x823A53A8  li        r5, 0x468\n0x823A53AC  addi      r3, r11, aLpinputbuffers@l# \"lpInputBufferStack != NULL\"\n0x823A53B0  mr        r4, r28\n0x823A53B4  bl        CgsDev__Assert__FireAssert\n0x823A53B8  bl        CgsDev__Assert__EndAssert\n0x823A53BC  cmplwi    cr6, r27, 0\n0x823A53C0  bne       cr6, loc_823A53E0\n0x823A53C4  bl        CgsDev__Assert__BeginAssert\n0x823A53C8  lis       r11, aLpoutputbuffer_2@ha\n0x823A53CC  li        r5, 0x469\n0x823A53D0  addi      r3, r11, aLpoutputbuffer_2@l# \"lpOutputBufferStack != NULL\"\n0x823A53D4  mr        r4, r28\n0x823A53D8  bl        CgsDev__Assert__FireAssert\n0x823A53DC  bl        CgsDev__Assert__EndAssert\n0x823A53E0  cmplwi    cr6, r30, 0\n0x823A53E4  bne       cr6, loc_823A5404\n0x823A53E8  bl        CgsDev__Assert__BeginAssert\n0x823A53EC  lis       r11, aLpinputNull@ha\n0x823A53F0  li        r5, 0x46A\n0x823A53F4  addi      r3, r11, aLpinputNull@l# \"lpInput != NULL\"\n0x823A53F8  mr        r4, r28\n0x823A53FC  bl        CgsDev__Assert__FireAssert\n0x823A5400  bl        CgsDev__Assert__EndAssert\n0x823A5404  cmplwi    cr6, r29, 0\n0x823A5408  bne       cr6, loc_823A5428\n0x823A540C  bl        CgsDev__Assert__BeginAssert\n0x823A5410  lis       r11, aLpoutputNull@ha\n0x823A5414  li        r5, 0x46B\n0x823A5418  addi      r3, r11, aLpoutputNull@l# \"lpOutput != NULL\"\n0x823A541C  mr        r4, r28\n0x823A5420  bl        CgsDev__Assert__FireAssert\n0x823A5424  bl        CgsDev__Assert__EndAssert\n0x823A5428  mr        r3, r30\n0x823A542C  bl        CgsModule__IOBuffer__LockForRead\n0x823A5430  mr        r3, r29\n0x823A5434  bl        CgsModule__IOBuffer__LockForWrite\n0x823A5438  mr        r3, r30\n0x823A543C  bl        BrnGameState__GameStateModuleIO__PreWorldInputBuffer__Get\n0x823A5440  cmplwi    cr6, r3, 0\n0x823A5444  bne       cr6, loc_823A5464\n0x823A5448  bl        CgsDev__Assert__BeginAssert\n0x823A544C  lis       r11, aLpinputGettime_1@ha\n0x823A5450  li        r5, 0x472\n0x823A5454  addi      r3, r11, aLpinputGettime_1@l# \"lpInput->GetTimerStatusInterface() != N\"...\n0x823A5458  mr        r4, r28\n0x823A545C  bl        CgsDev__Assert__FireAssert\n0x823A5460  bl        CgsDev__Assert__EndAssert\n0x823A5464  mr        r3, r30\n0x823A5468  bl        BrnGameState__GameStateModuleIO__PreWorldInputBuffer__Get\n0x823A546C  addic.    r11, r3, 0x18\n0x823A5470  bne       loc_823A5490\n0x823A5474  bl        CgsDev__Assert__BeginAssert\n0x823A5478  lis       r11, aLpinputGettime_0@ha\n0x823A547C  li        r5, 0x473\n0x823A5480  addi      r3, r11, aLpinputGettime_0@l# \"lpInput->GetTimerStatusInterface()->Get\"...\n0x823A5484  mr        r4, r28\n0x823A5488  bl        CgsDev__Assert__FireAssert\n0x823A548C  bl        CgsDev__Assert__EndAssert\n0x823A5490  addis     r15, r31, 4\n0x823A5494  lis       r11, flt_82001CC0@ha\n0x823A5498  addi      r15, r15, 0x75BC\n0x823A549C  mr        r3, r30\n0x823A54A0  lfs       f30, flt_82001CC0@l(r11)\n0x823A54A4  stfs      f30, 0(r15)\n0x823A54A8  bl        BrnGameState__GameStateModuleIO__PreWorldInputBuffer__Get\n0x823A54AC  mr        r11, r3\n0x823A54B0  mr        r3, r30\n0x823A54B4  lfs       f0, 0x20(r11)\n0x823A54B8  lfs       f13, 0x1C(r11)\n0x823A54BC  fmuls     f0, f0, f13\n0x823A54C0  stfs      f0, 0(r15)\n0x823A54C4  bl        BrnGameState__GameStateModuleIO__PreWorldInputBuffer__Get\n0x823A54C8  mr        r3, r30\n0x823A54CC  bl        BrnGameState__GameStateModuleIO__PreWorldInputBuffer__Get\n0x823A54D0  mr        r11, r3\n0x823A54D4  mr        r3, r29\n0x823A54D8  lfs       f0, 8(r11)\n0x823A54DC  lfs       f13, 4(r11)\n0x823A54E0  fmuls     f31, f0, f13\n0x823A54E4  bl        BrnGameState__GameStateModuleIO__Ou\n0x823A54E8  mr        r16, r3\n0x823A54EC  cmplwi    cr6, r16, 0\n0x823A54F0  bne       cr6, loc_823A5510\n0x823A54F4  bl        CgsDev__Assert__BeginAssert\n0x823A54F8  lis       r11, aLpactionqueueN@ha\n0x823A54FC  li        r5, 0x47D\n0x823A5500  addi      r3, r11, aLpactionqueueN@l# \"lpActionQueue != NULL\"\n0x823A5504  mr        r4, r28\n0x823A5508  bl        CgsDev__Assert__FireAssert\n0x823A550C  bl        CgsDev__Assert__EndAssert\n0x823A5510  addis     r28, r31, 3\n0x823A5514  li        r17, 0\n0x823A5518  addi      r28, r28, 0x2DC4\n0x823A551C  lbz       r11, 0(r28)\n0x823A5520  cmplwi    cr6, r11, 0\n0x823A5524  beq       cr6, loc_823A5544\n0x823A5528  mr        r4, r16\n0x823A552C  mr        r3, r31\n0x823A5530  bl        BrnGameState__GameStateModule__SendSetupPlayerCarEvent\n0x823A5534  mr        r4, r29\n0x823A5538  mr        r3, r31\n0x823A553C  bl        BrnGameState__GameStateModule__SendSetUpAllEventStartsMessage\n0x823A5540  stb       r17, 0(r28)\n0x823A5544  addi      r27, r31, 0x1020\n0x823A5548  lwz       r11, 0xD98(r27)\n0x823A554C  cmplwi    cr6, r11, 0\n0x823A5550  beq       cr6, loc_823A555C\n0x823A5554  lbz       r11, 0xAC(r11)\n0x823A5558  b         loc_823A5560\n0x823A555C  mr        r11, r17\n0x823A5560  clrlwi    r11, r11, 24\n0x823A5564  lis       r10, 3\n0x823A5568  cmplwi    cr6, r11, 0\n0x823A556C  ori       r25, r10, 0xD1A0 # 0x3D1A0\n0x823A5570  beq       cr6, loc_823A55A4\n0x823A5574  mr        r3, r31\n0x823A5578  bl        BrnGameState__GameStateModule__GetPlayerActiveRaceCarIndex\n0x823A557C  mr        r28, r3\n0x823A5580  mr        r3, r29\n0x823A5584  bl        BrnGameState__GameStateModuleIO__Outpu\n0x823A5588  mr        r11, r3\n0x823A558C  mr        r3, r29\n0x823A5590  add       r26, r31, r25\n0x823A5594  stw       r28, 0(r11)\n0x823A5598  bl        BrnGameState__GameStateModuleIO__Outpu\n0x823A559C  mr        r4, r26\n0x823A55A0  bl        BrnGameState__GameStateModuleIO__GameStateToGuiInterface__AppendRaceCarCrashes\n0x823A55A4  addis     r21, r31, 4\n0x823A55A8  addi      r21, r21, 0x75E8\n0x823A55AC  lwz       r3, 0(r21)\n0x823A55B0  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A55B4  lwz       r10, 0x1DB4(r31)\n0x823A55B8  cmpwi     cr6, r10, 2\n0x823A55BC  beq       cr6, loc_823A55CC\n0x823A55C0  cmpwi     cr6, r10, 0x10\n0x823A55C4  mr        r11, r17\n0x823A55C8  bne       cr6, loc_823A55D0\n0x823A55CC  li        r11, 1\n0x823A55D0  clrlwi    r11, r11, 24\n0x823A55D4  cmplwi    cr6, r11, 0\n0x823A55D8  bne       cr6, loc_823A5608\n0x823A55DC  lis       r11, 4\n0x823A55E0  ori       r11, r11, 0x5720 # 0x45720\n0x823A55E4  lfsx      f0, r31, r11\n0x823A55E8  li        r11, 1\n0x823A55EC  fcmpu     cr6, f0, f30\n0x823A55F0  bgt       cr6, loc_823A55F8\n0x823A55F4  mr        r11, r17\n0x823A55F8  clrlwi    r11, r11, 24\n0x823A55FC  mr        r22, r17\n0x823A5600  cmplwi    cr6, r11, 0\n0x823A5604  beq       cr6, loc_823A560C\n0x823A5608  li        r22, 1\n0x823A560C  lwz       r11, 0x1DB8(r31)\n0x823A5610  cmplwi    cr6, r11, 0\n0x823A5614  beq       cr6, loc_823A5640\n0x823A5618  cmpwi     cr6, r10, 0xF\n0x823A561C  beq       cr6, loc_823A562C\n0x823A5620  cmpwi     cr6, r10, 0x10\n0x823A5624  mr        r11, r17\n0x823A5628  bne       cr6, loc_823A5630\n0x823A562C  li        r11, 1\n0x823A5630  clrlwi    r11, r11, 24\n0x823A5634  mr        r24, r17\n0x823A5638  cmplwi    cr6, r11, 0\n0x823A563C  beq       cr6, loc_823A5644\n0x823A5640  li        r24, 1\n0x823A5644  lwz       r11, 0x1014(r31)\n0x823A5648  addis     r10, r31, 3\n0x823A564C  addi      r11, r11, -4\n0x823A5650  addi      r10, r10, -0x3240\n0x823A5654  cntlzw    r11, r11\n0x823A5658  extrwi    r11, r11, 1,26\n0x823A565C  xori      r26, r11, 1\n0x823A5660  ld        r11, 0(r10)\n0x823A5664  stw       r10, 0x760+var_6EC(r1)\n0x823A5668  cmpldi    cr6, r11, 0\n0x823A566C  li        r11, 1\n0x823A5670  bne       cr6, loc_823A5678\n0x823A5674  mr        r11, r17\n0x823A5678  addis     r9, r31, 4\n0x823A567C  lwz       r10, 0xD98(r27)\n0x823A5680  addi      r9, r9, -0x74A0\n0x823A5684  cmplwi    cr6, r10, 0\n0x823A5688  stw       r9, 0x760+var_6E8(r1)\n0x823A568C  lwz       r9, 0(r9)\n0x823A5690  cntlzw    r9, r9\n0x823A5694  extrwi    r9, r9, 1,26\n0x823A5698  xori      r27, r9, 1\n0x823A569C  beq       cr6, loc_823A56A8\n0x823A56A0  lbz       r28, 0xAC(r10)\n0x823A56A4  b         loc_823A56AC\n0x823A56A8  mr        r28, r17\n0x823A56AC  addis     r19, r31, 4\n0x823A56B0  lfs       f30, 0(r15)\n0x823A56B4  addis     r23, r31, 4\n0x823A56B8  addi      r19, r19, 0x56E8\n0x823A56BC  addis     r18, r31, 1\n0x823A56C0  mr        r3, r29\n0x823A56C4  addi      r23, r23, -0x6820\n0x823A56C8  addi      r18, r18, -0x5330\n0x823A56CC  lwz       r14, 0(r19)\n0x823A56D0  mr        r20, r11\n0x823A56D4  bl        BrnGameState__GameStateModuleIO__OutputBuffer__GetTimerRequest\n0x823A56D8  mr        r5, r3\n0x823A56DC  mr        r4, r16\n0x823A56E0  fmr       f1, f30\n0x823A56E4  mr        r3, r18\n0x823A56E8  stb       r27, 0x760+var_709(r1)\n0x823A56EC  mr        r7, r23\n0x823A56F0  stb       r20, 0x760+var_701(r1)\n0x823A56F4  mr        r8, r28\n0x823A56F8  stb       r26, 0x760+var_6F9(r1)\n0x823A56FC  mr        r9, r24\n0x823A5700  stw       r14, 0x760+var_6F4(r1)\n0x823A5704  mr        r10, r22\n0x823A5708  bl        BrnGameState__DriveThruManager__Update\n0x823A570C  lwz       r3, 0(r21)\n0x823A5710  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5714  addis     r28, r31, 4\n0x823A5718  addi      r28, r28, 0x75FC\n0x823A571C  lwz       r3, 0(r28)\n0x823A5720  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A5724  mr        r4, r30\n0x823A5728  mr        r3, r31\n0x823A572C  bl        BrnGameState__GameStateModule__CopyInputDataToPaybackManager\n0x823A5730  mr        r3, r30\n0x823A5734  bl        sub_8231CF78\n0x823A5738  mr        r4, r3\n0x823A573C  addis     r3, r31, 3\n0x823A5740  addi      r3, r3, -0x2480\n0x823A5744  bl        BrnNetwork__BrnNetworkModuleIO__InG\n0x823A5748  addi      r27, r31, 0x7F0\n0x823A574C  mr        r3, r30\n0x823A5750  stw       r17, 0x6B0(r27)\n0x823A5754  stw       r17, 0x71C(r27)\n0x823A5758  bl        BrnGameState__GameStateModule__GetControllerToGameStateInterface\n0x823A575C  mr        r4, r3\n0x823A5760  addi      r3, r27, 0x6A8\n0x823A5764  bl        CgsInput__InputIO__BindResult___Append\n0x823A5768  mr        r3, r30\n0x823A576C  bl        BrnGameState__GameStateModule__GetControllerToGameStateInterface\n0x823A5770  mr        r11, r3\n0x823A5774  addi      r3, r27, 0x714\n0x823A5778  addi      r4, r11, 0x6C # 'l'\n0x823A577C  bl        CgsInput__InputIO__UnBindResult___Append\n0x823A5780  lwz       r3, 0(r28)\n0x823A5784  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5788  addis     r24, r31, 4\n0x823A578C  mr        r4, r29\n0x823A5790  fmr       f1, f31\n0x823A5794  addi      r24, r24, -0x2C40\n0x823A5798  mr        r3, r31\n0x823A579C  mr        r5, r24\n0x823A57A0  bl        BrnGameState__GameStateModule__CheckForTailingRivals\n0x823A57A4  mr        r3, r31\n0x823A57A8  bl        BrnGameState__GameStateModule__ShouldAllowTimedTutorialTips\n0x823A57AC  mr        r8, r3\n0x823A57B0  addis     r3, r31, 1\n0x823A57B4  fmr       f1, f31\n0x823A57B8  mr        r6, r23\n0x823A57BC  mr        r5, r16\n0x823A57C0  mr        r4, r30\n0x823A57C4  addi      r3, r3, -0x49D0\n0x823A57C8  bl        BrnGameState__TrainingManager__Update\n0x823A57CC  addis     r26, r31, 4\n0x823A57D0  addis     r20, r31, 1\n0x823A57D4  fmr       f1, f31\n0x823A57D8  addi      r26, r26, -0x2C50\n0x823A57DC  addis     r22, r31, 3\n0x823A57E0  add       r21, r31, r25\n0x823A57E4  addi      r20, r20, -0x49A8\n0x823A57E8  addi      r22, r22, 0x2DB0\n0x823A57EC  mr        r7, r26\n0x823A57F0  mr        r4, r23\n0x823A57F4  lwz       r6, 0(r22)\n0x823A57F8  mr        r5, r21\n0x823A57FC  mr        r3, r20\n0x823A5800  bl        BrnGameState__RumbleManager__Update\n0x823A5804  lwz       r3, 0(r28)\n0x823A5808  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A580C  addi      r3, r1, 0x760+var_6C0\n0x823A5810  stb       r17, 0x760+var_6C0(r1)\n0x823A5814  bl        CgsModule__VariableEventQueue_1536_16___Construct\n0x823A5818  addis     r25, r31, 4\n0x823A581C  addi      r3, r1, 0x760+var_6C0\n0x823A5820  addi      r25, r25, -0x35C0\n0x823A5824  mr        r4, r25\n0x823A5828  bl        ___Append__0GAA__0BA____VariableEventQueue__0GAA__0BA__CgsModule__QAA_NABV01__Z# CgsModule::VariableEventQueue<1536,16>::Append<1536,16>(CgsModule::VariableEventQueue<1536,16> const &)\n0x823A582C  mr        r3, r30\n0x823A5830  bl        BrnGameState__GameStateModuleIO__PreWorld\n0x823A5834  mr        r4, r3\n0x823A5838  addi      r3, r1, 0x760+var_6C0\n0x823A583C  bl        ___Append__0GAA__0BA____VariableEventQueue__0GAA__0BA__CgsModule__QAA_NABV01__Z# CgsModule::VariableEventQueue<1536,16>::Append<1536,16>(CgsModule::VariableEventQueue<1536,16> const &)\n0x823A5840  mr        r4, r27\n0x823A5844  addi      r3, r1, 0x760+var_6C0\n0x823A5848  bl        ___Append__0GAA__0BA____VariableEventQueue__0GAA__0BA__CgsModule__QAA_NABV01__Z# CgsModule::VariableEventQueue<1536,16>::Append<1536,16>(CgsModule::VariableEventQueue<1536,16> const &)\n0x823A584C  mr        r3, r25\n0x823A5850  bl        CgsModule__VariableEventQueue_1536_16___Clear\n0x823A5854  lwz       r3, 0(r28)\n0x823A5858  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A585C  addis     r25, r31, 4\n0x823A5860  addi      r25, r25, 0x75CC\n0x823A5864  lwz       r3, 0(r25)\n0x823A5868  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A586C  mr        r6, r26\n0x823A5870  addis     r26, r31, 4\n0x823A5874  mr        r5, r29\n0x823A5878  addi      r26, r26, 0x3FD0\n0x823A587C  mr        r4, r30\n0x823A5880  mr        r3, r31\n0x823A5884  mr        r7, r26\n0x823A5888  bl        BrnGameState__GameStateModule__UpdateShowtimeMode\n0x823A588C  lwz       r3, 0(r25)\n0x823A5890  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5894  addis     r3, r31, 3\n0x823A5898  addi      r3, r3, -0x1A80\n0x823A589C  stw       r3, 0x760+var_6E4(r1)\n0x823A58A0  bl        CgsModule__VariableEventQueue_18432_16___Clear\n0x823A58A4  mr        r7, r29\n0x823A58A8  mr        r6, r30\n0x823A58AC  mr        r5, r16\n0x823A58B0  addi      r4, r1, 0x760+var_6C0\n0x823A58B4  mr        r3, r31\n0x823A58B8  bl        BrnGameState__GameStateModule__ProcessGameEvents\n0x823A58BC  lis       r11, 3\n0x823A58C0  ori       r11, r11, 0x8B71 # 0x38B71\n0x823A58C4  lbzx      r11, r31, r11\n0x823A58C8  cmplwi    cr6, r11, 0\n0x823A58CC  beq       cr6, loc_823A5904\n0x823A58D0  addis     r10, r31, 4\n0x823A58D4  addi      r10, r10, -0x7494\n0x823A58D8  lwz       r11, 0(r10)\n0x823A58DC  cmpwi     cr6, r11, 0\n0x823A58E0  ble       cr6, loc_823A5904\n0x823A58E4  addic.    r11, r11, -1\n0x823A58E8  stw       r11, 0(r10)\n0x823A58EC  bne       loc_823A5904\n0x823A58F0  li        r6, 1\n0x823A58F4  li        r5, 0xC0\n0x823A58F8  addi      r4, r1, 0x760+var_6EF\n0x823A58FC  mr        r3, r16\n0x823A5900  bl        CgsModule__VariableEventQueue_13312_16___AddEvent\n0x823A5904  addis     r25, r31, 4\n0x823A5908  addi      r25, r25, 0x75D0\n0x823A590C  lwz       r3, 0(r25)\n0x823A5910  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A5914  lwz       r11, 0x760+var_6EC(r1)\n0x823A5918  ld        r11, 0(r11)\n0x823A591C  cmpldi    cr6, r11, 0\n0x823A5920  li        r11, 1\n0x823A5924  bne       cr6, loc_823A592C\n0x823A5928  mr        r11, r17\n0x823A592C  clrlwi    r11, r11, 24\n0x823A5930  cmplwi    cr6, r11, 0\n0x823A5934  beq       cr6, loc_823A5958\n0x823A5938  mr        r3, r30\n0x823A593C  bl        BrnGameState__GameStateModuleIO__PreWorl\n0x823A5940  mr        r5, r3\n0x823A5944  addis     r3, r31, 3\n0x823A5948  fmr       f1, f31\n0x823A594C  mr        r4, r16\n0x823A5950  addi      r3, r3, -0x3260\n0x823A5954  bl        BrnGameState__CarSelectManager__Update\n0x823A5958  lwz       r3, 0(r25)\n0x823A595C  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5960  mr        r3, r30\n0x823A5964  bl        BrnGameState__GameStateModuleIO__PreWorl\n0x823A5968  mr        r5, r3\n0x823A596C  addis     r3, r31, 3\n0x823A5970  fmr       f1, f31\n0x823A5974  mr        r4, r16\n0x823A5978  addi      r3, r3, -0x31E0\n0x823A597C  bl        BrnGameState__OnlineCarSelectManager__Update\n0x823A5980  addis     r25, r31, 4\n0x823A5984  addis     r3, r31, 3\n0x823A5988  lwz       r4, 0(r22)\n0x823A598C  addi      r25, r25, -0x2FB0\n0x823A5990  mr        r6, r29\n0x823A5994  addi      r3, r3, -0x2B50\n0x823A5998  mr        r5, r25\n0x823A599C  bl        BrnGameState__GameStateImageManagerBase__PreWorldUpdate\n0x823A59A0  addis     r22, r31, 4\n0x823A59A4  addi      r22, r22, 0x75DC\n0x823A59A8  lwz       r3, 0(r22)\n0x823A59AC  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A59B0  lbz       r11, 0x760+var_6F0(r1)\n0x823A59B4  cmplwi    cr6, r11, 0\n0x823A59B8  lis       r11, 3\n0x823A59BC  ori       r11, r11, 0xD058 # 0x3D058\n0x823A59C0  stwx      r17, r31, r11\n0x823A59C4  bne       cr6, loc_823A5A74\n0x823A59C8  mr        r4, r24\n0x823A59CC  addi      r3, r1, 0x760+var_6D8\n0x823A59D0  bl        BrnPhysics__Vehicle__CrashingRaceCarInterface__SetFromVehicleOutputInterface\n0x823A59D4  mr        r10, r26\n0x823A59D8  mr        r9, r29\n0x823A59DC  lfs       f1, 0(r15)\n0x823A59E0  mr        r8, r30\n0x823A59E4  addi      r7, r1, 0x760+var_6D8\n0x823A59E8  mr        r6, r21\n0x823A59EC  mr        r4, r23\n0x823A59F0  addi      r3, r31, 0x238\n0x823A59F4  bl        BrnGameState__TakedownManager__Update\n0x823A59F8  mr        r3, r29\n0x823A59FC  bl        BrnGameState__GameStateModuleIO__Out\n0x823A5A00  mr        r4, r3\n0x823A5A04  mr        r3, r25\n0x823A5A08  stw       r17, 8(r25)\n0x823A5A0C  bl        BrnGameState__TakedownEvent___Append\n0x823A5A10  lwz       r14, 0x760+var_6E8(r1)\n0x823A5A14  mr        r7, r25\n0x823A5A18  lwz       r8, 0x1DB4(r31)\n0x823A5A1C  mr        r6, r24\n0x823A5A20  mr        r5, r29\n0x823A5A24  mr        r4, r30\n0x823A5A28  lwz       r11, 0(r14)\n0x823A5A2C  addi      r3, r31, 0x500\n0x823A5A30  cntlzw    r11, r11\n0x823A5A34  extrwi    r11, r11, 1,26\n0x823A5A38  xori      r9, r11, 1\n0x823A5A3C  bl        BrnGameState__MugshotManager__Update\n0x823A5A40  mr        r7, r25\n0x823A5A44  mr        r6, r24\n0x823A5A48  lwz       r8, 0x1DB4(r31)\n0x823A5A4C  mr        r5, r29\n0x823A5A50  mr        r4, r30\n0x823A5A54  addi      r3, r31, 0x570\n0x823A5A58  bl        BrnGameState__PaybackManager__Update\n0x823A5A5C  mr        r6, r29\n0x823A5A60  mr        r5, r25\n0x823A5A64  mr        r4, r16\n0x823A5A68  mr        r3, r31\n0x823A5A6C  bl        BrnGameState__GameStateModule__ProcessTakedownEvents\n0x823A5A70  b         loc_823A5A78\n0x823A5A74  lwz       r14, 0x760+var_6E8(r1)\n0x823A5A78  lwz       r3, 0(r22)\n0x823A5A7C  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5A80  lis       r11, 3\n0x823A5A84  addi      r6, r1, 0x760+var_6C0\n0x823A5A88  ori       r11, r11, 0xC041 # 0x3C041\n0x823A5A8C  mr        r5, r29\n0x823A5A90  mr        r4, r30\n0x823A5A94  mr        r3, r31\n0x823A5A98  lbzx      r7, r31, r11\n0x823A5A9C  bl        BrnGameState__GameStateModule__EmmPreWorldUpdate\n0x823A5AA0  lwz       r11, 0(r14)\n0x823A5AA4  mr        r3, r29\n0x823A5AA8  cntlzw    r11, r11\n0x823A5AAC  extrwi    r11, r11, 1,26\n0x823A5AB0  xori      r26, r11, 1\n0x823A5AB4  bl        BrnGameState__GameStateModuleIO__Ou\n0x823A5AB8  mr        r5, r3\n0x823A5ABC  mr        r4, r26\n0x823A5AC0  mr        r3, r20\n0x823A5AC4  bl        BrnGameState__RumbleManager__UpdatePauseState\n0x823A5AC8  lwz       r3, 0(r28)\n0x823A5ACC  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A5AD0  mr        r4, r29\n0x823A5AD4  mr        r3, r31\n0x823A5AD8  bl        BrnGameState__GameStateModule__CopyScoringDataToOutput\n0x823A5ADC  lwz       r3, 0(r28)\n0x823A5AE0  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5AE4  lis       r11, 2\n0x823A5AE8  lhz       r21, 0x760+arg_3E(r1)\n0x823A5AEC  ori       r24, r11, 0xCE90 # 0x2CE90\n0x823A5AF0  lis       r11, 2\n0x823A5AF4  rlwinm    r22, r21, 0,28,28\n0x823A5AF8  ori       r20, r11, 0xCE34 # 0x2CE34\n0x823A5AFC  lis       r11, 0\n0x823A5B00  cmplwi    cr6, r22, 0\n0x823A5B04  ori       r26, r11, 0xBB30 # 0xBB30\n0x823A5B08  beq       cr6, loc_823A5BB0\n0x823A5B0C  addis     r28, r31, 4\n0x823A5B10  addi      r28, r28, 0x75C8\n0x823A5B14  lwz       r3, 0(r28)\n0x823A5B18  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A5B1C  addis     r3, r31, 1\n0x823A5B20  lwz       r9, 0(r19)\n0x823A5B24  mr        r8, r23\n0x823A5B28  mr        r7, r18\n0x823A5B2C  add       r6, r31, r24\n0x823A5B30  mr        r5, r29\n0x823A5B34  mr        r4, r30\n0x823A5B38  addi      r3, r3, -0x5AB0\n0x823A5B3C  bl        BrnGameState__TriggerQueryManager__PreWorldUpdate\n0x823A5B40  lwz       r3, 0(r28)\n0x823A5B44  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5B48  lwz       r11, 0x760+var_6EC(r1)\n0x823A5B4C  ld        r11, 0(r11)\n0x823A5B50  cmpldi    cr6, r11, 0\n0x823A5B54  li        r11, 1\n0x823A5B58  bne       cr6, loc_823A5B60\n0x823A5B5C  mr        r11, r17\n0x823A5B60  clrlwi    r11, r11, 24\n0x823A5B64  cmplwi    cr6, r11, 0\n0x823A5B68  bne       cr6, loc_823A5B7C\n0x823A5B6C  lbzx      r11, r31, r20\n0x823A5B70  cmplwi    cr6, r11, 0\n0x823A5B74  mr        r11, r17\n0x823A5B78  beq       cr6, loc_823A5B80\n0x823A5B7C  li        r11, 1\n0x823A5B80  clrlwi    r9, r11, 24\n0x823A5B84  lfs       f1, 0(r15)\n0x823A5B88  mr        r8, r21\n0x823A5B8C  fmr       f2, f31\n0x823A5B90  mr        r7, r23\n0x823A5B94  mr        r6, r29\n0x823A5B98  add       r3, r31, r26\n0x823A5B9C  bl        BrnProgression__ProgressionManager__PreWorldUpdate\n0x823A5BA0  mr        r5, r29# a3  ; a3\n0x823A5BA4  mr        r4, r30# a2  ; a2\n0x823A5BA8  mr        r3, r31# result  ; result\n0x823A5BAC  bl        BrnGameState__GameStateModule__CheckIfPlayerIsAtJunctionWithAnEvent\n0x823A5BB0  add       r26, r31, r26\n0x823A5BB4  addis     r11, r26, 2\n0x823A5BB8  addi      r11, r11, 0x988\n0x823A5BBC  lbz       r10, 0(r11)\n0x823A5BC0  stb       r17, 0(r11)\n0x823A5BC4  cmplwi    cr6, r10, 0\n0x823A5BC8  beq       cr6, loc_823A5BD8\n0x823A5BCC  mr        r4, r16\n0x823A5BD0  mr        r3, r31\n0x823A5BD4  bl        BrnGameState__GameStateModule__SendSetUpAllDriveThrusMessage\n0x823A5BD8  mr        r5, r29\n0x823A5BDC  mr        r4, r30\n0x823A5BE0  mr        r3, r31\n0x823A5BE4  bl        BrnGameState__GameStateModule__DetectModeStarts\n0x823A5BE8  addi      r3, r1, 0x760+var_6C0\n0x823A5BEC  bl        CgsModule__VariableEventQueue_1536_16___Destruct\n0x823A5BF0  mr        r5, r16\n0x823A5BF4  mr        r4, r29\n0x823A5BF8  mr        r3, r27\n0x823A5BFC  bl        BrnGameState__GameStateInviteManager__Update\n0x823A5C00  addi      r27, r31, 0x1020\n0x823A5C04  mr        r6, r25\n0x823A5C08  mr        r5, r29\n0x823A5C0C  mr        r4, r30\n0x823A5C10  mr        r3, r27\n0x823A5C14  bl        BrnGameState__ModeManager__HandleOnlineTeamModes\n0x823A5C18  lwz       r11, 0x1DB8(r31)\n0x823A5C1C  cmplwi    cr6, r11, 0\n0x823A5C20  beq       cr6, loc_823A5C50\n0x823A5C24  lwz       r11, 0x1DB4(r31)\n0x823A5C28  cmpwi     cr6, r11, 0xF\n0x823A5C2C  beq       cr6, loc_823A5C3C\n0x823A5C30  cmpwi     cr6, r11, 0x10\n0x823A5C34  mr        r11, r17\n0x823A5C38  bne       cr6, loc_823A5C40\n0x823A5C3C  li        r11, 1\n0x823A5C40  clrlwi    r11, r11, 24\n0x823A5C44  li        r28, 1\n0x823A5C48  cmplwi    cr6, r11, 0\n0x823A5C4C  beq       cr6, loc_823A5C54\n0x823A5C50  mr        r28, r17\n0x823A5C54  mr        r3, r29\n0x823A5C58  lfs       f31, 0(r15)\n0x823A5C5C  bl        BrnGameState__GameStateModuleIO__Ou\n0x823A5C60  mr        r4, r3\n0x823A5C64  add       r3, r31, r24\n0x823A5C68  fmr       f1, f31\n0x823A5C6C  mr        r5, r23\n0x823A5C70  mr        r7, r28\n0x823A5C74  bl        BrnGameState__StuntManager__Update\n0x823A5C78  addis     r3, r31, 3\n0x823A5C7C  mr        r5, r29\n0x823A5C80  mr        r4, r30\n0x823A5C84  addi      r3, r3, -0x3B30\n0x823A5C88  bl        BrnGameState__RichPresenceManagerBase__Update\n0x823A5C8C  addis     r3, r31, 3\n0x823A5C90  mr        r5, r29\n0x823A5C94  mr        r4, r30\n0x823A5C98  addi      r3, r3, -0x3A50\n0x823A5C9C  bl        BrnGameState__AchievementManagerX360__Update\n0x823A5CA0  addis     r3, r31, 3\n0x823A5CA4  mr        r5, r29\n0x823A5CA8  mr        r4, r30\n0x823A5CAC  addi      r3, r3, -0x2A90\n0x823A5CB0  bl        BrnGameState__DeveloperChallengeManager__PreWorldUpdate\n0x823A5CB4  addis     r28, r31, 4\n0x823A5CB8  addi      r28, r28, 0x7604\n0x823A5CBC  lwz       r3, 0(r28)\n0x823A5CC0  bl        CgsDev__PerfMonCpu__StartMonitor\n0x823A5CC4  cmplwi    cr6, r22, 0\n0x823A5CC8  beq       cr6, loc_823A5D70\n0x823A5CCC  lwz       r11, 0xD98(r27)\n0x823A5CD0  lis       r10, 0\n0x823A5CD4  lfs       f2, 0x7ABC(r31)\n0x823A5CD8  ori       r10, r10, 0x8BE0 # 0x8BE0\n0x823A5CDC  cmplwi    cr6, r11, 0\n0x823A5CE0  beq       cr6, loc_823A5D04\n0x823A5CE4  ldx       r11, r27, r10\n0x823A5CE8  rlwinm    r11, r11, 0,11,11\n0x823A5CEC  cmpldi    cr6, r11, 0\n0x823A5CF0  li        r11, 1\n0x823A5CF4  bne       cr6, loc_823A5CFC\n0x823A5CF8  mr        r11, r17\n0x823A5CFC  clrlwi    r9, r11, 24\n0x823A5D00  b         loc_823A5D08\n0x823A5D04  mr        r9, r17\n0x823A5D08  lwz       r11, 0xD98(r27)\n0x823A5D0C  cmplwi    cr6, r11, 0\n0x823A5D10  beq       cr6, loc_823A5D34\n0x823A5D14  ldx       r11, r27, r10\n0x823A5D18  rlwinm    r11, r11, 0,2,2\n0x823A5D1C  cmpldi    cr6, r11, 0\n0x823A5D20  li        r11, 1\n0x823A5D24  bne       cr6, loc_823A5D2C\n0x823A5D28  mr        r11, r17\n0x823A5D2C  clrlwi    r10, r11, 24\n0x823A5D30  b         loc_823A5D38\n0x823A5D34  mr        r10, r17\n0x823A5D38  lwz       r11, 0(r14)\n0x823A5D3C  addis     r3, r31, 4\n0x823A5D40  stb       r9, 0x760+var_709(r1)\n0x823A5D44  addis     r9, r31, 4\n0x823A5D48  cntlzw    r11, r11\n0x823A5D4C  lfs       f1, 0(r15)\n0x823A5D50  addi      r9, r9, 0x41E0\n0x823A5D54  extrwi    r11, r11, 1,26\n0x823A5D58  mr        r8, r23\n0x823A5D5C  mr        r7, r29\n0x823A5D60  mr        r6, r30\n0x823A5D64  xori      r4, r11, 1\n0x823A5D68  addi      r3, r3, 0x5768\n0x823A5D6C  bl        BrnGameState__StreetManager__Update\n0x823A5D70  lwz       r3, 0(r28)\n0x823A5D74  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5D78  mr        r3, r30\n0x823A5D7C  bl        CgsModule__IOBuffer__UnlockForRead\n0x823A5D80  mr        r3, r31\n0x823A5D84  bl        BrnGameState__GameStateModule__IsOnlineGameMode\n0x823A5D88  mr        r30, r3\n0x823A5D8C  mr        r3, r29\n0x823A5D90  bl        sub_8231D800\n0x823A5D94  lwz       r11, 0x760+var_6EC(r1)\n0x823A5D98  stb       r30, 0x218(r3)\n0x823A5D9C  ld        r11, 0(r11)\n0x823A5DA0  cmpldi    cr6, r11, 0\n0x823A5DA4  li        r11, 1\n0x823A5DA8  bne       cr6, loc_823A5DB0\n0x823A5DAC  mr        r11, r17\n0x823A5DB0  clrlwi    r11, r11, 24\n0x823A5DB4  cmplwi    cr6, r11, 0\n0x823A5DB8  bne       cr6, loc_823A5DCC\n0x823A5DBC  lbzx      r11, r31, r20\n0x823A5DC0  mr        r30, r17\n0x823A5DC4  cmplwi    cr6, r11, 0\n0x823A5DC8  beq       cr6, loc_823A5DD0\n0x823A5DCC  li        r30, 1\n0x823A5DD0  mr        r3, r29\n0x823A5DD4  bl        sub_8231D800\n0x823A5DD8  mr        r11, r3\n0x823A5DDC  mr        r3, r29\n0x823A5DE0  stb       r30, 0x219(r11)\n0x823A5DE4  lwz       r30, 0x1DB4(r31)\n0x823A5DE8  bl        sub_8231D800\n0x823A5DEC  lis       r11, 3\n0x823A5DF0  stw       r30, 0x214(r3)\n0x823A5DF4  ori       r11, r11, 0x8B64 # 0x38B64\n0x823A5DF8  lwzx      r11, r31, r11\n0x823A5DFC  cmpwi     cr6, r11, 3\n0x823A5E00  beq       cr6, loc_823A5E10\n0x823A5E04  cmpwi     cr6, r11, 0\n0x823A5E08  mr        r11, r17\n0x823A5E0C  bne       cr6, loc_823A5E14\n0x823A5E10  li        r11, 1\n0x823A5E14  clrlwi    r4, r11, 24\n0x823A5E18  mr        r3, r29\n0x823A5E1C  bl        BrnGameState__GameStateModuleIO__OutputBuffer__SetControllerActive\n0x823A5E20  addis     r11, r31, 1\n0x823A5E24  addis     r3, r26, 2\n0x823A5E28  addi      r11, r11, -0x4360\n0x823A5E2C  addi      r3, r3, 0x8E4\n0x823A5E30  stw       r11, 0x760+var_6D8(r1)\n0x823A5E34  lwz       r11, 0(r3)\n0x823A5E38  cntlzw    r11, r11\n0x823A5E3C  extrwi    r11, r11, 1,26\n0x823A5E40  cmplwi    cr6, r11, 0\n0x823A5E44  beq       cr6, loc_823A5E50\n0x823A5E48  mr        r3, r17\n0x823A5E4C  b         loc_823A5E54\n0x823A5E50  bl        BrnProgression__ProgressionData\n0x823A5E54  lis       r11, 0\n0x823A5E58  stw       r3, 0x760+var_6D4(r1)\n0x823A5E5C  ori       r11, r11, 0xA780 # 0xA780\n0x823A5E60  lwzx      r11, r26, r11\n0x823A5E64  cmplwi    cr6, r11, 4\n0x823A5E68  bge       cr6, loc_823A5E98\n0x823A5E6C  lis       r11, 2\n0x823A5E70  ori       r11, r11, 0x950 # 0x20950\n0x823A5E74  lwzx      r11, r26, r11\n0x823A5E78  cmplwi    cr6, r11, 0\n0x823A5E7C  bgt       cr6, loc_823A5E98\n0x823A5E80  lis       r11, 2\n0x823A5E84  ori       r11, r11, 0x954 # 0x20954\n0x823A5E88  lwzx      r11, r26, r11\n0x823A5E8C  cmplwi    cr6, r11, 0\n0x823A5E90  mr        r11, r17\n0x823A5E94  ble       cr6, loc_823A5E9C\n0x823A5E98  li        r11, 1\n0x823A5E9C  li        r6, 0xC\n0x823A5EA0  stb       r11, 0x760+var_6D0(r1)\n0x823A5EA4  li        r5, 0xC1\n0x823A5EA8  addi      r4, r1, 0x760+var_6D8\n0x823A5EAC  mr        r3, r16\n0x823A5EB0  bl        CgsModule__VariableEventQueue_13312_16___AddEvent\n0x823A5EB4  mr        r3, r29\n0x823A5EB8  bl        BrnGameState__GameStateModuleIO__OutputBuffer__GetGuiEventQ\n0x823A5EBC  lwz       r4, 0x760+var_6E4(r1)\n0x823A5EC0  bl        ___Append__0EIAA__0BA____VariableEventQueue__0EIAA__0BA__CgsModule__QAA_NABV01__Z# CgsModule::VariableEventQueue<18432,16>::Append<18432,16>(CgsModule::VariableEventQueue<18432,16> const &)\n0x823A5EC4  mr        r3, r29\n0x823A5EC8  bl        BrnGameState__GameStateModuleIO__\n0x823A5ECC  mr        r30, r3\n0x823A5ED0  cmplwi    cr6, r30, 0\n0x823A5ED4  bne       cr6, loc_823A5EF4\n0x823A5ED8  bl        CgsDev__Assert__BeginAssert\n0x823A5EDC  lis       r11, aLpracecarraced@ha\n0x823A5EE0  li        r5, 0x592\n0x823A5EE4  lwz       r4, 0x760+var_6DC(r1)\n0x823A5EE8  addi      r3, r11, aLpracecarraced@l# \"lpRaceCarRaceDistInterface != NULL\"\n0x823A5EEC  bl        CgsDev__Assert__FireAssert\n0x823A5EF0  bl        CgsDev__Assert__EndAssert\n0x823A5EF4  mr        r4, r30\n0x823A5EF8  mr        r3, r27\n0x823A5EFC  bl        BrnGameState__ModeManager__FillInRaceDistanceInterface\n0x823A5F00  addis     r3, r31, 3\n0x823A5F04  addi      r3, r3, 0x2DF8\n0x823A5F08  bl        BrnGameState__GameStateDebugComponent__RenderLandmarkDebug\n0x823A5F0C  mr        r3, r29\n0x823A5F10  bl        CgsModule__IOBuffer__UnlockForWrite\n0x823A5F14  lwz       r11, 0x760+var_6CC(r1)\n0x823A5F18  lwz       r3, 0(r11)\n0x823A5F1C  lwz       r11, 0x760+var_6E0(r1)\n0x823A5F20  stb       r17, 0(r11)\n0x823A5F24  bl        CgsDev__PerfMonCpu__StopMonitor\n0x823A5F28  addi      r1, r1, 0x760\n0x823A5F2C  lfd       f30, var_A8(r1)\n0x823A5F30  lfd       f31, var_A0(r1)\n0x823A5F34  b         __restgprlr",
+  "xrefs_to": [
+    {
+      "address": "0x823EE0E8",
+      "name": "BrnGame::BrnGameModule::DoUpdate_GameStatePreWorld"
+    },
+    {
+      "address": "0x823F22D8",
+      "name": "LoadingScriptedState::Update"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EB0",
+      "name": "__savegprlr_14"
+    },
+    {
+      "address": "0x82356978",
+      "name": "BrnGameState::GameStateModule::IsSimPaused"
+    },
+    {
+      "address": "0x821F1198",
+      "name": "CgsDev::PerfMonCpu::StartMonitor"
+    },
+    {
+      "address": "0x82817548",
+      "name": "CgsDev::Assert::BeginAssert"
+    },
+    {
+      "address": "0x82820810",
+      "name": "CgsDev::Assert::FireAssert"
+    },
+    {
+      "address": "0x82817558",
+      "name": "CgsDev::Assert::EndAssert"
+    },
+    {
+      "address": "0x82204C88",
+      "name": "CgsModule::IOBuffer::LockForRead"
+    },
+    {
+      "address": "0x82204A18",
+      "name": "CgsModule::IOBuffer::LockForWrite"
+    },
+    {
+      "address": "0x8231CE28",
+      "name": "BrnGameState::GameStateModuleIO::PreWorldInputBuffer::Get"
+    },
+    {
+      "address": "0x8231D4B8",
+      "name": "BrnGameState::GameStateModuleIO::Ou"
+    },
+    {
+      "address": "0x8239A918",
+      "name": "BrnGameState::GameStateModule::SendSetupPlayerCarEvent"
+    },
+    {
+      "address": "0x823759D0",
+      "name": "BrnGameState::GameStateModule::SendSetUpAllEventStartsMessage"
+    },
+    {
+      "address": "0x82311570",
+      "name": "BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex"
+    },
+    {
+      "address": "0x8231D8A8",
+      "name": "BrnGameState::GameStateModuleIO::Outpu"
+    },
+    {
+      "address": "0x82379980",
+      "name": "BrnGameState::GameStateModuleIO::GameStateToGuiInterface::AppendRaceCarCrashes"
+    },
+    {
+      "address": "0x8231D608",
+      "name": "BrnGameState::GameStateModuleIO::OutputBuffer::GetTimerRequest"
+    },
+    {
+      "address": "0x8239EEF0",
+      "name": "BrnGameState::DriveThruManager::Update"
+    },
+    {
+      "address": "0x821F1308",
+      "name": "CgsDev::PerfMonCpu::StopMonitor"
+    },
+    {
+      "address": "0x8239AA78",
+      "name": "BrnGameState::GameStateModule::CopyInputDataToPaybackManager"
+    },
+    {
+      "address": "0x8231CF78",
+      "name": "sub_8231CF78"
+    },
+    {
+      "address": "0x8236B020",
+      "name": "BrnNetwork::BrnNetworkModuleIO::InG"
+    },
+    {
+      "address": "0x82362820",
+      "name": "BrnGameState::GameStateModule::GetControllerToGameStateInterface"
+    },
+    {
+      "address": "0x82369BF0",
+      "name": "CgsInput::InputIO::BindResult>::Append"
+    },
+    {
+      "address": "0x82369CE0",
+      "name": "CgsInput::InputIO::UnBindResult>::Append"
+    },
+    {
+      "address": "0x82375F90",
+      "name": "BrnGameState::GameStateModule::CheckForTailingRivals"
+    },
+    {
+      "address": "0x82356DB0",
+      "name": "BrnGameState::GameStateModule::ShouldAllowTimedTutorialTips"
+    },
+    {
+      "address": "0x823937D0",
+      "name": "BrnGameState::TrainingManager::Update"
+    },
+    {
+      "address": "0x82386A98",
+      "name": "BrnGameState::RumbleManager::Update"
+    },
+    {
+      "address": "0x822C6F78",
+      "name": "CgsModule::VariableEventQueue<1536,16>::Construct"
+    },
+    {
+      "address": "0x82373CC8",
+      "name": "??$Append@$0GAA@$0BA@@?$VariableEventQueue@$0GAA@$0BA@@CgsModule@@QAA_NABV01@@Z"
+    },
+    {
+      "address": "0x8231CD80",
+      "name": "BrnGameState::GameStateModuleIO::PreWorld"
+    },
+    {
+      "address": "0x822AC080",
+      "name": "CgsModule::VariableEventQueue<1536,16>::Clear"
+    },
+    {
+      "address": "0x82380EF8",
+      "name": "BrnGameState::GameStateModule::UpdateShowtimeMode"
+    },
+    {
+      "address": "0x8235F470",
+      "name": "CgsModule::VariableEventQueue<18432,16>::Clear"
+    },
+    {
+      "address": "0x823A0A18",
+      "name": "BrnGameState::GameStateModule::ProcessGameEvents"
+    },
+    {
+      "address": "0x8233FAE8",
+      "name": "CgsModule::VariableEventQueue<13312,16>::AddEvent"
+    },
+    {
+      "address": "0x823632F8",
+      "name": "BrnGameState::GameStateModuleIO::PreWorl"
+    },
+    {
+      "address": "0x8239C218",
+      "name": "BrnGameState::CarSelectManager::Update"
+    },
+    {
+      "address": "0x8239C480",
+      "name": "BrnGameState::OnlineCarSelectManager::Update"
+    },
+    {
+      "address": "0x82391A08",
+      "name": "BrnGameState::GameStateImageManagerBase::PreWorldUpdate"
+    },
+    {
+      "address": "0x823625C0",
+      "name": "BrnPhysics::Vehicle::CrashingRaceCarInterface::SetFromVehicleOutputInterface"
+    },
+    {
+      "address": "0x8239FAC0",
+      "name": "BrnGameState::TakedownManager::Update"
+    },
+    {
+      "address": "0x82362B80",
+      "name": "BrnGameState::GameStateModuleIO::Out"
+    },
+    {
+      "address": "0x82369DD0",
+      "name": "BrnGameState::TakedownEvent>::Append"
+    },
+    {
+      "address": "0x82391690",
+      "name": "BrnGameState::MugshotManager::Update"
+    },
+    {
+      "address": "0x8239AB78",
+      "name": "BrnGameState::PaybackManager::Update"
+    },
+    {
+      "address": "0x8238FC50",
+      "name": "BrnGameState::GameStateModule::ProcessTakedownEvents"
+    },
+    {
+      "address": "0x8238EF50",
+      "name": "BrnGameState::GameStateModule::EmmPreWorldUpdate"
+    },
+    {
+      "address": "0x8236E728",
+      "name": "BrnGameState::RumbleManager::UpdatePauseState"
+    },
+    {
+      "address": "0x8236CDC0",
+      "name": "BrnGameState::GameStateModule::CopyScoringDataToOutput"
+    },
+    {
+      "address": "0x8239F5C8",
+      "name": "BrnGameState::TriggerQueryManager::PreWorldUpdate"
+    },
+    {
+      "address": "0x823A4F68",
+      "name": "BrnProgression::ProgressionManager::PreWorldUpdate"
+    },
+    {
+      "address": "0x82390418",
+      "name": "BrnGameState::GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent"
+    },
+    {
+      "address": "0x82381A90",
+      "name": "BrnGameState::GameStateModule::SendSetUpAllDriveThrusMessage"
+    },
+    {
+      "address": "0x8239A428",
+      "name": "BrnGameState::GameStateModule::DetectModeStarts"
+    },
+    {
+      "address": "0x82368130",
+      "name": "CgsModule::VariableEventQueue<1536,16>::Destruct"
+    },
+    {
+      "address": "0x8239AE10",
+      "name": "BrnGameState::GameStateInviteManager::Update"
+    },
+    {
+      "address": "0x8234C750",
+      "name": "BrnGameState::ModeManager::HandleOnlineTeamModes"
+    },
+    {
+      "address": "0x8239F8D0",
+      "name": "BrnGameState::StuntManager::Update"
+    },
+    {
+      "address": "0x8237F108",
+      "name": "BrnGameState::RichPresenceManagerBase::Update"
+    },
+    {
+      "address": "0x823967C0",
+      "name": "BrnGameState::AchievementManagerX360::Update"
+    },
+    {
+      "address": "0x8238D698",
+      "name": "BrnGameState::DeveloperChallengeManager::PreWorldUpdate"
+    },
+    {
+      "address": "0x82352E90",
+      "name": "BrnGameState::StreetManager::Update"
+    },
+    {
+      "address": "0x82204D50",
+      "name": "CgsModule::IOBuffer::UnlockForRead"
+    },
+    {
+      "address": "0x823116D0",
+      "name": "BrnGameState::GameStateModule::IsOnlineGameMode"
+    },
+    {
+      "address": "0x8231D800",
+      "name": "sub_8231D800"
+    },
+    {
+      "address": "0x82363040",
+      "name": "BrnGameState::GameStateModuleIO::OutputBuffer::SetControllerActive"
+    },
+    {
+      "address": "0x82325790",
+      "name": "BrnProgression::ProgressionData"
+    },
+    {
+      "address": "0x82362C28",
+      "name": "BrnGameState::GameStateModuleIO::OutputBuffer::GetGuiEventQ"
+    },
+    {
+      "address": "0x8237FCB0",
+      "name": "??$Append@$0EIAA@$0BA@@?$VariableEventQueue@$0EIAA@$0BA@@CgsModule@@QAA_NABV01@@Z"
+    },
+    {
+      "address": "0x823630F0",
+      "name": "BrnGameState::GameStateModuleIO::"
+    },
+    {
+      "address": "0x82327B98",
+      "name": "BrnGameState::ModeManager::FillInRaceDistanceInterface"
+    },
+    {
+      "address": "0x8236C840",
+      "name": "BrnGameState::GameStateDebugComponent::RenderLandmarkDebug"
+    },
+    {
+      "address": "0x82204BB8",
+      "name": "CgsModule::IOBuffer::UnlockForWrite"
+    }
+  ]
+}

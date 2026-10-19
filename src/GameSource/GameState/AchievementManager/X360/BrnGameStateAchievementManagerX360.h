@@ -92,6 +92,13 @@ public:
     // At most this many achievements go into one system write (the write-record count).
     static const u32 KU_MAX_ACHIEVEMENTS_PER_WRITE = 3;
 
+    // The X360 inlines the derived-member initialization into GameStateModule::Construct
+    // immediately after AchievementManagerBase::Construct (ARTIST 0x82380388, 0x82380738..64).
+    void Construct(BrnProgression::ProgressionManager* lpProgressionManager,
+                   StreetManager* lpStreetManager,
+                   ScoringSystem* lpScoringSystem,
+                   GameStateModule* lpGameStateModule);
+
     // ===== X360 lifecycle (hide the base's platform-neutral Prepare/Release) =====
 
     // X360 0x82372DD0 (called by GameStateModule::Prepare). Reset the manager to

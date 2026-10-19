@@ -3,9 +3,10 @@
 //     BrnGameStateAchievementManagerX360.cpp
 // ============================================================================
 // BrnGameState::AchievementManagerX360 -- the Xbox 360 concrete achievement
-// manager (derives from AchievementManagerBase). This TU reconstructs the four
+// manager (derives from AchievementManagerBase). This TU reconstructs the five
 // self-contained functions:
 //
+//   Construct           (X360 inline in GameStateModule::Construct @0x82380388)
 //   AchievementEarnt   (X360 0x82367000, base vtable slot 0)
 //   IsAchievementEarnt (X360 0x82367240, base vtable slot 1)
 //   Prepare            (X360 0x82372DD0)
@@ -99,6 +100,25 @@ namespace
     {
         return reinterpret_cast<XOVERLAPPED*>(lpOverlapped);
     }
+}
+
+// The X360 inlines this owner-specific tail into GameStateModule::Construct after the
+// AchievementManagerBase::Construct call. Preserve that order and only initialize the derived
+// fields the assembly writes; it does not initialize mcbBuffer here.
+void AchievementManagerX360::Construct(BrnProgression::ProgressionManager* lpProgressionManager,
+                                       StreetManager* lpStreetManager,
+                                       ScoringSystem* lpScoringSystem,
+                                       GameStateModule* lpGameStateModule)
+{
+    AchievementManagerBase::Construct(lpProgressionManager, lpStreetManager,
+                                      lpScoringSystem, lpGameStateModule);
+
+    miUserIndex  = -1;  // module+181720, ARTIST 0x82380740
+    miState      = 0;   // module+181724, ARTIST 0x82380744
+    mhEnumerator = 0;   // module+181732, ARTIST 0x82380748
+    mOverLapped.Construct();
+    mAchievementsEarnt.UnSetAll();
+    mAchievementsToWrite.UnSetAll();
 }
 
 // ----------------------------------------------------------------------------

@@ -1,0 +1,81 @@
+{
+  "address": "0x823565C0",
+  "name": "BrnGameState::OnlineCarSelectManager::Construct",
+  "prototype": "_DWORD * BrnGameState::OnlineCarSelectManager::Construct_DWORD *__fastcall(_DWORD *result, int lpGameStateModule, int a3)",
+  "variables": [
+    {
+      "name": "result",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "lpGameStateModule",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a3",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R31",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R10",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "_R9",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    }
+  ],
+  "pseudocode": "_DWORD *__fastcall BrnGameState::OnlineCarSelectManager::Construct(_DWORD *result, int lpGameStateModule, int a3)\n{\n  _savegprlr_29();\n  _R31 = result;\n  if ( !lpGameStateModule )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpGameStateModule\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\gamestate\\\\CarSelect/BrnOnlineCarSelectManager.h\",\n      252);\n    result = CgsDev::Assert::EndAssert();\n  }\n  __asm { vspltisw  v0, 0 }\n  _R10 = 32;\n  *(_R31 + 4) = lpGameStateModule;\n  _R9 = 48;\n  *(_R31 + 8) = a3;\n  *_R31 = 0;\n  *(_R31 + 12) = 0;\n  *(_R31 + 16) = 0;\n  __asm { stvx128   v0, r31, r10 }\n  *(_R31 + 20) = 0;\n  __asm { stvx128   v0, r31, r9 }\n  *(_R31 + 64) = 0x2000000000LL;\n  *(_R31 + 72) = 0x2000000000LL;\n  *(_R31 + 80) = 0x2000000000LL;\n  *(_R31 + 88) = 0x2000000000LL;\n  *(_R31 + 96) = 0;\n  *(_R31 + 100) = 0;\n  _restgprlr_29();\n  return result;\n}\n",
+  "assembly": "0x823565C0  mflr      r12\n0x823565C4  bl        __savegprlr_29\n0x823565C8  stwu      r1, back_chain(r1)\n0x823565CC  mr        r30, r4\n0x823565D0  mr        r31, r3\n0x823565D4  mr        r29, r5\n0x823565D8  cmplwi    cr6, r30, 0\n0x823565DC  bne       cr6, loc_82356600\n0x823565E0  bl        CgsDev__Assert__BeginAssert\n0x823565E4  lis       r11, aDP4B5MainBurno_550@ha\n0x823565E8  li        r5, 0xFC\n0x823565EC  addi      r4, r11, aDP4B5MainBurno_550@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x823565F0  lis       r11, aLpgamestatemod@ha\n0x823565F4  addi      r3, r11, aLpgamestatemod@l# \"lpGameStateModule\"\n0x823565F8  bl        CgsDev__Assert__FireAssert\n0x823565FC  bl        CgsDev__Assert__EndAssert\n0x82356600  vspltisw  v0, 0\n0x82356604  li        r11, 0\n0x82356608  li        r10, 0x20 # ' '\n0x8235660C  stw       r30, 4(r31)\n0x82356610  li        r9, 0x30 # '0'\n0x82356614  stw       r29, 8(r31)\n0x82356618  stw       r11, 0(r31)\n0x8235661C  stw       r11, 0xC(r31)\n0x82356620  stw       r11, 0x10(r31)\n0x82356624  stvx128   v0, r31, r10\n0x82356628  stb       r11, 0x14(r31)\n0x8235662C  stvx128   v0, r31, r9\n0x82356630  std       r11, 0x40(r31)\n0x82356634  std       r11, 0x48(r31)\n0x82356638  std       r11, 0x50(r31)\n0x8235663C  std       r11, 0x58(r31)\n0x82356640  stb       r11, 0x60(r31)\n0x82356644  stw       r11, 0x64(r31)\n0x82356648  addi      r1, r1, 0x70 # 'p'\n0x8235664C  b         __restgprlr_29",
+  "xrefs_to": [
+    {
+      "address": "0x82380388",
+      "name": "BrnGameState::GameStateModule::Construct"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08EEC",
+      "name": "__savegprlr_29"
+    },
+    {
+      "address": "0x82817548",
+      "name": "CgsDev::Assert::BeginAssert"
+    },
+    {
+      "address": "0x82820810",
+      "name": "CgsDev::Assert::FireAssert"
+    },
+    {
+      "address": "0x82817558",
+      "name": "CgsDev::Assert::EndAssert"
+    }
+  ]
+}

@@ -1,0 +1,351 @@
+{
+  "address": "0x82340008",
+  "name": "BrnGameState::ModeManager::Construct",
+  "prototype": "int BrnGameState::ModeManager::Constructint __fastcall(int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11, int a12, int a13, int a14, int a15, int a16, int a17, int a18, int a19, int a20, int a21, int a22, int a23, int a24, int a25, int a26, int a27, int a28)",
+  "variables": [
+    {
+      "name": "a1",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a2",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a3",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a4",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a5",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a6",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a7",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a8",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "a9",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a10",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a11",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a12",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a13",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a14",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a15",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a16",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a17",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a18",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a19",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a20",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a21",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a22",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a23",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a24",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a25",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a26",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a27",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "a28",
+      "type": "int",
+      "is_reg": false,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v29",
+      "type": "__int64",
+      "is_reg": true,
+      "size": 8
+    },
+    {
+      "name": "v30",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v38",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v39",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v40",
+      "type": "_DWORD *",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v41",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v42",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v43",
+      "type": "__int128",
+      "is_reg": true,
+      "size": 16
+    },
+    {
+      "name": "v44",
+      "type": "__int128",
+      "is_reg": true,
+      "size": 16
+    },
+    {
+      "name": "v45",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v46",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "v47",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    },
+    {
+      "name": "result",
+      "type": "int",
+      "is_reg": true,
+      "size": 4
+    }
+  ],
+  "pseudocode": "// local variable allocation has failed, the output may be wrong!\nint __fastcall BrnGameState::ModeManager::Construct(\n        int a1,\n        int a2,\n        int a3,\n        int a4,\n        int a5,\n        int a6,\n        int a7,\n        int a8,\n        int a9,\n        int a10,\n        int a11,\n        int a12,\n        int a13,\n        int a14,\n        int a15,\n        int a16,\n        int a17,\n        int a18,\n        int a19,\n        int a20,\n        int a21,\n        int a22,\n        int a23,\n        int a24,\n        int a25,\n        int a26,\n        int a27,\n        int a28)\n{\n  __int64 v29; // r30\n  int v30; // r3\n  _DWORD *v38; // r11\n  int v39; // ctr\n  _DWORD *v40; // r29\n  int v41; // r28\n  int v42; // r11\n  __int128 v43; // r10 OVERLAPPED\n  __int128 v44; // r6\n  int v45; // r6\n  int v46; // r6\n  int v47; // r6\n  int result; // r3\n\n  _savegprlr_21();\n  LODWORD(v29) = 0;\n  v30 = a1 + 28112;\n  *(v30 + 12) = a1;\n  *(v30 + 16) = 0;\n  *(v30 + 17) = 0;\n  *(v30 + 20) = 1;\n  CgsDev::DebugComponent::Register(v30);\n  if ( a1 == -3504 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpScoringSystem\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp\",\n      99);\n    CgsDev::Assert::EndAssert();\n  }\n  *(a1 + 28148) = a1 + 3504;\n  *(a1 + 28152) = 0;\n  CgsDev::DebugComponent::Register(a1 + 28136);\n  *(a1 + 38168) = 0;\n  BrnGameState::ChallengeManager::Construct((a1 + 28160), a2, a1, a3, a8, a4);\n  if ( !a2 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpGameStateModule\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/ModeManager/BrnModeManager.cpp\",\n      202);\n    CgsDev::Assert::EndAssert();\n  }\n  *(a1 + 27992) = a2;\n  if ( !a3 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpProgressionManager\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/ModeManager/BrnModeManager.cpp\",\n      205);\n    CgsDev::Assert::EndAssert();\n  }\n  *(a1 + 27996) = a3;\n  *(a1 + 28000) = a4;\n  if ( !a5 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpNetworkRoundManager\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\unity\\\\../GameState/ModeManager/BrnModeManager.cpp\",\n      210);\n    CgsDev::Assert::EndAssert();\n  }\n  v38 = a1;\n  *(a1 + 28004) = a5;\n  v39 = 18;\n  do\n  {\n    *v38++ = 0;\n    --v39;\n  }\n  while ( v39 );\n  *a1 = a1 + 72;\n  *(a1 + 4) = a1 + 268;\n  *(a1 + 8) = a1 + 464;\n  *(a1 + 12) = a1 + 652;\n  *(a1 + 16) = a1 + 908;\n  *(a1 + 20) = a1 + 1096;\n  *(a1 + 28) = a1 + 1328;\n  *(a1 + 48) = a1 + 2256;\n  *(a1 + 32) = a1 + 1552;\n  *(a1 + 40) = a1 + 1776;\n  v40 = a1;\n  *(a1 + 44) = a1 + 2016;\n  v41 = 18;\n  *(a1 + 52) = a1 + 2512;\n  *(a1 + 60) = a1 + 2952;\n  *(a1 + 64) = a1 + 3296;\n  *(a1 + 56) = a1 + 2256;\n  *(a1 + 68) = a1 + 2256;\n  do\n  {\n    if ( *v40 )\n      (***v40)(*v40, a1);\n    --v41;\n    ++v40;\n  }\n  while ( v41 );\n  if ( !a6 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpStreetManager\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\gamestate\\\\modemanager\\\\GameModes/BrnOnlineFreeBurnLobbyMode.h\",\n      175);\n    CgsDev::Assert::EndAssert();\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpStreetManager\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\gamestate\\\\modemanager\\\\gamemodes\\\\BrnBurnoutSkillzManager.h\",\n      265);\n    CgsDev::Assert::EndAssert();\n  }\n  *(a1 + 3252) = a6;\n  if ( !a7 )\n  {\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpMugshotManager\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\gamestate\\\\modemanager\\\\GameModes/BrnOnlineFreeBurnLobbyMode.h\",\n      190);\n    CgsDev::Assert::EndAssert();\n    CgsDev::Assert::BeginAssert();\n    CgsDev::Assert::FireAssert(\n      \"lpMugshotManager\",\n      \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\gamesource\\\\gamestate\\\\modemanager\\\\gamemodes\\\\BrnBurnoutSkillzManager.h\",\n      280);\n    CgsDev::Assert::EndAssert();\n  }\n  *(a1 + 3256) = a7;\n  *(a1 + 3496) = 0;\n  *(a1 + 3480) = 0;\n  *(a1 + 38151) = 0;\n  *(a1 + 38152) = 0;\n  *(a1 + 3476) = -1;\n  *(a1 + 3484) = -1;\n  *(a1 + 3492) = -1;\n  *(a1 + 3488) = -1;\n  *(a1 + 38153) = 0;\n  *(a1 + 38160) = 0;\n  *(a1 + 38155) = 0;\n  *(a1 + 38154) = 0;\n  *(a1 + 38156) = 0;\n  *(a1 + 38164) = 0.0;\n  BrnGameState::ScoringSystem::Construct(a1 + 3504, a28);\n  BrnGameState::HUDMessageLogic::Construct(a1 + 27392);\n  v42 = a1 + 28016;\n  *(a1 + 38135) = 0;\n  *(a1 + 38136) = 0;\n  *(a1 + 28056) = 0;\n  *(a1 + 28048) = 0x3F8000001AD0891BLL;\n  *(a1 + 28016) = 1065353216;\n  *(&v43 + 4) = *(a1 + 28048);\n  LODWORD(v43) = 1284865837;\n  DWORD1(v43) = *(a1 + 28056);\n  *(&v44 + 4) = HIDWORD(*(&v43 + 4));\n  ++DWORD1(v43);\n  HIDWORD(v43) = 1284865837 * DWORD2(v43) + 1;\n  v45 = (DWORD2(v44) >> 9) | ((*(&v43 + 4) * v43) >> 32) & 0xFF800000;\n  DWORD1(v43) = BYTE7(v43) & 7;\n  *(a1 + 28056) = DWORD1(v43);\n  *(a1 + 28048) = *(&v43 + 12);\n  *(4 * DWORD1(v43) + v42) = v45;\n  *&v43 = *(a1 + 28048);\n  DWORD2(v43) = (*(a1 + 28056) + 1) & 7;\n  v46 = 4 * DWORD2(v43);\n  *(a1 + 28056) = DWORD2(v43);\n  *(&v43 + 4) = HIDWORD(*&v43);\n  *&v43 *= v43;\n  ++DWORD1(v43);\n  HIDWORD(v43) = (DWORD2(v43) >> 9) | HIDWORD(v43) & 0xFF800000;\n  *(a1 + 28048) = *&v43;\n  *(v46 + v42) = HIDWORD(v43);\n  *(&v43 + 4) = *(a1 + 28048);\n  DWORD1(v43) = *(a1 + 28056);\n  *(&v44 + 1) = HIDWORD(*(&v43 + 4));\n  ++DWORD1(v43);\n  HIDWORD(v43) = 1284865837 * DWORD2(v43);\n  DWORD2(v43) = (*(&v43 + 4) * v43) >> 32;\n  DWORD1(v43) = BYTE7(v43) & 7;\n  ++HIDWORD(v43);\n  LODWORD(v44) = 4 * DWORD1(v43);\n  *(a1 + 28056) = DWORD1(v43);\n  *(a1 + 28048) = *(&v43 + 12);\n  *(v44 + v42) = (DWORD2(v43) >> 9) | DWORD2(v44) & 0xFF800000;\n  *(&v43 + 4) = *(a1 + 28048);\n  DWORD1(v43) = *(a1 + 28056) + 1;\n  HIDWORD(v43) = 1284865837 * DWORD2(v43);\n  DWORD2(v43) = (*(&v43 + 4) * v43) >> 32;\n  DWORD1(v43) = BYTE7(v43) & 7;\n  ++HIDWORD(v43);\n  LODWORD(v44) = 4 * DWORD1(v43);\n  *(a1 + 28056) = DWORD1(v43);\n  *(a1 + 28048) = *(&v43 + 12);\n  *(v44 + v42) = (DWORD2(v43) >> 9) | 0x3F800000;\n  *(&v43 + 4) = *(a1 + 28048);\n  DWORD1(v43) = *(a1 + 28056) + 1;\n  HIDWORD(v43) = 1284865837 * DWORD2(v43);\n  DWORD2(v43) = (*(&v43 + 4) * v43) >> 32;\n  DWORD1(v43) = BYTE7(v43) & 7;\n  ++HIDWORD(v43);\n  LODWORD(v44) = 4 * DWORD1(v43);\n  *(a1 + 28056) = DWORD1(v43);\n  *(a1 + 28048) = *(&v43 + 12);\n  *(v44 + v42) = (DWORD2(v43) >> 9) | 0x3F800000;\n  *(&v43 + 4) = *(a1 + 28048);\n  DWORD1(v43) = *(a1 + 28056) + 1;\n  *(&v43 + 12) = *(&v43 + 4) * v43;\n  DWORD2(v43) = (*(&v43 + 4) * v43) >> 32;\n  DWORD1(v43) = BYTE7(v43) & 7;\n  ++HIDWORD(v43);\n  *(a1 + 28056) = DWORD1(v43);\n  *(a1 + 28048) = *(&v43 + 12);\n  *(4 * DWORD1(v43) + v42) = (DWORD2(v43) >> 9) | 0x3F800000;\n  *(&v43 + 1) = *(a1 + 28048);\n  DWORD2(v43) = *(a1 + 28056);\n  *(&v44 + 1) = DWORD2(v43);\n  ++DWORD2(v43);\n  DWORD1(v43) = 1284865837 * v43 + 1;\n  HIDWORD(v43) = (v44 >> 9) | ((0x3F8000004C957F2DLL * v43) >> 32) & 0xFF800000;\n  DWORD2(v43) = BYTE11(v43) & 7;\n  *(a1 + 28056) = DWORD2(v43);\n  *(a1 + 28048) = *&v43;\n  *(4 * DWORD2(v43) + v42) = HIDWORD(v43);\n  *(a1 + 28056) = (*(a1 + 28056) + 1) & 7;\n  BrnGameState::ModeManager::ClearLandmarkAndFinishLineData(a1);\n  *(a1 + 32808) = 0.0;\n  *(a1 + 38137) = 0;\n  *(a1 + 38128) = 0.0;\n  *(a1 + 38145) = 0;\n  *(a1 + 38147) = 0;\n  *(a1 + 38132) = 0;\n  *(a1 + 38144) = 0;\n  *(a1 + 38157) = 0;\n  *(a1 + 38133) = 0;\n  *(a1 + 38134) = 0;\n  *(a1 + 38140) = 0;\n  *(a1 + 38141) = 0;\n  *(a1 + 38148) = 0;\n  *(a1 + 38149) = 0;\n  HIDWORD(v29) = 38180;\n  *(a1 + 38146) = 0;\n  *(a1 + 38139) = 0;\n  *(a1 + 38143) = 0;\n  *(a1 + 38142) = 0;\n  *(a1 + 35824) = v29;\n  *(a1 + 35832) = v29;\n  *(a1 + 38172) = 0.0;\n  *(a1 + 38176) = 0.0;\n  *(a1 + 28008) = 0;\n  *(a1 + 38180) = 0.0;\n  *(a1 + 35852) = 0;\n  *(a1 + 35853) = 0;\n  *(a1 + 35848) = 0;\n  dword_82CDB6F4 = CgsDev::PerfMonCpu::AddMonitor(\"ModeManager PreWorld\", 5, 0, 1.0, 38176, 1);\n  result = CgsDev::PerfMonCpu::AddMonitor(\"ModeManager PostWorld\", 5, 0, 1.0, v47, 1);\n  dword_82CDB6F8 = result;\n  _restgprlr_21();\n  return result;\n}\n",
+  "assembly": "0x82340008  mflr      r12\n0x8234000C  bl        __savegprlr_21\n0x82340010  stfd      f30, var_70(r1)\n0x82340014  stfd      f31, var_68(r1)\n0x82340018  stwu      r1, back_chain(r1)\n0x8234001C  mr        r31, r3\n0x82340020  li        r30, 0\n0x82340024  addi      r3, r31, 0x6DD0\n0x82340028  li        r11, 1\n0x8234002C  mr        r28, r4\n0x82340030  mr        r26, r5\n0x82340034  mr        r24, r6\n0x82340038  mr        r22, r7\n0x8234003C  stw       r31, 0xC(r3)\n0x82340040  mr        r21, r8\n0x82340044  stb       r30, 0x10(r3)\n0x82340048  mr        r23, r9\n0x8234004C  stb       r30, 0x11(r3)\n0x82340050  mr        r25, r10\n0x82340054  stw       r11, 0x14(r3)\n0x82340058  bl        CgsDev__DebugComponent__Register\n0x8234005C  addi      r27, r31, 0xDB0\n0x82340060  addi      r29, r31, 0x6DE8\n0x82340064  cmplwi    cr6, r27, 0\n0x82340068  bne       cr6, loc_8234008C\n0x8234006C  bl        CgsDev__Assert__BeginAssert\n0x82340070  lis       r11, aDP4B5MainBurno_72@ha\n0x82340074  li        r5, 0x63 # 'c'\n0x82340078  addi      r4, r11, aDP4B5MainBurno_72@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x8234007C  lis       r11, aLpscoringsyste@ha\n0x82340080  addi      r3, r11, aLpscoringsyste@l# \"lpScoringSystem\"\n0x82340084  bl        CgsDev__Assert__FireAssert\n0x82340088  bl        CgsDev__Assert__EndAssert\n0x8234008C  mr        r3, r29\n0x82340090  stw       r27, 0xC(r29)\n0x82340094  stb       r30, 0x10(r29)\n0x82340098  bl        CgsDev__DebugComponent__Register\n0x8234009C  lis       r11, 0\n0x823400A0  mr        r8, r24# a6  ; a6\n0x823400A4  ori       r11, r11, 0x9518 # 0x9518\n0x823400A8  mr        r7, r25# a5  ; a5\n0x823400AC  mr        r6, r26# a4  ; a4\n0x823400B0  mr        r5, r31# a3  ; a3\n0x823400B4  mr        r4, r28# a2  ; a2\n0x823400B8  addi      r3, r31, 0x6E00# this  ; this\n0x823400BC  stwx      r30, r31, r11\n0x823400C0  bl        BrnGameState__ChallengeManager__Construct\n0x823400C4  lis       r11, aDP4B5MainBurno_70@ha\n0x823400C8  cmplwi    cr6, r28, 0\n0x823400CC  addi      r29, r11, aDP4B5MainBurno_70@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x823400D0  bne       cr6, loc_823400F0\n0x823400D4  bl        CgsDev__Assert__BeginAssert\n0x823400D8  lis       r11, aLpgamestatemod@ha\n0x823400DC  li        r5, 0xCA\n0x823400E0  addi      r3, r11, aLpgamestatemod@l# \"lpGameStateModule\"\n0x823400E4  mr        r4, r29\n0x823400E8  bl        CgsDev__Assert__FireAssert\n0x823400EC  bl        CgsDev__Assert__EndAssert\n0x823400F0  cmplwi    cr6, r26, 0\n0x823400F4  stw       r28, 0x6D58(r31)\n0x823400F8  bne       cr6, loc_82340118\n0x823400FC  bl        CgsDev__Assert__BeginAssert\n0x82340100  lis       r11, aLpprogressionm@ha\n0x82340104  li        r5, 0xCD\n0x82340108  addi      r3, r11, aLpprogressionm@l# \"lpProgressionManager\"\n0x8234010C  mr        r4, r29\n0x82340110  bl        CgsDev__Assert__FireAssert\n0x82340114  bl        CgsDev__Assert__EndAssert\n0x82340118  cmplwi    cr6, r22, 0\n0x8234011C  stw       r26, 0x6D5C(r31)\n0x82340120  stw       r24, 0x6D60(r31)\n0x82340124  bne       cr6, loc_82340144\n0x82340128  bl        CgsDev__Assert__BeginAssert\n0x8234012C  lis       r11, aLpnetworkround@ha\n0x82340130  li        r5, 0xD2\n0x82340134  addi      r3, r11, aLpnetworkround@l# \"lpNetworkRoundManager\"\n0x82340138  mr        r4, r29\n0x8234013C  bl        CgsDev__Assert__FireAssert\n0x82340140  bl        CgsDev__Assert__EndAssert\n0x82340144  mr        r11, r31\n0x82340148  stw       r22, 0x6D64(r31)\n0x8234014C  mr        r9, r30\n0x82340150  li        r10, 0x12\n0x82340154  mtctr     r10\n0x82340158  stw       r9, 0(r11)\n0x8234015C  addi      r11, r11, 4\n0x82340160  bdnz      loc_82340158\n0x82340164  addi      r10, r31, 0x48 # 'H'\n0x82340168  addi      r9, r31, 0x10C\n0x8234016C  addi      r8, r31, 0x1D0\n0x82340170  addi      r7, r31, 0x28C\n0x82340174  addi      r6, r31, 0x38C\n0x82340178  stw       r10, 0(r31)\n0x8234017C  addi      r5, r31, 0x448\n0x82340180  addi      r10, r31, 0x530\n0x82340184  stw       r9, 4(r31)\n0x82340188  stw       r8, 8(r31)\n0x8234018C  addi      r11, r31, 0x8D0\n0x82340190  stw       r7, 0xC(r31)\n0x82340194  addi      r9, r31, 0x610\n0x82340198  stw       r6, 0x10(r31)\n0x8234019C  addi      r8, r31, 0x6F0\n0x823401A0  stw       r5, 0x14(r31)\n0x823401A4  addi      r7, r31, 0x7E0\n0x823401A8  stw       r10, 0x1C(r31)\n0x823401AC  addi      r6, r31, 0x9D0\n0x823401B0  addi      r5, r31, 0xB88\n0x823401B4  stw       r11, 0x30(r31)\n0x823401B8  addi      r10, r31, 0xCE0\n0x823401BC  stw       r9, 0x20(r31)\n0x823401C0  stw       r8, 0x28(r31)\n0x823401C4  mr        r29, r31\n0x823401C8  stw       r7, 0x2C(r31)\n0x823401CC  li        r28, 0x12\n0x823401D0  stw       r6, 0x34(r31)\n0x823401D4  stw       r5, 0x3C(r31)\n0x823401D8  stw       r10, 0x40(r31)\n0x823401DC  stw       r11, 0x38(r31)\n0x823401E0  stw       r11, 0x44(r31)\n0x823401E4  lwz       r11, 0(r29)\n0x823401E8  cmplwi    cr6, r11, 0\n0x823401EC  beq       cr6, loc_82340208\n0x823401F0  clrlwi    r3, r11, 0\n0x823401F4  mr        r4, r31\n0x823401F8  lwz       r11, 0(r3)\n0x823401FC  lwz       r11, 0(r11)\n0x82340200  mtctr     r11\n0x82340204  bctrl\n0x82340208  addi      r28, r28, -1\n0x8234020C  addi      r29, r29, 4\n0x82340210  cmplwi    cr6, r28, 0\n0x82340214  bne       cr6, loc_823401E4\n0x82340218  lis       r11, aDP4B5MainBurno_66@ha\n0x8234021C  cmplwi    cr6, r21, 0\n0x82340220  addi      r28, r11, aDP4B5MainBurno_66@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x82340224  lis       r11, aDP4B5MainBurno_67@ha\n0x82340228  addi      r26, r11, aDP4B5MainBurno_67@l# \"d:\\\\p4\\\\b5_main\\\\burnout\\\\main\\\\code\\\\g\"...\n0x8234022C  bne       cr6, loc_82340268\n0x82340230  bl        CgsDev__Assert__BeginAssert\n0x82340234  lis       r11, aLpstreetmanage@ha\n0x82340238  li        r5, 0xAF\n0x8234023C  addi      r29, r11, aLpstreetmanage@l# \"lpStreetManager\"\n0x82340240  mr        r4, r26\n0x82340244  mr        r3, r29\n0x82340248  bl        CgsDev__Assert__FireAssert\n0x8234024C  bl        CgsDev__Assert__EndAssert\n0x82340250  bl        CgsDev__Assert__BeginAssert\n0x82340254  li        r5, 0x109\n0x82340258  mr        r4, r28\n0x8234025C  mr        r3, r29\n0x82340260  bl        CgsDev__Assert__FireAssert\n0x82340264  bl        CgsDev__Assert__EndAssert\n0x82340268  cmplwi    cr6, r23, 0\n0x8234026C  stw       r21, 0xCB4(r31)\n0x82340270  bne       cr6, loc_823402AC\n0x82340274  bl        CgsDev__Assert__BeginAssert\n0x82340278  lis       r11, aLpmugshotmanag@ha\n0x8234027C  li        r5, 0xBE\n0x82340280  addi      r29, r11, aLpmugshotmanag@l# \"lpMugshotManager\"\n0x82340284  mr        r4, r26\n0x82340288  mr        r3, r29\n0x8234028C  bl        CgsDev__Assert__FireAssert\n0x82340290  bl        CgsDev__Assert__EndAssert\n0x82340294  bl        CgsDev__Assert__BeginAssert\n0x82340298  li        r5, 0x118\n0x8234029C  mr        r4, r28\n0x823402A0  mr        r3, r29\n0x823402A4  bl        CgsDev__Assert__FireAssert\n0x823402A8  bl        CgsDev__Assert__EndAssert\n0x823402AC  lis       r10, 0\n0x823402B0  lwz       r4, 0xC0+arg_54(r1)\n0x823402B4  lis       r11, flt_82001CC0@ha\n0x823402B8  stw       r23, 0xCB8(r31)\n0x823402BC  ori       r10, r10, 0x9507 # 0x9507\n0x823402C0  stw       r30, 0xDA8(r31)\n0x823402C4  lis       r9, 0\n0x823402C8  stw       r30, 0xD98(r31)\n0x823402CC  lis       r8, 0\n0x823402D0  ori       r9, r9, 0x9508 # 0x9508\n0x823402D4  lfs       f31, flt_82001CC0@l(r11)\n0x823402D8  li        r11, -1\n0x823402DC  stbx      r30, r31, r10\n0x823402E0  lis       r10, 0\n0x823402E4  ori       r8, r8, 0x9509 # 0x9509\n0x823402E8  ori       r10, r10, 0x9510 # 0x9510\n0x823402EC  stbx      r30, r31, r9\n0x823402F0  lis       r9, 0\n0x823402F4  stw       r11, 0xD94(r31)\n0x823402F8  mr        r3, r27\n0x823402FC  stw       r11, 0xD9C(r31)\n0x82340300  ori       r9, r9, 0x950B # 0x950B\n0x82340304  stw       r11, 0xDA4(r31)\n0x82340308  stw       r11, 0xDA0(r31)\n0x8234030C  lis       r11, 0\n0x82340310  stbx      r30, r31, r8\n0x82340314  lis       r8, 0\n0x82340318  stwx      r30, r31, r10\n0x8234031C  lis       r10, 0\n0x82340320  ori       r11, r11, 0x950A # 0x950A\n0x82340324  stbx      r30, r31, r9\n0x82340328  ori       r8, r8, 0x950C # 0x950C\n0x8234032C  ori       r10, r10, 0x9514 # 0x9514\n0x82340330  stbx      r30, r31, r11\n0x82340334  stbx      r30, r31, r8\n0x82340338  stfsx     f31, r31, r10\n0x8234033C  bl        BrnGameState__ScoringSystem__Construct\n0x82340340  addi      r3, r31, 0x6B00\n0x82340344  bl        BrnGameState__HUDMessageLogic__Construct\n0x82340348  lis       r10, 0\n0x8234034C  lis       r8, 0x1AD0\n0x82340350  lis       r7, -0x3784\n0x82340354  lis       r9, 0\n0x82340358  ori       r8, r8, 0x891B # 0x1AD0891B\n0x8234035C  ori       r7, r7, 0xD8C9 # 0xC87CD8C9\n0x82340360  ori       r10, r10, 0x94F7 # 0x94F7\n0x82340364  ori       r9, r9, 0x94F8 # 0x94F8\n0x82340368  addi      r11, r31, 0x6D70\n0x8234036C  insrdi    r8, r7, 32,0\n0x82340370  lis       r7, 0x3F80\n0x82340374  stbx      r30, r31, r10\n0x82340378  lis       r6, 0x5851\n0x8234037C  lis       r10, 0x4C95\n0x82340380  stbx      r30, r31, r9\n0x82340384  stw       r30, 0x28(r11)\n0x82340388  ori       r6, r6, 0xF42D # 0x5851F42D\n0x8234038C  std       r8, 0x20(r11)\n0x82340390  ori       r10, r10, 0x7F2D # 0x4C957F2D\n0x82340394  stw       r7, 0(r11)\n0x82340398  ld        r9, 0x20(r11)\n0x8234039C  insrdi    r10, r6, 32,0\n0x823403A0  lwz       r8, 0x28(r11)\n0x823403A4  lis       r6, 0x3F80\n0x823403A8  srdi      r5, r9, 32\n0x823403AC  addi      r8, r8, 1\n0x823403B0  mulld     r7, r9, r10\n0x823403B4  clrlwi    r8, r8, 29\n0x823403B8  clrlwi    r9, r5, 0\n0x823403BC  addi      r7, r7, 1\n0x823403C0  inslwi    r6, r9, 23,9\n0x823403C4  slwi      r5, r8, 2\n0x823403C8  stw       r8, 0x28(r11)\n0x823403CC  std       r7, 0x20(r11)\n0x823403D0  lis       r7, 0x3F80\n0x823403D4  stwx      r6, r5, r11\n0x823403D8  lwz       r9, 0x28(r11)\n0x823403DC  ld        r8, 0x20(r11)\n0x823403E0  addi      r9, r9, 1\n0x823403E4  clrlwi    r9, r9, 29\n0x823403E8  slwi      r6, r9, 2\n0x823403EC  stw       r9, 0x28(r11)\n0x823403F0  srdi      r9, r8, 32\n0x823403F4  mulld     r8, r8, r10\n0x823403F8  clrlwi    r9, r9, 0\n0x823403FC  addi      r8, r8, 1\n0x82340400  inslwi    r7, r9, 23,9\n0x82340404  lis       r5, 0x3F80\n0x82340408  lis       r4, 0x3F80\n0x8234040C  lis       r3, 0x3F80\n0x82340410  lis       r29, 0x3F80\n0x82340414  std       r8, 0x20(r11)\n0x82340418  stwx      r7, r6, r11\n0x8234041C  ld        r9, 0x20(r11)\n0x82340420  lwz       r8, 0x28(r11)\n0x82340424  srdi      r6, r9, 32\n0x82340428  addi      r8, r8, 1\n0x8234042C  mulld     r7, r9, r10\n0x82340430  clrlwi    r8, r8, 29\n0x82340434  clrlwi    r9, r6, 0\n0x82340438  addi      r7, r7, 1\n0x8234043C  slwi      r6, r8, 2\n0x82340440  inslwi    r5, r9, 23,9\n0x82340444  stw       r8, 0x28(r11)\n0x82340448  std       r7, 0x20(r11)\n0x8234044C  stwx      r5, r6, r11\n0x82340450  ld        r9, 0x20(r11)\n0x82340454  lwz       r8, 0x28(r11)\n0x82340458  srdi      r6, r9, 32\n0x8234045C  addi      r8, r8, 1\n0x82340460  mulld     r7, r9, r10\n0x82340464  clrlwi    r8, r8, 29\n0x82340468  clrlwi    r9, r6, 0\n0x8234046C  addi      r7, r7, 1\n0x82340470  slwi      r6, r8, 2\n0x82340474  inslwi    r4, r9, 23,9\n0x82340478  stw       r8, 0x28(r11)\n0x8234047C  std       r7, 0x20(r11)\n0x82340480  stwx      r4, r6, r11\n0x82340484  ld        r9, 0x20(r11)\n0x82340488  lwz       r8, 0x28(r11)\n0x8234048C  srdi      r6, r9, 32\n0x82340490  addi      r8, r8, 1\n0x82340494  mulld     r7, r9, r10\n0x82340498  clrlwi    r8, r8, 29\n0x8234049C  clrlwi    r9, r6, 0\n0x823404A0  addi      r7, r7, 1\n0x823404A4  slwi      r6, r8, 2\n0x823404A8  inslwi    r3, r9, 23,9\n0x823404AC  stw       r8, 0x28(r11)\n0x823404B0  std       r7, 0x20(r11)\n0x823404B4  stwx      r3, r6, r11\n0x823404B8  mr        r3, r31\n0x823404BC  ld        r9, 0x20(r11)\n0x823404C0  lwz       r8, 0x28(r11)\n0x823404C4  srdi      r6, r9, 32\n0x823404C8  addi      r8, r8, 1\n0x823404CC  mulld     r7, r9, r10\n0x823404D0  clrlwi    r9, r6, 0\n0x823404D4  clrlwi    r8, r8, 29\n0x823404D8  inslwi    r29, r9, 23,9\n0x823404DC  addi      r7, r7, 1\n0x823404E0  slwi      r9, r8, 2\n0x823404E4  stw       r8, 0x28(r11)\n0x823404E8  mr        r8, r10\n0x823404EC  std       r7, 0x20(r11)\n0x823404F0  lis       r7, 0x3F80\n0x823404F4  stwx      r29, r9, r11\n0x823404F8  ld        r10, 0x20(r11)\n0x823404FC  lwz       r9, 0x28(r11)\n0x82340500  srdi      r6, r10, 32\n0x82340504  addi      r9, r9, 1\n0x82340508  mulld     r8, r10, r8\n0x8234050C  clrlwi    r10, r6, 0\n0x82340510  clrlwi    r9, r9, 29\n0x82340514  addi      r8, r8, 1\n0x82340518  inslwi    r7, r10, 23,9\n0x8234051C  slwi      r6, r9, 2\n0x82340520  stw       r9, 0x28(r11)\n0x82340524  std       r8, 0x20(r11)\n0x82340528  stwx      r7, r6, r11\n0x8234052C  lwz       r10, 0x28(r11)\n0x82340530  addi      r10, r10, 1\n0x82340534  clrlwi    r10, r10, 29\n0x82340538  stw       r10, 0x28(r11)\n0x8234053C  bl        BrnGameState__ModeManager__ClearLandmarkAndFinishLineData\n0x82340540  lis       r9, 0\n0x82340544  lis       r8, 0\n0x82340548  ori       r9, r9, 0x8028 # 0x8028\n0x8234054C  ori       r8, r8, 0x94F9 # 0x94F9\n0x82340550  lis       r11, 0\n0x82340554  lis       r10, 0\n0x82340558  ori       r11, r11, 0x94F0 # 0x94F0\n0x8234055C  stfsx     f31, r31, r9\n0x82340560  lis       r9, 0\n0x82340564  stbx      r30, r31, r8\n0x82340568  lis       r8, 0\n0x8234056C  ori       r9, r9, 0x9501 # 0x9501\n0x82340570  ori       r8, r8, 0x9503 # 0x9503\n0x82340574  ori       r10, r10, 0x94F4 # 0x94F4\n0x82340578  stfsx     f31, r31, r11\n0x8234057C  lis       r11, 0\n0x82340580  li        r7, 1\n0x82340584  stbx      r30, r31, r9\n0x82340588  lis       r9, 0\n0x8234058C  stbx      r30, r31, r8\n0x82340590  lis       r8, 0\n0x82340594  ori       r9, r9, 0x9500 # 0x9500\n0x82340598  stbx      r30, r31, r10\n0x8234059C  lis       r10, 0\n0x823405A0  ori       r8, r8, 0x950D # 0x950D\n0x823405A4  ori       r11, r11, 0x94F5 # 0x94F5\n0x823405A8  ori       r10, r10, 0x94F6 # 0x94F6\n0x823405AC  stbx      r30, r31, r9\n0x823405B0  lis       r9, 0\n0x823405B4  li        r5, 0\n0x823405B8  ori       r9, r9, 0x94FC # 0x94FC\n0x823405BC  stbx      r30, r31, r8\n0x823405C0  stbx      r30, r31, r11\n0x823405C4  lis       r8, 0\n0x823405C8  stbx      r30, r31, r10\n0x823405CC  lis       r11, 0\n0x823405D0  lis       r10, 0\n0x823405D4  ori       r8, r8, 0x94FD # 0x94FD\n0x823405D8  stbx      r30, r31, r9\n0x823405DC  lis       r9, flt_82001C98@ha\n0x823405E0  ori       r11, r11, 0x9504 # 0x9504\n0x823405E4  ori       r10, r10, 0x9505 # 0x9505\n0x823405E8  li        r4, 5\n0x823405EC  stbx      r30, r31, r8\n0x823405F0  lfs       f30, flt_82001C98@l(r9)\n0x823405F4  lis       r9, 0\n0x823405F8  stbx      r30, r31, r11\n0x823405FC  lis       r11, 0\n0x82340600  stbx      r30, r31, r10\n0x82340604  ori       r8, r9, 0x951C # 0x951C\n0x82340608  lis       r9, 0\n0x8234060C  fmr       f1, f30\n0x82340610  lis       r10, 0\n0x82340614  ori       r11, r11, 0x9502 # 0x9502\n0x82340618  ori       r10, r10, 0x94FB # 0x94FB\n0x8234061C  ori       r6, r9, 0x9520 # 0x9520\n0x82340620  lis       r9, 0\n0x82340624  ori       r29, r9, 0x9524 # 0x9524\n0x82340628  stbx      r30, r31, r11\n0x8234062C  lis       r9, 0\n0x82340630  stbx      r30, r31, r10\n0x82340634  lis       r11, 0\n0x82340638  lis       r10, 0\n0x8234063C  ori       r28, r9, 0x8C0C # 0x8C0C\n0x82340640  lis       r9, 0\n0x82340644  ori       r11, r11, 0x94FF # 0x94FF\n0x82340648  ori       r10, r10, 0x94FE # 0x94FE\n0x8234064C  ori       r27, r9, 0x8C0D # 0x8C0D\n0x82340650  lis       r9, 0\n0x82340654  stbx      r30, r31, r11\n0x82340658  ori       r26, r9, 0x8C08 # 0x8C08\n0x8234065C  stbx      r30, r31, r10\n0x82340660  addis     r11, r31, 1\n0x82340664  addis     r10, r31, 1\n0x82340668  lis       r9, aModemanagerPre@ha\n0x8234066C  addi      r11, r11, -0x7410\n0x82340670  addi      r10, r10, -0x7408\n0x82340674  addi      r3, r9, aModemanagerPre@l# \"ModeManager PreWorld\"\n0x82340678  std       r30, 0(r11)\n0x8234067C  std       r30, 0(r10)\n0x82340680  stfsx     f31, r31, r8\n0x82340684  stfsx     f31, r31, r6\n0x82340688  stw       r30, 0x6D68(r31)\n0x8234068C  stfsx     f31, r31, r29\n0x82340690  stbx      r30, r31, r28\n0x82340694  stbx      r30, r31, r27\n0x82340698  stwx      r30, r31, r26\n0x8234069C  bl        CgsDev__PerfMonCpu__AddMonitor\n0x823406A0  lis       r10, dword_82CDB6F4@ha\n0x823406A4  fmr       f1, f30\n0x823406A8  lis       r11, aModemanagerPos@ha\n0x823406AC  li        r7, 1\n0x823406B0  addi      r11, r11, aModemanagerPos@l# \"ModeManager PostWorld\"\n0x823406B4  li        r5, 0\n0x823406B8  stw       r3, dword_82CDB6F4@l(r10)\n0x823406BC  li        r4, 5\n0x823406C0  mr        r3, r11\n0x823406C4  bl        CgsDev__PerfMonCpu__AddMonitor\n0x823406C8  lis       r11, dword_82CDB6F8@ha\n0x823406CC  stw       r3, dword_82CDB6F8@l(r11)\n0x823406D0  addi      r1, r1, 0xC0\n0x823406D4  lfd       f30, var_70(r1)\n0x823406D8  lfd       f31, var_68(r1)\n0x823406DC  b         __restgprlr_21",
+  "xrefs_to": [
+    {
+      "address": "0x82380388",
+      "name": "BrnGameState::GameStateModule::Construct"
+    }
+  ],
+  "xrefs_from": [
+    {
+      "address": "0x82C08ECC",
+      "name": "__savegprlr_21"
+    },
+    {
+      "address": "0x828331D8",
+      "name": "CgsDev::DebugComponent::Register"
+    },
+    {
+      "address": "0x82817548",
+      "name": "CgsDev::Assert::BeginAssert"
+    },
+    {
+      "address": "0x82820810",
+      "name": "CgsDev::Assert::FireAssert"
+    },
+    {
+      "address": "0x82817558",
+      "name": "CgsDev::Assert::EndAssert"
+    },
+    {
+      "address": "0x82332DB0",
+      "name": "BrnGameState::ChallengeManager::Construct"
+    },
+    {
+      "address": "0x82337FE0",
+      "name": "BrnGameState::ScoringSystem::Construct"
+    },
+    {
+      "address": "0x8236F530",
+      "name": "BrnGameState::HUDMessageLogic::Construct"
+    },
+    {
+      "address": "0x82328590",
+      "name": "BrnGameState::ModeManager::ClearLandmarkAndFinishLineData"
+    },
+    {
+      "address": "0x82824C30",
+      "name": "CgsDev::PerfMonCpu::AddMonitor"
+    }
+  ]
+}
