@@ -89,7 +89,8 @@ public:
         GetRandom()->SetSeed(luSeed);
     }
 
-    s32  CalculateNumberOfCarsInFlyby();                                        // 0x82357F08
+    const GameStateModuleIO::FlybyData* CalculateFlybyRivals() override;        // 0x82391FA8
+    s32  CalculateNumberOfCarsInFlyby() override;                              // 0x82357F08
     void CalculateOnlineRivals();                                              // 0x823861C0
 
     void CalculateRivalryRating(FlybyManager::RivalRating* lpRating);          // 0x8236DAE0
@@ -128,23 +129,11 @@ public:
     void AddOngoingRivalryMessage(FlybyManager::RivalRating* lpRating);
 
 private:
+    // ARTIST PreWorldUpdate copies the typed network snapshot into +0x2A0.
+    friend class GameStateModule;
     BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerInputInterface;       // console +0x2A0
     CgsContainers::FastBitArray<5>                              mAvailableNoRivalryMessages; // console +0xC90
 };
-
-// ===========================================================================
-// Cross-TU boundary shims.
-//
-// The functions below stand for console code reached by the twelve reconstructed functions whose
-// real home is not reconstructed: an unnamed ScoringSystem player lookup by network id and the
-// inlined FlybyData::SetMessageStyle. DECLARED here (no body), reached BY NAME.
-// ===========================================================================
-// The X360 cross-references a network player to its active-race-car index via either the module's
-// or the scoring system's player table (sub_8231DD88). Two overloads keep the call sites typed.
-s32 ModulePlayerActiveRaceCarIndex(GameStateModule* lpModule, BrnNetwork::NetworkPlayerID lPlayerID);
-s32 ModulePlayerActiveRaceCarIndex(ScoringSystem* lpScoringSystem, BrnNetwork::NetworkPlayerID lPlayerID);
-
-void FlybyData_TagLastCarStyle(GameStateModuleIO::FlybyData* lpFlybyData, s32 liStyle);
 
 // The pre-race rivalry message tables: per stat and message style, up to KI_MAX_MESSAGES string-id
 // pairs, unused slots null. CountAvailable* count a row's leading non-null plural ids; the Add*

@@ -26,8 +26,9 @@
 //   (miLength != N). The X360 inlines IsEmpty/IsFull into each caller, so the
 //   constructed-check fires twice per Pop/Peek/Push in the asm (once direct, once from
 //   the inlined IsEmpty/IsFull); collapsing them into the single CGS_ASSERT here is
-//   semantically identical. The baked CgsStack.h path/line in the original FireAssert
-//   calls is dropped (CGS_ASSERT supplies __FILE__/__LINE__).
+//   semantically identical. Most reconstructed assertion sites use CGS_ASSERT and its
+//   host __FILE__/__LINE__; GetLength preserves the original baked path/line attested by
+//   ARTIST and rereads the length after EndAssert.
 //
 // For Stack<ICE::ActionRef,20>: ActionRef is 8 bytes, so maData[20] occupies +0x00..+0x9F
 // (160 bytes) and miLength lands at +0xA0 (160) -- exactly the `*(this + 160)` / `result[40]`
@@ -88,7 +89,23 @@ struct Stack
     }
 
     bool IsEmpty() const     { return miLength == 0; }
-    s32  GetLength() const   { return miLength; }
+
+    // X360 BrnTraffic::DebugComponent::UpdateStats @ 0x827584F0 asserts at the
+    // original CgsStack.h:160 site, continues, then rereads miLength after EndAssert.
+    s32 GetLength() const
+    {
+        if (miLength == KI_STACK_UNCONSTRUCTED)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Stack used before Construct/Clear was called",
+                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h",
+                160);
+            CgsDev::Assert::EndAssert();
+        }
+        return miLength;
+    }
+
     s32  GetMaxLength() const { return N; }
 
     // X360 0x8246E520 (Grow, <CgsGraphics::Im2dTransform,33>). Assert constructed +

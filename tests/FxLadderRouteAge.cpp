@@ -50,7 +50,7 @@ namespace
     AICar gCar;
 
     // A car at the origin facing world +Z whose route was built where it stands: three nodes
-    // straight ahead on the (x, z) ground plane (a RouteNode stores the plane's z as mfY),
+    // straight ahead on the (x, z) ground plane (a RouteNode stores the plane's z as mfPositionZ),
     // next node index 0, so the node the test reads (index 1) is 20 m ahead.
     void Reset(bool lbIsPlayer)
     {
@@ -64,7 +64,7 @@ namespace
         lpRoute->meStatus = Route::E_STATUS_COMPLETE;
         for (s32 liNode = 0; liNode < 3; ++liNode)
         {
-            lpRoute->maNodes[liNode] = Vector4{ 0.0f, 10.0f + 10.0f * static_cast<f32>(liNode), 0.0f, 0.0f };
+            lpRoute->maNodes[liNode] = RouteNode{ 0.0f, 10.0f + 10.0f * static_cast<f32>(liNode), 0.0f, 0, 0 };
         }
         gCar.miNextRouteNodeIndex = 0;
     }

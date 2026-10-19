@@ -27,12 +27,9 @@
 //     +0x00 meAggressorIndex   +0x04 meVictimIndex   +0x18 meType
 //     +0x20 miTakedownChainCount   +0x24 mbMarkedManTakeDown
 //
-// [FLAG PC signature deviation] a FOURTH parameter, `lrTimerStatusInterface`, carries the
-// frame's "now". The console reads it at gsm+208368 -- the module's 48-byte copy of the
-// PreWorldInputBuffer's timer block (mSimTimerStatus.mTime), which EmmPreWorldUpdate
-// @0x8238EF50 fills and which NOTHING on PC fills. Same deviation, same measured reason and the
-// same source as CopyScoringDataToOutput (BrnGameStateModule.h). DELETE-WHEN
-// DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer whose timer block is filled.
+// The original three-argument body reads the module's cached simulation Time at
+// gsm+208368. PreWorldUpdate calls this before EmmPreWorldUpdate refreshes that
+// cache; CopyScoringDataToOutput reads the refreshed cache later in the same frame.
 //
 // Every leg of the console body is live: the progression tally, the achievement hooks, the
 // developer-challenge hooks and the telemetry posts all reach real bodies.
@@ -106,8 +103,7 @@ namespace
 void GameStateModule::ProcessTakedownEvents(
         GameStateModuleIO::GameActionQueue*             lpGameActionQueue,
         const CgsModule::EventQueue<TakedownEvent, 8>*  lpTakedownEventQueue,
-        GameStateModuleIO::OutputBuffer*                lpOutputBuffer,
-        const CgsSystem::TimerStatusInterface&          lrTimerStatusInterface)
+        GameStateModuleIO::OutputBuffer*                lpOutputBuffer)
 {
     for (s32 liEvent = 0; liEvent < lpTakedownEventQueue->GetLength(); ++liEvent)
     {
@@ -191,7 +187,7 @@ void GameStateModule::ProcessTakedownEvents(
             // CgsSystem::Time at gsm+208368 (the sim-timer copy's mTime), passed BY VALUE.
             // See the signature FLAG in the banner for where the PC "now" comes from.
             mModeManager.GetScoringSystem()->OnPlayerDoesATakedown(
-                lrTimerStatusInterface.GetSimTimerStatus()->GetTime(), lpGameActionQueue);
+                mTimerStatusInterface.GetSimTimerStatus()->GetTime(), lpGameActionQueue);
 
             // ---- the chain / developer-challenge / achievement hooks ------------------------
             const s32 liTakedownChainCount = lrEvent.miTakedownChainCount;   // event+0x20

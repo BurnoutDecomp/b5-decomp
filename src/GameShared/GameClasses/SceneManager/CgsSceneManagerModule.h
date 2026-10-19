@@ -46,17 +46,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsCullingGroupManager.h"
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManager.h"
-
-// NOTE: the trailing debug component's home header
-// (CgsSceneManagerDebugComponent.h) currently does NOT compile against the present
-// vendor RenderWare headers -- it was authored against an older rw vocabulary
-// (rw::math::Vector3 / Matrix44Affine::InParam / rw::collision::TriangleVolume that
-// the current rw/ headers spell differently / do not yet expose). Pulling it here
-// would cascade those breakages into this TU's compile. Per the AGENTS.md
-// forward-declaration / cascade-avoidance exception, the embedded mSceneManagerDebugComponent
-// is modelled below as a sized stand-in for the trailing debug-only member; swap it for
-// the real `#include` once CgsSceneManagerDebugComponent.h is reconciled with the vendor
-// rw headers (its own TU). See the member comment.
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerDebugComponent.h"
 
 namespace rw { struct IResourceAllocator; }
 namespace CgsMemory { class LinearMalloc; }
@@ -76,6 +66,9 @@ namespace CgsSceneManager
     namespace SceneManagerIO
     {
         struct TriCacheQueryBuffer;
+        struct InEventLineTest;
+        struct InEventFrustumTest;
+        struct InEventVolumeTest;
         struct InEventLineTestFine;
         struct InEventLineTestNearest;
         struct InEventLineTestFastDoubleSided;
@@ -195,14 +188,20 @@ namespace CgsSceneManager
         void ProcessCoarseSpatialPartitionQueries( const SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
                                                    SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
                                                    SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
-        void ProcessCoarseLineTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );   // @0x828C6D78 TRAP
+        void ProcessCoarseLineTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                    const SceneManagerIO::InEventLineTest& lrQuery,
+                                    SceneManagerIO::OutputBuffer* lpSceneOutputBuffer ); // @0x828C6D78
         // One coarse SPHERE query: broad-phase it, re-emit the hit indices as one
         // scene-output event.
         void ProcessCoarseSphereTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
                                       const CgsModule::Event* lpEvent,
                                       SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
-        void ProcessCoarseVolumeTest( const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer* ); // @0x828C62C0 TRAP
-        void ProcessCoarseFrustumTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );// @0x828C6918 TRAP
+        void ProcessCoarseVolumeTest( const SceneManagerIO::InEventVolumeTest& lrQuery,
+                                      SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                      SceneManagerIO::OutputBuffer* lpSceneOutputBuffer ); // @0x828C62C0
+        void ProcessCoarseFrustumTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                       const SceneManagerIO::InEventFrustumTest& lrQuery,
+                                       SceneManagerIO::OutputBuffer* lpSceneOutputBuffer ); // @0x828C6918
         // One coarse view-projection FRUSTUM query. The two arrays are the
         // dispatcher's per-pass scratch, carried across the queue's queries so a query may
         // narrow an earlier one's result run instead of walking the tree again: slot i holds
@@ -482,6 +481,12 @@ namespace CgsSceneManager
         // The debug component draws straight out of the entity and volume managers.
         friend class SceneManagerDebugComponent;
 
+        // These helpers expose the existing scene-query statistics to the component page and
+        // reset the same storage that the query producers update. The counter storage remains
+        // owned by this translation unit; no mirrored values are introduced.
+        static void RegisterDebugPageCounters(SceneManagerDebugComponent& lrComponent);
+        static void ResetDebugPageCounters();
+
         // ---- members (DWARF order; offsets pinned to the X360 asm in comments) ----
         SceneQueryId maFrustumTestJobQueryIds[KU_MAX_FRUSTUM_TEST_JOB_QUERIES];  // X360 +0x228
 
@@ -503,13 +508,9 @@ namespace CgsSceneManager
         s32 miTimeInCachedContactGen;     // X360 +0x3A84D4
         s32 miTimeInNonCachedContactGen;  // X360 +0x3A84D8
 
-        // The trailing by-value debug component (DWARF mSceneManagerDebugComponent,
-        // X360 +0x3A84E0). Its real home CgsSceneManagerDebugComponent.h does not
-        // currently compile against the vendor rw headers (see the include note above),
-        // so it is modelled here as a sized opaque tail member -- the cascade-avoidance
-        // forward-declaration exception. Replace with the real embedded type once that
-        // header is reconciled. Construct()/Register() on it are routed as the documented
-        // debug-overlay registration in the .cpp.
-        u8 maSceneManagerDebugComponent[131200];  // X360 +0x3A84E0 (128KB query buffer + frustum + flags)
+        // DWARF CgsSceneManagerModule.h:679; X360 +0x3A84E0. This is the real by-value
+        // component type. Its host layout follows the host pointer width; the X360 offset is
+        // evidence for member order only.
+        SceneManagerDebugComponent mSceneManagerDebugComponent;
     };
 }

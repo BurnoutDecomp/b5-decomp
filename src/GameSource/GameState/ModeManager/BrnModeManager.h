@@ -275,6 +275,9 @@ public:
     bool Prepare(const BrnResource::ChallengeList* lpFreeburnChallengeList,
                  CgsMemory::HeapMalloc*            lpHeapMalloc);
 
+    // ARTIST 0x8231E5D8: the inlined ChallengeManager vehicle-list installer.
+    void ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList);
+
     // [tut-ticker] THE BRING-UP SEAM (kept; see the supersession banner in ModeManager_gUI_00.cpp).
     // Construct above is landed but UNCALLED: four of its eight arguments are not reachable at
     // GameStateModule::Construct's call position today. This is the ONLY armed construction path.
@@ -290,6 +293,7 @@ public:
     // ===============================================================================================
 
     // DWARF BrnModeManager.h:150 -- the ten-argument shape, verbatim.
+    void PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer); // ARTIST 82350DE0
     void PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutputBuffer,
                         const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                         const CgsSystem::TimerStatusInterface&        lrTimerStatusInterface,
@@ -611,6 +615,7 @@ public:
 
 private:
     friend class ModeManagerDebugComponent;
+    friend class GameStateDebugComponent; // original HUD reads the private timer and landmark table
     // ===============================================================================================
     // PRIVATE SPINE (agents 3, 6, 7, 8)
     // ===============================================================================================

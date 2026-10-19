@@ -32,12 +32,13 @@
 // already drop them). Every constant (opcode, record size, vertex count, payload
 // offset) is taken straight from the asm immediates; none is fabricated.
 //
-// No new instantiation of the whole template is made here (that lives in
-// CgsImRenderBufferTemplate.cpp for <Basic2dColouredTexturedVertex>); only the four
-// members THIS TU owns are explicitly instantiated, PER MEMBER (the wave-30 lesson).
+// Generic <Basic2dColouredTexturedVertex> bodies are instantiated per member in
+// CgsImRenderBufferTemplate.cpp. This TU separately instantiates only the four
+// Im2d-specific command writers it owns, also per member (the wave-30 lesson).
 // =============================================================================
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsGraphics
 {
@@ -168,9 +169,10 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
-    // PushBoostBarColours @0x824502A8 - push the boost-bar colour pair: a 48-byte
-    // {muType=21, muSize=48} record carrying the two 16-byte colour vectors (passed
-    // in v1/v2) at +16 and +32 (the two stvx128). Overflow rewinds.
+    // Shared command writer for the boost-bar colour pair: append a 48-byte
+    // {muType=21, muSize=48} record carrying two 16-byte vectors at +16/+32.
+    // The derived ARTIST API at 0x824502A8 takes Vector3 values in V1/V2 and
+    // forwards their complete lanes here; current host callers keep Vector4 refs.
     // -------------------------------------------------------------------------
     template <typename V>
     void ImRenderBuffer<V>::PushBoostBarColours(const rw::math::vpu::Vector4& lrColour0,
@@ -194,6 +196,45 @@ namespace CgsGraphics
         else
         {
             SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // ARTIST 0x824502A8 takes Vector3 values in V1/V2, copies both complete
+    // 128-bit registers, and stores them at +16/+32 in the 48-byte command. The
+    // host Vector3 is the same 16-byte VPU storage (its W lane is unused, but the
+    // console copies it); preserve every lane through the existing typed writer.
+    void Im2dRenderBuffer::PushBoostBarColours(rw::math::vpu::Vector3 lrColour0,
+                                               rw::math::vpu::Vector3 lrColour1)
+    {
+        static_assert(sizeof(rw::math::vpu::Vector3) == 16u,
+                      "X360 PushBoostBarColours copies one 16-byte VPU register per colour");
+        const u32 luRecord = ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES;
+        if (!mbInRenderBlock)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Command called outside of a BeginRendering/EndRendering block",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h",
+                1216);
+            CgsDev::Assert::EndAssert();
+        }
+
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        const bool lbCommandBufferFull = luPos + luRecord > muCommandBufferSize;
+        const rw::math::vpu::Vector4 lrPayload0 =
+            { lrColour0.x, lrColour0.y, lrColour0.z, lrColour0.w };
+        const rw::math::vpu::Vector4 lrPayload1 =
+            { lrColour1.x, lrColour1.y, lrColour1.z, lrColour1.w };
+        Im2dColouredTexturedRenderBuffer::PushBoostBarColours(lrPayload0, lrPayload1);
+
+        if (lbCommandBufferFull && !mbFailGracefully)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "ImRenderBuffer command buffer is full",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h",
+                1254);
+            CgsDev::Assert::EndAssert();
         }
     }
 
@@ -251,8 +292,8 @@ namespace CgsGraphics
     // Explicit instantiation (PER MEMBER) for the screen-space 2D buffer the Apt/
     // Flapt/GUI rasteriser fills -- the <Basic2dColouredTexturedVertex> instance the
     // X360 Im2dRenderBuffer bodies above were read from. Only the four members THIS
-    // TU owns are instantiated (the whole-struct instantiation for this vertex type
-    // lives in CgsImRenderBufferTemplate.cpp and does not cover these new members).
+    // TU owns are instantiated. Generic members are instantiated individually in
+    // CgsImRenderBufferTemplate.cpp; no whole-struct instantiation crosses TU bodies.
     // -------------------------------------------------------------------------
     template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PushMask(
         const renderengine::TextureState*, const Basic2dColouredTexturedVertex*);

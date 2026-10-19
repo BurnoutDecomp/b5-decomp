@@ -166,6 +166,10 @@ namespace BrnEffects { namespace EffectsIO { struct InputBuffer; struct Dispatch
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
 #include "GameSource/Network/BrnNetworkModule.h"
 
+// BrnGameModule.cpp:137 (DecFIGS), byte_82FAE28D (ARTIST). NetworkPreSim publishes
+// the online state used by QueryRequestDoStepFrame before it locks the input buffer.
+extern bool _gbHACKIsOnline;
+
 namespace BrnGame
 {
     // BrnGameModule.cpp:92 (DecFIGS) / byte_82FAE28A (ARTIST). PVSDebugComponent registers
@@ -492,6 +496,7 @@ namespace BrnGame
         bool GameMain();
 
         // GameMain callees + sim-step plumbing (reconstructed).
+        void         QueryRequestDoStepFrame(const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
         void         UpdateRequestDoStepFrame();   // @ BrnGameModule.cpp:4048
         void         CreateStaticIOBuffers();      // @ BrnGameModule.cpp:2497
         void         DestroyStaticIOBuffers();     // @ BrnGameModule.cpp:2515
@@ -552,11 +557,12 @@ namespace BrnGame
                                  RendererIO::OutputBuffer* lpRendererOutput);
 
 
-        // X360 0x823CD738 -- publish player-0 controller state into the GameState PreWorld input
-        // buffer (+ merge the bind/unbind result queues). FLAG: ledger dest is
-        // GameSource/GameState/BrnGameStateModuleIO.h, but as a BrnGameModule method it co-locates
-        // with its siblings + the shared GetPadInfoForPlayer0 helper in GameBridgeControllerToX.cpp.
-        void BridgeControllerToGameState(BrnGameState::GameStateModule* lpGameStateModule,
+        // ARTIST 823CD738: the caller owns and write-locks the staged buffer.
+        void BridgeControllerToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
+                                         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                         bool lbIsPlaying);
+        // Existing native pump: persistent module-owned input and button-only publication.
+        void BridgeControllerToGameStateNativePC(BrnGameState::GameStateModule* lpGameStateModule,
                                          const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
                                          s32 liActionContext);
 
@@ -890,6 +896,17 @@ namespace BrnGame
         u32 DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
                                    CgsModule::IOBufferStack* lpOutputBufferStack,
                                    CgsInput::InputIO::OutputBuffer* lpInputModuleOutput);
+
+        // ARTIST 823EE0E8: original per-step input staging and whole owner update.
+        // Native startup still uses the separately named persistent-buffer pump.
+        void DoUpdate_GameStatePreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
+                                       CgsModule::IOBufferStack* lpOutputBufferStack,
+                                       const CgsInput::InputIO::OutputBuffer* lpInputModuleOutput,
+                                       const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput,
+                                       BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+                                       BrnUpdateSet lUpdateSet);
+        void DoUpdate_GameStatePreWorldNativePC(
+            BrnGameMainFlowController::EMainGameFlowState leState);
 
         // ---- the network legs of the per-frame cascade and their bridges ------------------------
         // DoUpdate_NetworkPreSim (called by DoUpdate): perf monitors; carve a
@@ -1302,6 +1319,15 @@ namespace BrnGame
         // mHardware.HasGameBeenRebootedDueToInvite(), HasGameBeenSoftRebooted reads
         // mHardware.mPad94.
         BrnHW::System360HW mHardware;    // @ +10097088 (0x9A11C0); mPad94 @ +10097236 (0x9A1254)
+
+        // Appended typed storage for two ARTIST Construct debug-menu bools. Their visible
+        // captions and guest addresses are attested; these local names are descriptive storage
+        // homes while original declaration names and direct consumers remain unresolved. Keeping
+        // them at the class tail preserves existing host member offsets; no guest offset access
+        // or UI effect is implied.
+        bool mbForceShutdown;   // X360 gm+0x9A0B9B, "Force shutdown"
+        bool mbTakeScreenShots; // X360 gm+0x9A12B4, "Take screen shots"
+
     };
 
     // operator++(EReleaseStage&, int) @ 0x823A8AD8 (X360 ARTIST), defined in BrnGameModule.cpp.

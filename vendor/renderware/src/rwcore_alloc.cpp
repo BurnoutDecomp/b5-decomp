@@ -1,16 +1,68 @@
 #include "rw/rwcore_structs.h"
 #include "rw/rwcore_general_alloc.h"
+#include "rw/core/memory/memoryfunctions.h"
+#include <cstdlib>
 #include <cstring>
 #include <malloc.h>
+#include <new>
 #if defined(D_PLATFORM_X360)
 #include <xtl.h>
 #endif
+
+// ARTIST 0x82F91A10: one global object, initially pointing at the lazy CRT entries.
+RwMemoryFunctions rwMemoryFunctions = {
+    RwMallocMemStub, RwReallocMemStub, RwFreeMemStub
+};
+
+// ARTIST 0x82BBC728. Every lazy entry installs the complete three-slot CRT table.
+void* RwMallocMemStub(std::size_t lnSize)
+{
+    rwMemoryFunctions.rwmalloc = std::malloc;
+    rwMemoryFunctions.rwrealloc = std::realloc;
+    rwMemoryFunctions.rwfree = std::free;
+    return rwMemoryFunctions.rwmalloc(lnSize);
+}
+
+// ARTIST 0x82BBC760. The pointer and size are both preserved for realloc.
+void* RwReallocMemStub(void* lpMemory, std::size_t lnSize)
+{
+    rwMemoryFunctions.rwmalloc = std::malloc;
+    rwMemoryFunctions.rwrealloc = std::realloc;
+    rwMemoryFunctions.rwfree = std::free;
+    return rwMemoryFunctions.rwrealloc(lpMemory, lnSize);
+}
+
+// ARTIST 0x82BBC798. Release uses the unaligned CRT free operation.
+void RwFreeMemStub(void* lpMemory)
+{
+    rwMemoryFunctions.rwmalloc = std::malloc;
+    rwMemoryFunctions.rwrealloc = std::realloc;
+    rwMemoryFunctions.rwfree = std::free;
+    std::free(lpMemory);
+}
 
 // rw::LinearResourceAllocator - the resource-memory linear (bump) allocator the game-data
 // resource system carves module/bank memory through. [PC-LEAF, user-approved 2026-06-20]:
 // faithful Paradise structure and bump semantics over the same fixed pools.
 namespace rw
 {
+    namespace
+    {
+        template <class Allocator>
+        uint32_t GetAllocatorStorageAlignment(uint32_t luAlignment)
+        {
+            return luAlignment < alignof(Allocator)
+                ? static_cast<uint32_t>(alignof(Allocator)) : luAlignment;
+        }
+
+        template <class Allocator>
+        uint32_t GetAllocatorStorageSize(uint32_t luAlignment)
+        {
+            luAlignment = GetAllocatorStorageAlignment<Allocator>(luAlignment);
+            return (static_cast<uint32_t>(sizeof(Allocator)) + luAlignment - 1u)
+                & ~(luAlignment - 1u);
+        }
+    }
 #if defined(D_PLATFORM_X360)
     namespace
     {
@@ -184,17 +236,45 @@ namespace rw
     }
 #endif
 
-    // A linear allocator keeps its bookkeeping in its own object (m_currentUsage), not inside the
-    // managed heap, so the heap descriptor it requires == the requested usage. (X360
-    // LinearResourceAllocator::GetResourceDescriptor.)
+    // ARTIST 0x82BBCD90. The backing includes the placement object before lane-zero
+    // payload. Only its native sizeof/alignment differs from the console's 148 bytes.
     ResourceDescriptor* LinearResourceAllocator::GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn)
     {
         *lpOut = *lpIn;
+        ResourceDescriptor lStorage;
+        const uint32_t luAlignment = lpIn->m_baseResourceDescriptors[0].m_alignment;
+        lStorage.m_baseResourceDescriptors[0].m_size =
+            GetAllocatorStorageSize<LinearResourceAllocator>(luAlignment);
+        lStorage.m_baseResourceDescriptors[0].m_alignment =
+            GetAllocatorStorageAlignment<LinearResourceAllocator>(luAlignment);
+        *lpOut += lStorage;
         return lpOut;
     }
 
-    // Adopt the five resource pools [lrResource[t], +lrCapacity[t].m_size) and reset usage.
-    void LinearResourceAllocator::Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
+    // ARTIST 0x82BBCE30 adjusts only lane zero; r5 retains the original capacity.
+    LinearResourceAllocator* LinearResourceAllocator::Initialize(
+        const Resource& lrResource, const ResourceDescriptor& lrCapacity)
+    {
+        void* const lpStorage = lrResource.m_baseResources[0];
+        if (lpStorage == nullptr)
+            return nullptr;
+        Resource lHeapResource = lrResource;
+        lHeapResource.m_baseResources[0] = static_cast<unsigned char*>(lpStorage)
+            + GetAllocatorStorageSize<LinearResourceAllocator>(
+                lrCapacity.m_baseResourceDescriptors[0].m_alignment);
+        return new (lpStorage) LinearResourceAllocator(lHeapResource, lrCapacity);
+    }
+
+    // ARTIST 0x82BBCC70 receives already-adjusted heap bases.
+    LinearResourceAllocator::LinearResourceAllocator(
+        const Resource& lrResource, const ResourceDescriptor& lrCapacity)
+    {
+        AdoptMemory(lrResource, lrCapacity);
+    }
+
+    // FLAG PC-platform leaf: native out-of-region objects adopt the exact pool
+    // extents. Reserving a second allocator object here would reduce those extents.
+    void LinearResourceAllocator::AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
     {
         m_heapResource = lrResource;
         m_heapCapacity = lrCapacity;
@@ -208,53 +288,70 @@ namespace rw
         m_numAllocations = 0;
     }
 
-    // Bump luSize bytes (luAlignment-aligned) out of pool luType; null if the pool is exhausted.
+    // FLAG PC-platform leaf: native lane convenience API, absent from the ARTIST
+    // symbol family. Delegate to the same resource transaction as the game wrapper.
     void* LinearResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)
     {
-        if (luType >= KU_RESOURCE_LANE_COUNT || m_heapResource.m_baseResources[luType] == 0)
-            return 0;
-        if (luAlignment < 1)
-            luAlignment = 1;
-
-        BaseResourceDescriptor& lrUsage = m_currentUsage.m_baseResourceDescriptors[luType];
-        const uint32_t luCapacity = m_heapCapacity.m_baseResourceDescriptors[luType].m_size;
-        const uint32_t luOffset   = (lrUsage.m_size + luAlignment - 1) & ~(luAlignment - 1);
-
-        m_paddingUsed.m_baseResourceDescriptors[luType].m_size += (luOffset - lrUsage.m_size);
-        if (luOffset + luSize > luCapacity)
-            return 0;   // pool exhausted
-
-        void* lpBlock = static_cast<char*>(m_heapResource.m_baseResources[luType]) + luOffset;
-        lrUsage.m_size = luOffset + luSize;
-        ++m_numAllocations;
-        return lpBlock;
+        if (luType >= KU_RESOURCE_LANE_COUNT)
+            return nullptr;
+        ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[luType].m_size = luSize;
+        lDescriptor.m_baseResourceDescriptors[luType].m_alignment = luAlignment;
+        return DoAllocate(lDescriptor, nullptr).m_baseResources[luType];
     }
 
-    // The virtual DoAllocate slot satisfies each resource lane by bumping the
-    // matching pool. A lane that cannot be satisfied yields a null base resource (the rw
-    // convention the consumers' null-checks key on); zero-size lanes are null too.
+    // ARTIST 0x82BBCF50, with five-lane padding differences from 0x82B63FF8 and
+    // descriptor accumulation from 0x8268D9F8. Align absolute cursors, validate the
+    // complete proposed usage, then commit once. Failure changes no allocator state.
     Resource LinearResourceAllocator::DoAllocate(const ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
     {
         Resource lResult;
-        for (uint32_t luType = 0; luType < KU_RESOURCE_LANE_COUNT; ++luType)
+        ResourceDescriptor lPadding;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
         {
-            const BaseResourceDescriptor& lrLane = lrDescriptor.m_baseResourceDescriptors[luType];
-            lResult.m_baseResources[luType] =
-                (lrLane.m_size != 0) ? Alloc(luType, lrLane.m_size, lrLane.m_alignment) : 0;
+            const uintptr_t luCursor = reinterpret_cast<uintptr_t>(m_heapResource.m_baseResources[luLane])
+                + m_currentUsage.m_baseResourceDescriptors[luLane].m_size;
+            const uint32_t luAlignment = lrDescriptor.m_baseResourceDescriptors[luLane].m_alignment;
+            uintptr_t luAlignedCursor = luCursor;
+            if (luAlignment > 1)
+            {
+                const uintptr_t luMask = luAlignment - 1u;
+                luAlignedCursor = (luCursor + luMask) & ~luMask;
+            }
+            lResult.m_baseResources[luLane] = reinterpret_cast<void*>(luAlignedCursor);
+            lPadding.m_baseResourceDescriptors[luLane].m_size =
+                static_cast<uint32_t>(luAlignedCursor - luCursor);
         }
+
+        ResourceDescriptor lProposedUsage = m_currentUsage;
+        lProposedUsage += lPadding;
+        lProposedUsage += lrDescriptor;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            if (lProposedUsage.m_baseResourceDescriptors[luLane].m_size
+                > m_heapCapacity.m_baseResourceDescriptors[luLane].m_size)
+                return Resource();
+
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            if (lrDescriptor.m_baseResourceDescriptors[luLane].m_size == 0)
+                lResult.m_baseResources[luLane] = nullptr;
+        m_currentUsage += lPadding;
+        m_currentUsage += lrDescriptor;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            m_currentUsage.m_baseResourceDescriptors[luLane].m_alignment = 1;
+        m_paddingUsed += lPadding;
+        ++m_numAllocations;
         return lResult;
     }
 
     // Linear allocator: individual frees are no-ops; the pools are reclaimed en masse by a
-    // subsequent Initialize() (matches the X360 LinearResourceAllocator, which only tracks usage).
+    // subsequent pool adoption (the X360 allocator also has no individual free).
     void LinearResourceAllocator::Free(void* /*lpBlock*/)
     {
     }
 
     void LinearResourceAllocator::DoFree(const Resource& /*lrResource*/)
     {
-        // ARTIST's linear allocator reclaims its pools only when Initialize resets
-        // the bump cursors; individual Resources have no release operation.
+        // Individual Resources have no release operation on this linear allocator.
     }
 
     // The adopted heap: the base of each of the five pools.
@@ -277,24 +374,25 @@ namespace rw
 
 namespace core
 {
-    // EA::Allocator::GeneralAllocator's own in-heap bookkeeping overhead (X360 ctor/GetResourceDescriptor
-    // both round up by this many bytes before carving the main heap's initial core out of the front of
-    // the adopted region). Named from the literal 0xA38 in the ctor/GetResourceDescriptor asm.
-    static const uint32_t KU_GENERAL_ALLOCATOR_OVERHEAD = 2616u;
-
     // Default-construct: the two EA GeneralAllocators construct normally and m_hasPhysical
-    // starts false until Initialize()/the two-argument ctor adopts a region.
+    // starts false until adoption/the two-argument ctor receives a region.
     GeneralResourceAllocator::GeneralResourceAllocator()
         : m_hasPhysical(false)
     {
     }
 
-    // X360 ctor @0x82BC0AA8: adopt the resource regions immediately (same math as Initialize() -- the
-    // X360 in fact tail-calls this ctor from both the ctor path and the out-of-line Initialize wrapper).
+    // ARTIST 0x82BC0AA8. The backing's lane zero contains both object storage and
+    // the full advertised main capacity. The host EA members widen this reserve.
     GeneralResourceAllocator::GeneralResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
         : m_hasPhysical(false)
     {
-        Initialize(lrResource, lrCapacity);
+        Resource lHeapResource = lrResource;
+        if (lHeapResource.m_baseResources[0] != nullptr)
+            lHeapResource.m_baseResources[0] =
+                static_cast<unsigned char*>(lHeapResource.m_baseResources[0])
+                + GetAllocatorStorageSize<GeneralResourceAllocator>(
+                    lrCapacity.m_baseResourceDescriptors[0].m_alignment);
+        AdoptMemory(lHeapResource, lrCapacity);
     }
 
     // X360 dtor @0x82BC0A50: destroys m_physicalAllocator then m_mainAllocator (reverse declaration
@@ -303,10 +401,7 @@ namespace core
     {
     }
 
-    // GetResourceDescriptor @0x82BC0E28: copy the input 5-entry descriptor through, then accumulate a
-    // synthetic requirement of { size = round_up(m_alignment[0], KU_GENERAL_ALLOCATOR_OVERHEAD),
-    // alignment = m_alignment[0] } into entry 0 via the committed operator+= (entries 1..4 of the
-    // synthetic operand are the additive identity, so they pass through unchanged).
+    // ARTIST 0x82BC0E28. Add the aligned allocator-object reserve to lane zero.
     ::rw::BaseResourceDescriptors<5>* GeneralResourceAllocator::GetResourceDescriptor(::rw::BaseResourceDescriptors<5>* lpOut, const ::rw::BaseResourceDescriptors<5>* lpIn)
     {
         *lpOut = *lpIn;
@@ -318,30 +413,32 @@ namespace core
             lOverhead.m_baseResourceDescriptors[lu].m_alignment = 1;
         }
         const uint32_t luAlignment0 = lpIn->m_baseResourceDescriptors[0].m_alignment;
-        lOverhead.m_baseResourceDescriptors[0].m_size      = (luAlignment0 - 1 + KU_GENERAL_ALLOCATOR_OVERHEAD) & ~(luAlignment0 - 1);
-        lOverhead.m_baseResourceDescriptors[0].m_alignment = luAlignment0;
+        lOverhead.m_baseResourceDescriptors[0].m_size =
+            GetAllocatorStorageSize<GeneralResourceAllocator>(luAlignment0);
+        lOverhead.m_baseResourceDescriptors[0].m_alignment =
+            GetAllocatorStorageAlignment<GeneralResourceAllocator>(luAlignment0);
 
         *lpOut += lOverhead;
         return lpOut;
     }
 
-    // Adopt the resource regions into the main (and optional physical) EA GeneralAllocator(s). X360
-    // ctor asm @0x82BC0AA8: SetOption(kOptionEnableSystemAlloc, 0) then Init(pInitialCore, nSize,
-    // bShouldFreeInitialCore=false, bShouldTrace=false) on the main allocator, where pInitialCore is the
-    // pool-0 base offset by the KU_GENERAL_ALLOCATOR_OVERHEAD padding (rounded up to the pool's
-    // alignment) and nSize is the pool-0 capacity UNREDUCED by that padding (matches the asm literally:
-    // r5 = a3[0] with no subtraction). The physical heap (pool index 2) is adopted the same way only if
-    // its capacity is non-zero; otherwise it is Shutdown() and m_hasPhysical stays false.
-    void GeneralResourceAllocator::Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
+    // ARTIST 0x82BC0E00 has no receiver: resource lane zero is the placement address.
+    GeneralResourceAllocator* GeneralResourceAllocator::Initialize(
+        const Resource& lrResource, const ResourceDescriptor& lrCapacity)
+    {
+        void* const lpStorage = lrResource.m_baseResources[0];
+        return lpStorage != nullptr
+            ? new (lpStorage) GeneralResourceAllocator(lrResource, lrCapacity) : nullptr;
+    }
+
+    // FLAG PC-platform leaf: existing host objects adopt exactly the supplied
+    // capacities. Their object storage lives elsewhere, so no console header is
+    // skipped. In particular an exact 64 MiB backing stays within that 64 MiB.
+    void GeneralResourceAllocator::AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
     {
         m_mainAllocator.SetOption(EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
-        {
-            const uint32_t luAlignment0 = lrCapacity.m_baseResourceDescriptors[0].m_alignment;
-            const uint32_t luPadding0   = (luAlignment0 - 1 + KU_GENERAL_ALLOCATOR_OVERHEAD) & ~(luAlignment0 - 1);
-            void* lpCore0 = static_cast<char*>(lrResource.m_baseResources[0]) + luPadding0;
-            m_mainAllocator.Init(lpCore0, lrCapacity.m_baseResourceDescriptors[0].m_size,
-                                  /*bShouldFreeInitialCore=*/false, /*bShouldTrace=*/false, 0, 0);
-        }
+        m_mainAllocator.Init(lrResource.m_baseResources[0], lrCapacity.m_baseResourceDescriptors[0].m_size,
+                             /*bShouldFreeInitialCore=*/false, /*bShouldTrace=*/false, 0, 0);
 
         m_hasPhysical = (lrCapacity.m_baseResourceDescriptors[2].m_size != 0);
         if (m_hasPhysical)
@@ -358,10 +455,10 @@ namespace core
 
     void* GeneralResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)
     {
-        // ARTIST routes lane two and subsequent graphics lanes to the physical heap when present.
-        if (m_hasPhysical && luType >= 2)
-            return m_physicalAllocator.MallocAligned(luSize, luAlignment);
-        return m_mainAllocator.MallocAligned(luSize, luAlignment);
+        if (luType == 2)
+            return m_hasPhysical ? m_physicalAllocator.MallocAligned(luSize, luAlignment) : nullptr;
+        const int liAllocationFlags = (luType == 1 || luType == 4) ? 1 : 0;
+        return m_mainAllocator.MallocAligned(luSize, luAlignment, 0, liAllocationFlags);
     }
 
     void GeneralResourceAllocator::Free(void* lpBlock)
@@ -375,16 +472,17 @@ namespace core
     }
 
     // The virtual carve (X360 GeneralResourceAllocator::DoAllocate @0x82BC0C08):
-    // walk the descriptor's lanes and carve each
-    // non-empty one from the matching heap. Lane two and later lanes route through
-    // Alloc(), which applies the physical-heap routing. A lane the heap cannot serve
-    // stays null in the result -- the same "empty base" the X360 hands back on exhaustion.
+    // Allocate main lanes first, then lane two. Failure in either phase rolls back
+    // all partial allocations through DoFree and returns an empty resource.
     ::rw::Resource GeneralResourceAllocator::DoAllocate(
         const ::rw::ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
     {
         ::rw::Resource lResult;
+        bool lbFailed = false;
         for (uint32_t luPool = 0; luPool < KU_RESOURCE_LANE_COUNT; ++luPool)
         {
+            if (luPool == 2)
+                continue;
             const uint32_t luSize = lrDescriptor.m_baseResourceDescriptors[luPool].m_size;
             if (luSize == 0)
                 continue;
@@ -392,6 +490,23 @@ namespace core
             if (luAlignment < 1)
                 luAlignment = 1;
             lResult.m_baseResources[luPool] = Alloc(luPool, luSize, luAlignment);
+            if (lResult.m_baseResources[luPool] == nullptr)
+            {
+                lbFailed = true;
+                break;
+            }
+        }
+        const BaseResourceDescriptor& lrPhysical = lrDescriptor.m_baseResourceDescriptors[2];
+        if (lrPhysical.m_size != 0)
+        {
+            lResult.m_baseResources[2] = Alloc(2, lrPhysical.m_size, lrPhysical.m_alignment);
+            if (lResult.m_baseResources[2] == nullptr)
+                lbFailed = true;
+        }
+        if (lbFailed)
+        {
+            DoFree(lResult);
+            return Resource();
         }
         return lResult;
     }

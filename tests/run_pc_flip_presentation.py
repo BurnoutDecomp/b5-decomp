@@ -16,5 +16,6 @@ source=source.replace(before,'mFlip.Active()?InspectAndPresent(mFlip):mpSwapChai
 source=source.replace('mpSwapChain->Present(nullptr, nullptr, lhWindow, nullptr, 0)',
                       'InspectAndPresentLegacy(mpSwapChain,lhWindow)')
 result=compile_and_run(Path(__file__).with_name('PCFlipPresentation.cpp'),'pc_flip_present_unused.inc','','PCFlipPresentation',
-    shadow={path:source},extra_flags='d3d9.lib user32.lib')
+    shadow={path:source},extra_flags='d3d9.lib user32.lib',
+    extra_sources=(Path(__file__).resolve().parent.parent / 'src/pc/gcm/renderengine/OcclusionQueryProviderPC.cpp',))
 raise SystemExit(report('run_pc_flip_presentation',[],result,39))

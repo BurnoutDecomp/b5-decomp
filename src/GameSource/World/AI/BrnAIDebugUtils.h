@@ -27,10 +27,9 @@ namespace CgsDev { struct Debug3DImmediateRender; }
 
 namespace BrnAI
 {
-    using rw::RGBA;
-
     namespace BrnAIDebugUtils
     {
+        using rw::RGBA;
         // Half-height of a drawn boundary-line quad: the vertical drop from the top
         // (ground-height) edge to the bottom edge. X360 rodata flt_82004D0C == 40.0f
         // (DWARF BrnAIDebugUtils.cpp:33 KF_BLINE_HALF_HEIGHT).

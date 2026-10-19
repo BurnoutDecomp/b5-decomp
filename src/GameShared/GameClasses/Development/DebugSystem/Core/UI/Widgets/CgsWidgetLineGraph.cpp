@@ -52,11 +52,8 @@ void WidgetLineGraph::Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY,
     if (mpaaiValuesArray == nullptr || miFloatCount == 0 || miHistoryCount == 0)
         return;
 
-    // Background rect: the asm builds the max corner itself (x+w, y+h) and calls the
-    // Vector2-min/Vector2-max DrawBox (colour arrives in r8 after the four float corners).
-    const Vector2 lv2BoxMin = { lfX,           lfY,            0.0f, 0.0f };
-    const Vector2 lv2BoxMax = { lfX + lfWidth, lfY + lfHeight, 0.0f, 0.0f };
-    lpRender->DrawBox(lv2BoxMin, lv2BoxMax, mColourBackground);
+    // ARTIST 828245C8 calls the scalar min/max wrapper (color in r8).
+    lpRender->DrawBox(lfX, lfY, lfX + lfWidth, lfY + lfHeight, mColourBackground);
 
     const f32 lfBottom = lfY + lfHeight;
     const f32 lfXStep  = lfWidth / static_cast<f32>(miHistoryCount);

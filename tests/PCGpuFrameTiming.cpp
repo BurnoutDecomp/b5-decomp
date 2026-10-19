@@ -1,3 +1,4 @@
+#include "pc/gcm/renderengine/GpuMonitorTiming.h"
 #include "pc/gcm/renderengine/GpuFrameTiming.h"
 #include "pc/gcm/renderengine/WindowPresentation.h"
 #include <vector>

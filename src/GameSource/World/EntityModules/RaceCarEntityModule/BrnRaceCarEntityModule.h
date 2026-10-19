@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"             // CgsResource::ResourceHandle (mDistrictMapResourceHandle, +0x23C)
 #include "SharedClasses/World/BrnWorldRegion.h"                                   // BrnWorld::WorldRegion (mCurrentWorldRegion, +0x244)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostDebugComponent.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"         // BrnWorld::NearMissManager (by value, +0x17E68)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/AirTime/BrnAirTimeManager.h"             // BrnWorld::AirTimeManager (by value, +0x18098) [boost-ticker wave]
 #include "GameSource/World/EntityModules/RaceCarEntityModule/TrafficCheck/BrnTrafficCheckManager.h"    // BrnWorld::TrafficCheckManager (by value, +0x180E8) [boost-wave2]
@@ -178,6 +179,7 @@ struct RaceCarNeedsHidingEventRecord
 class RaceCarEntityModule
 {
     friend class WorldDebugComponent;
+    friend class BoostDebugComponent;
     friend struct CgsPC::Reflections::LightCapture;
     friend struct RaceCarEntityModuleDebugComponent;   // reads the module's debug switches/members directly
     friend class PlaceOnTrackManager; // writes the embedded diagnostic history
@@ -290,6 +292,10 @@ public:
         void PostPhysicsUpdate( RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
                                 RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
+
+        // X360 0x822BDAB0; DecFIGS declares this const. PostPhysicsUpdate calls it after
+        // SendStreamerEvents when the +0x18349 debug variable is true.
+        void DebugRenderPosition() const;
 
         // ⭐⭐ X360 0x822E87B8 -- THE PHYSICS READBACK (physics-return-path wave 2026-08-11).
         // The console's ONE producer of every active car's pose: it walks the post-physics
@@ -740,6 +746,8 @@ public:
 
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
+    // DecFIGS h:1128 / X360 clone 0x822A36E8, used by const DebugRenderPosition.
+    inline const ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
     // The module's OWN player slot, +0x182F8 (99064) -- the word WorldModule::CalculateVehicleLODs
     // @0x827C3778 reads straight off this object (`lwzx r4, r3, r11`, r3 == WorldModule+0x280 ==
@@ -1613,6 +1621,10 @@ private:
     // IsBoosting() through.
     BoostManager mBoostManager;
 
+    // ARTIST embeds the boost debug page beside the manager and registers it during stage 0
+    // of Prepare. Its original console seat is +0x17E50.
+    BoostDebugComponent mBoostDebugComponent;
+
     // X360 +0x17E68 (97896). DWARF :348 (the run between mBoostManager :347 and
     // mCrashPlayManager :355). ADDITIVE CARVE (boost-bar 206 wave): the near-miss chain
     // tracker UpdateOutputBoostInfo @0x822D1BD0 reads (`NearMissManager::
@@ -1685,7 +1697,8 @@ private:
     bool mbIsInOnlineGameMode;          // +0x18345 (99141)
     bool mbOnlineModeJustFinished;      // +0x18346 (99142)
     bool mbCarSelectAllowedInGameMode;  // +0x18347 (99143)
-    bool mbDisplayPlayerCarPosition = false; // +0x18349 (99145), the "Show Player Car Position" switch
+    bool mbDisplayPlayerCarPosition = true;  // +0x18349 (99145), Construct seeds the registered switch to 1
+    bool mbRivalDebug = false;               // +0x1834A (99146), Construct seed / DebugRenderPosition reader
     bool mbSixaxisSteeringEnabled;      // +0x1834D (99149)
     bool mbPaybackSixaxisSteering;      // +0x1834E (99150)
 
@@ -1850,6 +1863,18 @@ private:
 // element address: this + 6752 + 7376*index == &maActiveRaceCars[index].
 inline ActiveRaceCar*
 RaceCarEntityModule::GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+    return &maActiveRaceCars[leActiveRaceCarIndex];
+}
+
+// X360 0x822A36E8 -- the DecFIGS const overload used by DebugRenderPosition.
+inline const ActiveRaceCar*
+RaceCarEntityModule::GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
     CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");

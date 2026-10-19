@@ -23,6 +23,8 @@
 
 namespace BrnTraffic
 {
+    class DebugComponent;
+
     // BrnTrafficPvs.h:46 -- the traffic PVS grid.
     class Pvs
     {
@@ -68,6 +70,8 @@ namespace BrnTraffic
         void FixDown(const void* lpBaseData);
 
     private:
+        friend class DebugComponent;
+
         Vector3        mGridMin;        // :104  +0x00
         Vector3        mCellSize;       // :105  +0x10
         Vector3        mRecipCellSize;  // :106  +0x20

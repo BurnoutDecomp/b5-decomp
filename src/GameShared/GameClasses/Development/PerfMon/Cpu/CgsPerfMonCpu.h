@@ -111,9 +111,8 @@ namespace CgsDev
     namespace PerfMonCpu
     {
         void ReportMonitors(FPerfMonCpuReportCallback* lpfReportCallback, void* lpUserData, PerfMonCpuPage lePage);
-        // Allocate the monitor array (X360 Construct(maxCount, allocator)). The allocator is threaded
-        // through but unused - the backing comes from the global heap, the same shortcut the debug
-        // pools take (CgsDebugCollections.cpp); the faithful rw-allocator path is the allocator follow-on.
+        // ARTIST82824B10 allocates maxCount records of 96 bytes through the supplied
+        // resource allocator, 16-byte aligned, then clears the complete array.
         bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator);
         void Destruct();
         void SetGameFrequency(PerfMonGameFrequency leFrequency);

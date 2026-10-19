@@ -4,12 +4,14 @@
 #include <vector>
 #include <thread>
 #include <cstdio>
+#include <initializer_list>
 template<class T> HRESULT InspectAndPresent(T& flip);
 static HRESULT InspectAndPresentLegacy(IDirect3DSwapChain9* chain, HWND window);
 #include "pc/gcm/renderengine/WindowPresentation.h"
 #include "pc/gcm/renderengine/DisplayResize.h"
 static int checks,failures;
 static void Check(bool good,const char* label){++checks;if(!good){++failures;std::printf("FAIL %s\n",label);}}
+static std::vector<char> lifecycleEvents;
 struct ResetDevice
 {
     ULONG references=1;unsigned resets=0,presents=0,buffers=0;
@@ -19,6 +21,7 @@ struct ResetDevice
     ULONG AddRef(){return ++references;} ULONG Release(){return --references;}
     HRESULT ResetEx(D3DPRESENT_PARAMETERS* p,D3DDISPLAYMODEEX*)
     {
+        lifecycleEvents.push_back('X');
         ++resets;requests.push_back(*p);
         HRESULT result=S_OK;if(!outcomes.empty()){result=outcomes.front();outcomes.erase(outcomes.begin());}
         p->BackBufferWidth=p->BackBufferHeight=p->BackBufferCount=0;
@@ -27,25 +30,47 @@ struct ResetDevice
     HRESULT PresentEx(const RECT*,const RECT*,HWND,const RGNDATA*,DWORD){++presents;return presentResult;}
     HRESULT GetBackBuffer(UINT,UINT,D3DBACKBUFFER_TYPE,IDirect3DSurface9**){++buffers;return S_OK;}
 };
+struct RecordingQueryLifecyclePolicy
+{
+    static void Invalidate(ResetDevice*){lifecycleEvents.push_back('I');}
+    static void Resume(ResetDevice*){lifecycleEvents.push_back('R');}
+};
+static bool LifecycleIs(std::initializer_list<char> expected)
+{
+    if(lifecycleEvents.size()!=expected.size())return false;
+    size_t index=0;for(char event:expected)if(lifecycleEvents[index++]!=event)return false;
+    return true;
+}
 static void Protocol()
 {
-    ResetDevice device;renderengine::BasicFlipSwapChainPC<ResetDevice> flip;
+    ResetDevice device;renderengine::BasicFlipSwapChainPC<ResetDevice,RecordingQueryLifecyclePolicy> flip;
     D3DPRESENT_PARAMETERS p{};p.BackBufferWidth=320;p.BackBufferHeight=180;p.BackBufferCount=2;
     p.Windowed=TRUE;p.SwapEffect=D3DSWAPEFFECT_FLIPEX;p.PresentationInterval=D3DPRESENT_INTERVAL_IMMEDIATE;
     p.hDeviceWindow=reinterpret_cast<HWND>(uintptr_t(1));flip.Configure(&device,p);
     Check(SUCCEEDED(flip.Prepare(p.hDeviceWindow,false,320,180))&&!device.resets,"unchanged primary output does not reset");
+    Check(LifecycleIs({}),"unchanged output does not invalidate query lifecycle state");
+    lifecycleEvents.clear();
     Check(SUCCEEDED(flip.Prepare(p.hDeviceWindow,false,640,360))&&flip.Width()==640&&flip.Height()==360,
         "successful reset retains requested dimensions after ResetEx clears its parameter block");
+    Check(LifecycleIs({'I','X','R'}),"a successful reset invalidates before ResetEx and resumes after recovery");
+    lifecycleEvents.clear();
     device.outcomes={E_OUTOFMEMORY,S_OK};
     Check(FAILED(flip.Prepare(p.hDeviceWindow,false,800,600))&&flip.Ready()&&flip.Width()==640&&device.requests.back().BackBufferWidth==640,
         "failed resize restores the previous output before rendering resumes");
+    Check(LifecycleIs({'I','X','I','X','R'}),"rollback invalidates each ResetEx attempt and resumes after restoration");
+    lifecycleEvents.clear();
     const unsigned cached=device.resets;flip.Prepare(p.hDeviceWindow,false,800,600);
     Check(device.resets==cached,"a failed size is not retried on every healthy frame");
+    Check(LifecycleIs({}),"a cached failed size does not touch query lifecycle state");
     device.outcomes={D3DERR_DEVICELOST,D3DERR_DEVICELOST};flip.Prepare(p.hDeviceWindow,false,900,600);
+    Check(LifecycleIs({'I','X','I','X'}),"failed requested and rollback resets never resume query state");
+    lifecycleEvents.clear();
     const unsigned calls=device.presents+device.buffers;
     Check(!flip.Ready()&&FAILED(flip.Present())&&FAILED(flip.GetBackBuffer(nullptr))&&device.presents+device.buffers==calls,
         "unrecovered device loss prevents all output access");
     Check(SUCCEEDED(flip.Prepare(p.hDeviceWindow,false,900,600))&&flip.Ready(),"a later successful reset recovers the frame gate");
+    Check(LifecycleIs({'I','X','R'}),"recovery invalidates before ResetEx and resumes only after success");
+    lifecycleEvents.clear();
     const unsigned before=device.resets;HRESULT workerResult=S_OK;
     std::thread worker([&]{workerResult=flip.Prepare(p.hDeviceWindow,false,1000,700);});worker.join();
     Check(workerResult==E_PENDING&&device.resets==before,"render-thread resize never calls ResetEx");
@@ -53,6 +78,7 @@ static void Protocol()
         "assert/modal presentation cannot reset outside the joined frame boundary");
     device.presentResult=S_PRESENT_MODE_CHANGED;flip.Present();
     Check(!flip.Ready()&&SUCCEEDED(flip.Prepare(p.hDeviceWindow,false,900,600)),"display-mode changes request same-size recovery");
+    Check(LifecycleIs({'I','X','R'}),"same-size mode recovery also brackets its ResetEx attempt");
     flip.Release();Check(device.references==1,"presentation owns and releases exactly one device reference");
 }
 static HWND testWindow=nullptr;

@@ -16,8 +16,11 @@
 #include "SharedClasses/DataLists/ChallengeList.h"                           // mChallengeList (X360 a1+462800)
 #include "SharedClasses/DataLists/BrnHudMessageController.h"                 // [gateui r3] mHudMessageController (X360 a1+416080 == 0x65950)
 #include "SharedClasses/DataLists/BrnPopupController.h"                      // mPopupController (console +0x65974)
+#include "GameSource/Resource/BrnResourceDebugComponent.h"                   // embedded GameData debug component
+#include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC manager + debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
+namespace CgsMemory { struct MemoryMap; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
@@ -58,6 +61,10 @@ namespace BrnResource
 
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
+        // The Resource debug component reads the event-slot pool through the
+        // same typed GetNumUsed/GetNumFree members the X360 reads at +439320/+439322.
+        friend class DebugComponent;
+
     public:
         void DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfCallback, void* lpUserData);
         enum EPrepareStage
@@ -430,6 +437,7 @@ namespace BrnResource
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
         EPrepareStage                  meReleaseStage;   // +0x22C (a1[139])
+        const CgsMemory::MemoryMap*    mpMemoryMap;     // X360 ConstructResourceModule stores a1+0x6599C
         CgsResource::ResourceModule    mResourceModule;  // +0x280 (a1+160) the streaming engine
         // X360 a1+363096: the module's internal receiver queue -- every request the world
         // handlers post into the ResourceModule names it as mpUser, and Update drains the
@@ -493,6 +501,11 @@ namespace BrnResource
         // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
         // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
         CgsAttribSys::AttribSysModule  mAttribSysModule;
+        // X360 a1+444128: the GameData debug page (Construct initializes +0x0C..+0x20;
+        // Prepare registers it after the base module Prepare succeeds).
+        BrnResource::DebugComponent    mDebugComponent;
+        // X360 a1+444164: the DLC debug page, registered immediately after mDebugComponent.
+        BrnResource::DLCDebugComponent mDLCDebugComponent;
         // X360 a1+444336 / a1+457664 / a1+458696: the three RESIDENT data tables. Construct()s
         // them, Prepare stages 9/11/12 fill them, and ProcessGet{Vehicle,ICE,Wheel}ListRequest
         // hands a pointer to them straight back to the requester (the console literally
@@ -531,7 +544,10 @@ namespace BrnResource
         BrnResource::PopupController   mPopupController;
         // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
         s32                            miPopupsPrepareStage;
-        // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
+        // ARTIST Construct calls this typed owner at X360 this+475960 before
+        // the DLC debug component; native storage follows the actual member types.
+        BrnResource::DLCManager         mDLCManager;
+        // (the 9 GeneralAllocators, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
 }

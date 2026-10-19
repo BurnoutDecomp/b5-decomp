@@ -25,7 +25,7 @@
 
 static unsigned gAssertions = 0, gChecks = 0, gFailures = 0;
 namespace CgsDev {
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char* lpcText, const char*, int) { ++gAssertions; std::fprintf(stderr, "assert: %s\n", lpcText); return 0; }
@@ -60,17 +60,17 @@ static RaceBalancingManager gManager;
 
 static void BuildRoute(Route* lpRoute)
 {
-    // Three nodes along world Z at x == 0 (RouteNode mfX/mfY == world X/Z), 100 m apart; node[0]
-    // carries the whole-route distance (Route::GetDistance == node[0].mfDistanceToCheckpoint).
+    // Three nodes along world Z at x == 0 (RouteNode X/Z == world X/Z), 100 m apart; node[0]
+    // carries the whole-route distance (Route::GetDistance == node[0].mfDistanceLeft).
     std::memset(lpRoute, 0, sizeof(Route));
     const f32 lafZ[3] = { 100.0f, 200.0f, 300.0f };
     const f32 lafDist[3] = { 200.0f, 100.0f, 0.0f };
     for (s32 liNode = 0; liNode < 3; ++liNode)
     {
-        RouteNode* lpNode = reinterpret_cast<RouteNode*>(&lpRoute->maNodes[liNode]);
-        lpNode->mfX = 0.0f;
-        lpNode->mfY = lafZ[liNode];
-        lpNode->mfDistanceToCheckpoint = lafDist[liNode];
+        RouteNode* lpNode = &lpRoute->maNodes[liNode];
+        lpNode->mfPositionX = 0.0f;
+        lpNode->mfPositionZ = lafZ[liNode];
+        lpNode->mfDistanceLeft = lafDist[liNode];
         lpNode->muSectionIndex = 1;
     }
     lpRoute->miNodeCount = 3;

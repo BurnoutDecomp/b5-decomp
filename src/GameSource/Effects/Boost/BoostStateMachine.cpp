@@ -17,6 +17,7 @@
 // =============================================================================
 
 #include "GameSource/Effects/Boost/BoostStateMachine.h"
+#include "pc/math/VmxFloat.h"
 #include "GameSource/Effects/EffectsStateMachine.h"
 #include "GameSource/Effects/EffectsModule.h"                 // BrnEffects::CarState
 #include "GameSource/Effects/ParticleEffectHelper.h"          // ParticleEffectHelper / RaceCarParticleEffectHelper
@@ -469,7 +470,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
                 lfMax = lpDebug->BoostTransitionMax();
             }
 
-            const Vector3 lvParams = { lfMin, ((lfMax - lfMin) * 0.5f) + lfMin, lfMax, 0.0f };
+            const Vector3 lvParams = { lfMin, std::fma(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
             const Vector2 lvScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
             BrnEffects::Curves::SmoothStep lCurve;
             const f32 lfBlend = 1.0f - lCurve.Evaluate(lvParams, lvScale,
@@ -489,7 +490,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
                 return EffectsStateExhaustPopRestart;
             }
             // Over the speed cap, engine off, or jumping -> begin stopping the smoke.
-            if (lCarState.mfSpeedMPH >= KF_EXHAUST_MAX_VEHICLE_SPEED
+            if (!(lCarState.mfSpeedMPH < KF_EXHAUST_MAX_VEHICLE_SPEED)
                 || !lCarState.mbEngineRunning
                 || lCarState.mbCrashing)   // +0x4D (`*(a2 + 77)`)
             {
@@ -501,26 +502,19 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             // magnitude (vmsum3fp128 + rsqrt refine) and the running max via fsel.
             const BrnPhysics::Vehicle::RaceCarState& lCar = *lCarState.mpCarState;
             const Vector3& lvVel = lCar.mLinearVelocity;
-            f32 lfMax = sqrtf(lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z);
+            f32 lfMax = CgsPC::VmxFloat::Magnitude3(lvVel);
             for (int liWheel = 0; liWheel < 4; ++liWheel)
             {
                 const f32 lfWheelSurfaceSpeed =
                     lCar.maWheels[liWheel].mfRadiansPerSecond * lCar.maWheels[liWheel].mfRadius;
-                if (lfWheelSurfaceSpeed > lfMax)
-                {
-                    lfMax = lfWheelSurfaceSpeed;
-                }
+                // Scalar fsubs/fsel: unordered differences select the wheel operand.
+                const f32 lfDifference = lfMax - lfWheelSurfaceSpeed;
+                lfMax = lfDifference >= 0.0f ? lfMax : lfWheelSurfaceSpeed;
             }
 
             f32 lfIntensity = lfMax * KF_EXHAUST_SMOKE_SPEED_SCALE;
-            if (lfIntensity <= 0.0f)
-            {
-                lfIntensity = 0.0f;
-            }
-            if (lfIntensity > 1.0f)
-            {
-                lfIntensity = 1.0f;
-            }
+            lfIntensity = -lfIntensity >= 0.0f ? 0.0f : lfIntensity;
+            lfIntensity = 1.0f - lfIntensity >= 0.0f ? lfIntensity : 1.0f;
             mfExhaustSmokeBlend = lfIntensity;   // +0x20
             SetBlendValue(lHelper, lfIntensity);
             return leCurrentState;

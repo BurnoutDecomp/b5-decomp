@@ -582,8 +582,12 @@ void SerialiseBehaviourParameters(const char* lpcName, Behaviour::Parameters& lr
         char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
         CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStrStream << "Params type needs to be added to Serialise: ";
-        lStrStream << lrParameters.GetDebugName();
-        CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+        const char* const lpcDebugName = lrParameters.GetDebugName();
+        lStrStream << (lpcDebugName ? lpcDebugName : "<NULLSTRING>");
+        CgsDev::Assert::FireAssert(
+            lacMessage,
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
+            958);
         CgsDev::Assert::EndAssert();
         break;
     }

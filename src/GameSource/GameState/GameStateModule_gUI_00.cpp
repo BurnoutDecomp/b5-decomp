@@ -34,6 +34,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16>
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer (lock + GetGameActionQueue)
+#include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h" // current player-status snapshot
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"             // mpTakedownCache->mTakedownEventQueue (the post-world scoring leg)
 #include "GameSource/GameState/BrnGameEvents.h"                         // RecordPropHitEvent / E_EVENT_RECORD_PROP_HIT / E_EVENT_CHANGE_WORLD_REGION
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // WorldRegionChangeEvent (the case-115 payload)
@@ -434,6 +435,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     if (mpPreWorldInputBuffer != 0 && !IsSimPaused(true, false))
     {
         mpPreWorldInputBuffer->LockForRead();
+        // ARTIST 0x823A5734..0x823A5744 copies this snapshot before the mode/intro update.
+        mpOnlineFlybyManager->mPlayerInputInterface = *mpPreWorldInputBuffer->GetPlayerStatusInterface();
         mModeManager.PreWorldUpdate(
             mpOutputBuffer,
             mpPreWorldInputBuffer,
@@ -538,7 +541,9 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // Update's crash jolt and UpdateImpacts read.
     mRumbleManager.UpdatePauseState(miSimPauseFlags != 0, lpActionQueue);
 
-    CopyScoringDataToOutput(mpOutputBuffer, lrTimerStatusInterface);
+    // The legacy adapter stages the timer supplied by its existing PC caller.
+    mTimerStatusInterface = lrTimerStatusInterface;
+    CopyScoringDataToOutput(mpOutputBuffer);
 
     // ARTIST823A5328 calls the complete pre-world trigger pass here, after
     // ProcessGameEvents and before StuntManager consumes its gameplay latches.
@@ -698,11 +703,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
                 SendSetUpAllDriveThrusMessage(mpOutputBuffer->GetGameActionQueue());
             }
         }
-        // [!] D3's DetectModeStarts carries a THIRD argument the console does not: the
-        // module's cached game timestep at +292284, whose producer (PreWorldUpdate's own
-        // timer leg) is not reconstructed -- see its declaration. Fed the same game-timer
-        // product every other leg in this function uses.
-        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer, lfGameTimestep);
+        // The original two-argument arm reads the sim latch set above.
+        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer);
 
         // â­ [D4] THE HARNESS START INJECTION (NOT IN THE X360 BINARY). Runs immediately after
         // DetectModeStarts, inside the same read-lock bracket, because it stands in for exactly

@@ -571,7 +571,7 @@ void DeveloperChallengeManager::OnEventWin(s32 liGameModeType)
 // ----------------------------------------------------------------------------
 // PreWorldUpdate  (X360 0x8238D698)
 // ----------------------------------------------------------------------------
-void DeveloperChallengeManager::PreWorldUpdate(GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
+void DeveloperChallengeManager::PreWorldUpdate(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                                                GameStateModuleIO::OutputBuffer*         lpOutput)
 {
     CGS_ASSERT(lpPreWorldInputBuffer != nullptr, "lpPreWorldInputBuffer");

@@ -2,6 +2,8 @@
 #include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                             // Vector2 parameter of DebugDisplayRenderTarget
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
 extern f32 gfBloomLuminanceScale;
 extern f32 gfBloomThresholdScale;
@@ -20,7 +22,10 @@ namespace BrnEffects { class EffectsModule; }
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
 #include "GameSource/Graphics/BrnSunCorona.h"                        // BrnSunCorona (mSunCorona, embedded by value)
 #include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList (Prepare input)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
+#include "pc/gcm/renderengine/renderstates.h" // preview TextureState::Parameters
+#include "rw/rwcore_structs.h"                // preview's owning rw::Resource
 
 // EA::Jobs::Job is the real type (SDKs/EATech/eajobs/job.h): this module embeds thirty-two of
 // them by value (the object-to-mesh dispatch jobs, the shadow/envmap/scene sort jobs), and the
@@ -35,6 +40,7 @@ namespace BrnEffects { class EffectsModule; }
 // world render pass drives them, so the former local placeholders are gone.
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 
 namespace CgsGraphics
 {
@@ -55,13 +61,6 @@ class Im2dUntex
 // including the Lion blend renderer, since Im3dBlend derives from Im3dBase<V> in CgsIm3d.h.
 // This mirrors what was already done for the 2D pair noted at the top of this block.
 
-class Im3dZOnly
-{
-};
-
-class OcclusionCullManager
-{
-};
 }
 
 // EffectsArbitrator is the real type (BrnEffectsArbitrator.h); Im3dSkyDome is the real
@@ -186,15 +185,37 @@ struct Resource
 // indices and mbForceFrontFaceCull) did not exist at all.
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"
 
-struct DebugComponent
+class BrnRendererModule;
+
+namespace BrnGraphics
 {
-};
+    // Recovered from the ARTIST Construct, GetName, GetPath, and OnActivate exports.
+    class DebugComponent : public CgsDev::DebugComponent
+    {
+    public:
+        void Construct(::BrnRendererModule* lpRendererModule);
+        const bool GetOverrideSunBrightness();
+        const f32 GetOverriddenSunBrightness();
+
+    protected:
+        const char* GetName() const override;
+        const char* GetPath() const override;
+        void OnActivate() override;
+
+    private:
+        ::BrnRendererModule* mpRendererModule = nullptr;
+        f32 mfSunFlareOverrideBrightness = 0.3f;
+        bool mbSunFlareOverrideBrightness = false;
+    };
+}
 
 // Vector3 / Vector4 are the real rw::math types (BrnCommonTypes.h, pulled in above).
 
 class BrnRendererModule : public CgsModule::ModuleSingleBuffered
 {
 public:
+    friend class BrnGraphics::DebugComponent;
+
     enum ERendererPrepareStage
     {
         eRendererPrepareStart,
@@ -310,9 +331,13 @@ public:
 
         void Construct()
         {
-            s32* lpMonitor = &miScreenClear;
-            for (u32 luIndex = 0; luIndex < sizeof(BrnGpuMonitors) / sizeof(s32); ++luIndex)
-                lpMonitor[luIndex] = 0;
+            // ARTIST8240AD28..AD7C initializes each monitor ID to -1.
+            miScreenClear = miShadowmap = miSky = miEnvironmentMap = -1;
+            miWorldOpaque = miWorldTransparent = miCarOpaque = miCarTransparent = -1;
+            miResolveMSAAFromEDRAM = miDownsampleMSAAAndCompParticles = -1;
+            miSunCoronaVisibilityTest = miFullResParticles = miQuarterResParticles = -1;
+            miCoronas = miPostFX = miIm3dAndRacePositions = miMenusAndHud = -1;
+            miDebug3d = miDebug2d = miPreZ = -1;
         }
     };
 
@@ -338,6 +363,9 @@ public:
 
     // One-time construction of the renderer's subsystems.
     void Construct();
+
+    // Prepare the renderer-owned buffers from GameData bank 31 and register its debug page.
+    bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
     // Render one frame from the dispatch-thread input buffer the game side
     // published (the console's own lpDispatchThreadInputBuffer). The loading-screen overlay path
@@ -474,6 +502,10 @@ private:
     // them via the untextured Basic2dColouredVertex renderer at normalised coords; reconstructed
     // through mIm2dRenderer (untextured -> solid colour) at the same screen positions.
     void RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2);
+
+    // X360 DebugDisplayRenderTarget @0x82406208; draws one texture in the renderer's 2D tail.
+    void DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
+                                  Vector2 lrPosition, Vector2 lrSize, CgsDev::RGBA luColour);
 
     // Draw the two solid-black bars that frame a widescreen (letterboxed) view: one
     // across the top, one across the bottom. lfDestAspectRatio is the visible/kept vertical fraction
@@ -679,8 +711,8 @@ private:
     CgsGraphics::Im2dRenderBuffer       mIm2dAssertRenderBufferPC;
     CgsGraphics::Im2d                   mAssertIm2dRendererPC;
     renderengine::TextureState*         mpTextureState;
-    TextureStateParameters              mTextureStateParams;
-    Resource                            mTextureStateResource;
+    renderengine::TextureState::Parameters mTextureStateParams;
+    rw::Resource                       mTextureStateResource;
     renderengine::TextureState*         mpEnvMapTextureState;
     TextureStateParameters              mEnvMapTextureStateParams;
     Resource                            mEnvMapTextureStateResource;
@@ -778,6 +810,7 @@ private:
     BrnSunCorona                        mSunCorona;
     EFrameStallStage                    meFrameStallStage;
     s32                                 miFrameStallCountdown;
+    // The menu-visible flag defaults are attested; full query GPU-resource construction remains pending.
     CgsGraphics::OcclusionCullManager   mOcclusionCullManager;
     BrnGame::LoadingScreenRenderer      mLoadingScreenRenderer;
     CgsResource::ResourceHandle         mCalibrationTextureHandle;   // +0xC920
@@ -788,7 +821,7 @@ private:
     BrnGraphics::ShadowMapRenderManager mShadowMapRenderManager;
     bool                                mbDiskErrorLastFrame;
     s32                                 miFramesSinceDiskErrorReported;
-    DebugComponent                      mDebugComponent;
+    BrnGraphics::DebugComponent         mDebugComponent;
 
     // FLAG PC-platform leaf: physical bins never move; swapping their owners
     // keeps DispatchList/DispatchBin back-pointers and GDL constant lifetimes
@@ -908,6 +941,15 @@ inline BrnRendererModule::BrnRendererModule()
         maInterpretFunctions[luIndex] = 0;
 
     mpTextureState = 0;
+    // ARTIST C++ constructor827E008C..827E0110: the preview/single-shadow
+    // sampler starts with point filters, mip mode2, anisotropy13 and two flags.
+    // Construct later changes U/V to clamp; DebugDisplay only replaces raster.
+    mTextureStateParams = {};
+    mTextureStateParams.muMipFilter = 2;
+    mTextureStateParams.muMaxAnisotropy = 13;
+    mTextureStateParams.muField10 = 1;
+    mTextureStateParams.mu8Field43 = 1;
+    mTextureStateParams.mu8Field44 = 1;
     mpEnvMapTextureState = 0;
     mpGlassFractureTexture = 0;
     mpGlassFractureTextureState = 0;

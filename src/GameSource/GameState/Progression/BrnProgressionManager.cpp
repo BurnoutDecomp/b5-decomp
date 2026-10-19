@@ -90,11 +90,8 @@ ProgressionManager::ProgressionManager()
         maRoamingSections[liDistrict].MarkUnconstructed();
     }
 
-    // (3a) install the debug component's vtable (X360: result[33250] = off_820CDE4C). The
-    // real ProgressionDebugComponent vptr is supplied when Prepare2 constructs it; the ctor
-    // only seeds the slot so an early teardown sees a valid component. FLAG: the X360 vtable
-    // symbol off_820CDE4C is not yet homed; modelled as the seeded-null slot.
-    mDebugComponent.mpVTable = nullptr;
+    // (3a) The by-value ProgressionDebugComponent member's C++ construction installs its
+    // vtable at the manager's +133000 slot, matching ARTIST's off_820CDE4C store.
 
     // ⚠️⚠️ [drive-thru wave 2026-08-27] THE TROPHY QUEUE MUST BE CLEARED HERE, and this is a
     // HOST-ONLY initialisation site, not an invented behaviour. The console clears it in
@@ -293,12 +290,9 @@ bool ProgressionManager::LoadProgressionData(BrnGameState::GameStateModuleIO::Ou
 //
 // ⭐ THE LOAD IS REAL NOW (2026-08-11): LoadProgressionData above is reconstructed, so this
 // function's `if (LoadProgressionData(...))` gate is the console's gate, not a pass-through.
-// ✅ [progression wave: lifecycle, 2026-09-06] AND SO IS THE TAIL. The FLAG that stood here said
-// ComputeLandmarkAISectionIndices / ProcessLoadedPresetRaces / ProgressionDebugComponent::Construct
-// / DebugComponent::Register / SetupRoamingSections were "documented rather than dispatched".
-// Four of the five are reconstructed in BrnProgressionManager_Lifecycle.cpp and dispatched below
-// through RunPrepare2Tail, in the console's order; the debug component alone stays parked by name
-// (it has no class home in the tree). This function is now the console's Prepare2 end to end.
+// ✅ [progression wave: lifecycle, 2026-09-06] The Prepare2 tail now dispatches all five original
+// calls, in order, through RunPrepare2Tail, including the recovered debug-component Construct and
+// Register. This function is the console's Prepare2 end to end.
 // ------------------------------------------------------------------------------------
 bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
                                   BrnGameState::ModeManager* lpModeManager,
@@ -336,11 +330,7 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     CGS_ASSERT(lpAchievementManager != nullptr, "lpAchievementManager");
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
-    // ✅ [progression wave: lifecycle, 2026-09-06] THE FIVE TRAILING CALLS ARE REAL NOW. What
-    // stood here was a comment listing them ("X360 then calls, in order: ..."); four of the five
-    // are reconstructed in BrnProgressionManager_Lifecycle.cpp and dispatched by RunPrepare2Tail
-    // in the console's order, and the fifth (ProgressionDebugComponent::Construct + its Register)
-    // is parked BY NAME with a one-shot log inside it. See that function's banner.
+    // The five trailing calls are dispatched by RunPrepare2Tail in the original order.
     RunPrepare2Tail();
 
     // ⭐⭐ THE PROFILE EVENT-LIST SEAM -- KEPT, and now BOOT-MEASURED (progression wave, lane

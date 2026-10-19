@@ -5,9 +5,8 @@
 // DWARF (CgsFrustum.h:46/159): a single Vector4[8] maSwizzledPlanes member -> exactly 128 bytes
 // (0x80), the size FrustumJobQueryInfo::operator= block-copies per maFrustum[] element.
 //
-// Only the data layout is provided here (the type is embedded by value in
-// CgsSceneManager::FrustumJobQueryInfo); the Frustum member functions the X360 defines
-// (GetPlane/SetPlane/... CgsFrustum.h:86+) are out-of-scope separate TUs.
+// The data layout and the X360-attested member functions used by the shadow-map debug
+// renderers are declared here. Other Frustum members remain separate TUs.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"  // Vector4 (16-byte SIMD lane)
@@ -46,6 +45,12 @@ namespace CgsGeometric
         // plane-triple intersections and write them to lapVerts[0..7].
         // Body in CgsFrustum.cpp (reconstructed 2026-08-12, shadow-cascade wave).
         void CalcVertices(Vector4* lapVerts) const;
+
+        // ARTIST DebugRender @ 0x82845EC0 and DebugRenderCustomPlanes @ 0x82845BB8.
+        // Both publish the original 3D debug draws through DebugInterface.
+        // Bodies are reconstructed in CgsFrustum.cpp from the X360 call/data flow.
+        void DebugRender() const;
+        void DebugRenderCustomPlanes() const;
 
         // GetPlaneByIndex @ 0x8274EFE8 (CgsFrustum.h:242 assert) -- gather the
         // plane at luPlaneIndex out of the swizzled SoA lanes into an AoS vector

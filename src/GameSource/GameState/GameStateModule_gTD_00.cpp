@@ -435,8 +435,9 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
                                    << " takedown event(s) this frame [FLAG PC witness]\n";
     }
 
-    ProcessTakedownEvents(lpActionQueue, &mpTakedownCache->mTakedownEventQueue, mpOutputBuffer,
-                          lrTimerStatusInterface);
+    // The legacy adapter stages its existing caller's timer for the original signature.
+    mTimerStatusInterface = lrTimerStatusInterface;
+    ProcessTakedownEvents(lpActionQueue, &mpTakedownCache->mTakedownEventQueue, mpOutputBuffer);
 }
 
 // ProcessGameEvents @0x823A0A18 case 27 (POST_EVENT_LEAVE) ends with `TakedownManager::

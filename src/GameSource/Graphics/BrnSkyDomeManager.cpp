@@ -13,6 +13,27 @@
 
 #include <cmath>   // sqrtf / fabsf / sinf / cosf
 
+namespace
+{
+    rw::Resource AllocateSkyBuffer(rw::IResourceAllocator* lpAllocator,
+                                  const CgsResource::ResourceDescriptor& lrDescriptor)
+    {
+#if defined(D_PLATFORM_X360)
+        return lpAllocator->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), nullptr);
+#else
+        // FLAG PC-platform leaf: procedural VertexBuffer/IndexBuffer::Initialize in
+        // ImmediateMode.cpp owns its low-address payload through ArenaAlloc and never
+        // consumes resource lane two. The native WorldDispatch provider supplies the
+        // header in main memory. Request only that consumed backing here; keep the
+        // shared descriptors and serialized-resource allocation paths unchanged.
+        rw::ResourceDescriptor lHeaderDescriptor;
+        lHeaderDescriptor.m_baseResourceDescriptors[0] = lrDescriptor.m_baseResourceDescriptors[0];
+        return lpAllocator->DoAllocate(lHeaderDescriptor, nullptr);
+#endif
+    }
+}
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnSkyDomeManager::Prepare            @ 0x82408DF0
 //   BrnSkyDomeManager::RaySphereDistance  @ 0x823FD468
@@ -136,8 +157,7 @@ void BrnSkyDomeManager::CreateGeometry(
     CgsResource::ResourceDescriptor lVbResDesc;
     renderengine::VertexBuffer::GetResourceDescriptor(&lVbResDesc, &lVbParams);
 
-    rw::Resource lVbResource = lpAlloc->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>(lVbResDesc), 0);
+    rw::Resource lVbResource = AllocateSkyBuffer(lpAlloc, lVbResDesc);
     CGS_ASSERT(lVbResource.m_baseResources[0], "vbResource.GetMemoryResource()");
 
     renderengine::VertexBufferHeader* lpVbHeader = renderengine::VertexBuffer::Initialize(
@@ -265,8 +285,7 @@ void BrnSkyDomeManager::CreateGeometry(
         static_cast<u32>((2 * liIndexCount + 15) & ~15);
     lIbResDesc.m_baseResourceDescriptors[2].m_alignment = 4u;
 
-    rw::Resource lIbResource = lpAlloc->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>(lIbResDesc), 0);
+    rw::Resource lIbResource = AllocateSkyBuffer(lpAlloc, lIbResDesc);
     CGS_ASSERT(lIbResource.m_baseResources[0], "ibResource.GetMemoryResource()");
 
     renderengine::IndexBufferHeader* lpIbHeader = renderengine::IndexBuffer::Initialize(

@@ -51,10 +51,38 @@ static void RegistryChecks()
     Set("Test/Read Only", "9");
     Set("Test/Option", "uLtRa");
     Set("Test/Unknown Future", "1");
+    Set("Graphics/Vehicles...Extra/LODs.../Vehicle LOD", "3");
     LoadDebugIniPC(gacIni);
+    Check(!DebugIniNeedsComponentPC("Race Car Entity"), "absolute vehicle prefix requires a path separator");
+    Set("Graphics/Vehicles.../LODs.../Vehicle LOD", "3");
+    LoadDebugIniPC(gacIni);
+    Check(DebugIniNeedsComponentPC("/Race Car Entity"), "absolute vehicle INI control activates its real owner");
+    Check(!DebugIniNeedsComponentPC("Race Car Entity Else"), "vehicle alias belongs only to the original owner");
     Check(DebugIniNeedsComponentPC("/Lazy Component"), "lazy component with configured children is detected");
     Check(!DebugIniNeedsComponentPC("Lazy Component Else"), "component prefix must end at a path separator");
     Check(!DebugIniNeedsComponentPC("Unconfigured"), "unconfigured components remain lazy");
+
+    VariableManager lVehicleManager;
+    s32 liVehicleLod = 0;
+    Variable lVehicleLod;
+    lVehicleLod.Prepare(Variant(&liVehicleLod), "Vehicle LOD");
+    QueueDebugIniPC(&lVehicleManager, &lVehicleLod,
+                    "Race Car Entity/Graphics/Vehicles.../LODs...", "Vehicle LOD");
+    lVehicleManager.ApplyIniOverridesPC();
+    Check(liVehicleLod == 3, "absolute vehicle INI key applies to its actual component-prefixed registration");
+    liVehicleLod = 0;
+    QueueDebugIniPC(&lVehicleManager, &lVehicleLod,
+                    "Race Car Entity Else/Graphics/Vehicles.../LODs...", "Vehicle LOD");
+    Check(PendingDebugIniCountPC(&lVehicleManager) == 0,
+          "vehicle alias does not apply to another component prefix");
+    Set("Race Car Entity/Graphics/Vehicles.../LODs.../Vehicle LOD", "2");
+    LoadDebugIniPC(gacIni);
+    QueueDebugIniPC(&lVehicleManager, &lVehicleLod,
+                    "Race Car Entity/Graphics/Vehicles.../LODs...", "Vehicle LOD");
+    lVehicleManager.ApplyIniOverridesPC();
+    Check(liVehicleLod == 2, "explicit full menu key takes precedence over vehicle alias");
+    Set("Race Car Entity/Graphics/Vehicles.../LODs.../Vehicle LOD", nullptr);
+    LoadDebugIniPC(gacIni);
 
     VariableManager lManager, lOtherManager;
     f32 lfGain = 1.0f;

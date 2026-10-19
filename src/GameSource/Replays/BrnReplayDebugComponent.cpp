@@ -9,7 +9,7 @@
 //   MaybeDrawText(render, text, &pos, x, y, scale, ..., colour) @0x82824048
 //       == render->DrawText(text, x, y, scale, colour)   (builds Vector2{x,y})
 //   sub_8281C3E0(render, x0, y0, x1, y1, ..., colour)     @0x8281C3E0
-//       == render->DrawBox(x0, y0, x1-x0, y1-y0, colour)  (min + size)
+//       == render->DrawBox(x0, y0, x1, y1, colour)  (scalar min/max wrapper)
 // Both are re-inlined here as the named CgsDev::Debug2DImmediateRender primitives.
 //
 // The X360 lazy-init globals (`if((flags&bit)==0){flags|=bit; gColour=VALUE;}`) are
@@ -159,7 +159,7 @@ namespace BrnReplays
 
         // Frame fill behind the window (KU_COL_WINDOW_FRAME, semi-transparent white).
         lpRender->DrawBox(lv2Min.X(), lv2Min.Y(),
-                          lv2Max.X() - lv2Min.X(), lv2Max.Y() - lv2Min.Y(),
+                          lv2Max.X(), lv2Max.Y(),
                           KU_COL_WINDOW_FRAME);
 
         // Real draw pass.
@@ -414,9 +414,9 @@ namespace BrnReplays
                                     const Vector2f& lrv2Min, const Vector2f& lrv2Max)
     {
         if (lpRender)
-            lpRender->DrawBox(lrv2Min.X(), lrv2Min.Y(),
-                              lrv2Max.X() - lrv2Min.X(), lrv2Max.Y() - lrv2Min.Y(),
-                              KU_COL_GRAPH_FILL);
+            // ARTIST 8264F804 passes the second received vector directly as size.
+            lpRender->DrawBox(Vector2{lrv2Min.X(), lrv2Min.Y(), 0, 0},
+                              Vector2{lrv2Max.X(), lrv2Max.Y(), 0, 0}, KU_COL_GRAPH_FILL);
 
         const s32 liCount = lpGraph->mBuffer.GetLength();    // graph+0x118
         if (lpRender && liCount > 0)
@@ -501,7 +501,7 @@ namespace BrnReplays
                 const f32 lfY = static_cast<f32>(liRow) * lfStep + lfOriginY;
                 // Block-flag colour decode belongs to the WriteStream block type
                 // (ReplayModule TU); paint the default EMPTY slot until it lands.
-                lpRender->DrawBox(lfX, lfY, lfCellW, lfCellH, KU_COL_BLOCK_EMPTY);
+                lpRender->DrawBox(lfX, lfY, lfX + lfCellW, lfY + lfCellH, KU_COL_BLOCK_EMPTY);
             }
         }
 
@@ -544,7 +544,7 @@ namespace BrnReplays
                 const f32 lfY = static_cast<f32>(liRow) * lfStep + lfOriginY;
                 // Read-stream block-flag decode belongs to the ReadStream block type
                 // (ReplayModule TU); paint the default EMPTY slot until it lands.
-                lpRender->DrawBox(lfX, lfY, lfCellW, lfCellH, KU_COL_BLOCK_EMPTY);
+                lpRender->DrawBox(lfX, lfY, lfX + lfCellW, lfY + lfCellH, KU_COL_BLOCK_EMPTY);
             }
         }
 

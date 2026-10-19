@@ -236,6 +236,8 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         lrTrigger.meType = static_cast<ETriggerTypeID>(liType);
         // The event's gameplay handle (event @+64/+68) is copied into the Trigger record (@+8).
         lrTrigger.SetHandle(lpEvent->mTriggerID);
+        lrTrigger.miTriggerRegionType = lpEvent->miTriggerRegionType; //ARTIST822D9434
+        lrTrigger.miGenericRegionType = lpEvent->miGenericRegionType; //ARTIST822D943C
         // The event's world transform becomes the trigger's transform (position == W column).
         lrTrigger.mTransform = lpEvent->mTransform;
 

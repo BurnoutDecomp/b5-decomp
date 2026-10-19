@@ -69,10 +69,10 @@ namespace
     Portal         gaPortals[2];
     AISectionsData gData;
 
-    Vector4 Node(f32 lfX, f32 lfY)
+    RouteNode Node(f32 lfX, f32 lfY)
     {
-        Vector4 lNode;
-        lNode.x = lfX; lNode.y = lfY; lNode.z = 0.0f; lNode.w = 0.0f;
+        RouteNode lNode;
+        lNode.Construct(lfX, lfY, 0, 0);
         return lNode;
     }
 
@@ -97,7 +97,7 @@ namespace
         gAssertions = 0;
         return lpBest;
     }
-    u8 PortalTag(const Vector4& lrNode) { return reinterpret_cast<const u8*>(&lrNode.w)[2]; }
+    u8 PortalTag(const RouteNode& lrNode) { return lrNode.GetPortalIndex(); }
 }
 
 int main()
@@ -133,8 +133,8 @@ int main()
         TheRoute().AddNode(Node(0.0f, 0.0f));
         TheRoute().AddNode(Node(10.0f, 0.0f));
         TheAStar().BuildRoute(lpBest, &TheRoute());
-        const Vector4& lrLast = TheRoute().maNodes[TheRoute().miNodeCount - 1];
-        Check(TheRoute().miNodeCount == 3 && lrLast.x == 20.0f && lrLast.y == 0.0f && PortalTag(lrLast) == 1,
+        const RouteNode& lrLast = TheRoute().maNodes[TheRoute().miNodeCount - 1];
+        Check(TheRoute().miNodeCount == 3 && lrLast.GetPositionX() == 20.0f && lrLast.GetPositionZ() == 0.0f && PortalTag(lrLast) == 1,
               "control: travel +x -> exit node at portal 1 (20, 0), tagged portal 1");
     }
 

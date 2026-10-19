@@ -1,9 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
@@ -129,6 +126,9 @@ namespace CgsDev
         CreateDebugRenderStates(lpAllocator);
         mpFont.Clear();
         mVectorFont.Construct();
+        mVectorFont.SetSize({10.0f, 10.0f, 0.0f, 0.0f});
+        mVectorFont.SetRenderer(this);
+        mTextRenderer.Construct();
         miIm3dVertsHead = 0;
         mViewProjectionMatrix.SetIdentity();
         mCameraPosition.SetZero();
@@ -712,22 +712,64 @@ namespace CgsDev
                                           const char* lpcText, f32 lfScale,
                                           rw::RGBA lColour)
     {
-        if (!lpcText)
+        // ARTIST 8281FCB8..8281FE78: project to the vector font's normalised
+        // coordinates and record its strokes in this renderer's existing block.
+        SetProjectionMode(E_PROJECTION_2D);
+        const auto Flush = [](f32 lfValue)
+        {
+            return std::fpclassify(lfValue) == FP_SUBNORMAL
+                ? std::copysign(0.0f, lfValue) : lfValue;
+        };
+        const auto MultiplyAdd = [&](f32 lfA, f32 lfB, f32 lfC)
+        {
+            return Flush(std::fmaf(Flush(lfA), Flush(lfB), Flush(lfC)));
+        };
+        // 8281FCEC/FD14/FD20 fuse each row in x, y, z order, starting at row3.
+        const auto ProjectLane = [&](f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+        {
+            return MultiplyAdd(lfZ, lWorldPosition.z,
+                MultiplyAdd(lfY, lWorldPosition.y, MultiplyAdd(lfX, lWorldPosition.x, lfW)));
+        };
+        const Matrix44& lrMatrix = mViewProjectionMatrix;
+        const ClipPoint lClip = {
+            ProjectLane(lrMatrix.xAxis.x, lrMatrix.yAxis.x, lrMatrix.zAxis.x, lrMatrix.wAxis.x),
+            ProjectLane(lrMatrix.xAxis.y, lrMatrix.yAxis.y, lrMatrix.zAxis.y, lrMatrix.wAxis.y),
+            ProjectLane(lrMatrix.xAxis.z, lrMatrix.yAxis.z, lrMatrix.zAxis.z, lrMatrix.wAxis.z),
+            ProjectLane(lrMatrix.xAxis.w, lrMatrix.yAxis.w, lrMatrix.zAxis.w, lrMatrix.wAxis.w),
+        };
+        if (lClip.z < 0.001f)
             return;
+        // 8281FD48..FDA8 and FDC4..FDD4 independently refine vrefp twice.
+        // Keep the unconditional refinements for zero, infinity and NaN too.
+        const auto RefinedReciprocal = [&](f32 lfValue)
+        {
+            lfValue = Flush(lfValue);
+            // FLAG (model): correctly rounded vrefp seed; hardware estimate ULPs
+            // and NaN payloads remain unverified. VMX operands/results flush.
+            f32 lfEstimate = Flush(static_cast<f32>(1.0 / static_cast<f64>(lfValue)));
+            for (s32 liStep = 0; liStep < 2; ++liStep)
+            {
+                const f32 lfDifference = MultiplyAdd(lfEstimate, lfValue, -1.0f);
+                const f32 lfError = lfDifference != lfDifference ? lfDifference : -lfDifference;
+                lfEstimate = MultiplyAdd(lfEstimate, lfError, lfEstimate);
+            }
+            return lfEstimate;
+        };
+        const f32 lfInvZForX = RefinedReciprocal(lClip.z);
+        const f32 lfInvZForY = RefinedReciprocal(lClip.z);
+        const f32 lfTextSize = lfScale / (mfVirtualScreenHeight * 0.5f);
+        SetDrawingMode(E_DRAWING_LINES);
+        mVectorFont.SetSize({lfTextSize, lfTextSize, 0.0f, 0.0f});
+        mVectorFont.Print(Flush(lClip.x * lfInvZForX), -Flush(lClip.y * lfInvZForY),
+                          lpcText, lColour.m_rgba);
+    }
 
-#if !defined(D_PLATFORM_X360)
-        // FLAG PC-platform leaf: project to the host 2D renderer. ARTIST performs this same divide
-        // then sends the glyphs through the 3D buffer's TextRenderer.
-        CgsGraphics::BasicColouredTexturedVertex lSource = {};
-        lSource.mv3Pos = { lWorldPosition.x, lWorldPosition.y, lWorldPosition.z };
-        const ClipPoint lClip = TransformToClip(mViewProjectionMatrix, lSource);
-        if (lClip.w <= 0.000001f)
-            return;
-        const f32 lfInvW = 1.0f / lClip.w;
-        const f32 lfX = (lClip.x * lfInvW * 0.5f + 0.5f) * mfVirtualScreenWidth;
-        const f32 lfY = (0.5f - lClip.y * lfInvW * 0.5f) * mfVirtualScreenHeight;
-        DebugManager::GetInstance()->GetUI().Get2DRenderer()->DrawText(
-            lpcText, lfX, lfY, lfScale, lColour.m_rgba);
-#endif
+    void Debug3DImmediateRender::Draw2DLineForVectorFont(rw::math::vpu::Vector3 lFrom,
+                                                       rw::math::vpu::Vector3 lTo,
+                                                       rw::RGBA lColour)
+    {
+        SetProjectionMode(E_PROJECTION_2D);
+        SetDrawingMode(E_DRAWING_LINES);
+        AddLine(lFrom, lTo, lColour);
     }
 }

@@ -171,11 +171,10 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const u32* lauPixelProgramSize,
                               s8 li8NumberPrograms)
 {
-    static bool sbStateLibraryConstructed = false;
-    if (!sbStateLibraryConstructed)
+    if (!mgbStateLibraryConstructed)
     {
         ConstructOnceOnly(lpAllocator);
-        sbStateLibraryConstructed = true;
+        mgbStateLibraryConstructed = true;
     }
 
     renderengine::VertexDescriptor::Parameters lParameters;

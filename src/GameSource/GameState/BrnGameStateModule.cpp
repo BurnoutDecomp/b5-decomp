@@ -11,6 +11,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
+#include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"    // original mode-pause input: IsInTakedownCamera
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"             // [FX-GS2 G10-D11] mpTakedownCache->mVehicleOutputInterface (CheckForTailingRivals' r5)
 #include "GameSource/GameState/BrnGameEvents.h"                         // [returning-player wave] E_GUI_HAS_STARTED_GAME (the case-78 trigger)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> (the carry-queue walk)
@@ -39,6 +40,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                            // [boost-wave2] CgsIDCompress (the two impact message-id tables)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // [boost-wave2] BrnPhysics::Vehicle::EImpactType (E_IMPACT_COUNT)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"        // [FX-GS] PaybackManager::Destruct (the Destruct leg)
+#include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"
 #include "GameSource/GameState/InviteManager/BrnGameStateInviteManager.h"          // [PGEP] mpGameStateInviteManager (new / Construct / Prepare / Destruct)
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"        // [PGEP] mpImageManager
 #include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"      // [PGEP] mpOnlineFlybyManager
@@ -102,6 +104,10 @@ enum EGsmGameAction
 void GameStateModule::Construct()
 {
     CgsModule::ModuleSingleBuffered::Construct();
+    // The two embedded debug components are Constructed immediately after the module base in
+    // ARTIST 0x82380388, in this order and with the owning module pointer.
+    mResetPlayerDebugComponent.Construct(this);
+    mGameStateDebugComponent.Construct(this);
 
     if (mpOutputBuffer == 0)
     {
@@ -278,7 +284,6 @@ void GameStateModule::Construct()
     // trap paid up front -- PostWorldUpdate Appends into it and PreWorldUpdate Clears it, and
     // Clear() does NOT bind a buffer.
     mGameEventCarryQueue.Construct();
-    mResetPlayerDebugComponent.Construct(this);
 
     // ⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH HAND-OFF STACK (X360 this+284488).
     // Same never-Constructed-container trap, and this container makes it LOUD rather than latent:
@@ -356,9 +361,334 @@ void GameStateModule::Construct()
     // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
     ClearData();
 
-    // The "Process events" monitor (page 5, no minimum, budget 1.0, scaled) from the console's
-    // monitor block after ClearData; ProcessGameEvents brackets its walk with it.
+    // GameStateDebugComponent::OnActivate's module-owned controls: ARTIST Construct @0x82380388
+    // writes the two snap-race gates true and clears the four signature-takedown debug values.
+    mbDebugLimitSnapRaceStartConditions = true;   // X360 +0x4575F
+    mbAllowSnapRaceMode = true;                   // X360 +0x45762
+    muDebugSigTDRegionIndex = 0;                   // X360 +0x475B0
+    mbDrawCrashDebugText = false;                 // X360 +0x475B4
+    mbDrawSignatureTakedownRegionText = false;    // X360 +0x475B5
+    mbDebugMakeAllTakedownsSignature = false;     // X360 +0x475B6
+
+    // ARTIST Construct's four full-vector identity stores at +0x47570.
+    mPlayerCarTransform.SetIdentity();
+
+    // ARTIST's complete monitor block: page5, no minimum, budget1, scaled.
+    miTriggersPostPM = CgsDev::PerfMonCpu::AddMonitor("Trigger Post update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miTriggersPrePM = CgsDev::PerfMonCpu::AddMonitor("Trigger Pre update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miShowTimeUpdate = CgsDev::PerfMonCpu::AddMonitor("Show Time Update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miCarSelectManagerUpdate = CgsDev::PerfMonCpu::AddMonitor("Car Select Manager Update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miGameStatePrePM = CgsDev::PerfMonCpu::AddMonitor("Pre world update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miGameStatePostPM = CgsDev::PerfMonCpu::AddMonitor("Post world update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miDetectModeStartsPM = CgsDev::PerfMonCpu::AddMonitor("Detect mode starts", CgsDev::E_PMP_5, false, 1.0f, true);
+    miRoadRulesPM = CgsDev::PerfMonCpu::AddMonitor("Road rules", CgsDev::E_PMP_5, false, 1.0f, true);
+    miDriveThrusPM = CgsDev::PerfMonCpu::AddMonitor("Drive thrus", CgsDev::E_PMP_5, false, 1.0f, true);
     miProcessEventsPM = CgsDev::PerfMonCpu::AddMonitor("Process events", CgsDev::E_PMP_5, false, 1.0f, true);
+    miTakedownPM = CgsDev::PerfMonCpu::AddMonitor("Takedown manager", CgsDev::E_PMP_5, false, 1.0f, true);
+    miEmmUpdatePM = CgsDev::PerfMonCpu::AddMonitor("EMM update", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPrePM = CgsDev::PerfMonCpu::AddMonitor("Mode manager PRE", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPostPM = CgsDev::PerfMonCpu::AddMonitor("Mode manager POST", CgsDev::E_PMP_5, false, 1.0f, true);
+    miCopyingAndResettingPM = CgsDev::PerfMonCpu::AddMonitor("Copying and resetting", CgsDev::E_PMP_5, false, 1.0f, true);
+    miProcessContactsPM = CgsDev::PerfMonCpu::AddMonitor("Process contacts", CgsDev::E_PMP_5, false, 1.0f, true);
+    miStreetManagerPM = CgsDev::PerfMonCpu::AddMonitor("Street manager", CgsDev::E_PMP_5, false, 1.0f, true);
+    CGS_ASSERT(miGameStatePrePM >= 0, "miGameStatePrePM >= 0");
+    CGS_ASSERT(miGameStatePostPM >= 0, "miGameStatePostPM >= 0");
+    CGS_ASSERT(miDetectModeStartsPM >= 0, "miDetectModeStartsPM >= 0");
+    CGS_ASSERT(miRoadRulesPM >= 0, "miRoadRulesPM >= 0");
+    CGS_ASSERT(miDriveThrusPM >= 0, "miDriveThrusPM >= 0");
+    CGS_ASSERT(miProcessEventsPM >= 0, "miProcessEventsPM >= 0");
+    CGS_ASSERT(miTakedownPM >= 0, "miTakedownPM >= 0");
+    CGS_ASSERT(miEmmUpdatePM >= 0, "miEmmUpdatePM >= 0");
+    CGS_ASSERT(miModeManagerPrePM >= 0, "miModeManagerPrePM >= 0");
+    CGS_ASSERT(miModeManagerPostPM >= 0, "miModeManagerPostPM >= 0");
+    CGS_ASSERT(miCopyingAndResettingPM >= 0, "miCopyingAndResettingPM >= 0");
+    CGS_ASSERT(miStreetManagerPM >= 0, "miStreetManagerPM >= 0");
+}
+
+// ARTIST 82311E48..82311E70 and 82343220..82343248 inline this selector.
+FlybyManager* GameStateModule::GetFlybyManager()
+{
+    if (IsOnlineGameMode())
+        return mpOnlineFlybyManager;
+    return &mOfflineFlybyManager;
+}
+
+// ARTIST 8238EF50. Original whole owner body; the PC bring-up pump still has
+// separate extracted legs until the full PreWorldUpdate caller is recovered.
+// ARTIST 823A5328. The full original pre-world chain; PC bring-up entry points
+// remain separate until this caller and its prerequisites have been reviewed.
+void GameStateModule::PreWorldUpdate(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+        GameStateModuleIO::OutputBuffer* lpOutput,
+        BrnUpdateSet lUpdateSet)
+{
+    const bool lbSimPaused = IsSimPaused(true, false);
+    CgsDev::PerfMonCpu::StartMonitor(miGameStatePrePM);
+    mbIsUpdating = true;
+    CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
+    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+    CGS_ASSERT(lpInput->GetTimerStatusInterface() != 0,
+               "lpInput->GetTimerStatusInterface() != NULL");
+    CGS_ASSERT(lpInput->GetTimerStatusInterface()->GetSimTimerStatus() != 0,
+               "lpInput->GetTimerStatusInterface()->GetSimTimerStatus() != NULL");
+    mfSimTimeStep = 0.0f;
+    mfSimTimeStep = lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep();
+    // ARTIST 823A54C4 repeats the read accessor before fetching the game status.
+    (void)lpInput->GetTimerStatusInterface();
+    const f32 lfGameTimeStep =
+        lpInput->GetTimerStatusInterface()->GetGameTimerStatus()->GetCurrentTimeStep();
+    GameStateModuleIO::GameActionQueue* const lpActionQueue = lpOutput->GetGameActionQueue();
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+
+    if (mbSendSetupPlayerCarPending)
+    {
+        SendSetupPlayerCarEvent(lpActionQueue);
+        SendSetUpAllEventStartsMessage(lpOutput);
+        mbSendSetupPlayerCarPending = false;
+    }
+    if (mModeManager.IsOnlineGameMode())
+    {
+        const EActiveRaceCarIndex lePlayerIndex = GetPlayerActiveRaceCarIndex();
+        lpOutput->GetGameStateToGuiInterface()->SetPlayerRaceCarIndex(lePlayerIndex);
+        lpOutput->GetGameStateToGuiInterface()->AppendRaceCarCrashes(
+            &mpTakedownCache->mRaceCarCrashEventQueue);
+    }
+
+    CgsDev::PerfMonCpu::StartMonitor(miDriveThrusPM);
+    const GameStateModuleIO::EGameModeType leDriveMode = mModeManager.GetCurrentGameModeType();
+    const bool lbIsShowtiming = leDriveMode == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+        leDriveMode == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME || mfShowtimeIntroTimeLeft > 0.0f;
+    const bool lbIsFreeburn = mModeManager.GetCurrentGameMode() == 0 ||
+        leDriveMode == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
+        leDriveMode == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
+    const bool lbInviteInProgress = mpGameStateInviteManager->IsInviteInProgress();
+    const bool lbIsInJunkyard = mCarSelectManager.IsInJunkyard();
+    const bool lbIsAnythingPaused = miSimPauseFlags != 0;
+    const bool lbIsOnline = mModeManager.IsOnlineGameMode();
+    const f32 lfDriveTimeStep = mfSimTimeStep;
+    const BrnResource::VehicleList* const lpVehicleList = mpVehicleList;
+    CgsSystem::TimerRequestInterface* const lpTimerRequests = lpOutput->GetTimerRequestInterface();
+    mDriveThruManager.Update(lpActionQueue, lpTimerRequests, lfDriveTimeStep,
+        &mLastActiveRaceCarInterface, lbIsOnline, lbIsFreeburn, lbIsShowtiming,
+        lbIsAnythingPaused, lbIsInJunkyard, lbInviteInProgress, lpVehicleList);
+    CgsDev::PerfMonCpu::StopMonitor(miDriveThrusPM);
+
+    CgsDev::PerfMonCpu::StartMonitor(miCopyingAndResettingPM);
+    CopyInputDataToPaybackManager(lpInput);
+    mpOnlineFlybyManager->mPlayerInputInterface = *lpInput->GetPlayerStatusInterface();
+    mpGameStateInviteManager->AppendFromPreWorldInputData(lpInput);
+    CgsDev::PerfMonCpu::StopMonitor(miCopyingAndResettingPM);
+    CheckForTailingRivals(lpOutput, &mpTakedownCache->mVehicleOutputInterface, lfGameTimeStep);
+    const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
+    mpTrainingManager->Update(lpInput, lpActionQueue, &mLastActiveRaceCarInterface,
+                              lfGameTimeStep, lbAllowTimedTips);
+    mRumbleManager.Update(&mLastActiveRaceCarInterface, &mpTakedownCache->mRaceCarCrashEventQueue,
+                          mePlayerActiveRaceCarIndex, &mContactSpyInterface, lfGameTimeStep);
+
+    CgsDev::PerfMonCpu::StartMonitor(miCopyingAndResettingPM);
+    GameStateModuleIO::GameEventQueue lGameEvents;
+    lGameEvents.MarkUnconstructed();
+    lGameEvents.Construct();
+    lGameEvents.Append(mGameEventCarryQueue);
+    lGameEvents.Append(*lpInput->GetGameEventQueue());
+    lGameEvents.Append(*mpGameStateInviteManager->GetGameEventQueue());
+    mGameEventCarryQueue.Clear();
+    CgsDev::PerfMonCpu::StopMonitor(miCopyingAndResettingPM);
+    CgsDev::PerfMonCpu::StartMonitor(miShowTimeUpdate);
+    UpdateShowtimeMode(lpInput, lpOutput, &mContactSpyInterface,
+                       &mpTakedownCache->mTrafficTypeResponseQueue);
+    CgsDev::PerfMonCpu::StopMonitor(miShowTimeUpdate);
+    mOutputGuiEventQueue.Clear();
+    ProcessGameEvents(&lGameEvents, lpActionQueue, lpInput, lpOutput);
+
+    if (mbWaitingForStreaming && miStreamingWaitCountdown > 0 && --miStreamingWaitCountdown == 0)
+    {
+        // The original empty action copies one unspecified representation byte.
+        GameStateModuleIO::WaitForStreamingAction lAction;
+        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+            GameStateModuleIO::E_ACTION_WAIT_FOR_STREAMING, sizeof(lAction));
+    }
+    CgsDev::PerfMonCpu::StartMonitor(miCarSelectManagerUpdate);
+    if (mCarSelectManager.IsInJunkyard())
+        mCarSelectManager.Update(lpActionQueue, lpInput->GetControllerInput(), lfGameTimeStep);
+    CgsDev::PerfMonCpu::StopMonitor(miCarSelectManagerUpdate);
+    mOnlineCarSelectManager.Update(lpActionQueue, lpInput->GetControllerInput(), lfGameTimeStep);
+    mpImageManager->PreWorldUpdate(mePlayerActiveRaceCarIndex,
+                                  &mpTakedownCache->mTakedownEventQueue, lpOutput);
+
+    CgsDev::PerfMonCpu::StartMonitor(miTakedownPM);
+    mpTakedownCache->mTakedownEventQueue.Clear();
+    if (!lbSimPaused)
+    {
+        BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingCars;
+        lCrashingCars.SetFromVehicleOutputInterface(&mpTakedownCache->mVehicleOutputInterface);
+        mpTakedownManager->Update(&mLastActiveRaceCarInterface, mfSimTimeStep,
+            &mpTakedownCache->mRaceCarCrashEventQueue, &lCrashingCars, lpInput, lpOutput,
+            &mpTakedownCache->mTrafficTypeResponseQueue);
+        const GameStateModuleIO::TakedownEventOutputQueueType* const lpTakedownEvents =
+            lpOutput->GetTakedownEventOutputQueue();
+        mpTakedownCache->mTakedownEventQueue.Clear();
+        mpTakedownCache->mTakedownEventQueue.Append(*lpTakedownEvents);
+        mpMugshotManager->Update(lpInput, lpOutput, &mpTakedownCache->mVehicleOutputInterface,
+            &mpTakedownCache->mTakedownEventQueue, mModeManager.GetCurrentGameModeType(),
+            miSimPauseFlags != 0);
+        mpPaybackManager->Update(lpInput, lpOutput, &mpTakedownCache->mVehicleOutputInterface,
+            &mpTakedownCache->mTakedownEventQueue, mModeManager.GetCurrentGameModeType());
+        ProcessTakedownEvents(lpActionQueue, &mpTakedownCache->mTakedownEventQueue, lpOutput);
+    }
+    CgsDev::PerfMonCpu::StopMonitor(miTakedownPM);
+    // ARTIST r7 is active-interface+0x2861, its named all-active-cars-ready byte.
+    EmmPreWorldUpdate(lpInput, lpOutput, &lGameEvents, mLastActiveRaceCarInterface.GetAllActiveCarsRead());
+    const bool lbRumblePaused = miSimPauseFlags != 0;
+    mRumbleManager.UpdatePauseState(lbRumblePaused, lpOutput->GetGameActionQueue());
+    CgsDev::PerfMonCpu::StartMonitor(miCopyingAndResettingPM);
+    CopyScoringDataToOutput(lpOutput);
+    CgsDev::PerfMonCpu::StopMonitor(miCopyingAndResettingPM);
+
+    if ((lUpdateSet & 8) != 0)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miTriggersPrePM);
+        mTriggerQueryManager.PreWorldUpdate(lpInput, lpOutput, &mStuntManager,
+            &mDriveThruManager, &mLastActiveRaceCarInterface, mpVehicleList);
+        CgsDev::PerfMonCpu::StopMonitor(miTriggersPrePM);
+        const bool lbInCarSelect = mCarSelectManager.IsInJunkyard() ||
+            mOnlineCarSelectManager.IsInOnlineCarSelect();
+        mProgressionManager.PreWorldUpdate(mfSimTimeStep, lfGameTimeStep, lpOutput,
+            &mLastActiveRaceCarInterface, lUpdateSet, lbInCarSelect);
+        CheckIfPlayerIsAtJunctionWithAnEvent(lpInput, lpOutput);
+    }
+    const bool lbDriveThruDataDirty = mProgressionManager.IsDriveThruDataDirty();
+    mProgressionManager.ClearDriveThruDataDirtyFlag();
+    if (lbDriveThruDataDirty)
+        SendSetUpAllDriveThrusMessage(lpActionQueue);
+    DetectModeStarts(lpInput, lpOutput);
+    lGameEvents.Destruct();
+    mpGameStateInviteManager->Update(lpOutput, lpActionQueue);
+    mModeManager.HandleOnlineTeamModes(lpInput, lpOutput, &mpTakedownCache->mTakedownEventQueue);
+    const GameStateModuleIO::EGameModeType leStuntMode = mModeManager.GetCurrentGameModeType();
+    const bool lbIsAGameModeActive = mModeManager.GetCurrentGameMode() != 0 &&
+        leStuntMode != GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
+        leStuntMode != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
+    mStuntManager.Update(lpOutput->GetGameActionQueue(), &mLastActiveRaceCarInterface,
+                          mfSimTimeStep, lbIsAGameModeActive);
+    mpRichPresenceManager->Update(lpInput, lpOutput);
+    mAchievementManager.Update(lpInput, lpOutput);
+    mDeveloperChallengeManager.PreWorldUpdate(lpInput, lpOutput);
+
+    CgsDev::PerfMonCpu::StartMonitor(miStreetManagerPM);
+    if ((lUpdateSet & 8) != 0)
+    {
+        const f32 lfWrongWayTime = mModeManager.GetScoringSystem()->GetPlayerWrongWayTime();
+        const bool lbDisablesUpcoming = mModeManager.GetCurrentGameMode() != 0 &&
+            mModeManager.GetCurrentGameModeParams()->GetFlag(GameModeParams::KU_FLAG_DISABLE_UPCOMING_ROAD_SIGNS);
+        const bool lbUsesNavigation = mModeManager.GetCurrentGameMode() != 0 &&
+            mModeManager.GetCurrentGameModeParams()->GetFlag(GameModeParams::KU_FLAG_USES_NAVIGATION);
+        mStreetManager.Update(miSimPauseFlags != 0, mfSimTimeStep, lpInput, lpOutput,
+            &mLastActiveRaceCarInterface, &mLastAICarOutputInterface,
+            lbUsesNavigation, lbDisablesUpcoming, lfWrongWayTime);
+    }
+    CgsDev::PerfMonCpu::StopMonitor(miStreetManagerPM);
+    lpInput->UnlockForRead();
+
+    const bool lbNetworkOnline = IsOnlineGameMode();
+    lpOutput->GetGameStateToNetworkInterface()->SetIsInOnlineGameMode(lbNetworkOnline);
+    const bool lbNetworkCarSelect = mCarSelectManager.IsInJunkyard() ||
+        mOnlineCarSelectManager.IsInOnlineCarSelect();
+    lpOutput->GetGameStateToNetworkInterface()->SetIsCarSelect(lbNetworkCarSelect);
+    const GameStateModuleIO::EGameModeType leNetworkMode = mModeManager.GetCurrentGameModeType();
+    lpOutput->GetGameStateToNetworkInterface()->SetCurrentGameMode(leNetworkMode);
+    lpOutput->SetControllerActive(meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE ||
+                                  meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME);
+    GameStateModuleIO::ProgressionProfileDataAction lProfileData;
+    lProfileData.mpProgressionProfile = mProgressionManager.GetProfile();
+    lProfileData.mpProgressionData = mProgressionManager.GetProgressionData();
+    lProfileData.mbAreRoadRulesAvailable = mProgressionManager.AreRoadRulesAvailable();
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lProfileData),
+        GameStateModuleIO::E_ACTION_PROGRESSION_PROFILE_DATA, sizeof(lProfileData));
+    lpOutput->GetGuiEventQueue()->Append(mOutputGuiEventQueue);
+    GameStateModuleIO::RaceCarRaceDistanceInterface* const lpRaceCarRaceDistInterface =
+        lpOutput->GetRaceCarRaceDistanceInterface();
+    CGS_ASSERT(lpRaceCarRaceDistInterface != 0, "lpRaceCarRaceDistInterface != NULL");
+    mModeManager.FillInRaceDistanceInterface(lpRaceCarRaceDistInterface);
+    mGameStateDebugComponent.RenderLandmarkDebug();
+    lpOutput->UnlockForWrite();
+    mbIsUpdating = false;
+    CgsDev::PerfMonCpu::StopMonitor(miGameStatePrePM);
+}
+
+void GameStateModule::EmmPreWorldUpdate(
+        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+        GameStateModuleIO::OutputBuffer* lpOutput,
+        const GameStateModuleIO::GameEventQueue* lpGameEvents,
+        bool lbIsOnline)
+{
+    (void)lpGameEvents;
+    CgsDev::PerfMonCpu::StartMonitor(miEmmUpdatePM);
+    const bool lbSimPaused = IsSimPaused(true, false);
+    GameStateModuleIO::GameActionQueue* const lpActions = lpOutput->GetGameActionQueue();
+
+    if (mLastActiveRaceCarInterface.IsPlayerCarActive())
+    {
+        mPlayerCarTransform = mLastActiveRaceCarInterface.GetRaceCarState(
+            GetPlayerActiveRaceCarIndex())->mTransform;
+    }
+
+    mTimerStatusInterface = *lpInput->GetTimerStatusInterface();
+    const CgsSystem::Time lSimTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
+    if (lbSimPaused)
+    {
+        mModeManager.PausedUpdate(lpOutput);
+    }
+    else
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miModeManagerPrePM);
+        // 8238F100..F154 compares takedown timer+640 with -1.0f and stacks
+        // that result as the tenth argument. It is not the sim-pause flag.
+        const bool lbTakedownPaused = mpTakedownManager->IsInTakedownCamera();
+        const EGlobalRaceCarIndex leGlobal =
+            static_cast<EGlobalRaceCarIndex>(GetPlayerGlobalRaceCarIndex());
+        const EActiveRaceCarIndex leActive = GetPlayerActiveRaceCarIndex();
+        mModeManager.PreWorldUpdate(lpOutput, lpInput, mTimerStatusInterface,
+                                   leActive, leGlobal, lbIsOnline, lpActions,
+                                   &mLastGlobalRaceCarInterface, &mLastActiveRaceCarInterface,
+                                   lbTakedownPaused);
+        CgsDev::PerfMonCpu::StopMonitor(miModeManagerPrePM);
+    }
+    if (!lbSimPaused)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miRoadRulesPM);
+        UpdateRoadRulesManager(lpOutput, lpInput->GetControllerInput());
+        CgsDev::PerfMonCpu::StopMonitor(miRoadRulesPM);
+    }
+
+    ScoringSystem* const lpScoring = mModeManager.GetScoringSystem();
+    CgsSystem::Time lElapsed(0.0f);
+    if (GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        lElapsed = lpScoring->GetRaceCarTotalTime(GetPlayerActiveRaceCarIndex(), lSimTime);
+    lpOutput->SetGameModeElapsedTime(&lElapsed);
+
+    for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
+    {
+        const CarData* const lpCar = lpScoring->GetCarData(leIndex);
+        if (lpCar != nullptr)
+            lpOutput->GetGameStateToNetworkInterface()->SetActiveRaceCarIndex(
+                lpCar->GetNetworkPlayerID(), lpCar->GetActiveRaceCarIndex());
+    }
+    if (GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && lpScoring->GetOvertakenRival(GetPlayerActiveRaceCarIndex()))
+    {
+        const EActiveRaceCarIndex lePlayer = GetPlayerActiveRaceCarIndex();
+        const u8 luPosition = static_cast<u8>(lpScoring->GetCarRacePosition(GetPlayerActiveRaceCarIndex()));
+        lpOutput->GetGameStateToGuiInterface()->AddOvertakeEvent(luPosition, lePlayer);
+    }
+    CgsDev::PerfMonCpu::StopMonitor(miEmmUpdatePM);
 }
 
 // ----------------------------------------------------------------------------
@@ -670,7 +1000,221 @@ bool GameStateModule::ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLin
     return true;
 }
 
+// ARTIST 0x8239E578..0x8239ED10. The original 28-case preparation ladder.
+// ResourceUpdateThread continues to select PrepareNativePC explicitly.
 bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                              CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    (void)lpUpdateOutputBufferStack; // ARTIST never reads r5.
+    bool lbDone = false;
+    mbIsUpdating = true;
+    lpOutputBuffer->LockForWrite();
+
+    // The three resident-list replies have identical validation and payload shape.
+    // Keep assertion continuation: the original does not return on an invalid reply id.
+    const auto GetListReply = [this](s32 liExpectedType, s32 liTypeLine, s32 liEventLine)
+        -> const BrnResource::GameDataIO::GameDataAssetEvent*
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        if (liType != liExpectedType)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liTypeLine);
+            CgsDev::Assert::EndAssert();
+        }
+        const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
+            static_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+        if (lpReply->miEventId != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liEventLine);
+            CgsDev::Assert::EndAssert();
+        }
+        return lpReply;
+    };
+
+    switch (mePrepareStage)
+    {
+    case E_PREPARESTAGE_START:
+        ClearData();
+        mResetPlayerDebugComponent.Register();
+        mGameStateDebugComponent.Register();
+        // fall through
+    case E_PREPARESTAGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_MODE_DATA_ACQUIRING:
+        mePrepareStage = E_PREPARESTAGE_LOAD_TRIGGER_DATA;
+        // fall through
+    case E_PREPARESTAGE_LOAD_TRIGGER_DATA:
+        if (!mTriggerQueryManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
+        // fall through
+    case E_PREPARESTAGE_STUNT_MANAGER:
+        if (!mStuntManager.Prepare(lpOutputBuffer))
+            break;
+        // fall through
+    case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetFreeburnChallengeList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        mpFreeburnChallengeList = static_cast<const BrnResource::ChallengeList*>(
+            GetListReply(KI_REPLY_FREEBURN_CHALLENGE_LIST, 516, 521)->mHandle.mpResourceMemory);
+        // fall through
+    case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetVehicleList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_VEHICLE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        mpVehicleList = static_cast<BrnResource::VehicleList*>(
+            GetListReply(KI_REPLY_VEHICLE_LIST, 556, 561)->mHandle.mpResourceMemory);
+        mProgressionManager.ApplyVehicleList(mpVehicleList);
+        mModeManager.ApplyVehicleList(mpVehicleList);
+        // fall through
+    case E_PREPARESTAGE_REQUEST_WHEEL_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetWheelList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_WHEEL_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        mpWheelList = static_cast<BrnResource::WheelList*>(
+            GetListReply(KI_REPLY_WHEEL_LIST, 599, 604)->mHandle.mpResourceMemory);
+        // fall through
+    case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
+        mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
+        lpOutputBuffer->GetResourceRequestInterface()->AcquireResource(&mReceiverQueue, 0, 5, "CarColours");
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS:
+    {
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        CgsResource::ResourceHandle lHandle;
+        lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+        lHandle.mpSourceEntry = lpAcquire->mpSourceEntry;
+        mpPlayerCarColours = lHandle;
+    }
+        // fall through
+    case E_PREPARESTAGE_MODEMANAGER:
+        mePrepareStage = E_PREPARESTAGE_MODEMANAGER;
+        if (!mModeManager.Prepare(mpFreeburnChallengeList,
+                                  lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+            break;
+        // fall through
+    case E_PREPARESTAGE_TAKEDOWNMANAGER:
+        mePrepareStage = E_PREPARESTAGE_TAKEDOWNMANAGER;
+        if (!mpTakedownManager->Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_MUGSHOTMANAGER:
+        mePrepareStage = E_PREPARESTAGE_MUGSHOTMANAGER;
+        // ARTIST has no provider work in this case.
+        // fall through
+    case E_PREPARESTAGE_PAYBACKMANAGER:
+        mpPaybackManager->Prepare();
+        mePrepareStage = E_PREPARESTAGE_PAYBACKMANAGER;
+        // fall through
+    case E_PREPARESTAGE_INVITEMANAGER:
+        mePrepareStage = E_PREPARESTAGE_INVITEMANAGER;
+        mpGameStateInviteManager->Prepare();
+        // fall through
+    case E_PREPARESTAGE_FLYBYMANAGER:
+        mePrepareStage = E_PREPARESTAGE_FLYBYMANAGER;
+        mOfflineFlybyManager.Prepare();
+        mpOnlineFlybyManager->Prepare();
+        // fall through
+    case E_PREPARESTAGE_NETWORKROUNDMANAGER:
+        mePrepareStage = E_PREPARESTAGE_NETWORKROUNDMANAGER;
+        mReceiverQueue.Clear();
+        // fall through
+    case E_PREPARESTAGE_PROGRESSION:
+        mePrepareStage = E_PREPARESTAGE_PROGRESSION;
+        if (!mProgressionManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+    case E_PREPARESTAGE_RICH_PRESENCE:
+        mePrepareStage = E_PREPARESTAGE_RICH_PRESENCE;
+        mpRichPresenceManager->miNumberPlayers = 0;
+        mpRichPresenceManager->miLobbyContextEnabled = -1;
+        if (!mpRichPresenceManager->RichPresenceManagerBase::Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_ACHIEVEMENT_MANAGER;
+        if (!mAchievementManager.Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_STREET_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_STREET_MANAGER;
+        if (!mStreetManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+    case E_PREPARESTAGE_IMAGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_IMAGE_MANAGER;
+        if (!mpImageManager->Prepare(lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+            break;
+        // fall through
+    case E_PREPARESTAGE_RUMBLE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_RUMBLE_MANAGER;
+        if (!mRumbleManager.Prepare())
+            break;
+        // fall through
+    case E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_DEVELOPER_CHALLENGE_MANAGER;
+        mDeveloperChallengeManager.maCompletedChallenges.UnSetAll();
+        mDeveloperChallengeManager.maRoadRageTakedownTimes.Clear();
+        mDeveloperChallengeManager.maCollectedBillboards.Clear();
+        mDeveloperChallengeManager.maTakenDownRaceCars.UnSetAll();
+        // fall through
+    case E_PREPARESTAGE_ORIGINAL_DONE:
+        mDriveThruManager.Prepare(mTriggerQueryManager.GetTriggerData(),
+                                  CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>(
+                                      mpPlayerCarColours.GetResourceHandle()));
+        lbDone = true;
+        mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+        mOnlineCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+        meReleaseStage = E_RELEASESTAGE_START;
+        break;
+    default:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_GSM_FILE, 825);
+        CgsDev::Assert::EndAssert();
+        break;
+    }
+
+    lpOutputBuffer->UnlockForWrite();
+    mbIsUpdating = false;
+    return lbDone;
+}
+
+// Existing PC preparation adapter. ResourceUpdateThread explicitly selects this
+// preserved body; the original Prepare above remains unactivated.
+bool GameStateModule::PrepareNativePC(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                               CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                               const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
 {
@@ -700,8 +1244,8 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // DebugComponent::Register calls (this+0x32EA0 @0x8239E6B4, this+0x32DF8 @0x8239E6C0).
         ClearData();
         mResetPlayerDebugComponent.Register();
-        // The separate GameStateDebugComponent (this+0x32DF8) remains deferred here.
-        LogPrepareStageOnce(0, "ClearData + Reset Player Car registered; GameState debug deferred");
+        mGameStateDebugComponent.Register();
+        LogPrepareStageOnce(0, "ClearData + Reset Player Car and Game State debug registered");
         // fall through
 
     case E_PREPARESTAGE_MANAGER:
@@ -1824,6 +2368,7 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
     // referenced by both banners); only this CALL is removed. Delete the method with its
     // declaration when the supersession is consolidated.
 
+    GetPreWorldInputBuffer()->LockForRead();
     mpOutputBuffer->LockForWrite();
     GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
@@ -1838,11 +2383,12 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
         CheckForTailingRivals(mpOutputBuffer, &mpTakedownCache->mVehicleOutputInterface, lfGameTimestep);
     }
     const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
-    mpTrainingManager->Update(lpActionQueue, &mLastActiveRaceCarInterface,
+    mpTrainingManager->Update(GetPreWorldInputBuffer(), lpActionQueue, &mLastActiveRaceCarInterface,
                               lfGameTimestep, lbAllowTimedTips);
     mbIsUpdating = false;
 
     mpOutputBuffer->UnlockForWrite();
+    GetPreWorldInputBuffer()->UnlockForRead();
 }
 
 // --------------------------------------------------------------------------------------------
@@ -2484,9 +3030,8 @@ void GameStateModule::PreWorldUpdatePublishControllerActiveBringUp()
 // ================================================================================================
 // ⭐⭐⭐ [A9 scoring-feed wave 2026-08-27] GameStateModule::CopyScoringDataToOutput -- X360
 // 0x8236CDC0, REAL and WHOLE (not an extracted leg). See the declaration in BrnGameStateModule.h
-// for why this one function unblocks the entire event score/timer feed, and for the ONE named PC
-// deviation (the frame's Time arrives through a TimerStatusInterface argument instead of through
-// the module's copy of the PreWorldInputBuffer timer block at gsm+208328).
+// for the event score/timer feed. The original single-output-argument shape reads
+// the module's timer cache, refreshed by EmmPreWorldUpdate earlier in this caller.
 //
 // The console body, in order, with every base decoded:
 //   r28 = a1 + 235488  == mLastActiveRaceCarInterface           (the cached active-car snapshot)
@@ -2505,14 +3050,8 @@ void GameStateModule::PreWorldUpdatePublishControllerActiveBringUp()
 //   0x8236D0D0  mfDistanceDrivenInCurrentCar
 // ================================================================================================
 void GameStateModule::CopyScoringDataToOutput(
-        GameStateModuleIO::OutputBuffer* lpOutput,
-        const CgsSystem::TimerStatusInterface& lrTimerStatusInterface)
+        GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    if (lpOutput == 0)
-    {
-        return;
-    }
-
     GameStateModuleIO::ScoringOutputInterface* const lpScoringOut =
         lpOutput->GetScoringOutputInterface();
     GameStateModuleIO::OnlineScoringOutputInterface* const lpOnlineScoringOut =
@@ -2584,7 +3123,7 @@ void GameStateModule::CopyScoringDataToOutput(
     // The frame's "now". Console: gsm+208368 == the module's copy of the PreWorldInputBuffer timer
     // block (gsm+208328) at +40, i.e. TimerStatusInterface::mSimTimerStatus.mTime. See the FLAG at
     // the declaration for why it arrives as an argument on PC.
-    const CgsSystem::Time lTimeNow = lrTimerStatusInterface.GetSimTimerStatus()->GetTime();
+    const CgsSystem::Time lTimeNow = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
 
     if (lpScoringSystem->IsTimeLimitActive())
     {

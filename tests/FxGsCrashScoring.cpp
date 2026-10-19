@@ -22,6 +22,19 @@
 #include <cmath>
 
 static unsigned gAsserts = 0, gChecks = 0, gFailures = 0;
+static unsigned gDebugHookCalls = 0;
+
+// Test-only vtable witnesses. ClearData must neither mutate the embedded typed
+// component nor invoke its debug hooks. The base constructor/defaults below are
+// extracted from production; these subclass spies isolate ClearData from the UI.
+namespace BrnGameState
+{
+    void CrashScoreDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender*) { ++gDebugHookCalls; }
+    void CrashScoreDebugComponent::Update() { ++gDebugHookCalls; }
+    const char* CrashScoreDebugComponent::GetName() const { ++gDebugHookCalls; return "fixture"; }
+    const char* CrashScoreDebugComponent::GetPath() const { ++gDebugHookCalls; return "fixture"; }
+    void CrashScoreDebugComponent::OnActivate() { ++gDebugHookCalls; }
+}
 
 namespace CgsDev
 {
@@ -75,8 +88,8 @@ int main()
     // The two members ClearData must NOT store, and the debug component it must not touch.
     lScoring.mfResetComboGracePeriod = 0.5f;   // Update's re-arm value (flt_82001DA0)
     lScoring.mbInfiniteCrashMode     = true;
-    u8 laDebug[sizeof(lScoring.maCrashScoreDebugComponent)];
-    std::memcpy(laDebug, lScoring.maCrashScoreDebugComponent, sizeof(laDebug));
+    u8 laDebug[sizeof(lScoring.mCrashScoreDebugComponent)];
+    std::memcpy(laDebug, &lScoring.mCrashScoreDebugComponent, sizeof(laDebug));
 
     CgsContainers::RingBuffer<CgsID>& lrStunt = lScoring.mRecentStuntSet;
     CgsID* lpStuntData = lrStunt.mpData;
@@ -123,8 +136,9 @@ int main()
               && lScoring.mfHighestJump == 0.0f,
           "+0x310/+0x314/+0x318/+0x31C/+0x320 = 0.0");
     Check(lScoring.miStuntsPerformed == 0 && lScoring.miCarDestructionBonus == 0, "+0x324/+0x328 = 0");
-    Check(std::memcmp(laDebug, lScoring.maCrashScoreDebugComponent, sizeof(laDebug)) == 0,
-          "the embedded debug component (+0x00..+0x1F) is untouched");
+    Check(std::memcmp(laDebug, &lScoring.mCrashScoreDebugComponent, sizeof(laDebug)) == 0,
+          "the entire native typed debug component is untouched");
+    Check(gDebugHookCalls == 0, "ClearData invokes no debug-component hooks");
     Check(gAsserts == 0, "no assert fires on a constructed scorer");
 
     std::printf("FxGsCrashScoring: %u checks, %u failures\n", gChecks, gFailures);

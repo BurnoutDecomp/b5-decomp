@@ -6,15 +6,14 @@
 //   RenderWorld, RenderTailgateCones, RenderSingleDebugCone, DrawResetOnWaterHeight,
 //   RenderHUD, RenderEngineState, RenderTrafficRelated, DrawTextWithOffsets.
 //
-// Colours: the console words are 0xAARRGGBB. The 3D immediate renderer takes rw::RGBA, spelled
-// rw::RGBA(r, g, b, a); the 2D immediate renderer takes the packed word (CgsDev::RGBA).
+// The 3D renderer's rw::RGBA(r,g,b,a) packs (a<<24)|(b<<16)|(g<<8)|r;
+// the 2D renderer takes the original packed word (CgsDev::RGBA).
 //
 // The console's "draw text at x, y" helper used by these HUDs is the scalar
 // Debug2DImmediateRender::DrawText(text, x, y, scale, colour) overload (it builds the Vector2 and
 // forwards with screen culling disabled), so the bodies call that overload directly.
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleDebugComponent.h"
-#include "pc/debug/RaceCarControls.h"
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"   // module, ActiveRaceCar, RaceCarStreamer
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -31,6 +30,11 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
+#include "pc/math/VmxFloat.h"
+#include "pc/debug/IniComponentLifecycle.h"
+#include "SDKs/XboxMath/XMVectorSin.h"
+#include "SDKs/XboxMath/XMVectorCos.h"
+#include "SDKs/XboxMath/XMVectorTan.h"
 
 #include <cmath>                                                                          // atan2, sinf, cosf, tanf
 #include <cstdlib>
@@ -118,6 +122,23 @@ namespace
     const f32 KF_MPS_TO_MPH = 1.0f / KF_MPH_TO_MPS;
 
     const CgsDev::RGBA KRGBA_TEXT_WHITE = 0xFFFFFFFFu;
+
+    // FLAG PC-platform leaf: loading configured vehicle LODs materializes this
+    // lazy page before a player exists. Its original frame/overlay methods
+    // require an attached player. Only INI-origin activation waits for that
+    // prerequisite; its bindings and configured values are already available.
+    bool IniPlayerUnavailablePC(const CgsDev::DebugComponent* lpComponent,
+                                const RaceCarEntityModule* lpModule)
+    {
+        if (!CgsPC::Debug::IsIniComponent(lpComponent))
+            return false;
+        if (!lpModule)
+            return true;
+        const EActiveRaceCarIndex leIndex = lpModule->GetPlayerActiveRaceCarIndex();
+        if (leIndex < E_ACTIVE_RACE_CAR_INDEX_0 || leIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            return true;
+        return !lpModule->GetActiveRaceCar(leIndex)->IsAttached();
+    }
 }
 
 // ================================================================================================
@@ -306,8 +327,6 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
 
     // ---- vehicle LODs ----
     const char* lpcLods = "Graphics/Vehicles.../LODs...";
-    if (CgsPC::Debug::BeginVehicleLodRegistration())
-    {
     RegisterVariable(&sbUseDynamicLods,    lpcLods, "Use Dynamic LODs");
     RegisterVariable(&sbUseFixedLods,      lpcLods, "Use Fixed LODs");
     RegisterVariable(&sbUseAggressiveLods, lpcLods, "Use Aggressive LODs");
@@ -322,7 +341,6 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[2], lpcLods, "Aggressive LOD 2");
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[3], lpcLods, "Aggressive LOD 3");
     RegisterVariable(&KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[4], lpcLods, "Aggressive LOD 4");
-    }
     SetRange(&siFixedVehicleLod, 0, KI_MAX_FIXED_VEHICLE_LOD);
     for (s32 liLod = 0; liLod < 5; ++liLod)
     {
@@ -357,17 +375,19 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
 // The player's running mean speed (m/s): new mean = (speed + mean * n) / (n + 1).
 void RaceCarEntityModuleDebugComponent::Update()
 {
+    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
+        return;
     ActiveRaceCar* lpPlayerCar =
         mpRaceCarEntityModule->GetActiveRaceCar(mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex());
 
     if (lpPlayerCar != nullptr)
     {
-        const f32 lfSpeed = vpu::Magnitude(lpPlayerCar->GetVelocity());
+        const f32 lfSpeed = CgsPC::VmxFloat::Magnitude3(lpPlayerCar->GetVelocity());
 
         const s32 liFrameCount = miAverageSpeedFrameCount;
         miAverageSpeedFrameCount = liFrameCount + 1;
 
-        mfAverageSpeed = (static_cast<f32>(liFrameCount) * mfAverageSpeed + lfSpeed)
+        mfAverageSpeed = std::fma(static_cast<f32>(liFrameCount), mfAverageSpeed, lfSpeed)
                        / static_cast<f32>(liFrameCount + 1);
     }
 }
@@ -378,6 +398,8 @@ void RaceCarEntityModuleDebugComponent::Update()
 
 void RaceCarEntityModuleDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
 {
+    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
+        return;
     const rw::RGBA lWhite(0xFF, 0xFF, 0xFF, 0xFF);
 
     if (mbRenderTailgateCones)
@@ -467,7 +489,7 @@ void RaceCarEntityModuleDebugComponent::RenderTailgateCones(CgsDev::Debug3DImmed
     (void)lPlayerPosition;
     (void)lpPlayerState;
 
-    const rw::RGBA lConeColour(0x32, 0xB4, 0x00, 0x50);
+    const rw::RGBA lConeColour(0x00, 0xB4, 0x32, 0x50); // ARTIST packed word 0x5032B400
 
     for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0; leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
     {
@@ -481,8 +503,9 @@ void RaceCarEntityModuleDebugComponent::RenderTailgateCones(CgsDev::Debug3DImmed
         Matrix44Affine lConeTransform = lpCar->GetTransform();
         const Vector3  lDirection     = lpCar->GetDirection();
 
-        lConeTransform.wAxis = lDirection * KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX + lConeTransform.wAxis;
-        lConeTransform.zAxis = lConeTransform.zAxis * -KF_TAILGATING_CONE_DEPTH;
+        lConeTransform.wAxis = CgsPC::VmxFloat::MultiplyAdd(
+            lDirection, KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX, lConeTransform.wAxis);
+        lConeTransform.zAxis = CgsPC::VmxFloat::Multiply(lConeTransform.zAxis, -KF_TAILGATING_CONE_DEPTH);
 
         const VecFloat lvfHalfAngle = { KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS,
                                         KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS };
@@ -498,25 +521,31 @@ void RaceCarEntityModuleDebugComponent::RenderSingleDebugCone(CgsDev::Debug3DImm
                                                               Matrix44Affine lTransform, VecFloat lvfHalfAngle,
                                                               rw::RGBA lColour, s32 liNumSegments) const
 {
-    const f32 lfRadius = vpu::Magnitude(lTransform.zAxis) * tanf(lvfHalfAngle.x);
+    namespace vmx = CgsPC::VmxFloat;
+    const f32 lfLength = vmx::Magnitude3(lTransform.zAxis);
+    const Vector3 lRadius = {
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.x)),
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.y)),
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.z)),
+        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.w)) };
     const f32 lfStep   = KF_TWO_PI / static_cast<f32>(liNumSegments);
 
     for (s32 liSegment = 0; liSegment < liNumSegments; ++liSegment)
     {
-        const f32 lfAngle     = lfStep * static_cast<f32>(liSegment);
-        const f32 lfNextAngle = lfAngle + lfStep;
+        const f32 lfAngle     = vmx::Multiply(lfStep, static_cast<f32>(liSegment));
+        const f32 lfNextAngle = vmx::Add(lfAngle, lfStep);
 
-        Vector3 lEdge = lTransform.yAxis * sinf(lfAngle);
-        lEdge = lTransform.xAxis * cosf(lfAngle) + lEdge;
-        lEdge = lEdge * lfRadius + lTransform.zAxis;
+        Vector3 lEdge = vmx::Multiply(lTransform.yAxis, XboxMath::XMVectorSin(lfAngle));
+        lEdge = vmx::MultiplyAdd(lTransform.xAxis, XboxMath::XMVectorCos(lfAngle), lEdge);
+        lEdge = vmx::MultiplyAdd(lRadius, lEdge, lTransform.zAxis);
 
-        Vector3 lNextEdge = lTransform.yAxis * sinf(lfNextAngle);
-        lNextEdge = lTransform.xAxis * cosf(lfNextAngle) + lNextEdge;
-        lNextEdge = lNextEdge * lfRadius + lTransform.zAxis;
+        Vector3 lNextEdge = vmx::Multiply(lTransform.yAxis, XboxMath::XMVectorSin(lfNextAngle));
+        lNextEdge = vmx::MultiplyAdd(lTransform.xAxis, XboxMath::XMVectorCos(lfNextAngle), lNextEdge);
+        lNextEdge = vmx::MultiplyAdd(lRadius, lNextEdge, lTransform.zAxis);
 
         const Vector3 lApex = lTransform.wAxis;
-        lpRender->DrawSolidQuad(lApex, lApex, lApex + lEdge, lApex + lNextEdge, lColour);
-        lpRender->DrawSolidQuad(lApex, lApex, lApex + lNextEdge, lApex + lEdge, lColour);
+        lpRender->DrawSolidQuad(lApex, lApex, vmx::Add(lApex, lEdge), vmx::Add(lApex, lNextEdge), lColour);
+        lpRender->DrawSolidQuad(lApex, lApex, vmx::Add(lApex, lNextEdge), vmx::Add(lApex, lEdge), lColour);
     }
 }
 
@@ -544,6 +573,8 @@ void RaceCarEntityModuleDebugComponent::DrawResetOnWaterHeight(CgsDev::Debug3DIm
 
 void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
 {
+    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
+        return;
     // One line per active-race-car slot: "<slot>:" then, for an active car,
     // "Damaged: <bool>, <persistent damage>".
     if (mbRenderCarDamageState)

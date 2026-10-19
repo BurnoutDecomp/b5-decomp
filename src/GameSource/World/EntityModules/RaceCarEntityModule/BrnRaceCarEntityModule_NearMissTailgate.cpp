@@ -23,6 +23,8 @@
 // remembered crashes against.
 // =================================================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "pc/math/VmxFloat.h"
+#include "SDKs/XboxMath/XMVectorCos.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"  // InputBuffer_PostPhysics / OutputBuffer_PostPhysics accessors
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"         // VehicleManagerOutputInterface::FineTrafficCrashedEventQueue
@@ -163,23 +165,25 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const Vector3 lOtherPosition  = lpOtherCar->GetPosition();
 
         const Vector3 lReversedHeading = -lOtherDirection;
-        const Vector3 lReferencePoint  =
-                lOtherDirection * KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX + lOtherPosition;
-        const Vector3 lSeparation      = lPlayerPosition - lReferencePoint;
+        const Vector3 lReferencePoint = CgsPC::VmxFloat::MultiplyAdd(
+                lOtherDirection, KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX, lOtherPosition);
+        const Vector3 lSeparation = CgsPC::VmxFloat::Subtract(lPlayerPosition, lReferencePoint);
 
         // Written as the same `>` the console's skip branch is, so an unordered compare falls
         // through instead of skipping. Do not rewrite this as a negated `<=`.
-        const f32 lfAlongHeading = rw::math::vpu::Dot( lReversedHeading, lSeparation );
-        if( lfAlongHeading * lfAlongHeading
+        const f32 lfAlongHeading = CgsPC::VmxFloat::Dot3(lReversedHeading, lSeparation);
+        if( CgsPC::VmxFloat::Multiply(lfAlongHeading, lfAlongHeading)
                 > KF_TAILGATING_CONE_DEPTH * KF_TAILGATING_CONE_DEPTH )
         {
             continue;
         }
 
-        const f32 lfConeCosine = rw::math::vpu::Dot(
-                rw::math::vpu::Normalize( lSeparation ), lReversedHeading );
+        // 822CE3BC..410 has no zero fallback after either refinement.
+        const f32 lfConeCosine = CgsPC::VmxFloat::Dot3(
+                CgsPC::VmxFloat::Normalize3Unconditional(lSeparation, 2), lReversedHeading);
 
-        if( std::cos( KF_TAILGATING_CONE_HALF_ANGLE_RADS ) > lfConeCosine )
+        if( CgsPC::VmxFloat::Flush(XboxMath::XMVectorCos(KF_TAILGATING_CONE_HALF_ANGLE_RADS))
+                > CgsPC::VmxFloat::Flush(lfConeCosine) )
         {
             continue;
         }
@@ -192,10 +196,10 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
             continue;
         }
 
-        const Vector3 lVelocityDifference =
-                lpOtherPhysicsState->mLinearVelocity - lPlayerVelocity;
+        const Vector3 lVelocityDifference = CgsPC::VmxFloat::Subtract(
+                lpOtherPhysicsState->mLinearVelocity, lPlayerVelocity);
         const f32 lfVelocityDifferenceSquared =
-                rw::math::vpu::Dot( lVelocityDifference, lVelocityDifference );
+                CgsPC::VmxFloat::Dot3(lVelocityDifference, lVelocityDifference);
 
         // ARTIST 822CE48C: ble also takes the unordered arm of fcmpu.
         if( !( lfVelocityDifferenceSquared

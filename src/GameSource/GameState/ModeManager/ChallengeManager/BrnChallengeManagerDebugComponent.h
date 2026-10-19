@@ -21,12 +21,11 @@
 //   miChallengeIndex             = +0x10  (X360 OnActivate `addi r30,r31,0x10` -> the RegisterVariable/SetRange target)
 //   mbDebugBeginChallengePending = +0x14
 //
-// SCOPE: only the three functions this TU's X360 ledger attests are bodied here
-// (CompleteAllChallenges, GetName, OnActivate), plus the ICF-folded StartChallenge latch write.
-// The other DWARF-listed methods (Construct/Destruct/RenderHUD/GetPath/
-// DebugStartChallenge) are owned by their own passes and are intentionally NOT declared here
-// (gate every DWARF declaration on X360 attestation -- declaring them now would force
-// unimplemented vtable slots / link refs).
+// SCOPE: this TU bodies the X360-attested CompleteAllChallenges, GetName, and OnActivate methods,
+// plus the ICF-folded StartChallenge latch write. GetPath is an inline override because the ARTIST
+// vtable at 0x820CE034 points slot +0x10 to 0x82312480, the Gameplay-return leaf. The other
+// DWARF-listed methods (Construct/Destruct/RenderHUD/DebugStartChallenge) remain undeclared here
+// without X360 body/call-site evidence.
 
 namespace BrnGameState
 {
@@ -51,8 +50,8 @@ namespace BrnGameState
 
         // The original callback at X360 0x82817350 is ICF-folded with the perf-monitor reset
         // callback, but its body is only `li 1; stb 0x14(r3); blr`. DecFIGS names this component
-        // byte at +0x14 mbDebugBeginChallengePending. Preserve that store only: no X360 export
-        // reads this flag, so the menu action does not start a challenge.
+        // byte at +0x14 mbDebugBeginChallengePending. Preserve that store only; this callback body
+        // does not directly start a challenge, and no reader is added without its own evidence.
         static void StartChallenge(void* lpContext); // @ BrnChallengeManagerDebugComponent.cpp:114
 
         // The "Complete all challenges" debug action callback (X360 0x82335010). Registered with the

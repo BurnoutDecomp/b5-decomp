@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"            // CgsGraphics::ImRenderer<V>
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h"  // CgsGraphics::BasicColouredVertex
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // CgsGraphics::BasicColouredTexturedVertex (Im3d)
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsPositionOnlyVertex.h" // CgsGraphics::PositionOnlyVertex
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramVariableHandle
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 
@@ -12,10 +13,11 @@
 // Im3dUntex specialises it for the position+colour vertex (BasicColouredVertex). Hierarchy
 // from the DecFIGS DWARF (CgsIm3d.h:56/199):
 //   Im3dUntex : Im3dBase<BasicColouredVertex> : ImRenderer<BasicColouredVertex> : ImRendererBase
+//   Im3dZOnly : Im3dBase<PositionOnlyVertex> : ImRenderer<PositionOnlyVertex> : ImRendererBase
 //   Im3d : Im3dBase<BasicColouredTexturedVertex> : ImRenderer<BasicColouredTexturedVertex>
 //
-// Textured3D publishes full one/two-matrix transforms; the legacy untextured
-// ProgressBar slice remains limited to its previously recovered members.
+// Textured3D publishes full one/two-matrix transforms; Im3dUntex also owns its
+// ARTIST-attested program/transform constructor for the untextured ProgressBar path.
 namespace CgsGraphics
 {
     template <typename V>
@@ -35,6 +37,18 @@ namespace CgsGraphics
     // DWARF CgsIm3d.h:199.
     struct Im3dUntex : public Im3dBase<BasicColouredVertex>
     {
+        // ARTIST 0x827FCBD0: initialize the inherited transform, build the one
+        // untextured program pair, and resolve its worldViewProj handle.
+        void Construct(rw::IResourceAllocator* lpAllocator);
+    };
+
+    // DecFIGS DWARF CgsIm3d.h:226. The position-only renderer has exactly this inherited base
+    // shape; its descriptor and program state remain in ImRenderer<PositionOnlyVertex>.
+    struct Im3dZOnly : public Im3dBase<PositionOnlyVertex>
+    {
+        // ARTIST 0x827FCCB8: initialize the inherited transform, build the one
+        // position-only program pair, and resolve its worldViewProj handle.
+        void Construct(rw::IResourceAllocator* lpAllocator);
     };
 
     // CgsGraphics::Im3d - the concrete TEXTURED immediate-mode 3D renderer (the smoke / spark /

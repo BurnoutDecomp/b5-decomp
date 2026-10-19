@@ -25,6 +25,7 @@
 #include "pc/gcm/renderengine/renderstates.h"
 #include "pc/gcm/renderengine/texture.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
 #include "rw/rwcore_structs.h"
 
 #include <cstring>   // memset
@@ -264,6 +265,146 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
 }
 
 // ---------------------------------------------------------------------------------------------------
+// CgsGraphics::ImRendererBase::ConstructSamplerState  @ 0x827ED538
+// The four caller arguments are carried into the sampler block at offsets +0x0C, +0x10, +0x14 and
+// +0x00/+0x04 exactly as ARTIST stores them. The legacy member names in SamplerStateParameters are
+// not used here to infer meaning; the offsets and constants below follow the X360 stores.
+// ---------------------------------------------------------------------------------------------------
+const SamplerState* ImRendererBase::ConstructSamplerState(
+    rw::IResourceAllocator* lpAllocator, u32 luArg2, u32 luArg3, u32 luArg4, u32 luArg5)
+{
+    renderengine::SamplerStateParameters lParameters = {};
+
+    lParameters.muAddressU = luArg4;          // +0x00 = a4
+    lParameters.muAddressV = luArg5;          // +0x04 = a5
+    lParameters.muAddressW = 0;               // +0x08
+    lParameters.muBias = luArg2;              // +0x0C = a2
+    lParameters.muMaxLevel = luArg2;           // +0x10 = a2
+    lParameters.muMinLevel = luArg3;           // +0x14 = a3
+    lParameters.muMaxAnisotropy = 0;           // +0x18 = ARTIST v7[6]
+    lParameters.muMagFilter = 0;               // +0x1C
+    lParameters.muMinFilter = 13;              // +0x20 = ARTIST v7[8]
+    lParameters.muMipFilter = 0;               // +0x24
+    lParameters.muConvolution = 1;             // +0x28
+    lParameters.muColor = 0;                   // +0x2C
+    lParameters.muRemap = 0;                   // +0x30
+    lParameters.muDepthTextureFunction = 0;    // +0x34
+    lParameters.muGamma = 0;                   // +0x38
+    lParameters.muState17 = 0;                 // +0x3C
+    lParameters.mbState15 = 0;                 // +0x40
+    lParameters.mbState22 = 0;                 // +0x41
+    lParameters.mbState16 = 0;                 // +0x42
+    lParameters.mbState11Zero = 1;             // +0x43
+    lParameters.mbState26 = 1;                 // +0x44
+
+    renderengine::ResourceDescriptorEntry laDescriptor[5] = {};
+    renderengine::SamplerState::GetResourceDescriptor(laDescriptor);
+
+    renderengine::SamplerStateData* lapStateHandles[5] = {};
+    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
+    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, laDescriptor, 0);
+
+    return reinterpret_cast<const SamplerState*>(
+        renderengine::SamplerState::Initialize(lapStateHandles, &lParameters));
+}
+
+// ---------------------------------------------------------------------------------------------------
+// CgsGraphics::ImRendererBase::ConstructWhiteTexture  @ 0x827F1AE8
+// ---------------------------------------------------------------------------------------------------
+renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAllocator* lpAllocator)
+{
+    renderengine::Texture::Parameters lParameters;
+    lParameters.meType = renderengine::Texture::E_TYPE_2D; // +0x00 = 1
+    lParameters.muSysMem = 0;                              // +0x04
+    lParameters.muWidth = 4;                               // +0x08
+    lParameters.muHeight = 4;                              // +0x0C
+    lParameters.muDepth = 1;                               // +0x10
+    lParameters.muNumLevels = 1;                           // +0x14
+    // Preserve the raw X360 word; texture.cpp maps this exact code to D3DFMT_A8R8G8B8 at D3D9 allocation.
+    lParameters.miFormat = 0x18280086;                     // +0x18
+    // +0x1C (muReserved1) is not written by ARTIST; leave this field untouched.
+
+    u32 lauDescriptor[20] = {};
+    renderengine::Texture::GetResourceDescriptor(lauDescriptor, &lParameters);
+
+    rw::Resource lTextureResource = {};
+    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
+    lpAllocatorIf->Create(&lTextureResource, lpAllocatorIf, lauDescriptor, 0);
+
+    renderengine::Texture* lpWhiteTexture =
+        renderengine::Texture::Initialize(&lTextureResource, &lParameters);
+
+    renderengine::Texture::Locked lLocked = {};
+    // The console call is Lock(texture, flags=2, level=0, face=0, out). The host API orders these
+    // as (level, face, flags, out) and returns void, so its lock-result assert cannot be represented.
+    renderengine::Texture::Lock(lpWhiteTexture, 0, 0, 0, &lLocked);
+    CGS_ASSERT(lLocked.mpPixelData != nullptr, "lLocked.pixelData");
+
+    u8* lpPixelRow = static_cast<u8*>(lLocked.mpPixelData);
+    const u32 luStrideBytes = lLocked.muStride & 0xFFFFFFFCu;
+    for (u32 luRow = 0; luRow < 4; ++luRow)
+    {
+        u32* lpPixels = reinterpret_cast<u32*>(lpPixelRow);
+        lpPixels[0] = 0xFFFFFFFFu;
+        lpPixels[1] = 0xFFFFFFFFu;
+        lpPixels[2] = 0xFFFFFFFFu;
+        lpPixels[3] = 0xFFFFFFFFu;
+        lpPixelRow += luStrideBytes;
+    }
+
+    renderengine::Texture::Unlock(lpWhiteTexture, &lLocked);
+    return lpWhiteTexture;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// CgsGraphics::ImRendererBase::ConstructOnceOnly  @ 0x827F1C20
+// ARTIST's callers own the shared one-time guard. This body deliberately rebuilds all state slots
+// when called and does not read or set mgbStateLibraryConstructed.
+// ---------------------------------------------------------------------------------------------------
+void ImRendererBase::ConstructOnceOnly(rw::IResourceAllocator* lpAllocator)
+{
+    // ConstructBlendState's recovered implementation uses `this` as the allocator. The console
+    // passes the allocator in r3 to this helper and forwards that same pointer in r3 to each blend
+    // builder, so preserve that existing helper contract through its class-typed receiver.
+    ImRendererBase* lpAllocatorView = reinterpret_cast<ImRendererBase*>(lpAllocator);
+    mgStateLibrary.mpBlendState_Standard = lpAllocatorView->ConstructBlendState(6, 7, 0);
+    mgStateLibrary.mpBlendState_Additive = lpAllocatorView->ConstructBlendState(6, 1, 0);
+    mgStateLibrary.mpBlendState_Subtractive = lpAllocatorView->ConstructBlendState(6, 7, 1);
+    mgStateLibrary.mpBlendState_SubtractiveColour = lpAllocatorView->ConstructBlendState(6, 1, 4);
+    mgStateLibrary.mpBlendState_Premultiplied = lpAllocatorView->ConstructBlendState(1, 7, 0);
+    mgStateLibrary.mpBlendState_NoAlphaTest = ConstructNoAlphaTestBlendState(lpAllocator);
+    mgStateLibrary.mpBlendState_NoBlendNoAlphaTest = ConstructNoBlendNoAlphaTestBlendState(lpAllocator);
+
+    mgStateLibrary.mpRasterizerState_CullNone = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(0));
+    mgStateLibrary.mpRasterizerState_CullCCW = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(2));
+    mgStateLibrary.mpRasterizerState_CullCW = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(1));
+
+    mgStateLibrary.mpDepthStencilState_ZBufferOn = ConstructDepthStencilState(
+        lpAllocator, true, true, static_cast<renderengine::DepthStencilState::Function>(3));
+    mgStateLibrary.mpDepthStencilState_ZBufferOnWriteOff = ConstructDepthStencilState(
+        lpAllocator, true, false, static_cast<renderengine::DepthStencilState::Function>(3));
+    mgStateLibrary.mpDepthStencilState_ZBufferGreaterEqWriteOff = ConstructDepthStencilState(
+        lpAllocator, true, false, static_cast<renderengine::DepthStencilState::Function>(6));
+    mgStateLibrary.mpDepthStencilState_ZBufferOff = ConstructDepthStencilState(
+        lpAllocator, false, false, static_cast<renderengine::DepthStencilState::Function>(3));
+
+    mgStateLibrary.mpTexture_White = ConstructWhiteTexture(lpAllocator);
+    mgStateLibrary.mpTextureState_Untextured = ConstructDefaultTextureState(
+        lpAllocator, mgStateLibrary.mpTexture_White);
+    mgStateLibrary.mpSamplerState_Linear_MipNearest_ClampUV = ConstructSamplerState(
+        lpAllocator, 1, 0, 2, 2);
+    mgStateLibrary.mpSamplerState_Linear_MipNearest_TileUV = ConstructSamplerState(
+        lpAllocator, 1, 0, 0, 0);
+    mgStateLibrary.mpSamplerState_Nearest_MipNearest_ClampUV = ConstructSamplerState(
+        lpAllocator, 0, 0, 2, 2);
+    mgStateLibrary.mpSamplerState_Nearest_MipNearest_TileUV = ConstructSamplerState(
+        lpAllocator, 0, 0, 0, 0);
+}
+
+// ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::SetStateLowLevel   (X360 ImRendererBase::SetState @ 0x82276D08)
 //
 // WHAT 0x82276D08 ACTUALLY IS: the mgpActiveRenderer assert (`lwz r11, dword_83010F9C@l(r11)`
@@ -300,6 +441,30 @@ void* ImRendererBase::SetStateLowLevel(const void* lpState)
     shadow::Device::SetState(static_cast<const renderengine::BlendMaterialState*>(lpState));
 
     return this;
+}
+
+// ARTIST 82276D08 / 82276DA8: the immediate owner assertion wraps the
+// same lock/compare/apply/cache operations used by ordinary dispatch.
+void ImRendererBase::SetState(const BlendState* lpState)
+{
+    SetStateLowLevel(lpState);
+}
+
+void ImRendererBase::SetState(const DepthStencilState* lpState)
+{
+    CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
+    shadow::Device::SetState(reinterpret_cast<const renderengine::DepthStencilState*>(lpState));
+}
+
+// X360 CgsGraphics::ImRendererBase::SetState(const RasterizerState*) @0x82276E48.
+// Its active-renderer assertion is followed by the shadow device's rasterizer lock,
+// compare, low-level apply, and cache update (the same stages as shadow::Device::SetState
+// @0x82276B38).
+void ImRendererBase::SetState(const RasterizerState* lpState)
+{
+    CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
+
+    shadow::Device::SetState(reinterpret_cast<const renderengine::RasterizerState*>(lpState));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -349,12 +514,23 @@ void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
     shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
 }
 
+// ARTIST 8240625C..82406298 inlines the stage-zero TextureState overload.
+// The indexed twin is homed in CgsIm2d_wBT_01.cpp; both reach the one shadow.
+void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
+{
+    CGS_ASSERT(mgpActiveRenderer == this, "mgpActiveRenderer == this");
+    shadow::Device::SetState(lpTextureState, 0);
+}
+
 // ---- module statics (X360 .data home of this TU) --------------------------------------------------
 ImRendererBase*       ImRendererBase::mgpActiveRenderer        = nullptr;  // dword_83010F9C
+ImRendererBase::StateLibrary ImRendererBase::mgStateLibrary = {};
+bool ImRendererBase::mgbStateLibraryConstructed = false;
 // mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled were second host
 // homes for dword_83010964 / dword_830109E8 / dword_83010968 / byte_83010907, all of which
 // shadow::Device already owns -- see CgsImRenderer.h for the address evidence. Deleted with their
 // declarations.
-void*                 ImRendererBase::mgpDevice                 = nullptr;  // off_83271608
+// mgpDevice's native platform definition is in SkidImmediateMode.cpp. It is
+// shared by the existing direct-draw backend; no second definition lives here.
 
 }  // namespace CgsGraphics

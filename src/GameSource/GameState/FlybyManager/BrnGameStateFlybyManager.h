@@ -19,8 +19,8 @@
 // the two rank thresholds. The console's layout puts mFlybyData at +0x10 (OnlineFlybyManager's
 // CalculateOnlineRivals prepares this+0x10), mRandom at +0x260 and the owner pointers at
 // +0x290/+0x294 (Construct's stores).
-// The two reference virtuals (CalculateFlybyRivals, CalculateNumberOfCarsInFlyby) are not
-// declared virtual on this build: each derived class declares its own, called by name.
+// ARTIST's offline/online vtables each carry CalculateFlybyRivals then
+// CalculateNumberOfCarsInFlyby, matching the DecFIGS virtual declaration order.
 // ===========================================================================
 
 namespace BrnGameState
@@ -50,6 +50,10 @@ public:
     };
 
     void Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem);
+
+    // DecFIGS base vtable 0x104E6DF8 has __cxa_pure_virtual in both slots.
+    virtual const GameStateModuleIO::FlybyData* CalculateFlybyRivals() = 0;
+    virtual s32 CalculateNumberOfCarsInFlyby() = 0;
 
     // Asserts the owner was set by Construct and returns it.
     GameStateModule* GetGameStateModule();

@@ -85,7 +85,7 @@ namespace BrnWorld
         // lives inside maPrecedingState in this header and is not reachable (Construct and
         // Prepare carry the same seam).
 
-        // [FLAG PC bring-up] mBoostDebugComponent (+0x17E50) remains unhomed.
+        mBoostDebugComponent.Destruct(); // ARTIST 0x822F3E18, folded empty base body
         // The race-car diagnostic owner is real; teardown is inlined at 822F3E1C..822F3E54.
         mRCEntityModuleDebugComponent.Destruct();
 

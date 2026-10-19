@@ -35,8 +35,11 @@ namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyI
 
 namespace BrnPhysics
 {
+    namespace Vehicle { class DebugComponent; }
     class ExternalPhysicsBody : public ExternallySimulatedBody
     {
+        // ARTIST handling Update 825DA4A8 reads the named local-inertia rows.
+        friend class Vehicle::DebugComponent;
     public:
         // --- BrnPhysics-bodies group's 7 ledger functions (bodied in ExternalPhysicsBody.cpp) ---
 

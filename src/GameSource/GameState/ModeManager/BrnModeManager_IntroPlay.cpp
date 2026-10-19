@@ -376,25 +376,10 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
             }
         }
 
-        // ⚠️ [stuntrace] ONLINE ARM DEFERRED -- the live flyby roster.
-        // CONSOLE (asm 0x82343220..0x82343264): picks one of TWO flyby managers embedded in the
-        // GameStateModule -- `addis r3,gsm,3` then `addi r3,r3,-0x2720` (gsm+0x2D8E0 == 186592,
-        // the ONLINE one) when GameStateModule::IsOnlineGameMode(), else `addi r3,r3,-0x29D0`
-        // (gsm+0x2D630 == 185904, the offline one) -- calls its vtable slot 0 (==
-        // FlybyManager::GetFlybyData) and memcpy's 592 bytes (== sizeof(FlybyData)) into the
-        // action's mFlybyData.
-        // WHY DEFERRED: GameStateModule declares NO flyby-manager member or accessor in this tree
-        // (grep "flyby" over BrnGameStateModule.h finds only E_PREPARESTAGE_FLYBYMANAGER), and the
-        // only header that models FlybyManager -- FlybyManager/BrnGameStateOnlineFlybyManager.h --
-        // re-declares its OWN minimal `class GameStateModule` in namespace BrnGameState, so it
-        // cannot be included in the same TU as the real BrnGameStateModule.h. Reaching gsm+0x2D8E0
-        // by raw offset is exactly the fabrication the wave rules forbid.
-        // BEHAVIOUR HELD: the action still leaves here with a VALID, EMPTY roster (Prepare() is the
-        // same call the offline path makes) instead of an uninitialised 592-byte stack blob.
-        // Consequence: online events show no rival cards in the pre-race flyby. OFFLINE EVENTS --
-        // including every stunt race -- are UNAFFECTED; they never take this branch.
-        // RE-WIRE WHEN: GameStateModule grows GetFlybyManager()/GetOnlineFlybyManager() (filed).
-        lIntroAction.mFlybyData.Prepare();
+        // ARTIST 82343220..82343264: select the canonical manager, dispatch
+        // slot 0, then copy its complete 592-byte payload into action 29.
+        lIntroAction.mFlybyData =
+            *mpGameStateModule->GetFlybyManager()->CalculateFlybyRivals();
     }
     else
     {

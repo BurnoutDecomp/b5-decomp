@@ -345,7 +345,7 @@ namespace CgsMemory
 
             // build a one-type leaf bank for the allocator and create it
             MemoryBank::Params lParams;
-            for (s32 lt = 0; lt < 6; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
+            for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
             const char* lpcName = lpReq->GetBankName();
             s32 li = 0;
             for (; li < MemoryBank::KI_NAME_SIZE - 1 && lpcName[li] != 0; ++li) lParams.macName[li] = lpcName[li];
@@ -418,9 +418,8 @@ namespace CgsMemory
     // -> <<10) and compute the block count; build a one bank Params covering all types; CreateBank; then
     // gather the created bank's GetData(type) into the response's rw::Resource. This is the async/message-
     // driven equivalent of the synchronous GameDataModule pool-bank carve (CreatePoolBank); the sizing +
-    // field accessors are faithful to the X360. [VERIFY: the X360 serialised descriptor is
-    // rw::BaseResourceDescriptors<5> and the X360 loops 5 types; our request carries rw::ResourceDescriptor
-    // (<4>, the PC rwcore form) and pools use <=3 memory types, so the 4-entry loop is sufficient.]
+    // field accessors are faithful to the X360. The canonical request and native rw allocator
+    // descriptor both carry five lanes, matching the original reader traversal.
     void MemoryModule::ProcessCreateResourceRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
     {
         const MemoryIO::CreateResourceRequest* lpReq = static_cast<const MemoryIO::CreateResourceRequest*>(lpRequest);
@@ -433,9 +432,9 @@ namespace CgsMemory
         lResponse.SetDescriptor(lpDesc);
 
         MemoryBank::Params lParams;
-        for (s32 lt = 0; lt < 6; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
+        for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
 
-        const s32 kiNumTypes = 4;   // rw::ResourceDescriptor entry count [VERIFY: X360 loops 5]
+        const s32 kiNumTypes = static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT);
         MemoryIO::ResultCodes leResult = MemoryIO::E_RESULT_OK;
 
         const u32 luParentIdx = GetBankIndexFromId(static_cast<u32>(liParentId));

@@ -10,7 +10,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (batch-capacity guards)
 #include "pc/gcm/renderengine/device.h"        // gDevice, gDisplayWidth/Height
 #include "pc/gcm/renderengine/texture.h"       // Texture::mpD3DTexture
-#include "pc/gcm/renderengine/renderstates.h"  // TextureState::mpRaster (SetState(TextureState*))
+#include "pc/gcm/renderengine/renderstates.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 
 #include <d3d9.h>
 #include "pc/gcm/renderengine/SamplerStateCache.h"
@@ -45,8 +48,6 @@ namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
 
 namespace
 {
-    const void* gpIm2dTraceLastTexture = nullptr;
-
     bool Im2dTraceEnabled()
     {
         static int siState = -1;
@@ -85,6 +86,21 @@ namespace
         renderengine::PCSetPixelShader(lpDevice, nullptr);
     }
 
+    // FLAG PC-platform leaf: the fixed-function stage consumes the texture
+    // already bound through shadow::Device. No private texture key or direct
+    // SetTexture call exists here; a null resource selects vertex colour alone.
+    void SelectFixedFunctionTextureMode(IDirect3DDevice9* lpDevice)
+    {
+        const DWORD luOp = shadow::Device::GetSamplerTextureShadow(0) != nullptr
+            ? D3DTOP_MODULATE : D3DTOP_SELECTARG2;
+        lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, luOp);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, luOp);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+    }
+
     // The text path submits whole-line triangle strips (6 verts/glyph); size the reserve/submit
     // scratch well above the font's KU_MAX_VERTICES (1536) so a long line never overflows.
     const u32 KU_RENDER_BUFFER_MAX = 2048;
@@ -95,78 +111,34 @@ namespace CgsGraphics
     // [DIAG] NOT IN THE X360 BINARY -- see CgsIm2d.h.
     s32 gLastIm2dMaskRect[4] = { 0, 0, 0, 0 };
 
-    // ---- ImRendererBase (non-template) -------------------------------------------
-    void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
-    {
-        gpIm2dTraceLastTexture = lpTexture;   // [diag] BRN_IM2D_TRACE attribution
-        if (renderengine::gDevice != nullptr)
-        {
-            renderengine::gDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
-            // With a texture, modulate it by the vertex colour (the loading-screen path); with NO
-            // texture, drive the stage from the vertex colour alone (SELECTARG2 = DIFFUSE) so untextured
-            // prims - the debug overlay's solid squares - draw their colour regardless of the driver's
-            // unbound-texture default.
-            const DWORD luOp = (lpTexture != nullptr) ? D3DTOP_MODULATE : D3DTOP_SELECTARG2;
-            renderengine::gDevice->SetTextureStageState(0, D3DTSS_COLOROP, luOp);
-            renderengine::gDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, luOp);
-        }
-    }
-
-    // The CgsGraphics state objects are opaque here; for the 2D loading-screen path
-    // SetState installs the standard alpha-blend-over-framebuffer state.
-    void ImRendererBase::SetState(const BlendState* /*lpState*/)
-    {
-        IDirect3DDevice9* lpDevice = renderengine::gDevice;
-        if (lpDevice == nullptr)
-        {
-            return;
-        }
-        lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-    }
-
-    // Bind the bitmap and modulate it by the vertex colour
-    void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
-    {
-        IDirect3DDevice9* lpDevice = renderengine::gDevice;
-        if (lpDevice == nullptr)
-        {
-            return;
-        }
-        renderengine::Texture* lpTexture = (lpTextureState != nullptr) ? lpTextureState->mpRaster : nullptr;
-        lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
-        // Use bilinear filtering
-        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-        lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
-        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
-    }
-
     // ---- ImRenderer<V> (template) ------------------------------------------------
     template <typename V>
     void ImRenderer<V>::BeginRendering()
     {
+        // ARTIST Basic2d Begin823ABED8 claims the original base subobject,
+        // invalidates the shared shadow and selects program slot zero. Native
+        // fixed-function selection below replaces the console program/descriptor
+        // bind; those GPU program slots have no object in this backend.
+        CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+        mgpActiveRenderer = static_cast<ImRendererBase*>(this);
+        shadow::Device::ResetShadowing();
+        mi8CurrentProgram = 0;
+
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
         if (lpDevice == nullptr)
         {
             return;
         }
         SelectFixedFunctionPipeline(lpDevice);
+        // FLAG PC-platform leaf: fixed-function screen vertices need lighting
+        // off and the original immediate state defaults. Reuse the full native
+        // F20/F3C/F54 objects, applying them through the same lock-aware cache
+        // as the typed preview binds. Cull-none also resets the scissor state.
+        PrepareIm3dStateLibraryPC();
+        this->SetState(reinterpret_cast<const BlendState*>(CgsGui::gpGuiBlendStateStandard));
+        this->SetState(reinterpret_cast<const DepthStencilState*>(GetIm3dDepthStencilZBufferOffPC()));
+        this->SetState(reinterpret_cast<const RasterizerState*>(CgsGui::gpGuiRasterizerStateCullNone));
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
-        lpDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
-        lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-        lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-        // Frame-start mask reset: any scissor mask left by an unbalanced PushMask on the
-        // previous frame is cleared (the console's mask state is per-frame too).
-        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
         // Bilinear (D3D9 defaults to POINT -> blocky); no mip filtering for the 1:1 2D content.
         renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
         renderengine::PCSetSamplerState(lpDevice, 0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
@@ -182,6 +154,11 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderer<V>::EndRendering()
     {
+        // ARTIST823ABFD8 asserts the same base owner and releases it even
+        // after a failed Begin/End pairing; there is no owner restoration stack.
+        CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
+                   "mgpActiveRenderer == this");
+        mgpActiveRenderer = nullptr;
     }
 
     template <typename V>
@@ -195,6 +172,8 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderer<V>::Render(renderengine::PrimitiveType /*lePrimitiveType*/, const V* lpVertices, u32 luCount)
     {
+        CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
+                   "mgpActiveRenderer == this"); // ARTIST823C705C..823C708C
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
         if (lpDevice == nullptr || lpVertices == nullptr || luCount < 3u)
         {
@@ -234,7 +213,7 @@ namespace CgsGraphics
                         renderengine::guPresentCount, luCount, lfMinX, lfMinY, lfMaxX, lfMaxY,
                         lpVertices[0].mv4Colour.r, lpVertices[0].mv4Colour.g,
                         lpVertices[0].mv4Colour.b, lpVertices[0].mv4Colour.a,
-                        gpIm2dTraceLastTexture, lacShift);
+                        shadow::Device::GetSamplerTextureShadow(0), lacShift);
             CgsDev::Log::WriteToLog(lacMsg);
         }
 
@@ -262,6 +241,7 @@ namespace CgsGraphics
         // together on every draw (see SelectFixedFunctionPipeline): batches reach here
         // through paths that do not all open with BeginRendering.
         SelectFixedFunctionPipeline(lpDevice);
+        SelectFixedFunctionTextureMode(lpDevice);
         renderengine::PCSetFVF(lpDevice, KU_SCREEN_FVF);
         // The loading screen submits 4-vertex quads as triangle strips.
         renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, luCount - 2u, saBatch, sizeof(D3DScreenVertex));
@@ -328,6 +308,7 @@ namespace CgsGraphics
         }
 
         SelectFixedFunctionPipeline(lpDevice);   // pairs with SetFVF (see Render above)
+        SelectFixedFunctionTextureMode(lpDevice);
         renderengine::PCSetFVF(lpDevice, KU_SCREEN_FVF);
         // One triangle strip per line: the font's glyph quads are joined by degenerate connectors.
         renderengine::GeometryBindingsPC::DrawPrimitiveUP(lpDevice, D3DPT_TRIANGLESTRIP, luVertexCount - 2u, saBatch, sizeof(D3DScreenVertex));
@@ -754,7 +735,29 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
     }
 
-    // Instantiate the coloured+textured 2D renderer the loading screen uses.
-    template struct ImRenderer<Basic2dColouredTexturedVertex>;
-    template struct Im2dBase<Basic2dColouredTexturedVertex>;
+    // Emit only members whose bodies are owned by this translation unit. The 2D
+    // renderer has no ARTIST/DecFIGS BeginRendering(s8) body; Construct, AddProgram
+    // and the ImRenderer transform are separately owned by CgsIm2dColTex.cpp. Keep
+    // the no-argument render pipeline and the Im2dBase transform/mask methods
+    // available to loading, debug and GUI callers without requesting absent bodies.
+    template void ImRenderer<Basic2dColouredTexturedVertex>::BeginRendering();
+    template void ImRenderer<Basic2dColouredTexturedVertex>::EndRendering();
+    template bool ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(s8);
+    template void ImRenderer<Basic2dColouredTexturedVertex>::Render(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template Basic2dColouredTexturedVertex*
+        ImRenderer<Basic2dColouredTexturedVertex>::RenderStart(u32);
+    template void ImRenderer<Basic2dColouredTexturedVertex>::RenderEnd(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::SetTransform(
+        const Im2dTransform&);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::BeginRendering();
+    template void Im2dBase<Basic2dColouredTexturedVertex>::RenderEnd(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::BatchTransformTextureBlendRenderStatic(
+        const Im2dTransform&, renderengine::Texture*, const BlendState*,
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32, u8);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::PushMask(
+        renderengine::Texture*, Basic2dColouredTexturedVertex*);
+    template void Im2dBase<Basic2dColouredTexturedVertex>::PopMask();
 }

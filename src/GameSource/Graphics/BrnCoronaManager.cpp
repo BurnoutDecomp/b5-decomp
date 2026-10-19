@@ -1,4 +1,5 @@
 #include "GameSource/Graphics/BrnCoronaManager.h"
+#include "pc/math/VmxFloat.h"
 #include "pc/gcm/renderengine/reflections/LightSubmission.h"
 
 #include <cstdio>   // snprintf (the one-shot bring-up lines)
@@ -149,10 +150,10 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(const Vector3& lvPositi
         // the two unread lanes carry whatever the archetype table holds there, exactly as on the
         // console. Dispatch reads only x/y.)
         Vector2 lvSize;
-        lvSize.x = lCoronaTypeParams.mvSize.x * lfSizeScale;
-        lvSize.y = lCoronaTypeParams.mvSize.y * lfSizeScale;
-        lvSize.z = lCoronaTypeParams.mvSize.z * lfSizeScale;
-        lvSize.w = lCoronaTypeParams.mvSize.w * lfSizeScale;
+        lvSize.x = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.x, lfSizeScale);
+        lvSize.y = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.y, lfSizeScale);
+        lvSize.z = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.z, lfSizeScale);
+        lvSize.w = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.w, lfSizeScale);
 
         mBufferIterator.Write(lvPosition, lvDirection, lvSize, lCoronaTypeParams.mfBiasDistance,
                                lColour, lCoronaTypeParams.miTextureID);

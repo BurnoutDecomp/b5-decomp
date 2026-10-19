@@ -4,9 +4,9 @@
 // Plain value type (no base, no vtable: none of the reconstructed X360 bodies touch a vptr on `this`).
 //
 // MINIMAL SLICE (BrnDriveThruManager.h / BrnGameStateModuleIO.h precedent): only the members the
-// reconstructed functions touch are declared, placed at their X360 byte offsets by leading
-// reserved blobs. The full class preamble is NOT modelled — grow these reserved blobs into real
-// members from the full DWARF layout (BrnTriggerQueryManager.h) when the whole class lands.
+// reconstructed functions touch are declared, in the DecFIGS order. The comments below retain
+// their X360 byte offsets; pointer-bearing embedded members grow naturally on the 64-bit host.
+// Do not add padding to force those native members back into the console's opaque byte ranges.
 //
 // X360-attested member offsets (from Construct @0x82364BF0, ProcessPlayerTriggers @0x8239BF80,
 // UpdateTriggers @0x82391FD8):
@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                             // Array<T,N> (generic, committed)
 #include "GameSource/GameState/BrnGameStateTypes.h"                                 // BrnGameState::LandmarkIndex
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"           // BrnGameState::LightTriggerId (committed typedef home)
+#include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.h" // embedded debug component
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                            // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"                // CgsModule::EventReceiverQueue<3072,16> (Prepare's reply queue)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"                  // CgsResource::ResourcePtr<T>
@@ -42,7 +43,7 @@
 namespace BrnTrigger      { struct TriggerData; struct TriggerRegion; struct GenericRegion; }
 namespace BrnTraffic      { struct TrafficData; }
 namespace BrnProgression  { struct ProgressionManager; }
-namespace BrnGameState    { class TakedownManager; class RoadRulesManager; class StuntManager; class DriveThruManager; }
+namespace BrnGameState    { struct TakedownManager; class RoadRulesManager; class StuntManager; class DriveThruManager; }
 namespace BrnResource     { struct VehicleList; }
 namespace BrnGameState { namespace GameStateModuleIO { struct OutputBuffer; struct PreWorldInputBuffer; struct PostWorldInputBuffer; } }
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
@@ -178,11 +179,16 @@ public:
 
 private:
 
+    // RenderWorld @0x82364E10 reads these attested fields/arrays directly on the console. Keep its
+    // typed accesses by name instead of adding non-original engine accessors or raw offsets.
+    friend class TriggerQueryManagerDebugComponent;
+
     // ---- leading preamble (offsets 0..911), grown in place 2026-08-01 -----------------------
-    // this+0 .. this+351: mDebugComponent (BrnGameState::TriggerQueryManagerDebugComponent,
-    // DWARF h:211). Still reserved -- the component's own header is a separate slice and
-    // Prepare's Construct/Register of it is a documented deferral (see the Prepare body).
-    u8 mauReserved_DebugComponent[352];              // this+0 .. this+351
+    // DWARF BrnTriggerQueryManager.h:211. ARTIST Prepare constructs this component after the
+    // TriggerData resource handle is bound, then registers it with DebugComponent::Register.
+    // Its typed native size may grow with host pointers; following manager members are accessed
+    // by name, so no console-size padding is applied.
+    TriggerQueryManagerDebugComponent mTriggerQueryManagerDebugComponent;
     // this+352/360/368 (DWARF h:212/213/214). The three player trigger-GROUP ids.
     // TriggerQueryManager::Prepare zeroes all three with three 8-byte stores
     // (`std r28, 0x160/0x168/0x170(r31)` @0x823983D4/D8/E4) right after it binds the trigger
@@ -198,10 +204,11 @@ private:
     // store this+912..this+1423 (256 * 2B), live-count word this+1424 (== *(this+1424) in X360).
     Array<u16, 256> maActiveTriggers;                // this+912 (elements), count @ this+1424
 
-    // this+1428 / this+1496 (DWARF h:221/222). The previous-frame trigger sets. Not touched by
-    // any committed body yet; declared as their real types so meTriggerLoadStage below is a real
-    // member. Array<u16,32> is 32*2 + a 4-byte count == 68 bytes, pointer-free, so the pair is
-    // exactly the console's 136 bytes on the 64-bit gate too.
+    // this+1428 / this+1496 (DWARF h:221/222). The previous-frame trigger sets. RenderWorld reads
+    // maLastFrameTriggers by name to tint regions active in the previous frame; the per-frame
+    // trigger pump fills both arrays. Array<u16,32> is 32*2 + a 4-byte count == 68 bytes, pointer-
+    // free, so each array retains its native size on the 64-bit gate even though its start offset
+    // grows with the typed component and ResourcePtr members above.
     Array<u16, 32> maLastPlayerTriggers;             // this+1428 (elements), count @ this+1492
     Array<u16, 32> maLastFrameTriggers;              // this+1496 (elements), count @ this+1560
 

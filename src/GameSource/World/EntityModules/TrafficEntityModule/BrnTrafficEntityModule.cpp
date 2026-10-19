@@ -13,13 +13,14 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
-#include "pc/debug/TrafficControls.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
 #include <cstddef>   // offsetof / size_t
 #include <algorithm> // std::sort (RecalculateActiveHulls' std::_Sort of the active hulls)
+#include <new>       // placement new for the separately allocated debug component
 
 // includes folded in from the BrnTrafficEntityModule_w*.cpp partfiles (2026-09-15)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
@@ -121,6 +122,28 @@
 
 namespace BrnTraffic
 {
+    namespace
+    {
+        // Five-lane resource request used by the console's DebugComponent and
+        // DEBUG_VehicleFuzzyLogic allocations. X360 DoAllocate returns the same resource
+        // shape; the host uses its current DebugAllocator and the first base-resource lane.
+        void* AllocateTrafficDebugResource(size_t luSize, u32 luAlignment)
+        {
+            rw::BaseResourceDescriptors<5> lDescriptor;
+            for (u32 luLane = 0; luLane < 5; ++luLane)
+            {
+                lDescriptor.m_baseResourceDescriptors[luLane].m_size = 0;
+                lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
+            }
+            lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+
+            const rw::Resource lResource = BrnResource::GetDebugAllocator()->DoAllocate(
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+            return lResource.m_baseResources[0];
+        }
+    }
+
     // Vehicle / param pool accessors. The three vehicle pools are one array (maVehicles)
     // addressed with three base element indices at a 128-byte stride: 85 / 485 / 684, which
     // differ by exactly 400 and 199. See BrnTrafficConstants.h for the derivation.
@@ -1585,26 +1608,13 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
 
     case E_PREPARESTAGE_DEBUG:
     {
-        // FLAG PC-platform leaf: the original debug overlay is incomplete;
-        // register its supported scalar controls through the native UI adapter.
-        CgsPC::Debug::TrafficControls::Attach(*this);
-        // 0x8274A8A0..0x8274A918, PARTIAL. The second half is plain member seeding and is
-        // landed below; only the debug-allocator half is gated, on a missing wire.
-        //
-        // Offsets for the gated half, from the asm: Register's argument is the pointer LOADED
-        // FROM this + 0x727B0, not that address (0x8274A8A4); the AllocateMemoryResource(2560,
-        // 16, 0) result lands at this + 0x7286C (0x8274A8C8), and the neighbouring store into
-        // this + 0x72870 is a separate zero.
-        {
-            static bool sbLogged = false;
-            LogMissingLeg_Q7Stage( sbLogged,
-                "Prepare stage 4 FIRST half: DebugComponent::Register(mpDebugComponent) + "
-                "BrnResource::GetDebugAllocator() + rw::IResourceAllocator::"
-                "AllocateMemoryResource(2560, 16, 0) -> mpaDEBUGVehicleFuzzyLogic, plus the "
-                "companion muDEBUGVehicleFuzzyLogicCount = 0 store. All three members are real; "
-                "what is missing is the DebugComponent::Register / HeapResourceAllocator wire. "
-                "DEBUG-UI ONLY -- nothing on the parked-car path reads either member" );
-        }
+        // X360 0x8274A8A0..0x8274A8D0: register the Construct-owned native page, then carve
+        // forty 64-byte fuzzy-debug records from the same debug allocator. TrafficControls.h
+        // remains an API definition, but this original owner replaces its duplicate page.
+        mpDebugComponent->Register();
+        mpaDEBUGVehicleFuzzyLogic = static_cast<DEBUG_VehicleFuzzyLogic*>(
+            AllocateTrafficDebugResource(40u * sizeof(DEBUG_VehicleFuzzyLogic), 16u));
+        muDEBUGVehicleFuzzyLogicCount = 0;
 
         // The console's second half, 0x8274A8E0..0x8274A918: this + 0x79388 is
         // maStoredAITrafficData[0].meRaceCarIndex and +0x7938C its miNumTrafficIDs, stride 136
@@ -2941,19 +2951,23 @@ void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_Pos
             // PostPhysicsUpdate's tail, which reaches the same accessor.
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
                 lpPlayerState = lpActiveRaceCars->GetRaceCarState(lePlayerCar);
-            const Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
+            Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
 
+            // ARTIST 0x82721554..0x827215A8: the camera's current-state 0x4000 flag selects
+            // its position instead of the player position. DecFIGS UpdateRaceCarHulls tests
+            // the same CameraState word/bit; the named flag is E_FLAG_IS_PICTURE_PARADISE.
+            if (mCameraLastFrame.GetState().IsFlagSet(
+                    BrnDirector::Camera::CameraState::E_FLAG_IS_PICTURE_PARADISE))
             {
-                // GATE: the two DEBUG sim-centre overrides @0x82721554 / 0x827215A8, both
-                // substituting mCameraLastFrame.GetPosition() for lSimCentre.
-                // BLOCKER: the selector word at X360 +0x729D4 is mCameraLastFrame+0x144,
-                // an unnamed Camera field, and DebugComponent::+0x34 has no name either.
-                // DELETE-WHEN both are named. DEBUG-ONLY; the live default is taken.
-                static bool sbLogged = false;
-                LogMissingLeg_T1(sbLogged,
-                    "UpdateRaceCarHulls DEBUG sim-centre overrides @0x82721554 / "
-                    "0x827215A8 -- selector words mCameraLastFrame+0x144 and "
-                    "DebugComponent+0x34 are unnamed. DEBUG-ONLY, no live effect");
+                lSimCentre = mCameraLastFrame.GetPosition();
+            }
+
+            // ARTIST 0x827215A8..0x827215CC: if the component exists and its byte +0x34 is
+            // enabled, it overrides either selected centre with mCameraLastFrame's position.
+            // This is the original "Use camera position" row's runtime consumer.
+            if (mpDebugComponent != nullptr && mpDebugComponent->UseCameraPosition())
+            {
+                lSimCentre = mCameraLastFrame.GetPosition();
             }
 
             // The box half-extent, 0x827215CC..0x82721604: mfTrafficSimRadius through the
@@ -3593,10 +3607,10 @@ void TrafficEntityModule::RecalculateActiveHulls(
 // where parked cars are created), and the tail's local-player refresh (meLocalPlayerIndex,
 // mLocalPlayerPosition, mLocalPlayerDirection).
 //
-// Gated: the pre-state head (UpdateDEBUG, HandleExternalRequests), most of the
-// E_STATE_RUNNING arm, the E_STATE_TEARING_DOWN arm, and the rest of the tail (perfmon,
-// UpdateEventStarts, the network, traffic-type and replay legs). None is bodied in this tree
-// and none is on the parked-car path.
+// Gated: the pre-state HandleExternalRequests body is still partial, as are portions of the
+// E_STATE_RUNNING and E_STATE_TEARING_DOWN arms and the replay registration/write legs in the
+// tail. The original perfmon scopes and snapshot writer are restored; UpdateEventStarts, network,
+// and traffic-type consumers retain their separately evidenced bodies below.
 //
 // DEPENDS ON PreSceneUpdate BEING MOUNTED. The console advances
 // E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING in PreSceneUpdate @0x8274A968, not here,
@@ -3608,6 +3622,34 @@ void TrafficEntityModule::RecalculateActiveHulls(
 // tools/build/build_game_exe.bat. Until then the exe fails to link with LNK2019 on
 // PreSceneUpdate; the per-TU `cl /c` gate cannot see the mount either way.
 // ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateDEBUG @0x8271DC78. Age the recent-kill-zone records before the
+// rest of PostPhysicsUpdate, then run the original SoA consistency validator.
+void TrafficEntityModule::UpdateDEBUG()
+{
+    u32 luFiredKillZone = 0;
+    while (true)
+    {
+        const s32 liNumFiredKillZones = mDEBUGRecentlyFiredKillZones.GetLength();
+        CGS_ASSERT(liNumFiredKillZones != -1,
+                   "Array used before Construct/Clear was called");
+        if (luFiredKillZone >= static_cast<u32>(liNumFiredKillZones))
+            break;
+
+        FiredKillZoneInfo& lrFired = mDEBUGRecentlyFiredKillZones.GetItem(luFiredKillZone);
+        --lrFired.miFramesLeftToRemember;
+        if (lrFired.miFramesLeftToRemember <= 0)
+        {
+            mDEBUGRecentlyFiredKillZones.Erase(luFiredKillZone);
+        }
+        else
+        {
+            ++luFiredKillZone;
+        }
+    }
+
+    DEBUGValidateSoaData();
+}
+
 void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
                                             CgsModule::IOBufferStack* lpOutputBufferStack,
                                             BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -3617,14 +3659,13 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     (void)lpInputBufferStack;
     (void)lpOutputBufferStack;
 
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_PostPhysicsUpdate);
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_PostPhysicsUpdate_Pre0);
+
     lpOutput->LockForWrite();
     lpInput->LockForRead();
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "PostPhysicsUpdate head leg UpdateDEBUG @0x8271DC78 -- not bodied in this tree");
-    }
+    UpdateDEBUG();
 
     // ⭐ GATE PARTIALLY REMOVED 2026-08-29 (jam-valve wave). HandleExternalRequests
     // @0x8274B660 is now bodied in _wT6_03.cpp -- PARTIAL, but the one arm it runs for real is
@@ -3672,6 +3713,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     {
         EnterTearingDownState();
     }
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate_Pre0);
 
     switch (meState)
     {
@@ -3786,6 +3829,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // ====================================================================================
     case E_STATE_RUNNING:
     {
+        CgsDev::PerfMonCpu::StartMonitor(miPerfMon_PostPhysicsUpdate_Pre1);
+
         // 0x8274EA30..0x8274EA44 -- UNGATED as of 2026-09-06: HandleRecycledTraffic is bodied
         // in _wT3_02.cpp. The console fetches the vehicle manager's output interface and hands
         // it `interface + 0x7A0` == mRemovedTrafficEventQueue, reached here by name.
@@ -3820,6 +3865,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         // body in BrnTrafficEntityModule_ProcessDeformationData.cpp.
         ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
 
+        CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate_Pre1);
+
         // ⚠️ CORRECTED 2026-09-24 (FX-TRAFFIC3): an earlier note here said the RUNNING arm's head
         // legs were the three calls at 0x8274E870..0x8274E8A4 and that HandleResetRaceCarEvents
         // and HandleContactPoints were "NOT in this arm". That block is the TEARING_DOWN arm's
@@ -3836,6 +3883,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         {
             // The console's paused arm is genuinely empty apart from the perfmon bracket:
             // a paused traffic sim advances nothing and posts nothing.
+            CgsDev::PerfMonCpu::StartMonitor(miPerfMon_PostPhysicsUpdate_Post0);
         }
         else
         {
@@ -3847,6 +3895,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             {
                 UpdateNonDecisionFrame(lpInput, lpOutput);
             }
+
+            CgsDev::PerfMonCpu::StartMonitor(miPerfMon_PostPhysicsUpdate_Post0);
 
             // The per-frame scene MOVER; body @0x8273B568 belongs to cluster C3.
             GenerateSceneUpdateEvents(lpOutput);
@@ -3882,6 +3932,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         crashTraffic->SetRenderingBits(&mVehicleSoaData.mVehiclesRenderedLastFrame);
         crashTraffic->SetFarFromCameraBits(&mVehicleSoaData.mPhysicalVehiclesFarFromPlayer);
         crashTraffic->SetPhysicalBits(&mVehicleSoaData.mPhysicalVehicles);
+
+        CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate_Post0);
 
     }
     break;
@@ -3998,6 +4050,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         CGS_ASSERT(false, "Invalid state in traffic system");   // baked .cpp line 3041
         break;
     }
+
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_PostPhysicsUpdate_Post1);
 
     // ====================================================================================
     // The local-player refresh, X360 0x8274ED90..0x8274EE88. meLocalPlayerIndex is what this
@@ -4306,19 +4360,42 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // serialiser to hand it. BrnReplays::TrafficEntitySerialiser (Construct 0x8264C978, Write 0x8265F4E8) is
     // declared only inside the UNMOUNTED BrnReplayTrafficEntitySerialiser.cpp, the module header has no member at
     // +0x724C0, and Construct's own serialiser leg is gated (the [T1-traffic-leg] line). That is the traffic
-    // replay subsystem, not a tail call. The perfmon bracket is debug statistics only: left out on purpose.
+    // replay subsystem, not a tail call. Its independent debug-perfmon snapshot tail is restored below.
     {
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "PostPhysicsUpdate remaining tail legs -- the replay-serialiser registration/write "
-            "(RegisterSerialiser 0x821F34A0 is bodied, but TrafficEntitySerialiser at +0x724C0 is "
-            "not declared or mounted) and the debug-only perfmon bracket");
+            "PostPhysicsUpdate replay-serialiser registration/write -- RegisterSerialiser "
+            "0x821F34A0 is bodied, but TrafficEntitySerialiser at +0x724C0 is not declared or mounted");
     }
 
     LatchRenderPosesPC(); // FLAG PC-platform leaf: after every traffic pose producer.
 
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate_Post1);
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate);
+
+    CgsDev::PerfMonCpuMonitorData lUpdateParamData = {};
+    CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_UpdateParam, &lUpdateParamData);
+    if (lUpdateParamData.mfCurrentValue <= 0.0f)
+    {
+        CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_PostPhysicsUpdate,
+                                           &mPostPhysPerfmonData_NonDecision);
+        CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_UpdateParamNonDecision,
+                                           &mParamPerfmonData_NonDecision);
+        CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_UpdateVehicle,
+                                           &mVehiclePerfmonData_NonDecision);
+    }
+    else
+    {
+        CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_PostPhysicsUpdate,
+                                           &mPostPhysPerfmonData_Decision);
+        CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_UpdateParam,
+                                           &mParamPerfmonData_Decision);
+        CgsDev::PerfMonCpu::GetMonitorData(miPerfMon_UpdateVehicle,
+                                           &mVehiclePerfmonData_Decision);
+    }
 }
 
 namespace
@@ -5091,8 +5168,8 @@ void TrafficEntityModule::Reset()
 // TrafficPhysicsInfo constructs, ResetEventData + Reset, and the 96 VehicleTypeRuntime
 // constructs.
 //
-// Gated: the replay serialiser, the 102,800-byte
-// maTrafficPhysicsInfoList memset, the debug component allocation, and the debug-render stream reader. Each is a named one-shot below.
+// Gated: the replay serialiser, the 102,800-byte maTrafficPhysicsInfoList memset, and the
+// debug-render stream reader. The DebugComponent allocation is restored below.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Construct()
 {
@@ -5180,8 +5257,7 @@ void TrafficEntityModule::Construct()
         LogMissingLeg_T1(sbLogged,
             "Construct sub-object legs TrafficEntitySerialiser::Construct, "
             "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
-            "the 32-slot showtime "
-            "list seed, the DebugComponent allocation and DebugRenderStreamReader::"
+            "the 32-slot showtime list seed and DebugRenderStreamReader::"
             "Construct -- none of those callees has a body or a usable declaration in this tree");
     }
 
@@ -5279,6 +5355,14 @@ void TrafficEntityModule::Construct()
     mfRenderCullDistanceSq = 62500.0f;   // == 250.0f * 250.0f
     mbInOfflineCarSelect   = false;
 
+    // X360 0x827409E4..0x82740B44: allocate the owner object from the debug heap (size 0x74,
+    // 16-byte alignment), install its host vtable with placement new, then run the explicit
+    // two-phase Construct(this) body. The base Construct resets the just-created base state.
+    void* lpDebugComponentStorage = AllocateTrafficDebugResource(sizeof(DebugComponent), 16u);
+    CGS_ASSERT(lpDebugComponentStorage != nullptr, "Unable to allocate traffic debug component");
+    mpDebugComponent = new (lpDebugComponentStorage) DebugComponent;
+    mpDebugComponent->Construct(this);
+
     // The Logger, straight after the debug component: one single-lane request to the debug
     // allocator for sizeof(Logger) (1) bytes at 16-byte alignment, every other lane empty
     // (size 0, alignment 1), no name. The result is not null-checked. Logger::Construct turns
@@ -5314,16 +5398,10 @@ void TrafficEntityModule::Construct()
     mbDEBUGFakeShowtime         = false;   // 0x72876
     mbDEBUGPickVehicleFromCamera= false;   // 0x72877
 
-    // [DIAG] NOT IN THE X360 BINARY -- but the FLAG is, and so is its checkbox. The console
-    // ships a debug-menu toggle literally labelled "Fake Showtime" bound to this very byte:
-    // BrnTraffic::DebugComponent::OnActivate @0x8276335C registers `&module + 0x72876` under
-    // that name. UpdateCrashSlider @0x82715A28 (LIVE, _wT5_01.cpp) then raises
-    // mbPlayingShowtimeMode from it every frame -- which is the whole showtime chain,
-    // including UpdateDecisionFrame's SpawnShowtimeTraffic leg and FillNewHull's
-    // showtime-only parked records.
-    // DebugComponent::OnActivate is not reconstructed and the debug UI is not built, so this
-    // env switch stands in for pressing that shipped checkbox. It writes the console's own
-    // member and nothing else; it invents no predicate. DELETE-WHEN the debug UI can set it.
+    // [PC diagnostic only] The module member and its ARTIST "Fake Showtime" checkbox are both
+    // real; OnActivate now registers the native component's original row. This environment
+    // override remains a host-only startup convenience that writes that same member before UI
+    // activation, and does not add a new showtime predicate.
     if (getenv("BRN_TRAFFIC_FAKE_SHOWTIME") != 0)
     {
         mbDEBUGFakeShowtime = true;
@@ -5337,6 +5415,7 @@ void TrafficEntityModule::Construct()
     miDEBUGOverrideVehicleToSpawn     = -1;     // 0x727C0 stwx r29 (r29 == -1)
     mbDEBUGDontRenderMeshes           = false;  // 0x727C8
     mbDEBUGAllowAnarchy               = false;  // 0x727C9
+    mfDEBUGDistanceForAnarchy         = 250.0f;  // 0x727CC: flt_82004A24 (43 7A 00 00)
     mfDEBUGTrafficLightTimeMultiplier = 1.0f;   // 0x727D0 stfsx flt_82001C98 == 1.0f
     mbDEBUGEnableKillzones            = true;   // 0x727D4 stbx r27
     // LOAD-BEARING: PickVehicleToSpawn gates on `miDEBUGFlowtypeOverride >= 0`, so dropping
@@ -7192,6 +7271,8 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
             "UpdateNonDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body (wave 2)");
     }
 
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateParamNonDecision);
+
     // 0x8274C2A4: [cursor, cursor + KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME); the callee
     // advances the cursor. Body in _wT2_05.cpp.
     if (muLastParamCalculated < KU_MAX_PARAMS)
@@ -7201,6 +7282,8 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
             muLastParamCalculated + KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME,
             lpInput->GetActiveRaceCarOutputInterface());
     }
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_UpdateParamNonDecision);
 
     // ⭐ GATE REMOVED 2026-08-29 (jam-valve wave). NukeTrafficJams (DWARF :1551, @0x827353E8)
     // is BODIED in _wT6_01.cpp, so the leg and its flag clear both run for real now. The
@@ -10203,6 +10286,50 @@ u32 TrafficEntityModule::FindFirstParamAfterPos(u32 luHull, u32 luSectionIndex,
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
+// ARTIST 0x82716040. UpdateParams_PrecalcBehaviourParams calls this after scoring every param;
+// the original body gates ring writes by the menu toggle and distance from the saved camera.
+void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuzzyOutputs)
+{
+    CGS_ASSERT(lpafFuzzyOutputs != nullptr, "lpafFuzzyOutputs");
+    CGS_ASSERT(mpaDEBUGVehicleFuzzyLogic != nullptr, "mpaDEBUGVehicleFuzzyLogic");
+
+    if (!mFuzzyBehaviours.mbDEBUGRenderParamScores)
+        return;
+
+    const Vector3 lParamPosition = GetParamTransform(luParam)->GetDeterministicPos();
+    const Vector3 lCameraPosition = mFuzzyBehaviours.mDEBUGLastCameraPos;
+    const f32 lfDeltaX = lParamPosition.x - lCameraPosition.x;
+    const f32 lfDeltaY = lParamPosition.y - lCameraPosition.y;
+    const f32 lfDeltaZ = lParamPosition.z - lCameraPosition.z;
+    const f32 lfDistanceSquared = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+    if (!(900.0f > lfDistanceSquared))
+        return;
+
+    DEBUG_VehicleFuzzyLogic* lpDebugData =
+        &mpaDEBUGVehicleFuzzyLogic[muDEBUGVehicleFuzzyLogicCount];
+    for (u32 luRecord = 0; luRecord < 40; ++luRecord)
+    {
+        if (mpaDEBUGVehicleFuzzyLogic[luRecord].muVehicle == luParam)
+        {
+            lpDebugData = &mpaDEBUGVehicleFuzzyLogic[luRecord];
+            break;
+        }
+    }
+    ++muDEBUGVehicleFuzzyLogicCount;
+    if (muDEBUGVehicleFuzzyLogicCount >= 40)
+        muDEBUGVehicleFuzzyLogicCount = 0;
+
+    CGS_ASSERT(lpDebugData != nullptr, "lpDebugData");
+    lpDebugData->muVehicle = luParam;
+    CGS_ASSERT(luParam < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+    Vector3 lRenderPosition = maVehicleTransforms[luParam].Pos();
+    lRenderPosition.y += 2.5f;
+    lpDebugData->mRenderPosition = lRenderPosition;
+    for (u32 luOutput = 0; luOutput < 6; ++luOutput)
+        lpDebugData->mafParamOutputScores[luOutput] = lpafFuzzyOutputs[luOutput].x;
+}
+
+// ----------------------------------------------------------------------------
 // TrafficEntityModule::UpdateParams_PrecalcBehaviourParams  @0x82717C48 (.cpp 11415..11667)
 //
 // Runs the fuzzy rule base for one param and turns the winning score into the
@@ -10301,16 +10428,7 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
 
     VecFloat lafScores[KU_PARAM_NUM_BEHAVIOUR_SCORES];
     mFuzzyBehaviours.ProcessParamRules(lafScores, lConeA, lConeB, lConeC);
-
-    {
-        // GATE: DEBUG_AddFuzzyLogicData @0x82716040 (0x82717F34).
-        // BLOCKER: ARTIST export hole; it only fills the mpaDEBUGVehicleFuzzyLogic ring.
-        // DELETE-WHEN it lands. No scoring consequence.
-        static bool sbLoggedDebug = false;
-        LogMissingLeg_T2(sbLoggedDebug,
-                      "UpdateParams_PrecalcBehaviourParams DEBUG_AddFuzzyLogicData @0x82716040 -- "
-                      "export hole, debug ring only");
-    }
+    DEBUG_AddFuzzyLogicData(luParam, lafScores);
 
     if (mbAtStartLineSoProtectRaceCarsFromTraffic)
     {
@@ -11369,15 +11487,15 @@ void TrafficEntityModule::UpdateVehicles(
 {
     (void)lpOutput;   // the console reaches the physical-request list through the job stubs
 
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateVehicle);
+
     {
-        // GATE: the PerfMonCpu bracket (miPerfMon_UpdateVehicle) and the
-        // DebugRenderStreamReader bracket over unk_8300CD00. BLOCKER: neither has a home in
-        // this tree, same disposition as every sibling partfile's. DELETE-WHEN either lands.
+        // GATE: the DebugRenderStreamReader bracket over unk_8300CD00. The monitor handle
+        // itself is registered in Construct and its original bracket is restored below.
         static bool sbLogged = false;
         LogMissingLeg_T2(sbLogged,
-            "UpdateVehicles PerfMonCpu Start/StopMonitor bracket and the "
-            "DebugRenderStreamReader Begin/End bracket over unk_8300CD00 -- the monitor "
-            "handles are never issued and the debug render stream has no home in this tree");
+            "UpdateVehicles DebugRenderStreamReader Begin/End bracket over unk_8300CD00 -- "
+            "the debug render stream has no home in this tree");
     }
 
     if (IsDecisionFrame())
@@ -11445,6 +11563,8 @@ void TrafficEntityModule::UpdateVehicles(
     // ARTIST827451CC..827451E4: every slice completes before subsequent module work.
     for (u32 luJob = 0; luJob < muNumUpdateVehiclesJobs; ++luJob)
         maJobs[luJob].WaitOn();
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_UpdateVehicle);
 }
 
 // ----------------------------------------------------------------------------

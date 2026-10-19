@@ -83,7 +83,7 @@ int main()
     truck.Construct(); truck.Update({4,5,6,0},{0,0,0,0},BrnDirector::VecFloat(0.1f),tp);
     check(near(truck.GetPosition().x,4) && near(truck.GetVelocity().z,0),"stationary truck remains finite");
     BehaviourGyroCam::Parameters params{}; params.Construct();
-    check(params.meType == 9 && params.mfSlowDistance == 3 && params.mfFastDistance == 9,"gyro defaults have usable distances");
+    check(params.GetType() == 9 && params.mfSlowDistance == 3 && params.mfFastDistance == 9,"gyro defaults have usable distances");
     check(params.mfField_B0 == 60 && params.mfHeightDistanceVelocityRange == 40,"gyro defaults have FOV and speed range");
     check(params.mLagParams.mfSmoothing == 0.5f && params.mLookerParams.mbInitialiseToLookingAtTarget,"gyro initializes lag and tracking");
     auto v = Utils::SafeSLerp({0,0,1,0},{1,0,0,0},BrnDirector::VecFloat(0.5f));
@@ -136,8 +136,8 @@ int main()
           "recovery refuses a stale road more than 200 metres away");
     auto* route = car.GetRoute(); route->miNodeCount = 2;
     route->meStatus = static_cast<BrnAI::Route::Status>(1);
-    auto* nodes = reinterpret_cast<BrnAI::RouteNode*>(route->maNodes);
-    nodes[0].muSectionIndex = 0; nodes[1].muSectionIndex = 1; nodes[1].muPad0x0E = 1;
+    auto* nodes = route->maNodes;
+    nodes[0].muSectionIndex = 0; nodes[1].muSectionIndex = 1; nodes[1].muPortalIndex = 1;
     car.meRouteFindingStyle = static_cast<BrnAI::ERouteFindingStyle>(1); car.miNextRouteNodeIndex = 0;
     car.mbIsPlayer = false;
     check(reset.UpdateResetOnTrackSectionUsingRoute(&car) && car.muResetOnTrackStartPortal == 0 && car.muResetOnTrackEndPortal == 1,

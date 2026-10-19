@@ -173,16 +173,17 @@ namespace BrnWorld
         lStream << "Total trigger count: " << (miBoxTriggerCount + miSphereTriggerCount + miPlaneTriggerCount);
         lpRenderer->DrawText(lStream.GetBuffer(), 50.0f, 80.0f, 16.0f, 0xFFFFFFFFu);
 
-        // The X360 names each type via an .rdata name table (off_82F2C8EC); its string bytes are not
-        // in the available exports, so the labels are inferred from the ETriggerTypeID constants. The
-        // X360 walks the type counter from E_TRIGGERTYPE_INVALID (-1, "Unknown") up to and INCLUDING
-        // E_TRIGGERTYPE_COUNT (3) -- the table read for COUNT runs past its three entries and yields
-        // the "<NULLSTRING>" fallback, modelled here by the >= COUNT branch.
-        static const char* const KAPC_TRIGGER_TYPE_NAMES[E_TRIGGERTYPE_COUNT] =
+        // ARTIST reads the string-pointer table at off_82F2C8EC for liType 0..3. The raw
+        // big-endian table pins those labels as Landmark, Blackspot, GenericRegion, and VFXBoxRegion.
+        // The loop deliberately includes E_TRIGGERTYPE_COUNT (3), so that final row uses the fourth
+        // table entry even though COUNT is the geometry-enum sentinel. Invalid (-1) uses "Unknown";
+        // retain the original "<NULLSTRING>" fallback for a null or out-of-range table entry.
+        static const char* const KAPC_TRIGGER_TYPE_NAMES[4] =
         {
-            "Plane Segment", // E_TRIGGERTYPE_PLANE_SEGMENT
-            "Sphere",        // E_TRIGGERTYPE_SPHERE
-            "Box",           // E_TRIGGERTYPE_BOX
+            "Landmark",      // raw pointer at 0x82F2C8EC -> 0x820A3640
+            "Blackspot",     // raw pointer at 0x82F2C8F0 -> 0x8202DD20
+            "GenericRegion", // raw pointer at 0x82F2C8F4 -> 0x820A3630
+            "VFXBoxRegion",  // raw pointer at 0x82F2C8F8 -> 0x8202DD2C
         };
 
         const CgsContainers::BitArray<512>& lrUsedTriggers = mpTriggerEntityModule->GetUsedTriggerList();
@@ -193,7 +194,7 @@ namespace BrnWorld
                  liIndex != -1;
                  liIndex = lrUsedTriggers.GetNextNonZeroBit(liIndex))
             {
-                if (mpTriggerEntityModule->GetTrigger(liIndex).meType == liType)
+                if (mpTriggerEntityModule->GetTrigger(liIndex).miTriggerRegionType == liType)
                 {
                     ++liCount;
                 }
@@ -204,7 +205,7 @@ namespace BrnWorld
             {
                 lpcTypeName = "Unknown";
             }
-            else if (liType < E_TRIGGERTYPE_COUNT && KAPC_TRIGGER_TYPE_NAMES[liType] != nullptr)
+            else if (liType >= 0 && liType < 4 && KAPC_TRIGGER_TYPE_NAMES[liType] != nullptr)
             {
                 lpcTypeName = KAPC_TRIGGER_TYPE_NAMES[liType];
             }

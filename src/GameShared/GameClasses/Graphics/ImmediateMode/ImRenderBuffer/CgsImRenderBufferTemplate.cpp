@@ -4,8 +4,8 @@
 // CgsGraphics::ImRenderBuffer<V> - method bodies, faithfully decompiled from the
 // PS3 External ELF dossiers for the <Basic2dColouredTexturedVertex> instantiation
 // (addresses noted per-method). See CgsImRenderBufferTemplate.h for the layout /
-// source map. The buffer is reconstructed x64-native; the only platform leaf is
-// the GPU dispatch (a separate Dispatch path), which is // FLAG'd below, NOT here.
+// source map. Native CPU backing in Prepare and the separate GPU Dispatch path
+// are explicitly marked PC-platform leaves below.
 //
 // The PS3 originals interleave a `dcbz` (data-cache block zero) before each command
 // append to pre-warm the cache line being written. That is a pure micro-opt with no
@@ -41,7 +41,16 @@
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
-namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); extern u32 guDiagImBatches; extern u32 guDiagImFullBlack; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 counters
+namespace renderengine
+{
+    extern u32 guPresentCount;
+    u32 FrameDumpEvery();
+    extern u32 guDiagImBatches;
+    extern u32 guDiagImFullBlack;
+    extern bool gbDiagLastPresentBlack;
+    void ApplySamplerStateBlockPC(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                  const void* lpSamplerBlock);
+}   // [DIAG] issue #30 counters
 // [boost-bar 2026-08-25] The GUI additive-blend IDENTITY (CgsBillboardRenderer.cpp's
 // dword_83010F24 sentinel). Declared locally instead of including the Gui header -- this
 // graphics-layer TU must not depend on the Gui tree; the dispatch's SET_STATE_BLEND case
@@ -108,8 +117,12 @@ namespace CgsGraphics
         const u32 luCommandAllocBytes = luCommandBufferSizeBytes + 128u;
         const u32 luVertexAllocBytes  = luVertexBufferSizeBytes + 128u;
 
-        // Helper mirroring the PS3 descriptor build + allocator call. The descriptor
-        // is {size, alignment=128} in entry 0 (the PS3 body fills entry 1 = 128 too).
+        // FLAG PC-platform leaf: these are CPU command/vertex staging streams. The
+        // native renderer supplies main-only WorldDispatch backing and every stream
+        // consumer reads lane zero; D3D buffers are created by the separate upload
+        // path. PS3's second backing lane is not a PC disposable/debug allocation.
+        // Request only the actual CPU storage, retaining the size, alignment and
+        // cache-line guard band. RW still rejects unsupported multi-lane requests.
         rw::Resource laResources[4] = {};
         u32 luResourceCount = 0;
         auto lAllocate = [lpAllocator, &laResources, &luResourceCount](u32 luBytes) -> u8*
@@ -117,12 +130,6 @@ namespace CgsGraphics
             rw::ResourceDescriptor lDescriptor;
             lDescriptor.m_baseResourceDescriptors[0].m_size      = luBytes;
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = 128u;
-            lDescriptor.m_baseResourceDescriptors[1].m_size      = luBytes;
-            lDescriptor.m_baseResourceDescriptors[1].m_alignment = 128u;
-            lDescriptor.m_baseResourceDescriptors[2].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
-            lDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
             rw::Resource& lResource = laResources[luResourceCount++];
             lResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
             return static_cast<u8*>(lResource.m_baseResources[0]);
@@ -931,10 +938,8 @@ namespace CgsGraphics
             }
         }
 
-        // The address pair a TextureState carries. renderengine::TextureState keeps the sampler
-        // config as the leading 32 opaque bytes of TextureState::Parameters (texturestate.cpp's
-        // `memcpy(mauSamplerState, lpParams, 32)`), whose first two words ARE muAddressU and
-        // muAddressV -- read by that contract, not by re-typing the whole block.
+        // SamplerState::Initialize writes the original runtime address bytes
+        // at+0x08/+0x09. Generated and imported TextureStates share this block.
         void DispatchTextureStateAddressModes(const renderengine::TextureState* lpState,
                                               DWORD* lpuAddressUOut, DWORD* lpuAddressVOut)
         {
@@ -942,8 +947,8 @@ namespace CgsGraphics
             u32 luAddressV = 2u;
             if (lpState != nullptr)
             {
-                memcpy(&luAddressU, lpState->mauSamplerState + 0, sizeof(u32));
-                memcpy(&luAddressV, lpState->mauSamplerState + 4, sizeof(u32));
+                luAddressU = lpState->mauSamplerState[0x08];
+                luAddressV = lpState->mauSamplerState[0x09];
             }
             *lpuAddressUOut = DispatchAddressMode(luAddressU);
             *lpuAddressVOut = DispatchAddressMode(luAddressV);
@@ -1487,7 +1492,10 @@ namespace CgsGraphics
                     static_cast<const ImCommandSetStateTexture*>(lpCommand);
                 const renderengine::TextureState* lpState = lpSet->mpTextureState;
                 renderengine::Texture* lpTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
-                lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                const HRESULT lhrTexture =
+                    lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                if (SUCCEEDED(lhrTexture) && lpState != nullptr)
+                    renderengine::ApplySamplerStateBlockPC(lpDevice, 0u, lpState);
                 lpTraceBoundTexture = lpTexture;   // [diag]
                 if (CxformTraceEnabled()) DumpBoundTextureOnce(lpTexture);
                 // Texture present: modulate by vertex colour. (CgsIm2d.cpp's SetState(TextureState*).)
@@ -2092,12 +2100,59 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
-    // Explicit instantiation: the screen-space 2D buffer the Apt/Flapt/GUI/text
-    // rasteriser fills and submits (the family this TU targets). This is the
-    // <Basic2dColouredTexturedVertex> instance whose bodies the dossiers above
-    // were read from.
+    // Explicit instantiation for the screen-space 2D buffer the Apt/Flapt/GUI/text
+    // rasteriser fills and submits. Keep this member list aligned with the generic
+    // bodies above. The four Im2dRenderBuffer-specific command writers are owned by
+    // CgsIm2dRenderBuffer.cpp and explicitly instantiated there; a whole-class
+    // instantiation here requests those unavailable definitions a second time and
+    // emits C4661 warnings.
     // -------------------------------------------------------------------------
-    template struct ImRenderBuffer<Basic2dColouredTexturedVertex>;
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Construct();
+    template bool ImRenderBuffer<Basic2dColouredTexturedVertex>::Prepare(
+        u32, u32, rw::IResourceAllocator*, bool);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Clear();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Swap();
+    template bool ImRenderBuffer<Basic2dColouredTexturedVertex>::IsInARenderingBlock();
+    template Basic2dColouredTexturedVertex*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::AllocVertices(u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::BeginRendering();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::EndRendering();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Render(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::RenderFromStaticVertexBuffer(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template Basic2dColouredTexturedVertex*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::RenderStart(u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::RenderEnd(
+        renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetTexture(
+        renderengine::Texture*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetProgram(s8);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::RasterizerState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::TextureState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::BlendState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetState(
+        const renderengine::DepthStencilState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetTextureState(
+        const renderengine::TextureState*);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::SetTransform(
+        const Im2dTransform&);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PushMaskGeometry(
+        uintptr_t, const Basic2dColouredTexturedVertex&,
+        const Basic2dColouredTexturedVertex&);
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::EndMask();
+    template const ImCommand*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::GetFirstCommand() const;
+    template const ImCommand*
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::GetNextCommand(const ImCommand*) const;
+    template void
+        ImRenderBuffer<Basic2dColouredTexturedVertex>::SetBufferFullRewindToLastEndRender();
+    template bool ImRenderBuffer<Basic2dColouredTexturedVertex>::Release();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Destruct();
+    template void ImRenderBuffer<Basic2dColouredTexturedVertex>::Dispatch() const;
 
     // -------------------------------------------------------------------------
     // Explicit instantiation (PER MEMBER, not whole-struct): the untextured 3D

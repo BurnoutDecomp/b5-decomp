@@ -41,6 +41,10 @@
 
 namespace CgsGeometric
 {
+    struct AxisAlignedBox;
+    struct Box;
+    struct Triangle;
+
     namespace BT
     {
         struct TriangleData
@@ -89,6 +93,34 @@ namespace CgsGeometric
                                                          const BT::BoxVertexData& lLineStartVertex,
                                                          const BT::BoxVertexData& lLineEndVertex,
                                                          Vector3&                 lPoint);
+
+    // Clip the segment lLineStart -> lLineEnd against an axis-aligned box.
+    // The two output points and their masks occupy lpaDest[0..1] and
+    // lpaDestValid[0..1]. Original X360 body @0x8283FF90.
+    void ClipTriEdgeAgainstBox(Vector3* const                    lpaDest,
+                               rw::math::vpu::MaskScalar* const   lpaDestValid,
+                               const AxisAlignedBox&              lBox,
+                               Vector3                            lLineStart,
+                               Vector3                            lLineEnd);
+
+    // Clip a triangle against an axis-aligned box into at most 18 points:
+    // 12 box-edge/triangle intersections followed by up to six triangle-edge
+    // intersections. Original X360 body @0x82840210.
+    void ClipTriWithAABB(Vector3* const                    lpaDest,
+                         rw::math::vpu::MaskScalar* const   lpaDestValid,
+                         const AxisAlignedBox&              lAABox,
+                         Vector3                            lTriangleV0,
+                         Vector3                            lTriangleV1,
+                         Vector3                            lTriangleV2);
+
+    // Triangle/OBB contact generation used by TriangleCollisionDebugComponent.
+    // Signature is DWARF-attested; X360 body @0x828406D0.
+    rw::math::vpu::MaskScalar IntersectTriangleBox(
+        const Box& lBox, const Triangle& lTriangle, VecFloat lPadding,
+        rw::math::vpu::MaskScalar lbClampPenetration,
+        Vector3* lpOutTriangleNormals, Vector3* lpOutContactNormals,
+        Vector3* lpOutTrianglePoints, Vector3* lpOutContactPoints,
+        s32* lpOutNumContacts, s32 liMaxContacts);
 }
 
 #endif // CGS_TRIANGLE_BOX_H

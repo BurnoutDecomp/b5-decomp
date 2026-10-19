@@ -1,10 +1,12 @@
 #include <cstdio>
+#include "BrnCommonTypes.h"
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
 #include <thread>
 #include <initializer_list>
 #include "pc/debug/ComponentActivation.h"
+#include "pc/debug/IniComponentLifecycle.h"
 using f32 = float;
 using s32 = int;
 using u32 = unsigned;
@@ -16,6 +18,7 @@ using RGBA = u32;
 struct Debug2DImmediateRender {
     RGBA mFill=0,mFrame=0,mText=0;const char* mMessage=nullptr;
     void DrawBox(f32,f32,f32,f32,RGBA c){mFill=c;}
+    void DrawBox(Vector2,Vector2,RGBA c){mFill=c;}
     void DrawFrame(f32,f32,f32,f32,RGBA c,f32){mFrame=c;}
     void DrawTextInBox(const char* t,f32,f32,f32,f32,f32,RGBA c,f32){mMessage=t;mText=c;}
 };

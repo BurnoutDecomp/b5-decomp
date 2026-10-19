@@ -149,6 +149,27 @@ namespace BrnDirector
         ActualAppend(lrMoment.GetName(), lRGBA);
     }
 
+    // ARTIST 0x8221B9F0. Erase expired entries without advancing past the
+    // shifted next entry. Equality and unordered time comparisons retain the
+    // line and take the original scalar subtraction arm.
+    void DebugLog::Update(f32 lfTimestep)
+    {
+        for (u32 luLoop = 0; luLoop < mStringIndices.GetLength(); )
+        {
+            const s32 liIndex = mStringIndices[luLoop];
+            if (mStringPool[liIndex].mfTimeLeft < lfTimestep)
+            {
+                mStringPool.FreeObject(liIndex);
+                mStringIndices.Erase(luLoop);
+            }
+            else
+            {
+                mStringPool[liIndex].mfTimeLeft -= lfTimestep;
+                ++luLoop;
+            }
+        }
+    }
+
     // X360 0x8221BAC8. Replay every live pool entry, in mStringIndices order, through the printer's
     // private ActualPrint(text, colour) path.
     void DebugLog::Print(DebugPrinter& lrDebugPrinter)
