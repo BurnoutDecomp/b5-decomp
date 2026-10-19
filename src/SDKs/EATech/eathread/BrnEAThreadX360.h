@@ -189,9 +189,9 @@ namespace Thread
     //   JobScheduler::AddThread    @ 0x82BCA5F8 -> RtlEnterCriticalSection(this+8) ...
     //                                              RtlLeaveCriticalSection(this+8)
     // i.e. the scheduler's mLock Futex lives at +0x08 and occupies the +0x08..+0x28
-    // span (mEnableProfiling is the next member at +0x28) -- 32 bytes, matching the
-    // vendor EAThread FUTEX_PLATFORM_DATA_SIZE for the Win32/X360 CRITICAL_SECTION
-    // variant.
+    // span on the 32-bit X360 image (mEnableProfiling is the next member at +0x28).
+    // The PC x64 wrapper must use the host CRITICAL_SECTION size instead; its larger
+    // storage is a host layout detail and does not change the console member offsets.
     //
     // This is the PROJECT home for EA::Thread::Futex. It must NOT pull the divergent
     // vendor eathread/eathread_futex.h (that header transitively defines a different
@@ -224,14 +224,13 @@ namespace Thread
         void Unlock();
 
     private:
-        // Raw, pointer-aligned storage for the host CRITICAL_SECTION. Sized to the
-        // X360/Win32 FUTEX_PLATFORM_DATA_SIZE (32 bytes) so the member spans exactly
-        // the +0x08..+0x28 range the JobScheduler asm proves; the host CRITICAL_SECTION
-        // (24 bytes on Win32) fits within it. Reached only through the out-of-line Win32
-        // calls in the .cpp -- never by raw offset.
+        // Raw, pointer-aligned storage for the host CRITICAL_SECTION. Keep the
+        // 32-byte EAThread platform span on 32-bit builds; Win64's CRITICAL_SECTION
+        // is 40 bytes, so the host x64 wrapper must reserve 40. The out-of-line
+        // calls in the .cpp verify size and alignment against the Windows type.
         union
         {
-            u8     mCRITICAL_SECTION[32];
+            u8     mCRITICAL_SECTION[sizeof(void*) == 8 ? 40 : 32];
             void*  mAlign;
         };
 
