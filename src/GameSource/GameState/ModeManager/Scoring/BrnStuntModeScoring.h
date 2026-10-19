@@ -76,9 +76,10 @@ namespace BrnGameState
         struct OnStuntElementCompleteAction;
     }
 
-    // DWARF BrnStuntModeScoring.h:36 -- the achievement-manager member is a pointer to this
-    // (typedef AchievementManager == BrnGameState::AchievementManagerPS3). Pointer only.
-    class AchievementManagerPS3;
+    // The X360 constructor chain passes AchievementManagerX360 through ModeManager and
+    // ScoringSystem into both stunt scorers. This is pointer-only here; the X360 owner stays
+    // forward-declared to avoid coupling the scoring header to the GameStateModule include graph.
+    class AchievementManagerX360;
 
     // ------------------------------------------------------------------------
     // TidyStuntScore -- free function the stunt scorer uses to "tidy" a raw stunt score into the
@@ -188,8 +189,9 @@ namespace BrnGameState
         // DWARF typedef BrnStuntModeScoring.h:67 -- the output interface Update/UpdateXxx read.
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
             ActiveRaceCarOutputInterface;
-        // DWARF typedef BrnStuntModeScoring.h:36 -- the achievement-manager member type.
-        typedef BrnGameState::AchievementManagerPS3 AchievementManager;
+        // Preserve the DWARF alias name while selecting the X360 ARTIST concrete type: its
+        // GameStateModule::Construct supplies this pointer through ModeManager and ScoringSystem.
+        typedef BrnGameState::AchievementManagerX360 AchievementManager;
 
         void       Construct(AchievementManager* lpAchievementManager);                 // :123
         bool       Prepare();                                                           // :127
