@@ -107,7 +107,10 @@ struct MemberType : Type { u32 GetTypeID() const override { return 123; } };
 static MemberType memberType;
 struct AptMemberType : Type { u32 GetTypeID() const override { return 30; } };
 static AptMemberType aptMemberType;
-static const Type* Resolve(u32 type) { return type == 30 ? &aptMemberType : &memberType; }
+static const Type* Resolve(u32 type) {
+    return type == 30 ? static_cast<const Type*>(&aptMemberType)
+                      : static_cast<const Type*>(&memberType);
+}
 static u64 ListId(const char* name) {
     return static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(name))) | 0x8000000000000000ull;
 }
