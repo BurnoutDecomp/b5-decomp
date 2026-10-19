@@ -3902,8 +3902,8 @@ namespace BrnGame
             // carves a FRESH GameStateModuleIO::OutputBuffer off the update-output IOBufferStack
             // on every pass, so its request queue starts empty each time and the append moves
             // exactly that pass's requests. The PC module owns ONE persistent buffer (see
-            // GameStateModule::GetOutputBuffer's own FLAG -- it is newed in Construct because
-            // nothing on PC ran the module's Prepare, which is the console's allocation point).
+            // GameStateModule::GetOutputBuffer's FLAG): PC runs the original stage ladder, but the
+            // host base Prepare does not create the console's per-pass DataStructure.
             // Re-appending a persistent queue every pass would re-issue every request already
             // sent, so the queue is CLEARED after the append -- which is exactly the state the
             // console's next pass starts in. DELETE-WHEN the module's real
@@ -3913,9 +3913,8 @@ namespace BrnGame
             BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
                 mGameStateModule.GetOutputBuffer();
 
-            const bool lbGameStatePrepared = mGameStateModule.PrepareNativePC(
-                lpGameStateOutput, mpUpdateOutputBufferStack,
-                lpGameDataOutput ? lpGameDataOutput->GetAllocatorList() : 0);
+            const bool lbGameStatePrepared = mGameStateModule.Prepare(
+                lpGameStateOutput, mpUpdateOutputBufferStack, lpGameDataOutput->GetAllocatorList());
 
             if (!lbGameStatePrepared)
             {

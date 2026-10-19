@@ -1293,7 +1293,7 @@ bool TrafficEntityModule::LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutput
         // LABEL_11 (case 3). The console reads mpVehicleList from the payload's +0x20 word,
         // the same slot stage 1 hands to CreateFromHandle, i.e. GameDataAssetEvent::mHandle.
         // For a LIST resource it keeps the raw resource memory rather than a ResourcePtr, as
-        // GameStateModule::ReceiveListResource does for its own vehicle/wheel lists. The host
+        // GameStateModule::Prepare does for its own vehicle/wheel lists. The host
         // ResourceHandle is 16 bytes where the console's is 8, so every literal offset past it
         // shifts; read by member.
         meResourceStage = E_RESOURCE_LOAD_WFVEHICLELISTAQUIRE;
