@@ -165,6 +165,8 @@ namespace
                 lpSlot->lbUsed = false;
                 return false;
             }
+            static_cast<CgsGui::AptDataHeader*>(lpRes)->meCurrentState =
+                CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
             lpSlot->lpHeader = lpRes;
             lpSlot->luBase   = reinterpret_cast<uintptr_t>(lpRes);
             lpSlot->luSize   =

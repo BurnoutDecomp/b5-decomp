@@ -9,6 +9,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"
 #include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
+#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
 #undef CGS_ASSERT
 #define CGS_ASSERT(c, m) do { if (!(c)) { std::printf("ASSERT %s\n", m); std::abort(); } } while (0)
@@ -102,11 +104,13 @@ void Pool::PostFixUpEntry(Entry*) { fixups.push_back('P'); }
 
 struct MemberType : Type { u32 GetTypeID() const override { return 123; } };
 static MemberType memberType;
-static const Type* Resolve(u32) { return &memberType; }
+struct AptMemberType : Type { u32 GetTypeID() const override { return 30; } };
+static AptMemberType aptMemberType;
+static const Type* Resolve(u32 type) { return type == 30 ? &aptMemberType : &memberType; }
 static u64 ListId(const char* name) {
     return static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(name))) | 0x8000000000000000ull;
 }
-static void File(const char* name, std::initializer_list<u64> ids) {
+static void File(const char* name, std::initializer_list<u64> ids, u32 type = 123) {
     const size_t bytes = sizeof(BundleV2) + ids.size() * sizeof(BundleV2::ResourceEntry) + ids.size() * 48;
     std::vector<char>& file = files[Key(name)]; file.assign(bytes, 0);
     auto* header = reinterpret_cast<BundleV2*>(file.data());
@@ -115,7 +119,7 @@ static void File(const char* name, std::initializer_list<u64> ids) {
     auto* entries = reinterpret_cast<BundleV2::ResourceEntry*>(file.data() + sizeof(BundleV2));
     u32 i = 0;
     for (u64 id : ids) {
-        entries[i].mResourceId.SetHash(id); entries[i].muResourceTypeId = 123;
+        entries[i].mResourceId.SetHash(id); entries[i].muResourceTypeId = type;
         for (u32 t = 0; t < 3; ++t) {
             header->mauResourceDataOffset[t] = static_cast<u32>(sizeof(BundleV2) + ids.size() * sizeof(*entries) + t * ids.size() * 16);
             entries[i].mauUncompressedSizeAndAlignment[t] = 0x40000010;
@@ -231,6 +235,86 @@ int main() {
         Check(loader.LoadBundle("bad.bundle", &pool, Resolve) < 0 && pool.Used() == 0, "invalid copy range rejected before mutation");
 #endif
         Check(loader.LoadBundle("missing.bundle", &pool, Resolve) == BundleLoader::KI_LOAD_FILE_MISSING, "missing-file return preserved");
+    }
+    {
+        using namespace CgsResource::PCAptOwnership;
+        FixturePool pool;
+        File("apt.bundle", {701, 702}, 30);
+        Check(loader.LoadBundle("apt.bundle", &pool, Resolve) == 2, "Apt owner fixture loads its real resident list");
+        void* header = pool.entries[pool.Slot(701)].mResource.m_baseResources[0];
+        int fileA = 0, fileB = 0;
+        Check(Retain(header, &fileA) == RetainResult::Acquired, "native load boundary retains one actual bundle acquisition");
+        Check(pool.Refs(701) == 2 && pool.Refs(702) == 2 && pool.Refs(ListId("apt.bundle")) == 2,
+              "Apt pin holds every member and the entry list");
+        Check(Retain(header, &fileA) == RetainResult::AlreadyHeld && pool.Refs(701) == 2,
+              "duplicate completion does not add a second pin");
+        Check(loader.UnloadBundle("apt.bundle", &pool) == 0 && pool.Refs(701) == 1 && pool.Used() == 3,
+              "logical unload preserves the live imported movie and sibling resources");
+        Check(!IsBundleLoaded(&pool, "apt.bundle") && FindBundleLead(&pool, "apt.bundle") == nullptr,
+              "detached logical bundle cannot satisfy a fresh GUI acquire from an Apt pin");
+        Check(Retain(header, &fileB) == RetainResult::MissingOwner && pool.Refs(701) == 1,
+              "new completion cannot acquire a detached logical bundle");
+        Check(loader.UnloadBundle("apt.bundle", &pool) < 0 && pool.Refs(701) == 1,
+              "duplicate logical unload cannot consume a live file's pin");
+        int before = reads;
+        files.erase("apt.bundle");
+        Check(Release(&fileA) && pool.Used() == 0 && reads == before,
+              "native teardown releases all resources without bundle IO");
+        Check(!Release(&fileA) && pool.Used() == 0, "duplicate file release is an explicit miss without refcount mutation");
+        Check(Retain(header, &fileB) == RetainResult::MissingOwner, "released resource pointer is not dereferenced or resurrected");
+    }
+    {
+        using namespace CgsResource::PCAptOwnership;
+        FixturePool pool;
+        File("apt.bundle", {711, 712}, 30); loader.LoadBundle("apt.bundle", &pool, Resolve);
+        void* header = pool.entries[pool.Slot(711)].mResource.m_baseResources[0];
+        int fileA = 0, fileB = 0;
+        Check(Retain(header, &fileA) == RetainResult::Acquired && Retain(header, &fileB) == RetainResult::Acquired,
+              "two files get two independently balanced acquisitions");
+        loader.UnloadBundle("apt.bundle", &pool);
+        Check(Release(&fileA) && pool.Refs(711) == 1 && pool.Used() == 3,
+              "first file teardown cannot retire another file's movie");
+        Check(Release(&fileB) && pool.Used() == 0, "last file teardown retires the detached bundle");
+    }
+    {
+        using namespace CgsResource::PCAptOwnership;
+        FixturePool pool;
+        File("apt.bundle", {721, 722}, 30); loader.LoadBundle("apt.bundle", &pool, Resolve);
+        void* header = pool.entries[pool.Slot(721)].mResource.m_baseResources[0];
+        int fileA = 0;
+        Retain(header, &fileA); loader.UnloadBundle("apt.bundle", &pool);
+        Check(loader.LoadBundle("apt.bundle", &pool, Resolve) == 0 && pool.Refs(721) == 2,
+              "logical reload acquires retained members instead of re-running fixups");
+        Check(IsBundleLoaded(&pool, "apt.bundle") && FindBundleLead(&pool, "apt.bundle") != nullptr,
+              "logical reload restores the GUI lead from the actual bundle list");
+        Check(Release(&fileA) && pool.Refs(721) == 1, "old file teardown preserves the new logical load");
+        Check(loader.UnloadBundle("apt.bundle", &pool) == 2 && pool.Used() == 0,
+              "reloaded logical owner balances its acquisition exactly once");
+    }
+    {
+        using namespace CgsResource::PCAptOwnership;
+        FixturePool pool;
+        File("apt.bundle", {731, 732}, 30); loader.LoadBundle("apt.bundle", &pool, Resolve);
+        void* header = pool.entries[pool.Slot(731)].mResource.m_baseResources[0];
+        int fileA = 0;
+        const int missing = pool.Slot(732); pool.statuses[missing] = 0;
+        Check(Retain(header, &fileA) == RetainResult::Failed && pool.Refs(731) == 1,
+              "incomplete member acquisition rolls back the earlier member exactly");
+        pool.statuses[missing] = 2;
+        Check(!Release(&fileA), "failed retain publishes no releasable file lease");
+        loader.UnloadBundle("apt.bundle", &pool);
+    }
+    {
+        CgsGui::AptDataHeader header{};
+        header.mpConstData = 0x1122334455667788ull;
+        header.muSizeOfHeader = 0x12345678;
+        header.meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
+        Check(offsetof(CgsGui::AptDataHeader, meCurrentState) == 0x2C && sizeof(header) == 0x30,
+              "native header state and size match XB1 callback assembly");
+        header.meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_ACTIVE;
+        header.meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
+        Check(header.mpConstData == 0x1122334455667788ull && header.muSizeOfHeader == 0x12345678,
+              "LoadAnimation and FreeAnimation state writes preserve const offset and span size");
     }
     std::printf("PCBundleOwnership: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

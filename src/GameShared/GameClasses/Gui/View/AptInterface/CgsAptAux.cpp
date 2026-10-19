@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"  // the render + render-flag callback family
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"       // CgsGui::AptDataHeader (LoadAnimation's FindAptData result)
@@ -618,14 +619,9 @@ namespace CgsGui
         if (lpAptData == nullptr)
             return;
 
-        // FLAG PC-platform leaf (.apt native-8 bundle): the console asserts AptData[5] (meCurrentState) is
-        // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). The native-8 header is 8-byte-widened,
-        // so meCurrentState does NOT sit at the u32-struct's +20 (that overlaps mpConstData's high
-        // half at +16); its real offset is ambiguous in the widened layout. The state precondition
-        // is moot here anyway -- the host loads the .apt SYNCHRONOUSLY before this call, so it is
-        // always fully loaded, and the host's own load-once guard replaces the console's state=2
-        // re-load gate. So the on-disk state read/write is skipped (not asserted / not written) to
-        // avoid corrupting the widened mpConstData field. The rest of the control flow is faithful.
+        CGS_ASSERT(lpAptData->meCurrentState == AptDataHeader::E_APTDATASTATE_LOADED ||
+                   lpAptData->meCurrentState == AptDataHeader::E_APTDATASTATE_ACTIVE,
+                   "File not in a state to be loaded in AptCallbackFile::LoadAnimation");
 
         // Resolve the header's serialised offset fields to real pointers (x64 substitute for the
         // console's relocated mpAptData/mpConstData -- see the leaf note above). The header sits at the resource base,
@@ -640,14 +636,10 @@ namespace CgsGui
         // constant-record table _parseStream resolves Push/DefineDictionary entries through) --
         // exactly the console's AptData[1]/AptData[2] pair and the XB1 CompleteLoad's a3/a4 pair.
         const uintptr_t luHeaderBase  = reinterpret_cast<uintptr_t>(lpAptData);
-        const uintptr_t luAptDataOff  = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x10u));  // serialized .apt header: aptData off @+0x10
-        const uintptr_t luConstOff    = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x18u));  // serialized .apt header: const off @+0x18
-        void* lpBase      = reinterpret_cast<void*>(luHeaderBase + luAptDataOff);
-        void* lpConstFile = (luConstOff != 0)
-                                ? reinterpret_cast<void*>(luHeaderBase + luConstOff)
-                                : lpBase;   // degenerate header: keep the old collapse
+        const uintptr_t luAptDataOff = static_cast<uintptr_t>(lpAptData->mpAptData);
+        const uintptr_t luConstOff = static_cast<uintptr_t>(lpAptData->mpConstData);
+        void* lpBase = reinterpret_cast<void*>(luHeaderBase + luAptDataOff);
+        void* lpConstFile = reinterpret_cast<void*>(luHeaderBase + luConstOff);
 
         // Publish the resource span for the native-8 relocation walk's bounds checks
         // (see the gAptResourceSpan* leaf note in CgsAptAux.h): base = the header (== the resource
@@ -656,8 +648,29 @@ namespace CgsGui
         const uintptr_t luPrevSpanBase = gAptResourceSpanBase;
         const uint32_t  luPrevSpanSize = gAptResourceSpanSize;
         gAptResourceSpanBase = luHeaderBase;
-        gAptResourceSpanSize = static_cast<uint32_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x28u));  // serialized .apt header: size @+0x28
+        gAptResourceSpanSize = lpAptData->muSizeOfHeader;
+
+        // FLAG PC-platform leaf: the native file owns its loaded blob until
+        // ~AptFile finishes Unresolve/FreeAnimation. Couple that same lifetime to
+        // the PC bank's actual resident list and members before exposing the root.
+        const CgsResource::PCAptOwnership::RetainResult leRetained =
+            CgsResource::PCAptOwnership::Retain(lpAptData, lpHandle->pData);
+        if (leRetained != CgsResource::PCAptOwnership::RetainResult::Acquired)
+        {
+            if (leRetained != CgsResource::PCAptOwnership::RetainResult::AlreadyHeld)
+            {
+                CGS_ASSERT(false, "Apt data has no retainable resident bundle owner");
+                if (lpHandle->pData->mpData == nullptr)
+                    lpHandle->pData->mnState = 0; // failed producer cannot publish a ready movie
+            }
+            // A duplicate callback owns an incoming handle too, but must neither
+            // add another pin nor Resolve an already resolved in-place movie again.
+            AptSharedPtr<AptFile>::Dispose(lpHandle->pData);
+            lpHandle->pData = nullptr;
+            gAptResourceSpanBase = luPrevSpanBase;
+            gAptResourceSpanSize = luPrevSpanSize;
+            return;
+        }
 
         // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
         AptFilePtr laHandle;
@@ -673,8 +686,8 @@ namespace CgsGui
         gAptResourceSpanBase = luPrevSpanBase;
         gAptResourceSpanSize = luPrevSpanSize;
 
-        // (The console then sets AptData[5] = 2 (ACTIVE). Skipped -- see the leaf note above:
-        // the widened header's state slot is ambiguous and the host's load-once guard covers it.)
+        // XB1 sub_1400C90F0 +0x58: the native x64 state slot is +0x2C.
+        lpAptData->meCurrentState = AptDataHeader::E_APTDATASTATE_ACTIVE;
 
         // Drop the caller's original handle reference (the asm's trailing DecRef + null on *a2).
         AptFile* lpConsumed = lpHandle->pData;
