@@ -43,17 +43,11 @@
 // A wave started this round by reading this banner and concluding the finish ladder never runs.
 // It runs. PostWorldUpdate runs too: GameStateModule::PostWorldUpdate calls it with the frame's
 // PostWorldInputBuffer.
-//   BrnGameStateModule.cpp:1268   mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
-// remains the superseded clocks stand-in, and the DELETE-WHEN below still stands for it.
-// PreWorldUpdate below CONTAINS the whole of PreWorldUpdateClocksBringUp -- the mode/online/
-// freeburn clock if-else at 0x82353A98..0x82353B94 is the same code, reached through the same
-// named accessors (GetCarSelectManager()->GetJunkyardId(), GetTrainingManager()->IsInPictureParadise()).
-// DELETE-WHEN: the moment BrnGameStateModule.cpp:1268 is re-pointed at this PreWorldUpdate --
-// which needs the ten arguments (both race-car output interfaces, the pre-world input buffer, the
-// output buffer, the action queue and the live TimerStatusInterface) to be reachable at that call
-// position -- PreWorldUpdateClocksBringUp must be deleted from ModeManager_gUI_00.cpp and from the
-// header IN THE SAME CHANGE. NEVER LEAVE BOTH ARMED: the clocks would double-accumulate, and
-// mfTimeInFreeBurn feeds TrainingManager's WAIT_FOR_MESSAGE gate (> 3.0 s).
+// The extracted PreWorldUpdateClocksBringUp helper has no current caller in this source tree and
+// is retained for separate cleanup. The active GameState EMM pre-world path calls this full method,
+// which already contains the same clock if/else at 0x82353A98..0x82353B94. Do not wire the helper
+// into that frame path: both would advance the clocks twice, and mfTimeInFreeBurn feeds the
+// TrainingManager WAIT_FOR_MESSAGE gate (> 3.0 s).
 //
 // -- WHAT IS GATED AND WHY (hazards H7) -------------------------------------------------------
 // Every omission below carries its own banner naming the exact console call. Summary:
@@ -519,8 +513,8 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         // (The bring-up leg's CGS_ASSERT is deliberately NOT reproduced: no such assert exists at
         //  0x82353B10..0x82353B5C, and this file carries only verbatim X360 asserts.)
         // `ldx r11, r9, 0x2CDC0` is a 64-bit CgsID load == the junkyard id;
-        // `lbzx r11, r9, 0xB644` is the picture-paradise bool. Both reached by name, exactly the way
-        // the superseded PreWorldUpdateClocksBringUp reaches them.
+        // `lbzx r11, r9, 0xB644` is the picture-paradise bool. Both are read by name on the selected
+        // full PreWorldUpdate path.
         const bool lbInJunkyard =
             (mpGameStateModule->GetCarSelectManager()->GetJunkyardId() != 0);
         const bool lbInPictureParadise =

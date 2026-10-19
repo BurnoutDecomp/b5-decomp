@@ -74,36 +74,14 @@ void ModeManager::ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList
 // ============================================================================
 // ModeManager::Construct -- X360 0x82340008
 // ============================================================================
-// [!!] THIS BODY HAS NO CALLER ON THIS BUILD, AND THAT IS THE DECIDED STATE (conductor decision #1,
-// branch (b)). The investigation it asked for, done against GameStateModule::Construct's call
-// position (BrnGameStateModule.cpp:134, where ConstructInterModeStateBringUp is called today):
+// GameStateModule::Construct calls this full constructor at the X360 caller's matching position,
+// after GameStateInviteManager::Construct and before ProgressionManager::Construct. Its arguments
+// are the original eight owners, in order: module, progression, trigger-query, network-round, street,
+// mugshot, road-rules, and the module's AchievementManagerX360. The owning module and all referenced
+// manager bodies are available in the mounted source set.
 //
-//   arg                                        reachable there?
-//   1 GameStateModule*                         YES -- `this`
-//   2 BrnProgression::ProgressionManager*      YES -- &mProgressionManager (BrnGameStateModule.h:842)
-//   3 TriggerQueryManager*                     YES -- &mTriggerQueryManager (:965)
-//   4 NetworkRoundManager*                     NO  -- GameStateModule has no such member
-//   5 StreetManager*                           YES -- &mStreetManager (:868)
-//   6 MugshotManager*                          NO  -- GameStateModule has no such member
-//   7 const RoadRulesManager*                  NO  -- DWARF declares mRoadRulesManager between
-//                                                     mAchievementManager and mStreetManager, but it
-//                                                     is NOT reconstructed (see the note at :856)
-//   8 StuntModeScoring::AchievementManager*    NO (TYPE) -- the member exists (mAchievementManager,
-//                                                     :854) but it is an AchievementManagerX360,
-//                                                     while StuntModeScoring::AchievementManager is
-//                                                     typedef'd to AchievementManagerPS3
-//                                                     (BrnStuntModeScoring.h:194). Those two are
-//                                                     SIBLINGS under AchievementManagerBase, so the
-//                                                     address does not convert.
-//
-// FOUR OF EIGHT ARE UNREACHABLE, so wiring this in would mean passing nulls through four asserts the
-// console fires on exactly those pointers. The bring-up seam therefore stays, and it stays the ONLY
-// ARMED PATH -- both paths are never armed at once.
-// DELETE-WHEN, precisely: (a) GameStateModule grows a NetworkRoundManager member/accessor, (b) it
-// grows a MugshotManager one, (c) RoadRulesManager is reconstructed and embedded, and (d) the
-// StuntModeScoring::AchievementManager typedef is re-pointed at the base (or at the X360 flavour) so
-// &mAchievementManager converts. On that day: replace the ConstructInterModeStateBringUp call site
-// with this Construct and DELETE the seam and its two bring-up methods.
+// Prepare remains a separate GameStateModule::Prepare stage, and PreWorldUpdate remains on the
+// selected GameState EMM pre-world path. Neither lifecycle call belongs in this constructor.
 // ============================================================================
 void ModeManager::Construct(GameStateModule*                      lpGameStateModule,
                             BrnProgression::ProgressionManager*   lpProgressionManager,

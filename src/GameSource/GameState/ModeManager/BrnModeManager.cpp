@@ -563,9 +563,8 @@ void ModeManager::TellGuiToShowOnlineFinalStandings()
     mbOnlineFinalStandingsShown = true;   // X360 +0x94F8 = 1
 }
 
-// ([tut-ticker] 2026-08-24: ConstructInterModeStateBringUp + PreWorldUpdateClocksBringUp are
-//  bodied in the MOUNTED partfile ModeManager_gUI_00.cpp -- this TU still does not compile as
-//  a whole; see that partfile's duplicate-symbol watch note.)
+// PreWorldUpdateClocksBringUp remains in the mounted ModeManager_gUI_00.cpp support partfile.
+// No current caller was found; keep the helper for separate cleanup.
 
 } // namespace BrnGameState
 
