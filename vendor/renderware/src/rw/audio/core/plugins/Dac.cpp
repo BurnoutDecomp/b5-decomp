@@ -24,6 +24,7 @@
 // console-only XAudio callbacks and are not ported.
 // =====================================================================================
 
+#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"
 #include "rw/audio/core/plugins/Dac.h"
 #include "rw/audio/core/Mixer.h"           // Mixer / MixerExecuteParams / SampleBuffer
 #include "rw/audio/core/CpuLoadBalancer.h" // the CPU-load governor the Dac drives
@@ -607,6 +608,8 @@ int Dac::Mix(Dac *self)
 // =====================================================================================
 Dac::~Dac()
 {
+    // FLAG PC-platform leaf: retire the external producer before freeing its mixer.
+    CgsSound::Playback::DacOutputPC::Detach(this);
     sThreadRunning = 0;
     if (!sExternalDacMode)
     {

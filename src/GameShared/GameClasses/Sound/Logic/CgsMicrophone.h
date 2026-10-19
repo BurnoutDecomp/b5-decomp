@@ -128,6 +128,8 @@ public:
     // DWARF CgsMicrophone.h:117. Inlined to the single miNumPlayers store in
     // SoundLogicModule::UpdateMicrophones (ARTIST 0x826C9A00).
     void SetNumberOfPlayers(s32 liNumberOfPlayers) { miNumPlayers = liNumberOfPlayers; }
+    // ARTIST Generate3DParams @ 0x826EA7D8 reads this member inline.
+    s32 GetNumberOfPlayers() const { return miNumPlayers; }
 
     // @ 0x826804E0. Address-of accessor into the 2x2 microphone grid.
     Microphone* GetMicrophone(EMicPositions aePosition, EPlayer aePlayer);

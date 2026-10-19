@@ -59,17 +59,17 @@ namespace BrnWorld
         }
 
         u32 GetRawData() const;                        // :121 (own slice)
-        u16 GetMaterialTag() const;                    // :124 (own slice)
-        u16 GetGroupTag() const;                       // :127 (own slice)
+        u16 GetMaterialTag() const { return mu16MaterialTag; } // :124
+        u16 GetGroupTag() const { return mu16GroupTag; }       // :127
 
         // :134 — this TU's function (0x826763B0). Decodes the 4-bit traffic-direction
         // code from mu16MaterialTag and, for VALID lanes, writes the lane angle in
         // radians to *lpfTrafficAngle.
         TrafficDirection GetTrafficInfo(f32* lpfTrafficAngle) const;
 
-        u16  GetAISectionIndex() const;                // :137 (own slice)
-        u8   GetSurfaceId() const;                     // :140 (own slice)
-        bool IsDrivable() const;                       // :146 (own slice)
+        u16 GetAISectionIndex() const { return mu16GroupTag & 0x7fff; } // :137; ARTIST 822D8DD8
+        u8 GetSurfaceId() const { return static_cast<u8>((mu16MaterialTag >> 4) & 0x3f); } // :140; 822D8CC4
+        bool IsDrivable() const { return (mu16MaterialTag & KU_COLLISION_FLAG_DRIVEABLE) != 0; } // :146; 822D8E7C
         bool IsFatal() const;                          // :149 (own slice)
         bool IsSuperFatal() const;                     // :152 (own slice)
         bool IsInvisible() const;                      // :155 (own slice)

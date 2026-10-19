@@ -33,6 +33,8 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox4.h"
 #include <cstdint>
 
 namespace CgsGeometric
@@ -56,6 +58,25 @@ namespace CgsGeometric
         uintptr_t mpaPolySoupBoxes; // +0x28  (X360 +0x24 u32) base of the AxisAlignedBox4 array
         s32       miNumPolySoups;   // +0x30  (X360 +0x28)
         s32       miDataSize;       // +0x34  (X360 +0x2C) total serialised byte size
+
+        // Inlined in DrawPolySoups, ARTIST 828C0B28..828C0BCC; declaration
+        // names from DecFIGS CgsPolygonSoupList.h:101..119.
+        s32 GetNumPolygonSoups() const { return miNumPolySoups; }
+        const PolygonSoup* GetPolygonSoup(s32 liPolySoupIndex) const
+        {
+            CGS_ASSERT(liPolySoupIndex >= 0 && liPolySoupIndex < GetNumPolygonSoups(),
+                       "liPolySoupIndex >= 0 && liPolySoupIndex < GetNumPolygonSoups()");
+            return reinterpret_cast<const PolygonSoup* const*>(mpapPolySoups)[liPolySoupIndex];
+        }
+        // The binary's bound is the soup count rounded up to four, without
+        // dividing by four (828C0B90..98). Keep that original accessor behavior.
+        s32 GetNum4Boxes() const { return ((miNumPolySoups + 3) / 4) * 4; }
+        const AxisAlignedBox4* Get4Boxes(s32 li4BoxIndex) const
+        {
+            CGS_ASSERT(li4BoxIndex >= 0 && li4BoxIndex < GetNum4Boxes(),
+                       "li4BoxIndex >= 0 && li4BoxIndex < GetNum4Boxes()");
+            return reinterpret_cast<const AxisAlignedBox4*>(mpaPolySoupBoxes) + li4BoxIndex;
+        }
 
         // FixUp -- load-time relocation; rebases the table, every soup pointer, and
         // the two pointer fields inside every soup. Bodied in CgsPolygonSoupList.cpp.

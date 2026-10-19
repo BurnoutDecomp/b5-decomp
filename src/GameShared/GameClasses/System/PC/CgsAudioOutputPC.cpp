@@ -10,6 +10,9 @@
 // same 2.9 engine and same interfaces, but it names xaudio2_9redist.dll -- the
 // down-level-capable build we ship beside the exe. See Open() below.
 #include <xaudio2Redist.h>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <cmath>
 #include <cstring>
 #include <cstdio>
@@ -20,7 +23,7 @@
 // ===========================================================================
 //  CgsSystem::AudioOutputPC -- XAudio2 2.9 PC output backend (Microsoft's XAudio2
 //  Redistributable, xaudio2_9redist.dll). See the header for the
-//  X360 (Dac -> XAudio render-driver) correspondence. A single stereo 16-bit source
+//  X360 (Dac -> XAudio render-driver) correspondence. A single stereo float source
 //  voice is fed by a triple-buffered, callback-driven pull (OnBufferEnd refills the
 //  drained buffer and re-submits it), matching the X360 render-driver frame callback.
 // ===========================================================================
@@ -49,10 +52,18 @@ AudioOutputPC::FillFn   g_fill        = nullptr;
 void*                   g_user        = nullptr;
 // The additive ENGINE fill (the rw::audio Dac's mixed frame; phase D). Persistent
 // across Open/Close while the movie-owned primary slot churns.
-AudioOutputPC::FillFn   g_engineFill  = nullptr;
+AudioOutputPC::EngineFillFn g_engineFill  = nullptr;
 void*                   g_engineUser  = nullptr;
-s16                     g_buf[kBuffers][kFrames * kMaxChannels];
-s16                     g_engineBuf[kFrames * kMaxChannels];
+f32                     g_buf[kBuffers][kFrames * kMaxChannels];
+f32                     g_engineBuf[kFrames * kMaxChannels];
+s16                     g_primaryBuf[kFrames * kMaxChannels];
+
+// FLAG PC-platform leaf: publish callback/context pairs atomically under a short
+// mutex. No publication lock is held while a fill enters RWAC or reads movie PCM.
+std::mutex g_bindingMutex;
+std::condition_variable g_fillIdle;
+u32 g_primaryActive = 0;
+u32 g_engineActive = 0;
 
 // [DIAG] NOT IN THE X360 BINARY -- BRN_AUDIO_CAPTURE=<path.wav>: every packet handed to the
 // source voice (primary + engine mix, BEFORE the mastering volume, so it works with the
@@ -111,7 +122,7 @@ void CaptureWrite(const s16* lpBuf, int liValues)
                 std::fwrite(&luRate, 4, 1, g_capture); std::fwrite(&luByteRate, 4, 1, g_capture);
                 std::fwrite(&luAlign, 2, 1, g_capture); std::fwrite(&luBits, 2, 1, g_capture);
                 std::fwrite("data", 1, 4, g_capture); std::fwrite(&luZero, 4, 1, g_capture);
-                std::atexit(&CaptureFinish);
+
                 AUDIO_LOG << "[Audio] capture -> " << lpcPath << " (" << g_captureRate << " Hz, "
                           << g_captureChans << " ch, 16-bit; sizes patched at exit)\n";
             }
@@ -189,7 +200,7 @@ void EngineMeasure(const s16* lpBuf, int liValues)
                 std::fwrite(&luRate, 4, 1, g_engCapture); std::fwrite(&luByteRate, 4, 1, g_engCapture);
                 std::fwrite(&luAlign, 2, 1, g_engCapture); std::fwrite(&luBits, 2, 1, g_engCapture);
                 std::fwrite("data", 1, 4, g_engCapture); std::fwrite(&luZero, 4, 1, g_engCapture);
-                std::atexit(&EngineCaptureFinish);
+
                 AUDIO_LOG << "[engine-mix] capture -> " << lpcPath << "\n";
             }
         }
@@ -231,42 +242,188 @@ void EngineMeasure(const s16* lpBuf, int liValues)
     }
 }
 
-// Saturating add of one already-filled mix source into the outgoing buffer.
-void MixInto(s16* lpDst, const s16* lpSrc, int liValues)
+// Diagnostic storage is a bounded SPSC ring. Only the XAudio callback produces
+// packets; a separate worker performs all capture writes and log formatting.
+struct DiagnosticPacket
 {
-    for (int li = 0; li < liValues; ++li)
+    f32 maMix[kFrames * kMaxChannels];
+    f32 maEngine[kFrames * kMaxChannels];
+    bool mbEngine;
+};
+const u32 kDiagnosticPackets = 256;
+DiagnosticPacket g_diagnostics[kDiagnosticPackets];
+std::atomic<u32> g_diagWrite(0), g_diagRead(0), g_diagDropped(0);
+std::atomic<bool> g_diagStop(false);
+HANDLE g_diagEvent = nullptr;
+HANDLE g_diagThread = nullptr;
+
+// FLAG PC-platform leaf: final normalized device range, with no gain or history.
+f32 SaturateDeviceSample(f32 afValue)
+{
+    if (!std::isfinite(afValue)) return 0.0f;
+    if (afValue > 1.0f) return 1.0f;
+    if (afValue < -1.0f) return -1.0f;
+    return afValue;
+}
+
+s16 DiagnosticS16(f32 afValue)
+{
+    return static_cast<s16>(SaturateDeviceSample(afValue) * 32767.0f);
+}
+
+DWORD WINAPI DiagnosticThread(void*)
+{
+    u32 luPackets = 0, luOverRange = 0;
+    f32 lfPeak = 0.0f;
+    for (;;)
     {
-        int liMix = int(lpDst[li]) + int(lpSrc[li]);
-        if (liMix >  32767) liMix =  32767;
-        if (liMix < -32768) liMix = -32768;
-        lpDst[li] = s16(liMix);
+        u32 luRead = g_diagRead.load(std::memory_order_relaxed);
+        const u32 luWrite = g_diagWrite.load(std::memory_order_acquire);
+        while (luRead != luWrite)
+        {
+            const DiagnosticPacket& lrPacket = g_diagnostics[luRead % kDiagnosticPackets];
+            s16 laMix[kFrames * kMaxChannels], laEngine[kFrames * kMaxChannels];
+            const int liValues = kFrames * g_channels;
+            for (int li = 0; li < liValues; ++li)
+            {
+                const f32 lfAbs = std::fabs(lrPacket.maMix[li]);
+                if (lfAbs > lfPeak) lfPeak = lfAbs;
+                if (lfAbs > 1.0f) ++luOverRange;
+                laMix[li] = DiagnosticS16(lrPacket.maMix[li]);
+                laEngine[li] = DiagnosticS16(lrPacket.maEngine[li]);
+            }
+            if (lrPacket.mbEngine) EngineMeasure(laEngine, liValues);
+            CaptureWrite(laMix, liValues);
+            if (++luPackets == 96)
+            {
+                AUDIO_LOG << "[audio-output] prelimit peak=" << lfPeak
+                          << " overrange=" << luOverRange
+                          << " diagnostic-drops=" << g_diagDropped.load() << "\n";
+                luPackets = luOverRange = 0;
+                lfPeak = 0.0f;
+            }
+            ++luRead;
+            g_diagRead.store(luRead, std::memory_order_release);
+        }
+        if (g_diagStop.load(std::memory_order_acquire) &&
+            luRead == g_diagWrite.load(std::memory_order_acquire))
+            break;
+        ::WaitForSingleObject(g_diagEvent, 250);
+    }
+    return 0;
+}
+
+void StartDiagnostics()
+{
+    const char* lapKnobs[] = { "BRN_AUDIO_CAPTURE", "BRN_AUDIO_CAPTURE_ENGINE", "BRN_ENGINE_MIX_DIAG" };
+    bool lbEnabled = false;
+    for (const char* lpcKnob : lapKnobs)
+    {
+        const char* lpcValue = std::getenv(lpcKnob);
+        lbEnabled |= lpcValue && *lpcValue && *lpcValue != '0';
+    }
+    if (!lbEnabled) return;
+    g_diagRead.store(0); g_diagWrite.store(0); g_diagDropped.store(0);
+    g_diagStop.store(false);
+    g_diagEvent = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (g_diagEvent)
+        g_diagThread = ::CreateThread(nullptr, 0, &DiagnosticThread, nullptr, 0, nullptr);
+    if (!g_diagThread && g_diagEvent)
+    {
+        ::CloseHandle(g_diagEvent);
+        g_diagEvent = nullptr;
     }
 }
 
-void SubmitBuffer(int liIndex)
+void StopDiagnostics()
 {
-    s16* lpBuf = g_buf[liIndex];
-    if (g_fill)
-        g_fill(lpBuf, kFrames, g_user);
-    else
-        std::memset(lpBuf, 0, sizeof(s16) * kFrames * g_channels);
+    if (!g_diagThread) return;
+    g_diagStop.store(true, std::memory_order_release);
+    ::SetEvent(g_diagEvent);
+    ::WaitForSingleObject(g_diagThread, INFINITE);
+    ::CloseHandle(g_diagThread); ::CloseHandle(g_diagEvent);
+    g_diagThread = g_diagEvent = nullptr;
+}
 
-    const int liValues = kFrames * g_channels;
-    if (g_engineFill)
+void QueueDiagnostics(const f32* apMix, bool abEngine)
+{
+    if (!g_diagThread) return;
+    const u32 luWrite = g_diagWrite.load(std::memory_order_relaxed);
+    if (luWrite - g_diagRead.load(std::memory_order_acquire) == kDiagnosticPackets)
     {
-        g_engineFill(g_engineBuf, kFrames, g_engineUser);
-        EngineMeasure(g_engineBuf, liValues);   // [DIAG] BRN_ENGINE_MIX_DIAG / _CAPTURE_ENGINE
-        MixInto(lpBuf, g_engineBuf, liValues);
+        g_diagDropped.fetch_add(1, std::memory_order_relaxed);
+        return; // never stall audio to wait for a capture disk
     }
-    CaptureWrite(lpBuf, liValues);   // [DIAG] BRN_AUDIO_CAPTURE
+    DiagnosticPacket& lrPacket = g_diagnostics[luWrite % kDiagnosticPackets];
+    std::memcpy(lrPacket.maMix, apMix, sizeof(lrPacket.maMix));
+    std::memcpy(lrPacket.maEngine, g_engineBuf, sizeof(lrPacket.maEngine));
+    lrPacket.mbEngine = abEngine;
+    g_diagWrite.store(luWrite + 1, std::memory_order_release);
+    ::SetEvent(g_diagEvent);
+}
 
-    XAUDIO2_BUFFER lBuf;
-    std::memset(&lBuf, 0, sizeof(lBuf));
-    lBuf.AudioBytes = static_cast<UINT32>(kFrames * g_channels * sizeof(s16));
+void SubmitBuffer(int liIndex, bool abPrime = false)
+{
+    f32* lpBuf = g_buf[liIndex];
+    const int liValues = kFrames * g_channels;
+    std::memset(lpBuf, 0, sizeof(f32) * liValues);
+    // Device creation may run under the System lock. Priming is SILENCE ONLY;
+    // the sole engine producer is OnBufferEnd after all buffers are submitted.
+    if (!abPrime)
+    {
+        AudioOutputPC::FillFn lpFill;
+        AudioOutputPC::EngineFillFn lpEngineFill;
+        void* lpUser;
+        void* lpEngineUser;
+        {
+            std::lock_guard<std::mutex> lLock(g_bindingMutex);
+            lpFill = g_fill; lpUser = g_user;
+            lpEngineFill = g_engineFill; lpEngineUser = g_engineUser;
+            if (lpFill) ++g_primaryActive;
+            if (lpEngineFill) ++g_engineActive;
+        }
+        if (lpFill)
+        {
+            lpFill(g_primaryBuf, kFrames, lpUser);
+            for (int li = 0; li < liValues; ++li)
+                lpBuf[li] = static_cast<f32>(g_primaryBuf[li]) / 32768.0f;
+            std::lock_guard<std::mutex> lLock(g_bindingMutex);
+            --g_primaryActive;
+            g_fillIdle.notify_all();
+        }
+        std::memset(g_engineBuf, 0, sizeof(g_engineBuf));
+        if (lpEngineFill)
+        {
+            lpEngineFill(g_engineBuf, kFrames, lpEngineUser);
+            for (int li = 0; li < liValues; ++li)
+                lpBuf[li] += g_engineBuf[li];
+            std::lock_guard<std::mutex> lLock(g_bindingMutex);
+            --g_engineActive;
+            g_fillIdle.notify_all();
+        }
+        // Retain the pre-saturation floats for peak/overrange diagnostics. The
+        // worker's WAV conversion uses the same device-range guard as playback.
+        QueueDiagnostics(lpBuf, lpEngineFill != nullptr);
+        // FLAG PC-platform leaf: saturate only at the completed stereo device
+        // boundary. Preserve all representable samples exactly, including a
+        // large engine lane cancelled by the movie lane. RWAC already owns the
+        // authored master dynamics; a second XAPOFX loudness processor changes
+        // even quiet music and introduces another 1024 frames of latency.
+        for (int li = 0; li < liValues; ++li)
+            lpBuf[li] = SaturateDeviceSample(lpBuf[li]);
+    }
+    XAUDIO2_BUFFER lBuf = {};
+    lBuf.AudioBytes = static_cast<UINT32>(liValues * sizeof(f32));
     lBuf.pAudioData = reinterpret_cast<const BYTE*>(lpBuf);
-    lBuf.pContext   = reinterpret_cast<void*>(static_cast<intptr_t>(liIndex));
-    if (g_pSource)
-        g_pSource->SubmitSourceBuffer(&lBuf);
+    lBuf.pContext = reinterpret_cast<void*>(static_cast<intptr_t>(liIndex));
+    g_pSource->SubmitSourceBuffer(&lBuf);
+}
+
+void FinishOutput()
+{
+    AudioOutputPC::Close();
+    CaptureFinish();
+    EngineCaptureFinish();
 }
 
 // XAudio2 voice callback: when a buffer drains, refill that same slot and re-queue it.
@@ -426,8 +583,8 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 {
     if (g_pSource)
         return true; // already open
-    if (liChannels < 1) liChannels = 1;
-    if (liChannels > kMaxChannels) liChannels = kMaxChannels;
+    if (liSampleRate != 48000 || liChannels != 2)
+        return false; // this shared sink has one explicit master clock and layout
 
     // XAUDIO2_DLL_W is L"xaudio2_9redist.dll" (xaudio2Redist.h; the _W spelling because
     // plain XAUDIO2_DLL follows UNICODE, which this build does not define). That is the
@@ -476,11 +633,11 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
     WAVEFORMATEX lWfx;
     std::memset(&lWfx, 0, sizeof(lWfx));
-    lWfx.wFormatTag      = WAVE_FORMAT_PCM;
+    lWfx.wFormatTag      = WAVE_FORMAT_IEEE_FLOAT;
     lWfx.nChannels       = static_cast<WORD>(liChannels);
     lWfx.nSamplesPerSec  = static_cast<DWORD>(liSampleRate);
-    lWfx.wBitsPerSample  = 16;
-    lWfx.nBlockAlign     = static_cast<WORD>(liChannels * sizeof(s16));
+    lWfx.wBitsPerSample  = 32;
+    lWfx.nBlockAlign     = static_cast<WORD>(liChannels * sizeof(f32));
     lWfx.nAvgBytesPerSec = liSampleRate * lWfx.nBlockAlign;
 
     if (FAILED(g_pXAudio2->CreateSourceVoice(&g_pSource, &lWfx, 0,
@@ -493,14 +650,24 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
     g_channels = liChannels;
     g_openRate = liSampleRate;
-    g_fill = lpFill;
-    g_user = lpUser;
-    g_pSource->Start(0);
-    for (int li = 0; li < kBuffers; ++li) // prime the queue
-        SubmitBuffer(li);
+    SetFill(lpFill, lpUser);
+    static bool sbExitRegistered = false;
+    if (!sbExitRegistered)
+    {
+        std::atexit(&FinishOutput);
+        sbExitRegistered = true;
+    }
+    StartDiagnostics();
+    for (int li = 0; li < kBuffers; ++li)
+        SubmitBuffer(li, true);
+    if (FAILED(g_pSource->Start(0)))
+    {
+        Close();
+        return false;
+    }
 
     AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels
-              << " ch (16-bit PCM)";
+              << " ch (float PCM, final saturation)";
     if (luEndpointIndex != UINT32_MAX)
         AUDIO_LOG << " via active endpoint " << luEndpointIndex;
     // [FLAG PC witness] The mastering voice's OWN gain, read back out of the engine rather than
@@ -522,44 +689,54 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
 void AudioOutputPC::Close()
 {
-    // [DIAG] BRN_AUDIO_CAPTURE -- do NOT close the capture here. The device is opened and
-    // closed many times in one boot (ReleasePrimaryFill() around every movie), and closing
-    // the file on the first of those ended the capture for the whole run (g_captureTried
-    // stays true, so CaptureWrite never reopens): a 120 s run captured 0.79 s. Just make the
-    // header describe what is on disk; CaptureFinish still runs from the atexit handler.
-    if (g_capture)
-        CapturePatchHeader();
+    // DestroyVoice waits for the last callback before buffers, bindings or
+    // capture headers are touched. Diagnostic writes have their own drain barrier.
     if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
+    StopDiagnostics();
+    if (g_capture) CapturePatchHeader();
+    if (g_engCapture) EngineCapturePatchHeader();
     if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
     if (g_pXAudio2) { g_pXAudio2->Release(); g_pXAudio2 = nullptr; }
     if (g_hXAudioDll) { ::FreeLibrary(g_hXAudioDll); g_hXAudioDll = nullptr; }
-    g_fill = nullptr; g_user = nullptr;
+    SetFill(nullptr, nullptr);
     g_openRate = 0;
 }
 
 void AudioOutputPC::ReleasePrimaryFill()
 {
-    // Destroying the source voice synchronises with any Fill callback that may
-    // still be reading the movie PCM. The engine fill is deliberately not
-    // cleared by Close(), so restore its native device after that barrier.
-    const bool lbKeepEngine = g_engineFill != nullptr;
-    Close();
-    if (lbKeepEngine)
-        Open(48000, 2, nullptr, nullptr);
+    std::unique_lock<std::mutex> lLock(g_bindingMutex);
+    g_fill = nullptr; g_user = nullptr;
+    g_fillIdle.wait(lLock, [] { return g_primaryActive == 0; });
 }
 
 bool AudioOutputPC::IsOpen() { return g_pSource != nullptr; }
 
 int AudioOutputPC::GetOpenSampleRate() { return g_openRate; }
 
-void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser) { g_fill = lpFill; g_user = lpUser; }
+void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser)
+{
+    std::lock_guard<std::mutex> lLock(g_bindingMutex);
+    g_fill = lpFill; g_user = lpUser;
+}
 
-void AudioOutputPC::SetEngineFill(FillFn lpFill, void* lpUser) { g_engineFill = lpFill; g_engineUser = lpUser; }
+void AudioOutputPC::SetEngineFill(EngineFillFn lpFill, void* lpUser)
+{
+    std::lock_guard<std::mutex> lLock(g_bindingMutex);
+    g_engineFill = lpFill; g_engineUser = lpUser;
+}
+
+void AudioOutputPC::ReleaseEngineFill()
+{
+    std::unique_lock<std::mutex> lLock(g_bindingMutex);
+    g_engineFill = nullptr; g_engineUser = nullptr;
+    g_fillIdle.wait(lLock, [] { return g_engineActive == 0; });
+}
 
 void AudioOutputPC::PlayTestTone(float lfSeconds)
 {
     if (!g_pSource && !Open(48000, 2, nullptr, nullptr))
         return;
+    ReleasePrimaryFill();
     g_tone.phase = 0.0;
     g_tone.sampleRate = 48000;
     g_tone.channels = g_channels;

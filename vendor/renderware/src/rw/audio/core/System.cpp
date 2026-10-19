@@ -16,6 +16,7 @@
 // scratchpad/waveE/AudioSystem.spec.md.
 // =====================================================================================
 
+#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::System (+ PlugInRegistry, hooks)
 #include "rw/audio/core/Mixer.h"        // StackAllocator (the typed static object table)
 #include "rw/audio/core/Voice.h"        // Voice / VoiceListLink / VoiceActiveNode
@@ -578,6 +579,9 @@ int System::ReleaseHandler(void *cmd)
 // -------------------------------------------------------------------------------------
 void System::Release(System *self)
 {
+    // FLAG PC-platform leaf: join the external fill before freeing its System.
+    // This barrier precedes all RWAC locks to preserve command -> System order.
+    CgsSound::Playback::DacOutputPC::ReleaseSystem(self);
     // ---- 1. queue the deferred teardown record ---------------------------------------
     Lock(self);
     SystemReleaseCommand *command = reinterpret_cast<SystemReleaseCommand *>(

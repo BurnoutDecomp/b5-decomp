@@ -20,7 +20,8 @@ namespace
     s32 siSurfaceAlpha = 75;            // dword_82CDB59C
     const WorldEntityModule* spWorldEntityModule = 0; // dword_82FAD2A0
 
-    const u32 K_ZONE_COLOURS[16] =
+    // ARTIST 0x822D8D34 indexes dword_82CDB660 with liPolyIndex modulo 16.
+    const u32 KAU_ZONE_COLOURS[16] =
     {
         0x208080FFu, 0x2000FFFFu, 0x2080FF80u, 0x20FF0000u,
         0x20400080u, 0x20808040u, 0x20FFFF00u, 0x200080FFu,
@@ -50,7 +51,7 @@ namespace
 // ARTIST 0x822F9F40. BaseCollisionGenerator::Destruct, called at entry by the
 // original body, is the empty function at 0x8284CB38. The remaining stores are the
 // mode-list entries and file-static callback state.
-void CollisionDebugComponent::Construct(WorldEntityModule* lpWorldEntityModule)
+void CollisionDebugComponent::Construct(const WorldEntityModule* lpWorldEntityModule)
 {
     sbDrawTags = false;
     spWorldEntityModule = lpWorldEntityModule;
@@ -124,7 +125,7 @@ u32 CollisionDebugComponent::GetSurfaceRenderColour(u8 luSurfaceId)
 
 u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
 {
-    const u16 luMaterialTag = lCollisionTag.mu16MaterialTag;
+    const u16 luMaterialTag = lCollisionTag.GetMaterialTag();
     const bool lbDrivable = (luMaterialTag & KU_COLLISION_FLAG_DRIVEABLE) != 0;
     const bool lbFatal = (luMaterialTag & KU_COLLISION_FLAG_FATAL) != 0;
     const bool lbSuperFatal = (luMaterialTag & KU_COLLISION_FLAG_SUPERFATAL) != 0;
@@ -155,20 +156,17 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
                    siDrawMode < E_DRAWMODE_COUNT,
                "leDrawMode >= 0 && leDrawMode < E_DRAWMODE_COUNT");
 
-    const u16 luMaterialTag = lCollisionTag.mu16MaterialTag;
-    const u16 luGroupTag = lCollisionTag.mu16GroupTag;
     switch (siDrawMode)
     {
     case E_DRAWMODE_SURFACES:
     {
-        const u8 luSurfaceId =
-            static_cast<u8>((luMaterialTag & KU_COLLISION_MASK_SURFACE_ID) >> 4);
+        const u8 luSurfaceId = lCollisionTag.GetSurfaceId();
         return (luSurfaceId != 0) ? GetSurfaceRenderColour(luSurfaceId) : 0;
     }
     case E_DRAWMODE_FLAGS:
         return GetFlagsRenderColour(lCollisionTag);
     case E_DRAWMODE_ZONES:
-        return K_ZONE_COLOURS[liPolyIndex % 16];
+        return KAU_ZONE_COLOURS[liPolyIndex % 16];
     case E_DRAWMODE_TRAFFIC:
     {
         f32 lfTrafficAngle = 0.0f;
@@ -186,7 +184,7 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
     }
     case E_DRAWMODE_AISECTION:
     {
-        const u16 luSectionIndex = luGroupTag & 0x7FFFu;
+        const u16 luSectionIndex = lCollisionTag.GetAISectionIndex();
         if (luSectionIndex == KI_INVALID_SECTION_INDEX)
         {
             return 0x200000FFu;
@@ -200,9 +198,7 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
         }
     }
     case E_DRAWMODE_DRIVABLE:
-        return (luMaterialTag & KU_COLLISION_FLAG_DRIVEABLE) != 0
-                   ? 0x20006400u
-                   : 0x20000064u;
+        return lCollisionTag.IsDrivable() ? 0x20006400u : 0x20000064u;
     default:
         CGS_ASSERT(false, "\nInvalid collision draw mode");
         return 0;
@@ -232,6 +228,8 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         laPoints[liPoint] = AddPositions(lpaPolyPoints[liPoint], lOffset);
     }
 
+    // ARTIST 0x822EE884/0x822EE8A4 stores the high half at material +2 and
+    // the low half at group +0; Construct takes group before material.
     CollisionTag lCollisionTag;
     lCollisionTag.Construct(static_cast<u16>(luCollisionTag),
                             static_cast<u16>(luCollisionTag >> 16));
@@ -284,7 +282,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         if (sqrtf(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ) < 20.0f)
         {
             CgsDev::SimpleStrStream lStream;
-            lStream << "( " << static_cast<s32>(lCollisionTag.mu16GroupTag & 0x7FFF) << ")";
+            lStream << "( " << static_cast<s32>(lCollisionTag.GetAISectionIndex()) << ")";
             lpDisplay->DrawText(lTagPosition, lStream.GetBuffer(), 10.0f);
         }
     }
