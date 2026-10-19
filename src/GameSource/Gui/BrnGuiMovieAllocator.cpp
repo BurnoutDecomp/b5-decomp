@@ -19,9 +19,10 @@ namespace BrnGui
         miMainAlignment = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_alignment);
         if (lDescriptor.m_baseResourceDescriptors[2].m_size != 0)
         {
-            // The PC MovieManager can intentionally supply no graphics lane. Preserve the
-            // original failure for a missing non-empty backing, but don't create a zero-byte
-            // allocator with a null base (LinearMalloc::Create asserts on lpBuffer either way).
+            // FLAG PC-platform leaf: D3D owns movie pixel storage, and PC movie rw descriptors
+            // request only lane 0, so the zero-capacity graphics lane has no backing to create.
+            // For a nonempty graphics descriptor, keep the original Create call so a null base
+            // still triggers its original lpBuffer assertion.
             mGraphicsAllocator.Create(lResource.m_baseResources[2],
                 lDescriptor.m_baseResourceDescriptors[2].m_size);
         }
