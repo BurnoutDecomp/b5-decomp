@@ -639,6 +639,11 @@ public:
     // returns r3 == the CgsIDCompress result). Called by ~45 overlay-request sites.
     CgsID Construct(const char* lpcOverlayId);
 
+    // ARTIST case 49 @0x823ED8E0..0x823ED920 already has the compressed CgsID in the action's
+    // leading qword. It clears the same count/button guards, then stores that id directly over
+    // maMessages[0].maHead, without another CgsIDCompress call.
+    CgsID Construct(CgsID lOverlayId);
+
     // ADDITIVE GROW (GuiOverlaysDirector::HandleOverlayRequest @0x825162C8, which loads
     // the request's leading qword): the compressed overlay id Construct stored over the
     // first param record's head.

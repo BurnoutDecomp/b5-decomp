@@ -246,6 +246,20 @@ CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
     return lId;
 }
 
+// ARTIST case 49 @0x823ED8E0..0x823ED920: zero the same three fields as the string constructor,
+// then std the already-compressed action qword at +0. The original arm does not compress this
+// value or assert that it is non-null.
+CgsID GuiOverlayRequest::Construct(CgsID lOverlayId)
+{
+    static_assert(sizeof(CgsID) == sizeof(maMessages[0].maHead),
+                  "overlay id (std r3,0) overlays the first param record's 8-byte head");
+    miNumMessages = 0;   // stw 0, 0x118(this)
+    mbButton1Used = 0;   // stb 0, 0x11C(this)
+    mbButton2Used = 0;   // stb 0, 0x11D(this)
+    std::memcpy(&maMessages[0].maHead[0], &lOverlayId, sizeof(CgsID)); // std r11, 0(this)
+    return lOverlayId;
+}
+
 // @0x82472A18 -- append one message param at the next free slot.
 //   guard: *(this+0x118) >= 2 -> streamed "Not enough free params in the Overlay (<n>/2)."
 //                                (BrnGuiEventTypeDefs.h:7438)
