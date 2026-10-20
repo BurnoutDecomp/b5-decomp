@@ -647,7 +647,7 @@ namespace
             case 185:
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
-                    "lpHUDMessageOnlineTeamChangeAction",
+                    "Part of offline custom events - no longer exist, and certainly not handled by GUI",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
                     2284);
                 CgsDev::Assert::EndAssert();
