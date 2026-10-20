@@ -133,6 +133,7 @@ namespace CgsResource
         // ---- lifecycle ----------------------------------------------------------------
         // NativePC typed storage requirement, shared with the active InitPool carver.
         static u32 GetOverheadMemoryRequired(const InitOptions* lpOptions);
+        static u32 GetOverheadMemoryAlignment(const InitOptions* lpOptions);
         // X360 0x828E0BB8 - original formatted diagnostic body remains separately unresolved.
         static u32 PrintOverheadMemoryRequired(const InitOptions* lpOptions);
         void Construct();

@@ -88,6 +88,10 @@ namespace BrnGui
                        const BrnResource::PopupController* lpPopupController,
                        bool lbHighDef);
 
+        // DecFIGS BrnGuiModule.h:660; ARTIST823AAC3C inlines the false store
+        // at CompleteLoading::OnLeave, matching the constructor/validator byte.
+        void SetMovieBootMode(bool lbBootMovieMode) { mbBootMovieMode = lbBootMovieMode; }
+
         bool Prepare() override;
         bool Release() override;
         void Destruct() override;
@@ -288,6 +292,10 @@ namespace BrnGui
         // Post one event into each live flow's in-queue if that flow subscribed to it
         // (the observer-subscription filter, per flow).
         void RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize);
+
+        // ARTIST82518B88; DecFIGS BrnGuiModule.h:417. The flow's
+        // CompleteLoading::OnLeave owns the later false transition.
+        bool mbBootMovieMode;
 
         // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
         // buffer itself lives on the update IO stack and is re-created per sub-step).

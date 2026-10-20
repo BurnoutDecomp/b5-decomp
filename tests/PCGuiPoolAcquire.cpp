@@ -81,8 +81,8 @@ int main() {
     Check(acquire().mpResourceMemory == nullptr, "unloaded entry cannot be acquired");
     status[0] = 2; refs[0] = 0;
     Check(acquire().mpResourceMemory == nullptr, "original refcount policy preserved");
-    request.mbCheckRefCount = true;
-    Check(acquire().mpSourceEntry == &entries[0], "original unreferenced-entry option preserved");
+    refs[0] = 1;
+    Check(acquire().mpSourceEntry == &entries[0], "referenced entry becomes acquirable again");
     request.mResourceId.SetHash(0x87654321);
     Check(acquire().mpResourceMemory == nullptr, "wrong resource does not return another bank member");
     request.mResourceId = textureId; request.miPoolId = 10;

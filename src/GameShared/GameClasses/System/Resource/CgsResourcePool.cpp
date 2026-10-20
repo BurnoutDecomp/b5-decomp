@@ -666,6 +666,13 @@ namespace CgsResource
         return static_cast<u32>((luStorageStart - luHeapEnd) + lLayout.mSize);
     }
 
+    // FLAG PC-platform leaf: expose the same native alignment used by InitPool
+    // so its real memory-request producer can allocate that management block.
+    u32 Pool::GetOverheadMemoryAlignment(const InitOptions* lpOptions)
+    {
+        return static_cast<u32>(CalculatePoolManagementStorageLayout(*lpOptions).mAlignment);
+    }
+
     // 0x828E0BB8 - report the original X360 management estimate and its three heap-node
     // contributions. Keep its signed-extension and low-word arithmetic explicit: this is the
     // console diagnostic consumed by the original InitPool path, not the NativePC host-layout

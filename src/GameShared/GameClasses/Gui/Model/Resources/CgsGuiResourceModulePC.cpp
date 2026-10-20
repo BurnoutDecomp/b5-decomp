@@ -813,9 +813,8 @@ namespace CgsGui
                         // Mirror the console responder (PoolModule::DoAcquireResourceRequest
                         // @0x828FCD48): FindResource with status mask 2 (loaded), handle =
                         // { &entry main-memory slot, entry }.
-                        s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_FsmBankPool.FindResource(
-                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                            lpRequest->mResourceId, false, 2, 0);
                         if (lpEntry != 0)
                         {
                             lResponse.mResourceHandle.mpResourceMemory =
@@ -827,9 +826,8 @@ namespace CgsGui
                     {
                         // Same shared console responder shape for the font bank: the
                         // type-16 FONTDATA acquire resolves the named Font entry.
-                        s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_FontBankPool.FindResource(
-                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                            lpRequest->mResourceId, false, 2, 0);
                         if (lpEntry != 0)
                         {
                             lResponse.mResourceHandle.mpResourceMemory =
@@ -842,9 +840,8 @@ namespace CgsGui
                         // PoolModule::DoAcquireResourceRequest @0x828FCD48 is shared by
                         // all console banks: loaded-status mask 2 and the entry's main-
                         // memory slot form the returned handle.
-                        s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_AptPersistentBankPool.FindResource(
-                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                            lpRequest->mResourceId, false, 2, 0);
                         if (lpEntry != 0)
                         {
                             lResponse.mResourceHandle.mpResourceMemory =
@@ -862,9 +859,8 @@ namespace CgsGui
                         // fell back to LoadBundleForMissingResources, and the boot died trying
                         // to open a file named 'Headtif.bundle' every frame until the
                         // bundle-queue overflow assert (measured, 2026-08-24 run 3).
-                        s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_GuiTexturesBankPool.FindResource(
-                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                            lpRequest->mResourceId, false, 2, 0);
                         if (lpEntry != 0)
                         {
                             lResponse.mResourceHandle.mpResourceMemory =
@@ -877,9 +873,8 @@ namespace CgsGui
                         // The post-FX colour cubes (EffectsArbitrator::Acquire3dTints, requests 229..)
                         // resolve by their u64 resource id out of the dictionary the load arm above put in
                         // the bank -- the same FindResource walk the other banks use.
-                        s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_GlobalTextureBankPool.FindResource(
-                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                            lpRequest->mResourceId, false, 2, 0);
                         if (lpEntry != 0)
                         {
                             lResponse.mResourceHandle.mpResourceMemory =

@@ -472,7 +472,6 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
         lRequest.miPoolId  = KI_POOL_GAMEDATA;
         lRequest.mResourceId.SetHash( static_cast<u64>( static_cast<u32>(
             CgsResource::ID::HashString( reinterpret_cast<const u8*>( "CarColours" ) ) ) ) );
-        lRequest.mbCheckRefCount = false;
 
         // X360 posts 24 bytes -- its 32-bit sizeof(AcquireResourceRequest). On x64 the
         // record is wider, and the consumer reads it back by NAME, so the host must copy

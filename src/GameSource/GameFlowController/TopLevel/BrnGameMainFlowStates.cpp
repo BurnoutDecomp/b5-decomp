@@ -1885,13 +1885,14 @@ void MainGameFlowStateCompleteLoading::OnEnter()
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "CompleteLoading: OnEnter -> GUI FSM stage 3 (BrnCmpLdFsm)\n";
 }
-// @ 0x823AAC18 -- clear the video byte. (The console also clears an unmapped byte at
-// gm+0x70A65D here; its consumer is not recovered, so it stays unmodelled -- boot audit
-// F-P4-5 carries it as an unmapped-store TODO rather than a fabricated home.)
+// ARTIST823AAC18: clear the flow's video byte, then leave GUI boot-movie mode.
+// game+0x70A65D == GUI base0x6EAA20 + mbBootMovieMode0x1FC3D; the same byte
+// is initialized at82518B88 and read by both original resource validators.
 void MainGameFlowStateCompleteLoading::OnLeave()
 {
     if (BrnGameMainFlowController::gpMainGameFlowController != 0)
         BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);      // @0x823AAC34
+    BrnGame::GetMainGameModule()->GetGuiModule().SetMovieBootMode(false);                 // @0x823AAC3C
 }
 
 // @ 0x823F2E08 -- when the GUI posts phase-complete (the post-title intro finished) and

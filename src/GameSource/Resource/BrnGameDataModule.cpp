@@ -27,6 +27,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
 #include <cstring>                                                              // memset / memcmp / strncmp
 #include <cstdlib>                                                              // atoi (prop-instance zone number)
+#include <numeric>                                                              // lcm (native bank block geometry)
 #include <cstdio>                                                               // fopen/fread (PC schema-file leaf)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator (schema blob carve)
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator::Malloc
@@ -39,6 +40,95 @@
 
 namespace BrnResource
 {
+    namespace
+    {
+        // FLAG PC-platform leaf: this is the existing root allocation granule,
+        // shared by its allocation owner and the typed bank-capacity projection.
+        const u32 KU_GAMEDATA_ROOT_BLOCK_SIZE = 0x00010000u;
+
+        void ApplyHostPoolHeapAllowance(CgsResource::Events::CreatePoolRequest& lrRequest)
+        {
+            // Retain the existing measured allowance for converted WorldMapData.
+            // The same request adjustment feeds both sizing and actual creation.
+            if (lrRequest.miPoolId == 5)
+                lrRequest.mDescriptor.m_baseResourceDescriptors[0].m_size *= 2u;
+        }
+
+        u64 RoundMemoryBankSize(u64 luSize, u64 luGranule)
+        {
+            CGS_ASSERT(luGranule != 0, "Memory bank allocation granule must be nonzero");
+            return ((luSize + luGranule - 1u) / luGranule) * luGranule;
+        }
+
+        u32 GetMapMainBlockSize(const CgsMemory::MemoryMap& lrMap, s32 liBankId)
+        {
+            if (liBankId == 0)
+                return KU_GAMEDATA_ROOT_BLOCK_SIZE;
+            const CgsMemory::MemoryBank::Params* lpParams = nullptr;
+            for (s32 liBank = 0; liBank < lrMap.GetNumBanks(); ++liBank)
+            {
+                const CgsMemory::MemoryBank::Params* lpCandidate = lrMap.GetBank(liBank)->GetParams();
+                if (lpCandidate->mnBankId == liBankId)
+                {
+                    lpParams = lpCandidate;
+                    break;
+                }
+            }
+            CGS_ASSERT(lpParams != nullptr, "Memory-map parent bank was not found");
+            CGS_ASSERT(lpParams->mauBankBlocks[0] != 0, "Memory-map main bank has no blocks");
+            CGS_ASSERT(lpParams->mauBankSize[0] % lpParams->mauBankBlocks[0] == 0,
+                "Memory-map main bank size is not divisible by its block count");
+            return lpParams->mauBankSize[0] / lpParams->mauBankBlocks[0];
+        }
+
+        // FLAG PC-platform leaf: preserve every original bank budget and block
+        // size, adding only the increased allocations caused by native-pointer
+        // management storage and the retained pool-5 heap allowance. The actual
+        // original parent ids propagate each child's growth to its owner.
+        u32 GetHostMainBankSize(const CgsMemory::MemoryMap& lrMap,
+            const CgsMemory::MemoryBank::Params& lrParams)
+        {
+            const u32 luBlockSize = GetMapMainBlockSize(lrMap, lrParams.mnBankId);
+            u64 luGrowth = 0;
+            for (s32 liPool = 0; liPool < lrMap.GetNumPools(); ++liPool)
+            {
+                const CgsResource::Events::CreatePoolRequest* lpRaw = lrMap.GetPool(liPool)->GetRequest();
+                if (lpRaw->miParentBankId != lrParams.mnBankId)
+                    continue;
+                rw::ResourceDescriptor lConsoleDescriptor;
+                CgsResource::PoolModule::GetRequiredResourceDescriptor(lpRaw, &lConsoleDescriptor);
+                CgsResource::Events::CreatePoolRequest lHostRequest = *lpRaw;
+                ApplyHostPoolHeapAllowance(lHostRequest);
+                CgsResource::Pool::InitOptions lHostOptions;
+                CgsResource::PoolModule::ConvertPoolRequestOptions(&lHostRequest, &lHostOptions);
+                const u64 luHostRequired = static_cast<u64>(lHostOptions.maHeapInfo[0].muHeapMemorySize)
+                    + CgsResource::Pool::GetOverheadMemoryRequired(&lHostOptions);
+                const u64 luOriginalAllocation = RoundMemoryBankSize(
+                    lConsoleDescriptor.m_baseResourceDescriptors[0].m_size, luBlockSize);
+                const u64 luHostAllocation = RoundMemoryBankSize(luHostRequired, luBlockSize);
+                if (luHostAllocation > luOriginalAllocation)
+                    luGrowth += luHostAllocation - luOriginalAllocation;
+            }
+            for (s32 liBank = 0; liBank < lrMap.GetNumBanks(); ++liBank)
+            {
+                const CgsMemory::MemoryBank::Params& lrChild = *lrMap.GetBank(liBank)->GetParams();
+                if (lrChild.mnParentBankId == lrParams.mnBankId)
+                    luGrowth += GetHostMainBankSize(lrMap, lrChild) - lrChild.mauBankSize[0];
+            }
+            const u32 luParentBlockSize = GetMapMainBlockSize(lrMap, lrParams.mnParentBankId);
+            const u64 luCommonGranule = std::lcm(static_cast<u64>(luBlockSize),
+                static_cast<u64>(luParentBlockSize));
+            const u64 luRequired = RoundMemoryBankSize(
+                static_cast<u64>(lrParams.mauBankSize[0]) + luGrowth, luCommonGranule);
+            CGS_ASSERT(luRequired <= 0xFFFFFFFFull, "Native memory bank size exceeds its size field");
+            CGS_ASSERT(luRequired / luBlockSize <= 0xFFFFu,
+                "Native memory bank exceeds its block-count field");
+            CGS_ASSERT(luRequired / luParentBlockSize <= 0xFFFFu,
+                "Native memory bank exceeds its parent allocation-count field");
+            return static_cast<u32>(luRequired);
+        }
+    }
+
     // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
     // value, so this ctor runs at STATIC INIT (before gpDebugPrint is initialized); logging here would
     // deref an uninitialized gpDebugPrint and crash before the window opens.
@@ -182,371 +272,89 @@ namespace BrnResource
         }
     }
 
-    // ---- DEFERRED (rw allocator middleware + game-data subsystems) --------------------
-    // CreateBanks (0x8266DA28) / CreatePools (0x8266DB88) / CreateAllocators (0x8266DD00) carve the
-    // resource banks/pools/allocators out of the GameData heap through the rw::IResourceAllocator
-    // (the rwcore allocator layer). Inert stubs that report success so the Prepare stage machine
-    // advances; reconstruct with that allocator layer. Construct (0x82671B90) builds the embedded
-    // subsystems; Update pumps the ResourceModule and services the game-data query handlers
-    // (ProcessGetVehicle/Wheel/Traffic/WorldUnit/PVS/... - 30+ handlers); Destruct (0x82664508)
-    // tears it down. All inert until the loading-machine case 8 drives this module.
-    bool GameDataModule::CreateBanks(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
-
-    // @ 0x8266DB88 - create the game's resource pools. The X360 iterates the binary memory map
-    // (unk_82F2A788) and sends a CreatePoolRequest per pool through the async dispatch
-    // (DoCreatePoolRequest -> SendCreatePoolMemoryRequest -> MemoryModule alloc -> CreatePool). Here we
-    // drive the SAME pool set directly from the extracted memory-map table (BrnMemoryMapData.h, generated
-    // from progress/memory_map_artist.yaml): per pool, allocate its per-type backing memory from the root
-    // debug allocator and PoolModule::CreatePool it. [marked deviation: the faithful async memory-request
-    // dispatch is deferred; the pool data + Pool::InitPool are faithful.] Runs once (the Prepare stage
-    // re-enters until done).
-    bool GameDataModule::CreatePools(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
+    // ARTIST8266DA28. Current GamePrepare has no IO stacks, so only the scratch
+    // transport is a PC adaptation; map rows, request identities and waits are original.
+    bool GameDataModule::CreateBanks(void*, void*)
     {
-        static bool s_bPoolsCreated = false;
-        if (s_bPoolsCreated)
-            return true;
-        s_bPoolsCreated = true;
-
-        rw::IResourceAllocator* lpAllocator =
-            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
-        if (lpAllocator == 0)
-            return true;
-        CgsResource::PoolModule&  lrPoolModule   = mResourceModule.GetPoolModule();
-        CgsMemory::MemoryModule&  lrMemoryModule = mResourceModule.GetMemoryModule();
-        const u32 KU_BLOCK = 0x10000u;   // 64 KB -- the MemoryModule root-bank block granularity
-
-        s32 lNumCreated = 0, lNumFromBank = 0, lNumFromHeap = 0, lNumDepsWired = 0, lNumViaAsync = 0;
-
-        // The ResourceModule input buffer CreatePools publishes CreatePool requests to; ResourceModule::
-        // Update (the streaming shuttle) owns the pool/memory scratch buffers internally. Static so the
-        // (large) embedded request queue is constructed once + reused across the loop.
-        static CgsResource::ResourceIO::InputBuffer s_resIn;
-        static bool s_ioConstructed = false;
-        if (!s_ioConstructed) { s_resIn.Construct(); s_ioConstructed = true; }
-        // id -> created Pool*, so each pool's import dependencies (referenced by pool id) resolve to real
-        // pointers in this one pass: the memory-map order lists every dependency target before its
-        // dependents (deps reference ids 10/25 @ idx 8/23; all dependents are at later indices).
-        CgsResource::Pool* lapPoolById[64];
-        memset(lapPoolById, 0, sizeof(lapPoolById));
-        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_POOLS; ++li)
+        // FLAG PC-platform leaf: this host's serialized Prepare(0,0) caller has no
+        // IOBufferStack. Own the real per-call input buffer locally instead of
+        // fabricating a successful bank phase or a second bank representation.
+        CgsResource::ResourceIO::InputBuffer lResourceInput;
+        lResourceInput.Construct();
+        if (miNumBankCreationRequests == 0)
         {
-            const MemoryMapPoolDef& lrDef = KAC_MEMORY_MAP_POOLS[li];
-
-            CgsResource::Pool::InitOptions lOpt;
-            memset(&lOpt, 0, sizeof(lOpt));   // POD-ish; zero unused types/deps
-            lOpt.miId                   = lrDef.miId;
-            lOpt.mpcName                = lrDef.mpcName;
-            lOpt.muMaxResources         = static_cast<u32>(lrDef.miMaxResources);
-            lOpt.muMaxImports           = static_cast<u32>(lrDef.miMaxImports);
-            lOpt.miRefCountThreshold    = 0;
-            lOpt.miBankId               = -1;
-            // ⭐ 2026-08-16 (boot audit F-P7-13). CreatePools @0x8266DC30-50 does NOT just copy
-            // the memory-map row's flag: it FORCES the request's allow-defragmentation word to
-            // 1 for exactly three pool ids -- 3 (OpenWorldGr), 4 (CarPool), 15 (Traffic) --
-            // and those are precisely the defragmenter's own pools. Our table has all three
-            // rows false and no special case, so even once the relocating defragmenter lands
-            // it would have had nothing to work on. Latent until then, wrong either way.
-            lOpt.mbAllowDefragmentation =
-                (lrDef.miId == 3 || lrDef.miId == 4 || lrDef.miId == 15) ? true
-                                                                        : lrDef.mbAllowDefrag;
-
-            // Resolve this pool's import dependencies to the (earlier-created) pools by id. The dependency
-            // graph drives cross-pool import resolution (e.g. OpenWorldGr/VFX/Environment import from Global
-            // Textures; CarPool/Traffic also from CarSharedPool).
-            s32 lNumDeps = 0;
-            for (s32 ld = 0; ld < lrDef.miNumDeps && lNumDeps < 16; ++ld)
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            lRequests.Construct();
+            const s32 liNumBanks = mpMemoryMap->GetNumBanks();
+            for (s32 liBank = 0; liBank < liNumBanks; ++liBank)
             {
-                const s32 lDepId = lrDef.maiDeps[ld];
-                CgsResource::Pool* lpDep = (lDepId >= 0 && lDepId < 64) ? lapPoolById[lDepId] : 0;
-                if (lpDep != 0)
-                    lOpt.mapDependencies[lNumDeps++] = lpDep;
+                CgsMemory::MemoryIO::CreateBankRequest lRequest;
+                const s32 liEventId = miNumBankCreationRequests++;
+                lRequest.Construct(&mReceiverQueue, liEventId);
+                CgsMemory::MemoryBank::Params lParams = *mpMemoryMap->GetBank(liBank)->GetParams();
+                // FLAG PC-platform leaf: retain the original main block size
+                // while reserving the exact extra pool/child allocations.
+                const u32 luMainBlockSize = GetMapMainBlockSize(*mpMemoryMap, lParams.mnBankId);
+                lParams.mauBankSize[0] = GetHostMainBankSize(*mpMemoryMap, lParams);
+                lParams.mauBankBlocks[0] = lParams.mauBankSize[0] / luMainBlockSize;
+                lRequest.SetParams(&lParams);
+                lRequests.AddEvent(&lRequest, 9);
             }
-            lOpt.miNumDependencies = lNumDeps;
-            lNumDepsWired += lNumDeps;
-
-            // [FLAG PC boot gate] Heap-node headroom. The map's node budgets assume the console's
-            // relocating defragmenter keeps each heap compact (CreatePools forces allow-defrag for
-            // pools 3/4/15); without it (still deferred here) a long DRIVING run fragments pool 3's
-            // OpenWorldGr heaps until the 8500-node pool runs dry -- the pool then REFUSES resources,
-            // the unit's bundle completes degraded with unresolved imports, and the world streamer's
-            // load-complete walks an instance with a null model (the intermittent BrnWorldEntityModule
-            // lpModel assert + DoesStateExist AV). A heap of N live allocations never needs more than
-            // 2N+1 nodes (free runs coalesce, so free blocks <= allocs+1), and live allocations per
-            // memory type are capped by miMaxResources -- so 2*maxResources+1 nodes makes exhaustion
-            // structurally impossible. Node structs are ~32 bytes on x64: the extra overhead is a few
-            // hundred KB on the biggest pool. DELETE (revert to lrDef.miMaxHeapNodes) when the
-            // defragmenter is reconstructed.
-            const u32 luDefNodes  = static_cast<u32>(lrDef.miMaxHeapNodes);
-            const u32 luSafeNodes = 2u * static_cast<u32>(lrDef.miMaxResources) + 1u;
-            const u32 luMaxNodes  = (luDefNodes > luSafeNodes) ? luDefNodes : luSafeNodes;
-
-            // Per-type region keeps the authored heap budgets. Type 0 adds the exact shared native
-            // management-layout requirement, then each region retains the existing 64 KB bank rounding.
-            u32 lauRegion[3] = { 0, 0, 0 };
-            u32 lauAlign[3]  = { 16u, 16u, 16u };
-            for (s32 lt = 0; lt < 3; ++lt)
-            {
-                u32 luHeapSize = lrDef.mauHeapSize[lt];
-                // ⭐ [FLAG PC platform: PORTED DATA IS BIGGER THAN THE CONSOLE MEMORY MAP]
-                // MEASURED 2026-08-25 (aimodule wave), on the pool-FULL report this build now
-                // prints by name:
-                //     heap FULL, pool 5 'GameData' type 0: wanted 3273824 B, free 3133632 B
-                //                of 6845120 B
-                // That "wanted" is the WorldMapData resource out of AI.dat -- and AI.DAT is
-                // 3.27 MB in build/game against 1.66 MB on the X360, because the ported bundles
-                // are 64-bit (bnd2 platform byte @+8 == 4). The console's row is sized for the
-                // 32-bit resource; the same resource on this host is ~2x, so it missed by
-                // 140 KB and the AI ROAD NETWORK SIMPLY DID NOT LOAD -- silently, since a
-                // refused resource just yields a both-null acquire handle downstream.
-                // The table itself stays the console's ground truth (it is generated from
-                // progress/memory_map_artist.yaml); the deviation lives HERE with the two
-                // deviations already above it. Doubled, matching the measured port ratio.
-                // ⚠️ TARGETED, NOT BLANKET: pool 5 is the one that was measured to refuse. The
-                // other 26 rows carry the same latent risk, and the report above will name any
-                // of them by pool id + name the moment it bites. Do NOT pre-emptively double
-                // them all -- pool 3 alone is 90 MB, and a blanket multiplier would also hide
-                // the fragmentation failure this same report is meant to distinguish.
-                if (lrDef.miId == 5 && lt == 0)
-                {
-                    luHeapSize *= 2u;
-                }
-
-                lOpt.maHeapInfo[lt].muMaxNodes       = luMaxNodes;
-                lOpt.maHeapInfo[lt].muHeapMemorySize = luHeapSize;
-                lOpt.maHeapInfo[lt].muHeapAlignment  = lrDef.mauHeapAlign[lt];
-                lauAlign[lt] = lrDef.mauHeapAlign[lt] < 16u ? 16u : lrDef.mauHeapAlign[lt];
-            }
-
-            // The one native host storage calculation drives both InitPool's typed carves and the
-            // main-lane region. Keep the map's outer 64 KB bank rounding and per-heap budgets intact.
-            const bool lbAnyHeap = lOpt.maHeapInfo[0].muHeapMemorySize != 0
-                                || lOpt.maHeapInfo[1].muHeapMemorySize != 0
-                                || lOpt.maHeapInfo[2].muHeapMemorySize != 0;
-            if (lbAnyHeap)
-            {
-                const u32 luMainHeapSize = lOpt.maHeapInfo[0].muHeapMemorySize;
-                const u32 luMainOverhead = CgsResource::Pool::GetOverheadMemoryRequired(&lOpt);
-                lauRegion[0] = (luMainHeapSize + luMainOverhead + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
-                for (s32 lt = 1; lt < 3; ++lt)
-                {
-                    const u32 luHeapSize = lOpt.maHeapInfo[lt].muHeapMemorySize;
-                    if (luHeapSize != 0)
-                        lauRegion[lt] = (luHeapSize + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
-                }
-            }
-
-            bool lbAnyType = (lauRegion[0] | lauRegion[1] | lauRegion[2]) != 0;
-
-            // Carry the pool's resource descriptor through the async pending FIFO into CreatePool (the async
-            // path fills mResource from the memory response; mDescriptor is set here from the carved regions).
-            for (s32 lt = 0; lt < 3; ++lt)
-            {
-                if (lauRegion[lt] == 0)
-                    continue;
-                lOpt.mDescriptor.m_baseResourceDescriptors[lt].m_size      = lauRegion[lt];
-                lOpt.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = lauAlign[lt];
-            }
-
-            const s32 liBankId = 100 + li;   // unique leaf-bank id (pool ids occupy 0..26)
-            CgsResource::Pool* lpPool = 0;
-            bool lbViaAsync = false;
-
-            // ---- Current NativePC resolved-options path. The ResourceModule event remains its existing
-            // host payload and is consumed by ProcessInputBufferNativePC; original raw-request startup is not
-            // activated here. Its cross-pool dependency order (lapPoolById) is preserved across the shuttle.
-            if (lbAnyType)
-            {
-                CgsResource::CreatePoolRequestEvent lReqEvent;
-                lReqEvent.mOptions       = lOpt;
-                lReqEvent.miBankId       = liBankId;
-                lReqEvent.miParentBankId = 0;                 // root bank
-                for (s32 lt = 0; lt < 3; ++lt) { lReqEvent.mauRegion[lt] = lauRegion[lt]; lReqEvent.mauAlign[lt] = lauAlign[lt]; }
-
-                s_resIn.LockForWrite();
-                s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReqEvent),
-                                                     0 /*CreatePool*/, static_cast<s32>(sizeof(lReqEvent)));
-                s_resIn.UnlockForWrite();
-
-                for (s32 lf = 0; lf < 4 && lpPool == 0; ++lf)
-                {
-                    mResourceModule.Update(&s_resIn, 0);
-                    lpPool = lrPoolModule.GetPool(lrDef.miId);
-                }
-                if (lpPool != 0 && lpPool->IsValid()) { lbViaAsync = true; ++lNumViaAsync; ++lNumFromBank; }
-            }
-
-            // ---- NativePC fallback: carve a leaf bank directly, else allocate from the root debug
-            // allocator, fill mResource, and call the returning NativePC pool provider.
-            if (!lbViaAsync)
-            {
-                CgsMemory::MemoryBank::Params lParams;
-                memset(&lParams, 0, sizeof(lParams));
-                for (s32 lc = 0; lc < 31 && lrDef.mpcName[lc]; ++lc)
-                    lParams.macName[lc] = lrDef.mpcName[lc];
-                lParams.mnParentBankId       = 0;            // root bank
-                lParams.mnBankId             = liBankId;
-                lParams.mbIsLeaf             = true;
-                lParams.mbAllowFragmentation = lrDef.mbAllowDefrag;
-                for (s32 lt = 0; lt < 3; ++lt)
-                {
-                    if (lauRegion[lt] == 0)
-                        continue;
-                    lParams.mauBankSize[lt]   = lauRegion[lt];
-                    lParams.mauBankBlocks[lt] = lauRegion[lt] / KU_BLOCK;
-                }
-
-                rw::Resource lMem;
-                for (s32 lr = 0; lr < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lr)
-                    lMem.m_baseResources[lr] = 0;
-                const bool lbFromBank = lbAnyType && lrMemoryModule.CreatePoolBank(&lParams, lMem);
-
-                bool lbAllocOk = true;
-                for (s32 lt = 0; lt < 3; ++lt)
-                {
-                    if (lauRegion[lt] == 0)
-                        continue;
-                    void* lpMem = lbFromBank ? lMem.m_baseResources[lt] : 0;
-                    if (!lbFromBank)
-                    {
-                        rw::ResourceDescriptor lDesc;
-                        for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-                        {
-                            lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
-                            lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
-                        }
-                        lDesc.m_baseResourceDescriptors[0].m_size      = lauRegion[lt];
-                        lDesc.m_baseResourceDescriptors[0].m_alignment = lauAlign[lt];
-                        rw::Resource lFb = lpAllocator->DoAllocate(lDesc, lrDef.mpcName);
-                        lpMem = lFb.m_baseResources[0];
-                    }
-                    if (lpMem == 0)
-                    {
-                        lbAllocOk = false;
-                        break;
-                    }
-                    lOpt.mResource.m_baseResources[lt] = lpMem;
-                }
-
-                if (!lbAllocOk)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[5b POOLS] alloc FAILED for pool " << lrDef.mpcName << "\n";
-                    continue;
-                }
-                if (lbFromBank) ++lNumFromBank; else ++lNumFromHeap;
-                lpPool = lrPoolModule.CreatePoolNativePC(&lOpt);
-            }
-
-            if (lpPool != 0 && lpPool->IsValid())
-                ++lNumCreated;
-            if (lpPool != 0 && lrDef.miId >= 0 && lrDef.miId < 64)
-                lapPoolById[lrDef.miId] = lpPool;   // so later pools can depend on this one
+            lResourceInput.LockForWrite();
+            lResourceInput.AppendResourceQueue(&lRequests);
+            lResourceInput.UnlockForWrite();
         }
-        *CgsDev::Log::gpDebugPrint << "[5b POOLS] created " << (s32)lNumCreated << " of "
-                                  << (s32)KI_NUM_MEMORY_MAP_POOLS << " pools ("
-                                  << (s32)lNumViaAsync << " via async memory dispatch, "
-                                  << (s32)lNumFromBank << " from MemoryModule banks, "
-                                  << (s32)lNumFromHeap << " from debug heap), "
-                                  << (s32)lNumDepsWired << " dependencies wired\n";
-
-        // [resource streaming bring-up] -- FLAG: non-faithful bring-up TEST scaffolding. The X360
-        // GameDataModule::Prepare just creates the pools and returns; it does NOT publish inline font
-        // load/acquire/unload test requests. This inline pump currently faults (0xC0000005) and blocks
-        // the boot, so it is disabled to let Prepare complete faithfully -- the real streaming path is
-        // exercised by the GUI / game flow when it actually requests resources. Set to `if (true)` to
-        // re-validate the request -> shuttle -> bundle loader -> pool path in isolation.
-        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Prepare: pools ready, streaming-test scaffolding skipped (faithful) -> return\n";
-        if (false)
+        else if (mReceiverQueue.GetLength() == miNumBankCreationRequests)
         {
-            CgsResource::Events::LoadBundleRequest lReq;
-            memset(&lReq, 0, sizeof(lReq));
-            lReq.SetFileName("Language/Fonts/Default.font");
-            lReq.miPoolId = 0;   // the Fonts pool
-
-            s_resIn.LockForWrite();
-            s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReq),
-                                                 2 /*LoadBundle*/, static_cast<s32>(sizeof(lReq)));
-            s_resIn.UnlockForWrite();
-            mResourceModule.Update(&s_resIn, 0);
-
-            CgsResource::Pool* lpFonts = lrPoolModule.GetPool(0);
-            s32 liFontIdx = -1;
-            CgsResource::Entry* lpFontEntry = lpFonts
-                ? lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liFontIdx) : 0;
-            *CgsDev::Log::gpDebugPrint << "[stream] Fonts pool (id 0) font resource via shuttle: "
-                                      << (lpFontEntry ? "FOUND" : "absent") << "\n";
-
-            // The font bundle carries 2 resources: the Font (0x21) + its atlas Texture (RwRaster, 0x0).
-            // Confirm the texture resource streamed too -- proving the system handles the most platform-
-            // divergent resource type (textures), not just the font, through the same shuttle.
-            s32 liTexIdx = -1;
-            CgsResource::Entry* lpTexEntry = lpFonts
-                ? lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_TEXTURE, &liTexIdx) : 0;
-            *CgsDev::Log::gpDebugPrint << "[stream] Fonts pool texture resource (RwRaster) via shuttle: "
-                                      << (lpTexEntry ? "FOUND" : "absent") << "\n";
-
-            // [acquire bring-up] prove the consumer path: AcquireResource by id through the shuttle. The
-            // streamed font is already at status 2 (loaded) from BundleLoader's load-completion pass, so it
-            // is acquirable directly. Publish an AcquireResourceRequest (id 4) -> ProcessResourceRequests ->
-            // pool input -> DoAcquireResourceRequest -> Pool::FindResource (gates on status & 2) -> response
-            // on the pool output queue -> ProcessPoolOutputResponses routes it back to our receiver.
-            if (lpFontEntry != 0 && lpFonts != 0)
-            {
-                const CgsResource::ID lFontId = lpFontEntry->mID;
-
-                static CgsModule::EventReceiverQueue<4096, 16> s_acqReceiver;
-                static bool s_acqRecvCtor = false;
-                if (!s_acqRecvCtor) { s_acqReceiver.Construct(); s_acqRecvCtor = true; }
-                s_acqReceiver.Clear();
-
-                CgsResource::Events::AcquireResourceRequest lAcq;
-                memset(&lAcq, 0, sizeof(lAcq));
-                lAcq.mpUser          = &s_acqReceiver;
-                lAcq.miPoolId        = 0;
-                lAcq.mResourceId     = lFontId;
-                lAcq.mbCheckRefCount = true;
-
-                s_resIn.LockForWrite();
-                s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAcq),
-                                                     4 /*AcquireResource*/, static_cast<s32>(sizeof(lAcq)));
-                s_resIn.UnlockForWrite();
-                mResourceModule.Update(&s_resIn, 0);
-
-                const CgsModule::Event* lpResp = 0; s32 liRespSize = 0;
-                const s32 liRespId = s_acqReceiver.GetFirstEvent(&lpResp, &liRespSize);
-                const CgsResource::Events::AcquireResourceResponse* lpAcqResp =
-                    (liRespId != -1 && lpResp != 0)
-                        ? reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpResp) : 0;
-                const bool lbAcquired = lpAcqResp != 0 && lpAcqResp->mpSourceEntry != 0
-                                        && lpAcqResp->mpSourceEntry == lpFontEntry;
-                *CgsDev::Log::gpDebugPrint << "[stream] AcquireResource(font) via shuttle: "
-                                          << (lbAcquired ? "handle OK" : "FAILED") << "\n";
-            }
-
-            // [unload bring-up] prove the load/unload pair: publish an UnloadBundleRequest (id 3) for the
-            // font -> ProcessResourceRequests -> bundle loader -> UnloadBundle (ref-count-release each
-            // resource; frees heap memory + slot at refcount 0). Confirm the font is then gone from the pool.
-            if (lpFonts != 0)
-            {
-                CgsResource::Events::UnloadBundleRequest lUnload;
-                memset(&lUnload, 0, sizeof(lUnload));
-                lUnload.SetFileName("Language/Fonts/Default.font");
-                lUnload.miPoolId = 0;
-
-                s_resIn.LockForWrite();
-                s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lUnload),
-                                                     3 /*UnloadBundle*/, static_cast<s32>(sizeof(lUnload)));
-                s_resIn.UnlockForWrite();
-                mResourceModule.Update(&s_resIn, 0);
-
-                s32 liGoneIdx = -1;
-                CgsResource::Entry* lpGone =
-                    lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liGoneIdx);
-                *CgsDev::Log::gpDebugPrint << "[stream] after UnloadBundle, Fonts pool font resource: "
-                                          << (lpGone ? "STILL PRESENT (bug)" : "gone (freed)") << "\n";
-            }
+            miNumBankCreationRequests = 0;
+            mReceiverQueue.Clear();
+            return true;
         }
-        return true;
+        // Existing ResourceModule transport owns the real memory request/response
+        // pump. One pass per Prepare call; there is no direct creation fallback.
+        mResourceModule.Update(&lResourceInput, 0);
+        return false;
     }
+
+    // ARTIST8266DB88. Every created object is owned by PoolModule::maPools; the
+    // memory map already contains each bank, parent, dependency and heap record.
+    bool GameDataModule::CreatePools(void*, void*)
+    {
+        // FLAG PC-platform leaf: same per-call transport boundary as CreateBanks.
+        CgsResource::ResourceIO::InputBuffer lResourceInput;
+        lResourceInput.Construct();
+        if (miNumPoolCreationRequests == 0)
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            lRequests.Construct();
+            const s32 liNumPools = mpMemoryMap->GetNumPools();
+            for (s32 liPool = 0; liPool < liNumPools; ++liPool)
+            {
+                CgsResource::Events::CreatePoolRequest lRequest =
+                    *mpMemoryMap->GetPool(liPool)->GetRequest();
+                if (lRequest.miPoolId == 3 || lRequest.miPoolId == 4 || lRequest.miPoolId == 15)
+                    lRequest.mbAllowDefragmentation = true;
+                lRequest.mpUser = &mReceiverQueue;
+                lRequest.miEventId = miNumPoolCreationRequests++;
+                // FLAG PC-platform leaf: share the retained allowance with the
+                // parent-bank sizing producer; all other map heap budgets stay intact.
+                ApplyHostPoolHeapAllowance(lRequest);
+                lRequests.AddEvent(&lRequest, 0);
+            }
+            lResourceInput.LockForWrite();
+            lResourceInput.AppendResourceQueue(&lRequests);
+            lResourceInput.UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetLength() == miNumPoolCreationRequests)
+        {
+            miNumPoolCreationRequests = 0;
+            mReceiverQueue.Clear();
+            return true;
+        }
+        mResourceModule.Update(&lResourceInput, 0);
+        return false;
+    }
+
 
     // ------------------------------------------------------------------------------------------
     // The rw allocator OBJECTS the registry's pointer rows reference. On the X360 the create
@@ -1067,7 +875,6 @@ namespace BrnResource
             lRequest.miPoolId  = liPoolId;
             lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
                 CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)))));
-            lRequest.mbCheckRefCount = false;
             lpResourceInput->GetResourceQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRequest),
                 4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
@@ -1551,6 +1358,9 @@ namespace BrnResource
         CgsModule::ModuleSingleBuffered::Construct();
 
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
+        miNumBankCreationRequests = 0;
+        miNumPoolCreationRequests = 0;
+
 
         // X360 0x82671B90: wire the in-flight event-slot pool -- capacity 96
         // (`*(a1+439324) = 96`), the module-embedded element array (a1+439328) and
@@ -1572,8 +1382,8 @@ namespace BrnResource
         // Construct's full store list for this region is not mapped (the module rides
         // zero-init BSS there), so this is the same observable state.
         muLoadedSoundBundlesCount       = 0;
-        miWorldCollisionRefCount        = 0;
-        miWorldCollisionValidatePending = 0;
+        miCollisionWorldRefCount        = 0;
+        mbCollisionWorldInvalidated = 0;
         miResourcePrepareStage          = 0;
         miVehicleListPrepareStage       = 0;
         miChallengeListPrepareStage     = 0;   // [challenge-list wave] X360 a1[139] (0x22C)
@@ -1625,12 +1435,18 @@ namespace BrnResource
         lrMem.muMaxBanks  = 128;
         lrMem.muHighestId = 1024;
         lrMem.muMaxBlocks = 30000;
+        for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
+        {
+            lrMem.maResourceSets[liType].mpDataStart = nullptr;
+            lrMem.maResourceSets[liType].muDataSize = 0;
+            lrMem.maResourceSets[liType].muNumBlocks = 0;
+        }
 
-        // Root memory regions, carved in 64 KB blocks, sized to hold the 27 pools' per-type memory (sum
-        // ~70 MB type 0 / main + ~196 MB type 1 / graphics, + per-pool overhead + block rounding). The
-        // MemoryModule's root bank (bank 0) is built from these; GameDataModule::CreatePools then carves a
-        // leaf bank per pool out of them (#2 -- pool memory from the MemoryModule banks).
-        const u32 KU_BLOCK    = 0x00010000u;   // 64 KB
+        // FLAG PC-platform leaf: keep the existing low-address root allocation
+        // owner and 160/224 MiB budgets. The typed map reserves its original
+        // parent banks before pool leaves. Their host-width growth fits these
+        // budgets; graphics is RW lane 2, as CreateResource/SmallResource require.
+        const u32 KU_BLOCK    = KU_GAMEDATA_ROOT_BLOCK_SIZE;
         const u32 KU_TYPE0    = 0x0A000000u;   // 160 MB main  (2560 blocks)
         const u32 KU_TYPE1    = 0x0E000000u;   // 224 MB gfx   (3584 blocks)
         rw::ResourceDescriptor lRegionDesc;
@@ -1652,10 +1468,10 @@ namespace BrnResource
 
         lRegionDesc.m_baseResourceDescriptors[0].m_size = KU_TYPE1;
         rw::Resource lType1 = lpAllocator->DoAllocate(lRegionDesc, "GameDataRoot1");
-        lrMem.maResourceSets[1].mpDataStart = lType1.m_baseResources[0];
-        lrMem.maResourceSets[1].muDataSize  = KU_TYPE1;
-        lrMem.maResourceSets[1].muNumBlocks = static_cast<u16>(KU_TYPE1 / KU_BLOCK);
-        // memory types 2-4 left zeroed (skipped by CreateRootBank)
+        lrMem.maResourceSets[2].mpDataStart = lType1.m_baseResources[0];
+        lrMem.maResourceSets[2].muDataSize  = KU_TYPE1;
+        lrMem.maResourceSets[2].muNumBlocks = static_cast<u16>(KU_TYPE1 / KU_BLOCK);
+        // RW lanes 1/3/4 remain empty; SmallResource maps RW0/2 to its main/graphics heaps.
 
         // [PC diagnostic] the serialised resource format stores pointers in FOUR-BYTE slots
         // (the PointerFromU32 convention); on x64 that only round-trips while the pointee is
@@ -2091,10 +1907,12 @@ namespace BrnResource
                                     static_cast<const GameDataIO::GameDataAssetEvent*>(lpEvent), -1);
             break;
         case 67:   // SwapOutCollisionWorldRequest
-            ProcessSwapOutCollisionWorldRequest();
+            ProcessSwapOutCollisionWorldRequest(lpResourceInput,
+                static_cast<const GameDataIO::SwapOutCollisionWorldRequest*>(lpEvent));
             break;
         case 68:   // SwapInCollisionWorldRequest
-            ProcessSwapInCollisionWorldRequest();
+            ProcessSwapInCollisionWorldRequest(lpResourceInput,
+                static_cast<const GameDataIO::SwapInCollisionWorldRequest*>(lpEvent));
             break;
         default:
             CGS_ASSERT(false, "Invalid event id\n");   // X360 line 2791
@@ -2382,14 +2200,75 @@ namespace BrnResource
 
     // @ 0x826717A8 / @ 0x82671530 -- swap the collision world in/out. DEFERRED with the
     // collision-world swap machinery (WorldEntityModule Validate/InvalidateCollision).
-    void GameDataModule::ProcessSwapInCollisionWorldRequest()
+// ARTIST82671530. Resource input is r4 and the original typed request is r5;
+// neither argument may be dropped by the GameData request dispatcher.
+void GameDataModule::ProcessSwapOutCollisionWorldRequest(
+    CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+    const GameDataIO::SwapOutCollisionWorldRequest* lpRequest)
+{
+    CGS_ASSERT(!mbCollisionWorldInvalidated, "Collision world already invalid\n");
+    GameDataEventSlot* lpSlot = mGameDataEventSlotPool.Pop();
+    CGS_ASSERT(lpSlot != 0,
+        "No space for new requests - extend size of game data event pool\n");
+    lpSlot->mEvent.mId = 0;
+    lpSlot->mEvent.mbFailFlag = false;
+    lpSlot->mEvent.miEventId = lpRequest->miEventId;
+    lpSlot->mEvent.mpReceiverQueue = lpRequest->mpReceiverQueue;
+    lpSlot->mEvent.meType = static_cast<EAssetSet>(1);
+    lpSlot->mEvent.miPoolId = 2;
+    lpSlot->miResponseEventId = 67;
+    mbCollisionWorldInvalidated = true;
+
+    if (miCollisionWorldRefCount > 0)
     {
-        *CgsDev::Log::gpDebugPrint << "[GameData] ProcessSwapInCollisionWorldRequest DEFERRED\n";
+        CGS_ASSERT(miCollisionWorldRefCount == 1,
+            "Currently only support swapping out collision world when it's ref count is 1\n");
+        lpSlot->meStage = GameDataEventSlot::E_UNLOADING;
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        lRequest.SetFileName(KPC_WORLD_COLLISION_FILE_NAME);
+        lRequest.miPoolId = 2;
+        lRequest.mbLiveUpdateReplace = false;
+        lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 3);
     }
-    void GameDataModule::ProcessSwapOutCollisionWorldRequest()
+    else
     {
-        *CgsDev::Log::gpDebugPrint << "[GameData] ProcessSwapOutCollisionWorldRequest DEFERRED\n";
+        lpSlot->meStage = GameDataEventSlot::E_DONE;
+        CgsResource::Events::InvalidatePoolRequest lRequest;
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        lRequest.miPoolId = 2;
+        lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 7);
     }
+}
+
+// ARTIST826717A8. Keep the original assertion's contradictory text. The
+// invalidated flag remains true until the actual validate response consumes it.
+void GameDataModule::ProcessSwapInCollisionWorldRequest(
+    CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+    const GameDataIO::SwapInCollisionWorldRequest* lpRequest)
+{
+    CGS_ASSERT(mbCollisionWorldInvalidated, "Collision world already invalid\n");
+    GameDataEventSlot* lpSlot = mGameDataEventSlotPool.Pop();
+    CGS_ASSERT(lpSlot != 0,
+        "No space for new requests - extend size of game data event pool\n");
+    lpSlot->mEvent.mId = 0;
+    lpSlot->mEvent.mbFailFlag = false;
+    lpSlot->mEvent.miEventId = lpRequest->miEventId;
+    lpSlot->mEvent.mpReceiverQueue = lpRequest->mpReceiverQueue;
+    lpSlot->mEvent.meType = static_cast<EAssetSet>(1);
+    lpSlot->mEvent.miPoolId = 2;
+    lpSlot->miResponseEventId = 68;
+    lpSlot->meStage = GameDataEventSlot::E_DONE;
+
+    CgsResource::Events::ValidatePoolRequest lRequest;
+    lRequest.mpUser = &mReceiverQueue;
+    lRequest.miEventId = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+    lRequest.miPoolId = 2;
+    lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 8);
+}
+
 
     // @ 0x8266F5C8 -- service a LOAD world-unit request: post the LoadBundle for the unit's
     // per-asset-set bundle ("<TRK_UNITn>_<GR|PH|SO|DA|AT>.bndl"). The reply lands on
@@ -2649,7 +2528,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -2891,7 +2769,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -2934,7 +2811,6 @@ namespace BrnResource
 
         // The X360 24-byte type-4 record: {mpUser = &mReceiverQueue, miEventId = the slot
         // index, miPoolId = the request's pool, mResourceId = ID::HashString(name)}.
-        // mbCheckRefCount lies outside the X360 record; false per the committed convention.
         CgsResource::Events::AcquireResourceRequest lRequest;
         memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser    = &mReceiverQueue;
@@ -2942,7 +2818,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3059,7 +2934,6 @@ namespace BrnResource
 
         // The X360 24-byte type-4 record: {mpUser = &mReceiverQueue, miEventId = the slot
         // index, miPoolId = the request's pool, mResourceId = ID::HashString(list name)}.
-        // mbCheckRefCount lies outside the X360 record; false per the committed convention.
         CgsResource::Events::AcquireResourceRequest lRequest;
         memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser    = &mReceiverQueue;
@@ -3067,7 +2941,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacListName)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3118,10 +2991,10 @@ namespace BrnResource
                                                           const GameDataIO::GameDataAssetEvent* lpEvent,
                                                           s32 liEventId, s32 liSlotIndex)
     {
-        // X360 line 4326. The flag is a1+475940 -- committed as miWorldCollisionValidatePending
+        // X360 line 4326. The flag is a1+475940 -- committed as mbCollisionWorldInvalidated
         // with a FLAGged role name; this assert text is the first real attestation of what it
         // means ("invalidated"), so the role is now confirmed even though the identifier is not.
-        CGS_ASSERT(miWorldCollisionValidatePending == 0,
+        CGS_ASSERT(mbCollisionWorldInvalidated == 0,
                    "Attempted collision world operation when it is invalidated\n");
         CGS_ASSERT(lpEvent->meType == E_ASSETSET_PHYSICS,
                    "Invalid asset type for world collision\n");   // X360 line 4327
@@ -3353,7 +3226,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(KPC_PVS_RESOURCE_NAME)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3393,7 +3265,6 @@ namespace BrnResource
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(
                 reinterpret_cast<const u8*>(KPC_TRAFFIC_LANES_RESOURCE_NAME)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3421,7 +3292,6 @@ namespace BrnResource
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(
                 reinterpret_cast<const u8*>(KPC_AI_LANES_RESOURCE_NAME)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3445,7 +3315,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>("surfacelist")))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3470,7 +3339,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3507,7 +3375,6 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3549,7 +3416,6 @@ namespace BrnResource
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(
                 reinterpret_cast<const u8*>(KPC_PROP_PHYSICS_RESOURCE_NAME)))));
-        lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3717,55 +3583,11 @@ namespace BrnResource
 
     namespace
     {
-        // The type-7 pool-invalidate request record the collision swap-out path publishes
-        // (X360 12-byte build @0x8266E3F0 / @0x8266E5D8: {mpUser, miEventId, 2}). MINIMAL
-        // SLICE: the pool-side invalidate consumer is not committed yet; the trailing
-        // immediate 2 is the collision pool id at both build sites.
-        struct InvalidatePoolRequest
-        {
-            CgsModule::BaseEventReceiverQueue* mpUser;     // +0
-            s32                                miEventId;  // +4 (the event-slot index)
-            s32                                miPoolId;   // +8 (== 2, the collision pool)
-        };
-
-        // The type-7 invalidate RESPONSE view (X360 reads @0x8266E5D8). MINIMAL SLICE with
-        // FLAG lane names -- the producer (pool invalidate) is not committed on PC, so only
-        // the read offsets are attested: miEventId @+4, three words @+12..+20 and six words
-        // @+24..+44 echoed into the id-67 reply, the still-loaded flag @+48.
-        struct InvalidatePoolResponse
-        {
-            CgsModule::BaseEventReceiverQueue* mpUser;                  // +0
-            s32                                miEventId;               // +4
-            s32                                miPoolId;                // +8
-            u32                                mauEchoWordsA[3];        // +12..+20 (FLAG role)
-            u32                                mauEchoWordsB[6];        // +24..+44 (FLAG role)
-            s32                                miResourcesStillLoaded;  // +48
-        };
-
-        // The 44-byte id-67 "collision world swapped out" reply record (X360 build
-        // @0x8266E5D8: {slot event id, 0, the three +12 words, the six +24 words}).
-        struct CollisionSwapOutResponse
-        {
-            s32 miEventId;            // +0
-            s32 miZero;               // +4 (X360 stores 0)
-            u32 mauEchoWordsA[3];     // +8..+16
-            u32 mauEchoWordsB[6];     // +20..+40
-        };
-
-        // The 8-byte id-68 "collision world swapped in" reply record (X360 builds
-        // {slot event id, 0} @0x82672630 case 0x44 / @0x8266E858).
-        struct CollisionSwapInResponse
-        {
-            s32 miEventId;   // +0
-            s32 miZero;      // +4
-        };
-
-        // The type-8 validate RESPONSE view (X360 reads @0x8266E858: only miEventId @+4).
-        struct ValidatePoolResponse
-        {
-            CgsModule::BaseEventReceiverQueue* mpUser;     // +0
-            s32                                miEventId;  // +4
-        };
+        using InvalidatePoolRequest = CgsResource::Events::InvalidatePoolRequest;
+        using InvalidatePoolResponse = CgsResource::Events::InvalidatePoolResponse;
+        using ValidatePoolResponse = CgsResource::Events::ValidatePoolResponse;
+        using CollisionSwapOutResponse = GameDataIO::SwapOutCollisionWorldResponse;
+        using CollisionSwapInResponse = GameDataIO::SwapInCollisionWorldResponse;
     }
 
     // The shared 40-byte completion-post the X360 inlines in every acquire/load case:
@@ -3853,7 +3675,7 @@ namespace BrnResource
         case 32:   // world collision -- loaded is the terminal state (acquire rides the
                    // zone-collision AcquireResourceList protocol, not a GET here)
             CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3268
-            ++miWorldCollisionRefCount;
+            ++miCollisionWorldRefCount;
             PostGameDataResponse(lpSlot, 32, false, 1 /*X360 +0x18 immediate*/, 0, 0);
             mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             break;
@@ -3900,7 +3722,7 @@ namespace BrnResource
         {
             CollisionSwapInResponse lReply;
             lReply.miEventId = lpSlot->mEvent.miEventId;
-            lReply.miZero    = 0;
+            lReply.mpReceiverQueue    = 0;
             lpSlot->mEvent.mpReceiverQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lReply), 68,
                 static_cast<s32>(sizeof(lReply)));
@@ -4078,9 +3900,9 @@ namespace BrnResource
 
         if (lpSlot->miResponseEventId == 45)
         {
-            CGS_ASSERT(miWorldCollisionRefCount > 0,
+            CGS_ASSERT(miCollisionWorldRefCount > 0,
                        "Attempt to unload world collision when it already has 0 ref count\n");   // line 3603
-            --miWorldCollisionRefCount;
+            --miCollisionWorldRefCount;
         }
 
         if (lpSlot->mEvent.mpReceiverQueue == 0)
@@ -4130,7 +3952,7 @@ namespace BrnResource
         CGS_ASSERT(lpSlot->meStage == GameDataEventSlot::E_DONE,
                    "Should only ever get invalidate responses for 'done' slots\n");   // line 3658
 
-        if (lpResponse->miResourcesStillLoaded != 0)
+        if (lpResponse->GetResult() != CgsResource::Events::InvalidatePoolResponse::E_RESULT_SUCCESS)
         {
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint
@@ -4151,13 +3973,7 @@ namespace BrnResource
             *CgsDev::Log::gpDebugPrint << "Attempt to invalidate succeeded\n";
 
         CollisionSwapOutResponse lReply;
-        memset(&lReply, 0, sizeof(lReply));
-        lReply.miEventId = lpSlot->mEvent.miEventId;
-        lReply.miZero    = 0;
-        for (s32 li = 0; li < 3; ++li)
-            lReply.mauEchoWordsA[li] = lpResponse->mauEchoWordsA[li];
-        for (s32 li = 0; li < 6; ++li)
-            lReply.mauEchoWordsB[li] = lpResponse->mauEchoWordsB[li];
+        lReply.Construct(lpSlot->mEvent.miEventId, lpResponse->GetResource(), lpResponse->GetDescriptor());
         lpSlot->mEvent.mpReceiverQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lReply), 67,
             static_cast<s32>(sizeof(lReply)));
@@ -4181,8 +3997,8 @@ namespace BrnResource
         CGS_ASSERT(lpSlot->meStage == GameDataEventSlot::E_DONE,
                    "Should only ever get validate responses for 'done' slots\n");   // line 3739
 
-        const s32 liRefCount = miWorldCollisionRefCount;
-        miWorldCollisionValidatePending = 0;
+        const s32 liRefCount = miCollisionWorldRefCount;
+        mbCollisionWorldInvalidated = 0;
 
         if (liRefCount != 0)
         {
@@ -4207,7 +4023,7 @@ namespace BrnResource
 
         CollisionSwapInResponse lReply;
         lReply.miEventId = lpSlot->mEvent.miEventId;
-        lReply.miZero    = 0;
+        lReply.mpReceiverQueue    = 0;
         lpSlot->mEvent.mpReceiverQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lReply), 68,
             static_cast<s32>(sizeof(lReply)));

@@ -151,12 +151,7 @@ namespace CgsResource
     // *(response+0x0C) != 0 it fires the "Destroy Bank Failed" assert (CgsPoolModule.cpp:1309). On the
     // success path it does nothing. (response is a serialised DestroyBankResponse payload.)
     // ----------------------------------------------------------------------------------------------
-    void PoolModule::DoDeletePoolRequestNativePC(const void* lpResponse)
-    {
-        const CgsMemory::MemoryIO::DestroyBankResponse* lpResult =
-            static_cast<const CgsMemory::MemoryIO::DestroyBankResponse*>(lpResponse);
-        CGS_ASSERT(lpResult->GetResult() == CgsMemory::MemoryIO::E_RESULT_OK, "Destroy Bank Failed");
-    }
+
 
     // ARTIST 0x828D81D0. The output argument is passed through the receiver route but unused here.
     void PoolModule::DoDeletePoolRequest(const CgsMemory::MemoryIO::DestroyBankResponse* lpResponse,

@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"  // the 3 real-shape structs
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // original append lock diagnostic
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -74,6 +75,25 @@ namespace CgsResource
         {
             CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
             return &mResourceQueue;
+        }
+
+        // ARTIST8266BFD8. DecFIGS h82 declares void; the Append return in r3
+        // is residue, not an additional success contract. Assert, then continue.
+        void InputBuffer::AppendResourceQueue(const ResourceRequestQueue<16384>* lpResourceQueue)
+        {
+            if (!IsBufferLockedForWriting())
+            {
+                CgsDev::Assert::BeginAssert();
+                // FLAG PC-platform leaf: the existing assertion provider keeps
+                // the original shared buffer on-owner and isolates worker text.
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "Not locked for writing\n";
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 82);
+                CgsDev::Assert::EndAssert();
+            }
+            mResourceQueue.Append<16384, 16>(*lpResourceQueue);
         }
 
         // -------- OutputBuffer::GetFileSystemStatusInterface() const @ 0x82663BE0 --------

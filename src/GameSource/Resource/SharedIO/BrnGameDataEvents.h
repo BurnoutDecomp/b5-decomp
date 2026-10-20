@@ -2,6 +2,7 @@
 #define GAMESOURCE_RESOURCE_SHAREDIO_BRNGAMEDATAEVENTS_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceBasePool.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "BrnCommonTypes.h"                                  // CgsID (typedef u64)
 #include "GameSource/Resource/SharedIO/BrnAssetIds.h"        // BrnResource::EAssetSet
@@ -190,6 +191,33 @@ namespace GameDataIO
     struct UnloadGameDataEvent : public GameDataAssetEvent {};
     struct SwapInCollisionWorldRequest : public GameDataEvent {};
     struct SwapOutCollisionWorldRequest : public GameDataEvent {};
+
+    // DecFIGS867..885; native8266E5D8 copies these actual resource/descriptor
+    // values. Resource pointers widen; they are not three host u32 echo words.
+    struct SwapOutCollisionWorldResponse : public GameDataEvent
+    {
+        void Construct(s32 liEventId, const CgsResource::SmallResource& lrResource,
+            const CgsResource::Entry::ResourceDescriptor& lrDescriptor)
+        {
+            miEventId = liEventId;
+            mpReceiverQueue = 0;
+            mResource = lrResource;
+            mDescriptor = lrDescriptor;
+        }
+        const CgsResource::SmallResource& GetResource() const { return mResource; }
+        const CgsResource::Entry::ResourceDescriptor& GetDescriptor() const { return mDescriptor; }
+    private:
+        CgsResource::SmallResource mResource;
+        CgsResource::Entry::ResourceDescriptor mDescriptor;
+    };
+    struct SwapInCollisionWorldResponse : public GameDataEvent
+    {
+        void Construct(s32 liEventId)
+        {
+            miEventId = liEventId;
+            mpReceiverQueue = 0;
+        }
+    };
 
     // ========================================================================
     // The two "here is your loaded asset" responses the traffic module consumes.

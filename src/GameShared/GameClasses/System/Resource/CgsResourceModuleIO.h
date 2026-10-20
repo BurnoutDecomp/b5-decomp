@@ -38,7 +38,7 @@ namespace CgsResource
 
             const ResourceRequestQueue<16384>* GetResourceQueue() const;   // CgsResourceModuleIO.h:80 (THIS TU)
             ResourceRequestQueue<16384>*       GetResourceQueue();          // CgsResourceModuleIO.h:81 (deferred)
-            void AppendResourceQueue(const ResourceRequestQueue<16384>* lpResourceQueue);  // :82 (deferred)
+            void AppendResourceQueue(const ResourceRequestQueue<16384>* lpResourceQueue);  // :82 / ARTIST8266BFD8
 
         private:
             // CgsResourceModuleIO.h:86. Lands at +4: after the 1-byte IOBuffer base the
