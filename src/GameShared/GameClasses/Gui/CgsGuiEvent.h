@@ -85,6 +85,21 @@ namespace CgsGui
     };
     static_assert(sizeof(GuiEvent<523>) == 1, "ARTIST GUI tag523 is one byte");
 
+    // Original PFX tags carry one unwritten byte: ARTIST8250D828/2C
+    // posts497, and823CEFA4/A8 posts500. The queue owns their type/size.
+    template <>
+    struct GuiEvent<497> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 497; }
+    };
+    template <>
+    struct GuiEvent<500> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 500; }
+    };
+    static_assert(sizeof(GuiEvent<497>) == 1 && sizeof(GuiEvent<500>) == 1,
+                  "PFX tags497 and500 are one-byte empty events");
+
     // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
     // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /
     // OutputInternalState channels) builds and hands to VariableEventQueue::AddEvent. It boxes an

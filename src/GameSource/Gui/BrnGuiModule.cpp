@@ -33,6 +33,11 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h" // GetScriptedLoadGameData{Input,Output} (the PC stand-in for the scheduler's GameData IO pair)
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h"      // BrnNetwork::LiveRevengeProfile (the PC live-revenge block)
 
+// Existing PC platform providers in System/PC/CgsXboxLivePC.cpp.
+extern "C" void* XNotifyCreateListener(unsigned long long luAreas);
+extern "C" int XNotifyGetNext(void* lhListener, unsigned long luFilter,
+    unsigned long* lpuId, unsigned long* lpuParam);
+
 // DecFIGS types GuiModule::Construct's alternate-text palette as const RGBA*.
 // ARTIST's eight packed words at 0x82F27F84 are the complete table.
 struct RGBA
@@ -916,6 +921,7 @@ namespace BrnGui
         // ARTIST82518BF0..C0C: the real receiver owns its backing storage.
         mGDMReceiverQueue.Construct();
         gbGuiToolStartHookRequested = false; // ARTIST82518C38..82518C44
+        mhSysListenerHandle = 0; // ARTIST82518C48, before serialiser Construct
         mGuiModuleSerialiser.Construct(); // ARTIST82518C4C, before manager Construct
         mCustomRendererManager.Construct();
 
@@ -1700,6 +1706,82 @@ namespace BrnGui
         return mWorldDataController.Prepare2(lpGameDataInput);
     }
 
+    // Original stage12 has no failure return after this assertion.
+    // Selecting the full typed Prepare will own the stage transition/call.
+    void GuiModule::PrepareNativeSystemNotifications()
+    {
+        mhSysListenerHandle = XNotifyCreateListener(1);
+        if (!mhSysListenerHandle)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Failed to create an X360 system listener";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 557);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST82529CA8..82529DD0: dequeue at most one notification,
+    // then publish the actual four-byte event516 to the fresh Model input.
+    void GuiModule::UpdateNativeSystemNotifications(
+        CgsGui::ModelIO::InputBuffer* lpInputBuffer)
+    {
+        unsigned long luNotificationId;
+        unsigned long luNotificationParam;
+        if (mhSysListenerHandle &&
+            XNotifyGetNext(mhSysListenerHandle, 9, &luNotificationId, &luNotificationParam))
+        {
+            if (luNotificationId == 0x02000002)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "Invite notification processed by GuiModule. This could break cross game invites\n";
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2918);
+                CgsDev::Assert::EndAssert();
+            }
+            const u32 luUiVisible = luNotificationParam != 1;
+            if (!lpInputBuffer)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpInputBuffer",
+                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+                CgsDev::Assert::EndAssert();
+            }
+            lpInputBuffer->LockForWrite();
+            lpInputBuffer->GetEventQueueNonConst()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&luUiVisible), 516, sizeof(luUiVisible));
+            if (!lpInputBuffer)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpInputBuffer",
+                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+                CgsDev::Assert::EndAssert();
+            }
+            lpInputBuffer->UnlockForWrite();
+        }
+    }
+
+    // Original Release closes before its stage switch, including failed close.
+    // The assertion continues and clears the original member in either case.
+    void GuiModule::ReleaseNativeSystemNotifications()
+    {
+        if (mhSysListenerHandle)
+        {
+            if (!CloseHandle(mhSysListenerHandle))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CloseHandle( mhSysListenerHandle )",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 681);
+                CgsDev::Assert::EndAssert();
+            }
+            mhSysListenerHandle = 0;
+        }
+    }
+
     bool GuiModule::Release()
     {
         mbRenderInputCompletedPC = false;
@@ -2025,6 +2107,7 @@ void GuiModule::Destruct()
                     // fall through -- the record also feeds GuiCache::mpProfile (case 350 below)
                 case 27:    // Actual Sku notification -> the cache enum owner.
                 case 29:    // Actual language notification -> the cache enum owner.
+                case 501:   // Original PFX enumeration -> actual cache owner.
                 case 330:   // GuiEventSetRoadRuleScoreMode -- the road-rule panel mode word
                 case 335:   // GuiEventRoadRuleBegin -- the rule's score type marked active
                 case 336:   // GuiEventRoadRuleEnd   -- the rule's score type marked inactive

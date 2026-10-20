@@ -40,19 +40,6 @@ namespace BrnGui
         // preload's "pfxhooks" entry), the colour cubes 229..234 (KU_MAX_NUM_COLOURCUBES).
         const u32 KU_PFX_HOOK_BUNDLE_REQUEST_ID  = 228;
 
-        // THE QUEUE RECORD IS THE PAYLOAD. CgsGui::GuiModule::AddGuiEvent<T> pushes the event
-        // MINUS its 12-byte GuiEvent<N> header (the console record: GUID at +0, the six maxima
-        // at +4, the name at +28 -- exactly what StartHook @0x8250B618 reads), and
-        // VariableEventQueue::GetFirstEvent hands back a pointer to that payload. Viewing it
-        // through the header-bearing PC struct therefore means stepping BACK over the header:
-        // the 12 bytes before the payload are the queue entry's own size/pad words, never
-        // read through this view. (Dispatch of 64 / 501 keeps its own +0 convention.)
-        template <class T>
-        const T* PayloadAs(const CgsModule::Event* lpEvent)
-        {
-            const s32 KI_GUI_EVENT_HEADER_SIZE = 12;
-            return reinterpret_cast<const T*>(reinterpret_cast<const u8*>(lpEvent) - KI_GUI_EVENT_HEADER_SIZE);
-        }
         const u32 KU_PFX_COLOURCUBE_REQUEST_BASE = 229;
         // ARTIST's E_GUI_RESOURCETYPE_PFX_COLOURCUBE. The DecFIGS-derived enum in
         // CgsGuiResourceModuleIO.h ends one entry early (its 22 is DONE); the loader's switch in
@@ -662,12 +649,12 @@ namespace BrnGui
                 break;
             case 495:
                 CGS_ASSERT(lpEvent != 0, "Invalid hook event message");             // :288
-                StartHook(PayloadAs<GuiPFXHookEvent>(lpEvent));
+                StartHook(static_cast<const GuiPFXHookEvent*>(lpEvent));
                 break;
             case 496:
             {
                 CGS_ASSERT(lpEvent != 0, "lpGuiPFXHookEvent != NULL");              // :297
-                const GuiPFXHookStopEvent* lpStop = PayloadAs<GuiPFXHookStopEvent>(lpEvent);
+                const GuiPFXHookStopEvent* lpStop = static_cast<const GuiPFXHookStopEvent*>(lpEvent);
                 const PFXHook* lpHook = ResolveHook(lpStop->muGuid, lpStop->macName, "EventUpdate");
                 if (lpHook != 0)
                 {
@@ -688,11 +675,11 @@ namespace BrnGui
                 break;
             case 498:
                 CGS_ASSERT(lpEvent != 0, "Invalid start background hook event.");   // :334
-                StartBackgroundHook(PayloadAs<GuiPFXStartBackgroundHookEvent>(lpEvent));
+                StartBackgroundHook(static_cast<const GuiPFXStartBackgroundHookEvent*>(lpEvent));
                 break;
             case 499:
                 CGS_ASSERT(lpEvent != 0, "Invalid stop background hook event.");    // :343
-                StopBackgroundHook(PayloadAs<GuiPFXStopBackgroundHookEvent>(lpEvent));
+                StopBackgroundHook(static_cast<const GuiPFXStopBackgroundHookEvent*>(lpEvent));
                 break;
             case 500:
             {

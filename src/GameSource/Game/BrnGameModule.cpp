@@ -1199,21 +1199,17 @@ namespace BrnGame
                     lpDirectorInput->SetFinishedOnlineEventLoading();
                     break;
 
-                case 501:   // the GUI PFX hook enumeration (a 404-byte publish). The console
-                            // memcpys all 404 bytes off the payload unconditionally; the size
-                            // guard is ours, because a short record here would read past the
-                            // queue entry (the exact class of bug that cost this project the
-                            // intro AV). BrnGui::EffectsArbitrator::EventUpdate posts it (the
-                            // reply to 500) since 2026-09-17; the record is copied WHOLE (header
-                            // included), so the director reads it back as the same struct.
+                case 501:   // Original count plus100 pointers, at native host width.
+                            // Retain the existing host record-bound/legacy-wrapper guard.
                     static_assert(sizeof(BrnGui::GuiPFXHookEnumeration) ==
                                   BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES,
-                                  "the director copies the whole 501 record");
+                                  "the director copies the canonical501 payload");
                     if (liSize >= static_cast<s32>(BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES
                                                    + (reinterpret_cast<const u8*>(lpuPayload)
                                                           - reinterpret_cast<const u8*>(lpEvent))))
                     {
-                        lpDirectorInput->SetHookEnumeration(lpuPayload);
+                        lpDirectorInput->SetHookEnumeration(
+                            reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpuPayload));
                         if (getenv("BRN_PFX_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
                             *CgsDev::Log::gpDebugPrint << "[pfx-dir] 501 record (" << liSize << " bytes) -> director input\n";
                     }

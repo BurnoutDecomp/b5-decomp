@@ -15,7 +15,17 @@
 #include "GameShared/GameClasses/Core/CgsID.h"   // CgsIDCompress (TriggerPostEvent's unlock ids)
 #include "GameSource/Gui/BrnGuiModule.h"         // GuiModule::mGuiCache (TriggerPostEvent)
 
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
+
 #include <cstring>                               // strlen / strncpy / memset
+
+namespace
+{
+    // ARTIST82FB5920: original file-global count, not reset by Construct.
+    u32 guGuiDebugUpdateCount = 0;
+}
 
 namespace BrnGui
 {
@@ -84,6 +94,100 @@ void GuiDebugComponent::Construct(GuiModule* lpGuiModule)
         mabTogglableRaceHUDElementsState[liElement] = true;
 }
 
+// ARTIST8250C998. Preserve the read pass, then the separate write pass
+// which flushes this real component queue into the supplied GUI input.
+void GuiDebugComponent::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer)
+{
+    const CgsGui::CgsGuiModuleIO::InputBuffer* lpInputRead = lpInputBuffer;
+    lpInputRead->LockForRead();
+    const CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEvents =
+        lpInputRead->GetGuiEvents();
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    s32 liId = lpEvents->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
+    {
+        if (liId == 64)
+        {
+            const GuiCache* lpGuiCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+            if (!lpGuiCache)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpGuiCache",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 334);
+                CgsDev::Assert::EndAssert();
+            }
+            std::memcpy(&mPFXHookEnumeration, lpGuiCache->GetPFXHookEnumeration(),
+                sizeof(mPFXHookEnumeration));
+            if (mPFXHookEnumeration.miHookNameCount > 0 && miCurrentPFXHookIndex == -1)
+            {
+                SetRange(&miCurrentPFXHookIndex, 0, mPFXHookEnumeration.miHookNameCount - 1);
+                miCurrentPFXHookIndex = 0;
+            }
+        }
+        else if (liId == 147)
+        {
+            std::memcpy(&mSpeedoInfo, lpEvent, sizeof(mSpeedoInfo));
+        }
+        liId = lpEvents->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+    lpInputRead->UnlockForRead();
+    if (miCurrentPFXHookIndex != -1)
+    {
+        CgsCore::SPrintf(macCurrentPFXHookName, KI_PFX_HOOK_NAME_LENGTH,
+            "Trigger PFX Hook %s", mPFXHookEnumeration.mapHookNames[miCurrentPFXHookIndex]);
+    }
+    if (!lpInputBuffer)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpInputBuffer",
+            "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+        CgsDev::Assert::EndAssert();
+    }
+    lpInputBuffer->LockForWrite();
+    lpInputBuffer->GetGuiEvents()->Append(mInputQueue);
+    if (!lpInputBuffer)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpInputBuffer",
+            "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+        CgsDev::Assert::EndAssert();
+    }
+    lpInputBuffer->UnlockForWrite();
+    mInputQueue.Clear();
+    if (++guGuiDebugUpdateCount == 3600u)
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        lDebugInterface.GetDebugManager().ActivateComponent(this);
+    }
+}
+
+// ARTIST825076D0..82507710 in the actual enclosing module Destruct.
+// The base call resolves to the observed no-op8284CB38; it adds no reset.
+void GuiDebugComponent::Destruct()
+{
+    if (!mpGuiModule)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpGuiModule != NULL",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 169);
+        CgsDev::Assert::EndAssert();
+    }
+    mpGuiModule = 0;
+    mInputQueue.Destruct();
+}
+
+// Actual native vtable820CE7E0 slots3/4, including shared ICF GetPath.
+const char* GuiDebugComponent::GetName() const
+{
+    return "Gui Module";
+}
+
+const char* GuiDebugComponent::GetPath() const
+{
+    return "Gui";
+}
+
 // @ 0x824ECC40
 GuiDebugComponent* GuiDebugComponent::GetSingletonPtr()
 {
@@ -114,10 +218,9 @@ void GuiDebugComponent::TriggerPFX()
     CGS_ASSERT(std::strlen(lpcHookName) < static_cast<size_t>(KI_MAX_PFX_ID_LENGTH), "String too long: ");
     std::strncpy(lEvent.macName, lpcHookName, KI_MAX_PFX_ID_LENGTH);
 
-    // The queued record is the payload past the GuiEvent<495> header (64 bytes).
-    const s32 KI_PAYLOAD_SIZE = static_cast<s32>(sizeof(GuiPFXHookEvent) - sizeof(CgsGui::GuiEvent<495>));
-    static_assert(sizeof(GuiPFXHookEvent) - sizeof(CgsGui::GuiEvent<495>) == 64, "event 495 payload is 64 bytes");
-    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent.muGuid), 495, KI_PAYLOAD_SIZE);
+    // ARTIST8250D408..18 posts this complete64-byte payload.
+    static_assert(sizeof(GuiPFXHookEvent) == 64, "event495 payload is64 bytes");
+    mInputQueue.AddEvent(&lEvent, 495, sizeof(lEvent));
 }
 
 // Post the payload-less event 291, then a made-up offline post-event result (event 289) to the

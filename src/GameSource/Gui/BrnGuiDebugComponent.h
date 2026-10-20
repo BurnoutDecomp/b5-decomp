@@ -25,6 +25,10 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                                    // GuiEventUpdateHud
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                                 // GuiPFXHookEnumeration
 
+#include "GameSource/Gui/Flow/BrnBaseFlow.h"                              // original streaming enum
+
+namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer; } }
+
 namespace BrnGui
 {
     class GuiModule;
@@ -39,12 +43,30 @@ namespace BrnGui
         // ARTIST82505488; real two-phase provider, unselected by the
         // current module which still lacks this contained debug owner.
         void Construct(GuiModule* lpGuiModule);
+        // ARTIST825076D0..82507710 inlines the original derived teardown.
+        void Destruct();
+
+        bool IsGuiRenderingEnabled() const { return mbRenderGui; }
+        void SetScreenFlowStreamingMode(BrnBaseFlow::EStreamingMode leMode)
+        {
+            miScreenFlowStreamingMode = leMode;
+        }
+        BrnBaseFlow::EStreamingMode GetScreenFlowStreamingMode() const
+        {
+            return static_cast<BrnBaseFlow::EStreamingMode>(miScreenFlowStreamingMode);
+        }
+
+        // ARTIST8250C998; original typed GUI input reader/publisher.
+        void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
 
         // Return the singleton instance pointer, asserting it is non-null (the assert is
         // non-fatal; the pointer is returned either way).
         static GuiDebugComponent* GetSingletonPtr();
 
     protected:
+        const char* GetName() const override;
+        const char* GetPath() const override;
+
         // Post the selected post-FX hook (by name, every maximum weight 1.0) to the GUI.
         void TriggerPFX();
         // Post a made-up offline post-event result built from the debug finish settings.
