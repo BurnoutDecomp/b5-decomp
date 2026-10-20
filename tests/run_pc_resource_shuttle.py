@@ -20,16 +20,26 @@ names=['bool ResourceModule::AddOpenReadStreamRequest(',
        'void ResourceModule::ProcessMemoryResponses(',
        'bool ResourceModule::Update(']
 code='namespace CgsResource {\n'+ '\n'.join(definition(source,n).replace('ResourceModule::','Shuttle::') for n in names)+'\n}\n'
+# This transport fixture exercises lifecycle/accessors, not AppendResourceQueue.
+# The hierarchy fixture links and exercises that complete production provider.
+io_source=Tree().read(resource+'CgsResourceModuleIO.cpp')
+io_names=['void FileSystemStatusInterface::Construct(', 'void OutputBuffer::Construct(',
+          'void InputBuffer::Construct(', 'void InputBuffer::Destruct(',
+          'const ResourceRequestQueue<16384>* InputBuffer::GetResourceQueue() const',
+          'const FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const',
+          'FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface()\n']
+code+='namespace CgsResource { namespace ResourceIO {\n'+ '\n'.join(
+    definition(io_source,n) for n in io_names)+'\n} }\n'
 base='src/GameShared/GameClasses/'
 sources=[STRSTREAM_CPP, REPO/'vendor/renderware/src/rw/BaseResourceDescriptor.cpp']
+sources += [REPO/base/'Core/CgsStringUtils.cpp']
 sources += [REPO/base/'Module'/n for n in ['CgsIOBuffer.cpp','CgsBaseEventReceiverQueue.cpp']]
-sources += [REPO/resource/n for n in ['CgsResourceIOEvents.cpp','CgsResourceModuleIO.cpp',
+sources += [REPO/resource/n for n in ['CgsResourceIOEvents.cpp',
     'CgsResourceModuleIO_InputBuffer_GetResourceQueue.cpp',
     'CgsPoolModuleIO_OutputBuffer.cpp','CgsBundleLoaderModuleIO_InputBuffer.cpp',
     'CgsBundleLoaderModuleIO_InputBuffer_Update.cpp','CgsBundleLoaderModuleIO_InputBuffer_Record.cpp',
     'CgsBundleLoaderModuleIO_OutputBuffer.cpp']]
 sources += [REPO/base/'Memory'/n for n in ['CgsMemoryModuleIO.cpp']]
 result=compile_and_run(Path(__file__).with_name('PCResourceShuttle.cpp'),
-    'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_flags='/Gy',
-    extra_sources=sources,output_dir=args.output_dir)
+    'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_sources=sources,output_dir=args.output_dir)
 raise SystemExit(report('run_pc_resource_shuttle',[],result,14))
