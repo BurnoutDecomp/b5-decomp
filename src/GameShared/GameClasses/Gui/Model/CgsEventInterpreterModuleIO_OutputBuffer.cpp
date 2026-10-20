@@ -45,10 +45,10 @@ namespace EventInterpreterModuleIO
     {
         CgsModule::IOBuffer::Construct();
         mGuiOutEvents.Construct();
-        mGuiOutResource.Construct();
+        mGuiOutResource.CgsModule::VariableEventQueue<4096, 16>::Construct();
         mGuiOutView.CgsModule::VariableEventQueue<65536, 16>::Construct();
         mGuiOutEvents.Clear();
-        mGuiOutResource.Clear();
+        mGuiOutResource.CgsModule::VariableEventQueue<4096, 16>::Clear();
         mGuiOutView.CgsModule::VariableEventQueue<65536, 16>::Clear();
     }
 
@@ -56,7 +56,7 @@ namespace EventInterpreterModuleIO
     void OutputBuffer::Destruct()
     {
         mGuiOutEvents.Destruct();
-        mGuiOutResource.Destruct();
+        mGuiOutResource.CgsModule::VariableEventQueue<4096, 16>::Destruct();
         mGuiOutView.CgsModule::VariableEventQueue<65536, 16>::Destruct();
         CgsModule::IOBuffer::Destruct();
     }
