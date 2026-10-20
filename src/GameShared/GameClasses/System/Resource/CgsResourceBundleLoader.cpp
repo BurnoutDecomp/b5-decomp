@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"     // EnsureDeviceManagerUp
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint (read trace)
 
+#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
+
 #include <cstdlib>   // malloc / free
 #include <cstring>   // memcpy
 
@@ -132,6 +134,177 @@ namespace CgsResource
             || lpList->muNumEntries > (luSize - EntryListResource::KI_HEADERSIZE) / sizeof(ID))
             return nullptr;
         return lpList;
+    }
+
+    // FLAG PC-platform leaf: one bundle acquisition per loaded AptFile, released
+    // after its native Unresolve -> FreeAnimation callback. Pin the resident list
+    // AND every member, including geometry/texture dependencies, without file IO.
+    namespace PCAptOwnership
+    {
+        static constexpr u32 KU_MAX_BUNDLES = 128;
+        static constexpr u32 KU_MAX_FILES = 128;
+        struct Bundle
+        {
+            Pool* mpPool;
+            char macPath[160];
+            u32 muLoads;
+            u32 muFiles;
+        };
+        struct Lease
+        {
+            const void* mpFile;
+            const void* mpHeader;
+            Bundle* mpBundle;
+        };
+        static Bundle saBundles[KU_MAX_BUNDLES] = {};
+        static Lease saLeases[KU_MAX_FILES] = {};
+
+        static Bundle* Find(Pool* lpPool, const char* lpacPath)
+        {
+            if (!lpPool || !lpacPath) return nullptr;
+            for (Bundle& lrBundle : saBundles)
+                if (lrBundle.mpPool == lpPool && _stricmp(lrBundle.macPath, lpacPath) == 0)
+                    return &lrBundle;
+            return nullptr;
+        }
+        static const EntryListResource* List(const Bundle& lrBundle, s32* lpiSlot)
+        {
+            return GetBundleList(lrBundle.mpPool->FindResource(
+                BundleListId(lrBundle.macPath), true, 3, lpiSlot));
+        }
+        static bool Loaded(Pool* lpPool, const char* lpacPath)
+        {
+            Bundle* lpBundle = Find(lpPool, lpacPath);
+            if (!lpBundle)
+            {
+                for (Bundle& lrBundle : saBundles)
+                    if (!lrBundle.mpPool) { lpBundle = &lrBundle; break; }
+            }
+            if (!lpBundle || std::strlen(lpacPath) >= sizeof(lpBundle->macPath))
+                return false;
+            if (!lpBundle->mpPool)
+            {
+                lpBundle->mpPool = lpPool;
+                std::strcpy(lpBundle->macPath, lpacPath);
+            }
+            ++lpBundle->muLoads;
+            return true;
+        }
+        static void ForgetUnused(Bundle* lpBundle)
+        {
+            if (lpBundle && !lpBundle->muLoads && !lpBundle->muFiles)
+                *lpBundle = {};
+        }
+        static Entry* Member(Pool* lpPool, ID lId, Pool** lppPool, s32* lpiSlot)
+        {
+            *lpiSlot = lpPool->FindResourceIndexWithDependencies(lId, lppPool, true, 0xFF);
+            return *lpiSlot < 0 || !*lppPool ? nullptr
+                : const_cast<Entry*>((*lppPool)->GetEntryDirect(*lpiSlot));
+        }
+        static s32 RetainBundle(Bundle& lrBundle)
+        {
+            s32 liListSlot = -1;
+            const EntryListResource* lpList = List(lrBundle, &liListSlot);
+            if (!lpList) return BundleLoader::KI_LOAD_FAILED;
+            BundleReferencesPC lReferences(lpList->muNumEntries + 1);
+            if (!lReferences.IsValid()) return BundleLoader::KI_LOAD_FAILED;
+            for (u32 i = 0; i < lpList->muNumEntries; ++i)
+            {
+                Pool* lpMemberPool = nullptr;
+                s32 liMemberSlot = -1;
+                if (!Member(lrBundle.mpPool, lpList->mIds[i], &lpMemberPool, &liMemberSlot))
+                    return BundleLoader::KI_LOAD_FAILED;
+                lReferences.Acquire(i, lpMemberPool, liMemberSlot, false);
+            }
+            lReferences.Acquire(lpList->muNumEntries, lrBundle.mpPool, liListSlot, false);
+            lReferences.Commit();
+            return static_cast<s32>(lpList->muNumEntries);
+        }
+        static s32 ReleaseBundle(Pool* lpPool, const char* lpacPath)
+        {
+            s32 liListSlot = -1;
+            const EntryListResource* lpList = GetBundleList(lpPool->FindResource(
+                BundleListId(lpacPath), true, 3, &liListSlot));
+            if (!lpList) return BundleLoader::KI_LOAD_FAILED;
+            s32 liFreed = 0;
+            for (u32 i = 0; i < lpList->muNumEntries; ++i)
+            {
+                Pool* lpMemberPool = nullptr;
+                s32 liMemberSlot = -1;
+                if (Member(lpPool, lpList->mIds[i], &lpMemberPool, &liMemberSlot)
+                    && lpMemberPool->RemoveReference(static_cast<u32>(liMemberSlot)))
+                    ++liFreed;
+            }
+            lpPool->RemoveReference(static_cast<u32>(liListSlot));
+            return liFreed;
+        }
+        bool IsBundleLoaded(Pool* lpPool, const char* lpacPath)
+        {
+            Bundle* lpBundle = Find(lpPool, lpacPath);
+            s32 liSlot = -1;
+            return lpBundle && lpBundle->muLoads && List(*lpBundle, &liSlot);
+        }
+        Entry* FindBundleLead(Pool* lpPool, const char* lpacPath)
+        {
+            Bundle* lpBundle = Find(lpPool, lpacPath);
+            if (!lpBundle || !lpBundle->muLoads) return nullptr;
+            s32 liSlot = -1;
+            const EntryListResource* lpList = List(*lpBundle, &liSlot);
+            if (!lpList) return nullptr;
+            for (u32 i = 0; i < lpList->muNumEntries; ++i)
+            {
+                Pool* lpMemberPool = nullptr;
+                Entry* lpEntry = Member(lpPool, lpList->mIds[i], &lpMemberPool, &liSlot);
+                if (lpEntry && lpEntry->mpResourceType && lpEntry->mpResourceType->GetTypeID() == 30)
+                    return lpEntry;
+            }
+            return nullptr;
+        }
+        RetainResult Retain(const void* lpHeader, const void* lpFile)
+        {
+            if (!lpHeader || !lpFile) return RetainResult::Failed;
+            Lease* lpFree = nullptr;
+            for (Lease& lrLease : saLeases)
+            {
+                if (lrLease.mpFile == lpFile)
+                    return lrLease.mpHeader == lpHeader ? RetainResult::AlreadyHeld : RetainResult::Failed;
+                if (!lrLease.mpFile && !lpFree) lpFree = &lrLease;
+            }
+            if (!lpFree) return RetainResult::Failed;
+            for (Bundle& lrBundle : saBundles)
+            {
+                if (!lrBundle.mpPool || !lrBundle.muLoads) continue;
+                s32 liSlot = -1;
+                const EntryListResource* lpList = List(lrBundle, &liSlot);
+                if (!lpList) continue;
+                for (u32 i = 0; i < lpList->muNumEntries; ++i)
+                {
+                    Pool* lpMemberPool = nullptr;
+                    Entry* lpEntry = Member(lrBundle.mpPool, lpList->mIds[i], &lpMemberPool, &liSlot);
+                    if (!lpEntry || lpEntry->mResource.m_baseResources[0] != lpHeader) continue;
+                    if (RetainBundle(lrBundle) < 0) return RetainResult::Failed;
+                    *lpFree = {lpFile, lpHeader, &lrBundle};
+                    ++lrBundle.muFiles;
+                    return RetainResult::Acquired;
+                }
+            }
+            return RetainResult::MissingOwner;
+        }
+        bool Release(const void* lpFile)
+        {
+            if (!lpFile) return false;
+            for (Lease& lrLease : saLeases)
+            {
+                if (lrLease.mpFile != lpFile) continue;
+                Bundle* lpBundle = lrLease.mpBundle;
+                lrLease = {};
+                --lpBundle->muFiles;
+                const bool lbReleased = ReleaseBundle(lpBundle->mpPool, lpBundle->macPath) >= 0;
+                ForgetUnused(lpBundle);
+                return lbReleased;
+            }
+            return false;
+        }
     }
 
     s32 BundleLoader::LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType)
@@ -415,6 +588,14 @@ namespace CgsResource
             lpPool->SetEntryStatus(liSlot, 2);
         }
         lpPool->SetEntryStatus(liListSlot, 2);
+        bool lbHasAptData = false;
+        for (u32 i = 0; i < luEntryCount; ++i)
+            lbHasAptData |= lpEntries[i].muResourceTypeId == 30;
+        if (lbHasAptData && !PCAptOwnership::Loaded(lpPool, lpcFileName))
+        {
+            free(lpcBundle);
+            return KI_LOAD_FAILED;
+        }
         lReferences.Commit();
 
         if (liShared != 0 && (CgsDev::Message::gxMessageFilterFlags & 1))
@@ -431,27 +612,15 @@ namespace CgsResource
     // logical bundle refcounts and asynchronous DeAllocate scheduling remain the module's job.
     s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool)
     {
-        s32 liListSlot = -1;
-        const EntryListResource* lpList = GetBundleList(
-            lpPool->FindResource(BundleListId(lpcFileName), true, 3, &liListSlot));
-        if (!lpList)
-            return KI_LOAD_FAILED; // native cleanup also handles optional bundles whose load failed
-
-        s32 liUnloaded = 0;
-        for (u32 luIndex = 0; luIndex < lpList->muNumEntries; ++luIndex)
+        PCAptOwnership::Bundle* lpBundle = PCAptOwnership::Find(lpPool, lpcFileName);
+        if (lpBundle && !lpBundle->muLoads)
+            return KI_LOAD_FAILED; // detached logical load cannot consume an AptFile's pin
+        const s32 liFreed = PCAptOwnership::ReleaseBundle(lpPool, lpcFileName);
+        if (liFreed >= 0 && lpBundle)
         {
-            // find the resource by id (any in-use status; ignore the ref-count gate), then release a ref.
-            // Ids are stored raw/untagged (see LoadBundle) and looked up in the same form. The search
-            // spans the dependency pools exactly as LoadBundle's CheckListDependencies pass does, so
-            // every reference that pass took is given back to the pool that owns it.
-            ID lId = lpList->mIds[luIndex];
-            Pool*     lpFoundPool = 0;
-            const s32 liSlot = lpPool->FindResourceIndexWithDependencies(lId, &lpFoundPool, true, 0xFF);
-            if (liSlot >= 0 && lpFoundPool != 0 && lpFoundPool->RemoveReference(static_cast<u32>(liSlot)))
-                ++liUnloaded;
+            --lpBundle->muLoads;
+            PCAptOwnership::ForgetUnused(lpBundle);
         }
-
-        lpPool->RemoveReference(static_cast<u32>(liListSlot));
-        return liUnloaded;
+        return liFreed;
     }
 }

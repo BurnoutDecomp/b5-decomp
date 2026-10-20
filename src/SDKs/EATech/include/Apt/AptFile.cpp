@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 // ===========================================================================
 // EATech Apt -- AptFile::~AptFile.   PS3 EXTERNAL @0x812AD4 (D2), 0x80CBBC (D1).
 //
@@ -46,10 +48,13 @@ AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;
 // AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to the
 // registered Apt free callback (PS3 (*dword_1071B1F4)(*(this+6))).
 // FLAG PC-platform leaf: the host free-callback boundary (gpAptFreeAnimationHook, installed by AptAux::ConstructApt).
-void AptFile_FreeLoadedBlock(void* pDataBlock)
+void AptFile_FreeLoadedBlock(void* pDataBlock, const AptFile* pFile)
 {
     if (gpAptFreeAnimationHook != nullptr)   // installed by CgsGui::AptAux::ConstructApt
         gpAptFreeAnimationHook(pDataBlock);
+    // The host resource can retire only after both native teardown operations.
+    const bool lbReleased = CgsResource::PCAptOwnership::Release(pFile);
+    CGS_ASSERT(lbReleased, "AptFile has no retained PC resource owner at FreeAnimation");
 }
 
 AptFile::~AptFile()
@@ -89,7 +94,7 @@ AptFile::~AptFile()
         AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
             reinterpret_cast<char*>(mpData) + KU_AptEmbeddedMovieOff);   // [c:] *(this+5) + 16
         pAnimation->Unresolve(reinterpret_cast<intptr_t>(mpResolveContext));
-        AptFile_FreeLoadedBlock(mpDataBlock);
+        AptFile_FreeLoadedBlock(mpDataBlock, this);
     }
 
     // 3. mFileName (the EAStringC member) is released by its destructor, which
