@@ -112,7 +112,7 @@ namespace CgsInput
         // into this member through its embedded InputPads object.
         void SetWheelSpring(const CgsInput::Device::WheelFFSpring& lrSpring);
 
-        // X360 0x823A5F38 (CgsInputPads.h:251) -- homed in CgsInputPads_GetDebugGamePad.cpp.
+        // X360 0x823A5F38 (CgsInputPads.h:251) -- homed with the other InputPads methods in CgsInputPads.cpp.
         // Returns the address of the liPortIndex-th physical pad record.
         DeviceX360Pad* GetDebugGamePad(s32 liPortIndex);
 
