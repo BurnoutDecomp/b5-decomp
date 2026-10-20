@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdarg>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -183,5 +184,33 @@ namespace CreateMatchTracePC
             luTick, State().miOptionsSubstate, luRound, static_cast<double>(lTime), static_cast<double>(lStoredTime),
             liUsed, liCompleted, lbInfoValid ? 1 : 0, lbWidthsReady ? 1 : 0);
     }
+    // FLAG PC diagnostic: one process-wide receipt per original Continue context.
+    // These functions only observe values passed after the existing positive branch.
+    inline void VehicleReady(s32 liState, s32 liType, bool lbChange, f32 lfCarousel,
+                              bool lbVoiceOver, u64 luCurrent, u64 luDropIn)
+    {
+        if (!Enabled())
+            return;
+        static std::atomic_flag sOnce = ATOMIC_FLAG_INIT;
+        if (sOnce.test_and_set(std::memory_order_relaxed))
+            return;
+        Emit("[create-match-trace] carselect vehicle-ready state=%d type=%d change=%d carousel=%.6f vo=%d current=%llu dropin=%llu\n",
+            liState, liType, lbChange ? 1 : 0, static_cast<double>(lfCarousel), lbVoiceOver ? 1 : 0,
+            static_cast<unsigned long long>(luCurrent), static_cast<unsigned long long>(luDropIn));
+    }
+
+    inline void LiveryReady(s32 liState, s32 liType, bool lbExiting, bool lbChange,
+                             u64 luCurrent, u64 luDropIn)
+    {
+        if (!Enabled())
+            return;
+        static std::atomic_flag sOnce = ATOMIC_FLAG_INIT;
+        if (sOnce.test_and_set(std::memory_order_relaxed))
+            return;
+        Emit("[create-match-trace] carselect livery-ready state=%d type=%d exiting=%d change=%d current=%llu dropin=%llu\n",
+            liState, liType, lbExiting ? 1 : 0, lbChange ? 1 : 0,
+            static_cast<unsigned long long>(luCurrent), static_cast<unsigned long long>(luDropIn));
+    }
+
 }
 }

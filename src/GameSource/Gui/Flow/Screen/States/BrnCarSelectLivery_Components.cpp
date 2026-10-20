@@ -19,6 +19,7 @@
 // group's real emptiness contract, and the console's own idiom.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: one readiness receipt per context
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
@@ -352,6 +353,11 @@ namespace BrnGui
             mHelpItemContinue.SetItem("$GENERAL_OPTION_CONTINUE",
                                       ButtonIconComponent::E_PADBUTTON_SELECT,
                                       ButtonIconComponent::E_PADBUTTON_INVISIBLE);
+            // FLAG PC diagnostic: Continue is enabled; retain the input handler's exit gate.
+            if (meCurrentState == E_CARSELECT_VISIBLE_INTERACTIVE && !mbExiting)
+                CreateMatchTracePC::LiveryReady(static_cast<s32>(meCurrentState),
+                    static_cast<s32>(meCarSelectType), mbExiting, mbCarChangeInProgress,
+                    mCurrentSetupInfo.mCarId, miMostRecentDropInId);
             // ⭐ THE CAROUSEL COUNT IS SHARED WITH THE SIBLING SCREEN. The X360 reads
             // dword_82FB4958 here, and that is the SAME global BrnGui::CarSelectVehicle's
             // HandleCarInfoResponseEvent writes (it is a linker-visible counter, not a
