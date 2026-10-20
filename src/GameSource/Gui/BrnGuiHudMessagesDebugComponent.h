@@ -36,6 +36,9 @@ namespace BrnGui
     struct GuiHudMessagesDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        // Actual C++ constructor inlined at ARTIST827E5D50.
+        GuiHudMessagesDebugComponent();
+
         void Construct(HudMessageDirector* lpMessageDirector);
         void Destruct();
 

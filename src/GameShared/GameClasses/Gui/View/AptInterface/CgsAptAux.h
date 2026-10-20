@@ -136,6 +136,10 @@ namespace CgsGui
         // AptCommunicator::UpdateAllComponents (the "UpdateAll" push to the movie AS).
         void UpdateComponents();
 
+        // DecFIGS CgsAptAux.h:426; ARTIST824F8484 inlines this existing
+        // communicator pointer through the actual view/AptAux owner chain.
+        AptCommunicator* GetAptCommunicatorInstance() { return mpAptCommunicator; }
+
         // X360 0x82853C28 (CgsGui::AptAux::UpdateFlashComponent) -- mirror one component
         // (key, value) pair into the communicator's key/value store. The X360 call sites
         // (GuiComponent::FillAptViewMessage @0x828583A8 and ViewModule::

@@ -78,6 +78,7 @@ namespace BrnGui
     struct FreeburnChallengeManager;
     struct BurnoutSkillsManager;   // GetBurnoutSkillsManager return (pointer only)
     struct OptionsDataProfile;     // GetOptionsDataProfile return (pointer only; home BrnCrashNavOptions.h family)
+    struct GuiCacheDebugComponent; // original state-loading status reader
     struct HudMessageAnalyzer;     // friend of GuiCache (reads the analyzer-carved snapshot members by name)
     struct HudMessageDirector;
     class  MapIconManager;         // [H3b] `class` is the canonical tag (BrnMapIconManager.h);
@@ -270,6 +271,9 @@ namespace BrnGui
         void AppendResourceInfo(u32 luIndex, CgsDev::StrStream& lStream);
 
     private:
+        // Original debug status helper snapshots and reads these actual rows.
+        friend struct GuiCacheDebugComponent;
+
         // X360 ARTIST value: 237 (the 0xED bound + 237-entry walk in EnsureResourceIsLoaded
         // @0x824FDA28 / EnsureResourcesAreLoaded @0x824FDD20 / IncrementUnloadPending
         // @0x824EC008, and the Array<int,237> dirty-list helpers). The PS3-FIGS DWARF says
@@ -1418,6 +1422,7 @@ namespace BrnGui
         // surface -- is the honest exposure. (HudMessageAnalyzer wave-C keystone.)
         friend class MapIconManager; // ARTIST map icon reads of landmark lists.
         friend struct HudMessageAnalyzer;
+        friend struct GuiCacheDebugComponent; // owns typed helper snapshot access
 
         // Same exposure rule for the online game-room screen (wave-H keystone): the
         // X360 inlines its raw loads/stores of the freeburn gate bytes (+0x4B57..5A),
