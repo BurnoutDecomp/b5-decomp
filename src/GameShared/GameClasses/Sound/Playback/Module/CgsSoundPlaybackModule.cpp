@@ -1129,7 +1129,6 @@ bool Module::DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMet
     lRequest.miEventId = static_cast<s32>(static_cast<u32>(luUserData));
     lRequest.miPoolId = mi32PoolId;
     lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(liHash)));
-    lRequest.mbCheckRefCount = false;
 
     CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
     return mpOutputBuffer->GetResourceRequestQueue().AddEvent(

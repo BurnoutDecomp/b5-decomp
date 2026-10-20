@@ -87,24 +87,7 @@ namespace CgsResource
         return 0;
     }
 
-    // NativePC returning helper retained for the resolved-options bring-up route. ARTIST's separate
-    // CreatePool method below returns void and uses formatted assertions plus the filtered diagnostic.
-    Pool* PoolModule::CreatePoolNativePC(const Pool::InitOptions* lpOptions)
-    {
-        CGS_ASSERT(lpOptions->miId >= 0, "Pool id is invalid");                    // CgsPoolModule.cpp:916
-        for (s32 li = 0; li < KI_MAX_POOLS; ++li)
-            CGS_ASSERT(maPools[li].GetId() != lpOptions->miId, "Pool id is already in use");  // :922
-        for (s32 li = 0; li < KI_MAX_POOLS; ++li)
-        {
-            if (maPools[li].GetId() == -1)
-            {
-                maPools[li].InitPool(lpOptions);
-                return &maPools[li];
-            }
-        }
-        CGS_ASSERT(false, "Failed to find free pool - increase max pools or get rid of some other ones!");  // :937
-        return 0;
-    }
+
 
     // ARTIST 0x82904B20. The original API returns void; a created Pool* is not part of the
     // caller contract. Assertions continue into the same slot search and filtered diagnostic.
@@ -355,8 +338,8 @@ namespace CgsResource
 
 
     }
-    // Current two-argument NativePC update adapter. It keeps the resolved event-zero request path,
-    // then advances the reconstructed state and live pools.
+    // The existing host update transport now drives the original typed request and
+    // receiver processors, then the same state machines and owned maPools sweep.
     bool PoolModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {
         PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
@@ -366,9 +349,9 @@ namespace CgsResource
             renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_REQUESTS);
             lpOut->LockForWrite();
             lpIn->LockForRead();
-            ProcessInputBufferNativePC(lpIn, lpOut);
+            ProcessInputBuffer(static_cast<const PoolIO::InputBuffer*>(lpIn), lpOut);
             lpIn->UnlockForRead();
-            ProcessReceiverQueueNativePC(lpOut);
+            ProcessReceiverQueue(lpOut);
             if (mProcessState == E_UPDATESTATE_IDLE)
             {
                 Events::AllocateResourceListRequest lRequest;
@@ -399,93 +382,11 @@ namespace CgsResource
         return mProcessState == E_UPDATESTATE_EMERGENCYFRAG;
     }
 
-    // NativePC receiver adapter. Its response queue behavior remains separate from the typed ARTIST
-    // receiver method below.
-    void PoolModule::ProcessReceiverQueueNativePC(void* /*lpOutputBuffer*/)
-    {
-        if (mReceiverQueue.GetCount() > 0)
-        {
-            const CgsModule::Event* lpEvent = 0;
-            s32 liSize = 0;
-            s32 liId = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            while (liId != -1 && lpEvent != 0)
-            {
-                if (liId == 10)        // CreatePool
-                    DoCreatePoolRequestNativePC(reinterpret_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent));
-                else if (liId == 13)   // DeletePool
-                    DoDeletePoolRequestNativePC(lpEvent);
-                else
-                    CGS_ASSERT(false, "Invalid Event Id.\n");
 
-                const CgsModule::Event* lpNext = 0;
-                liId = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
-                lpEvent = lpNext;
-            }
-        }
-        mReceiverQueue.Clear();
-    }
 
-    // NativePC resolved-options input adapter. It remains the event-zero consumer used by the current
-    // two-argument Update; original raw request dispatch is implemented separately below.
-    void PoolModule::ProcessInputBufferNativePC(void* lpInputBuffer, void* lpOutputBuffer)
-    {
-        PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
-        PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
-        const PoolIO::InputBuffer::PoolInputQueue* lpQ =
-            static_cast<const PoolIO::InputBuffer&>(*lpIn).GetPoolInputQueue();
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
-        while (liId != -1 && lpEvent != 0)
-        {
-            if (liId == 0)        // CreatePool
-            {
-                const CreatePoolRequestEvent* lpReq = reinterpret_cast<const CreatePoolRequestEvent*>(lpEvent);
-                SendCreatePoolMemoryRequestNativePC(lpReq->mOptions, lpReq->miBankId, lpReq->miParentBankId,
-                                            lpReq->mauRegion, lpReq->mauAlign, lpOut);
-            }
-            else if (liId == 4)   // AcquireResource
-            {
-                DoAcquireResourceRequest(reinterpret_cast<const Events::AcquireResourceRequest*>(lpEvent), lpOut);
-            }
-            else if (liId == 5)   // AcquireResourceList (the per-zone collision protocol)
-            {
-                DoAcquireResourceListRequest(
-                    reinterpret_cast<const Events::AcquireResourceListRequest*>(lpEvent), lpOut);
-            }
-            else if (liId == 16)
-            {
-                mPendingAllocationRequests.Push(reinterpret_cast<const Events::AllocateResourceListRequest*>(lpEvent));
-            }
-            else if (liId == 18)
-            {
-                DoFixUpAndResolveResourceListRequest(
-                    reinterpret_cast<const Events::FixUpAndResolveResourceListRequest*>(lpEvent), lpOut);
-            }
-            else if (liId == 20)
-            {
-                DoUnloadResourceListRequest(reinterpret_cast<const Events::UnloadResourceListRequest*>(lpEvent), lpOut);
-            }
-            const CgsModule::Event* lpNext = 0;
-            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent = lpNext;
-        }
-    }
 
-    // NativePC-only per-response helper. The original memory response routing remains owned by
-    // ResourceModule and is not activated by this resolved-options adapter.
-    void PoolModule::ProcessMemoryResponseNativePC(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse)
-    {
-        CGS_ASSERT(lpResponse != 0, "lpResponse");
-        if (lpResponse == 0)
-            return;
-        CgsModule::BaseEventReceiverQueue* lpReceiver = lpResponse->GetUser();
-        CGS_ASSERT(lpReceiver != 0, "memory response has no receiver queue");
-        if (lpReceiver != 0)
-            lpReceiver->AddEvent(reinterpret_cast<const CgsModule::Event*>(lpResponse), 10 /*CreatePool*/,
-                                 static_cast<s32>(sizeof(*lpResponse)));
-    }
+
 
     // Look up a created pool by id (null if absent).
     Pool* PoolModule::GetPool(s32 liPoolId)
@@ -516,8 +417,8 @@ namespace CgsResource
         Pool* lpPool = GetPool(lpRequest->miPoolId);
         if (lpPool != nullptr)
         {
-            s32 liIndex = -1;
-            Entry* lpEntry = lpPool->FindResource(lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+            // ARTIST828FCD88..C0 passes literal false and null; neither is request data.
+            Entry* lpEntry = lpPool->FindResource(lpRequest->mResourceId, false, 2, 0);
             if (lpEntry != 0)
             {
                 lResponse.mpResourceMemory = &lpEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
@@ -603,70 +504,9 @@ namespace CgsResource
                                                  static_cast<s32>(sizeof(lResponse)));
     }
 
-    // NativePC resolved-options transport. It preserves the existing separate options ring and explicit
-    // bank geometry; the original raw FIFO and output tag-10 path are implemented separately below.
-    void PoolModule::SendCreatePoolMemoryRequestNativePC(const Pool::InitOptions& lrOptions, s32 liBankId, s32 liParentBankId,
-                                                 const u32 lauRegion[3], const u32 lauAlign[3],
-                                                 PoolIO::OutputBuffer* lpPoolOutput)
-    {
-        CGS_ASSERT(lpPoolOutput != 0, "lpOutputBuffer");
-        CGS_ASSERT(miPendingCountNativePC < KI_MAX_PENDING_CREATE, "CreatePoolRequest FIFO overflow");
-        if (lpPoolOutput == 0 || miPendingCountNativePC >= KI_MAX_PENDING_CREATE)
-            return;
 
-        // Push the pending pool options (FIFO) so DoCreatePoolRequest can match the memory response.
-        maPendingCreateNativePC[miPendingTailNativePC] = lrOptions;
-        miPendingTailNativePC = (miPendingTailNativePC + 1) % KI_MAX_PENDING_CREATE;
-        ++miPendingCountNativePC;
 
-        // Build the CreateResource request describing the bank the MemoryModule must allocate. The reply
-        // target is this module's receiver queue: when the memory response returns, ProcessMemoryResponse
-        // routes it there (event 10) and ProcessReceiverQueue -> DoCreatePoolRequest stands the pool up.
-        CgsMemory::MemoryIO::CreateResourceRequest lRequest;
-        lRequest.Construct(&mReceiverQueue, lrOptions.miId);
-        lRequest.SetBankName(lrOptions.mpcName);
-        lRequest.SetBankId(liBankId);
-        lRequest.SetParentBankId(liParentBankId);
 
-        rw::ResourceDescriptor lDesc;                   // <4>; pool uses memory types 0..2 (type 3 unused)
-        for (s32 lt = 0; lt < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lt)
-        {
-            lDesc.m_baseResourceDescriptors[lt].m_size      = (lt < 3) ? lauRegion[lt] : 0u;
-            lDesc.m_baseResourceDescriptors[lt].m_alignment = (lt < 3) ? lauAlign[lt]  : 1u;
-        }
-        lRequest.SetDescriptor(&lDesc);
-
-        // Emit onto the pool module's resource-request output queue (the caller holds the write lock).
-        // Queue tag 10 (CreatePool) is the routing id ProcessPoolResourceRequests forwards on (distinct
-        // from the embedded request's meEventType=CREATE_RESOURCE, which the MemoryModule dispatches on).
-        lpPoolOutput->GetPoolResourceRequestQueue()->AddEvent(&lRequest, 10 /*CreatePool*/,
-                                                              static_cast<s32>(sizeof(lRequest)));
-    }
-
-    // NativePC response adapter: consumes the resolved-options ring and returns the pool pointer to GDM.
-    Pool* PoolModule::DoCreatePoolRequestNativePC(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse)
-    {
-        CGS_ASSERT(lpResponse != 0, "lpResponse");
-        CGS_ASSERT(miPendingCountNativePC > 0, "CreatePoolRequest FIFO underflow");
-        if (lpResponse == 0 || miPendingCountNativePC <= 0)
-            return 0;
-
-        // Pop the pending options (the X360 stores the raw request; we carry the resolved InitOptions).
-        Pool::InitOptions lOptions = maPendingCreateNativePC[miPendingHeadNativePC];
-        miPendingHeadNativePC = (miPendingHeadNativePC + 1) % KI_MAX_PENDING_CREATE;
-        --miPendingCountNativePC;
-
-        if (lpResponse->GetResult() != CgsMemory::MemoryIO::E_RESULT_OK)
-            return 0;
-
-        // Adopt the carved bank's per-type memory into the pool options (dense 0..2 runtime types -- the
-        // memory backend returns the bank GetData(type) in the same indices it was requested in).
-        const rw::Resource& lrResource = lpResponse->GetResource();
-        for (s32 lt = 0; lt < 3; ++lt)
-            lOptions.mResource.m_baseResources[lt] = lrResource.m_baseResources[lt];
-
-        return CreatePoolNativePC(&lOptions);
-    }
 
     // ARTIST 0x82906FD0. Dispatch each response with the output buffer that the completion
     // handlers use, then clear the queue after draining it. Invalid ids assert and continue.
@@ -698,8 +538,8 @@ namespace CgsResource
         mReceiverQueue.Clear();
     }
 
-    // ARTIST 0x82904E00. The current native adapter remains a separate method so its resolved
-    // event-zero payload cannot be mistaken for the original raw CreatePoolRequest.
+    // ARTIST 0x82904E00. One canonical raw-request dispatcher, including the
+    // original invalidate/validate pool tags11/12 and event-zero CreatePoolRequest.
     void PoolModule::ProcessInputBuffer(const PoolIO::InputBuffer* lpInputBuffer,
                                        PoolIO::OutputBuffer* lpOutputBuffer)
     {
@@ -766,6 +606,16 @@ namespace CgsResource
 
         rw::ResourceDescriptor lDescriptor;
         GetRequiredResourceDescriptor(lpRequest, &lDescriptor);
+        // FLAG PC-platform leaf: native-pointer management records use the exact
+        // shared layout that InitPool actually carves, rather than console byte
+        // constants. Heap budgets and RW0/2 lane ownership remain the request's.
+        Pool::InitOptions lHostOptions;
+        ConvertPoolRequestOptions(lpRequest, &lHostOptions);
+        lDescriptor.m_baseResourceDescriptors[0].m_size =
+            lHostOptions.maHeapInfo[0].muHeapMemorySize + Pool::GetOverheadMemoryRequired(&lHostOptions);
+        const u32 luManagementAlignment = Pool::GetOverheadMemoryAlignment(&lHostOptions);
+        if (lDescriptor.m_baseResourceDescriptors[0].m_alignment < luManagementAlignment)
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luManagementAlignment;
 
         // Value initialization preserves the original strncpy32 zero-padded bank-name tail.
         CgsMemory::MemoryIO::CreateResourceRequest lRequest = {};
@@ -778,8 +628,9 @@ namespace CgsResource
             &lRequest, 10, static_cast<s32>(sizeof(lRequest)));
     }
 
-    // ARTIST 0x82905000. The converter deliberately leaves miBankId unwritten: the original
-    // request-to-options path has no attested store for it. Its bank lifetime remains unresolved.
+    // ARTIST 0x82905000. The original conversion has no bank-id store. The current
+    // host InitPool consumes an explicit bank owner, supplied below from the same
+    // raw request whose memory allocation is completing; this is a PC adaptation.
     void PoolModule::DoCreatePoolRequest(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse,
                                          PoolIO::OutputBuffer* lpPoolOutput)
     {
@@ -800,6 +651,10 @@ namespace CgsResource
 
         Pool::InitOptions lOptions;
         ConvertPoolRequestOptions(&lPendingRequest, &lOptions);
+        // FLAG PC-platform leaf: retain the actual completed allocation's bank
+        // identity in the existing host InitPool provider. No default bank or
+        // alternate owner is synthesized; MemoryModule allocated this exact id.
+        lOptions.miBankId = lPendingRequest.miBankId;
         for (s32 li = 0; li < lOptions.miNumDependencies; ++li)
         {
             const s32 liDependencyId = lPendingRequest.maiDependencyIds[li];

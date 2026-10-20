@@ -282,7 +282,6 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
                 lRequest.mResourceId.SetHash(
                     static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
                         reinterpret_cast<const u8*>("Districts")))));   // untagged (high dword 0)
-                lRequest.mbCheckRefCount = false;
 
                 // The request interface's queue IS a VariableEventQueue<4096,16> (RequestQueue
                 // <4096> -> ResourceRequestQueue<4096> -> VariableEventQueue<4096,16>); the X360
@@ -669,7 +668,6 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             lRequest.mResourceId.SetHash(
                 static_cast<u64>( static_cast<u32>( CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>( "WorldVault" ) ) ) ) );
-            lRequest.mbCheckRefCount = false;
 
             lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(
                 &lRequest, 4 );

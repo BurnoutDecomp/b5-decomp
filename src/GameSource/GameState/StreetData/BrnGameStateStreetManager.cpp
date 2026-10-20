@@ -439,14 +439,10 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
             //      file -- LoadStreetData -- goes through the untagged AcquireResource builder,
             //      which is exactly why STREETDATA.DAT binds and the district map did not.
             //
-            //  (2) THE POST SIZE WAS THE CONSOLE'S LITERAL 24. On x64 the record is 32 bytes
-            //      (8-byte mpUser, 8-aligned CgsID at +0x10, mbCheckRefCount at +0x18), so a
-            //      24-byte copy stopped at the end of mResourceId and left mbCheckRefCount
-            //      reading whatever stale bytes the queue buffer held --
-            //      PoolModule::DoAcquireResourceRequest passes it straight into
-            //      FindResource's ref-count gate. Post sizeof(), the convention every committed
-            //      producer uses (the consumer reads the record BY NAME, so producer and
-            //      consumer agree by construction).
+            //  (2) RequestInterface posts sizeof(AcquireResourceRequest), keeping
+            //      the producer paired with the shared record. The canonical record
+            //      is 24 bytes here too: pointer widening consumes its header gap,
+            //      and the full 64-bit ID is its only payload after PoolEvent.
             //
             // The request is issued through the de-inlined builder the console folded in
             // (RequestInterface<3072>::AcquireResource -- same type 4, same four fields, and

@@ -1995,7 +1995,6 @@ bool EnvironmentManager::Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             lRequest.mResourceId.SetHash(
                 static_cast<u64>( static_cast<u32>( CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>( KAC_DEFAULT_COLOUR_CUBE_RESOURCE ) ) ) ) );
-            lRequest.mbCheckRefCount = false;   // the console leaves this stack byte unwritten
             lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(
                 &lRequest, KI_REQUEST_ACQUIRE_RESOURCE );
 
@@ -2113,7 +2112,6 @@ bool EnvironmentManager::Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             lRequest.mResourceId.SetHash(
                 static_cast<u64>( static_cast<u32>( CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>( lacResourceName ) ) ) ) );
-            lRequest.mbCheckRefCount = false;
             lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(
                 &lRequest, KI_REQUEST_ACQUIRE_RESOURCE );
 
@@ -2454,7 +2452,6 @@ bool EnvironmentManager::StreamIn( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             lRequest.mResourceId.SetHash(
                 static_cast<u64>( static_cast<u32>( CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>( lrSeason.macResourceName ) ) ) ) );
-            lRequest.mbCheckRefCount = false;
             lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(
                 &lRequest, KI_REQUEST_ACQUIRE_RESOURCE );
 

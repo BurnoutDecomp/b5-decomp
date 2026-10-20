@@ -347,10 +347,9 @@ namespace GameDataIO
     //          <32768>) --------
     // ASM (the inlined record build): rec[0] = lpUser (&the caller's receiver queue),
     // rec[1] = liEventId (0x91449 at the site), rec[2] = liPoolId (9),
-    // rec@+0x10 (qword) = CgsResource::ID::HashString(name) | (u64)poolId << 48;
-    // AddEvent(&rec, /*type*/4, /*X360 size*/24). FLAG: the id's packed top nibble equals
-    // the pool id at the one attested site. mbCheckRefCount lies outside the X360 24-byte
-    // record; set false here for PC determinism.
+    // rec@+0x10 (qword) = the zero-extended CgsResource::ID::HashString(name);
+    // AddEvent(&rec, /*type*/4, /*X360 size*/24). The pool id is a separate
+    // header field. DecFIGS314..339 attests only the trailing ID.
     template <s32 N>
     bool RequestInterface<N>::AcquireResource(
             CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
@@ -373,7 +372,6 @@ namespace GameDataIO
         lEvent.mResourceId.SetHash(
             static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
                 reinterpret_cast<const u8*>(lpcResourceName)))));
-        lEvent.mbCheckRefCount = false;
 
         return mRequestQueue.AddEvent(&lEvent, 4);
     }

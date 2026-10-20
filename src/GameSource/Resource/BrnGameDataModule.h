@@ -135,8 +135,10 @@ namespace BrnResource
         void ProcessUnloadGameDataEvent(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                         const GameDataIO::GameDataAssetEvent* lpEvent,
                                         s32 liSlotIndex);                              // 0x826733F8 (deferred body)
-        void ProcessSwapInCollisionWorldRequest();                                     // 0x826717A8 (deferred body)
-        void ProcessSwapOutCollisionWorldRequest();                                    // 0x82671530 (deferred body)
+        void ProcessSwapInCollisionWorldRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::SwapInCollisionWorldRequest* lpRequest); // ARTIST826717A8
+        void ProcessSwapOutCollisionWorldRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::SwapOutCollisionWorldRequest* lpRequest); // ARTIST82671530
 
         // Fetch (liSlotIndex >= 0) or allocate (liSlotIndex < 0) an event slot and capture
         // the request event into it.
@@ -464,6 +466,10 @@ namespace BrnResource
         CgsMemory::LinearMalloc             mAudioStreamAllocator;
         // X360 a1+439304 (dword 109826): outstanding allocator-create requests published to
         // the ResourceModule; the drain zeroes it once every response has been stored.
+        // ARTIST82671BF4/1C14 resets these original request-owner counters;
+        // DecFIGS h405/407 names the same bank/pool preparation phases.
+        s32                                 miNumBankCreationRequests;
+        s32                                 miNumPoolCreationRequests;
         s32                                 miNumAllocatorCreationRequests;
         // DWARF :303 sibling counter; its X360 updater is outside the CreateAllocators
         // pseudocode (FLAG: maintained here as the created-allocator total).
@@ -479,11 +485,11 @@ namespace BrnResource
         u32                            muLoadedSoundBundlesCount;
         // X360 a1+475936 -- the world-collision bundle ref count (++ on load complete
         // @0x82672630 case 32, -- on unload response id 45, ==1 gate in the validate
-        // swap-in @0x8266E858). FLAG role name (no DWARF/assert attestation).
-        s32                            miWorldCollisionRefCount;
+        // swap-in @0x8266E858). DecFIGS h433 attests the original name.
+        s32                            miCollisionWorldRefCount;
         // X360 a1+475940 -- cleared by ProcessInternalValidateResponse; FLAG role name
-        // (its setter lives in the deferred swap-in request path).
-        s32                            miWorldCollisionValidatePending;
+        // ARTIST swap-out sets this byte; the real validate response clears it.
+        bool                           mbCollisionWorldInvalidated;
         // ---- AttribSys service (THIS BATCH) ---------------------------------------------
         // X360 a1+395888: the attrib reply receiver -- the queue the vault-registration
         // legs name as the RegisterVault/UnregisterVault reply target; Update drains it

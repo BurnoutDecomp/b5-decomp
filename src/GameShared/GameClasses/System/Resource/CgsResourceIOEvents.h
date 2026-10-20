@@ -392,13 +392,16 @@ namespace Events
 
     // Acquire a single already-loaded resource by id from a pool (resource request id 4 -> pool input).
     // PoolModule::DoAcquireResourceRequest (X360 0x828FCD48) resolves it via Pool::FindResource and replies
-    // with an AcquireResourceResponse carrying the resolved handle. [X360 element size 24 on the 32-bit
-    // target; x64-widened here.]
+    // with an AcquireResourceResponse carrying the resolved handle. ARTIST828FCD94 reads the
+    // full ID at byte 16; DecFIGS314..339 declares no request tail. Both target and host
+    // records occupy 24 bytes: pointer widening consumes the old header alignment gap.
     struct AcquireResourceRequest : public PoolEvent
     {
-        ID   mResourceId;      // +16 (8-byte aligned) the resource to acquire
-        bool mbCheckRefCount;  // FindResource ref-count gate (X360 a2[4])
+        ID mResourceId;       // +16 (8-byte aligned), full 64-bit resource identity
     };
+    static_assert(sizeof(ID) == 8, "Resource identity must retain all 64 bits");
+    static_assert(sizeof(AcquireResourceRequest) == 24,
+        "Acquire request is PoolEvent plus one aligned 64-bit ID");
 
     // Acquire every resource of a named resource LIST (request id/type 5 -> pool input) into a
     // caller-owned handle array. DWARF CgsResourceIOEvents.h:410 {mListResourceId, mpHandles,

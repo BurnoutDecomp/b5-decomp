@@ -429,7 +429,7 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
 // pool packed into the top bits matches NOTHING and the request parks on the receiver queue for
 // ever. The case-2 record is therefore spelled through the committed
 // RequestInterface<N>::AcquireResource builder, which builds exactly that record (mpUser,
-// miEventId, miPoolId, untagged hashed id, mbCheckRefCount = false) and posts it with type 4.
+// miEventId, miPoolId and the untagged 64-bit resource id) and posts it with type 4.
 //
 // ⭐ THE REPLY IS READ BY MEMBER, NEVER AT THE CONSOLE'S LITERAL +0x18/+0x1C. The X360 does
 // `this[73970] = v9[6]; this[73971] = v9[7]`, i.e. the pair at payload +24/+28 -- which IS

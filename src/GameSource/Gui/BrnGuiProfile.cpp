@@ -1669,7 +1669,6 @@ s32 ProfileManager::LoadProfileUpgradeData(CgsGui::CgsGuiModuleIO::OutputBuffer*
                 static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>("PROFILEUPG")))) |
                 (static_cast<u64>(KI_PROFILEUPG_POOL_ID) << 32));
-            lRequest.mbCheckRefCount = false;
 
             lpOutputBuffer->GetGuiResourceRequestQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRequest),

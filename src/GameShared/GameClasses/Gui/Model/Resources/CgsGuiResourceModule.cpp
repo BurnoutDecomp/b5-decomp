@@ -398,9 +398,8 @@ namespace CgsGui
 
     // X360 0x8285E9A8. Post the acquire-by-id request (queue type 4; X360 payload 24): the
     // localised-text type (12) and nameless records carry their resource id directly;
-    // everything else hashes the type's templated name. mbCheckRefCount: the X360 record
-    // leaves the +0x0C..0x17 pad slots unwritten (the 24-byte AddEvent copies stack
-    // residue); the PC build zeroes the flag deterministically.
+    // everything else hashes the type's templated name. ARTIST8285EA90/A8 stores
+    // the full ID; the shared request contains no refcount-policy flag.
     void GuiResourceModule::RequestResource(GuiBundleToLoad& lrBundle, OutputBuffer* lpOutput)
     {
         CGS_ASSERT(lpOutput != 0, "Invalid output buffer in GuiResourceModule::RequestResource");
@@ -409,7 +408,6 @@ namespace CgsGui
         lRequest.mpUser         = &mReceiverQueue;
         lRequest.miEventId      = static_cast<s32>(lrBundle.muRequestId);
         lRequest.miPoolId       = lrBundle.miBundleBank;
-        lRequest.mbCheckRefCount = false;
 
         if (static_cast<s32>(lrBundle.meResourceType) == 12 || lrBundle.mpcBundleNameToLoad == 0)
         {

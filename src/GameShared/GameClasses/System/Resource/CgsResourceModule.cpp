@@ -155,7 +155,7 @@ namespace CgsResource
     // @ 0x82907268 - route inbound resource requests to the sub-module inputs. Pool-create slice: a
     // CreatePool request (id 0) is forwarded to the pool input queue. [The bundle/file/memory request
     // routes (ids 2/3/9..0xD) are deferred -- pool bring-up only sends CreatePool. X360 forwards size 172;
-    // we use the recorded event size so the x64-width CreatePoolRequestEvent copies whole.]
+    // we use the recorded event size so the native canonical CreatePoolRequest copies whole.]
     void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn, PoolIO::InputBuffer* lpPoolIn)
     {
         const ResourceIO::ResourceRequestQueue<16384>* lpQ =

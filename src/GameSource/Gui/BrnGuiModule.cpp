@@ -854,6 +854,8 @@ namespace BrnGui
         muFrameUpdateSet = 0;
         mEffectsArbitrator.Construct();
         mMovieManager.Construct();
+        // ARTIST82518B88 initializes the actual boot-movie owner byte.
+        mbBootMovieMode = true;
         // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
