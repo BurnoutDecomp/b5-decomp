@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 
 namespace CgsGraphics { class Im3dRenderBuffer; }
+namespace BrnGui { struct GuiDebugComponent; }
 
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h
@@ -208,6 +209,8 @@ namespace CgsGui
         void AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lrTypeface);
 
     protected:
+        // ARTIST8252A630..64C registers this actual shared-view bool by address.
+        friend struct BrnGui::GuiDebugComponent;
         bool mbUpdateFlash;
         f32 mfHack_LastValidTimeStep;
         f32 mfCurrentTime;

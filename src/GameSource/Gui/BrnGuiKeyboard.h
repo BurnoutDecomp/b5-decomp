@@ -18,8 +18,8 @@ namespace BrnGui
         void Update();
         bool IsShown() const;
 
-        // ARTIST824F5B00. The recovered body is held separately until the
-        // actual XShowKeyboardUI platform backend is available.
+        // ARTIST824F5B00. CP58 preserves the recovered body as an unmounted
+        // source proposal until the actual XShowKeyboardUI backend is available.
         bool Show(const CgsGui::CgsUtf16* lpDefaultText,
                   const CgsGui::CgsUtf16* lpTitleText,
                   const CgsGui::CgsUtf16* lpDescriptionText,
