@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Language/CgsSku.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-namespace CgsModule { class IOBufferStack; }
+namespace CgsModule { struct IOBufferStack; }
 namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
 namespace rw { class IResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 
