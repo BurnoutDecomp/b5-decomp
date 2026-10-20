@@ -95,6 +95,18 @@ namespace
     const f32 KF_DISTANCE_MESSAGE_OFFSET_METRES  = 100.0f;                                // flt_820049E0
     const f32 KF_NO_RACE_DISTANCE                = 3.4028234663852886e+38f;               // flt_82CDB9AC (FLT_MAX)
     const f32 KF_DISTANCE_MESSAGE_UNSET          = -1.0f;                                 // flt_820037C8
+
+    // X360 HUDMessageLogic's online Road Rage generators (0x82395218, 0x823953B0,
+    // 0x82395548). Values are confirmed by the named ARTIST loads and bounded x360rd reads.
+    const f32 KF_BLUE_TEAM_ESCAPE_MIN_GAP_METRES  = 400.0f;       // 0x8200889C
+    const f32 KF_BLUE_TEAM_ESCAPE_SECONDS        = 60.0f;        // 0x82004C6C
+    const f32 KF_BLUE_TEAM_BEHIND_GAP_METRES     = 15.0f;        // 0x8202AEC4
+    const f32 KF_BLUE_TEAM_BEHIND_SECONDS        = 8.0f;         // 0x82029F04
+    const f32 KF_METRES_PER_MILE                 = 1609.344f;    // 0x820DB5AC (0x44C92B02)
+    const f32 KF_METRES_PER_KILOMETRE            = 1000.0f;      // 0x82009E10
+    const f32 KF_BOUNDARY_STEP                   = 1.0f;         // 0x82001C98
+    const f32 KF_INITIAL_DISTANCE_BOUNDARY       = 5.0f;         // 0x8200426C (0x40A00000)
+    const s32 KI_NO_LEADER_RACE_POSITION         = 9999;
 }
 
 // ============================================================================
@@ -133,8 +145,8 @@ void HUDMessageLogic::Construct()
 // X360 0x82366478. Re-seeds the message edge-trackers so each notification fires once per mode.
 // Called by Construct and by PostWorldUpdate on every latched-mode change.
 //
-// The console writes twenty-five fields; the six below are every one of them that this file's
-// semantic-parity layout models, and each is X360-proven:
+// The console writes twenty-five fields. These six established manager/scorer trackers are
+// X360-proven; the four Road Rage words at +0x204..+0x210 are documented just below:
 //   *(a1+452) = 0.0   -> mfTimeInMode                (+0x1C4)
 //   *(a1+464) = -1    -> miScoreMessageRaceCarIndex  (+0x1D0)
 //   *(a1+476) = -1    -> meEliminationRaceCarIndex   (+0x1DC)
@@ -146,7 +158,8 @@ void HUDMessageLogic::Construct()
 // buffered-crash pool: 0x82366528..0x82366578 write its Clear image (free queue 7..0 at
 // +0x190..+0x1AC, count 8 at +0x1B0, occupancy 0 at +0x1B8) as Prepare's last stores
 // [FX-GS 2026-09-23, crash-parity G11-D2].
-// Still unmounted: +516/+520 (5.0), +524/+528 (0), +584 (-1), +568/+588 (0), +596 (0).
+// The Road Rage slice below restores +516/+520 (5.0) and +524/+528 (0). Still unmounted:
+// +584 (-1), +568/+588 (0), +596 (0).
 // (+532/+540, the times 1.5/7.5, and +592, -1.0, are mounted since FX-FLOW 2026-09-24: the
 // race-arm generators read them.)
 // Prepare deliberately leaves the two score-sample fields untouched, as in ARTIST.
@@ -167,6 +180,10 @@ void HUDMessageLogic::Prepare()
     miLastLeadingTeam          = 0;                                     // +0x1E0
     miLastVictoryTeam          = 0;                                     // +0x1E4
     mfLastTimeWarningAnnounced = -1.0f;                                 // +0x1E8
+    mfNextMileBoundaryForMessage = KF_INITIAL_DISTANCE_BOUNDARY;        // +0x204
+    mfNextKMBoundaryForMessage   = KF_INITIAL_DISTANCE_BOUNDARY;        // +0x208
+    mfBlueTeamIsAheadTime        = KF_ZERO_SECONDS;                     // +0x20C
+    mfBlueTeamIsBehindTime       = KF_ZERO_SECONDS;                     // +0x210
     // [FX-FLOW 2026-09-24] the race-arm generators' three members: `bl Time::SetFloatVal` on +0x214
     // with flt_82029F18 (@0x82366518) and on +0x21C with flt_82029F1C (@0x82366524);
     // `stfs f30(flt_820037C8), 0x250` @0x82366530.
@@ -198,10 +215,9 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
 //                   [sp+0x5C] mePlayerActiveRaceCarIndex, [sp+0x67] IsGameModeInProgress(mode))
 // (r4 iface, r5 mode, r6 ModeManager, r7 scoring, r8 crash queue, r9 vehicle interface,
 // r10 takedown queue, f1 delta; 0x8239D9A8..0x8239D9CC, `lwz r29, 0x10C(r1)` @0x8239DA40).
-// The seven carried here are the ones the reproduced arms read, so both of the console's head
+// The eight carried here are the ones the reproduced arms read, so both of the console's head
 // asserts stay verbatim rather than being dropped with the arguments they guard. Still dropped:
-// the ModeManager (only case 13 reads it), the VehicleOutputInterface (only the online-team tail)
-// and the in-progress byte (only case 11).
+// the ModeManager (only case 13 reads it) and the VehicleOutputInterface (only the online-team tail).
 //
 // REPRODUCED, statement for statement:
 //   CGS_ASSERT(a2, "lpActiveRaceCarInterface != NULL")  (BrnHUDMessageLogic.cpp:144)
@@ -211,17 +227,20 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
 //   switch (*(a1+448)) { case 0/10: GenerateRaceModeMessages(a1, a2, a5, a6, a8, [sp+0x5C], a9);
 //                        case 3: GenerateCriticalDamageMessage(a1, a2, a5); break;
 //                        case 7: GenerateStuntMessage(a1, a5); break;
+//                        case 11: GenerateOnlineBlueTeamEscapingMessage(a1, a5, a9, playerIndex);
+//                                 GenerateOnlineBlueTeamAreBehindYouMessage(a1, a5, a9, playerIndex);
+//                                 GenerateOnlineLeaderMilestoneMessage(a1, a5, a9, playerIndex, inProgress);
 //                        case 12/14/17: GenerateStuntMessage(a1, a5); ... break;
 //                        case 15: DetectOnlineCrashes(a1, a2, a6, a9);
 //                                 RemoveCrashingMessagesForTakendownPlayers(a1, a8); break; }
 // Note the switch tests the LATCHED member, not the incoming argument -- they differ only on the
 // frame the mode changes, and the console reads the member. Faithfully kept.
 // (case 3 added by the road-rage wave 2026-09-02: it reads only a2 and a5, both carried here.)
-// [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3] cases 0/10 (@0x8239DAB0, `bl` @0x8239DACC) and
-// 15 (@0x8239DB40, `bl` @0x8239DB50 / @0x8239DB5C) are reproduced; jump table 0x8239DA68.
+// [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3] cases 0/10 (@0x8239DAB0, `bl` @0x8239DACC),
+// 11 (@0x8239DAE8..0x8239DB24), and 15 (@0x8239DB40, `bl` @0x8239DB50 / @0x8239DB5C) are
+// reproduced; jump table 0x8239DA68.
 //
 // [X] NOT REPRODUCED, named rather than faked -- the other switch arms and the tail:
-//   case 11    GenerateOnlineBlueTeamEscapingMessage + ...AreBehindYouMessage + ...LeaderMilestone;
 //   case 12/14 (not 17) GenerateOnlineStuntRunVictoryMessages + ...LeadingMessages;
 //   case 12/14/17 GenerateOnlineStuntRunEliminationMessages + ...TimeMessages + ...ScoreMessages;
 //   case 13    GenerateBurningHomeRunMessages;
@@ -232,8 +251,8 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
 // player index carried since 2026-09-23 and are still unwired (online-only; not part of the
 // crash-message fix). Behaviour cost on an OFFLINE stunt race -- the mode that leg exists for --
 // is zero: case 7 is the whole of its arm.
-// DELETE-WHEN the console's full argument set is reachable (a real PostWorldInputBuffer exists and
-// ModeManager::PostWorldUpdate becomes the live caller again).
+// Remaining call-path gaps are case 13 (needs ModeManager) and the online team-change tail (needs
+// VehicleOutputInterface); this recovery carries the existing mode-progress byte for case 11.
 void HUDMessageLogic::PostWorldUpdate(
     const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
     GameStateModuleIO::EGameModeType leGameModeType,
@@ -241,7 +260,8 @@ void HUDMessageLogic::PostWorldUpdate(
     const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
     const InputBuffer::TakedownEventQueue* lpTakedownQueue,
     f32 lfDelta,
-    EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
+    EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+    bool lbIsGameModeInProgress)
 {
     CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
     CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
@@ -264,6 +284,13 @@ void HUDMessageLogic::PostWorldUpdate(
 
         case GameStateModuleIO::E_MODE_ROAD_RAGE:           // case 3
             GenerateCriticalDamageMessage(lpActiveRaceCarInterface, lpScoringSystem);
+            break;
+
+        case GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE:    // case 11
+            GenerateOnlineBlueTeamEscapingMessage(lpScoringSystem, lfDelta, lePlayerActiveRaceCarIndex);
+            GenerateOnlineBlueTeamAreBehindYouMessage(lpScoringSystem, lfDelta, lePlayerActiveRaceCarIndex);
+            GenerateOnlineLeaderMilestoneMessage(lpScoringSystem, lfDelta, lePlayerActiveRaceCarIndex,
+                                                 lbIsGameModeInProgress);
             break;
 
         case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:  // case 15
@@ -1108,6 +1135,246 @@ void HUDMessageLogic::GenerateOnlineStuntRunScoreMessages(ScoringSystem* lpScori
     }
 
     miScoreMessageRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);
+}
+
+// X360 0x82395218. When the local player is team 1, accumulate time while at least one
+// non-eliminated team-2 car exists and every such car is more than 400 m ahead. After the
+// accumulator exceeds 60 s, post the original one-byte action 162 and reset the accumulator.
+void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
+    ScoringSystem* lpScoringSystem,
+    f32 lfDelta,
+    EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
+{
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+
+    if (lpScoringSystem->GetNumberOfActiveCars() > 0)
+    {
+        const f32 lfPlayerDistanceToFinish =
+            lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerActiveRaceCarIndex);
+        if (lpScoringSystem->GetPlayerTeam(lePlayerActiveRaceCarIndex) ==
+            GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM)
+        {
+            bool lbFoundBlueTeamCar = false;
+            bool lbFoundBlueCarNotMoreThan400MetresAhead = false;
+            s32 liActiveRaceCarIndex = 0;
+            while (liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            {
+                const EActiveRaceCarIndex leCandidateIndex =
+                    static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
+                const f32 lfCandidateDistanceToFinish =
+                    lpScoringSystem->GetRaceCarDistanceToFinish(leCandidateIndex);
+                const CarData* lpCandidateCarData =
+                    static_cast<const ScoringSystem*>(lpScoringSystem)->GetCarData(leCandidateIndex);
+
+                if (!lpCandidateCarData->GetScoreData()->GetEliminated() &&
+                    lpScoringSystem->GetPlayerTeam(leCandidateIndex) ==
+                        GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+                {
+                    lbFoundBlueTeamCar = true;
+                    // ARTIST uses fcmpu + bge: include unordered values by spelling this as
+                    // "not less" rather than C++ >= (which is false for NaN).
+                    if (!((lfCandidateDistanceToFinish + KF_BLUE_TEAM_ESCAPE_MIN_GAP_METRES) <
+                          lfPlayerDistanceToFinish))
+                    {
+                        lbFoundBlueCarNotMoreThan400MetresAhead = true;
+                        break;
+                    }
+                }
+
+                ++liActiveRaceCarIndex;
+                if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
+                {
+                    CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                }
+            }
+
+            if (lbFoundBlueTeamCar && !lbFoundBlueCarNotMoreThan400MetresAhead)
+            {
+                mfBlueTeamIsAheadTime += lfDelta;
+            }
+            else
+            {
+                mfBlueTeamIsAheadTime = KF_ZERO_SECONDS;
+            }
+
+            // ARTIST uses fcmpu + ble-to-skip; an unordered timer falls through and posts.
+            if (!(mfBlueTeamIsAheadTime <= KF_BLUE_TEAM_ESCAPE_SECONDS))
+            {
+                GameStateModuleIO::BlueTeamIsEscapingAction lAction;
+                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_ESCAPING,
+                                      sizeof(lAction));
+                mfBlueTeamIsAheadTime = KF_ZERO_SECONDS;
+            }
+        }
+    }
+}
+
+// X360 0x823953B0. When the local player is team 1, accumulate time while at least one
+// non-eliminated non-team-1 car exists and every such car is at least 15 m farther behind.
+// After the accumulator exceeds 8 s, post the original one-byte action 163 and reset it.
+void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
+    ScoringSystem* lpScoringSystem,
+    f32 lfDelta,
+    EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
+{
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+
+    if (lpScoringSystem->GetNumberOfActiveCars() > 0)
+    {
+        const f32 lfPlayerDistanceToFinish =
+            lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerActiveRaceCarIndex);
+        if (lpScoringSystem->GetPlayerTeam(lePlayerActiveRaceCarIndex) ==
+            GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM)
+        {
+            bool lbFoundOtherTeamCar = false;
+            bool lbFoundOtherTeamCarNotMoreThan15MetresBehind = false;
+            s32 liActiveRaceCarIndex = 0;
+            while (liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            {
+                const EActiveRaceCarIndex leCandidateIndex =
+                    static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
+                const f32 lfCandidateDistanceToFinish =
+                    lpScoringSystem->GetRaceCarDistanceToFinish(leCandidateIndex);
+                const CarData* lpCandidateCarData =
+                    static_cast<const ScoringSystem*>(lpScoringSystem)->GetCarData(leCandidateIndex);
+
+                if (!lpCandidateCarData->GetScoreData()->GetEliminated() &&
+                    lpScoringSystem->GetPlayerTeam(leCandidateIndex) !=
+                        GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM)
+                {
+                    lbFoundOtherTeamCar = true;
+                    if (lfCandidateDistanceToFinish <
+                        (lfPlayerDistanceToFinish + KF_BLUE_TEAM_BEHIND_GAP_METRES))
+                    {
+                        lbFoundOtherTeamCarNotMoreThan15MetresBehind = true;
+                        break;
+                    }
+                }
+
+                ++liActiveRaceCarIndex;
+                if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
+                {
+                    CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                }
+            }
+
+            if (lbFoundOtherTeamCar && !lbFoundOtherTeamCarNotMoreThan15MetresBehind)
+            {
+                mfBlueTeamIsBehindTime += lfDelta;
+            }
+            else
+            {
+                mfBlueTeamIsBehindTime = KF_ZERO_SECONDS;
+            }
+
+            // ARTIST uses fcmpu + ble-to-skip; an unordered timer falls through and posts.
+            if (!(mfBlueTeamIsBehindTime <= KF_BLUE_TEAM_BEHIND_SECONDS))
+            {
+                GameStateModuleIO::BlueTeamIsBehindYouAction lAction;
+                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_BEHIND_YOU,
+                                      sizeof(lAction));
+                mfBlueTeamIsBehindTime = KF_ZERO_SECONDS;
+            }
+        }
+    }
+}
+
+// X360 0x82395548. Select the lowest race-position, non-eliminated team-1 car. Each time it
+// crosses the next mile or kilometre boundary, consume that boundary; post action 164 only while
+// the mode is in progress. Prepare seeds each boundary to 5, and the console decrements even when
+// the mode-progress byte suppresses the action.
+void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
+    ScoringSystem* lpScoringSystem,
+    f32,
+    EActiveRaceCarIndex,
+    bool lbIsGameModeInProgress)
+{
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+
+    s32 liBestRacePosition = KI_NO_LEADER_RACE_POSITION;
+    EActiveRaceCarIndex leLeadingTeamCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+    if (lpScoringSystem->GetNumberOfActiveCars() > 0)
+    {
+        s32 liActiveRaceCarIndex = 0;
+        while (liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)
+        {
+            const EActiveRaceCarIndex leCandidateIndex =
+                static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
+            CGS_ASSERT((leCandidateIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leCandidateIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            const CarData* lpCandidateCarData = lpScoringSystem->GetCarData(leCandidateIndex);
+            s32 liCandidateRacePosition = 8;
+            if (lpCandidateCarData != NULL)
+            {
+                liCandidateRacePosition = lpCandidateCarData->GetScoreData()->GetRacePosition();
+            }
+
+            const CarData* lpCandidateStatusCarData =
+                static_cast<const ScoringSystem*>(lpScoringSystem)->GetCarData(leCandidateIndex);
+            if (!lpCandidateStatusCarData->GetScoreData()->GetEliminated())
+            {
+                const GameStateModuleIO::EPlayerTeam leCandidateTeam =
+                    lpScoringSystem->GetPlayerTeam(leCandidateIndex);
+                if (leCandidateTeam == GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM &&
+                    lpScoringSystem->GetPlayerTeam(leCandidateIndex) !=
+                        GameStateModuleIO::E_PLAYER_TEAM_NONE &&
+                    liCandidateRacePosition < liBestRacePosition)
+                {
+                    liBestRacePosition = liCandidateRacePosition;
+                    leLeadingTeamCarIndex = leCandidateIndex;
+                }
+            }
+
+            ++liActiveRaceCarIndex;
+            if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            {
+                CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            }
+        }
+
+        if (leLeadingTeamCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            const f32 lfLeaderDistanceToFinish =
+                lpScoringSystem->GetRaceCarDistanceToFinish(leLeadingTeamCarIndex);
+
+            const f32 lfNextMileBoundaryMetres = mfNextMileBoundaryForMessage * KF_METRES_PER_MILE;
+            if (lfLeaderDistanceToFinish < lfNextMileBoundaryMetres)
+            {
+                if (lbIsGameModeInProgress)
+                {
+                    GameStateModuleIO::LeaderReachedBoundaryAction lAction;
+                    lAction.mfDistanceInMetres = lfNextMileBoundaryMetres;
+                    lAction.meRaceCarIndex = leLeadingTeamCarIndex;
+                    lAction.mbIsBoundaryInMiles = true;
+                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY,
+                                          sizeof(lAction));
+                }
+                mfNextMileBoundaryForMessage -= KF_BOUNDARY_STEP;
+            }
+
+            const f32 lfNextKMBoundaryMetres =
+                mfNextKMBoundaryForMessage * KF_METRES_PER_KILOMETRE;
+            if (lfLeaderDistanceToFinish < lfNextKMBoundaryMetres)
+            {
+                if (lbIsGameModeInProgress)
+                {
+                    GameStateModuleIO::LeaderReachedBoundaryAction lAction;
+                    lAction.mfDistanceInMetres = lfNextKMBoundaryMetres;
+                    lAction.meRaceCarIndex = leLeadingTeamCarIndex;
+                    lAction.mbIsBoundaryInMiles = false;
+                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY,
+                                          sizeof(lAction));
+                }
+                mfNextKMBoundaryForMessage -= KF_BOUNDARY_STEP;
+            }
+        }
+    }
 }
 
 // Announce the team changes OnlineTeamChange recorded: for each car whose flag is set, while

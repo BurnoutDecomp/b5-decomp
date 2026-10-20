@@ -1066,15 +1066,17 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
     }
 
     // The HUD message pump, every post-world tick, mode or not. It is also the one consumer of the
-    // stunt scorer's mbRecentStunt latch armed by the fork above. The console passes ten
-    // arguments; the body takes the seven it reads (see BrnHUDMessageLogic.cpp for the rest).
+    // stunt scorer's mbRecentStunt latch armed by the fork above. ARTIST's case-11 leader-boundary
+    // producer additionally reads the current mode-progress byte, passed at this same call site.
+    const bool lbIsGameModeInProgress = IsGameModeInProgress(mpCurrentGameMode);
     mHUDMessageLogic.PostWorldUpdate(lpActiveRaceCarOutput,
                                      meCurrentGameModeType,
                                      &mScoringSystem,
                                      lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
                                      lpTakedownQueue,
                                      lfDelta,
-                                     mePlayerActiveRaceCarIndex);
+                                     mePlayerActiveRaceCarIndex,
+                                     lbIsGameModeInProgress);
 
     // `lbzx 0x94F5 -> stbx 0x94F6`: the mode-start-region edge detector's one-frame history. This
     // is the ONLY writer of mbLastInModeStartRegion, and it runs every post-world tick, mode or not.

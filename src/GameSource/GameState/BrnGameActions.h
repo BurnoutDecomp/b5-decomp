@@ -985,6 +985,12 @@ enum EGameActionType
     //   166 `li r5,0xA6` + `li r6,4` @0x8234432C/0x82344324  a same-team takedown in mode 12/14/17
     //   165 `li r5,0xA5` + `li r6,8` @0x823443B8/0x823443B0  mode 11, team 1 takes down team 2
     //   167 `li r5,0xA7` + `li r6,4` @0x82344370/0x8234436C  mode 13, team 1 takes down team 2
+    // [Road Rage GUI producer recovery, 2026-10-20] DecFIGS BrnGameActions.h:475/3216/3229/3272
+    // gives DWARF ids 154..156. ARTIST's HUDMessageLogic methods post X360 ids 162..164
+    // (the +8 shift) with sizes 1, 1 and 12 respectively.
+    E_ACTION_BLUE_TEAM_IS_ESCAPING                        = 162,  // DWARF 154 (+8 X360); size 1
+    E_ACTION_BLUE_TEAM_IS_BEHIND_YOU                      = 163,  // DWARF 155 (+8 X360); size 1
+    E_ACTION_LEADER_REACHED_BOUNDARY                      = 164,  // DWARF 156 (+8 X360); size 12
     E_ACTION_PLAYER_ELIMINATED                           = 165,  // DWARF 157 (+8 X360); size 8  BAND
     E_ACTION_TRAITOROUS_TAKEDOWN                         = 166,  // DWARF 158 (+8 X360); size 4  BAND
     E_ACTION_SWITCH_BURNING_HOME_RUN_RUNNER              = 167,  // DWARF 159 (+8 X360); size 4  BAND
@@ -3540,6 +3546,33 @@ struct TraitorousTakedownAction : public GameAction<E_ACTION_TRAITOROUS_TAKEDOWN
     ::EActiveRaceCarIndex meAggrActiveRaceCarIndex;   // +0x00
 };
 static_assert(sizeof(TraitorousTakedownAction) == 4, "X360 posts action 166 with size 4");
+
+// ARTIST HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage / ::GenerateOnlineBlueTeamAreBehindYouMessage
+// post only an unwritten byte (AddEvent ids 162/163, size 1). The action type itself carries the meaning.
+struct BlueTeamIsEscapingAction : public GameAction<E_ACTION_BLUE_TEAM_IS_ESCAPING>
+{
+};
+static_assert(sizeof(BlueTeamIsEscapingAction) == 1, "X360 posts action 162 with size 1");
+
+struct BlueTeamIsBehindYouAction : public GameAction<E_ACTION_BLUE_TEAM_IS_BEHIND_YOU>
+{
+};
+static_assert(sizeof(BlueTeamIsBehindYouAction) == 1, "X360 posts action 163 with size 1");
+
+// DecFIGS BrnGameActions.h:3272-3276 names the fields. ARTIST
+// GenerateOnlineLeaderMilestoneMessage @0x82395548 writes the X360 order
+// {metres f32 @+0, active-car index @+4, miles bool @+8}, then posts 164/12 bytes.
+struct LeaderReachedBoundaryAction : public GameAction<E_ACTION_LEADER_REACHED_BOUNDARY>
+{
+    f32                   mfDistanceInMetres;   // +0x00 (ARTIST)
+    ::EActiveRaceCarIndex meRaceCarIndex;       // +0x04 (ARTIST)
+    bool                  mbIsBoundaryInMiles;  // +0x08 (ARTIST)
+};
+static_assert(sizeof(LeaderReachedBoundaryAction) == 12 &&
+              offsetof(LeaderReachedBoundaryAction, mfDistanceInMetres) == 0 &&
+              offsetof(LeaderReachedBoundaryAction, meRaceCarIndex) == 4 &&
+              offsetof(LeaderReachedBoundaryAction, mbIsBoundaryInMiles) == 8,
+              "ARTIST action 164 producer record: f32, race-car index, bool");
 
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:5417-5419. Producer
 // HandleOnlineTeamTakedowns: `stw GetNetworkPlayerID(aggressor), var+0` @0x82344368, size 4.

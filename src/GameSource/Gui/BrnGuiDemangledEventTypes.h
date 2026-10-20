@@ -16,6 +16,7 @@
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"   // GuiPFXHookEvent / ...StopEvent / ...Background... / GuiPFXHookEnumeration (495..501, RECOVERED 2026-09-17)
 #include "GameSource/Gui/Events/BrnGuiEventSetBlackBars.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
+#include "SharedClasses/World/BrnWorldRegion.h"   // BrnWorld::ECounty (rival response)
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"  // BrnTraffic::VehicleClass / VehicleScoreCategory (GuiHitVehicleEvent)
 #include "GameSource/BurnoutConstants.h"                  // EActiveRaceCarIndex (GuiShowtimeScoreUpdate)
@@ -343,8 +344,45 @@ namespace BrnGui
         s32 GetEventType() const { return 493; }
     };
     struct GuiEventReturnDistrict { u8 maData[8]; s32 GetEventType() const { return 196; } };  // id 196 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiEventRivalInfoResponse : public CgsGui::GuiEvent<444> { u8 maPayload[20]; };  // id 444 size 32 (12B GuiEvent header + opaque payload)
-    struct GuiEventRivalryFullInfoResponse : public CgsGui::GuiEvent<442> { u8 maPayload[676]; };  // id 442 size 688 (12B GuiEvent header + opaque payload)
+
+    // Rivalry response records are plain X360 wire records, not 12-byte CgsGui::GuiEvent headers.
+    // ARTIST case 189 writes the first CgsID at byte 0 and AddGuiEvent<GuiEventRivalInfoResponse>
+    // posts the whole 32-byte record as (GUI id 444, size 32).
+    struct GuiEventRivalInfoResponse : public CgsModule::Event
+    {
+        CgsID             mRivalId;          // +0x00 (`ld` from action +0x00)
+        CgsID             mCarId;            // +0x08 (`ld` from action +0x08)
+        BrnWorld::ECounty meCountyIndex;     // +0x10 (`lwz` from action +0x10)
+        s32               miRaceWins;        // +0x14 (`lwz` from action +0x14)
+        s8                miProgressStatus;  // +0x18 (`lbz` from action +0x18)
+
+        s32 GetEventType() const { return 444; }
+    };
+    static_assert(sizeof(GuiEventRivalInfoResponse) == 32, "ARTIST AddGuiEvent id 444 size 32");
+    static_assert(offsetof(GuiEventRivalInfoResponse, mRivalId) == 0x00, "id 444 rival id @+0x00");
+    static_assert(offsetof(GuiEventRivalInfoResponse, mCarId) == 0x08, "id 444 car id @+0x08");
+    static_assert(offsetof(GuiEventRivalInfoResponse, meCountyIndex) == 0x10, "id 444 county @+0x10");
+    static_assert(offsetof(GuiEventRivalInfoResponse, miRaceWins) == 0x14, "id 444 race wins @+0x14");
+    static_assert(offsetof(GuiEventRivalInfoResponse, miProgressStatus) == 0x18, "id 444 progress @+0x18");
+
+    // ARTIST case 188 sets this cap with the count assert and then still loops the supplied count.
+    // DecFIGS names KI_MAX_NUM_RIVALS_IN_EVENT; the X360 writes pin the wire offsets and types.
+    struct GuiEventRivalryFullInfoResponse : public CgsModule::Event
+    {
+        static const s32 KI_MAX_NUM_RIVALS_IN_EVENT = 34;
+
+        CgsID maRivalIds[KI_MAX_NUM_RIVALS_IN_EVENT];          // +0x000, 34 x 8
+        CgsID maRivalCarIds[KI_MAX_NUM_RIVALS_IN_EVENT];       // +0x110, 34 x 8
+        s32   miRivalsReturned;                                // +0x220
+        s32   maRivalryStatus[KI_MAX_NUM_RIVALS_IN_EVENT];     // +0x224, 34 x 4
+
+        s32 GetEventType() const { return 442; }
+    };
+    static_assert(sizeof(GuiEventRivalryFullInfoResponse) == 688, "ARTIST AddGuiEvent id 442 size 688");
+    static_assert(offsetof(GuiEventRivalryFullInfoResponse, maRivalIds) == 0x000, "id 442 rival ids @+0x000");
+    static_assert(offsetof(GuiEventRivalryFullInfoResponse, maRivalCarIds) == 0x110, "id 442 car ids @+0x110");
+    static_assert(offsetof(GuiEventRivalryFullInfoResponse, miRivalsReturned) == 0x220, "id 442 count @+0x220");
+    static_assert(offsetof(GuiEventRivalryFullInfoResponse, maRivalryStatus) == 0x224, "id 442 statuses @+0x224");
     struct GuiEventRoadRagePlayerDamage { u8 maData[8]; s32 GetEventType() const { return 348; } };  // id 348 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRageTimeExtended { u8 maData[4]; s32 GetEventType() const { return 427; } };  // id 427 size 4 (raw; size not GuiEvent-shaped)
     // [road-rules GUI wave 2026-09-25] GuiEventRoadRuleBatchDataResponse (344),

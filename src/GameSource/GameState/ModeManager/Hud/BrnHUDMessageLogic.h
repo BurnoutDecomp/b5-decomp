@@ -176,7 +176,8 @@ public:
                          const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
                          const InputBuffer::TakedownEventQueue* lpTakedownQueue,
                          f32 lfDelta,
-                         EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
+                         EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+                         bool lbIsGameModeInProgress);
 
     // X360 0x82399C78 (DWARF BrnHUDMessageLogic.h:128). The race arm of PostWorldUpdate (modes 0 and
     // 10): the leader / finisher / checkpoint / crash / first-or-last / distance messages, in that
@@ -267,6 +268,18 @@ public:
                                           EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
 private:
+    // X360 PostWorldUpdate case 11 calls these three generators in this order.
+    void GenerateOnlineBlueTeamEscapingMessage(ScoringSystem* lpScoringSystem,
+                                               f32 lfDelta,
+                                               EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
+    void GenerateOnlineBlueTeamAreBehindYouMessage(ScoringSystem* lpScoringSystem,
+                                                   f32 lfDelta,
+                                                   EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
+    void GenerateOnlineLeaderMilestoneMessage(ScoringSystem* lpScoringSystem,
+                                              f32 lfDelta,
+                                              EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+                                              bool lbIsGameModeInProgress);
+
     friend class ModeManager; // ARTIST inlined finish/checkpoint notification setters.
     // ===== data members (semantic-parity order; see LAYOUT NOTE above) =====
     // The action queue is the first member (object offset 0): the X360 passes `this`
@@ -316,6 +329,14 @@ private:
     CgsID mNextPlayerCheckpointID;    // ARTIST +504
     bool mbIsLastCheckpoint;         // ARTIST +512
     bool mbPlayerHasJustTriggeredCheckpoint; // ARTIST +513
+
+    // DecFIGS BrnHUDMessageLogic.h:284-287; ARTIST Prepare and the three online Road Rage
+    // generators pin these four words at +0x204..+0x210. They fill the gap before the two Time fields.
+    f32 mfNextMileBoundaryForMessage; // +516 / +0x204
+    f32 mfNextKMBoundaryForMessage;   // +520 / +0x208
+    f32 mfBlueTeamIsAheadTime;        // +524 / +0x20C
+    f32 mfBlueTeamIsBehindTime;       // +528 / +0x210
+
     // [FX-FLOW 2026-09-24] GenerateFirstOrLastMessage's two debounce clocks (DWARF :288/:289): the
     // time since the lead / last place last changed hands. X360 +0x214 / +0x21C (`addi r3, r27,
     // 0x214` @0x823957E8, `addi r3, r27, 0x21C` @0x8239593C); Prepare seeds them to the thresholds
