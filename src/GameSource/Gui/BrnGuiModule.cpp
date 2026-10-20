@@ -1069,6 +1069,13 @@ namespace BrnGui
         mHudMessageAnalyzer.Construct(&mHudMessageDirector);
         mOverlaysDirector.Construct(&mGuiModel);
 
+        // ARTIST825187D8..82518818: actual debug subobjects, after their real director owner.
+        // Their C++ constructors installed only vtables/queue flags; this is their data phase.
+        mDebugComponent.Construct(this);
+        mHudMessageDebugComponent.Construct(&mHudMessageDirector);
+        mSatNavDebugComponent.Construct(this);
+        mGuiCacheDebugComponent.Construct(this);
+
         // ⭐ [gateui r4] THE CONTROLLER HAND-OFF -- the missing writer of
         // GuiCache::mpHudMessageController. X360 GuiModule::Construct @0x82518028
         // pseudocode lines 362-368, IMMEDIATELY before the director store:
@@ -1797,10 +1804,26 @@ namespace BrnGui
         return true;
     }
 
+    // Native primary Prepare82519218..54 only. This original registration block is
+    // deliberately not called by the selected no-arg PC Prepare/Update path.
+    void GuiModule::PrepareNativeDebugComponents()
+    {
+        mDebugComponent.Register();
+        mHudMessageDebugComponent.Register();
+        mSatNavDebugComponent.Register();
+        mGuiCacheDebugComponent.Register();
+        mEventReceiverQueue.Clear();
+    }
+
 void GuiModule::Destruct()
     {
         mbRenderInputCompletedPC = false;
         mMovieManager.Destruct();
+        // ARTIST825076D0..825077A4: four actual derived teardown owners, original order.
+        mDebugComponent.Destruct();
+        mHudMessageDebugComponent.Destruct();
+        mSatNavDebugComponent.Destruct();
+        mGuiCacheDebugComponent.Destruct();
         // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
         // sub-object destruct, immediately before the base CgsGui::GuiModule::Destruct.
         // ARTIST825077D0/D4: retain the original host/profile pointer teardown.

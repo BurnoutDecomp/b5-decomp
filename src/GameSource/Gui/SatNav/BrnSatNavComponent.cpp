@@ -34,15 +34,17 @@
 namespace BrnGui
 {
 
+// BrnSatNav.cpp:36..40; original non-const shared words, also edited by
+// SatNavDebugComponent. ARTIST static initializers82C51FE0/1FF8 copy the
+// distance pair into distinct BSS lerp words82FB3110/18 before game use.
+f32 KF_CAR_MAX_MPH = 120.0f;       // ARTIST82F258E4
+f32 KF_MIN_VIEW_DIST = 375.0f;     // ARTIST82F259CC
+f32 KF_MAX_VIEW_DIST = 630.0f;     // ARTIST82F259D0
+f32 KF_MIN_VIEW_LERP = KF_MIN_VIEW_DIST;
+f32 KF_MAX_VIEW_LERP = KF_MAX_VIEW_DIST;
+
 namespace
 {
-    // BrnSatNav.cpp:36..:40 (DWARF) -- the view-distance band. KF_MIN/MAX_VIEW_LERP
-    // are X360 runtime statics COPIED from the dist pair by the 0x82C51FE0/0x82C51FF8
-    // init thunks (h3_dump3.txt), so the four collapse to two values here.
-    const f32 KF_CAR_MAX_MPH   = 120.0f;   // .rdata 0x82F258E4
-    const f32 KF_MIN_VIEW_DIST = 375.0f;   // .rdata 0x82F259CC (== KF_MIN_VIEW_LERP @0x82FB3110)
-    const f32 KF_MAX_VIEW_DIST = 630.0f;   // .rdata 0x82F259D0 (== KF_MAX_VIEW_LERP @0x82FB3118)
-
     // The per-zoom-level view-distance scale (X360 .rdata table @0x82F259D4, indexed
     // by the cache's miSatNavZoomLevel 0..1).
     const f32 KAF_ZOOM_VIEW_SCALE[2] = { 1.0f, 2.5f };
@@ -175,21 +177,23 @@ void SatNavComponent::LoadResources()
 }
 
 // @ 0x82447C00 -- the camera view distance for a car speed + zoom level: lerp the
-// 375..630 band by speed/120 (clamped 0..1), re-clamp into the band, then scale by
-// the zoom table.
+// live lerp band by speed/max MPH, clamp against the tuning band, then scale
+// by the zoom table (ARTIST82447C00).
 f32 SatNavComponent::GetViewDistance(f32 lfSpeedMph, s32 liCurrentZoomLevel)
 {
     f32 lfRatio = lfSpeedMph / KF_CAR_MAX_MPH;
-    if (lfRatio < 0.0f)
-        lfRatio = 0.0f;
-    if (lfRatio > 1.0f)
-        lfRatio = 1.0f;
+    // Preserve the original fsel operand order, including NaN and signed zero.
+    lfRatio = -lfRatio >= 0.0f ? 0.0f : lfRatio;
+    lfRatio = 1.0f - lfRatio >= 0.0f ? lfRatio : 1.0f;
 
-    f32 lfViewDistance = KF_MIN_VIEW_DIST + (KF_MAX_VIEW_DIST - KF_MIN_VIEW_DIST) * lfRatio;
-    if (lfViewDistance < KF_MIN_VIEW_DIST)
-        lfViewDistance = KF_MIN_VIEW_DIST;
-    if (lfViewDistance > KF_MAX_VIEW_DIST)
-        lfViewDistance = KF_MAX_VIEW_DIST;
+    // ARTIST82447C40..88 reads the distinct live lerp words, then performs
+    // one fused VMADDFP before clamping against the shared distance words.
+    f32 lfViewDistance = std::fma(KF_MAX_VIEW_LERP - KF_MIN_VIEW_LERP,
+        lfRatio, KF_MIN_VIEW_LERP);
+    lfViewDistance = KF_MIN_VIEW_DIST - lfViewDistance >= 0.0f
+        ? KF_MIN_VIEW_DIST : lfViewDistance;
+    lfViewDistance = KF_MAX_VIEW_DIST - lfViewDistance >= 0.0f
+        ? lfViewDistance : KF_MAX_VIEW_DIST;
 
     CGS_ASSERT(liCurrentZoomLevel >= 0, "leCurrentZoomLevel >= E_SAT_NAV_ZOOM_IN_MAX");   // :705 (non-gating)
     CGS_ASSERT(liCurrentZoomLevel <= 1, "leCurrentZoomLevel <= E_SAT_NAV_ZOOM_OUT_MAX");  // :706 (non-gating)
