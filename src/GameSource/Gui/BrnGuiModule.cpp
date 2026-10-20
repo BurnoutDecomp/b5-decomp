@@ -2842,9 +2842,42 @@ void GuiModule::Destruct()
         lpOutBase->Clear();
     }
 
-    // X360 GuiModule::Update (0x82527A58): dispatch the inbound GUI events, drive the
-    // FSM controller + the flows + the MovieManager, then the view chain.
+    // Selected no-argument PC entry for the GUI port. Original GuiModule::Update
+    // (0x82527A58) receives its IO set from its frame caller.
     void GuiModule::Update()
+    {
+        // FLAG PC-platform leaf: the no-argument host entry owns its scripted
+        // GameData pair. Loading callers already own the pair and use the typed
+        // overload below. The original native Update receives its IO set from
+        // its caller; this boundary does not recover that complete signature.
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+        lpGameDataInput->LockForWrite();
+        lpGameDataOutput->LockForRead();
+        Update(lpGameDataInput, lpGameDataOutput);
+        lpGameDataOutput->UnlockForRead();
+        lpGameDataInput->UnlockForWrite();
+    }
+
+    // The original call at ARTIST 82529AE4..82529B04 borrows the caller's
+    // GameData pair. Keep its selected-port call together without an inner lock.
+    void GuiModule::UpdateCalibrationScreen(
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
+    {
+        if (lpGameDataInput != 0)
+        {
+            mColourCalibrationScreen.Update(lpGameDataInput, lpGameDataOutput,
+                                            &mGuiOutQueue, mpTextureAllocator);
+        }
+    }
+
+    // FLAG PC-platform leaf: selected GUI port with an explicitly borrowed
+    // GameData pair, already locked by this frame's owner.
+    void GuiModule::Update(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+                           const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
     {
         // ---- 1. inbound GUI events (144 -> RunFsm; 14/16/481 -> notifications;
         //          504/508/513 -> MovieManager; subscription fan-out to the flow) -------
@@ -3170,14 +3203,9 @@ void GuiModule::Destruct()
             mOverlaysDirector.SetController(mGuiCache.GetPopupController());
 
         // ---- 3c. the colour-calibration screen (X360 GuiModule::Update @0x82529B04) -----
-        // The console ticks it here: after the profile/overlay pumps and BEFORE the base
-        // module update ticks the flows, with the module's GUI OUT buffer held write-locked
-        // across the whole update. Its four arguments are recovered in the header note; on PC
-        // the GameData IO pair is the scripted-load pair (the one place it is live and
-        // pumped, the same source BrnGameModule::ResourceUpdateThread reads) and the GUI OUT
-        // buffer's mOutEvents stand-in is mGuiOutQueue.
-        // FLAG PC bring-up (argument sourcing only -- the screen body is the real
-        // reconstruction): DELETE-WHEN a module scheduler hands GuiModule::Update its IO set.
+        // The console ticks it here after the profile/overlay pumps and before
+        // the flow update. The selected PC port uses this caller's borrowed
+        // GameData pair and mGuiOutQueue as its GUI output boundary.
         // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT] BRN_POSTFX_CALIB_SCREEN_TEST=<n>: 300
         // updates before the n-th GuiModule::Update ensure the CN_COLOUR state's two APT resources
         // are loaded (the same GuiCache::EnsureResourcesAreLoaded call BrnBaseFlow::UpdateStreaming
@@ -3218,22 +3246,7 @@ void GuiModule::Destruct()
                     mColourCalibrationScreen.RecvEvent(&lEvent, 515);
             }
         }
-        {
-            BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
-                BrnGameMainFlowController::GetScriptedLoadGameDataInput();
-            BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
-                BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
-            if (lpGameDataInput != 0)
-            {
-                // The screen's PREPARE_TO_SHOW arm pushes an AcquireResourceRequest onto the
-                // request interface, which asserts the buffer is locked for WRITING -- the
-                // same bracket PrepareWorldData is driven under.
-                lpGameDataInput->LockForWrite();
-                mColourCalibrationScreen.Update(lpGameDataInput, lpGameDataOutput,
-                                                &mGuiOutQueue, mpTextureAllocator);
-                lpGameDataInput->UnlockForWrite();
-            }
-        }
+        UpdateCalibrationScreen(lpGameDataInput, lpGameDataOutput);
         // The console's next call after ColourCalibrationScreen::Update, unconditional: the
         // sat-nav tracker's route request (GUI out 494).
         mGuiTracker.Update(&mGuiOutQueue);

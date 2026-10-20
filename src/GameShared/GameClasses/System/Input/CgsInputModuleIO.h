@@ -102,6 +102,11 @@ namespace InputIO
         // EventQueue<PadMapping,4>::Construct on this queue (the original header's 7 is the other platform's count).
         typedef CgsModule::EventQueue<PadMapping,     4> PadMappingQueue;
 
+        // ARTIST 0x828F8578 / 0x828EF880. The stack calls this derived lifecycle;
+        // the base-only lifecycle does not bind the three queues' inline storage.
+        void Construct();
+        void Destruct();
+
         const BindRequestQueue*   GetBindRequestQueue() const;   // 0x828E6A88
         const UnBindRequestQueue* GetUnBindRequestQueue() const; // read-lock, this+80
         const PadMappingQueue*    GetPadMappingQueue() const;    // 0x828E6BD8
