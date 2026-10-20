@@ -918,6 +918,8 @@ namespace BrnGui
         // AptRenderHandler::mpCustomRendererManager -- until this leg NOTHING in the PC
         // build instantiated it, so `_type='PlayerImage'` on the licence card (and every
         // other custom control) had nowhere to resolve to.
+        // ARTIST82518BB0..BD0: bind this receiver's own backing with 1024/16, then Clear.
+        mEventReceiverQueue.Construct();
         // ARTIST82518BF0..C0C: the real receiver owns its backing storage.
         mGDMReceiverQueue.Construct();
         gbGuiToolStartHookRequested = false; // ARTIST82518C38..82518C44

@@ -391,6 +391,10 @@ namespace BrnGui
         // the same explicit producer pointer instead of bypassing the event route.
         CgsModule::VariableEventQueue<18432, 16>* mpOutputBuffer;
 
+        // ARTIST82518BB0..BD0: this derived receiver owns its inline 1024-byte backing.
+        // Separate owners handle collision validation and GameData replies.
+        CgsGui::GuiAccessPointers::GuiEventReceiverQueue mEventReceiverQueue;
+
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
 
         // X360 +311952 -- the GUI CUSTOM-RENDERER SET manager. GuiModule::GuiModule
