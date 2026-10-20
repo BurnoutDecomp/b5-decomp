@@ -1,11 +1,13 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAnimChannel.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (flagged substitute for the StrStream assert path)
+#include <cfloat>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // CgsGui::AnimChannel is one live APT animation channel. This TU homes the channel
-// constructor plus the three X360-emitted behavioural methods recovered against the asm:
+// constructor, the original inlined Construct, and the three X360-emitted
+// behavioural methods recovered against the asm:
 //
 //   GetInterpolator(InterpolateType) @ 0x82848D30 -> &mLinearInterpolator for E_INTERPOLATE_LINEAR,
 //                                                    else null with the "Invalid interpolator
@@ -47,6 +49,16 @@ namespace CgsGui
     // SetAnimation()).
     AnimChannel::AnimChannel()
     {
+    }
+
+    // DecFIGS CgsAptAnimChannel.h:51; inlined at ARTIST 828590D4..82859110.
+    // Two-phase initialization is separate from the vtable-only C++ constructor.
+    void AnimChannel::Construct()
+    {
+        mpCurrentInterpolator = nullptr;
+        mbActive = false;
+        mfCurrentValue = -FLT_MAX;
+        mLinearInterpolator.Construct();
     }
 
     // X360 0x82848D30. Resolve the interpolator object for the requested interpolation type.
