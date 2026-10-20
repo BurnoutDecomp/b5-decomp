@@ -15,6 +15,7 @@ os.environ.pop("NoDefaultCurrentDirectoryInExePath", None)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--old-capacity", action="store_true")
 parser.add_argument("--clear-input-on-destruct", action="store_true")
+parser.add_argument("--output-dir", type=Path)
 args = parser.parse_args()
 tree = Tree()
 base = tree.read("src/GameShared/GameClasses/Module/CgsIOBuffer.cpp")
@@ -38,7 +39,7 @@ if args.clear_input_on_destruct:
     source_input = source_input.replace(original, mutated, 1)
 result = compile_and_run(Path(__file__).with_name("GuiInterpreterIO.cpp"),
     "gui_interpreter_io.inc", base + "\n" + source_input + "\n" + source_output,
-    "GuiInterpreterIO", shadow=shadow, extra_sources=[STRSTREAM_CPP])
+    "GuiInterpreterIO", shadow=shadow, extra_sources=[STRSTREAM_CPP], output_dir=args.output_dir)
 if result is None:
     raise SystemExit(1)
 checks, failures = result

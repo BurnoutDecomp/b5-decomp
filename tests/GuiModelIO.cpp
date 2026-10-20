@@ -17,7 +17,7 @@ int BeginAssert() { return 0; }
 int FireAssert(const char*, const char*, int) { ++suAsserts; return 0; }
 void* EndAssert() { return nullptr; }
 } }
-namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+namespace CgsDev { namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 namespace Message { u64 gxMessageFilterFlags = 0; } }
 
 #include "gui_model_io.inc"
