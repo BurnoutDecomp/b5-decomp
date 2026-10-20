@@ -180,13 +180,6 @@ namespace
     // GuiAccessPointers instance.
     CgsGui::GuiAccessPointers s_GuiAccessPointers;
 
-    // FLAG PC stand-in: the real CgsGui::ModelModule (the GUI model dispatcher) is not
-    // yet instantiable on PC (its reconstructed ctor initialises X360 byte offsets over
-    // an unmodelled ~0x18000-byte layout). GuiFsmController::Prepare only STORES and
-    // null-checks the pointer (no dereference on any reconstructed path), so a sentinel
-    // non-null stands in until the model module lands.
-    u8 s_ModelModuleSentinel;
-
     // The subscription record the states post through StateInterface::RegisterForEvents
     // (X360 wire records 34/35: { s32 miEventType; EventObserver* } -- only the leading
     // event-type word matters to the dispatch table; the pointer is the posting observer).
@@ -847,6 +840,9 @@ namespace BrnGui
         // non-null label the base accepts.
         mViewModule.Construct(this, "BrnGuiView", 7, 1280.0f / 720.0f,
                               KA_ALTERNATE_TEXT_COLOURS, 8);
+        // ARTIST825184E4: construct the actual shared Model and stored-event
+        // owner. Native preparation/update selection remains with its caller.
+        CgsGui::GuiModule::Construct(&mViewModule, lbHighDef);
         mViewModule.GetFlaptManager()->SetSoundTriggerHandler(
             &GuiModule::FlaptSoundTriggerCallback, this);
         // X360 GuiModule::Construct @0x82518B18: EffectsArbitrator::Construct just ahead of
@@ -1012,33 +1008,18 @@ namespace BrnGui
         mScreenFlow.Construct(&mGuiCache);
         mHudFlow.Construct(&mGuiCache);
         mOverlayFlow.Construct(&mGuiCache);
+        // ARTIST82518570/580/590/5A0: the four real observer owners, event0.
+        mGuiModel.AddGuiEventObserver(&mHudFlow, 0);
+        mGuiModel.AddGuiEventObserver(&mScreenFlow, 0);
+        mGuiModel.AddGuiEventObserver(&mOverlayFlow, 0);
+        mGuiModel.AddGuiEventObserver(&mAlwaysAvailableComponentsManager, 0);
         mFsmController.Construct();
 
-        // ---- the HUD-message pair (gateui wave, round 2) --------------------------------
-        // X360 GuiModule::Construct @0x82518028, lines 277-278 + 376, verbatim order:
-        //     HudMessageDirector::Construct(gm + 639264, gm + 552, gm + 1005376);
-        //     HudMessageAnalyzer ::Construct(gm + 660992, gm + 639264);
-        //     ... *(gm + 1021876) = gm + 639264;   // GuiCache::SetHudMessageDirector
-        //
-        // ⚠ FLAG PC bring-up (argument sourcing only -- both bodies are real
-        // reconstructions): the console's first Construct argument is its embedded
-        // CgsGui::ModelModule (gm+552 == the CgsGui::GuiModule base's +0x228). This tree's
-        // BrnGui::GuiModule derives straight from CgsModule::ModuleSingleBuffered and there
-        // is no reconstructed CgsGui::ModelModule anywhere, so there is nothing to pass and
-        // NOTHING IS FABRICATED HERE -- the argument is NULL and the console's own
-        // "lpModelModule" assert (BrnGuiHudMessageDirector.cpp:80) fires ONCE per boot as
-        // the honest marker for that gap. It costs no behaviour: mpModelModule is
-        // write-only in the whole recovered surface (the console reaches the model IO
-        // buffer through ModelModule::AddGuiEvents @0x8285DF50, which never touches its own
-        // `this`), and HudMessageDirector::Update takes the buffer as its own argument.
-        // DELETE-WHEN CgsGui::ModelModule is reconstructed (or BrnGui::GuiModule is given
-        // its CgsGui::GuiModule base).
-        mHudMessageDirector.Construct(0, &mGuiCache);
+        // ARTIST82518720 and the inlined overlay Construct: both directors receive the real contained
+        // Model. Their original publishers are restored together (CP16).
+        mHudMessageDirector.Construct(&mGuiModel, &mGuiCache);
         mHudMessageAnalyzer.Construct(&mHudMessageDirector);
-        // The overlays director, constructed inline by the console right after the analyzer.
-        // Its model-module argument is the same missing CgsGui::ModelModule as the HUD
-        // director's above, so it is NULL here too (see BridgeOutEvents).
-        mOverlaysDirector.Construct(0);
+        mOverlaysDirector.Construct(&mGuiModel);
 
         // ⭐ [gateui r4] THE CONTROLLER HAND-OFF -- the missing writer of
         // GuiCache::mpHudMessageController. X360 GuiModule::Construct @0x82518028
@@ -1297,7 +1278,7 @@ namespace BrnGui
         mHudFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mHudStatePool,
                          &mProfileManager);
         mHudInQueue.Construct();
-        mHudFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mHudInQueue));
+        mHudFlow.SetInEventQueue(&mHudInQueue);
 
         // The overlay flow: the 15-popup-state pool + its own in-queue (the X360 module
         // prepares all three flows here).
@@ -1305,7 +1286,7 @@ namespace BrnGui
         mOverlayStatePool.Create(s_overlayStatePoolBacking, sizeof(s_overlayStatePoolBacking));
         mOverlayFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mOverlayStatePool);
         mOverlayInQueue.Construct();
-        mOverlayFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mOverlayInQueue));
+        mOverlayFlow.SetInEventQueue(&mOverlayInQueue);
 
         // The SCREEN flow: the 61-state front-end pool + its own in-queue. The X360
         // Prepare threads the module's ProfileManager through BY REFERENCE (the CN_PROFILE
@@ -1315,7 +1296,7 @@ namespace BrnGui
         mScreenFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
                             mProfileManager);
         mScreenInQueue.Construct();
-        mScreenFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mScreenInQueue));
+        mScreenFlow.SetInEventQueue(&mScreenInQueue);
 
         // The always-available components manager (save-icon spinner, EATrax/achievement/
         // showtime overlays): give it its own in-queue and latch it. The manager's Prepare
@@ -1329,7 +1310,7 @@ namespace BrnGui
         // The controller: store the model-module pointer + the FSM allocator, then
         // register the three flow slots.
         mFsmController.Prepare(
-            reinterpret_cast<CgsGui::ModelModule*>(&s_ModelModuleSentinel), &mFsmLuaHeap);
+            &mGuiModel, &mFsmLuaHeap);
         mFsmController.AddFlow(E_GUIFLOW_SCREEN, &mScreenFlow);
         mFsmController.AddFlow(E_GUIFLOW_HUD, &mHudFlow);
         mFsmController.AddFlow(E_GUIFLOW_OVERLAY, &mOverlayFlow);
@@ -1604,6 +1585,9 @@ void GuiModule::Destruct()
         // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
         // sub-object destruct, immediately before the base CgsGui::GuiModule::Destruct.
         mColourCalibrationScreen.Destruct();
+        // ARTIST825077F4: the shared queue/base lifecycle follows the final
+        // game subobject. Existing Movie/APT lifetime owners above are retained.
+        CgsGui::GuiModule::Destruct();
     }
 
     // Post one event into each subscribing observer's in-queue (the EventInterpreterModule

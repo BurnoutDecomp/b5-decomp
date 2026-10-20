@@ -33,6 +33,13 @@ namespace ViewIO
         mGuiEvents.CgsModule::VariableEventQueue<18432, 16>::Construct();
     }
 
+    // ARTIST82858E58: queue teardown precedes the base status teardown.
+    void OutputBuffer::Destruct()
+    {
+        mGuiEvents.CgsModule::VariableEventQueue<18432, 16>::Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
+
     // X360 0x8284F040: read-lock handle to the embedded GUI event queue (this+4).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetGuiEventQueue() const
     {
@@ -49,6 +56,23 @@ namespace ViewIO
     }
 
     // ---- CgsGui::ViewIO::InputBuffer (X360 0x824F7A10 / 0x824F7AB8 / 0x82856EC8) ------------
+
+    // ARTIST82858D98. ImRendererSet::Construct is the existing real
+    // Camera/slot initializer; slot1 and queue payload bytes remain unwritten.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mViewStateQueue.CgsModule::VariableEventQueue<65536, 16>::Construct();
+        mRendererSet.Construct();
+        mpGuiDispatchBuffer = 0;
+    }
+
+    // ARTIST82858E08.
+    void InputBuffer::Destruct()
+    {
+        mViewStateQueue.CgsModule::VariableEventQueue<65536, 16>::Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
 
     void InputBuffer::_AssertInputLayout()
     {

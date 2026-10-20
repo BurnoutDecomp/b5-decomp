@@ -76,6 +76,15 @@ namespace CgsGui
     static_assert(sizeof(GuiEvent<178>) == 1 && sizeof(GuiEvent<180>) == 1 &&
                   sizeof(GuiEvent<183>) == 1, "ARTIST Payback tag records are one byte");
 
+    // ARTIST823D8540 posts tag523 with size1 (823D85DC/E0). Action293
+    // stores no payload byte; retain the original empty event representation.
+    template <>
+    struct GuiEvent<523> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 523; }
+    };
+    static_assert(sizeof(GuiEvent<523>) == 1, "ARTIST GUI tag523 is one byte");
+
     // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
     // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /
     // OutputInternalState channels) builds and hands to VariableEventQueue::AddEvent. It boxes an
