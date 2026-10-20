@@ -1,0 +1,35 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnAbstractPool.cpp
+        BrnDirectorAllVehicleData.cpp
+        BrnDirectorEffectTrigger.cpp
+        BrnDirectorHookNameArray.cpp
+        BrnDirectorTimestep.cpp
+        BrnDirectorVector3Journal8.cpp
+        BrnDirectorVehicleTracker.cpp
+        BrnDirectorWorldMap.cpp
+        BrnICEMoviePlayer.cpp
+        BrnICEMoviePlayerSerialise.cpp
+        BrnPostBox.cpp
+        BrnSceneQueryInterface.cpp
+        BrnShotSelector.cpp
+        BrnVehicleRef.cpp
+        ObjectPool_DebugMenuRemoveData.cpp
+        ObjectPool_IceMovie.cpp
+
+    PUBLIC
+        BrnAbstractPool.h
+        BrnDirectorAllVehicleData.h
+        BrnDirectorDataJournal.h
+        BrnDirectorEffectTrigger.h
+        BrnDirectorPostOfficeTypes.h
+        BrnDirectorTimestep.h
+        BrnDirectorVehicleTracker.h
+        BrnDirectorWorldMap.h
+        BrnICEMoviePlayer.h
+        BrnPostBox.h
+        BrnPostOffice.h
+        BrnSceneQueryInterface.h
+        BrnShotSelector.h
+        BrnVehicleRef.h
+)

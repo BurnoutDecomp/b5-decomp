@@ -1,0 +1,28 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnMomentBystanderSeesAction.cpp
+        BrnMomentFailsafe.cpp
+        BrnMomentHardStop.cpp
+        BrnMomentHitTraffic.cpp
+        BrnMomentNewCarJoined.cpp
+        BrnMomentPassengerSeesAction.cpp
+        BrnMomentPlayerJumping.cpp
+        BrnMomentPlayerStunt.cpp
+        BrnMomentStaticCamImpact.cpp
+        BrnMomentStationaryCrash.cpp
+        BrnMomentTakedownLookback.cpp
+        BrnMomentTumbling.cpp
+
+    PUBLIC
+        BrnMomentFailsafe.h
+        BrnMomentHardStop.h
+        BrnMomentHitTraffic.h
+        BrnMomentNewCarJoined.h
+        BrnMomentPassengerSeesAction.h
+        BrnMomentPlayerJumping.h
+        BrnMomentPlayerStunt.h
+        BrnMomentStaticCamImpact.h
+        BrnMomentStationaryCrash.h
+        BrnMomentTakedownLookback.h
+        BrnMomentTumbling.h
+)
