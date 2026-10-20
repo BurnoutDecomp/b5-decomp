@@ -21,7 +21,7 @@ names=['bool ResourceModule::AddOpenReadStreamRequest(',
        'bool ResourceModule::Update(']
 code='namespace CgsResource {\n'+ '\n'.join(definition(source,n).replace('ResourceModule::','Shuttle::') for n in names)+'\n}\n'
 base='src/GameShared/GameClasses/'
-sources=[STRSTREAM_CPP]
+sources=[STRSTREAM_CPP, REPO/'vendor/renderware/src/rw/BaseResourceDescriptor.cpp']
 sources += [REPO/base/'Module'/n for n in ['CgsIOBuffer.cpp','CgsBaseEventReceiverQueue.cpp']]
 sources += [REPO/resource/n for n in ['CgsResourceIOEvents.cpp','CgsResourceModuleIO.cpp',
     'CgsResourceModuleIO_InputBuffer_GetResourceQueue.cpp',
@@ -30,5 +30,6 @@ sources += [REPO/resource/n for n in ['CgsResourceIOEvents.cpp','CgsResourceModu
     'CgsBundleLoaderModuleIO_OutputBuffer.cpp']]
 sources += [REPO/base/'Memory'/n for n in ['CgsMemoryModuleIO.cpp']]
 result=compile_and_run(Path(__file__).with_name('PCResourceShuttle.cpp'),
-    'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_sources=sources,output_dir=args.output_dir)
+    'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_flags='/Gy',
+    extra_sources=sources,output_dir=args.output_dir)
 raise SystemExit(report('run_pc_resource_shuttle',[],result,14))
