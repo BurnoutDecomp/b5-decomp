@@ -84,7 +84,7 @@ namespace CgsGraphics
         };
 
         PlayerStateType GetPlayerState() const { return mePlayerState; }
-        bool            IsFinished() const     { return mbFinished; }
+        bool            IsFinished() const     { return !mbIsOkToPlay || mbFinished; }
 
         // Original unit-screen rectangle; the shared screen transform maps it to the display.
         void SetRectangle(float fLeft, float fTop, float fRight, float fBottom);
