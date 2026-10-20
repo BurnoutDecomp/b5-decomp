@@ -69,6 +69,13 @@ def wiring(tree):
            re.search(r"GenerateRaceModeMessages\s*\(\s*lpActiveRaceCarInterface\s*,\s*lpScoringSystem\s*,\s*"
                      r"lpRaceCarCrashQueue\s*,\s*lpTakedownQueue\s*,\s*lePlayerActiveRaceCarIndex\s*,\s*lfDelta\s*\)",
                      race) is not None)
+    road = switch_arm(post, ["E_MODE_ONLINE_ROAD_RAGE"])
+    road_calls = [road.find("GenerateOnlineBlueTeamEscapingMessage(lpScoringSystem, lfDelta, lePlayerActiveRaceCarIndex)"),
+                  road.find("GenerateOnlineBlueTeamAreBehindYouMessage(lpScoringSystem, lfDelta, lePlayerActiveRaceCarIndex)"),
+                  road.find("GenerateOnlineLeaderMilestoneMessage(lpScoringSystem, lfDelta, lePlayerActiveRaceCarIndex,")]
+    yield ("D1 PostWorldUpdate case 11 calls the three Road Rage producers in ARTIST order and passes the progress byte",
+           all(position >= 0 for position in road_calls) and road_calls == sorted(road_calls)
+           and "lbIsGameModeInProgress" in road[road_calls[2]:])
     lobby = switch_arm(post, ["E_MODE_ONLINE_FREE_BURN_LOBBY"])
     detect = lobby.find("DetectOnlineCrashes(lpActiveRaceCarInterface, lpRaceCarCrashQueue, lfDelta)")
     remove = lobby.find("RemoveCrashingMessagesForTakendownPlayers(lpTakedownQueue)")

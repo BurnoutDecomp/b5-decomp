@@ -41,7 +41,7 @@ namespace Assert
     int   FireAssert(const char*, const char*, int) { ++gAsserts; return 0; }
     void* EndAssert() { return nullptr; }
 }
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }   // the [hud-xcrash] witness stays silent
+namespace Log { StrStreamBase* gpDebugPrint = nullptr; }   // the [hud-xcrash] witness stays silent
 namespace Message { u64 gxMessageFilterFlags = 0; }      // VariableEventQueue::OutputQueueContents
 }
 
@@ -52,6 +52,14 @@ void BrnPhysics::Vehicle::RaceCarState::Clear() { std::memset(this, 0, sizeof(*t
 void BrnGameState::HUDMessageLogic::GenerateCriticalDamageMessage(
     const StuntModeScoring::ActiveRaceCarOutputInterface*, ScoringSystem*) { ++gCriticalCalls; }
 void BrnGameState::HUDMessageLogic::GenerateStuntMessage(ScoringSystem*) { ++gStuntCalls; }
+// Harness-only: case-11 Road Rage bodies are stubs here; their production bodies are exercised in
+// FxGsOnlineRoadRageHud.cpp. This fixture remains scoped to crash messages.
+void BrnGameState::HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
+    ScoringSystem*, f32, EActiveRaceCarIndex) {}
+void BrnGameState::HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
+    ScoringSystem*, f32, EActiveRaceCarIndex) {}
+void BrnGameState::HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
+    ScoringSystem*, f32, EActiveRaceCarIndex, bool) {}
 // Harness-only: the five race-arm generators GenerateRaceModeMessages calls around the crash legs
 // (FX-FLOW G11-D1 remainder, tests/run_fxflow_race_hud_messages.py covers them); silent here.
 void BrnGameState::HUDMessageLogic::GenerateLeaderMessages(
@@ -192,7 +200,7 @@ static void Fresh(GameStateModuleIO::EGameModeType leLatchedMode)
 
 static void PostWorld(GameStateModuleIO::EGameModeType leMode, f32 lfDelta)
 {
-    gHud.PostWorldUpdate(&gIface, leMode, gpScoring, &gCrashes, &gTakedowns, lfDelta, KE_PLAYER);
+    gHud.PostWorldUpdate(&gIface, leMode, gpScoring, &gCrashes, &gTakedowns, lfDelta, KE_PLAYER, false);
 }
 
 int main()
