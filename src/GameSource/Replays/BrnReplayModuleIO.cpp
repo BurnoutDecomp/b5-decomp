@@ -74,7 +74,7 @@ namespace ReplayIO
             mStatusInterface.maReels[liReel].mbUsed = false;
         mStatusInterface.miCurrentRecordReel = -1;
         mStatusInterface.miCurrentPlaybackReel = -1;
-        mStatusInterface.mfDebugHudAlpha = 0.0f; // original constant 82001CC0
+        mStatusInterface.mfPlaybackTimeRemaining = 0.0f; // original constant 82001CC0
         mGameDataRequestInterface.Construct(); // Construct then original extra Clear
         mGuiEventQueue.Construct();
     }

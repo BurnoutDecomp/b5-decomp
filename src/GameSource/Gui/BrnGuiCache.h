@@ -1246,6 +1246,15 @@ namespace BrnGui
         // ARTIST AboveCarRenderer::RenderReplayAboveCar reads the byte at141DC.
         // Name recovered from its role; this extension is absent from DecFIGS.
         bool GetRenderReplayPlayerNames() const { return mbRenderReplayPlayerNames; }
+        // Typed host access to original replay members. Native replay screens
+        // inline these member loads; their guest offsets are not host addresses.
+        const BrnReplays::ReplayIO::StatusInterface& GetReplayStatusInterface() const
+        {
+            return mReplayStatusInterface;
+        }
+        bool GetReplayDisplayHud() const { return mbReplayDisplayHud; }
+        bool GetReplayShowCredits() const { return mbReplayShowCredits; }
+
         // Both names are the console's own: the replay screens' assert texts spell
         // "mpGuiCache->IsReplayInfoVisible()" and "mpGuiCache->GetReplayNumberSlotsUsed()".
         bool IsReplayInfoVisible() const      { return mbReplayInfoVisible; }   // +0x141D4

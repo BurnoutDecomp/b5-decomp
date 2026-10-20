@@ -14,6 +14,8 @@
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"      // BrnGui::HudMessageDirector::AddMessage
 #include "SharedClasses/DataLists/BrnHudMessageController.h" // BrnResource::HudMessageController
 
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
 namespace BrnGui
 {
     // ARTIST825187E8..82518804 inlines this actual owner; DecFIGS534114
@@ -24,6 +26,116 @@ namespace BrnGui
         mpMessageDirector = lpMessageDirector;
         miMessageId = 0;
         miMessageGroup = 0;
+    }
+
+    // Actual module Destruct82507714..1C resolves this owner to8284CB38.
+    void GuiHudMessagesDebugComponent::Destruct()
+    {
+        // Original folded empty body; no active/controller reset.
+    }
+
+    // Target table820CE800 slot5 resolves to false-returning827E2F38.
+    bool GuiHudMessagesDebugComponent::IsSimple() const
+    {
+        return false;
+    }
+
+    bool GuiHudMessagesDebugComponent::ControllerIsValid() const
+    {
+        return mpMessageController != 0;
+    }
+
+    // ARTIST82523B90. The observed base activation call is empty8284CB38.
+    void GuiHudMessagesDebugComponent::OnActivate()
+    {
+        RegisterVariable(&miMessageId, "Message Id to send");
+        SetReadOnly(&miMessageId, true);
+        RegisterVariable(&miMessageGroup, "Group Of Messages");
+        SetRange(&miMessageGroup, 0, 3);
+        SetOptions(&miMessageGroup, CgsGui::KAC_HUD_MESSAGE_GROUP_NAMES);
+        RegisterFunction(&GuiHudMessagesDebugComponent::SelectNextMessageCallback,
+            this, "Select the next message");
+        RegisterFunction(&GuiHudMessagesDebugComponent::TriggerMessageCallback,
+            this, "Trigger the current message");
+        RegisterFunction(&GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback,
+            this, "Trigger the current message ignoring time");
+        RegisterFunction(&GuiHudMessagesDebugComponent::SelectPreviousMessageCallback,
+            this, "Select the previous message");
+    }
+
+    // ARTIST824FD5D0..E8 /824FD688..6A0 inline these real helpers.
+    void GuiHudMessagesDebugComponent::SelectNextMessage()
+    {
+        if (ControllerIsValid())
+            miMessageId = mpMessageController->GetNextMessageIdInGroup(miMessageId,
+                static_cast<CgsGui::HudMessageGroups>(miMessageGroup));
+    }
+
+    void GuiHudMessagesDebugComponent::SelectPreviousMessage()
+    {
+        if (ControllerIsValid())
+            miMessageId = mpMessageController->GetPreviousMessageIdInGroup(miMessageId,
+                static_cast<CgsGui::HudMessageGroups>(miMessageGroup));
+    }
+
+    void GuiHudMessagesDebugComponent::TriggerMessageCallback(void* lpUserData)
+    {
+        if (!lpUserData)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid data pointer sent to GuiHudMessagesDebugComponent::TriggerMessageCallback";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 238);
+            CgsDev::Assert::EndAssert();
+        }
+        static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->TriggerMessage(false);
+    }
+
+    void GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback(void* lpUserData)
+    {
+        if (!lpUserData)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid data sent to GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 252);
+            CgsDev::Assert::EndAssert();
+        }
+        static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->TriggerMessage(true);
+    }
+
+    void GuiHudMessagesDebugComponent::SelectNextMessageCallback(void* lpUserData)
+    {
+        if (!lpUserData)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid data in the callback";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 267);
+            CgsDev::Assert::EndAssert();
+        }
+        static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->SelectNextMessage();
+    }
+
+    void GuiHudMessagesDebugComponent::SelectPreviousMessageCallback(void* lpUserData)
+    {
+        if (!lpUserData)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid data in the callback";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 282);
+            CgsDev::Assert::EndAssert();
+        }
+        static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->SelectPreviousMessage();
     }
 
     // @ 0x827DD220
@@ -43,7 +155,7 @@ namespace BrnGui
     // PLACEHOLDER_TEMP_STRING string id for a string id, "Unrecognized Param" for any other type
     // (posted under its own type) -- and hand it to the director. Nothing happens until a
     // controller has been set.
-    void GuiHudMessagesDebugComponent::TriggerMessage(bool lbWithTimer)
+    void GuiHudMessagesDebugComponent::TriggerMessage(bool lbForce)
     {
         if (mpMessageController == 0)
             return;
@@ -77,6 +189,6 @@ namespace BrnGui
             }
         }
 
-        mpMessageDirector->AddMessage(&lMessage, lbWithTimer);
+        mpMessageDirector->AddMessage(&lMessage, lbForce);
     }
 }

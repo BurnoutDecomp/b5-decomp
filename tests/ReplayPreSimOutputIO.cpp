@@ -47,7 +47,7 @@ int main()
                   && storage.after[1] == storage.before[0], "constructor stays inside its allocation");
             Check(!output.IsBufferLocked(), "constructor removes stale IO locks");
             Check(status.mxStatusFlags == 0 && status.miCurrentRecordReel == -1
-                  && status.miCurrentPlaybackReel == -1 && status.mfDebugHudAlpha == 0.0f,
+                  && status.miCurrentPlaybackReel == -1 && status.mfPlaybackTimeRemaining == 0.0f,
                   "real status reset clears flags, indices and trailing float");
             for (unsigned reel = 0; reel < 6; ++reel)
             {
