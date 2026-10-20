@@ -297,3 +297,14 @@ namespace CgsGui
     EventInterpreterModule::EventInterpreterReleaseStage operator++(
         EventInterpreterModule::EventInterpreterReleaseStage& lrStage, int);
 }
+
+namespace CgsContainers
+{
+    // ARTIST828565E0/82856708 use the existing sorted-insert/assert-on-miss
+    // specialization. Declare it before callers can instantiate generic methods.
+    template<>
+    void HashTable<int, CgsGui::EventInterpreterModule::sMapEntry, 7u>::Insert(
+        HashTable<int, CgsGui::EventInterpreterModule::sMapEntry, 7u>::Element* lpElement);
+    template<>
+    void HashTable<int, CgsGui::EventInterpreterModule::sMapEntry, 7u>::Remove(int lKey);
+}
