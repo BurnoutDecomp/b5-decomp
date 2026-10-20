@@ -3414,6 +3414,19 @@ void GuiModule::Destruct()
         mBurnoutSkillsManager.Update();
         mFreeburnChallengeManager.Update();
 
+        // FLAG PC-platform leaf: this port fans the current frame's model/input
+        // events out directly. ARTIST 82529848 appends cache 64 after the existing
+        // GUI input; base Update 828602C8 then bridges that stream to the model.
+        // Publish it here, after current inbound events (including profile 350),
+        // before observer updates. A post-update handoff leaves stale 64 ahead of
+        // the next frame's profile and violates Intro's SetProfilePointer contract.
+        {
+            GuiEventCache lCacheEvent;
+            lCacheEvent.mpGuiCache = &mGuiCache;
+            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
+                             static_cast<s32>(sizeof(lCacheEvent)));
+        }
+
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
         // ARTIST82518570/80 registers HUD before Screen; UpdateObservers keeps
         // that order. The outgoing HUD hides its minimap before the new map
@@ -3465,16 +3478,6 @@ void GuiModule::Destruct()
             DrainFlowOutputQueue(E_GUIOBSERVER_ALWAYSAVAILABLE);
         }
         mViewInputBuffer.UnlockForWrite();
-
-        // The FSM's OnEnter registrations are committed by the drain above. Queue the
-        // per-frame cache pointer after that handoff so a newly entered state receives
-        // event 64 before the next frame's inbound response events.
-        {
-            GuiEventCache lCacheEvent;
-            lCacheEvent.mpGuiCache = &mGuiCache;
-            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
-                             static_cast<s32>(sizeof(lCacheEvent)));
-        }
 
         // ---- 6. the MovieManager pump (receiver -> RecvEvent -> Update -> 510 back) ---
         {
