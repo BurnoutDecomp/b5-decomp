@@ -9,8 +9,13 @@
 // record the HUD-message analyzer builds) and the HUD-message resource/director
 // TUs. Only the vocabulary the in-scope code consumes lives here; the full
 // GuiHudMessageResource/GuiHudMessageData records land with their own TUs.
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
+
 namespace CgsGui
 {
+    // ARTIST8206F290; original four-row debug group option owner.
+    extern const CgsDev::DebugUI::StringList KAC_HUD_MESSAGE_GROUP_NAMES[4];
+
     // DWARF CgsGuiHudMessage.h:29 -- which message group a HUD message belongs to.
     enum HudMessageGroups
     {

@@ -12,7 +12,7 @@
 //                           from the source reel into maReels[index].
 //   operator=@ 0x823A6488 : member-wise copy of the status word, all six reels
 //                           (bounded name copy + used flag), the two current-reel
-//                           indices, and the trailing debug-HUD alpha float.
+//                           indices, and trailing playback seconds remaining.
 //
 // The X360 build uses SIX reels (the index guards fire on `index >= 6`, the copy
 // loop runs six times); the leaked PS3 DWARF declares five. X360 asm is the
@@ -57,7 +57,7 @@ namespace ReplayIO
     // through the CgsDev::Assert machinery (built via a stack StrStream, matching the
     // CgsNetwork::PlayerName::Construct precedent) -- it does NOT silently truncate
     // like CgsCore::StrCpy. The copy itself is then an unbounded strcpy either way.
-    // The mbUsed flag and the scalar tail (record/playback reel + debug alpha) are
+    // The mbUsed flag and scalar tail (record/playback reels + remaining time) are
     // copied verbatim.
     StatusInterface& StatusInterface::operator=(const StatusInterface& rOther)
     {
@@ -89,7 +89,7 @@ namespace ReplayIO
 
         miCurrentRecordReel   = rOther.miCurrentRecordReel;
         miCurrentPlaybackReel = rOther.miCurrentPlaybackReel;
-        mfDebugHudAlpha       = rOther.mfDebugHudAlpha;
+        mfPlaybackTimeRemaining       = rOther.mfPlaybackTimeRemaining;
 
         return *this;
     }

@@ -22,22 +22,6 @@ namespace
     const char* KPC_REPLAYS_LOADING_MOVIE = "ReplaysLoading";
     const s32   KI_REPLAYS_LOADING_LEVEL  = 3;
 
-    // The far GuiCache advance-block flag Update() polls: X360 ((*(mpGuiCache + 0x13BBC)
-    // >> 4) & 1). The cache exposes no named accessor for this bit in the committed home,
-    // so it is read here through a file-local boundary helper against the documented X360
-    // byte offset (semantic parity; the flag word lives deep in the GuiCache). When the
-    // GuiCache TU homes a named accessor for this bit, replace this with it.
-    struct ReplayLoadingCacheBoundary
-    {
-        static const u32 KU_ADVANCE_BLOCK_FLAG_OFFSET = 0x13BBC;  // X360 GuiCache far member
-
-        static bool IsAdvanceBlocked(const GuiCache* lpGuiCache)
-        {
-            const u8 lu8Flags = *(reinterpret_cast<const u8*>(lpGuiCache) +
-                                  KU_ADVANCE_BLOCK_FLAG_OFFSET);
-            return ((lu8Flags >> 4) & 1) != 0;
-        }
-    };
 }
 
 // ---- statics -----------------------------------------------------------------
@@ -114,7 +98,7 @@ void ReplayLoading::Update()
         meLoadState = E_LOAD_ADVANCE;             // this+0x3C = 2
         // Once the cache stops blocking, send ADVANCE (leaves the loading screen).
         // X360: ((*(mpGuiCache + 0x13BBC) >> 4) & 1) -- a far GuiCache advance-block flag.
-        if (ReplayLoadingCacheBoundary::IsAdvanceBlocked(mpGuiCache))
+        if (((mpGuiCache->GetReplayStatusInterface().GetStatusFlags() >> 4) & 1u) != 0)
             break;                                // blocked -> Clear + return
         SendStateEvent("ADVANCE");
         break;

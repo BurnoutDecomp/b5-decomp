@@ -66,28 +66,6 @@ namespace
         GuiOptionEvent20() : CgsGui::GuiEvent<25>(8, 12), miReserved(0), mfValue(1.0f) {}
     };
 
-    // FLAG boundary helper: the two far GuiCache flags the outro reads. No named accessor on
-    // the committed BrnGui::GuiCache API, so they are read here through a file-local boundary
-    // against the documented X360 byte offsets (mirrors ReplayLoadingCacheBoundary). Replace
-    // with named accessors when the GuiCache TU homes them.
-    struct ReplayOutroCacheBoundary
-    {
-        // X360 *(mpGuiCache + 0x141D5) (byte): non-zero -> the loading movie is still active.
-        static const u32 KU_LOADING_MOVIE_ACTIVE_OFFSET = 0x141D5;
-        // X360 *(mpGuiCache + 0x141DE) (byte): non-zero -> the replay ends into the credits.
-        static const u32 KU_CREDITS_FOLLOW_ON_OFFSET     = 0x141DE;
-
-        static bool IsLoadingMovieActive(const GuiCache* lpGuiCache)
-        {
-            return *(reinterpret_cast<const u8*>(lpGuiCache) +
-                     KU_LOADING_MOVIE_ACTIVE_OFFSET) == 1;
-        }
-        static bool IsCreditsFollowOn(const GuiCache* lpGuiCache)
-        {
-            return *(reinterpret_cast<const u8*>(lpGuiCache) +
-                     KU_CREDITS_FOLLOW_ON_OFFSET) != 0;
-        }
-    };
 
     // Boundary onto the cache's resource watcher: the X360 OnLeave calls
     // UnloadAllResources(mpGuiCache, 5) on the StateLoadingHelper sub-object. The
@@ -133,7 +111,7 @@ void ReplayOutro::OnLeave()
 
     // If the cache still holds the outro loading movie (X360 far flag *(mpGuiCache+0x141D5)==1),
     // tear it down first: bind the empty-name apt movie at level 3.
-    if (ReplayOutroCacheBoundary::IsLoadingMovieActive(mpGuiCache))
+    if (mpGuiCache->GetReplayDisplayHud() == 1)
         mpStateInterface->PlayAptMovie("", 3);   // { 8, 18, 12, "", 3 } ch 41, size 20
 
     // Bind the empty-name apt movie at level 4 (the outro's own layer).
@@ -181,7 +159,7 @@ void ReplayOutro::UpdateRunning()
         {
             // The cache far flag *(mpGuiCache+0x141DE): non-zero -> the replay ends into the
             // credits sequence; zero -> a plain advance out of the outro.
-            const char* lpacEvent = ReplayOutroCacheBoundary::IsCreditsFollowOn(mpGuiCache)
+            const char* lpacEvent = mpGuiCache->GetReplayShowCredits() != 0
                                         ? "TO_CREDITS" : "ADVANCE";
             SendStateEvent(lpacEvent);
 
