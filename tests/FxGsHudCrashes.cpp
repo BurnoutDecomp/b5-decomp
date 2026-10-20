@@ -28,6 +28,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include <cstdio>
 #include <cstring>
 
@@ -47,6 +48,24 @@ namespace Message { u64 gxMessageFilterFlags = 0; }      // VariableEventQueue::
 
 // Harness-only: RaceCarState's default ctor calls Clear() (BrnVehicleEvents.cpp, not under test).
 void BrnPhysics::Vehicle::RaceCarState::Clear() { std::memset(this, 0, sizeof(*this)); }
+
+// Harness boundary: the vehicle snapshot copies this test's per-slot crash flags.
+// GenerateOnlineTeamChangeMessages and the inline IsCrashing reader remain production code.
+static bool gabVehicleCrashing[8] = {};
+static unsigned gVehicleSnapshotCalls = 0;
+static const BrnPhysics::Vehicle::VehicleOutputInterface* gpSnapshotArgument = nullptr;
+alignas(16) static unsigned char gaVehicleOutputToken[16];
+static const BrnPhysics::Vehicle::VehicleOutputInterface* const gpVehicleOutput =
+    reinterpret_cast<const BrnPhysics::Vehicle::VehicleOutputInterface*>(gaVehicleOutputToken);
+void BrnPhysics::Vehicle::CrashingRaceCarInterface::SetFromVehicleOutputInterface(const VehicleOutputInterface* lpOutput)
+{
+    ++gVehicleSnapshotCalls;
+    gpSnapshotArgument = lpOutput;
+    for (s32 li = 0; li < 8; ++li)
+        mabCrashingRaceCars[li] = gabVehicleCrashing[li];
+}
+// BHR counting is outside this crash/team-tail fixture; no BHR behavior is claimed here.
+void BrnGameState::HUDMessageLogic::GenerateBurningHomeRunMessages(ModeManager*, ScoringSystem*) {}
 
 // Harness-only: the two PostWorldUpdate arms that are not under test, counted.
 void BrnGameState::HUDMessageLogic::GenerateCriticalDamageMessage(
@@ -196,11 +215,15 @@ static void Fresh(GameStateModuleIO::EGameModeType leLatchedMode)
     gAsserts = 0;
     gCriticalCalls = 0;
     gStuntCalls = 0;
+    std::memset(gabVehicleCrashing, 0, sizeof(gabVehicleCrashing));
+    gVehicleSnapshotCalls = 0;
+    gpSnapshotArgument = nullptr;
 }
 
 static void PostWorld(GameStateModuleIO::EGameModeType leMode, f32 lfDelta)
 {
-    gHud.PostWorldUpdate(&gIface, leMode, gpScoring, &gCrashes, &gTakedowns, lfDelta, KE_PLAYER, false);
+    gHud.PostWorldUpdate(&gIface, leMode, nullptr, gpScoring, &gCrashes, gpVehicleOutput,
+                         &gTakedowns, lfDelta, KE_PLAYER, false);
 }
 
 int main()
@@ -385,6 +408,36 @@ int main()
     PostWorld(GameStateModuleIO::E_MODE_OFFLINE_RACE, 0.0f);
     Check(BufferedCount() == 0 && gHud.meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_RACE,
           "a mode change runs Prepare first (pool cleared) and latches the new mode  @0x8239DA2C/0x8239DA30");
+
+    // The restored tail runs even when no mode-specific arm posts a notification.
+    Fresh(GameStateModuleIO::E_MODE_NONE);
+    gHud.mTeamChangedBits.SetBit(3);
+    gHud.mTeamChangedBits.SetBit(6);
+    PostWorld(GameStateModuleIO::E_MODE_NONE, 0.0f);
+    liCount = Drain(laPosted, 16);
+    s32 liFirstTeamCar = -1, liSecondTeamCar = -1;
+    if (liCount >= 1) std::memcpy(&liFirstTeamCar, laPosted[0].maBytes, sizeof(liFirstTeamCar));
+    if (liCount >= 2) std::memcpy(&liSecondTeamCar, laPosted[1].maBytes, sizeof(liSecondTeamCar));
+    Check(liCount == 2 && laPosted[0].miType == 254 && laPosted[1].miType == 254 &&
+          laPosted[0].miSize == 4 && laPosted[1].miSize == 4 && liFirstTeamCar == 3 && liSecondTeamCar == 6,
+          "team-change tail posts ordered 254 records outside mode-specific arms");
+    Check(gVehicleSnapshotCalls == 1 && gpSnapshotArgument == gpVehicleOutput,
+          "team-change tail receives the actual vehicle output argument");
+    Check(!gHud.mTeamChangedBits.IsBitSet(3) && !gHud.mTeamChangedBits.IsBitSet(6),
+          "team-change tail consumes the emitted latches");
+
+    Fresh(GameStateModuleIO::E_MODE_STUNT_ATTACK);
+    gHud.mTeamChangedBits.SetBit(3);
+    gabVehicleCrashing[KE_PLAYER] = true;
+    PostWorld(GameStateModuleIO::E_MODE_STUNT_ATTACK, 0.0f);
+    Check(Drain(laPosted, 16) == 0 && gHud.mTeamChangedBits.IsBitSet(3),
+          "team-change tail retains the latch while the local player is crashing");
+    gabVehicleCrashing[KE_PLAYER] = false;
+    gHud.mActionQueue.Clear();
+    PostWorld(GameStateModuleIO::E_MODE_STUNT_ATTACK, 0.0f);
+    liCount = Drain(laPosted, 16);
+    Check(liCount == 1 && laPosted[0].miType == 254 && !gHud.mTeamChangedBits.IsBitSet(3),
+          "team-change tail publishes the retained latch after the local crash ends");
 
     std::printf("FxGsHudCrashes: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
