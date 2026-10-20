@@ -198,6 +198,8 @@ namespace BrnGui
     void MovieManager::Construct()
     {
         miMoveMemoryReleaseDelay = 0;
+        // PC synchronous VIDEOLIST.BUNDLE storage is manager-owned, not GameDataModule pool 11.
+        mMoviePool.Construct();
         mMoviePlayer.Construct();
         mResourceAllocatorResource = rw::Resource();
         mAllocator.Construct();
@@ -266,10 +268,10 @@ namespace BrnGui
         CgsResource::BundleLoader lLoader;
         const s32 liLoaded = lLoader.LoadBundle("VIDEOS/VIDEOLIST.BUNDLE", &mMoviePool,
                                                 CgsResource::ResolveResourceType);
-        CgsDev::Log::WriteToLog(liLoaded > 0
-            ? "[MovieManager] VIDEOS/VIDEOLIST.BUNDLE loaded.\n"
+        CgsDev::Log::WriteToLog(liLoaded >= 0
+            ? "[MovieManager] VIDEOS/VIDEOLIST.BUNDLE load completed.\n"
             : "[MovieManager] VIDEOS/VIDEOLIST.BUNDLE missing/unreadable -> no videos available.\n");
-        mbBundleLoaded = (liLoaded > 0);
+        mbBundleLoaded = (liLoaded >= 0);
         return mbBundleLoaded;
     }
 
@@ -391,9 +393,28 @@ namespace BrnGui
         mPlayingMovie.Release();
         mQueuedMovie.Release();
         mReceiverQueue.Clear(); // Retain the selected host Release queue drain with its real receiver.
-        for (u32 li = 0; li < 3; ++li)
+        mpVideoDataResource.SetResource(nullptr);
+        if (mapPoolBacking[0] != 0)
         {
-            if (mapPoolBacking[li] != 0) { free(mapPoolBacking[li]); mapPoolBacking[li] = 0; }
+            if (mbBundleLoaded)
+            {
+                CgsResource::BundleLoader lLoader;
+                if (lLoader.UnloadBundle("VIDEOS/VIDEOLIST.BUNDLE", &mMoviePool) < 0)
+                    return false;
+                mbBundleLoaded = false;
+            }
+
+            CgsResource::SmallResource lPoolResource = {};
+            CgsResource::Entry::ResourceDescriptor lPoolDescriptor = {};
+            if (!mMoviePool.Invalidate(&lPoolResource, &lPoolDescriptor))
+                return false;
+
+            mMoviePool.ResetPool();
+            mMoviePool.Construct();
+            for (u32 li = 0; li < 3; ++li)
+            {
+                if (mapPoolBacking[li] != 0) { free(mapPoolBacking[li]); mapPoolBacking[li] = 0; }
+            }
         }
         mbBundleLoaded = false;
         meState = E_MOVIEMANAGERSTATE_RELEASED;
@@ -453,10 +474,44 @@ namespace BrnGui
 
     void MovieManager::HandleStopVideoEvent(const GuiEventStopVideo* lpEv)
     {
+        // ARTIST 0x824F17C0 does not read the event payload; the state selects stop behavior.
         if (lpEv == 0) return;
-        mbStopVideoStraightAway = lpEv->mbStopStraightAway;
-        if (meState == E_MOVIEMANAGERSTATE_PLAYING_MOVIE)
+        switch (meState)
+        {
+        case E_MOVIEMANAGERSTATE_STOP_MOVIE:
+        case E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER:
+        case E_MOVIEMANAGERSTATE_DELAYING_RETURN_OF_MEMORY:
+        case E_MOVIEMANAGERSTATE_DELAYING_VALIDATE:
+        case E_MOVIEMANAGERSTATE_RETURNING_MEMORY:
+        case E_MOVIEMANAGERSTATE_REPORTING_FINISHED:
+        case E_MOVIEMANAGERSTATE_IDLE:
+            mQueuedMovie.Prepare();
+            break;
+        case E_MOVIEMANAGERSTATE_REQUESTING_AUDIO:
+        case E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO:
+        case E_MOVIEMANAGERSTATE_PLAYING_MOVIE:
             meState = E_MOVIEMANAGERSTATE_STOP_MOVIE;
+            mQueuedMovie.Prepare();
+            break;
+        case E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE:
+        case E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE:
+        case E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY:
+        case E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER:
+            mbStopVideoStraightAway = true;
+            break;
+        default:
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid state " << static_cast<s32>(meState)
+                    << " when requesting video stop";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 740);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+        }
     }
 
     // ---- collision-world / car-pool state requests (ARTIST-faithful) ---------------------------------
