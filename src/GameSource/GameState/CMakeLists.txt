@@ -1,0 +1,85 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        Array_DriveThruInfo_46.cpp
+        Array_LandmarkIndex_16.cpp
+        Array_short_8.cpp
+        Array_short_25.cpp
+        Array_short_32.cpp
+        Array_short_256.cpp
+        BrnCgsPlayerName.cpp
+        #BrnCheckpointData.cpp # TODO: Broken for now
+        BrnCheckpointData_ArrayInstance.cpp
+        BrnGameActions.cpp
+        BrnGameEvents.cpp
+        BrnGameStateDebugComponent.cpp
+        BrnGameStateModule.cpp
+        BrnGameStateModule_wBT_01.cpp
+        BrnGameStateModule_wBT_04.cpp
+        BrnGameStateModule_wBT_05.cpp
+        BrnGameStateModule_wG4_00.cpp
+        BrnGameStateModuleIO.cpp
+        BrnGameStateSharedIO.cpp
+        BrnGuiInterfaceEvent_EventQueueInstance.cpp
+        BrnResetPlayerDebugComponent.cpp
+        BrnTriggerQueryRecord_ArrayInstance.cpp
+        EventQueue_CompletedFburnChallengesData_7.cpp
+        EventQueue_CompletedFburnChallengesData_GetEvent.cpp
+        EventQueue_HitOverheadSignEvent_100.cpp
+        EventQueue_RecordPropHitEvent_50.cpp
+        GameStateModule_gDC_00.cpp
+        GameStateModule_GetActiveRaceCarIndexFromNetworkPlayer.cpp
+        GameStateModule_gRR_00.cpp
+        GameStateModule_gSR_00.cpp
+        GameStateModule_gTD_00.cpp
+        GameStateModule_gUI_00.cpp
+        GameStateModule_ProcessGameEvents.cpp
+        GameStateModule_ProcessGameEvents_wBT_01.cpp
+        GameStateModule_ProcessGameEvents_wBT_02.cpp
+        GameStateModule_ProcessGameEvents_wBT_03.cpp
+        GameStateModule_ProcessGameEvents_wBT_04.cpp
+        GameStateModule_ProcessGameEvents_wBT_05.cpp
+        GameStateModule_RoadRules.cpp
+        GameStateModule_SendSetUpAllDriveThrus.cpp
+        GameStateModule_SendSetUpAllEventStarts.cpp
+        GameStateModule_SendSpecificPreSetRacesModes.cpp
+        GameStateModule_Showtime.cpp
+        GameStateModule_wW_01.cpp
+        Interface_SetUpAllEventStarts.cpp
+        SpecificGameModeEventInterface_embed_check.cpp
+
+    PUBLIC
+        BrnCgsPlayerName.h
+        BrnCheckpointData.h
+        BrnGameActions.h
+        BrnGameEvents.h
+        BrnGameStateDebugComponent.h
+        BrnGameStateModule.h
+        BrnGameStateModuleIO.h
+        BrnGameStateSharedIO.h
+        BrnGameStateTakedownCache.h
+        BrnGameStateTypes.h
+        BrnOpponentData.h
+        BrnResetPlayerDebugComponent.h
+        BrnTakedownType.h
+)
+
+add_subdirectory(AchievementManager)
+add_subdirectory(CarSelect)
+add_subdirectory(DeveloperChallengeManager)
+add_subdirectory(FlybyManager)
+add_subdirectory(ImageManager)
+add_subdirectory(InviteManager)
+add_subdirectory(ModeManager)
+add_subdirectory(MugshotManager)
+add_subdirectory(NetworkRoundManager)
+add_subdirectory(Offences)
+add_subdirectory(PaybackManager)
+add_subdirectory(Progression)
+add_subdirectory(RichPresenceManager)
+add_subdirectory(RoadRules)
+add_subdirectory(RumbleManager)
+add_subdirectory(SharedIO)
+add_subdirectory(StreetData)
+add_subdirectory(TakedownManager)
+add_subdirectory(TrainingManager)
+add_subdirectory(TriggerQueryManager)

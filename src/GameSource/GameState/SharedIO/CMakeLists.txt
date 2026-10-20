@@ -1,0 +1,36 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        Array_BufferedNewHighScore_5.cpp
+        Array_ChainableMultiplierInfo_8.cpp
+        Array_CheckpointData_16.cpp
+        Array_CollectedBillboard_5.cpp
+        Array_ENewRivalryCompare_4.cpp
+        Array_EOngoingRivalryCompare_6.cpp
+        Array_GridPositionAndScoreData_8.cpp
+        Array_ImageLoadRequest_3.cpp
+        Array_MultiplierData_3.cpp
+        Array_OpponentData_7.cpp
+        Array_SoundTriggerAction_16.cpp
+        Array_StartLocation_8.cpp
+        Array_TargetEventScore_49.cpp
+        Array_TrophyUnlockAction_12.cpp
+        BrnGameActionData.cpp
+        BrnGameStateToGuiIOInterfaces.cpp
+        EventQueue_GameStateToGuiEndingDirtyTrick_4.cpp
+        EventQueue_GameStateToGuiFinishedRaceEvent_4.cpp
+        EventQueue_GameStateToGuiNewDirtyTrick_4.cpp
+        EventQueue_GameStateToGuiOnTailEvent_7.cpp
+        EventQueue_GameStateToGuiOvertakeEvent_4.cpp
+        EventQueue_GameStateToGuiTookLastEvent_1.cpp
+        EventQueue_GameStateToGuiTookLeadEvent_1.cpp
+        EventQueue_GameStateToGuiTriggeredDirtyTrick_4.cpp
+
+    PUBLIC
+        BrnChainableMultiplierInfo.h
+        BrnGameActionData.h
+        BrnGameStateLeafContainers.h
+        BrnGameStateModuleInputIOInterfaces.h
+        BrnGameStateToGuiEvents.h
+        BrnGameStateToGuiIOInterfaces.h
+        BrnTargetEventScore.h
+)
