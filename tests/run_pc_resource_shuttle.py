@@ -1,8 +1,12 @@
 """Production request routing/update ordering with observable module/device boundaries."""
 import os
+import argparse
 from pathlib import Path
 from fxgs_common import REPO,Tree,definition,compile_and_run,report,STRSTREAM_CPP
 os.environ.pop('NoDefaultCurrentDirectoryInExePath',None)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--output-dir', type=Path)
+args = parser.parse_args()
 resource='src/GameShared/GameClasses/System/Resource/'
 source=Tree().read(resource+'CgsResourceModule.cpp')
 names=['bool ResourceModule::AddOpenReadStreamRequest(',
@@ -26,5 +30,5 @@ sources += [REPO/resource/n for n in ['CgsResourceIOEvents.cpp','CgsResourceModu
     'CgsBundleLoaderModuleIO_OutputBuffer.cpp']]
 sources += [REPO/base/'Memory'/n for n in ['CgsMemoryModuleIO.cpp']]
 result=compile_and_run(Path(__file__).with_name('PCResourceShuttle.cpp'),
-    'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_sources=sources)
+    'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_sources=sources,output_dir=args.output_dir)
 raise SystemExit(report('run_pc_resource_shuttle',[],result,14))

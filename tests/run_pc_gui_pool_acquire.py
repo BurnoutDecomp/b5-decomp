@@ -9,6 +9,7 @@ from fxgs_common import Tree, REPO, STRSTREAM_CPP, definition, compile_and_run, 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--rev')
+parser.add_argument('--output-dir', type=Path)
 args = parser.parse_args()
 base = 'src/GameShared/GameClasses/System/Resource/'
 pool = Tree().read(base + 'CgsResourcePool.cpp')
@@ -21,5 +22,6 @@ for signature in ['Pool* PoolModule::GetPool(', 'void PoolModule::DoAcquireResou
 code += '}\n'
 result = compile_and_run(Path(__file__).with_name('PCGuiPoolAcquire.cpp'),
                          'pc_gui_pool_acquire.inc', code, 'PCGuiPoolAcquire', extra_flags='/Gy',
-                         extra_sources=[STRSTREAM_CPP, REPO / 'vendor/renderware/src/rw/BaseResourceDescriptor.cpp'])
+                         extra_sources=[STRSTREAM_CPP, REPO / 'vendor/renderware/src/rw/BaseResourceDescriptor.cpp'],
+                         output_dir=args.output_dir)
 raise SystemExit(report('run_pc_gui_pool_acquire', [], result, 27))
