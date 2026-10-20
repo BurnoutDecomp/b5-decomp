@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
 #include <cstring>
 
@@ -821,13 +822,12 @@ namespace CgsGui
         case 6:
         case 7:
         {
-            // `*(**a2 + 20) = 1`: stamp the header's loaded-state field (console header
-            // +0x14, meCurrentState = LOADED) before registering. FLAG (x64 widened
-            // header): the converted 6-field header's state slot is ambiguous (+0x14
-            // overlaps mpConstData's high half -- see LoadAnimation's state note), so the
-            // store is skipped; the load-once guards carry the state contract.
             AptDataHeader* lpHeader = *static_cast<AptDataHeader* const*>(
                 lpNotification->mResourceHandle.mpResourceMemory);
+            // The PC bank emits resident registrations again when another bundle
+            // arrives. Preserve an already active movie during that transport replay.
+            if (lpHeader->meCurrentState != AptDataHeader::E_APTDATASTATE_ACTIVE)
+                lpHeader->meCurrentState = AptDataHeader::E_APTDATASTATE_LOADED;
             mAptAux.mAptDataHandler.AddAptData(lpHeader);
             break;
         }

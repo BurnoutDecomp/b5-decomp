@@ -1,0 +1,32 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnCrashAnalyser.cpp
+        BrnDirectorDevTools.cpp
+        BrnDirectorICEWrapper.cpp
+        BrnDirectorICEWrapperPrepare.cpp
+        BrnDirectorModule.cpp
+        BrnDirectorResourceManager.cpp
+        BrnDirectorResourceManagerICE.cpp
+        BrnDirectorResourceManagerICEWrapper.cpp
+        BrnMainDirector.cpp
+        BrnMainDirector_wM_01.cpp
+        BrnReplayDirector.cpp
+
+    PUBLIC
+        BrnCrashAnalyser.h
+        BrnDirectorDevTools.h
+        BrnDirectorHarness.h
+        BrnDirectorICEWrapper.h
+        BrnDirectorModule.h
+        BrnDirectorResourceManager.h
+        BrnMainDirector.h
+        BrnReplayDirector.h
+)
+
+add_subdirectory(Arbitrator)
+add_subdirectory(Camera)
+add_subdirectory(DirectorModule)
+add_subdirectory(MomentController)
+add_subdirectory(SharedIO)
+add_subdirectory(Shots)
+add_subdirectory(Utils)
