@@ -9,6 +9,9 @@
 // convention; the stringized condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiDebugComponent.h"
+#include "GameSource/Gui/Flow/PostEvent/States/Online/BrnOnlineInstantResults.h"
+#include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
+#include <cmath>
 #include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
@@ -23,6 +26,10 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 
 #include <cstring>                               // strlen / strncpy / memset
+
+// Existing compatibility provider; the original wrapper always disables screen checking.
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+    f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 namespace
 {
@@ -55,12 +62,9 @@ void GuiDebugComponent::Construct(GuiModule* lpGuiModule)
     mspSingletonThis = this;
     mpGuiModule = lpGuiModule;
     mbSpeedoVisible = false;
-    mSpeedoInfo.miSpeedMph = 0;
-    mSpeedoInfo.miRPM = 0;
-    mSpeedoInfo.mi8Gear = 0;
-    mSpeedoInfo.mau8Pad[0] = 0;
-    mSpeedoInfo.mau8Pad[1] = 0;
-    mSpeedoInfo.mau8Pad[2] = 0;
+    mSpeedoInfo.miPlayerMPH = 0;
+    mSpeedoInfo.miPlayerRPM = 0;
+    mSpeedoInfo.miPlayerGear = 0;
     mfSafePercent = 85.0f;
     mbRenderGui = true;
     mbMiniMapVisible = true;
@@ -508,6 +512,61 @@ void GuiDebugComponent::ToggleGenericHUDPriorityOverrideCallback(void* lpUserDat
     static_cast<GuiDebugComponent*>(lpUserData)->ToggleGenericHUDPriorityOverride();
 }
 
+// ARTIST824F7CF0. Decode the actual VMADD fields as VA*VC+VB;
+// their last two printed IDA operands are in physical-field order.
+void GuiDebugComponent::DrawDebugFrame1280(CgsDev::Debug2DImmediateRender* lpRender,
+    Vector4 lvFrame, CgsDev::RGBA lColour, f32 lfBorderSize)
+{
+    const Vector2 lvScreen = lpRender->GetVirtualScreenSize();
+    const f32 lfInvWidth = 0.0007812500116415322f;
+    const f32 lfInvHeight = 0.0013888889225199819f;
+    const f32 lfX0 = std::fma(lfInvWidth * lvFrame.x, lvScreen.x, 1.0f);
+    const f32 lfY0 = std::fma(lfInvHeight * lvFrame.y, lvScreen.y, 1.0f);
+    const f32 lfX1 = (lfInvWidth * lvFrame.z) * lvScreen.x - 1.0f;
+    const f32 lfY1 = (lfInvHeight * lvFrame.w) * lvScreen.y - 1.0f;
+    lpRender->DrawFrame(lfX0, lfY0, lfX1, lfY1, lColour, lfBorderSize);
+}
+
+// ARTIST824FD010. Function-local rectangle constants are native1280x720 coordinates.
+void GuiDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
+{
+    static const Vector4 lFullArea = { 0.0f, 0.0f, 1280.0f, 720.0f };
+    static const Vector4 lFourThreeArea = { 160.0f, 0.0f, 1120.0f, 720.0f };
+    if (mbShow43Area)
+        DrawDebugFrame1280(lpRender, lFourThreeArea, 0xFF00FF00u, 1.0f);
+    if (mbShowSafeArea)
+    {
+        const Vector4& lrArea = mbShow43Area ? lFourThreeArea : lFullArea;
+        const f32 lfHalfWidth = (lFullArea.z - lFullArea.x) * 0.5f;
+        const f32 lfHalfHeight = (lFullArea.w - lFullArea.y) * 0.5f;
+        const f32 lfPercent = mfSafePercent * 0.01f;
+        Vector4 lvSafeArea;
+        lvSafeArea.x = std::fma(lrArea.x - lfHalfWidth, lfPercent, lfHalfWidth);
+        lvSafeArea.y = std::fma(lrArea.y - lfHalfHeight, lfPercent, lfHalfHeight);
+        lvSafeArea.z = std::fma(lrArea.z - lfHalfWidth, lfPercent, lfHalfWidth);
+        lvSafeArea.w = std::fma(lrArea.w - lfHalfHeight, lfPercent, lfHalfHeight);
+        DrawDebugFrame1280(lpRender, lvSafeArea, 0xFF0000FFu, 1.0f);
+    }
+    if (mpGuiModule->mScreenFlow.mpStateOnlineInstantResults && mbDebugOnlineInstantResults)
+        mpGuiModule->mScreenFlow.mpStateOnlineInstantResults->RenderDebug(lpRender);
+    if (mpGuiModule->mScreenFlow.mpStateOfflineInstantResults && mbDebugOfflineInstantResults)
+        mpGuiModule->mScreenFlow.mpStateOfflineInstantResults->RenderDebug(lpRender);
+    if (mbSpeedoVisible)
+    {
+        char lacBuffer[1024];
+        CgsDev::StrStream lStream(lacBuffer, sizeof(lacBuffer));
+        lStream << "SPEED : " << mSpeedoInfo.miPlayerMPH << "mph \n";
+        MaybeDrawText(lpRender, lStream.GetBuffer(), 50.0f, 50.0f, 30.0f, 0xFFFFFFC8u, false);
+        lStream.Reset();
+        lStream << "RPM : " << mSpeedoInfo.miPlayerRPM << " \n";
+        MaybeDrawText(lpRender, lStream.GetBuffer(), 50.0f, 80.0f, 30.0f, 0xFFFFFFC8u, false);
+        lStream.Reset();
+        lStream << "GEAR : " << mSpeedoInfo.miPlayerGear << " \n";
+        MaybeDrawText(lpRender, lStream.GetBuffer(), 50.0f, 110.0f, 30.0f, 0xFFFFFFC8u, false);
+        lStream.Reset();
+    }
+}
+
 // ARTIST824ED288. lpUserData is an integer menu index, not a component pointer.
 void GuiDebugComponent::ToggleRaceHudComponentsCallback(void* lpValue, void* lpUserData)
 {
@@ -571,6 +630,106 @@ void GuiDebugComponent::TriggerPaybackComponent(void* lpUserData)
     lEvent.meVictimActiveRaceCarIndex = lePlayer;
     lpThis->mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
         177, sizeof(lEvent));
+}
+
+// Original command is gated only by the actual SystemUserProfile state word.
+void GuiDebugComponent::BootupProfile()
+{
+    if (mpGuiModule->mSystemUserProfile.miState == 1)
+        mpGuiModule->mProfileHost.Bootup();
+}
+
+// Original command is gated only by the actual SystemUserProfile state word.
+void GuiDebugComponent::SaveProfile()
+{
+    if (mpGuiModule->mSystemUserProfile.miState == 1)
+        mpGuiModule->mProfileHost.Save();
+}
+
+// Original command is gated only by the actual SystemUserProfile state word.
+void GuiDebugComponent::LoadProfile()
+{
+    if (mpGuiModule->mSystemUserProfile.miState == 1)
+        mpGuiModule->mProfileHost.Load();
+}
+
+// ARTIST825238E0: same original manager/handler and autosave latch/time owners.
+void GuiDebugComponent::AutosaveProfile()
+{
+    if (mpGuiModule->mSystemUserProfile.miState == 1)
+    {
+        ProfileManager& lrManager = mpGuiModule->mProfileHost.GetProfileManager();
+        if (lrManager.AutosaveIsEnabled())
+        {
+            lrManager.Autosave(&mpGuiModule->mProfileHost, 0, 0);
+            mpGuiModule->mbProfileAutosavePending = false;
+            mpGuiModule->mfLastProfileAutosaveTime = mpGuiModule->mGuiCache.GetTime();
+        }
+    }
+}
+
+// ARTIST82523970; original assertion and continuation into the real command.
+void GuiDebugComponent::BootupProfileCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "BootupProfileCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1114);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->BootupProfile();
+}
+
+// ARTIST82523A30; original assertion and continuation into the real command.
+void GuiDebugComponent::AutosaveProfileCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "AutosaveProfileCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1127);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->AutosaveProfile();
+}
+
+// ARTIST82523AD0; original assertion and continuation into the real command.
+void GuiDebugComponent::SaveProfileCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "SaveProfileCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1140);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->SaveProfile();
+}
+
+// ARTIST82527998; original assertion and continuation into the real command.
+void GuiDebugComponent::LoadProfileCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "LoadProfileCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1153);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->LoadProfile();
 }
 
 // Post event 495 for the hook picked in the debug menu: every maximum weight 1.0 and the hook's

@@ -18,6 +18,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"       // CgsDev::DebugUI::StringList
@@ -59,6 +61,8 @@ namespace BrnGui
         // ARTIST8250C998; original typed GUI input reader/publisher.
         void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
 
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+
         // Return the singleton instance pointer, asserting it is non-null (the assert is
         // non-fatal; the pointer is returned either way).
         static GuiDebugComponent* GetSingletonPtr();
@@ -66,6 +70,9 @@ namespace BrnGui
     protected:
         const char* GetName() const override;
         const char* GetPath() const override;
+
+        void DrawDebugFrame1280(CgsDev::Debug2DImmediateRender* lpRender,
+            Vector4 lvFrame, CgsDev::RGBA lColour, f32 lfBorderSize);
 
         // Actual nonvirtual members inlined into the original debug callbacks.
         void TriggerIntro();
@@ -82,6 +89,10 @@ namespace BrnGui
         void TriggerClosePFX();
         void TriggerEATraxComponent();
         void TriggerOnlineInviteComponent();
+        void BootupProfile();
+        void AutosaveProfile();
+        void SaveProfile();
+        void LoadProfile();
 
         // Post the selected post-FX hook (by name, every maximum weight 1.0) to the GUI.
         void TriggerPFX();
@@ -94,6 +105,10 @@ namespace BrnGui
         static void TriggerEATraxComponentCallback(void* lpUserData);
         static void TriggerOnlineInviteCallback(void* lpUserData);
         static void TriggerPaybackComponent(void* lpUserData);
+        static void BootupProfileCallback(void* lpUserData);
+        static void AutosaveProfileCallback(void* lpUserData);
+        static void SaveProfileCallback(void* lpUserData);
+        static void LoadProfileCallback(void* lpUserData);
         static void EnterCarSelectCallback(void* lpUserData);
         static void TriggerIntroCallback(void* lpUserData);
         static void TriggerPostEventCallback(void* lpUserData);

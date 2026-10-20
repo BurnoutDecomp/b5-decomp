@@ -1460,9 +1460,9 @@ namespace BrnGui
             {
                 const BrnGui::GuiEventUpdateHud* lpHudEvent =
                     reinterpret_cast<const BrnGui::GuiEventUpdateHud*>(lpEvent);
-                miPlayerSpeedMph = lpHudEvent->miSpeedMph;   // +19208
-                miPlayerRPM      = lpHudEvent->miRPM;        // +19212
-                miPlayerGear     = lpHudEvent->mi8Gear;      // +19216 (word store of the byte)
+                miPlayerSpeedMph = lpHudEvent->miPlayerMPH;   // +19208
+                miPlayerRPM      = lpHudEvent->miPlayerRPM;   // +19212
+                miPlayerGear     = lpHudEvent->miPlayerGear;  // +19216, full signed word
             }
             break;
 

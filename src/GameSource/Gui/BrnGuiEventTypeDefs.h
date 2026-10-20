@@ -195,17 +195,20 @@ static_assert(sizeof(OverheadSignScore) == 0x20,
 // bridge posts and GuiCache::RecEvent consumes (relocated here from the demangled-shell
 // header, which would otherwise ODR-clash for TUs that include both).
 //   GuiEventUpdateHud (147): BridgeWorldVehicleDataToGui @0x823E5768 builds a RAW 12-byte
-//   {(s32)RaceCarState::mfSpeedMPH @972, (s32)mfRPM @984, mi8Gear @1092} local (BE stores
+//   {(s32)RaceCarState::mfSpeedMPH @972, (s32)mfRPM @984, (s32)mi8Gear @1092} local (word stores
 //   +0/+4/+8, no GuiEvent header); AddGuiEvent<GuiEventUpdateHud> @0x823DA5C8 ==
 //   AddEvent(&event, 147, 12). Cache case 147 -> +19208/+19212/+19216.
 struct GuiEventUpdateHud
 {
-    s32 miSpeedMph;   // @0
-    s32 miRPM;        // @4
-    s8  mi8Gear;      // @8
-    u8  mau8Pad[3];   // @9..@11 (the console posts 12 bytes)
+    s32 miPlayerMPH;   // @0, DecFIGS BrnGuiEventTypeDefs.h:961
+    s32 miPlayerRPM;   // @4, :962
+    s32 miPlayerGear;  // @8, :963; producer sign-extends the vehicle's signed byte
     s32 GetEventType() const { return 147; }
 };
+static_assert(sizeof(GuiEventUpdateHud) == 12, "ARTIST event147 has three32-bit words");
+static_assert(offsetof(GuiEventUpdateHud, miPlayerMPH) == 0 &&
+    offsetof(GuiEventUpdateHud, miPlayerRPM) == 4 &&
+    offsetof(GuiEventUpdateHud, miPlayerGear) == 8, "ARTIST event147 field geometry");
 
 //   GuiPlayerRaceCarIdEvent (376): the raw {active, global} index pair
 //   (@0x823DA458 == AddEvent(&event, 376, 8)); GuiCache case 376 asserts both ranges as

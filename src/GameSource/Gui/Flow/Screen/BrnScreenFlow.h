@@ -26,6 +26,7 @@ namespace rw        { struct IResourceAllocator; }
 // order); on x64 the offsets differ (8-byte pointers) but the member order is faithful.
 namespace BrnGui
 {
+    struct GuiDebugComponent;
     class GuiCache;         // GameSource/Gui/BrnGuiCache.h (held by pointer in the base)
     class ProfileManager;   // threaded by reference to CN_PROFILE's wider Construct (never
                             // dereferenced by the flow itself; may be an un-reconstructed shell)
@@ -124,6 +125,9 @@ namespace BrnGui
         virtual void Update();
 
     private:
+        // ARTIST824FD294/C0 reads these actual pool-owned instant-result states.
+        friend struct GuiDebugComponent;
+
         // @ 0x824F2150 -- dev-only dump of every state's name + sizeof (behind the
         // CgsDev::Message filter). Prepare virtually dispatches it right after the base
         // prepare (@0x82523E94, vtbl +0x18).
