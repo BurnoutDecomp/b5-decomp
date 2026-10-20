@@ -26,7 +26,7 @@ from fxgs_common import Tree, definition, body_or_empty, code_only, compile_and_
 HUD_CPP = "src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp"
 HUD_H = "src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"
 ACTIONS_H = "src/GameSource/GameState/BrnGameActions.h"
-GUI00 = "src/GameSource/GameState/GameStateModule_gUI_00.cpp"
+MODE_WORLD_CPP = "src/GameSource/GameState/ModeManager/BrnModeManager_WorldTick.cpp"
 MODE_MANAGER_H = "src/GameSource/GameState/ModeManager/BrnModeManager.h"
 RCIF_CPP = "src/GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRCEntityActiveRaceCarOutputInterface.cpp"
 BODIES = [
@@ -81,13 +81,15 @@ def wiring(tree):
     remove = lobby.find("RemoveCrashingMessagesForTakendownPlayers(lpTakedownQueue)")
     yield ("D2/D3 PostWorldUpdate case 15 -> DetectOnlineCrashes then RemoveCrashingMessagesForTakendownPlayers  "
            "@0x8239DB50 / 0x8239DB5C", 0 <= detect < remove)
-    gui = code_only(tree.read(GUI00))
-    call = re.search(r"GetHUDMessageLogic\(\)->PostWorldUpdate\((.*?)\);", gui, re.S)
+    world = body_or_empty(tree.read(MODE_WORLD_CPP), "ModeManager::PostWorldUpdate(")
+    call = re.search(r"mHUDMessageLogic\.PostWorldUpdate\((.*?)\);", world, re.S)
     arguments = call.group(1) if call else ""
-    yield ("D1 the post-world leg hands in the crash queue, the takedown cache's queue and the ModeManager's "
-           "player index (console r8 / r10 / [sp+0x5C])",
-           "lpRaceCarCrashEventQueue" in arguments and "mpTakedownCache->mTakedownEventQueue" in arguments
-           and "GetPlayerActiveRaceCarIndex()" in arguments)
+    yield ("D1 the selected ModeManager post-world caller carries the crash queue, takedown input, "
+           "player index and mode-progress byte in ARTIST order",
+           re.fullmatch(r"\s*lpActiveRaceCarOutput\s*,\s*meCurrentGameModeType\s*,\s*&mScoringSystem\s*,\s*"
+                        r"lpPostWorldInputBuffer->GetRaceCarCrashEventQueue\(\)\s*,\s*lpTakedownQueue\s*,\s*"
+                        r"lfDelta\s*,\s*mePlayerActiveRaceCarIndex\s*,\s*lbIsGameModeInProgress\s*",
+                        arguments) is not None)
     actions = code_only(tree.read(ACTIONS_H))
     yield ("D1 action ids 249 E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT / 250 E_ACTION_HUD_MESSAGE_X_CRASHES "
            "(DWARF 239/240, +10; translator case 250 @0x823EC0CC)",
