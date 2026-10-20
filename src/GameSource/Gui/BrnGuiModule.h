@@ -302,6 +302,7 @@ namespace BrnGui
         // The GUI debug components read the cache inline off their module pointer.
         friend struct SatNavDebugComponent;
         friend struct GuiDebugComponent;
+        friend struct GuiCacheDebugComponent; // actual cache status reader
 
         // ARTIST824F10D8; the real static callback registered by native
         // Prepare. Its recovered body remains unregistered in the host flow.

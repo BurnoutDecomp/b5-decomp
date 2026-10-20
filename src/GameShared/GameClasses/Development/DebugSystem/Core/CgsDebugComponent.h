@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"
 
 namespace CgsResource { class DebugComponent; }
+namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 
 // CgsDev::DebugComponent - the base every in-game debug component derives from (perfmon
 // overlays, the takedown/mode-manager debug menus, etc.). Subclasses register their member
@@ -46,6 +47,13 @@ namespace CgsDev
         friend class CgsResource::DebugComponent;
         struct ResourceConstructorTag {};
         explicit DebugComponent(ResourceConstructorTag) {}
+
+        // ARTIST827E5D50 installs the HUD debug vtable without writing base
+        // data. Keep this actual GUI owner separate from the active default
+        // constructor and from the Resource-only initialization path above.
+        friend struct BrnGui::GuiHudMessagesDebugComponent;
+        struct GuiConstructorTag {};
+        explicit DebugComponent(GuiConstructorTag) {}
 
     public:
         DebugComponent();

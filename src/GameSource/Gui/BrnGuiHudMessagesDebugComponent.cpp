@@ -18,6 +18,13 @@
 
 namespace BrnGui
 {
+    // Original C++ initialization emits only the derived vtable.
+    // No active/next/controller/director/id/group field is initialized here.
+    GuiHudMessagesDebugComponent::GuiHudMessagesDebugComponent()
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+    {
+    }
+
     // ARTIST825187E8..82518804 inlines this actual owner; DecFIGS534114
     // supplies its named declaration/body. The folded base call is empty.
     void GuiHudMessagesDebugComponent::Construct(HudMessageDirector* lpMessageDirector)
