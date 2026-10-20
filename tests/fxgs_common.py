@@ -10,6 +10,9 @@ Run the runners from the workflow checkout with NoDefaultCurrentDirectoryInExePa
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxgs_<name>.py [--rev <rev>]
 """
 from pathlib import Path
+from contextlib import nullcontext
+import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -86,14 +89,24 @@ STRSTREAM_CPP = REPO / "src/GameShared/GameClasses/Development/CgsStrStream.cpp"
 
 
 def compile_and_run(test_cpp, inc_name, inc_text, tag, extra_flags="", shadow=None, extra_sources=(),
-                    extra_files=None):
+                    extra_files=None, output_dir=None):
     """Write inc_text as <tmp>/<inc_name>, compile test_cpp (+ extra_sources, e.g. the real
     CgsStrStream.cpp the assert-message paths need) with the canonical flags (+ the access macros
     the fixtures need) and run it. `shadow` maps a src-relative header path to the revision's text
     so the extracted bodies compile against their own revision's header. `extra_files` maps more
     file names to texts written beside the .inc (e.g. a generated configuration include).
+    `output_dir` retains generated inputs, commands and execution receipts in a new/empty directory.
+    Default callers retain their temporary-directory behavior.
     Returns (checks, failures) parsed from the '<tag>: N checks, M failures' line, or None."""
-    with tempfile.TemporaryDirectory(prefix="brn_fxgs_") as directory:
+    if output_dir is None:
+        directory_context = tempfile.TemporaryDirectory(prefix="brn_fxgs_")
+    else:
+        destination = Path(output_dir).resolve()
+        if destination.exists() and any(destination.iterdir()):
+            raise ValueError("Refusing to overwrite fixture receipts: " + str(destination))
+        destination.mkdir(parents=True, exist_ok=True)
+        directory_context = nullcontext(str(destination))
+    with directory_context as directory:
         output = Path(directory)
         (output / inc_name).write_text(inc_text, encoding="utf-8")
         for name, text in (extra_files or {}).items():
@@ -119,6 +132,25 @@ def compile_and_run(test_cpp, inc_name, inc_text, tag, extra_flags="", shadow=No
         sys.stdout.write(result.stdout[-8000:])
         sys.stderr.write(result.stderr[-4000:])
         match = re.search(re.escape(tag) + r": (\d+) checks, (\d+) failures", result.stdout)
+        if output_dir is not None:
+            (output / "run.stdout.txt").write_text(result.stdout, encoding="utf-8")
+            (output / "run.stderr.txt").write_text(result.stderr, encoding="utf-8")
+            input_files = [Path(test_cpp), output / inc_name, script,
+                           WORKFLOW / "tools/build/msvc_flags.txt", WORKFLOW / "tools/build/msvc_includes.txt"]
+            input_files += [Path(source) for source in extra_sources]
+            input_files += [p for p in output.rglob("*") if p.is_file() and
+                            (p.is_relative_to(shadow_dir) or p.name in (extra_files or {}))]
+            receipt = {
+                "tag": tag, "process_exit_code": result.returncode,
+                "numeric": {"checks": int(match.group(1)), "failures": int(match.group(2))} if match else None,
+                "command": command,
+                "inputs": [{"path": str(path.resolve()), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                           for path in dict.fromkeys(input_files)],
+            }
+            executable = output / "regression.exe"
+            if executable.exists():
+                receipt["executable_sha256"] = hashlib.sha256(executable.read_bytes()).hexdigest()
+            (output / "result.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
         if match is None:
             print(f"NUMERIC: the test did not run (exit {result.returncode})")
             return None

@@ -12,7 +12,7 @@ int BeginAssert() { return 0; }
 int FireAssert(const char* message, const char*, int) { ++assertions; std::printf("ASSERT %s\n", message); return 0; }
 void* EndAssert() { return nullptr; }
 } }
-namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+namespace CgsDev { namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 namespace Message { u64 gxMessageFilterFlags = 0; } }
 namespace CgsResource {
 // The module scheduler/lifecycle is the boundary. Pool lookup, native resource

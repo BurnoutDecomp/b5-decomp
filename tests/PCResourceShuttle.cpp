@@ -11,7 +11,7 @@
 
 static int checks,failures,assertions;
 static std::vector<int> order;
-namespace CgsDev { namespace Log { DebugPrint* gpDebugPrint=nullptr; }
+namespace CgsDev { namespace Log { StrStreamBase* gpDebugPrint=nullptr; }
 namespace Message { u64 gxMessageFilterFlags=0; } }
 namespace CgsDev { namespace Assert {
 int BeginAssert(){return 0;}
