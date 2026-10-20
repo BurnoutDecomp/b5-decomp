@@ -16,6 +16,16 @@
 
 namespace BrnGui
 {
+    // ARTIST825187E8..82518804 inlines this actual owner; DecFIGS534114
+    // supplies its named declaration/body. The folded base call is empty.
+    void GuiHudMessagesDebugComponent::Construct(HudMessageDirector* lpMessageDirector)
+    {
+        mpMessageController = 0;
+        mpMessageDirector = lpMessageDirector;
+        miMessageId = 0;
+        miMessageGroup = 0;
+    }
+
     // @ 0x827DD220
     const char* GuiHudMessagesDebugComponent::GetName() const
     {

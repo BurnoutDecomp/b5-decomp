@@ -96,6 +96,18 @@ namespace
     // GUI event 356 is posted as one byte, id 356 size 1, through its canonical record.
     static_assert(sizeof(BrnGui::GuiAutosaveRequestEvent) == 1, "id 356 size 1");
 
+    // ARTIST case 224 calls the one-byte AddGuiEvent<GuiEvent<152>> instantiation.
+    // Keep this one-byte legacy tag local: the normal GUI 152 header is 12 bytes and
+    // GuiHudMessage uses it, while this translator passes only its untouched stack byte.
+    // No matching source consumer for this one-byte route is claimed.
+    struct GuiEvent152UnwrittenByte
+    {
+        u8 mu8Unwritten;
+        s32 GetEventType() const { return 152; }
+    };
+    static_assert(sizeof(GuiEvent152UnwrittenByte) == 1,
+                  "ARTIST action 224 posts GUI 152 as one unwritten byte");
+
     // =========================================================================
     // [drive-thru wave 2026-08-29] The byte the BODY-SHOP drive-thru action (97) carries its
     // "the repair did something" flag in. The 144-byte shop payload is a serialised action
@@ -1751,6 +1763,38 @@ namespace
                 break;
             }
 
+            // ---- 222..224  original one-byte leftovers and the joined-car wire ------------------
+            // ARTIST 0x823EC57C..0x823EC5C0. 222 and 224 pass unwritten stack bytes to one-byte
+            // GUI 151 / 152 AddEvent helpers. Preserve that residue. 223 copies only action+0
+            // (qword) and action+0x18 (one byte) into GUI 150; output bytes +9..+15 stay residue.
+            // The upstream action producer and its declared payload size remain unlocated.
+            case 222:
+            {
+                static_assert(sizeof(BrnGui::GuiEventCarEliminatedFromEvent) == 1,
+                              "ARTIST GUI 151 tag is one byte");
+                BrnGui::GuiEventCarEliminatedFromEvent lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case 223:
+            {
+                static_assert(sizeof(bool) == 1,
+                              "ARTIST GUI 150 camera flag is one byte");
+                const u8* lpActionBytes = reinterpret_cast<const u8*>(lpAction);
+                BrnGui::GuiEventCarJoinedEvent lEvent;
+                std::memcpy(&lEvent.mJoiningRivalID, lpActionBytes, sizeof(lEvent.mJoiningRivalID));
+                // Preserve the raw byte as the lbz/stb pair does; do not normalize it through bool.
+                std::memcpy(&lEvent.mbDoCamera, lpActionBytes + 0x18, sizeof(lEvent.mbDoCamera));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case 224:
+            {
+                GuiEvent152UnwrittenByte lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 242 / 245 / 246 / 247 / 248 / 250  THE RACE-MODE HUD MESSAGES -----------------
             // [FX-FLOW 2026-09-24, G11-D1 remainder] HUDMessageLogic's race arm posts these into the
             // game-action queue (242 GenerateFirstOrLastMessage, 245 GenerateLeaderMessages, 247
@@ -2593,6 +2637,20 @@ namespace
                 {
                     TranslateShowtimeActionToGuiEvent(liActionType, lpAction, lpGuiInput);
                 }
+                break;
+            }
+
+            // ARTIST 0x823ED570..0x823ED5C4: action294 is the image-save request that becomes
+            // GUI358. The action producer widens its pointer to the host width; copy the whole
+            // 24-byte ImageFileInfo-shaped record, including the unwritten trailing X360 word.
+            case 294:
+            {
+                const BrnGameState::GameStateModuleIO::ImageSaveRequestAction* lpSaveImageAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageSaveRequestAction*>(lpAction);
+                CGS_ASSERT(lpSaveImageAction != 0, "lpSaveImageAction");
+                BrnGui::GuiEventSaveImageFileAndAutosave lEvent;
+                std::memcpy(&lEvent.mImageFileInfo, lpSaveImageAction, sizeof(lEvent.mImageFileInfo));
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 

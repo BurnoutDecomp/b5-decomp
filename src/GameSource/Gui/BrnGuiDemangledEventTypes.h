@@ -427,10 +427,16 @@ namespace BrnGui
     // BrnGuiEventTypeDefs.h (named fields, derives from CgsModule::Event). A placeholder
     // must never shadow a real home; defining both made every TU that includes both
     // headers a hard C2011 (it already broke two committed files before wave I hit it).
-    // FLAG / OPEN: this catalogue read the id as 144 size 24 from the AddGuiEvent<T>
-    // spine, which does NOT match the real home. One of the two is misnamed -- unresolved,
-    // needs asm arbitration, deliberately not guessed here.
-    struct GuiEventSaveImageFileAndAutosave : public CgsGui::GuiEvent<358> { u8 maPayload[4]; };  // id 358 size 16 (12B GuiEvent header + opaque payload)
+    // ARTIST action294 routes to GUI358; AddGuiEvent @0x823D80F0 posts 358/16 on X360.
+    // GuiModule::Update forwards the direct image-file record to AutosaveProfile, whose
+    // ImageFileInfo consumer reads the trailing word as its corrupt flag.
+    struct GuiEventSaveImageFileAndAutosave
+    {
+        CgsGui::ImageFileInfo mImageFileInfo;
+        s32 GetEventType() const { return 358; }
+    };
+    static_assert(sizeof(GuiEventSaveImageFileAndAutosave) == 24,
+                  "GUI358 carries one host-native ImageFileInfo record");
     // [E1 event-status wave 2026-08-26] GuiEventScoreUpdate (id 424) has been RECOVERED and
     // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape. Same reason for the
     // move as GuiAttackScoreUpdate above. Deleted rather than left to shadow it.

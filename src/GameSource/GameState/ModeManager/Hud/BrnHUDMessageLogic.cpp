@@ -1353,6 +1353,26 @@ void HUDMessageLogic::GenerateBurningHomeRunCheckpointMessage(ModeManager* lpMod
     const EActiveRaceCarIndex leRaceCarIndex = meCheckpointTriggeringRaceCarIndex;
     if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
     {
+        // sub_8231EA70 performs these non-fatal checks before the named getter/count calls.
+        if (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp",
+                5565);
+            CgsDev::Assert::EndAssert();
+        }
+        if (leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp",
+                5566);
+            CgsDev::Assert::EndAssert();
+        }
+
         const EGlobalRaceCarIndex leGlobalRaceCarIndex =
             lpModeManager->GetGlobalRaceCarOutputInterface()->GetGlobalRaceCarIndex(leRaceCarIndex);
         const s32 liNumCheckpointsToGo =

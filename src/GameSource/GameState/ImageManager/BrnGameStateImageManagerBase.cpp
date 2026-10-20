@@ -25,7 +25,7 @@
 #include <cstring>   // std::memcpy / std::memset (model the X360 XMemCpy / XMemSet block intrinsics)
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
 #include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // typed image-load records (host-native pointer width)
-#include "GameSource/GameState/BrnGameActions.h" // typed image-gallery action record shapes 289..293
+#include "GameSource/GameState/BrnGameActions.h" // typed image-gallery/image-save action records 289..294
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsID.h"                     // CgsID, CgsIDCompress
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // CgsSystem::DateAndTime
@@ -167,16 +167,8 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
                   offsetof(GameStateModuleIO::ImageGalleryDataAction, mActiveBitArray),
                   "producer occupancy bits start at action +0x08");
 
-    // type 294 (16 bytes): a save request (file id, texture size, texture buffer ptr). The asm
-    // (RequestImageSave 0x82384868) writes only +0x00/+0x04/+0x08; +0x0C is trailing pad it never
-    // stores (size 16 is still passed to AddEvent).
-    struct ImageSaveRequestEvent
-    {
-        s32   miFileID;       // +0x00
-        s32   miTextureSize;  // +0x04
-        char* mpTextureBuffer;// +0x08
-        s32   miPad0C;        // +0x0C (never written by the asm)
-    };
+    // Shared typed action294 payload: its X360 tail word remains unwritten and follows the
+    // native-width buffer pointer at host +0x10 (the host record size is 24 bytes).
 }
 
 // ---------------------------------------------------------------------------
@@ -484,11 +476,12 @@ void GameStateImageManagerBase::RequestImageSave(s32 liFileID, CgsNetwork::Netwo
 
     CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
 
-    ImageSaveRequestEvent lSaveRequest;
+    GameStateModuleIO::ImageSaveRequestAction lSaveRequest;
     lSaveRequest.miFileID        = liFileID;
     lSaveRequest.miTextureSize   = lSaveSlot.GetTextureSize();
     lSaveRequest.mpTextureBuffer = lSaveSlot.GetTexture();
-    // +0x0C is left uninitialised: the X360 asm never writes that word.
+    // The X360 +0x0C word is unwritten. Pointer widening moves it to host +0x10, where
+    // GUI358 reads its first byte as ImageFileInfo::mbIsCorrupt; preserve the original residue.
     AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lSaveRequest), KI_EVENT_IMAGE_SAVE, (s32)sizeof(lSaveRequest));
 

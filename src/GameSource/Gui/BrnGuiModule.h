@@ -2,6 +2,7 @@
 #define BRN_GUI_MODULE_H
 
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // actual shared base and Model owner (CP15/16)
+#include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // GUI358 autosave image record
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
@@ -308,10 +309,13 @@ namespace BrnGui
 
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
-        // 14/16 -> the model-out notification queue, 504/508/513 -> MovieManager), and fan
-        // every event the flow subscribed to (records 34/35) into the HUD flow's in-queue
+        // 14/16 -> the model-out notification queue, 358 -> profile image autosave,
+        // 504/508/513 -> MovieManager), and fan every event the flow subscribed to
+        // (records 34/35) into the HUD flow's in-queue
         // -- the EventInterpreterModule observer dispatch.
-        void DispatchInboundGuiEvents();
+        void DispatchInboundGuiEvents(bool& rbHasSaveImageEvent,
+                                      CgsGui::ImageFileInfo& lrSaveImageInfo);
+        void AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo);
 
         // Drain one flow's StateInterface output queue -- the per-frame dispatch point
         // for everything its states post: subscription records (34/35, keyed into that
