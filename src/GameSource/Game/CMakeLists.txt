@@ -1,7 +1,66 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
+        BrnAutoTestManager.cpp
+        BrnAutoTestManagerLUACallbacks.cpp
+        BrnDispatchThreadInputBuffer.cpp
+        BrnGame.cpp
         BrnGameModule.cpp
+        BrnGameModule_wN1_01.cpp
+        BrnGameModule_wN1_02.cpp
+        BrnGameModuleIO.cpp
+        BrnGlobalCpuMonitors.cpp
+        #BrnGlobalCpuMonitors_embed_check.cpp # TODO: Broken for now
+        BrnHarnessWinTeleport.cpp
+        BrnLoadingScreenRenderer.cpp
+        BrnLUACall.cpp
+        BrnLUACallbackHelper.cpp
+        GameBridgeControllerToX.cpp
+        #GameBridgeControllerToX_embed_check.cpp # TODO: Broken for now
+        GameBridgeDirectorToX.cpp
+        GameBridgeGameStateToX.cpp
+        GameBridgeGameStateToX_Controller.cpp
+        GameBridgeGameStateToX_EventFlowGuiEvents.cpp
+        GameBridgeGameStateToX_EventFlowGuiEvents_wZ_00.cpp
+        GameBridgeGameStateToX_EventStartsGuiEvents.cpp
+        GameBridgeGameStateToX_EventStatusGuiEvents.cpp
+        GameBridgeGameStateToX_ShowtimeGuiEvents.cpp
+        GameBridgeGameStateToX_Sound.cpp
+        GameBridgeGameStateToX_StuntGuiEvents.cpp
+        GameBridgeGameStateToX_TrainingStringIds.cpp
+        GameBridgeGameStateToX_wN1_01.cpp
+        GameBridgeGUIToX.cpp
+        GameBridgeGUIToX_GameState.cpp
+        GameBridgeGUIToX_Sound.cpp
+        GameBridgeGUIToX_wBT_01.cpp
+        GameBridgeNetworkToX.cpp
+        GameBridgeNetworkToX_embed_check.cpp
+        GameBridgeRendererToX.cpp
+        GameBridgeReplayToX.cpp
+        GameBridgeReplayToX_embed_check.cpp
+        GameBridgeSoundToX.cpp
+        GameBridgeWorldToGui.cpp
+        GameBridgeWorldToX.cpp
+        GameBridgeWorldToX_wBT_01.cpp
 
     PUBLIC
+        BrnAutoTestManager.h
+        BrnDispatchThreadInputBuffer.h
+        BrnGame.h
         BrnGameModule.hpp
+        BrnGameModuleIO.h
+        BrnGlobalCpuMonitors.h
+        BrnHarnessWinTeleport.h
+        BrnLoadingScreenRenderer.h
+        BrnLUACall.h
+        BrnLUACallbackHelper.h
+        GameBridgeControllerToX.h
+        GameBridgeGameStateToX.h
+        GameBridgeGUIToX.h
+        GameBridgeNetworkToX.h
+        GameBridgeReplayToX.h
+        GameBridgeWorldToX.h
 )
+
+if (X360)
+    add_subdirectory(X360)
+endif()

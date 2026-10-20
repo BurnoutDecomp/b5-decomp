@@ -1,0 +1,26 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnDebugLogStringPool.cpp
+        BrnDirectorGameState.cpp
+        BrnDirectorModule.cpp
+        BrnDirectorModuleDebugCompononent.cpp
+        BrnDirectorModuleDebugCompononent_wS34_00.cpp
+        BrnDirectorModuleDebugCompononent_wS34_01.cpp
+        BrnDirectorModuleDebugCompononent_wS34_02.cpp
+        BrnDirectorModuleDebugPrinter.cpp
+        BrnDirectorModuleIO.cpp
+        BrnDirectorModuleIOInputBuffer.cpp
+        BrnDirectorModuleIOInputBuffer_embed_check.cpp
+        BrnDirectorModuleIOOutputBuffer.cpp
+        BrnDirectorModuleIOSceneQuery.cpp
+
+    PUBLIC
+        BrnDebugLogString.h
+        BrnDirectorGameState.h
+        BrnDirectorInputOutput.h
+        BrnDirectorModuleDebugCompononent.h
+        BrnDirectorModuleDebugPrinter.h
+        BrnDirectorModuleIO.h
+        BrnDirectorModuleIOOutputBuffer.hpp
+        BrnDirectorModuleIOSceneQuery.h
+)

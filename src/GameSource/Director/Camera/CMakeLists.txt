@@ -1,0 +1,53 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        AbstractPool_100_20_Vector4_AllocateVoid.cpp
+        AbstractPool_AllocateVoid_DebugOrbitPlayer.cpp
+        AbstractPool_AllocateVoid_GameplayExternal.cpp
+        BrnAbstractPool_AllocateVoid_AftertouchCrash.cpp
+        BrnAbstractPool_AllocateVoid_LooseAttachment.cpp
+        BrnBehaviourHandleRig.cpp
+        BrnBehaviourManager.cpp
+        BrnBehaviourManager_AllocateBehaviour_IceAnim.cpp
+        BrnBehaviourManager_AllocateBehaviour_RenderMetrics.cpp
+        BrnBehaviourManager_AllocateBehaviour_Rig.cpp
+        BrnBehaviourManager_NewBehaviourFromShot.cpp
+        BrnBehaviourManager_wS34_00.cpp
+        BrnBehaviourParameterBank.cpp
+        BrnBoostShakeController.cpp
+        BrnCameraCollisionPolicy.cpp
+        BrnCameraEffects.cpp
+        BrnCameraFinaliser.cpp
+        BrnCameraReference.cpp
+        BrnCameraState.cpp
+        BrnCameraValidityAccount.cpp
+        BrnCollisionPolicyAttachedToVehicle.cpp
+        BrnDepthOfField.cpp
+        BrnGeometryCollisionPredictor.cpp
+        BrnSharedCameraContainer.cpp
+        BrnVisibilityCollisionPolicy.cpp
+        BrnVisibilityTest.cpp
+        Camera.cpp
+        CgsArrayBehaviourHelperIndex28.cpp
+        ICECameraMover.cpp
+        ObjectPool_LargeBehaviour_8.cpp
+        ObjectPool_SmallBehaviourPool_100.cpp
+
+    PUBLIC
+        BrnBehaviourManager.h
+        BrnBehaviourParameterBank.h
+        BrnBoostShakeController.h
+        BrnCameraEffects.h
+        BrnCameraFinaliser.h
+        BrnCameraReference.h
+        BrnCameraState.h
+        BrnCameraValidityAccount.h
+        BrnCollisionPolicy.h
+        BrnDepthOfField.h
+        BrnSharedCameraContainer.h
+        Camera.h
+        ICECameraMover.h
+)
+
+add_subdirectory(Behaviours)
+add_subdirectory(SharedIO)
+add_subdirectory(Utils)
