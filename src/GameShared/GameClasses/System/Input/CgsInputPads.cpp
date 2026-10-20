@@ -1,7 +1,7 @@
 // CgsInput::InputPads -- construction, preparation, player/port bind reset, and the jolt/rumble
 // force-feedback effect engine. Reconstructed from BURNOUT_X360_ARTIST.XEX (CgsInputPads.cpp,
 // methods @0x828E72xx / 0x828EFxxx / 0x828DCxxx). The class layout + member offsets are pinned in
-// CgsInputPads.h (offsetof static_asserts). GetDebugGamePad lives in CgsInputPads_GetDebugGamePad.cpp.
+// CgsInputPads.h (offsetof static_asserts).
 //
 // Source path: d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\input\CgsInputPads.cpp
 
@@ -17,6 +17,21 @@
 
 namespace CgsInput
 {
+
+    // CgsInput::InputPads::GetDebugGamePad @ 0x823A5F38 (DecFIGS DWARF CgsInputPads.h:251).
+    // Reconstructed from BURNOUT_X360_ARTIST.XEX. Range-asserts liPortIndex (the two asserts are
+    // non-gating tripwires under the house assert substitution), then returns the address of the
+    // liPortIndex-th physical pad record: `452 * liPortIndex + this + 120`, i.e. &maPads[liPortIndex].
+    // Sole caller: BrnGame::BrnGameModule::HandleInputBindResult @0x823A8C38, which forwards the
+    // result to CgsDev::DebugManager::SetGamePad as the active debug-controller pad.
+
+    DeviceX360Pad* InputPads::GetDebugGamePad(s32 liPortIndex)
+    {
+        CGS_ASSERT(liPortIndex >= 0, "liPortIndex >= 0");                          // h:251
+        CGS_ASSERT(liPortIndex < (s32)KU_NUMBER_OF_PADS, "liPortIndex < (int32_t)KU_NUMBER_OF_PADS"); // h:252
+        return &maPads[liPortIndex];
+    }
+
     // ------------------------------------------------------------------------------------------------
     // DWARF CgsInputPads.cpp:901 -- GetTotalJoltEnvelopeDuration. The total wall-clock length of one
     // ADSR envelope, summed the way UpdatePadRumble's inlined copies sum it (0x828EFD28..0x828EFD48):
