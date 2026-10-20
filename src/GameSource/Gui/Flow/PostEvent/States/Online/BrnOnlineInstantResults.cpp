@@ -4,6 +4,8 @@
 
 #include "GameSource/Gui/Flow/PostEvent/States/Online/BrnOnlineInstantResults.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf / SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
@@ -13,6 +15,9 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // GuiCache::GetOnlinePlayerInfo / GetRandomNumberGenerator
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventTickerClearMessages / GuiEventTickerCustomMessage
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"  // InGamePlayerStatusData
+
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 namespace BrnGui
 {
@@ -175,6 +180,86 @@ namespace BrnGui
             }
 
             OutputGuiEvent(mpStateInterface, lMessage);
+        }
+    }
+    void OnlineInstantResultsState::RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        char lacText[1024];
+        char lacStatus[1064];
+
+        CgsCore::SPrintf(lacText, 1024, "HELLO!");
+        MaybeDrawText(lpDisplay, lacText, 80.0f, 100.0f, 20.0f,
+                      static_cast<CgsDev::RGBA>(-1), false);
+
+        const s32 liNumPlayers = mOnlinePostEvent.miNumPlayersInEvent;
+        if (liNumPlayers > 0)
+        {
+            f32 lfRowY = 124.0f;
+            for (s32 liRecord = 0; liRecord < liNumPlayers; ++liRecord)
+            {
+                const GuiEventOnlinePostEvent::Record& lrRecord =
+                    mOnlinePostEvent.maRecords[liRecord];
+                if (lrRecord.miIndex != -1)
+                {
+                    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo = 0;
+                    for (s32 liPlayer = 0; liPlayer < KI_MAX_ONLINE_PLAYERS; ++liPlayer)
+                    {
+                        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
+                            mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+                        if (static_cast<s32>(lpCandidate->meActiveRaceCarIndex) == lrRecord.miIndex)
+                        {
+                            lpPlayerInfo = lpCandidate;
+                            break;
+                        }
+                    }
+
+                    if (lpPlayerInfo == 0)
+                    {
+                        CgsCore::SPrintf(lacText, 1024,
+                                         "NO PLAYER INFO FOR ACTIVE RACE CAR %d",
+                                         lrRecord.miIndex);
+                    }
+                    else
+                    {
+                        const char* lpcStatus;
+                        if (lrRecord.mbFlag35)
+                        {
+                            lpcStatus = "DISCONNECTED";
+                        }
+                        else if (lrRecord.mbFlag34)
+                        {
+                            lpcStatus = "TIMED OUT";
+                        }
+                        else
+                        {
+                            const f32 lfTime = lrRecord.mTime.GetFloatVal();
+                            if (lfTime <= 0.0f)
+                            {
+                                lpcStatus = "PLAYING";
+                            }
+                            else
+                            {
+                                CgsCore::SPrintf(lacStatus, 1024, "%.2f", lfTime);
+                                lpcStatus = lacStatus;
+                            }
+                        }
+
+                        CgsCore::SPrintf(lacText, 1024, "Name=%s %s TABLEPOS=%d",
+                                         lpPlayerInfo->mPlayerName.GetPlayerName(),
+                                         lpcStatus, static_cast<s32>(lrRecord.muValue1C));
+                    }
+                    MaybeDrawText(lpDisplay, lacText, 80.0f, lfRowY, 20.0f,
+                                  static_cast<CgsDev::RGBA>(-1), false);
+                }
+                lfRowY += 24.0f;
+            }
+
+            CgsCore::SPrintf(lacText, 1024, "%d PLAYERS IN GAME", liNumPlayers);
+            MaybeDrawText(lpDisplay, lacText, 80.0f, lfRowY, 20.0f,
+                          static_cast<CgsDev::RGBA>(-1), false);
+            CgsCore::SPrintf(lacText, 1024, "STATE=%d", static_cast<s32>(meCurrentState));
+            MaybeDrawText(lpDisplay, lacText, 80.0f, lfRowY + 24.0f, 20.0f,
+                          static_cast<CgsDev::RGBA>(-1), false);
         }
     }
 }

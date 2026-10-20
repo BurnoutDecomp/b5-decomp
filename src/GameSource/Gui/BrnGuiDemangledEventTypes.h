@@ -63,6 +63,7 @@ namespace CgsNetwork { class NetworkTexture; }
 // BrnNetworkModuleInGamePlayerStatusInterface.h (an opaque declaration keeps that network
 // header out of this one).
 namespace BrnNetwork { enum ECameraStatus : s32; struct LiveRevengeProfile; }
+namespace BrnNetwork { enum EBuddyNotification : s32; }
 #include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (cam picture events)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
@@ -180,7 +181,19 @@ namespace BrnGui
     // [gateui r3] GuiEventBoostInfo (id 206) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :4566 in the X360 field order, sizeof 28).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
-    struct GuiEventBuddyNotification : public CgsGui::GuiEvent<105> { u8 maPayload[12]; };  // id 105 size 24 (12B GuiEvent header + opaque payload)
+    // ARTIST82513228 and823E0C38..64: flat24-byte notification/count/name payload.
+    // The target orders the two words before PlayerName; the near-ancestor lists count last.
+    struct GuiEventBuddyNotification
+    {
+        BrnNetwork::EBuddyNotification meBuddyNotification;
+        s32 miNumBuddies;
+        CgsNetwork::PlayerName mBuddyName;
+        s32 GetEventType() const { return 105; }
+    };
+    static_assert(sizeof(GuiEventBuddyNotification) == 24, "ARTIST tag105 payload is24 bytes");
+    static_assert(offsetof(GuiEventBuddyNotification, meBuddyNotification) == 0 &&
+        offsetof(GuiEventBuddyNotification, miNumBuddies) == 4 &&
+        offsetof(GuiEventBuddyNotification, mBuddyName) == 8, "ARTIST tag105 field order");
     // The compressed still is ready (network -> GUI). AddGuiEvent posts the object itself; the
     // pixel pointer is a 4-byte slot on the console and native width here.
     struct GuiEventCamPicCompressed
