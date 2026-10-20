@@ -28,12 +28,22 @@ def extract(source, signatures):
     return "\n".join(definition(source, signature) for signature in signatures)
 
 
+def host_pool_layout(pool):
+    # Both modes use the actual shared host calculator. Protocol Send now calls
+    # it too; extracting the same production body avoids a fixture sizing stub.
+    layout = pool[pool.index("        struct PoolManagementStorageLayout"):pool.index("    // ---- lookup")]
+    result = "namespace CgsResource { namespace {\n" + definition(pool, "u32 GetManagementHashLength(") + "\n" + layout
+    result += extract(pool, ["u32 Pool::GetOverheadMemoryRequired(", "u32 Pool::GetOverheadMemoryAlignment("])
+    return result + "\n}\n"
+
+
 def production(mode, negative):
     module = read(RESOURCE + "CgsResourcePoolModule.cpp")
     driver = read(RESOURCE + "CgsPoolModule.cpp")
     pool = read(RESOURCE + "CgsResourcePool.cpp")
     manager = read(BASE + "Development/AssertSystem/CgsAssertManager.cpp")
     result = "namespace CgsDev { namespace Assert {\n" + definition(manager, "Manager::Manager()") + "\n} }\n"
+    result += host_pool_layout(pool)
     if mode == "protocol":
         helpers = module[module.index("    namespace\n"):module.index("    // @ 0x828D80E8")]
         code = extract(module, ["s32 PoolModule::GetPoolIndex(", "void PoolModule::CreatePool(",
@@ -55,10 +65,7 @@ def production(mode, negative):
         code = code.replace("PoolModule::", "PoolProtocolFixture::")
         result += "namespace CgsResource {\n" + helpers + code + "\n" + definition(pool, "s32  Pool::GetId(") + "\n}\n"
     else:
-        layout = pool[pool.index("        struct PoolManagementStorageLayout"):pool.index("    // ---- lookup")]
-        # layout already contains the anonymous namespace's closing brace.
-        result += "namespace CgsResource { namespace {\n" + definition(pool, "u32 GetManagementHashLength(") + "\n" + layout
-        result += extract(pool, ["void Pool::Construct(", "u32 Pool::GetOverheadMemoryRequired(",
+        result += "namespace CgsResource {\n" + extract(pool, ["void Pool::Construct(",
             "void Pool::InitPool(", "void Pool::InitManagementData(", "const s16* Pool::CreateBatchEntrySlots("])
         result += "\n}\n"
         if negative == "batch-count":

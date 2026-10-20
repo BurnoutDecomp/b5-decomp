@@ -1,7 +1,8 @@
 // Production bodies are extracted without changing their statements. The protocol owner below
 // substitutes only module scheduling/storage; real typed queues, transport and handlers are retained.
-// Layout mode instead calls the real native Pool/Heap/LinearMalloc provider. Original InitPool's
-// unresolved bank/name lifecycle is deliberately outside the protocol fixture boundary.
+// Both modes use the real shared host sizing calculator. Layout mode calls the real
+// Pool/Heap/LinearMalloc provider; protocol mode captures its actual bank/name/descriptor
+// inputs without treating a capture as proof of successful memory-bank allocation.
 #include <Windows.h>
 #undef DrawText
 #include <atomic>
@@ -90,14 +91,15 @@ namespace CgsResource
 {
     static Pool::InitOptions sCapturedOptions;
     static char sacCapturedName[32];
-    // Explicit boundary: inspect caller routing without reading the unproven bank-id slot or
-    // executing the absent original InitPool. Native InitPool is exercised separately in layout mode.
+    // Explicit boundary: inspect the completed request's real bank/name/resource geometry.
+    // Actual InitPool and memory extent are exercised separately in layout mode.
     void Pool::InitPool(const InitOptions* lpOptions)
     {
         miId = lpOptions->miId;
         mbIsValid = true;
         std::strcpy(sacCapturedName, lpOptions->mpcName);
         sCapturedOptions.miId = lpOptions->miId;
+        sCapturedOptions.miBankId = lpOptions->miBankId;
         sCapturedOptions.mResource = lpOptions->mResource;
         sCapturedOptions.mDescriptor = lpOptions->mDescriptor;
         sCapturedOptions.miNumDependencies = lpOptions->miNumDependencies;
@@ -300,31 +302,69 @@ static void TestProtocol()
     Pool::InitOptions lOptions{}; lOptions.miBankId=0x345678;
     PoolProtocolFixture::ConvertPoolRequestOptions(&lRequest,&lOptions);
     Check(lOptions.miBankId==0x345678 && lOptions.mpcName==lRequest.mpcName,
-        "conversion borrows the inline name and leaves the unresolved bank-id slot unwritten");
+        "original conversion borrows the inline name and leaves the caller bank-id slot unchanged");
     ClearRecords(); lpModule->SendCreatePoolMemoryRequest(&lRequest,&lOutput);
+    lOutput.UnlockForWrite(); lOutput.LockForRead();
+    const CgsModule::Event* lpMemoryEvent = nullptr; s32 liMemoryBytes = 0;
+    const s32 liMemoryTag = static_cast<const PoolIO::OutputBuffer&>(lOutput).GetPoolResourceRequestQueue()->GetFirstEvent(&lpMemoryEvent,&liMemoryBytes);
+    const auto lMemoryRequest = *reinterpret_cast<const CgsMemory::MemoryIO::CreateResourceRequest*>(lpMemoryEvent);
+    const rw::ResourceDescriptor lFirstDescriptor = *lMemoryRequest.GetDescriptor();
+    Check(liMemoryTag == 10 && liMemoryBytes == sizeof(lMemoryRequest)
+        && lMemoryRequest.GetBankId() == 42 && lMemoryRequest.GetParentBankId() == 2
+        && lMemoryRequest.GetEventId() == 7 && lMemoryRequest.GetUser() == &lpModule->mReceiverQueue,
+        "real create-memory producer carries the pending request bank, parent and receiver identity");
+    bool lbHostGeometry = lFirstDescriptor.m_baseResourceDescriptors[0].m_size == 4096 + Pool::GetOverheadMemoryRequired(&lOptions)
+        && lFirstDescriptor.m_baseResourceDescriptors[0].m_alignment == 64
+        && lFirstDescriptor.m_baseResourceDescriptors[0].m_alignment >= Pool::GetOverheadMemoryAlignment(&lOptions)
+        && lFirstDescriptor.m_baseResourceDescriptors[2].m_size == 8192
+        && lFirstDescriptor.m_baseResourceDescriptors[2].m_alignment == 256;
+    for (s32 liLane : {1,3,4}) lbHostGeometry = lbHostGeometry
+        && lFirstDescriptor.m_baseResourceDescriptors[liLane].m_size == 0
+        && lFirstDescriptor.m_baseResourceDescriptors[liLane].m_alignment == 1;
+    Check(lbHostGeometry, "actual emitted descriptor covers real shared host metadata and retains RW0/2 geometry");
+    lOutput.UnlockForRead(); lOutput.LockForWrite();
     lOutput.GetPoolResourceRequestQueue()->Clear();
     Events::CreatePoolRequest lSecond=lRequest;
-    lSecond.miPoolId=9; lSecond.miNumDependencies=1; lSecond.maiDependencyIds[0]=7;
+    lSecond.miPoolId=9; lSecond.miBankId=43; lSecond.miParentBankId=5;
+    lSecond.miNumDependencies=1; lSecond.maiDependencyIds[0]=7;
+    lSecond.mDescriptor.m_baseResourceDescriptors[0].m_size=8192;
+    lSecond.mDescriptor.m_baseResourceDescriptors[1].m_size=12288;
     std::strcpy(lSecond.mpcName,"second");
     lpModule->SendCreatePoolMemoryRequest(&lSecond,&lOutput);
+    lOutput.UnlockForWrite(); lOutput.LockForRead();
+    const s32 liSecondTag = static_cast<const PoolIO::OutputBuffer&>(lOutput).GetPoolResourceRequestQueue()->GetFirstEvent(&lpMemoryEvent,&liMemoryBytes);
+    const auto lSecondMemoryRequest = *reinterpret_cast<const CgsMemory::MemoryIO::CreateResourceRequest*>(lpMemoryEvent);
+    const rw::ResourceDescriptor lSecondDescriptor = *lSecondMemoryRequest.GetDescriptor();
+    Check(liSecondTag == 10 && lSecondMemoryRequest.GetBankId() == 43
+        && lSecondMemoryRequest.GetParentBankId() == 5 && lSecondMemoryRequest.GetEventId() == 9,
+        "second raw request keeps its distinct actual memory bank owner");
+    lOutput.UnlockForRead(); lOutput.LockForWrite();
     rw::Resource lMemory{};
     lMemory.m_baseResources[0]=reinterpret_cast<void*>(0x123456780000ull);
     lMemory.m_baseResources[2]=reinterpret_cast<void*>(0x123456790000ull);
-    PoolProtocolFixture::GetRequiredResourceDescriptor(&lRequest,&lDescriptor);
     CgsMemory::MemoryIO::CreateResourceResponse lReply;
     lReply.Construct(nullptr,999); lReply.SetResult(CgsMemory::MemoryIO::E_RESULT_BANK_OUT_OF_RANGE);
-    lReply.SetDescriptor(&lDescriptor);
+    lReply.SetDescriptor(&lFirstDescriptor);
     for (u32 luLane=0; luLane<rw::KU_RESOURCE_LANE_COUNT; ++luLane)
         lReply.SetResourceData(luLane,lMemory.m_baseResources[luLane]);
     lpModule->DoCreatePoolRequest(&lReply,&lOutput);
-    Check(sCapturedOptions.miId==7 && std::strcmp(sacCapturedName,"first")==0
+    Check(sCapturedOptions.miId==7 && sCapturedOptions.miBankId==42 && std::strcmp(sacCapturedName,"first")==0
         && sCapturedOptions.mResource.m_baseResources[0]==lMemory.m_baseResources[0]
         && sCapturedOptions.mResource.m_baseResources[1]==lMemory.m_baseResources[2],
-        "real DoCreate consumes FIFO identity and converts RW0/2 despite unrelated response id/result");
+        "real DoCreate retains the FIFO bank owner and RW0/2 resource despite unrelated response id/result");
+    Check(sCapturedOptions.mDescriptor.m_baseResourceDescriptors[0].m_size == lFirstDescriptor.m_baseResourceDescriptors[0].m_size
+        && sCapturedOptions.mDescriptor.m_baseResourceDescriptors[0].m_alignment == lFirstDescriptor.m_baseResourceDescriptors[0].m_alignment
+        && sCapturedOptions.mDescriptor.m_baseResourceDescriptors[1].m_size == lFirstDescriptor.m_baseResourceDescriptors[2].m_size
+        && sCapturedOptions.mDescriptor.m_baseResourceDescriptors[1].m_alignment == lFirstDescriptor.m_baseResourceDescriptors[2].m_alignment,
+        "completed host-sized memory descriptor reaches InitPool with the original RW0/2-to-small mapping");
+    lReply.SetDescriptor(&lSecondDescriptor);
     lpModule->DoCreatePoolRequest(&lReply,&lOutput);
-    Check(sCapturedOptions.miId==9 && sCapturedOptions.miNumDependencies==1
+    Check(sCapturedOptions.miId==9 && sCapturedOptions.miBankId==43 && sCapturedOptions.miNumDependencies==1
         && sCapturedOptions.mapDependencies[0]==&lpModule->maPools[0],
-        "second raw request resolves the previously created dependency synchronously");
+        "second raw request retains its bank and resolves the previously created dependency synchronously");
+    Check(sCapturedOptions.mDescriptor.m_baseResourceDescriptors[0].m_size == lSecondDescriptor.m_baseResourceDescriptors[0].m_size
+        && sCapturedOptions.mDescriptor.m_baseResourceDescriptors[1].m_size == lSecondDescriptor.m_baseResourceDescriptors[2].m_size,
+        "second completion adopts its distinct returned descriptor instead of stale console or first-request geometry");
     lOutput.UnlockForWrite(); lOutput.LockForRead();
     const auto* lpQueue=static_cast<const PoolIO::OutputBuffer&>(lOutput).GetPoolOutputQueue();
     s32 liCompletion=lpQueue->GetFirstEvent(&lpEvent,&liBytes);
