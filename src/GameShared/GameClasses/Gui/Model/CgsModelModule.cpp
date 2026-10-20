@@ -224,7 +224,7 @@ namespace CgsGui
     {
         const ModelIO::InputBuffer::GuiEventInputQueue* lpInputEventQueue = lpInput->GetEventQueue();
         CGS_ASSERT(lpInputEventQueue != 0, "lpInputEventQueue != NULL");
-        if (lpInputEventQueue->GetLength() > 0)
+        if (lpInputEventQueue->CgsModule::VariableEventQueue<32768, 16>::GetLength() > 0)
             lpInterpreterInput->AddGuiEvents(*lpInputEventQueue);
     }
 

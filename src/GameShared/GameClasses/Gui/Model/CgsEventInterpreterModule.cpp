@@ -459,7 +459,7 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
                    "Invalid observer output Queue in EventInterpreterModule::ProcessOutEvents");
 
         lStagingQueue.Append(*lpObserverOutQueue);
-        lpObserverOutQueue->Clear();
+        lpObserverOutQueue->CgsModule::VariableEventQueue<65536, 16>::Clear();
     }
 
     // The E_GUI_OUT_* records below are external serialised event blobs the GUI states packed
