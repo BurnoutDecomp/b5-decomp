@@ -170,9 +170,9 @@ def main():
         end = producer.index("sizeof(lProfileData));", start) + len("sizeof(lProfileData));")
         producer_fragment = producer[start:end]
         translator_source = read(TRANSLATOR)
-        case_start = translator_source.index("case BrnGameState::GameStateModuleIO::E_ACTION_PROGRESSION_PROFILE_DATA:")
-        case_end = translator_source.index("break;", case_start) + len("break;")
-        translator_arm = translator_source[case_start:case_end]
+        translator_arm = definition(
+            translator_source,
+            "case BrnGameState::GameStateModuleIO::E_ACTION_PROGRESSION_PROFILE_DATA:")
         push = "template<class GuiEventT>\n" + body(PUSH_H, "static void PushGuiEvent(")
 
         # Actual data declarations, shared only where both original TUs use the same
