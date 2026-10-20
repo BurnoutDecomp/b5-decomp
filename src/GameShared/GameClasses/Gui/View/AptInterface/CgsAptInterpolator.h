@@ -11,11 +11,9 @@
 // lambda (parametric position) range and a value range, lerping the current
 // value as the animation advances.
 //
-// MINIMAL OWNING SLICE: only the member layout proven by the in-scope getter
-// (and corroborated by the DWARF member list at this header) is modelled. The
-// virtual Construct/SetInterpolator/Update/Reset methods live in
-// CgsAptInterpolator.cpp (separate TUs) and are declared here for the vtable
-// shape; their bodies are NOT in this leaf TU.
+// Canonical owner for the five scalar members and four virtual slots.
+// Construct is nonvirtual; SetInterpolator/GetCurrentValue/Update/Reset keep
+// the original vtable order. Bodies live in the CgsAptInterpolator.cpp family.
 
 namespace CgsGui
 {
@@ -35,6 +33,10 @@ namespace CgsGui
     public:
         Interpolator() {}
 
+        // CgsAptInterpolator.cpp:39; public in the original declaration.
+        // Inlined into the channel template at ARTIST 828590E4..82859100.
+        void Construct();
+
         // Set up a new interpolation between (startLambda -> endLambda) producing
         // (startValue -> endValue). Defined in CgsAptInterpolator.cpp.
         virtual void SetInterpolator(f32 lfStartLambda, f32 lfEndLambda,
@@ -44,7 +46,7 @@ namespace CgsGui
         f32 GetEndValue() const { return mfEndValue; }       // h:122
 
         // h:135 -- the in-scope ledger function @ 0x824E5BC8.
-        virtual f32 GetCurrentValue() const { return mfCurrentValue; }
+        virtual f32 GetCurrentValue() const;
 
         f32 GetStartLambda() const { return mfStartLambda; } // h:148
         f32 GetEndLambda() const { return mfEndLambda; }     // h:161
@@ -56,8 +58,6 @@ namespace CgsGui
         virtual void Reset();
 
     protected:
-        void Construct();   // CgsAptInterpolator.cpp
-
         f32 mfStartLambda;   // [+0x04] h:88
         f32 mfEndLambda;     // [+0x08] h:89
         f32 mfStartValue;    // [+0x0C] h:91
