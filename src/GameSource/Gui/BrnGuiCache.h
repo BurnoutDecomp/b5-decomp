@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT (GetCurrentCarSelectType inline)
+#include "GameShared/GameClasses/Language/CgsSku.h" // actual ESku/ELanguage
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 #include "GameSource/Gui/BrnGuiOptionsDataProfileDLC1.h" // BrnGui::OptionsDataProfileDLC1 (live DLC1 options block @+0x12BE8; self-contained header, no clashing slices)
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
@@ -427,6 +428,11 @@ namespace BrnGui
         // RecEvent @ 0x8250DDF0 -- resource completion (14/16) and Apt ONLOAD (21)
         // branches used by the module bridges.
         void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId);
+
+        // DecFIGS BrnGuiCache.h:1487/1491; ARTIST owns the enum words and
+        // primary Prepare825193D8 reads this language for its font table.
+        const CgsLanguage::ESku GetSku() const { return mSku; }
+        const CgsLanguage::ELanguage GetLanguage() const { return mLanguage; }
 
         // Request the unload of every watched resource of the given type. X360
         // @0x824FEBB0 (`addi r3,r3,8` + tail-branch into the watcher). Bodied in the
@@ -2089,7 +2095,9 @@ namespace BrnGui
         // ---- scoring-traffic CgsArray (mTrafficCarInfo.mScoreTargets) ----
         GuiTrafficCarInfoEvent mTrafficCarInfo;         // +0xA150, 656 bytes; count +0xA3D0
         GuiOverheadSignInfoEvent::VisibleOverheadSignArray mVisibleOverheadSignArray; // +0xA3E0, 1040 bytes
-        u8 mPad_A7F0[12];                              // +0xA7F0..+0xA7FB
+        u8 mPad_A7F0[4];                               // +0xA7F0..+0xA7F3
+        CgsLanguage::ESku mSku;                         // ARTIST +0xA7F4, DecFIGS h:1793
+        CgsLanguage::ELanguage mLanguage;               // ARTIST +0xA7F8, DecFIGS h:1794
         // ---- online game-mode-options (round-indexed) ----
         s32 miOnlineRoundIndex;                          // +0xA7FC (43004) GetOnlineRoundIndex (GetOnlineLandmarkIndex @0x8240FB50), < KU_MAX_ONLINE_ROUNDS_IN_MODE
         // The +0xA800 span is the cached GuiEventNetworkGameParams PAYLOAD MIRROR:

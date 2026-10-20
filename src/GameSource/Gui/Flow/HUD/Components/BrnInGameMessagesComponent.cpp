@@ -20,7 +20,7 @@ namespace
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"        // BrnFlapt::FileRef::FindComponent (Prepare)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // BrnFlapt::MovieClipInstance::ResetTimeline
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"     // BrnGui::HudMessageDirector::IsMessageAllowed (TerminateMessages)
-#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers (+0x14 serialiser slot)
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::GetAccessPointers
 #include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"          // BrnReplays::GuiModuleStaticLayout (UpdateInPlace tail)
 
@@ -35,19 +35,7 @@ namespace
 // counter catches up. Same defect class as HudMessageDirector's repeat-rate gate; same fix.
 namespace CgsSystem { u64 GetSystemTimerBaseTime64(); u64 GetSystemTimerFrequency64(); }
 
-// Compile-only slice of the GUI-module replay serialiser reached from the GUI
-// access-pointer block (mirrors BrnReplayHudMessageComponent.cpp). The full type + its
-// GetStaticLayout body live in GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.cpp
-// (no shared header). UpdateInPlace's serialiser tail calls GetStaticLayout() to reach the
-// GUI-module static layout and re-run its StartMessage flags.
-namespace BrnReplays
-{
-    class GuiModuleSerialiser
-    {
-    public:
-        GuiModuleStaticLayout* GetStaticLayout();
-    };
-}
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 
 // BrnGui::InGameMessagesComponent -- the HUD in-game message queue driver, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Seven X360-emitted functions: the double-buffered slot accessors
@@ -124,19 +112,13 @@ namespace
     BrnReplays::GuiModuleStaticLayout* GetGuiModuleStaticLayout(
         CgsGui::StateInterface* lpStateInterface)
     {
-        // ⚠️ [FLAG PC bring-up, gateui r4 boot fix -- REPLAY MIRROR PARKED, and the +0x14
-        // derivation is CONTRADICTED]. The raw guest-offset read that stood here
-        // (*(GuiAccessPointers + 0x14) as a GuiModuleSerialiser*) is wrong TWICE on this build:
-        // (1) the committed DWARF layout of CgsGui::GuiAccessPointers (CgsGuiShared.h) has NO
-        //     serialiser member at all -- guest slot +0x14 is mpGDMInput there; the "mpSerialiser
-        //     (guest +0x14)" claim needs re-derivation against the real console block;
-        // (2) on the host the pointers widen, so a literal +0x14 lands MID-POINTER -- the first
-        //     smash-gate HUD message crashed here (AV on garbage `this`, boot-drive
-        //     2026-08-20 17:33, InGameMessagesComponent::StartMessage -> GetStaticLayout+0x6).
-        // No GuiModuleSerialiser is constructed on this build anyway (replay recording), so the
-        // mirror has no consumer. Return NULL; the call sites skip the mirror when null.
-        // DELETE-WHEN the replay GUI serialiser is constructed and reachable through a NAMED
-        // access-pointer member.
+        // Existing PC boundary: the contained GuiModuleSerialiser is now
+        // reachable through GuiAccessPointers::GetSerialiser(), but Construct
+        // deliberately leaves its static buffer null. Original event595 must
+        // reach BridgeGuiToReplay_PostSim and the prepared replay owner's
+        // StoreSerialisers before this replay mirror can be restored. The
+        // selected host path currently adopts only the effects serialiser.
+        // Keep the existing parked mirror until that transport is recovered.
         (void)lpStateInterface;
         return 0;
     }

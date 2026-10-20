@@ -24,6 +24,7 @@
 
 #include <cstring>   // std::memcpy / std::memset (model the X360 XMemCpy / XMemSet block intrinsics)
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
+#include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // typed image-load records (host-native pointer width)
 #include "GameSource/GameState/BrnGameActions.h" // typed image-gallery action record shapes 289..293
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsID.h"                     // CgsID, CgsIDCompress
@@ -930,25 +931,24 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     BrnProgression::MugshotInfo* lpUncoverInfo = lpProfile->GetMugshotInfo(leGalleryType, liUncoverImageIndex);
     if (lpUncoverInfo != nullptr)
     {
-        struct PrepareRenderEvent
-        {
-            s32   maClear[3];      // -1, -1, -1
-            s32   miSlotClear[3];  // 0, 0, 0 (interleaved with the above as 3 {id,?,?,size?})
-            s32   miFileID;        // +0x00 (MugshotInfo +0x30)
-            s32   miTextureSize;   // +0x04
-            char* mpTextureBuffer; // +0x08
-        } lPrepareRender;
+        CgsGui::ImageFileInfo laPrepareRender[KI_NUM_PICTURES];
+        static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
+                      "ImageFileInfo carries a native 64-bit buffer pointer");
+        static_assert(sizeof(laPrepareRender) == 72,
+                      "three host-native image-file records widen the X360 48-byte record");
         for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
         {
-            lPrepareRender.maClear[liIndex]     = -1;
-            lPrepareRender.miSlotClear[liIndex] = 0;
+            // ARTIST initializes only id@+0 and corrupt@+0xC in each 16-byte X360 slot.
+            // Size, buffer and the remaining bytes of slots 1/2 stay unwritten.
+            laPrepareRender[liIndex].miId        = -1;
+            laPrepareRender[liIndex].mbIsCorrupt = false;
         }
-        lPrepareRender.miFileID        = lpUncoverInfo->GetFileID();
-        lPrepareRender.mpTextureBuffer = lLastSlot.GetTexture();
-        lPrepareRender.miTextureSize   = lLastSlot.GetTextureSize();
-        miMugshotToSaveIndex           = 2; // X360 a1[33] = 2
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lPrepareRender),
-                          KI_EVENT_PREPARE_RENDER, 48);
+        laPrepareRender[0].miId     = lpUncoverInfo->GetFileID();
+        laPrepareRender[0].mpBuffer = lLastSlot.GetTexture();
+        laPrepareRender[0].miSize   = lLastSlot.GetTextureSize();
+        miMugshotToSaveIndex        = 2; // X360 a1[33] = 2
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laPrepareRender),
+                          KI_EVENT_PREPARE_RENDER, static_cast<s32>(sizeof(laPrepareRender)));
     }
     else
     {
@@ -978,14 +978,19 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
     BrnProgression::Profile* lpProfile = (mpProgression != nullptr) ? mpProgression->GetProfile() : nullptr;
 
-    // Local scratch list of slots whose textures need loading from disk.
-    struct PendingLoad { s32 miFileID; s32 miTextureSize; char* mpTextureBuffer; };
-    PendingLoad laPendingLoads[KI_NUM_PICTURES];
+    // Local scratch list of slots whose textures need loading from disk. The X360 record is
+    // CgsGui::ImageFileInfo[3] (48 bytes); native pointers widen each record to 24 bytes.
+    CgsGui::ImageFileInfo laPendingLoads[KI_NUM_PICTURES];
+    static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
+                  "ImageFileInfo carries a native 64-bit buffer pointer");
+    static_assert(sizeof(laPendingLoads) == 72,
+                  "three host-native image-file records widen the X360 48-byte record");
     for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
     {
-        laPendingLoads[liIndex].miFileID       = -1;
-        laPendingLoads[liIndex].miTextureSize  = 0;
-        laPendingLoads[liIndex].mpTextureBuffer = nullptr;
+        laPendingLoads[liIndex].miId     = -1;
+        laPendingLoads[liIndex].miSize   = 0;
+        laPendingLoads[liIndex].mpBuffer = nullptr;
+        // mbIsCorrupt and record padding remain unwritten, as in ARTIST's init loop.
     }
 
     s32 liNumLoadsQueued  = 0;
@@ -1024,9 +1029,9 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
 
                 *lpSlotMapping++ = liSlotIndex;
                 CgsNetwork::NetworkTexture& lSlotTexture = maImageGalleryMugshots[liSlotIndex];
-                laPendingLoads[liNumLoadsQueued - 1].miFileID       = lpMugshotInfo->GetFileID();
-                laPendingLoads[liNumLoadsQueued - 1].miTextureSize  = lSlotTexture.GetTextureSize();
-                laPendingLoads[liNumLoadsQueued - 1].mpTextureBuffer = lSlotTexture.GetTexture();
+                laPendingLoads[liNumLoadsQueued - 1].miId     = lpMugshotInfo->GetFileID();
+                laPendingLoads[liNumLoadsQueued - 1].miSize   = lSlotTexture.GetTextureSize();
+                laPendingLoads[liNumLoadsQueued - 1].mpBuffer = lSlotTexture.GetTexture();
             }
             else
             {
@@ -1045,9 +1050,10 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     {
         if (liNumLoadsQueued > 0)
         {
-            // Kick off the file load (type 295: prepare-render record carrying the pending loads).
+            // Kick off the file load (type 295). ARTIST posts 48 bytes on X360;
+            // native host records widen to 72.
             lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laPendingLoads),
-                              KI_EVENT_PREPARE_RENDER, 48);
+                              KI_EVENT_PREPARE_RENDER, static_cast<s32>(sizeof(laPendingLoads)));
             maImageLoadRequests.Clear();
             mbLoadInProgress = true;
         }

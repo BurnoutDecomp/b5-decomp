@@ -278,6 +278,10 @@ namespace BrnGui
         mbFriendsListOpen = false;
         mbFriendsListChangePending = false;
 
+        // ARTIST825061D0/D8: retain the real pre-notification defaults.
+        mSku = CgsLanguage::E_SKU_DEFAULT;
+        mLanguage = CgsLanguage::E_LANGUAGE_INVALID;
+
 
         mStateLoadingHelper.Construct();
         // X360 0x82505860 mid-body: BrnGui::OptionsDataProfile::Construct(this + 47224)
@@ -1337,6 +1341,14 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        // ARTIST8250F1F8..F220; native jump index is event id minus4.
+        // CP15's canonical notifications are raw enum payloads at+0.
+        case 27:
+            mSku = reinterpret_cast<const CgsGui::GuiEventSetSku*>(lpEvent)->meSku;
+            break;
+        case 29:
+            mLanguage = reinterpret_cast<const CgsGui::GuiEventSetLanguageNotification*>(lpEvent)->meLanguage;
+            break;
         // ARTIST 0x82510E7C..0x82510EC0: player-car change, whole CgsID
         // stores to both cache members consumed by the map and minimap.
         case 415:
