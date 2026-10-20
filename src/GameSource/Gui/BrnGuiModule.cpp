@@ -1795,15 +1795,17 @@ namespace BrnGui
     bool GuiModule::Release()
     {
         mbRenderInputCompletedPC = false;
-        mProfileHost.GetProfileManager().Release();   // detach the sign-in listener + release the SLS
         mScreenFlow.Release();       // staged: current state OnLeave + ScriptedFsm release
         mHudFlow.Release();
         mOverlayFlow.Release();
+        // Leave retry-sensitive GUI owners intact until the movie pool releases successfully.
+        if (!mMovieManager.Release())
+            return false;
+        mProfileHost.GetProfileManager().Release();   // detach the sign-in listener + release the SLS
         mFsmLuaHeap.Destruct();
         if (gpActiveGuiModule == this)
             gpActiveGuiModule = 0;
         gpActiveMovieManager = 0;
-        mMovieManager.Release();
         return true;
     }
 
