@@ -36,6 +36,10 @@ namespace BrnGui
         static const s32 KI_PFX_HOOK_NAME_LENGTH         = 128;
         static const s32 KI_NUM_TOGGLEABLE_RACE_HUD_ITEMS = 22;
 
+        // ARTIST82505488; real two-phase provider, unselected by the
+        // current module which still lacks this contained debug owner.
+        void Construct(GuiModule* lpGuiModule);
+
         // Return the singleton instance pointer, asserting it is non-null (the assert is
         // non-fatal; the pointer is returned either way).
         static GuiDebugComponent* GetSingletonPtr();

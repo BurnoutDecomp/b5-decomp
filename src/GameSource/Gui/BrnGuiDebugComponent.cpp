@@ -10,6 +10,8 @@
 
 #include "GameSource/Gui/BrnGuiDebugComponent.h"
 
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
 #include "GameShared/GameClasses/Core/CgsID.h"   // CgsIDCompress (TriggerPostEvent's unlock ids)
 #include "GameSource/Gui/BrnGuiModule.h"         // GuiModule::mGuiCache (TriggerPostEvent)
 
@@ -21,6 +23,66 @@ namespace BrnGui
 // X360 off_82FB5080 -- the live singleton instance, populated when the debug component
 // is constructed. Defaults to null until then.
 GuiDebugComponent* GuiDebugComponent::mspSingletonThis = nullptr;
+
+// ARTIST82505488. The original base Construct call is folded to
+// the empty8284CB38 body, so it has no source operation here. In particular,
+// do not replace it with the current base provider's additional field resets.
+void GuiDebugComponent::Construct(GuiModule* lpGuiModule)
+{
+    if (!lpGuiModule)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid Gui module passed to GuiDebugComponent::Construct";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 92);
+        CgsDev::Assert::EndAssert();
+    }
+    mspSingletonThis = this;
+    mpGuiModule = lpGuiModule;
+    mbSpeedoVisible = false;
+    mSpeedoInfo.miSpeedMph = 0;
+    mSpeedoInfo.miRPM = 0;
+    mSpeedoInfo.mi8Gear = 0;
+    mSpeedoInfo.mau8Pad[0] = 0;
+    mSpeedoInfo.mau8Pad[1] = 0;
+    mSpeedoInfo.mau8Pad[2] = 0;
+    mfSafePercent = 85.0f;
+    mbRenderGui = true;
+    mbMiniMapVisible = true;
+    mbPriEventOverride = false;
+    mbShow43Area = false;
+    mbShowSafeArea = false;
+    mfFontSpacing = 100.0f;
+    mInputQueue.Construct();
+    miScreenFlowStreamingMode = 1;
+    maStreamingOptions[0].miValue = 0;
+    maStreamingOptions[1].miValue = 1;
+    miDebugPlayerRank = 0;
+    miDebugFinishPos = 1;
+    mbDebugFinishRankup = true;
+    mPFXHookEnumeration.miHookNameCount = -1;
+    maStreamingOptions[0].mpcName = "Off";
+    miCurrentPFXHookIndex = -1;
+    maStreamingOptions[2].miValue = 2;
+    maStreamingOptions[1].mpcName = "Load current only";
+    mbDebugFinishUnlockFreeCar = true;
+    mbDebugFinishUnlockNormalCar = true;
+    maStreamingOptions[2].mpcName = "Preload adjacent";
+    mbDebugFinishUnlockRival = true;
+    mbDebugOfflineInstantResults = false;
+    mbDebugOnlineInstantResults = false;
+    std::strcpy(macCurrentPFXHookName, "Trigger PFX Hook (N/A)");
+    mbWorstCaseHudActive = false;
+    mbWorstCaseHudAlreadyActive = false;
+    mbToggleableRaceHUDEnabled = false;
+    mfWorstCaseUpdateTime = 0.0f;
+    // ARTIST82505618 loads21, not the near-ancestor's22. Retain the
+    // declared array shape and the target's unwritten final element.
+    for (s32 liElement = 0; liElement < 21; ++liElement)
+        mabTogglableRaceHUDElementsState[liElement] = true;
+}
 
 // @ 0x824ECC40
 GuiDebugComponent* GuiDebugComponent::GetSingletonPtr()

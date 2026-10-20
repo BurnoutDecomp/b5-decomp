@@ -4073,6 +4073,23 @@ static_assert(sizeof(ImageGalleryDataAction) == 16, "gallery-data action is 16 b
 struct ImageGalleryLoadCompleteAction : public GameAction<E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE> {};
 static_assert(sizeof(ImageGalleryLoadCompleteAction) == 1, "gallery-load-complete action is one byte");
 
+// ARTIST action294 is posted by GameStateImageManagerBase::RequestImageSave. The original
+// {file id, size, 32-bit buffer pointer, trailing word} record is 16 bytes; the pointer widens
+// on the PC host, moving the untouched trailing word from X360 +0x0C to host +0x10.
+struct ImageSaveRequestAction
+{
+    s32   miFileID;        // X360 +0x00
+    s32   miTextureSize;   // X360 +0x04
+    char* mpTextureBuffer; // X360 +0x08 (host-native pointer)
+    s32   miPad0C;         // X360 +0x0C; producer leaves it unwritten
+};
+static_assert(offsetof(ImageSaveRequestAction, mpTextureBuffer) == 0x08,
+              "action294 image pointer follows id and size");
+static_assert(offsetof(ImageSaveRequestAction, miPad0C) == (sizeof(void*) == 8 ? 0x10 : 0x0C),
+              "action294 trailing word follows the native-width pointer");
+static_assert(sizeof(ImageSaveRequestAction) == (sizeof(void*) == 8 ? 24 : 16),
+              "action294 image-save record widens with its buffer pointer");
+
 // 296 -- decode a received DXT image. Console 20 bytes; the texture pointer is 8 bytes on the
 // host, so the name lands at +0x08 here.
 struct DXTDecodeImageAction : public GameAction<E_ACTION_DXT_DECODE_IMAGE>

@@ -72,8 +72,8 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 namespace
 {
     // ARTIST file-global Tool.GUI request owners at82FB5060/5088/5089.
-    // The native image starts these bytes at zero. Construct does not reset
-    // them; native Update consumes start before stop. Names are host projections.
+    // The native image starts these bytes at zero. Construct clears only the
+    // start flag; native Update consumes start before stop. Names are host projections.
     char gacGuiToolHookName[32] = {};
     bool gbGuiToolStartHookRequested = false;
     bool gbGuiToolStopHookRequested = false;
@@ -915,6 +915,7 @@ namespace BrnGui
         // other custom control) had nowhere to resolve to.
         // ARTIST82518BF0..C0C: the real receiver owns its backing storage.
         mGDMReceiverQueue.Construct();
+        gbGuiToolStartHookRequested = false; // ARTIST82518C38..82518C44
         mGuiModuleSerialiser.Construct(); // ARTIST82518C4C, before manager Construct
         mCustomRendererManager.Construct();
 
@@ -1927,10 +1928,31 @@ void GuiModule::Destruct()
                                      reinterpret_cast<const u8*>(lacQuoted));
     }
 
+    // X360 0x8251A568: preserve an image file when autosave is disabled, otherwise autosave
+    // it as a one-record ImageFileInfo request. The current PC Update keeps its documented
+    // sign-in-gate deviation, but retains the original autosave-enabled and image-copy branches.
+    void GuiModule::AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo)
+    {
+        if (lpImageFileInfo != 0 && !mProfileManager.AutosaveIsEnabled())
+        {
+            mProfileManager.CopyImageToBuffer(lpImageFileInfo);
+        }
+
+        if (mProfileManager.AutosaveIsEnabled())
+        {
+            mProfileManager.Autosave(&mProfileAutosaveResultHandler,
+                                     lpImageFileInfo != 0 ? 1 : 0, lpImageFileInfo);
+            mbProfileAutosavePending  = false;
+            mfLastProfileAutosaveTime = mGuiCache.GetTime();
+        }
+    }
+
     // The real GuiModule::Update event dispatch (X360 0x82527A58's switch): consume the
     // module-level events, forward the load notifications, and fan the rest to the flow.
-    void GuiModule::DispatchInboundGuiEvents()
+    void GuiModule::DispatchInboundGuiEvents(bool& rbHasSaveImageEvent,
+                                              CgsGui::ImageFileInfo& lrSaveImageInfo)
     {
+        rbHasSaveImageEvent = false;
         if (mpGuiEventInputBuffer == 0)
             return;
 
@@ -2151,6 +2173,17 @@ void GuiModule::Destruct()
                     break;
                 case 584:
                     mFreeburnChallengeManager.EndNotActiveChallenge();
+                    break;
+
+                case 358:
+                    // X360 copies the four image-save words into a frame-local record, raises
+                    // the force/pending latches, then lets Update call AutosaveProfile. The host
+                    // record is 24 bytes because the buffer pointer widened; the unwritten
+                    // trailing word remains byte-for-byte residue.
+                    std::memcpy(&lrSaveImageInfo, lpEvent, sizeof(lrSaveImageInfo));
+                    rbHasSaveImageEvent = true;
+                    mbForceProfileAutosave = true;
+                    mbProfileAutosavePending = true;
                     break;
 
                 case 359:   // Image-file records loaded by ProfileManager (ARTIST GuiModule::Update case 359)
@@ -2994,7 +3027,9 @@ void GuiModule::Destruct()
     {
         // ---- 1. inbound GUI events (144 -> RunFsm; 14/16/481 -> notifications;
         //          504/508/513 -> MovieManager; subscription fan-out to the flow) -------
-        DispatchInboundGuiEvents();
+        bool lbHasSaveImageEvent = false;
+        CgsGui::ImageFileInfo lSaveImageInfo;
+        DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);
 
         // ---- 2. the per-frame cache event (64): the real Update posts the GuiCache
         //          pointer into the event queue each frame; the states read it as their
@@ -3192,10 +3227,9 @@ void GuiModule::Destruct()
         //             }
         //         }
         //     }
-        // flt_82004C6C == 60.0f. The v143/AutosaveProfile arm is the id-358
-        // (GuiEventSaveImageFileAndAutosave) mugshot path, which nothing in this build posts
-        // yet -- named here, not faked; when a producer lands, GuiModule::AutosaveProfile
-        // @0x8251A568 goes in beside this block.
+        // flt_82004C6C == 60.0f. GUI358 now reaches AutosaveProfile with the complete
+        // host-native ImageFileInfo record; absent that event, this block saves the profile
+        // without image files.
         //
         // The two gates, and what each is on PC:
         //  * module+1024648 == GuiCache+19272 -- GuiCache::Construct @0x82505860 zeroes it
@@ -3225,7 +3259,11 @@ void GuiModule::Destruct()
 
             if (mbForceProfileAutosave || lbThrottleElapsed)
             {
-                if (mProfileManager.AutosaveIsEnabled())
+                if (lbHasSaveImageEvent)
+                {
+                    AutosaveProfile(&lSaveImageInfo);
+                }
+                else if (mProfileManager.AutosaveIsEnabled())
                 {
                     // The console's 4-arg call with count 0 / records NULL: save the profile
                     // image with no image files attached. The handler is the ProfileHost the

@@ -46,6 +46,14 @@ namespace BrnGui
 
         CgsGui::StateMachine& GetStateMachine() { return mStateMachine; }   // BrnBaseFlow.h:171
 
+        // DecFIGS BrnBaseFlow.h:187/203. ARTIST825190E8 sets CURRENT;
+        // 82529C40/44 copies the actual debug streaming value into this owner.
+        void SetStreamingMode(EStreamingMode leStreamingMode)
+        {
+            meStreamingMode = leStreamingMode;
+        }
+        EStreamingMode GetStreamingMode() const { return meStreamingMode; }
+
         // ---- lifecycle (reconstructed from BURNOUT_X360_ARTIST.XEX; bodies in BrnBaseFlow.cpp) ----
 
         // @ 0x824F1BC0 -- EventObserver::Construct(), bring the embedded state machine up, then
