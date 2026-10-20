@@ -58,6 +58,8 @@
 //     BridgeGuiToGame consumes it and the game main flow requests the next FSM stage.
 // The [PC IO] leaf that remains module-side is the synchronous FSM-bundle load standing
 // in for the GuiResourceModule module dispatch (ServiceFsmBundleRequests).
+namespace EA { namespace GameTalk { class GameTalkMessage; } }
+
 namespace BrnGui
 {
     class GuiModule : public CgsGui::GuiModule
@@ -95,6 +97,47 @@ namespace BrnGui
         // DecFIGS BrnGuiModule.h:660; ARTIST823AAC3C inlines the false store
         // at CompleteLoading::OnLeave, matching the constructor/validator byte.
         void SetMovieBootMode(bool lbBootMovieMode) { mbBootMovieMode = lbBootMovieMode; }
+
+        // DecFIGS names, with ARTIST82518D68's actual stage order. ARTIST
+        // moved the world-data stage after WF resources.
+        enum GuiPrepareStage
+        {
+            E_PREPARE_START = 0,
+            E_PREPARE_MEMORY = 1,
+            E_PREPARE_PARENT = 2,
+            E_PREPARE_HUD = 3,
+            E_PREPARE_SCREEN = 4,
+            E_PREPARE_OVERLAY = 5,
+            E_PREPARE_FSM_CONTROLLER = 6,
+            E_PREPARE_CUSTOMRENDERER_PREPARE = 7,
+            E_PREPARE_MOVIE_MANAGER = 8,
+            E_PREPARE_COLOUR_CALIBRATION_SCREEN = 9,
+            E_PREPARE_GUI_DEBUG_COMPONENT = 10,
+            E_PREPARE_PROFILE = 11,
+            E_PREPARE_SYSTEM_NOTIFICATIONS = 12,
+            E_PREPARE_WF_RESOURCES = 13,
+            E_PREPARE_WORLD_DATA_CONTROLLER = 14,
+            E_PREPARE_DONE = 15,
+        };
+        enum GuiReleaseStage
+        {
+            E_RELEASE_START = 0,
+            E_RELEASE_MEMORY = 1,
+            E_RELEASE_PARENT = 2,
+            E_RELEASE_HUD = 3,
+            E_RELEASE_SCREEN = 4,
+            E_RELEASE_OVERLAY = 5,
+            E_RELEASE_FSM_CONTROLLER = 6,
+            E_RELEASE_CUSTOMRENDERER_DESTRUCT = 7,
+            E_RELEASE_CUSTOMRENDERER_RELEASE = 8,
+            E_RELEASE_MOVIE_MANAGER = 9,
+            E_RELEASE_COLOUR_CALIBRATION_SCREEN = 10,
+            E_RELEASE_WORLD_DATA_CONTROLLER = 11,
+            E_RELEASE_GUI_DEBUG_COMPONENT = 12,
+            E_RELEASE_PROFILE = 13,
+            E_RELEASE_SYSTEM_NOTIFICATIONS = 14,
+            E_RELEASE_DONE = 15,
+        };
 
         bool Prepare() override;
         // ARTIST825194B8; original native vtable+0x5C. The selected host
@@ -259,6 +302,10 @@ namespace BrnGui
         friend struct SatNavDebugComponent;
         friend struct GuiDebugComponent;
 
+        // ARTIST824F10D8; the real static callback registered by native
+        // Prepare. Its recovered body remains unregistered in the host flow.
+        static void GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage);
+
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
         // 14/16 -> the model-out notification queue, 504/508/513 -> MovieManager), and fan
@@ -306,9 +353,13 @@ namespace BrnGui
         // CompleteLoading::OnLeave owns the later false transition.
         bool mbBootMovieMode;
 
+        // DecFIGS h:513/514; ARTIST82518850/68. These are the derived
+        // lifecycle owners, separate from the shared GuiModule's own stages.
+        GuiPrepareStage mePrepareStage;
         // ARTIST-only second-prepare word (Construct82518858). DecFIGS lacks
         // this addition; the host member name is a projection of that owner.
         u32 muPrepare2State;
+        GuiReleaseStage meReleaseStage;
 
         // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
         // buffer itself lives on the update IO stack and is re-created per sub-step).
@@ -353,21 +404,19 @@ namespace BrnGui
         // guest displacement is a note, not a layout instruction.
         ColourCalibrationScreen mColourCalibrationScreen;   // X360 +306752
 
-        // X360 +311932 -- one row of the console's mGuiConfig (DWARF BrnGuiModule.h:516 ->
-        // CgsGui::GuiModuleConfig, CgsGuiModule.h:73 `rw::IResourceAllocator*
-        // mpTextureAllocator`). GuiModule::Prepare @0x82518DE0 fills it with
-        // `GetAllocatorList(gameDataOut)->GetRWLinearResourceAllocator(42)` ("Network Image
-        // Allocator") and GuiModule::Update @0x82529B00 hands it to
-        // ColourCalibrationScreen::Update as r7. Only this one row of GuiModuleConfig is
-        // modelled; the rest of the config block is the (unreconstructed) base-module
-        // prepare's business.
-        rw::IResourceAllocator* mpTextureAllocator;   // X360 +311932 (mGuiConfig.mpTextureAllocator)
+        // DecFIGS BrnGuiModule.h:516; ARTIST82518EF4..82519024 fills all
+        // seven pool ids and seven allocator rows. The two selected PC
+        // consumers use these same rows rather than separate projections.
+        CgsGui::GuiModuleConfig mGuiConfig;
 
-        // ⭐ [licence-icon] X360 +311924 -- the sibling mGuiConfig row: Prepare stage 1 fills it
-        // with GetAllocatorList(gameDataOut)->GetRWGeneralResourceAllocator(31) and the console
-        // hands it to CustomRendererManager::Prepare as the heap allocator (`v26 = *(gm+311924)`
-        // at the stage-7 call @0x82518D68). Modelled for the same one consumer.
-        rw::IResourceAllocator* mpGuiHeapAllocator;   // X360 +311924 (mGuiConfig heap row, bank 31)
+        // Host extraction of native Prepare's inline stage-1 block. This
+        // helper stays dormant until the whole typed Prepare chain is ready.
+        void PopulateNativeGuiConfig(
+            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
+
+        // Host extraction of ARTIST825193C8..82519444. Unselected; native
+        // Prepare must wait here before its world-data stage.
+        bool EnsureNativeGuiResources();
 
         // [licence-icon] the manager's staged-prepare latch. The console pumps the manager's
         // Prepare through GuiModule::Prepare's stage re-entry (`if (!v27) goto fail` + the module

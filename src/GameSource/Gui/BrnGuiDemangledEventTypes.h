@@ -66,6 +66,8 @@ namespace BrnNetwork { enum ECameraStatus : s32; struct LiveRevengeProfile; }
 #include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (cam picture events)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
+namespace BrnReplays { class BaseSerialiser; }
+
 namespace BrnGui
 {
     // NOTE (HudMessageAnalyzer keystone, wave B): the analyzer-consumed payloads formerly
@@ -76,7 +78,18 @@ namespace BrnGui
     // with their REAL DWARF field shapes in GameSource/Gui/BrnGuiEventTypeDefs.h (one
     // definition per type; same X360 (id,size) pairs, asserted there). Do not re-add them
     // here.
-    struct GuiAftertouchEvent : public CgsGui::GuiEvent<403> { u8 maPayload[20]; };  // id 403 size 32 (12B GuiEvent header + opaque payload)
+    // ARTIST action 178 writes a 32-byte GUI 403 record as {sideways@0, forward@4, zero@8, race-car@16};
+    // bytes +20..+31 are not written. The target consumer is not identified in this source snapshot.
+    struct GuiAftertouchEvent
+    {
+        f32 mfSidewaysAftertouch;     // +0: action +8
+        f32 mfForwardAftertouch;      // +4: action +4
+        u64 muZero;                    // +8: ARTIST r19 is initialized to zero
+        s32 miRaceCarIndex;           // +16: action +0
+        u8  mau8UnwrittenTail[12];    // +20..+31: ARTIST leaves these bytes untouched
+        s32 GetEventType() const { return 403; }
+    };
+    static_assert(sizeof(GuiAftertouchEvent) == 32, "ARTIST AddGuiEvent size 32 (id 403)");
     // [E1 event-status wave 2026-08-26] GuiAttackScoreUpdate (id 428) has been RECOVERED and
     // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape (the opaque
     // `GuiEvent<428> + u8[28]` shell that stood here read the 40-byte record as "12-byte
@@ -1201,7 +1214,16 @@ namespace BrnGui
     struct GuiMuteDac { u8 maData[1]; s32 GetEventType() const { return 88; } };  // id 88 size 1
     struct GuiNetworkCustomRouteCreated { u8 maData[8]; s32 GetEventType() const { return 286; } };  // id 286 size 8
     struct GuiReplayDeleteReelEvent { u8 maData[4]; s32 GetEventType() const { return 527; } };  // id 527 size 4
-    struct GuiReplayRegisterSerialiser { u8 maData[4]; s32 GetEventType() const { return 595; } };  // id 595 size 4
+    // ARTIST82518E7C..82518E8C and8252A0D0..8252A0DC publish the
+    // contained GUI serialiser; BridgeGuiToReplay_PostSim823CCEB8 reads that
+    // same pointer and registers it through the actual replay request owner.
+    struct GuiReplayRegisterSerialiser
+    {
+        BrnReplays::BaseSerialiser* mpSerialiser;
+        s32 GetEventType() const { return 595; }
+    };
+    static_assert(sizeof(GuiReplayRegisterSerialiser) == sizeof(BrnReplays::BaseSerialiser*),
+                  "GUI replay registration carries one full native pointer");
     struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4
     struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
     struct GuiResponseTimeDateString : public CgsGui::GuiEvent<594> { u8 maPayload[24]; };  // id 594 size 36

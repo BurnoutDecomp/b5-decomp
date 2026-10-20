@@ -1,5 +1,6 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGUIToX.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Replays/BrnReplayModuleIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h"
@@ -54,11 +55,11 @@ namespace BrnGame
                 }
                 case 595:
                 {
-                    BrnReplays::BaseSerialiser* lpSerialiser =
-                        *reinterpret_cast<BrnReplays::BaseSerialiser* const*>(lpEvent);
+                    const BrnGui::GuiReplayRegisterSerialiser* lpRegistration =
+                        reinterpret_cast<const BrnGui::GuiReplayRegisterSerialiser*>(lpEvent);
                     BrnReplays::ReplayIO::RequestInterface* lpRequestInterface =
                         lpReplayModuleInputBuffer->GetRequestInterface();
-                    lpRequestInterface->RegisterSerialiser(lpSerialiser);
+                    lpRequestInterface->RegisterSerialiser(lpRegistration->mpSerialiser);
                     break;
                 }
                 default: break;

@@ -1,4 +1,5 @@
 #include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"
+#include "GameSource/GameState/ModeManager/BrnModeManager.h" // CountCheckpointsRemaining / GetGlobalRaceCarOutputInterface
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::IsComboInProgress
@@ -174,6 +175,8 @@ void HUDMessageLogic::Prepare()
     miNextRivalCheckpoint = 1;
     meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     mRivalCheckpointID = 0;
+    meBurningHomeRunRunnerCrashRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID; // +0x248
+    miBurningHomeRunCrashesToGo = 0;                                           // +0x24C
     mfTimeInMode               = 0.0f;                                  // +0x1C4
     miScoreMessageRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);  // +0x1D0
     meEliminationRaceCarIndex  = static_cast<EActiveRaceCarIndex>(-1);  // +0x1DC
@@ -207,57 +210,17 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
     mActionQueue.Clear();
 }
 
-// X360 0x8239D998. Latch the game mode, tick the in-mode clock, run the per-mode generators.
-//
-// ⚠ THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY. The console signature is ten arguments --
-//   PostWorldUpdate(this, lpActiveRaceCarInterface, leGameModeType, lpModeManager, lpScoringSystem,
-//                   lpRaceCarCrashEventQueue, lpVehicleOutputInterface, lpTakedownQueue, lfDelta,
-//                   [sp+0x5C] mePlayerActiveRaceCarIndex, [sp+0x67] IsGameModeInProgress(mode))
-// (r4 iface, r5 mode, r6 ModeManager, r7 scoring, r8 crash queue, r9 vehicle interface,
-// r10 takedown queue, f1 delta; 0x8239D9A8..0x8239D9CC, `lwz r29, 0x10C(r1)` @0x8239DA40).
-// The eight carried here are the ones the reproduced arms read, so both of the console's head
-// asserts stay verbatim rather than being dropped with the arguments they guard. Still dropped:
-// the ModeManager (only case 13 reads it) and the VehicleOutputInterface (only the online-team tail).
-//
-// REPRODUCED, statement for statement:
-//   CGS_ASSERT(a2, "lpActiveRaceCarInterface != NULL")  (BrnHUDMessageLogic.cpp:144)
-//   CGS_ASSERT(a5, "lpScoringSystem != NULL")           (BrnHUDMessageLogic.cpp:145)
-//   if (*(a1+448) != a3) { Prepare(a1); *(a1+448) = a3; }
-//   *(a1+452) += a9;
-//   switch (*(a1+448)) { case 0/10: GenerateRaceModeMessages(a1, a2, a5, a6, a8, [sp+0x5C], a9);
-//                        case 3: GenerateCriticalDamageMessage(a1, a2, a5); break;
-//                        case 7: GenerateStuntMessage(a1, a5); break;
-//                        case 11: GenerateOnlineBlueTeamEscapingMessage(a1, a5, a9, playerIndex);
-//                                 GenerateOnlineBlueTeamAreBehindYouMessage(a1, a5, a9, playerIndex);
-//                                 GenerateOnlineLeaderMilestoneMessage(a1, a5, a9, playerIndex, inProgress);
-//                        case 12/14/17: GenerateStuntMessage(a1, a5); ... break;
-//                        case 15: DetectOnlineCrashes(a1, a2, a6, a9);
-//                                 RemoveCrashingMessagesForTakendownPlayers(a1, a8); break; }
-// Note the switch tests the LATCHED member, not the incoming argument -- they differ only on the
-// frame the mode changes, and the console reads the member. Faithfully kept.
-// (case 3 added by the road-rage wave 2026-09-02: it reads only a2 and a5, both carried here.)
-// [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3] cases 0/10 (@0x8239DAB0, `bl` @0x8239DACC),
-// 11 (@0x8239DAE8..0x8239DB24), and 15 (@0x8239DB40, `bl` @0x8239DB50 / @0x8239DB5C) are
-// reproduced; jump table 0x8239DA68.
-//
-// [X] NOT REPRODUCED, named rather than faked -- the other switch arms and the tail:
-//   case 12/14 (not 17) GenerateOnlineStuntRunVictoryMessages + ...LeadingMessages;
-//   case 12/14/17 GenerateOnlineStuntRunEliminationMessages + ...TimeMessages + ...ScoreMessages;
-//   case 13    GenerateBurningHomeRunMessages;
-//   tail       GenerateOnlineTeamChangeMessages(a1, a7, a31).
-// The five online stunt-run generators ARE bodied in this file. Leading and Time also take a
-// CgsSystem::Time read off the ModeManager (`lwz 0x6DC8(r27) / lfs 0x6DCC(r27)` @0x8239DB9C /
-// @0x8239DBDC) that this reduced set does not carry; Victory, Elimination and Score need only the
-// player index carried since 2026-09-23 and are still unwired (online-only; not part of the
-// crash-message fix). Behaviour cost on an OFFLINE stunt race -- the mode that leg exists for --
-// is zero: case 7 is the whole of its arm.
-// Remaining call-path gaps are case 13 (needs ModeManager) and the online team-change tail (needs
-// VehicleOutputInterface); this recovery carries the existing mode-progress byte for case 11.
+// X360 0x8239D998. The source signature carries the arguments consumed by ARTIST in order:
+// active-race output, mode type, ModeManager, ScoringSystem, crash queue, VehicleOutputInterface,
+// takedown queue, delta, player active-race index, and mode-progress byte. Mode 13 runs the BHR
+// producers; the team-change producer runs unconditionally after the switch, matching ARTIST.
 void HUDMessageLogic::PostWorldUpdate(
     const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
     GameStateModuleIO::EGameModeType leGameModeType,
+    ModeManager* lpModeManager,
     ScoringSystem* lpScoringSystem,
     const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+    const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
     const InputBuffer::TakedownEventQueue* lpTakedownQueue,
     f32 lfDelta,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
@@ -293,6 +256,10 @@ void HUDMessageLogic::PostWorldUpdate(
                                                  lbIsGameModeInProgress);
             break;
 
+        case GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN:  // case 13
+            GenerateBurningHomeRunMessages(lpModeManager, lpScoringSystem);
+            break;
+
         case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:  // case 15
             DetectOnlineCrashes(lpActiveRaceCarInterface, lpRaceCarCrashQueue, lfDelta);
             RemoveCrashingMessagesForTakendownPlayers(lpTakedownQueue);
@@ -311,6 +278,8 @@ void HUDMessageLogic::PostWorldUpdate(
         default:
             break;
     }
+
+    GenerateOnlineTeamChangeMessages(lpVehicleOutputInterface, lePlayerActiveRaceCarIndex);
 }
 
 // ============================================================================
@@ -1374,10 +1343,53 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
     }
 }
 
-// Announce the team changes OnlineTeamChange recorded: for each car whose flag is set, while
-// the local player's car is not crashing, drop the flag and queue the team-change record
-// carrying that car's index. PostWorldUpdate's online tail calls it; this reduced PostWorldUpdate
-// does not carry the vehicle output interface, so that call is not made yet.
+// X360 0x82394D60. Convert the latched active car to a global index, count its remaining
+// checkpoints through ModeManager, post action 252, and clear the latch.
+void HUDMessageLogic::GenerateBurningHomeRunCheckpointMessage(ModeManager* lpModeManager,
+                                                              ScoringSystem* lpScoringSystem)
+{
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem");
+
+    const EActiveRaceCarIndex leRaceCarIndex = meCheckpointTriggeringRaceCarIndex;
+    if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        const EGlobalRaceCarIndex leGlobalRaceCarIndex =
+            lpModeManager->GetGlobalRaceCarOutputInterface()->GetGlobalRaceCarIndex(leRaceCarIndex);
+        const s32 liNumCheckpointsToGo =
+            static_cast<s32>(lpModeManager->CountCheckpointsRemaining(leGlobalRaceCarIndex));
+
+        BurningHomeRunCheckpointMessage lMessage;
+        lMessage.meActiveRaceCarIndex = leRaceCarIndex;
+        lMessage.miNumCheckpointsToGo = liNumCheckpointsToGo;
+        meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mActionQueue.AddEvent(&lMessage,
+                              E_HUD_MESSAGE_BHR_CHECKPOINT,
+                              static_cast<s32>(sizeof(lMessage)));
+    }
+}
+
+// X360 0x82399D70. Run the checkpoint message first, then consume the pending runner-crash latch
+// as action 253.
+void HUDMessageLogic::GenerateBurningHomeRunMessages(ModeManager* lpModeManager,
+                                                     ScoringSystem* lpScoringSystem)
+{
+    GenerateBurningHomeRunCheckpointMessage(lpModeManager, lpScoringSystem);
+
+    if (meBurningHomeRunRunnerCrashRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        BurningHomeRunRunnerCrashedMessage lMessage;
+        lMessage.meActiveRaceCarIndex = meBurningHomeRunRunnerCrashRaceCarIndex;
+        lMessage.miNumCrashesToGo = miBurningHomeRunCrashesToGo;
+        meBurningHomeRunRunnerCrashRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mActionQueue.AddEvent(&lMessage,
+                              E_HUD_MESSAGE_BHR_RUNNER_CRASHED,
+                              static_cast<s32>(sizeof(lMessage)));
+    }
+}
+
+// Announce the team changes OnlineTeamChange recorded: for each flagged car, while the local
+// player's car is not crashing, clear the flag and queue the 4-byte team-change record. The
+// PostWorldUpdate tail invokes this generator unconditionally, matching ARTIST.
 void HUDMessageLogic::GenerateOnlineTeamChangeMessages(
     const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)

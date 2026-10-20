@@ -1071,8 +1071,10 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
     const bool lbIsGameModeInProgress = IsGameModeInProgress(mpCurrentGameMode);
     mHUDMessageLogic.PostWorldUpdate(lpActiveRaceCarOutput,
                                      meCurrentGameModeType,
+                                     this,
                                      &mScoringSystem,
                                      lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
+                                     lpVehicleOutput,
                                      lpTakedownQueue,
                                      lfDelta,
                                      mePlayerActiveRaceCarIndex,

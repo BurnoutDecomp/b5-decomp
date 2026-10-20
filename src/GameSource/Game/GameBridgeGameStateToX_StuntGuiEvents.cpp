@@ -1551,6 +1551,22 @@ namespace
                 break;
             }
 
+            // ---- 178  AFTERTOUCH (12-byte action) -> GUI 403 (32-byte raw event) ----------------
+            // ARTIST writes {sideways, forward, zero-qword, race-car index} at offsets 0/4/8/16;
+            // the final 12 bytes of the 32-byte event remain stack residue.
+            case BrnGameState::GameStateModuleIO::E_ACTION_AFTERTOUCH:
+            {
+                const BrnGameState::GameStateModuleIO::AftertouchAction* lpAftertouchAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::AftertouchAction*>(lpAction);
+                BrnGui::GuiAftertouchEvent lEvent;
+                lEvent.mfSidewaysAftertouch = lpAftertouchAction->mfSidewaysAftertouch;
+                lEvent.mfForwardAftertouch = lpAftertouchAction->mfForwardAftertouch;
+                lEvent.muZero = 0;
+                lEvent.miRaceCarIndex = lpAftertouchAction->meRaceCarIndex;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 59  E_ACTION_ON_STUNT_ELEMENT_COMPLETE_FOR_COUNTY (8 bytes) --------------
             // @0x823EB98C..0x823EB9B0: { meStuntElementType@+0x00 <- Map(action+0x00),
             //                            meCounty@+0x04 <- action+0x04 }. No autosave request.

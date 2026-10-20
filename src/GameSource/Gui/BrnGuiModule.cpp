@@ -1,5 +1,6 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
+#include "SDKs/EA/GameTalk/GameTalk.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
 #include <cstdio>                                                         // std::snprintf (log formatting)
@@ -25,6 +26,8 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::AptCommunicator (the per-frame trigger publish)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                // FLApt live-instance allocator
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "rw/rwcore_general_alloc.h"                                   // actual public allocator derivation
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                      // BrnResource::GameDataIO::Input/OutputBuffer (the colour-calibration screen's IO)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // AllocatorList::GetRWLinearResourceAllocator (mGuiConfig.mpTextureAllocator)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h" // GetScriptedLoadGameData{Input,Output} (the PC stand-in for the scheduler's GameData IO pair)
@@ -68,6 +71,37 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 namespace
 {
+    // ARTIST file-global Tool.GUI request owners at82FB5060/5088/5089.
+    // The native image starts these bytes at zero. Construct does not reset
+    // them; native Update consumes start before stop. Names are host projections.
+    char gacGuiToolHookName[32] = {};
+    bool gbGuiToolStartHookRequested = false;
+    bool gbGuiToolStopHookRequested = false;
+
+    // Host extraction of the callback's duplicated assert/copy block. Keep
+    // assertion continuation and strncpy's original fixed32 behavior.
+    void CopyGuiToolHookName(const char* lpcContent, s32 liOriginalLine)
+    {
+        if (!lpcContent)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpcContent != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", liOriginalLine);
+            CgsDev::Assert::EndAssert();
+        }
+        if (std::strlen(lpcContent) >= 32)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "String too long: " << (lpcContent ? lpcContent : "<NULLSTRING>");
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+            CgsDev::Assert::EndAssert();
+        }
+        std::strncpy(gacGuiToolHookName, lpcContent, 32);
+    }
+
     // [FLAG PC witness] BRN_HUD_VIS gate for the `[hud-vis] cmd` lines in the channel-42
     // drain (lane `hud`, bug-test wave 2026-09-06). NOT IN THE X360 BINARY.
     // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
@@ -847,7 +881,9 @@ namespace BrnGui
         // ARTIST82518B88 initializes the actual boot-movie owner byte.
         mbBootMovieMode = true;
         // ARTIST82518858: distinct from primary Prepare and release stages.
+        mePrepareStage = E_PREPARE_START;
         muPrepare2State = 0;
+        meReleaseStage = E_RELEASE_DONE;
         // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
@@ -903,8 +939,8 @@ namespace BrnGui
         mbRenderInputCompletedPC = false;
         mCompletedRenderInputPC.Construct();
         mpOutputBuffer = 0;
-        mpTextureAllocator = 0;   // filled by Prepare (X360 GuiModule::Prepare @0x82518DE0)
-        mpGuiHeapAllocator = 0;   // [licence-icon] filled by Prepare (mGuiConfig row +311924, bank 31)
+        mGuiConfig.mpTextureAllocator = 0;   // retained selected PC initialization
+        mGuiConfig.mpRendererAllocator = 0;  // retained selected PC initialization
         mbCustomRenderersPrepared = false;   // [licence-icon] the manager staged-prepare latch
 
         // The flow-controller chain (the X360 Construct's flow set): the cache Construct
@@ -1099,11 +1135,106 @@ namespace BrnGui
         mbPrepared          = false;
     }
 
+    // ARTIST82518E9C..82519024, extracted from the original inline memory
+    // stage. No selected host caller invokes this helper yet.
+    void GuiModule::PopulateNativeGuiConfig(
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
+    {
+        if (!lpGameDataOutput->GetAllocatorList())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid allocator list passed into BrnGui::GuiModule::Prepare";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 367);
+            CgsDev::Assert::EndAssert();
+        }
+        mGuiConfig.miAptPersistentBunldePoolId = 8;
+        mGuiConfig.miAptStreamedbundlePoolId = 9;
+        mGuiConfig.miFontBundlePoolId = 0;
+        mGuiConfig.miGlobalTexturePoolId = 10;
+        mGuiConfig.miFSMBunldePoolId = 11;
+        mGuiConfig.miLanguageBundlePoolId = 11;
+        mGuiConfig.miTexturesBundlePoolId = 12;
+        mGuiConfig.mpAptAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(32);
+        mGuiConfig.mpFSMAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(38);
+        mGuiConfig.mpRendererAllocator =
+            lpGameDataOutput->GetAllocatorList()->GetRWGeneralResourceAllocator(31);
+        mGuiConfig.mpLanguageAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(38);
+        mGuiConfig.mpGuiStateAllocator = lpGameDataOutput->GetAllocatorList()->GetLinearAllocator(44);
+        mGuiConfig.mpTextureAllocator =
+            lpGameDataOutput->GetAllocatorList()->GetRWLinearResourceAllocator(42);
+        mGuiConfig.mpFlaptAllocator = lpGameDataOutput->GetAllocatorList()->GetLinearAllocator(66);
+        mGuiConfig.mpGuiStateAllocator->SetAlignment(16);
+        mGuiConfig.mpFlaptAllocator->SetAlignment(16);
+    }
+
+    // ARTIST825193C8..82519444. Counts and tuple words are recovered
+    // directly from the three original tables; enum ordinals are target values.
+    // This extracted block has no selected host caller.
+    bool GuiModule::EnsureNativeGuiResources()
+    {
+        static const CgsGui::sResourceTuple maEuropeanFontResourcesToLoad[3] =
+        {
+            { 17u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            { 18u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            { 19u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+        };
+        static const CgsGui::sResourceTuple maJapaneseFontResourcesToLoad[2] =
+        {
+            { 20u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            { 21u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+        };
+        static const CgsGui::sResourceTuple maBasicResourcesToLoad[2] =
+        {
+            { 125u, static_cast<CgsGui::ResourceRequestTypes>(7) },
+            { 196u, static_cast<CgsGui::ResourceRequestTypes>(10) },
+        };
+        const CgsGui::sResourceTuple* lpFonts;
+        u32 luFontCount;
+        if (mGuiCache.GetLanguage() == CgsLanguage::E_LANGUAGE_JAPANESE)
+        {
+            lpFonts = maJapaneseFontResourcesToLoad;
+            luFontCount = 2;
+        }
+        else
+        {
+            lpFonts = maEuropeanFontResourcesToLoad;
+            luFontCount = 3;
+        }
+        if (!mGuiCache.EnsureResourcesAreLoaded(lpFonts, luFontCount))
+            return false;
+        return mGuiCache.EnsureResourcesAreLoaded(maBasicResourcesToLoad, 2);
+    }
+
+    // ARTIST824F10D8. GameTalk's actual MessageHandler contract is void.
+    // Registration belongs to native Prepare and remains unselected here.
+    void GuiModule::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
+    {
+        const char* lpcKey = lpMessage->GetKey(0);
+        if (_strnicmp(lpcKey, "StartHook", 9) == 0)
+        {
+            CopyGuiToolHookName(lpMessage->GetKeyContent("StartHook"), 3554);
+            gbGuiToolStartHookRequested = true;
+        }
+        else if (_strnicmp(lpcKey, "StopHook", 8) == 0)
+        {
+            CopyGuiToolHookName(lpMessage->GetKeyContent("StopHook"), 3564);
+            gbGuiToolStopHookRequested = true;
+        }
+        else if (_strnicmp(lpcKey, "StopMenuHook", 12) == 0)
+        {
+            std::strncpy(gacGuiToolHookName, "", 32);
+            gbGuiToolStopHookRequested = true;
+        }
+    }
+
     bool GuiModule::Prepare()
     {
         // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 1 (the mGuiConfig fill) -----------
         // The console's stage 1 reads seven pool ids and seven allocators out of the GameData
-        // OUTPUT buffer's AllocatorList. The ONE row this build needs is
+        // OUTPUT buffer's AllocatorList. The selected PC path keeps its existing two rows:
         //     *(gm + 311932) = AllocatorList::GetRWLinearResourceAllocator(list, 42)
         // (0x82518DE0's `ori r21, r11, 0xC27C`), the allocator ColourCalibrationScreen::Update
         // carves its texture-state resource from. Bank 42 is "Network Image Allocator" and is
@@ -1122,8 +1253,8 @@ namespace BrnGui
         // CgsModule::IOBuffer's lock is a single status BIT (CgsIOBuffer.h:26/:42), not a count --
         // an inner Unlock would clear the caller's lock and its own UnlockForRead would then assert
         // "Not locked for read". GetAllocatorList's read assert is satisfied by the caller's bracket.
-        mpTextureAllocator = 0;
-        mpGuiHeapAllocator = 0;
+        mGuiConfig.mpTextureAllocator = 0;
+        mGuiConfig.mpRendererAllocator = 0;
         {
             BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
                 BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
@@ -1135,15 +1266,9 @@ namespace BrnGui
                     lpGameDataOutput->GetAllocatorList();
                 if (lpAllocators != 0)
                 {
-                    mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
-                    // [licence-icon] the console's sibling stage-1 row:
-                    //   *(gm + 311924) = AllocatorList::GetRWGeneralResourceAllocator(list, 31)
-                    // -- the heap allocator the custom-renderer manager Prepare receives.
-                    // (reinterpret: rw::core::GeneralResourceAllocator is forward-declared
-                    // opaque in this TU; on the rwcore ABI it IS an IResourceAllocator -- the
-                    // console stores the same pointer in the IResourceAllocator config row.)
-                    mpGuiHeapAllocator = reinterpret_cast<rw::IResourceAllocator*>(
-                        lpAllocators->GetRWGeneralResourceAllocator(31));
+                    mGuiConfig.mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
+                    mGuiConfig.mpRendererAllocator =
+                        lpAllocators->GetRWGeneralResourceAllocator(31);
                 }
             }
         }
@@ -1197,12 +1322,12 @@ namespace BrnGui
         //
         // ⭐ [licence-icon] 2026-08-24: the allocator FLAG that stood here is PAID -- the call
         // now passes the console's own pair (stage 1 above fills both mGuiConfig rows: slot 31
-        // general -> mpGuiHeapAllocator, slot 42 linear -> mpTextureAllocator; the X360 stage-7
+        // general -> mGuiConfig.mpRendererAllocator, slot 42 linear -> mGuiConfig.mpTextureAllocator; the X360 stage-7
         // call is `Prepare(*(gm+311924), *(gm+311932))` @0x82518D68). One call advances the
         // staged prepare as far as it can this frame; the console re-enters Prepare until every
         // stage passes, so Update owns the PC pump (see the [licence-icon] block there).
         const bool lbCustomRenderersPrepared =
-            mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
+            mCustomRendererManager.Prepare(mGuiConfig.mpRendererAllocator, mGuiConfig.mpTextureAllocator);
         mbCustomRenderersPrepared = lbCustomRenderersPrepared;
         mViewModule.SetCustomRendererManager(&mCustomRendererManager, 10,
                                              &mGuiModuleSerialiser);
@@ -2905,7 +3030,7 @@ void GuiModule::Destruct()
             if (!mbCustomRenderersPrepared)
             {
                 mbCustomRenderersPrepared =
-                    mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
+                    mCustomRendererManager.Prepare(mGuiConfig.mpRendererAllocator, mGuiConfig.mpTextureAllocator);
                 if (mbCustomRenderersPrepared)
                 {
                     CgsDev::Log::WriteToLog("[custrend] manager prepare DONE (pump)\n");
@@ -3251,7 +3376,7 @@ void GuiModule::Destruct()
                 // same bracket PrepareWorldData is driven under.
                 lpGameDataInput->LockForWrite();
                 mColourCalibrationScreen.Update(lpGameDataInput, lpGameDataOutput,
-                                                &mGuiOutQueue, mpTextureAllocator);
+                                                &mGuiOutQueue, mGuiConfig.mpTextureAllocator);
                 lpGameDataInput->UnlockForWrite();
             }
         }

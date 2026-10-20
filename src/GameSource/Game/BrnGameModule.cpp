@@ -4964,6 +4964,29 @@ namespace BrnGame
 
     // @ BrnGameModule.cpp:2497 - allocate this sub-step's static GUI/director IO buffers from
     // the update input/output buffer stacks.
+    // ARTIST823DCD78. The scheduler continues to use its existing host
+    // route; this recovered native caller has no selected invocation yet.
+    void BrnGameModule::DoUpdate_GuiPreWorld(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+        CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI);
+        if (!mbDiskError)
+            mGuiModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
+                lpGuiOutput, lpModelOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI);
+
+        const CgsGui::ModelIO::OutputBuffer* lpModelRead = lpModelOutput;
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiRead = lpGuiOutput;
+        CgsModule::LockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
+            *lpGuiRead->GetGuiResourceRequestQueue());
+        CgsModule::UnlockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
+    }
+
     void BrnGameModule::CreateStaticIOBuffers()
     {
         // CreateIOBuffer<T> runs each buffer's own Construct right after the stack alloc, the
