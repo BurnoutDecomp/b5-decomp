@@ -253,7 +253,7 @@ void BridgePropToOutput_PreScene(
 // (BrnWorldModuleIO_UpdateOutputBuffer.cpp :: Construct, `mGameEventQueue.Construct()`).
 //
 // STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
-//   * legs 4/6 and leg 13's sound/director siblings -- the remaining traffic transfers.
+//   * leg 4 -- the remaining traffic GUI-event transfer. Leg 6 is restored below.
 //     (Leg 3, the resource-request flush, has landed -- see the body. Leg 13's network
 //     transfer has landed too; the sound transfer feeds a live sound-module consumer, so it
 //     lands with its own offline check, and the director transfer with it.)
@@ -356,6 +356,11 @@ void BridgeEntityModulesToOutput_PostPhysics(
         BridgeRaceCarEntityInfoToOutput_PostPhysics(lpWorldModule, lpOutputBuffer,
                                                     lpRaceCarOutput_PostPhysics);
     }
+
+    // ARTIST 0x827AF018, leg 6: carry the traffic module's game replies before
+    // its per-frame output is destroyed. This includes streaming-complete module 0.
+    lpOutputBuffer->GetGameEventQueue()->Append(
+        *lpTrafficOutput_PostPhysics->GetGameEventQueue());
 
     // ================================================================================
     // ⭐⭐ LEG 7, @0x827AF024..0x827AF02C -- THE TRAFFIC-TYPE RESPONSE TRANSFER.
