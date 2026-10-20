@@ -1007,6 +1007,9 @@ namespace BrnGui
 
         mProfileManager.Construct(mGuiCache, mSystemUserProfile,
                                   mViewModule.GetLanguageManager());
+        // ARTIST825187CC/D0/D4: real contained keyboard and listener host.
+        mGuiKeyboard.Construct();
+        mKeyboardHost.Construct();
         mScreenFlow.Construct(&mGuiCache);
         mHudFlow.Construct(&mGuiCache);
         mOverlayFlow.Construct(&mGuiCache);
@@ -1607,6 +1610,9 @@ void GuiModule::Destruct()
         mMovieManager.Destruct();
         // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
         // sub-object destruct, immediately before the base CgsGui::GuiModule::Destruct.
+        // ARTIST825077D0/D4: retain the original host/profile pointer teardown.
+        mKeyboardHost.Destruct();
+        mGuiKeyboard.Destruct();
         mColourCalibrationScreen.Destruct();
         // ARTIST825077F4: the shared queue/base lifecycle follows the final
         // game subobject. Existing Movie/APT lifetime owners above are retained.

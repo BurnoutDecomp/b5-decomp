@@ -1,25 +1,56 @@
-// ===================================================================================
-// BrnGui::BrnGuiKeyboard  -- implementation
-//   class:BrnGui::BrnGuiKeyboard
-//
-// Prepare @ 0x824EACC0
-//   The GUI module hands the keyboard the system user-profile it will edit. The X360
-//   asserts the argument is non-NULL (BrnGuiKeyboard.h line 139) and that the slot is
-//   still empty (line 140), then latches it and returns 1.
-//   Reconstructed store-for-store from the X360 pseudocode/asm.
-// ===================================================================================
 #include "GameSource/Gui/BrnGuiKeyboard.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnGui
 {
-    // @ 0x824EACC0
-    s32 BrnGuiKeyboard::Prepare(SystemUserProfile* lpSystemUserProfile)
+    void BrnGuiKeyboard::Construct()
     {
-        CGS_ASSERT(lpSystemUserProfile != 0, "lpSystemUserProfile");            // @0x824EACE0 (cmplwi r30,0)
-        CGS_ASSERT(mpSystemUserProfile == 0, "mpSystemUserProfile == NULL");    // @0x824EAD08 (lwz 0x420(r29))
+        // ARTIST825187CC/D0: profile pointer first, then keyboard listener.
+        mpSystemUserProfile = 0;
+        mKeyboard.Construct();
+    }
 
-        mpSystemUserProfile = lpSystemUserProfile;                              // stw r30, 0x420(r29)
-        return 1;                                                              // li r3, 1
+    // ARTIST824EACC0: original assertions continue into the actual store.
+    bool BrnGuiKeyboard::Prepare(CgsGui::SystemUserProfile* lpSystemUserProfile)
+    {
+        if (lpSystemUserProfile == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpSystemUserProfile", "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.h", 139);
+            CgsDev::Assert::EndAssert();
+        }
+        if (mpSystemUserProfile != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpSystemUserProfile == NULL", "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.h", 140);
+            CgsDev::Assert::EndAssert();
+        }
+        mpSystemUserProfile = lpSystemUserProfile;
+        return true;
+    }
+
+    // Inlined in ARTIST824F9158's keyboard release leg. It does not clear
+    // the async listener or fabricate an XDK cancellation.
+    bool BrnGuiKeyboard::Release()
+    {
+        mpSystemUserProfile = 0;
+        return true;
+    }
+
+    // ARTIST825077D4: only the profile owner pointer is cleared here.
+    void BrnGuiKeyboard::Destruct()
+    {
+        mpSystemUserProfile = 0;
+    }
+
+    // ARTIST8252A08C..A094 inlines the wrapper Update.
+    void BrnGuiKeyboard::Update()
+    {
+        mKeyboard.Update();
+    }
+
+    bool BrnGuiKeyboard::IsShown() const
+    {
+        return mKeyboard.IsShown();
     }
 }
