@@ -1,0 +1,34 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        ActiveRaceCarData.cpp
+        BrnCrashTriangleCache.cpp
+        BrnEffectsBuildUVData.cpp
+        BrnEffectsDebrisColourRandomiser.cpp
+        BrnEffectsDebugComponent.cpp
+        BrnEffectsGlassManager.cpp
+        BrnEffectsUtils.cpp
+        Curves.cpp
+        EffectsModule.cpp
+        EffectsStateMachine.cpp
+        ParticleEffectHelper.cpp
+
+    PUBLIC
+        ActiveRaceCarData.h
+        BrnCrashTriangleCache.h
+        BrnEffectsDebrisColourRandomiser.h
+        BrnEffectsDebugComponent.h
+        BrnEffectsGlassManager.h
+        BrnEffectsUtils.h
+        Curves.h
+        EffectsDebugPostFxSettingsPC.h
+        EffectsModule.h
+        EffectsStateMachine.h
+        ParticleEffectHelper.h
+)
+
+add_subdirectory(Boost)
+add_subdirectory(Jump)
+add_subdirectory(Particles)
+add_subdirectory(Props)
+add_subdirectory(SharedIO)
+add_subdirectory(Wheel)

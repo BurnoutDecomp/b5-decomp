@@ -1,0 +1,37 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnArbStateAttractMode.cpp
+        BrnArbStateCarSelect.cpp
+        BrnArbStateCrashing.cpp
+        BrnArbStateCrashMode.cpp
+        BrnArbStateCrashNav.cpp
+        BrnArbStateDriveThru.cpp
+        BrnArbStateOnlineCarSelect.cpp
+        BrnArbStateOnlineRaceIntro.cpp
+        BrnArbStatePostEvent.cpp
+        BrnArbStateRaceIntro.cpp
+        BrnArbStateRankUp.cpp
+        BrnArbStateRenderMetrics.cpp
+        BrnArbStateRoaming.cpp
+        BrnArbStateTakedown.cpp
+        BrnArbStateTestbed.cpp
+        BrnSimpleIceTakedownPlayer.cpp
+
+    PUBLIC
+        BrnArbStateAttractMode.h
+        BrnArbStateCarSelect.h
+        BrnArbStateCrashing.h
+        BrnArbStateCrashMode.h
+        BrnArbStateCrashNav.h
+        BrnArbStateDriveThru.h
+        BrnArbStateOnlineCarSelect.h
+        BrnArbStateOnlineRaceIntro.h
+        BrnArbStatePostEvent.h
+        BrnArbStateRaceIntro.h
+        BrnArbStateRankUp.h
+        BrnArbStateRenderMetrics.h
+        BrnArbStateRoaming.h
+        BrnArbStateTakedown.h
+        BrnArbStateTestbed.h
+        BrnSimpleIceTakedownPlayer.h
+)
