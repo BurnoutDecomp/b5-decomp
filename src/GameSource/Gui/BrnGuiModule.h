@@ -26,6 +26,10 @@
 #include "GameSource/Gui/BrnGuiKeyboard.h"
 #include "GameSource/Gui/BrnGuiKeyboardHost.h"
 #include "GameSource/Gui/BrnGuiProfileHost.h"
+#include "GameSource/Gui/BrnGuiDebugComponent.h"
+#include "GameSource/Gui/BrnGuiHudMessagesDebugComponent.h"
+#include "GameSource/Gui/BrnGuiSatNavDebugComponent.h"
+#include "GameSource/Gui/BrnGuiGuiCacheDebugComponent.h"
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
@@ -309,6 +313,10 @@ namespace BrnGui
         // Prepare. Its recovered body remains unregistered in the host flow.
         static void GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage);
 
+        // Extracted ARTIST82519218..54; called only by the future typed Prepare stage10.
+        // Keep current no-arg host Prepare selected until the complete native chain is ready.
+        void PrepareNativeDebugComponents();
+
         // Extracted native blocks: Prepare82519360..C4,
         // Update82529CA8..DD0 and Release824F917C..B0. These remain
         // uncalled by the selected host lifecycle until native composition.
@@ -541,6 +549,12 @@ namespace BrnGui
         bool mbForceProfileAutosave;        // X360 Update stack byte var_430 (v142)
         BrnGuiKeyboard mGuiKeyboard; // ARTIST gm+1545808
         CgsGui::SystemUserProfile mSystemUserProfile; // X360 +949152 (sign-in watcher the manager listens to)
+        // Four actual by-value GUI debug owners (ARTIST827E5D38..6C), native relative order.
+        // Existing host field order is retained; host offsets follow these complete types.
+        GuiDebugComponent mDebugComponent;
+        GuiHudMessagesDebugComponent mHudMessageDebugComponent;
+        SatNavDebugComponent mSatNavDebugComponent;
+        GuiCacheDebugComponent mGuiCacheDebugComponent;
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)
         CgsMemory::HeapMalloc   mProfileHeap;   // the manager's heap (mugshot buffer + SLS callbacks)
         CgsMemory::LinearMalloc mProfileLinear; // the manager's linear (SLS Prepare)
