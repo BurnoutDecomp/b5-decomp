@@ -55,6 +55,27 @@ namespace CgsGui
     };
     static_assert(sizeof(GuiEvent<91>) == 1, "ARTIST GUI tag 91 is one byte");
 
+    // ARTIST's Payback bridge uses these one-byte tag instantiations, not the generic
+    // 12-byte header record: AddGuiEvent helpers 0x823D7570/0x823D7628/0x823D2FB8 pin
+    // ids 178/180/183 at size 1. Keep their empty byte representation unwritten.
+    template <>
+    struct GuiEvent<178> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 178; }
+    };
+    template <>
+    struct GuiEvent<180> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 180; }
+    };
+    template <>
+    struct GuiEvent<183> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 183; }
+    };
+    static_assert(sizeof(GuiEvent<178>) == 1 && sizeof(GuiEvent<180>) == 1 &&
+                  sizeof(GuiEvent<183>) == 1, "ARTIST Payback tag records are one byte");
+
     // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
     // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /
     // OutputInternalState channels) builds and hands to VariableEventQueue::AddEvent. It boxes an

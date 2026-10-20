@@ -28,6 +28,7 @@
 #include "GameSource/Game/GameBridgeGameStateToX.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // original formatted rivalry assertions
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"               // BrnGui::GuiAutosaveRequestEvent (id 356)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::StuntType / GuiEventStunt*
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h" // GuiEventRankProgressResponse (case 181)
@@ -771,6 +772,230 @@ namespace
                 lEvent.mWreckedArray = lrAction.mWreckedArray;
                 lEvent.miMaxAvailableCars = lrAction.miMaxAvailableCars;
                 PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EBD98/0x823EBDA4 posts the one-byte Blue Team Escaping tag (GUI 446).
+            // The local byte is unwritten on X360; default-initialize the existing raw event type.
+            case 162:
+            {
+                BrnGui::GuiBlueTeamIsEscapingEvent lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EBDAC/0x823EBDB8 posts the one-byte Blue Team Behind You tag (GUI 447).
+            case 163:
+            {
+                BrnGui::GuiBlueTeamIsBehindYouEvent lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST case 164 reads the typed LeaderReachedBoundaryAction record emitted by
+            // HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage: {metres f32 @+0,
+            // active-car index @+4, miles bool @+8}. Preserve its filtered distance diagnostics
+            // after the GUI event, including the console's metres-to-display-unit factors.
+            case 164:
+            {
+                using LeaderBoundaryAction = BrnGameState::GameStateModuleIO::LeaderReachedBoundaryAction;
+                static_assert(sizeof(LeaderBoundaryAction) == 12, "X360 action 164 payload size");
+                const auto& lrAction = *reinterpret_cast<const LeaderBoundaryAction*>(lpAction);
+                if (lrAction.mbIsBoundaryInMiles)
+                {
+                    BrnGui::GuiLeaderPassedMileBoundaryEvent lEvent = {};
+                    lEvent.meActiveRaceCarIndex = lrAction.meRaceCarIndex;
+                    lEvent.mfDistanceToFinishInMetres = lrAction.mfDistanceInMetres;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "****** LEADER PASSED "
+                                                  << (lrAction.mfDistanceInMetres * 0.0006213712f)
+                                                  << "mi boundary! ********!\n";
+                    }
+                }
+                else
+                {
+                    BrnGui::GuiLeaderPassedKMBoundaryEvent lEvent = {};
+                    lEvent.meActiveRaceCarIndex = lrAction.meRaceCarIndex;
+                    lEvent.mfDistanceToFinishInMetres = lrAction.mfDistanceInMetres;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "****** LEADER PASSED "
+                                                  << (lrAction.mfDistanceInMetres * 0.001f)
+                                                  << "km boundary! ********!\n";
+                    }
+                }
+                break;
+            }
+
+            // ARTIST 0x823EBE88..0x823EBEF4 posts the player-eliminated record/tag, then the
+            // optional last-blue-team-member tag. Preserve its order and unwritten tag bytes.
+            case BrnGameState::GameStateModuleIO::E_ACTION_PLAYER_ELIMINATED:
+            {
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::PlayerEliminatedAction*>(lpAction);
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "****** PLAYER ELIMINATED - TRANSLATING TO GUI EVENT! ********!\n";
+                }
+                if (lrAction.mbLocalPlayerEliminated)
+                {
+                    BrnGui::GuiLocalPlayerEliminatedEvent lEvent;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                }
+                else
+                {
+                    BrnGui::GuiPlayerEliminatedEvent lEvent = {};
+                    std::memcpy(lEvent.maData, &lrAction.meActiveRaceCarIndex,
+                                sizeof(lrAction.meActiveRaceCarIndex));
+                    PushGuiEvent(lEvent, lpGuiInput);
+                }
+                if (lrAction.mbLastBlueTeamMember)
+                {
+                    BrnGui::GuiLastBlueTeamMemberEvent lEvent;
+                    PushGuiEvent(lEvent, lpGuiInput);
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "****** LAST BLUE TEAM MEMBER - TRANSLATING TO GUI EVENT! ********!\n";
+                    }
+                }
+                break;
+            }
+
+            // ARTIST 0x823EBEF8..0x823EBF2C preserves the original assert and forwards the
+            // aggressor's active-car index as GUI 453 / four bytes.
+            case BrnGameState::GameStateModuleIO::E_ACTION_TRAITOROUS_TAKEDOWN:
+            {
+                if (lpAction == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "lpTraitorousTDAction",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                        2219);
+                    CgsDev::Assert::EndAssert();
+                }
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::TraitorousTakedownAction*>(lpAction);
+                BrnGui::GuiTraitorousTakedownEvent lEvent = {};
+                lEvent.meAggActiveRaceCarIndex = lrAction.meAggrActiveRaceCarIndex;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED62C..0x823ED670 posts GUI 541 only when action flag 0x04 is set.
+            // It copies the 56-byte score block and maps flag 0x08 to the HUD-message byte.
+            case BrnGameState::GameStateModuleIO::E_ACTION_BURNOUT_SKILLZ:
+            {
+                if (lpAction == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "lpBurnoutSkillzAction",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                        3503);
+                    CgsDev::Assert::EndAssert();
+                }
+                using BurnoutSkillzAction = BrnGameState::GameStateModuleIO::BurnoutSkillzAction;
+                static_assert(sizeof(BurnoutSkillzAction) == 68 &&
+                              offsetof(BurnoutSkillzAction, meActiveRaceCarIndex) == 0x40,
+                              "X360 action 168 input layout");
+                const auto& lrAction = *reinterpret_cast<const BurnoutSkillzAction*>(lpAction);
+                if ((lrAction.miActionFlags & BurnoutSkillzAction::KI_ACTION_TYPE_UPDATED_VALUE) !=
+                    BurnoutSkillzAction::KI_ACTION_TYPE_UPDATED_VALUE)
+                {
+                    break;
+                }
+
+                BrnGui::GuiNewBurnoutSkillzEvent lEvent;
+                lEvent.mNetworkPlayerID = lrAction.mNetworkPlayerID;
+                lEvent.meActiveRaceCarIndex = lrAction.meActiveRaceCarIndex;
+                lEvent.mSkillzData = lrAction.mBurnoutSkillzData;
+                lEvent.mbUpdateHUDMessage =
+                    (lrAction.miActionFlags & BurnoutSkillzAction::KI_ACTION_TYPE_SHOW_HUD_MESSAGE) != 0;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED678..0x823ED6F0 posts GUI 542 / 24 bytes. The action's producer
+            // type is not present in current source; this view names only the fields and offsets
+            // consumed by the original arm and leaves its input-domain owner unresolved.
+            case 169:
+            {
+                if (lpAction == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "lpRoadRulesSkillzAction",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                        3526);
+                    CgsDev::Assert::EndAssert();
+                }
+                struct NewBurnoutHudMessageActionView
+                {
+                    CgsID mRoadID;  // +0x00
+                    u32 muActionValue;  // +0x08; ARTIST maps zero / one / other to message types 1/2/3
+                    BrnGameState::BurnoutSkillzData::EBurnoutSkillType meSkill;  // +0x0C
+                    EActiveRaceCarIndex meNewOwner;  // +0x10
+                };
+                static_assert(offsetof(NewBurnoutHudMessageActionView, muActionValue) == 0x08 &&
+                              offsetof(NewBurnoutHudMessageActionView, meSkill) == 0x0C &&
+                              offsetof(NewBurnoutHudMessageActionView, meNewOwner) == 0x10,
+                              "ARTIST action 169 consumed input offsets");
+                const auto& lrAction =
+                    *reinterpret_cast<const NewBurnoutHudMessageActionView*>(lpAction);
+                BrnGui::GuiNewBurnoutHudMessageEvent lEvent = {};
+                lEvent.mRoadID = lrAction.mRoadID;
+                if (lrAction.muActionValue == 0)
+                    lEvent.meMessageType = BrnGui::GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_BEAT_YOUR;
+                else if (lrAction.muActionValue == 1)
+                    lEvent.meMessageType = BrnGui::GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_GOT;
+                else
+                    lEvent.meMessageType = BrnGui::GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_YOU_GOT;
+                lEvent.meSkill = lrAction.meSkill;
+                lEvent.meNewOwner = lrAction.meNewOwner;
+                lEvent.mePreviousOwner = static_cast<EActiveRaceCarIndex>(-1);
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED184..0x823ED194: payback lost -> one unwritten GUI 178 tag.
+            case 211:
+            {
+                CgsGui::GuiEvent<178> lEvent;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED198..0x823ED1A8: payback victim left -> one unwritten GUI 180 tag.
+            case 212:
+            {
+                CgsGui::GuiEvent<180> lEvent;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EB598..0x823EB5AC forwards the activated dirty-trick type as GUI 182 / 4 bytes.
+            case BrnGameState::GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED:
+            {
+                using PaybackAction = BrnGameState::GameStateModuleIO::PaybackActivatedAction;
+                static_assert(sizeof(PaybackAction) == 12, "X360 action 215 payload size");
+                const auto& lrAction = *reinterpret_cast<const PaybackAction*>(lpAction);
+                BrnGui::GuiPaybackReceivedEvent lEvent = {};
+                std::memcpy(lEvent.maData, &lrAction.mePaybackType, sizeof(lrAction.mePaybackType));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EB5B4..0x823EB5C0: payback over -> one unwritten GUI 183 tag.
+            case 216:
+            {
+                CgsGui::GuiEvent<183> lEvent;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
@@ -1842,6 +2067,110 @@ namespace
                 std::memcpy(&lEvent, &lrAction.mPlayerInfo, sizeof(lrAction.mPlayerInfo));
                 std::memcpy(reinterpret_cast<u8*>(&lEvent) + 0x38,
                             &lrAction.mbIsCarDamaged, sizeof(lrAction.mbIsCarDamaged));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 188 / 189  RIVALRY DATA RESPONSES ------------------------------------
+            // X360 cases 188/189 at 0x823ECCB0/0x823ECE0C post GUI 442/688 and 444/32.
+            // The GameState producers already post these typed records: SendAllRivalryData
+            // (action 188, 1288 bytes) and ProcessGameEvents case 102 (action 189, 32 bytes).
+            case BrnGameState::GameStateModuleIO::E_ACTION_ALL_RIVALRY_DATA_RESPONSE:
+            {
+                const BrnGameState::GameStateModuleIO::RivalryOverviewAction& lrAction =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::RivalryOverviewAction*>(lpAction);
+                BrnGui::GuiEventRivalryFullInfoResponse lEvent;   // GUI 442, 688 bytes; plain record
+
+                // ARTIST compares signed count > 34, asserts at the original line, then still
+                // iterates the supplied count. Keep that continuation and do not clamp it.
+                if (lrAction.miRivalsReturned > BrnGui::GuiEventRivalryFullInfoResponse::KI_MAX_NUM_RIVALS_IN_EVENT)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "BrnGui::GuiEventRivalryFullInfoResponse::KI_MAX_NUM_RIVALS_IN_EVENT >= lpRivalOverview->miRivalsReturned",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                        3047);
+                    CgsDev::Assert::EndAssert();
+                }
+
+                lEvent.miRivalsReturned = lrAction.miRivalsReturned;
+                for (s32 liRival = 0; liRival < lrAction.miRivalsReturned; ++liRival)
+                {
+                    lEvent.maRivalIds[liRival]    = lrAction.mRivalIDs[liRival];
+                    lEvent.maRivalCarIds[liRival] = lrAction.mRivalCarIDs[liRival];
+
+                    s32 liGuiStatus;
+                    bool lbGuiStatusWasWritten = true;
+                    switch (lrAction.mRivalryStatus[liRival])
+                    {
+                    case BrnGameState::GameStateModuleIO::RivalryOverviewAction::E_RIVALRY_STAGE_UNKNOWN:
+                        liGuiStatus = 1; break;
+                    case BrnGameState::GameStateModuleIO::RivalryOverviewAction::E_RIVALRY_STAGE_DRIVER:
+                        liGuiStatus = 2; break;
+                    case BrnGameState::GameStateModuleIO::RivalryOverviewAction::E_RIVALRY_STAGE_RIVAL:
+                        liGuiStatus = 3; break;
+                    case BrnGameState::GameStateModuleIO::RivalryOverviewAction::E_RIVALRY_STAGE_TARGET:
+                        liGuiStatus = 4; break;
+                    case BrnGameState::GameStateModuleIO::RivalryOverviewAction::E_RIVALRY_STAGE_WRECKED:
+                        liGuiStatus = 5; break;
+                    case BrnGameState::GameStateModuleIO::RivalryOverviewAction::E_RIVALRY_STAGE_INVALID:
+                        liGuiStatus = 0; break;
+                    default:
+                        // The original asserts with the numeric stage, continues, and does not
+                        // store this output slot. Leave the stack bytes unwritten on this path.
+                        CgsDev::Assert::BeginAssert();
+                        {
+                            CgsDev::StrStream lAssertStream(CgsDev::Assert::gpcMessageBuffer,
+                                                            CgsDev::Assert::giMessageBufferSize);
+                            lAssertStream << "Unknown rivalry type "
+                                          << static_cast<s32>(lrAction.mRivalryStatus[liRival]) << "\n";
+                        }
+                        CgsDev::Assert::FireAssert(
+                            CgsDev::Assert::gpcMessageBuffer,
+                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                            3099);
+                        CgsDev::Assert::EndAssert();
+                        lbGuiStatusWasWritten = false;
+                        break;
+                    }
+                    if (lbGuiStatusWasWritten)
+                        lEvent.maRivalryStatus[liRival] = liGuiStatus;
+                }
+
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            case BrnGameState::GameStateModuleIO::E_ACTION_ONE_RIVALRY_DATA_RESPONSE:
+            {
+                const BrnGameState::GameStateModuleIO::RivalryOneInDepthAction& lrAction =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::RivalryOneInDepthAction*>(lpAction);
+                BrnGui::GuiEventRivalInfoResponse lEvent;   // GUI 444, 32 bytes; plain record
+
+                lEvent.mRivalId      = lrAction.mId;
+                lEvent.mCarId        = lrAction.mCarId;
+                lEvent.meCountyIndex = lrAction.meCountyIndex;
+                lEvent.miRaceWins    = lrAction.miRaceWins;
+
+                // ARTIST sign-extends the s8 field before asserting, then stores that byte even
+                // after the assertion; preserve both the full signed range check and raw value.
+                if (lrAction.miProgressStatus < 0 || lrAction.miProgressStatus > 100)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    {
+                        CgsDev::StrStream lAssertStream(CgsDev::Assert::gpcMessageBuffer,
+                                                        CgsDev::Assert::giMessageBufferSize);
+                        lAssertStream << "Invalid progress"
+                                      << static_cast<s32>(lrAction.miProgressStatus) << "\n";
+                    }
+                    CgsDev::Assert::FireAssert(
+                        CgsDev::Assert::gpcMessageBuffer,
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
+                        3120);
+                    CgsDev::Assert::EndAssert();
+                }
+
+                lEvent.miProgressStatus = lrAction.miProgressStatus;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }

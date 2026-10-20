@@ -712,16 +712,11 @@ private:
 // "you beat" HUD flash and, for newly-beaten records above a per-skill threshold, emits a
 // GuiNewBurnoutHudMessageEvent.
 //
-// DWARF home BrnGuiEventTypeDefs.h:6330 (GuiEvent<526>); member order/types verbatim from
-// the DecFIGS DWARF and corroborated by the X360 SetSkillsData field offsets (member
-// access by NAME -- per project policy the GuiEvent<N> base contributes its own header to
-// the layout; the asm offsets only fix member ORDER, not byte placement):
-//   mNetworkPlayerID      (origin player id)             -- read by the HUD-message branch
-//   meActiveRaceCarIndex  (which active race-car scored)
-//   mSkillzData           (the 14-skill score array; SetSkillsData reads mafBurnoutSkilz[i])
-//   mbUpdateHUDMessage    (gate: only emit the HUD message when set; X360 lbz @event+0x40)
-// X360 AddGuiEvent<GuiNewBurnoutSkillzEvent> @0x823D8260 bakes id 541 (was PS3-DWARF 526).
-struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<541>
+// DWARF home BrnGuiEventTypeDefs.h:6330 (PS3 id526). ARTIST case168 and
+// AddGuiEvent<GuiNewBurnoutSkillzEvent> @0x823D8260 pin the X360 raw record as id541/68 bytes:
+// network ID @0, active-car index @4, 56-byte skillz data @8, and update-HUD flag @0x40. There
+// is no 12-byte CgsGui::GuiEvent header in this transport record.
+struct GuiNewBurnoutSkillzEvent
 {
     // DWARF type is RoadRulesRecvData::NetworkPlayerID, a typedef of s32 (see
     // BrnNetwork::RoadRulesRecvData). Modelled as s32 here to avoid dragging the network
@@ -730,8 +725,14 @@ struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<541>
     s32                                mNetworkPlayerID;    // BrnGuiEventTypeDefs.h:6333
     EActiveRaceCarIndex                meActiveRaceCarIndex;// BrnGuiEventTypeDefs.h:6334
     BrnGameState::BurnoutSkillzData    mSkillzData;         // BrnGuiEventTypeDefs.h:6335
-    bool                               mbUpdateHUDMessage;  // BrnGuiEventTypeDefs.h:6336
+    bool                               mbUpdateHUDMessage;  // +0x40 (BrnGuiEventTypeDefs.h:6336)
+
+    s32 GetEventType() const { return 541; }
 };
+static_assert(offsetof(GuiNewBurnoutSkillzEvent, meActiveRaceCarIndex) == 4 &&
+              offsetof(GuiNewBurnoutSkillzEvent, mSkillzData) == 8 &&
+              offsetof(GuiNewBurnoutSkillzEvent, mbUpdateHUDMessage) == 0x40 &&
+              sizeof(GuiNewBurnoutSkillzEvent) == 68, "X360 GUI 541 raw record layout");
 
 // ===================================================================================
 // BrnGui::GuiNewBurnoutHudMessageEvent -- the "show a burnout-skill HUD flash" event the
@@ -743,8 +744,10 @@ struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<541>
 //   meSkill         -- the skill whose record changed
 //   meNewOwner      -- the active race-car that now holds the record
 //   mePreviousOwner -- the active race-car that previously held it (-1 if none)
-// X360 AddGuiEvent<GuiNewBurnoutHudMessageEvent> @0x823D8318 bakes id 542 (was PS3-DWARF 527).
-struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<542>
+// ARTIST case169 and AddGuiEvent<GuiNewBurnoutHudMessageEvent> @0x823D8318 pin the X360 raw
+// record as id542/24 bytes: road ID @0, message type @8, skill @12, new owner @16, previous
+// owner @20. There is no 12-byte CgsGui::GuiEvent header in this transport record.
+struct GuiNewBurnoutHudMessageEvent
 {
     // BrnGuiEventTypeDefs.h:6351 -- which of the four HUD flash strings to show.
     enum EBurnoutSkillzMessageTypes
@@ -761,7 +764,14 @@ struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<542>
     BrnGameState::BurnoutSkillzData::EBurnoutSkillType meSkill;    // BrnGuiEventTypeDefs.h:6363
     EActiveRaceCarIndex                            meNewOwner;     // BrnGuiEventTypeDefs.h:6364
     EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
+
+    s32 GetEventType() const { return 542; }
 };
+static_assert(offsetof(GuiNewBurnoutHudMessageEvent, meMessageType) == 8 &&
+              offsetof(GuiNewBurnoutHudMessageEvent, meSkill) == 12 &&
+              offsetof(GuiNewBurnoutHudMessageEvent, meNewOwner) == 16 &&
+              offsetof(GuiNewBurnoutHudMessageEvent, mePreviousOwner) == 20 &&
+              sizeof(GuiNewBurnoutHudMessageEvent) == 24, "X360 GUI 542 raw record layout");
 
 // The colour-calibration SCREEN's show / hide requests: the two events
 // BrnGui::CrashNavColourCalibrate posts and BrnGui::ColourCalibrationScreen::RecvEvent
