@@ -97,6 +97,12 @@ namespace BrnGui
         void Destruct() override;
         void Update() override;
 
+        // FLAG PC-platform leaf: borrow this caller's already write/read-locked
+        // GameData pair. This is the selected GUI port's ownership boundary,
+        // not the complete original native GuiModule::Update signature.
+        void Update(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+                    const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
+
         // The frame's simulation update set. X360 GuiModule::Update @0x82527A58 receives it as
         // its second argument from the module scheduler (`a2`) and reads ONE bit of it: bit 8
         // (0x08, set while the main flow FSM is in an in-game state -- see
@@ -274,6 +280,11 @@ namespace BrnGui
         // (The console passes the view-state queue as a second argument; the body never
         // reads it, so it is dropped here.)
         void UpdatePlayerName();
+
+        // Selected PC GUI port: preserve the original calibration call with the
+        // GameData locks owned by the frame caller.
+        void UpdateCalibrationScreen(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+                                     const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
 
         // The GUI resource-loading dispatch: hand the flow controller's FSM-bundle load
         // requests (GuiEventLoadRequest, queue type 39, out of mModelInputBuffer) to the
