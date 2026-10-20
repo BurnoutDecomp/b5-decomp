@@ -1823,6 +1823,158 @@ namespace
                 break;
             }
 
+            // ---- 252..254  Burning Home Run and team-change HUD records -------------------------
+            // ARTIST 0x823EC0F0..0x823EC230: preserve the three source assertions and raw payloads.
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT:
+            {
+                CGS_ASSERT(lpAction != 0, "lpHUDMessageBHRCheckpoint");
+                const auto* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRCheckpointAction*>(lpAction);
+                BrnGui::GuiBHRCheckpointReachedEvent lEvent;
+                std::memcpy(&lEvent, lpBHRAction, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED:
+            {
+                CGS_ASSERT(lpAction != 0, "lpHUDMessageBHRRunnerCrashesEvent");
+                const auto* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRRunnerCrashedAction*>(lpAction);
+                BrnGui::GuiHUDMessageBHRRunnerCrashed lEvent;
+                std::memcpy(&lEvent, lpBHRAction, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpHUDMessageOnlineTeamChangeAction");
+                const auto* lpTeamChangeAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageOnlineTeamChangeAction*>(lpAction);
+                BrnGui::GuiOnlineTeamChangeEvent lEvent;
+                std::memcpy(&lEvent, lpTeamChangeAction, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 256..260  rivalry status records -----------------------------------------------
+            // ARTIST loads two CgsIDs at +0/+8, then appends the status values 0..3 for GUI 439;
+            // the fleeing case forwards the same pair to GUI 440 without an added status word.
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageFirstHitOnRivalAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_NEW;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsARivalAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_RIVAL;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsATargetAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_TARGET;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsFleeingAction*>(lpAction);
+                BrnGui::GuiRivalIsFleeing lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsWreckedAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_WRECKED;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 266..271  Online Stunt Run HUD records ------------------------------------------
+            // The producer's 12-byte StuntRunTeamMessage maps by offset to the three typed GUI
+            // receiver records; only bytes 0..9 are written by ARTIST and the two tail bytes remain
+            // stack residue. Cases 270/271 build the receiver's score/time triple explicitly.
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_ELIMINATION:
+            {
+                CGS_ASSERT(lpAction != 0, "lpEliminationAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                BrnGui::GuiNetworkStuntRunEliminationEvent lEvent;
+                lEvent.mbIsLocalPlayer = lpMessage->miTeam;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                std::memcpy(&lEvent.mbIsTeammate, &lpMessage->mbLocalPlayerOnTeam, sizeof(bool));
+                std::memcpy(&lEvent.mbIsLastPlayer, &lpMessage->mbLocalPlayerIsSubject, sizeof(bool));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_LEADING:
+            {
+                CGS_ASSERT(lpAction != 0, "lpLeadingAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                BrnGui::GuiNetworkStuntRunLeadingEvent lEvent;
+                lEvent.mbIsLocalPlayer = lpMessage->miTeam;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                std::memcpy(&lEvent.mbIsTeammate, &lpMessage->mbLocalPlayerOnTeam, sizeof(bool));
+                std::memcpy(&lEvent.mbIsLastPlayer, &lpMessage->mbLocalPlayerIsSubject, sizeof(bool));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_VICTORY:
+            {
+                CGS_ASSERT(lpAction != 0, "lpVictoryAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                BrnGui::GuiNetworkStuntRunVictoryEvent lEvent;
+                lEvent.mbIsLocalPlayer = lpMessage->miTeam;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                std::memcpy(&lEvent.mbIsTeammate, &lpMessage->mbLocalPlayerOnTeam, sizeof(bool));
+                std::memcpy(&lEvent.mbIsLastPlayer, &lpMessage->mbLocalPlayerIsSubject, sizeof(bool));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_COMBO_END:
+            {
+                // ARTIST posts one unwritten byte as GUI 490; the GUI receiver is pointer-only.
+                BrnGui::GuiNetworkLastStunRunEvent lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_SCORE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpMessageAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunScoreMessage*>(lpAction);
+                BrnGui::GuiNetworkSuntRunInfoMessageEvent lEvent;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                lEvent.meMessageType = BrnGui::GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_SCORE;
+                lEvent.miValue = lpMessage->miScore;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_TIME:
+            {
+                CGS_ASSERT(lpAction != 0, "lpMessageAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTimeMessage*>(lpAction);
+                BrnGui::GuiNetworkSuntRunInfoMessageEvent lEvent;
+                lEvent.mPlayerId = -1;
+                lEvent.meMessageType = BrnGui::GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_TIME;
+                lEvent.miValue = static_cast<s32>(lpMessage->mfWarningTimeSeconds); // ARTIST fctiwz (30.0 -> 30)
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
             // ---- 112  the DISTRICT CHANGE (8 bytes: {county, district}) -------------------
             // ⭐ [H1 district wave 2026-08-25] X360 case 112 @0x823EA-range (h1_dump2.txt),
             // verbatim: copy the action's 8-byte {county, district} pair, zero the third

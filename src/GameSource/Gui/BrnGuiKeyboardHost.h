@@ -26,21 +26,23 @@ namespace BrnGui
 {
     // The on-screen GUI keyboard this host owns a pointer to. Only the pointer slot is
     // referenced by this TU; the keyboard type itself is not modelled here.
-    class GuiKeyboard;
+    class BrnGuiKeyboard;
 
     class KeyboardHost : public CgsGui::GuiKeyboardListener
     {
     public:
         // @ 0x824ED010 -- latch the (non-NULL) keyboard pointer. Returns 1 (X360 li r3,1).
-        s32 Prepare(GuiKeyboard* lpGuiKeyboard);
+        void Construct();
+        bool Prepare(BrnGuiKeyboard* lpGuiKeyboard);
 
         // @ 0x824ED078 -- clear the (must be non-NULL) keyboard pointer. Returns 1.
-        s32 Release();
+        bool Release();
+        void Destruct();
 
     private:
         // The keyboard finished: log the entered text (or the cancel) to the debug channel.
         virtual void KeyboardClosed(const CgsGui::CgsUtf16* lpResultText);
 
-        GuiKeyboard* mpGuiKeyboard;      // +0x04 -- set by Prepare, cleared by Release
+        BrnGuiKeyboard* mpGuiKeyboard;      // +0x04 -- set by Prepare, cleared by Release
     };
 }

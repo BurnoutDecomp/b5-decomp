@@ -980,6 +980,17 @@ enum EGameActionType
     E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT            = 248,  // DWARF 238 (+10 X360); size 24 PINNED (producer + translator)
     E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT       = 249,  // DWARF 239 (+10 X360); size 24 BAND
     E_ACTION_HUD_MESSAGE_X_CRASHES                       = 250,  // DWARF 240 (+10 X360); size 16 PINNED (translator case 250)
+    // X360 HUD band from ARTIST translator cases and the corresponding DecFIGS action names.
+    // The BHR/team and rival-status ids are the DecFIGS 245..253 records shifted by +7; 255
+    // (road-rage extension) is declared below with its producer evidence.
+    E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT                  = 252,  // DWARF 245; X360 producer posts 8 bytes
+    E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED              = 253,  // DWARF 246; X360 producer posts 8 bytes
+    E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE              = 254,  // DWARF 247; X360 producer posts 4 bytes
+    E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT                 = 256,  // DWARF 249; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL                = 257,  // DWARF 250; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET               = 258,  // DWARF 251; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING                = 259,  // DWARF 252; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED                = 260,  // DWARF 253; ARTIST translator consumes two CgsIDs
     // ---- [FX-GS 2026-09-23, crash-parity G11-D4] the online team-takedown trio -----------------
     // BAND (+8, the freeburn-challenge block 153..161 above and NEAR_MISS..TAILGATING 171..176 sit in
     // it). ModeManager::HandleOnlineTeamTakedowns @0x823440B8 posts all three, each with the DWARF
@@ -3499,6 +3510,78 @@ struct HUDMessageXCrashesAction : public GameAction<E_ACTION_HUD_MESSAGE_X_CRASH
 static_assert(sizeof(HUDMessageXCrashesAction) == 16 &&
               offsetof(HUDMessageXCrashesAction, meRivalRaceCarIndex) == 8,
               "X360 posts action 250 with size 16; the index at +8");
+
+// [CP25] ARTIST-consumed payload shapes and DecFIGS field names for actions 252-260.
+struct HUDMessageBHRCheckpointAction : public GameAction<E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
+    s32                   miNumCheckpointsToGo; // +0x04
+};
+static_assert(sizeof(HUDMessageBHRCheckpointAction) == 8 &&
+              offsetof(HUDMessageBHRCheckpointAction, miNumCheckpointsToGo) == 4,
+              "ARTIST action 252 is two words");
+
+struct HUDMessageBHRRunnerCrashedAction : public GameAction<E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
+    s32                   miNumCrashesToGo;     // +0x04
+};
+static_assert(sizeof(HUDMessageBHRRunnerCrashedAction) == 8 &&
+              offsetof(HUDMessageBHRRunnerCrashedAction, miNumCrashesToGo) == 4,
+              "ARTIST action 253 is two words");
+
+struct HUDMessageOnlineTeamChangeAction : public GameAction<E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
+};
+static_assert(sizeof(HUDMessageOnlineTeamChangeAction) == 4,
+              "ARTIST action 254 is one active-race-car index");
+
+struct HUDMessageFirstHitOnRivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageFirstHitOnRivalAction) == 16 &&
+              offsetof(HUDMessageFirstHitOnRivalAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsARivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsARivalAction) == 16 &&
+              offsetof(HUDMessageRivalIsARivalAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsATargetAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsATargetAction) == 16 &&
+              offsetof(HUDMessageRivalIsATargetAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsFleeingAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsFleeingAction) == 16 &&
+              offsetof(HUDMessageRivalIsFleeingAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsWreckedAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsWreckedAction) == 16 &&
+              offsetof(HUDMessageRivalIsWreckedAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
 
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3256-3260. Producer
 // ModeManager::HandleOnlineTeamTakedowns @0x823440B8: `stw victim, var+0` @0x8234439C,

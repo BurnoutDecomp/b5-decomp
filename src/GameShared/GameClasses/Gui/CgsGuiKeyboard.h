@@ -35,6 +35,10 @@ namespace CgsGui
     class GuiKeyboard
     {
     public:
+        // ARTIST825187D0; do not clear result/overlapped bytes before Show.
+        void Construct();
+        bool IsShown() const;
+
         // @ 0x8284CFD8 — assert no dialog is already shown, store the listener, init the
         // overlapped handle, and call XShowKeyboardUI (flags 0x30000064). Returns the
         // XShowKeyboardUI status.

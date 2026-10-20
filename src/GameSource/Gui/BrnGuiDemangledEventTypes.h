@@ -617,11 +617,52 @@ namespace BrnGui
 
         s32 GetEventType() const { return 384; }
     };  // id 384 size 8
-    struct GuiNetworkLastStunRunEvent { u8 maData[1]; s32 GetEventType() const { return 490; } };  // id 490 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiNetworkStuntRunEliminationEvent : public CgsGui::GuiEvent<487> {};  // id 487 size 12
-    struct GuiNetworkStuntRunLeadingEvent : public CgsGui::GuiEvent<488> {};  // id 488 size 12
-    struct GuiNetworkStuntRunVictoryEvent : public CgsGui::GuiEvent<489> {};  // id 489 size 12
-    struct GuiNetworkSuntRunInfoMessageEvent : public CgsGui::GuiEvent<491> {};  // id 491 size 12
+    struct GuiNetworkLastStunRunEvent { u8 maData[1]; s32 GetEventType() const { return 490; } };  // id 490 size 1 (unwritten marker)
+    // ARTIST cases 266..268 write these exact 10 payload bytes at +0/+4/+8/+9; the final two
+    // bytes are in the 12-byte AddEvent record but are not written. These fields match the
+    // existing HudMessageAnalyzer receiver structs in BrnGuiEventTypeDefs.h.
+    struct GuiNetworkStuntRunEliminationEvent
+    {
+        s32 mbIsLocalPlayer;
+        s32 mPlayerId;
+        bool mbIsTeammate;
+        bool mbIsLastPlayer;
+        u8 mau8UnwrittenTail[2];
+        s32 GetEventType() const { return 487; }
+    };
+    struct GuiNetworkStuntRunLeadingEvent
+    {
+        s32 mbIsLocalPlayer;
+        s32 mPlayerId;
+        bool mbIsTeammate;
+        bool mbIsLastPlayer;
+        u8 mau8UnwrittenTail[2];
+        s32 GetEventType() const { return 488; }
+    };
+    struct GuiNetworkStuntRunVictoryEvent
+    {
+        s32 mbIsLocalPlayer;
+        s32 mPlayerId;
+        bool mbIsTeammate;
+        bool mbIsLastPlayer;
+        u8 mau8UnwrittenTail[2];
+        s32 GetEventType() const { return 489; }
+    };
+    // Cases 270/271 write the score/time message triple; the action-270 score and action-271
+    // 30-second time threshold become {player id, message kind, integer value} for GUI 491.
+    struct GuiNetworkSuntRunInfoMessageEvent
+    {
+        s32 mPlayerId;
+        s32 meMessageType;
+        s32 miValue;
+        s32 GetEventType() const { return 491; }
+    };
+    static_assert(sizeof(GuiNetworkStuntRunEliminationEvent) == 12 &&
+                  sizeof(GuiNetworkStuntRunLeadingEvent) == 12 &&
+                  sizeof(GuiNetworkStuntRunVictoryEvent) == 12,
+                  "ARTIST GUI 487..489 records are 12 bytes with two unwritten tail bytes");
+    static_assert(sizeof(GuiNetworkSuntRunInfoMessageEvent) == 12,
+                  "ARTIST GUI 491 message record is three words");
     // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4472 {f32 mfDistance};
     // RecvEvent case 388 latches it with a single float load (@0x82420B38).
     struct GuiOncomingEvent { f32 mfDistance; s32 GetEventType() const { return 388; } };  // id 388 size 4

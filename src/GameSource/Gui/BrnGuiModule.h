@@ -22,6 +22,8 @@
 #include "GameSource/Gui/Flow/HUD/BrnHudFlow.h"                         // BrnGui::BrnHudFlow (the 14-state HUD flow)
 #include "GameSource/Gui/Flow/Overlay/BrnOverlayFlow.h"                 // BrnGui::BrnOverlayFlow (the 15-popup-state overlay flow)
 #include "GameSource/Gui/Flow/Screen/BrnScreenFlow.h"                   // BrnGui::BrnScreenFlow (the 61-state front-end SCREEN flow)
+#include "GameSource/Gui/BrnGuiKeyboard.h"
+#include "GameSource/Gui/BrnGuiKeyboardHost.h"
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
@@ -451,6 +453,7 @@ namespace BrnGui
         HudMessageAnalyzer mHudMessageAnalyzer;  // X360 +660992
         GuiOverlaysDirector mOverlaysDirector;   // console +0xA1B10 (662288)
 
+        KeyboardHost mKeyboardHost; // ARTIST gm+681672
         ProfileManager    mProfileManager;  // X360 +681696 (the REAL save/load manager)
         // ---- [profile-save 2026-08-27] the module's AUTOSAVE latch + throttle ------------
         // X360 GuiModule::Update tail @0x825295CC..0x825296A4:
@@ -484,6 +487,7 @@ namespace BrnGui
             virtual void HandleProfileTaskResult();
         };
         ProfileAutosaveResultHandler mProfileAutosaveResultHandler;
+        BrnGuiKeyboard mGuiKeyboard; // ARTIST gm+1545808
         CgsGui::SystemUserProfile mSystemUserProfile; // X360 +949152 (sign-in watcher the manager listens to)
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)
         CgsMemory::HeapMalloc   mProfileHeap;   // the manager's heap (mugshot buffer + SLS callbacks)

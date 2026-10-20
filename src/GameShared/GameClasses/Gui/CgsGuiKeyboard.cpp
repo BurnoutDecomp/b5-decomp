@@ -39,6 +39,17 @@ namespace CgsSystem
 
 namespace CgsGui
 {
+    void GuiKeyboard::Construct()
+    {
+        mpListener = 0;
+    }
+
+    // Inlined in ARTIST824F5B20..B28, with the DecFIGS const declaration.
+    bool GuiKeyboard::IsShown() const
+    {
+        return mpListener != 0;
+    }
+
     // @ 0x8284CFD8
     u32 GuiKeyboard::Show(u32 luUserIndex, const CgsUtf16* lpDefaultText,
                           const CgsUtf16* lpTitleText, const CgsUtf16* lpDescriptionText,

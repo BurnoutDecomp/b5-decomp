@@ -59,6 +59,9 @@ namespace CgsGui
         };
 
     public:
+        // DecFIGS h:492; ARTIST824F5B70 loads this actual user index.
+        u32 GetUserIndex() const { return miUserIndex; }
+
         // X360 0x8284CCF8 -- one-time setup: no user (miUserIndex=4), not ready (miState=0),
         // create the Xbox system-area notification listener. Returns true.
         bool Prepare();
