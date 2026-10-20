@@ -2,6 +2,7 @@
 
 #include <cstddef>   // offsetof (layout pins in _AssertLayout)
 #include "types.hpp"
+#include "GameSource/Gui/Events/BrnGuiPFXEvents.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
@@ -532,6 +533,12 @@ namespace BrnGui
         // closest off-screen icon. Exposed by name as the leading 16-byte lane (xyz = camera
         // world position); body links from the GuiCache TU. X360-attested @0x4AE0.
         const Vector4& GetWorldCameraPosition() const;   // X360 far member @0x4AE0
+
+        // DecFIGS h:1149; ARTIST8250CA44 reads this actual contained owner.
+        const GuiPFXHookEnumeration* GetPFXHookEnumeration() const
+        {
+            return &mPFXHookEnumeration;
+        }
 
         // DWARF h:1386/1389 -- the player's profile-event list (offline events). GetProfileEvent
         // indexes it; GetNumProfileEvents is the live count.
@@ -1559,7 +1566,10 @@ namespace BrnGui
         // whole queue is exactly 0x8C8 bytes here as well -- the one place in this header
         // where a console span survives the widening intact. Access stays BY NAME regardless.
         InGameMessagesQueue mInGameMessagesQueue;        // +0x4080 (16512), spans ..+0x4947
-        u8  mPad_4948[0x4AE0 - 0x4948];                  // +0x4948..+0x4ADF
+        // Native+0x4948: count plus100 pointers (404B there). Host width
+        // follows the canonical record; later fields are still reached by name.
+        GuiPFXHookEnumeration mPFXHookEnumeration;
+        u8 mPad_4ADC[4];                                // original trailing gap
         Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
         // ADDITIVE CARVE (BrnCrashNavMap wave J): the leading 8 bytes of the former
         // mPad_4AF0[16] -- the local player's car id. X360-attested as an `ld` (8-byte load)

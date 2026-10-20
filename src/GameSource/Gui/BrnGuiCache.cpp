@@ -418,6 +418,7 @@ namespace BrnGui
         // ⚠️ Read the header's carve note with this: it records "values observed: -1 / 1 / 3"
         // and calls -1 the invalid one. 1 is what Construct seeds -- so the HUD is meant to be
         // in a message-eligible state from the moment the cache is built.
+        mPFXHookEnumeration.miHookNameCount = -1; // ARTIST82505C60
         miGameFlowState      = 1;   // X360 stw r11(==1), 0x4B30(r31)  @0x82505C68
         mu8GameFlowByte_4B34 = 0;   // X360 stb r30(==0), 0x4B34(r31)  @0x825059E8
 
@@ -1336,6 +1337,20 @@ namespace BrnGui
 
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
+        // Preserve this original case's assert-and-continue before the
+        // older host-wide null guard.501 carries the canonical flat payload.
+        if (liEventId == 501)
+        {
+            if (!lpEvent)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpEnumeration != NULL",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 2694);
+                CgsDev::Assert::EndAssert();
+            }
+            std::memcpy(&mPFXHookEnumeration, lpEvent, sizeof(mPFXHookEnumeration));
+            return;
+        }
         if (lpEvent == 0)
             return;
 
@@ -1449,6 +1464,15 @@ namespace BrnGui
                 miPlayerRPM      = lpHudEvent->miRPM;        // +19212
                 miPlayerGear     = lpHudEvent->mi8Gear;      // +19216 (word store of the byte)
             }
+            break;
+
+        // ARTIST 0x8250DDF0: these notifications carry no cache payload; they maintain the
+        // event-opponent count consumed by GetOpponentsInEvent and HandleEliminatedEvent.
+        case 150:
+            ++miOpponentsInEvent;
+            break;
+        case 151:
+            --miOpponentsInEvent;
             break;
 
         case 194:

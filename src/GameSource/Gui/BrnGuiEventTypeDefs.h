@@ -1872,15 +1872,15 @@ struct GuiEventCarJoinedEvent
 static_assert(sizeof(GuiEventCarJoinedEvent) == 16, "X360 AddGuiEvent size 16 (id 150)");
 
 // DWARF :1542 typedef GuiEventCarEliminatedFromEvent = GuiEvent<149> (payload-less on
-// PS3). X360 (id 151 = Update dispatch 64+87): HandleEliminatedEvent @0x8251D0E8 reads a
-// SIGNED BYTE at record+0x00 (lbz;extsb) and indexes KAPC_FINISH_POSITION_MESSAGES[1 + it].
-// FLAG: the field name is consumer-inferred (no DWARF member exists for the X360 payload).
+// PS3). ARTIST X360 id 151 is a one-byte event, but neither GuiCache::RecEvent nor
+// HudMessageAnalyzer::HandleEliminatedEvent reads its byte: the cache decrements
+// miOpponentsInEvent and the handler formats that count. Preserve a one-byte raw tag without
+// assigning an unattested payload meaning.
 struct GuiEventCarEliminatedFromEvent
 {
-    s8 mi8FinishPosition;   // +0x00 (0-based position; message id = POSITION_* [pos+1])
-
     s32 GetEventType() const { return 151; }
 };
+static_assert(sizeof(GuiEventCarEliminatedFromEvent) == 1, "ARTIST GUI151 is a one-byte tag");
 
 // DWARF :4528 (PS3 GuiEvent<217>; X360 id 219, record 8 bytes). "All collectibles of
 // this stunt family in this county are done" -- HandleStuntsComplete @0x8251F6E8 fires

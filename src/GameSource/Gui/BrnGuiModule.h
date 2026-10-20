@@ -307,6 +307,13 @@ namespace BrnGui
         // Prepare. Its recovered body remains unregistered in the host flow.
         static void GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage);
 
+        // Extracted native blocks: Prepare82519360..C4,
+        // Update82529CA8..DD0 and Release824F917C..B0. These remain
+        // uncalled by the selected host lifecycle until native composition.
+        void PrepareNativeSystemNotifications();
+        void UpdateNativeSystemNotifications(CgsGui::ModelIO::InputBuffer* lpInputBuffer);
+        void ReleaseNativeSystemNotifications();
+
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
         // 14/16 -> the model-out notification queue, 358 -> profile image autosave,
@@ -387,6 +394,9 @@ namespace BrnGui
         // into AptRenderHandler::mpCustomRendererManager, the pointer the Apt custom-control
         // callback reads), and only then gate on the prepare result.
         CustomRendererManager mCustomRendererManager;   // X360 +311952
+        // ARTIST-only handle at gm+0x18DC60. The original Release
+        // assertion names this member; the PC provider returns a kernel HANDLE.
+        void* mhSysListenerHandle;
         BrnReplays::GuiModuleSerialiser mGuiModuleSerialiser; // ARTIST gm+1629284
 
         // The view-module IO pair the per-frame bridge fills (the input buffer carries the
