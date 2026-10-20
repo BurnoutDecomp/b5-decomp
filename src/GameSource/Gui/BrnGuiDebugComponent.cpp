@@ -9,6 +9,9 @@
 // convention; the stringized condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiDebugComponent.h"
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
@@ -503,6 +506,71 @@ void GuiDebugComponent::ToggleGenericHUDPriorityOverrideCallback(void* lpUserDat
         CgsDev::Assert::EndAssert();
     }
     static_cast<GuiDebugComponent*>(lpUserData)->ToggleGenericHUDPriorityOverride();
+}
+
+// ARTIST824ED288. lpUserData is an integer menu index, not a component pointer.
+void GuiDebugComponent::ToggleRaceHudComponentsCallback(void* lpValue, void* lpUserData)
+{
+    (void)lpValue;
+    GuiDebugComponent* lpThis = GetSingletonPtr();
+    RaceMainHudState* lpRaceMainHudState = lpThis->mpGuiModule->mHudFlow.mpRaceMain;
+    const bool lbOverride = lpThis->mbToggleableRaceHUDEnabled;
+    if (reinterpret_cast<uintptr_t>(lpUserData) != 21 && !lbOverride)
+        return;
+    if (lbOverride)
+        lpRaceMainHudState->ForceReenter(true,
+            GetSingletonPtr()->mabTogglableRaceHUDElementsState);
+    else
+        lpRaceMainHudState->ForceReenter(false, 0);
+}
+
+// ARTIST825131E0: zero exactly the two bit words and song index, then set preview.
+// The record's three trailing padding bytes remain unwritten.
+void GuiDebugComponent::TriggerEATraxComponent()
+{
+    GuiEATraxNewTrackEvent lEvent;
+    lEvent.mRemainingSongs.Construct();
+    lEvent.miSongIndex = 0;
+    lEvent.mbPreview = 1;
+    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+        502, sizeof(lEvent));
+}
+
+// ARTIST82513228: original buddy-notification order is notification/count/name.
+void GuiDebugComponent::TriggerOnlineInviteComponent()
+{
+    GuiEventBuddyNotification lEvent;
+    lEvent.mBuddyName.Construct("Linus T");
+    lEvent.meBuddyNotification = static_cast<BrnNetwork::EBuddyNotification>(0);
+    lEvent.miNumBuddies = 0;
+    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+        105, sizeof(lEvent));
+}
+
+// These two original callbacks contain no null diagnostic or additional guard.
+void GuiDebugComponent::TriggerEATraxComponentCallback(void* lpUserData)
+{
+    static_cast<GuiDebugComponent*>(lpUserData)->TriggerEATraxComponent();
+}
+
+void GuiDebugComponent::TriggerOnlineInviteCallback(void* lpUserData)
+{
+    static_cast<GuiDebugComponent*>(lpUserData)->TriggerOnlineInviteComponent();
+}
+
+// ARTIST8250D848 ignores its registered user-data and uses the real singleton/cache.
+void GuiDebugComponent::TriggerPaybackComponent(void* lpUserData)
+{
+    (void)lpUserData;
+    GuiDirtyTrickNewEvent lEvent;
+    lEvent.meTrickType = static_cast<BrnNetwork::EPaybackType>(0);
+    GuiDebugComponent* lpThis = GetSingletonPtr();
+    const EActiveRaceCarIndex lePlayer = static_cast<EActiveRaceCarIndex>(
+        lpThis->mpGuiModule->mGuiCache.GetPlayerActiveRaceCarIndex());
+    lEvent.meAggressorActiveRaceCarIndex = lePlayer;
+    lEvent.meVictimActiveRaceCarIndex = lePlayer;
+    lpThis->mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+        177, sizeof(lEvent));
 }
 
 // Post event 495 for the hook picked in the debug menu: every maximum weight 1.0 and the hook's

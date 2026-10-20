@@ -9,6 +9,8 @@
 // from the console asm. The inline resource accessor hands out the static table and its count.
 // Only the members the reconstructed bodies read are named; the console span between them is
 // kept as padding.
+namespace CgsDev { struct Debug2DImmediateRender; }
+
 namespace BrnGui
 {
     class GuiCache;
@@ -70,6 +72,9 @@ namespace BrnGui
             *lppResourceTuples    = maResourceTuplesToLoad;
             *lpuNumberOfResources = static_cast<u32>(miNumResourcesToLoad);
         }
+
+        // Direct non-virtual callee from GuiDebugComponent::RenderHUD 0x824FD2B0.
+        void RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay);
 
     private:
         // BrnOnlineInstantResults.cpp. Clear the ticker, then (in the

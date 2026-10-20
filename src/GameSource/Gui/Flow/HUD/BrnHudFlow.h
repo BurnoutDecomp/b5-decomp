@@ -21,6 +21,8 @@ namespace rw         { struct IResourceAllocator; }
 // Prepare build order); on x64 the offsets differ (8-byte pointers) but the member order is faithful.
 namespace BrnGui
 {
+    struct GuiDebugComponent;
+
     class ProfileManager;   // GameSource/Gui/... (threaded to BF_PROFILE; held by ptr only)
 
     // boot states
@@ -64,6 +66,9 @@ namespace BrnGui
         virtual void PrintStateSizes();
 
     private:
+        // ARTIST824ED2D4..E8 reaches this actual pool-owned RACE_MAIN state.
+        friend struct GuiDebugComponent;
+
         // The 14-state pool, in BrnHudFlow::Prepare build order (X360 flow+0x1024C..+0x10280).
         BootPreload*          mpPreload;               // BF_PRELOAD
         BootVideos*           mpVideos;                // BF_VIDEOS

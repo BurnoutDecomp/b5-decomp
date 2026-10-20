@@ -80,6 +80,8 @@ namespace BrnGui
         void OpenCrashNav();
         void OpenCarSelect();
         void TriggerClosePFX();
+        void TriggerEATraxComponent();
+        void TriggerOnlineInviteComponent();
 
         // Post the selected post-FX hook (by name, every maximum weight 1.0) to the GUI.
         void TriggerPFX();
@@ -87,6 +89,11 @@ namespace BrnGui
         void TriggerPostEvent();
 
     private:
+        // The second argument is an encoded item index, including valid index0.
+        static void ToggleRaceHudComponentsCallback(void* lpValue, void* lpUserData);
+        static void TriggerEATraxComponentCallback(void* lpUserData);
+        static void TriggerOnlineInviteCallback(void* lpUserData);
+        static void TriggerPaybackComponent(void* lpUserData);
         static void EnterCarSelectCallback(void* lpUserData);
         static void TriggerIntroCallback(void* lpUserData);
         static void TriggerPostEventCallback(void* lpUserData);

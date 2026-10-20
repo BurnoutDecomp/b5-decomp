@@ -23,9 +23,11 @@
 //   UpdateLeaving                  @0x824BE7E0 ( 68)   HandleAptTriggers @0x824BDAB8 (475)
 //
 //   HandleControllerInput          @0x824B3E00 (124)   UpdatePhoto    @0x824B47C8 ( 55)
-// RenderDebug remains unreconstructed; it is diagnostic-only.
+// RenderDebug @0x824BAF00 is reconstructed below; it remains diagnostic-only.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
+
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
@@ -51,6 +53,9 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 #include <cstdlib>   // getenv (the BRN_LOSE_DIAG witness)
+
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 namespace BrnGui
 {
@@ -2602,4 +2607,87 @@ namespace BrnGui
         }
     }
 
+    void InstantResultsState::RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        char lacText[1024];
+        const CgsDev::RGBA KU_WHITE = static_cast<CgsDev::RGBA>(-1);
+        const CgsDev::RGBA KU_GREEN = static_cast<CgsDev::RGBA>(-16711936);
+        const CgsDev::RGBA KU_RED = static_cast<CgsDev::RGBA>(-65536);
+
+        CgsCore::SPrintf(lacText, 1024, "OFFLINE RESULTS DEBUGGING");
+        MaybeDrawText(lpDisplay, lacText, 80.0f, 100.0f, 15.0f, KU_WHITE, false);
+
+        const auto DrawInteger = [lpDisplay, &lacText](const char* lpcFormat, s32 liValue,
+                                                       f32 lfY, CgsDev::RGBA luColour)
+        {
+            CgsCore::SPrintf(lacText, 1023, lpcFormat, liValue);
+            MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, luColour, false);
+        };
+
+        f32 lfY = 118.0f;
+        DrawInteger("Current State = %d", static_cast<s32>(meCurrentState), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("Win State = %d", static_cast<s32>(meWinState), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("Active SubState = %d", static_cast<s32>(meActiveSubState), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("SubState State = %d", static_cast<s32>(meSubStateState), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("Photo Presentation Stage = %d",
+                    static_cast<s32>(mePhotoPresentationStage), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("Rank Up Presentation Stage = %d",
+                    static_cast<s32>(meRankUpPresentationStage), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("Car Unlock Presentation Stage = %d",
+                    static_cast<s32>(meCarUnlockPresentationStage), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("New Rivals Presentation Stage = %d",
+                    static_cast<s32>(meNewRivalsPresentationStage), lfY, KU_WHITE);
+        lfY += 18.0f;
+        DrawInteger("Free Car Presentation Stage = %d",
+                    static_cast<s32>(meFreeCarPresentationStages), lfY, KU_WHITE);
+        lfY += 18.0f;
+
+        DrawInteger("License Shown = %d", static_cast<s32>(mbLicenseShown), lfY, KU_GREEN);
+        lfY += 18.0f;
+        // The native second print intentionally reads +0x2224 again, not mbWinsIncremented at +0x222C.
+        DrawInteger("Wins Incremented = %d", static_cast<s32>(mbLicenseShown), lfY, KU_GREEN);
+        lfY += 18.0f;
+        DrawInteger("Started Upgrade Trans Out = %d",
+                    static_cast<s32>(mbStartedUpgradeTransOut), lfY, KU_GREEN);
+        lfY += 18.0f;
+
+        DrawInteger("Results.Finished Game Mode Type = %d",
+                    mResults.meFinishedGameModeType, lfY, KU_RED);
+        lfY += 18.0f;
+        CgsCore::SPrintf(lacText, 1023, "Results.Beaten Rival = %x",
+                         static_cast<u32>(mResults.mBeatenRival));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lfY += 18.0f;
+        DrawInteger("Results.Player Finish Position = %d",
+                    static_cast<s32>(mResults.miPlayerFinishPosition), lfY, KU_RED);
+        lfY += 18.0f;
+
+        // CgsArray::GetLength preserves the native assert-then-continue path and its -1 sentinel.
+        const s32 liCarsToUnlockCount =
+            static_cast<s32>(mResults.maCarsToUnlockFromSpecialEvent.GetLength());
+        DrawInteger("Results.Cars To Unlock Count = %d", liCarsToUnlockCount, lfY, KU_RED);
+        lfY += 18.0f;
+
+        CgsCore::SPrintf(lacText, 1023, "Results.Rank Up (Old -> New) = %d (%d -> %d)",
+                         static_cast<s32>(mResults.mbHasRankedUp),
+                         mResults.miPlayerOldRank, mResults.miPlayerNewRank);
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lfY += 18.0f;
+        DrawInteger("Results.Cars Revealed = %d", mResults.miCarsRevealed, lfY, KU_RED);
+        lfY += 18.0f;
+        DrawInteger("Results.Events Unlocked = %d", mResults.miEventsUnlocked, lfY, KU_RED);
+        lfY += 18.0f;
+        DrawInteger("Results.Completed Last Rank = %d",
+                    static_cast<s32>(mResults.mbCompletedLastRank), lfY, KU_RED);
+        lfY += 18.0f;
+        DrawInteger("Results.Unlocked Free Car = %d",
+                    static_cast<s32>(mResults.mbHasUnlockedFreeCar), lfY, KU_RED);
+    }
 }

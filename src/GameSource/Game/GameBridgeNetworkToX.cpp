@@ -829,10 +829,11 @@ namespace BrnGame
                     const NetIO::NetworkOutBuddyNotification* lpBuddyNotification =
                         reinterpret_cast<const NetIO::NetworkOutBuddyNotification*>(lpEvent);
                     BrnGui::GuiEventBuddyNotification lEvent;
-                    unsigned char* lpDst = RecordBytes(lEvent);
-                    std::memcpy(lpDst + 0x8, &lpBuddyNotification->mBuddyName, sizeof(lpBuddyNotification->mBuddyName));
-                    *reinterpret_cast<s32*>(lpDst)       = lpBuddyNotification->meBuddyNotification;
-                    *reinterpret_cast<s32*>(lpDst + 0x4) = lpBuddyNotification->miNumBuddies;
+                    std::memcpy(&lEvent.mBuddyName, &lpBuddyNotification->mBuddyName,
+                                sizeof(lEvent.mBuddyName));
+                    lEvent.meBuddyNotification = static_cast<BrnNetwork::EBuddyNotification>(
+                        lpBuddyNotification->meBuddyNotification);
+                    lEvent.miNumBuddies = lpBuddyNotification->miNumBuddies;
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }

@@ -74,6 +74,8 @@ namespace CgsGui { struct GuiEventAptTriggerPayload; }
 // CgsGui::State base and every component widen on the x64 gate, so members are reached BY
 // NAME. What the offsets pin is the ORDER, and the order is what the asm proves.
 // ==========================================================================================
+namespace CgsDev { struct Debug2DImmediateRender; }
+
 namespace BrnGui
 {
     struct InstantResultsState : public CgsGui::State
@@ -201,6 +203,9 @@ namespace BrnGui
             *lppResourceTuples    = maResourcesToLoad;
             *lpuNumberOfResources = muNumResourcesToLoad;
         }
+
+        // Direct non-virtual callee from GuiDebugComponent::RenderHUD 0x824FD2DC.
+        void RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay);
 
     private:
         // ---- BODIED in BrnOfflineInstantResults.cpp -------------------------------------

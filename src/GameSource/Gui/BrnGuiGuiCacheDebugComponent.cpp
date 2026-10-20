@@ -107,8 +107,8 @@ namespace BrnGui
     }
 
     // ARTIST 0x824FD6B0. The console snapshots 16,460 bytes beginning at the embedded
-    // StateLoadingHelper and reads it through AppendResourceInfo. That method is read-only, so the
-    // host uses the same named owner directly and does not copy guest-sized object bytes.
+    // StateLoadingHelper before reading it through AppendResourceInfo. The host snapshots the
+    // complete typed owner, preserving its native-width fields and original snapshot point.
     void GuiCacheDebugComponent::ShowGuiCacheStatus(CgsDev::Debug2DImmediateRender* lpRender)
     {
         char lacBuffer[1024];
@@ -143,7 +143,7 @@ namespace BrnGui
                 else
                 {
                     luColour = static_cast<CgsDev::RGBA>(0xFF0000F5u);
-                    lbDisplayEntry = miDisplayMode < 2 || miDisplayMode == 3;
+                    lbDisplayEntry = miDisplayMode == 0 || miDisplayMode == 1 || miDisplayMode == 3;
                 }
             }
             else if (lpcEntry[6] == 'E')

@@ -407,9 +407,22 @@ namespace BrnGui
 
     // The two debug component-override statics (DWARF .cpp:346/:347; X360 byte_82FB3C94 /
     // off_82FB3C98). Both live in .bss -- ForceReenter is their only writer -- so they
-    // start cleared and UpdateSetupState's override block is retail-dead.
+    // start cleared until the actual ForceReenter debug override is requested.
     bool        RaceMainHudState::msbDEBUG_OverrideNormalCptStates = false;
     const bool* RaceMainHudState::mspbDEBUG_ComponentEnabledStates = 0;
+
+    // ARTIST82474F00: only a currently entered race HUD is reentered.
+    // Keep virtual leave/enter calls before publishing the two original override statics.
+    void RaceMainHudState::ForceReenter(bool lbOverride, const bool* lpbComponentEnabledStates)
+    {
+        if (mbInRaceHud)
+        {
+            OnLeave();
+            OnEnter();
+            msbDEBUG_OverrideNormalCptStates = lbOverride;
+            mspbDEBUG_ComponentEnabledStates = lpbComponentEnabledStates;
+        }
+    }
 
     // =======================================================================
     //  OnEnter  @ 0x82478EF8
