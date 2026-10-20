@@ -27,4 +27,4 @@ sources += [REPO/resource/n for n in ['CgsResourceIOEvents.cpp','CgsResourceModu
 sources += [REPO/base/'Memory'/n for n in ['CgsMemoryModuleIO.cpp']]
 result=compile_and_run(Path(__file__).with_name('PCResourceShuttle.cpp'),
     'pc_resource_shuttle.inc',code,'PCResourceShuttle',extra_sources=sources)
-raise SystemExit(report('run_pc_resource_shuttle',[],result,13))
+raise SystemExit(report('run_pc_resource_shuttle',[],result,14))

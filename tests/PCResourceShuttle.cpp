@@ -86,6 +86,12 @@ int main(){
     Events::LoadBundleRequest load{};load.mpUser=reinterpret_cast<CgsModule::BaseEventReceiverQueue*>(0x123456780000ull);
     load.miPoolId=17;load.miEventId=123;std::strcpy(load.macFileName,"native.bndl");
     input.LockForWrite();input.GetResourceQueue()->AddEvent(reinterpret_cast<CgsModule::Event*>(&load),2,sizeof(load));
+    Events::CreatePoolRequest create{};
+    create.mpUser = load.mpUser; create.miEventId = 444; create.miPoolId = 11;
+    create.miBankId = 37; create.miParentBankId = 5; create.muMaxResources = 64;
+    std::strcpy(create.mpcName,"Gui_Lang_Fsm_Data_Pool");
+    create.mDescriptor.m_baseResourceDescriptors[0].m_size = 511680;
+    input.GetResourceQueue()->AddEvent(&create,0);
     Events::PoolEvent marker{};
     for(int tag=4;tag<=8;++tag)input.GetResourceQueue()->AddEvent(reinterpret_cast<CgsModule::Event*>(&marker),tag,sizeof(marker));
     for(int tag=9;tag<=15;++tag)input.GetResourceQueue()->AddEvent(reinterpret_cast<CgsModule::Event*>(&marker),tag,sizeof(marker));
@@ -96,8 +102,15 @@ int main(){
     Check(copied.mpUser==load.mpUser&&copied.miEventId==123&&copied.miPoolId==17,"bundle intake preserves native pointers and request identity");loader.UnlockForRead();
     pool.LockForRead();const auto* q=static_cast<const PoolIO::InputBuffer&>(pool).GetPoolInputQueue();
     const CgsModule::Event* p=nullptr;s32 bytes=0;int tag=q->GetFirstEvent(&p,&bytes);std::vector<int> tags;
+    const auto* rawCreate = reinterpret_cast<const Events::CreatePoolRequest*>(p);
+    Check(tag == 0 && bytes == sizeof(create) && rawCreate->mpUser == create.mpUser
+        && rawCreate->miEventId == 444 && rawCreate->miPoolId == 11 && rawCreate->miBankId == 37
+        && rawCreate->miParentBankId == 5 && rawCreate->muMaxResources == 64
+        && rawCreate->mDescriptor.m_baseResourceDescriptors[0].m_size == 511680
+        && std::strcmp(rawCreate->mpcName,create.mpcName) == 0,
+        "resource event0 forwards the whole canonical raw pool request and native reply pointer");
     while(p){tags.push_back(tag);const auto* prev=p;tag=q->GetNextEvent(prev,&p,&bytes);}
-    Check(tags==std::vector<int>({4,5,8,11,12}),"resource operations use the original pool request tags");pool.UnlockForRead();
+    Check(tags==std::vector<int>({0,4,5,8,11,12}),"resource operations use the original pool request tags");pool.UnlockForRead();
     memory.LockForRead();const auto* mq=static_cast<const CgsMemory::MemoryIO::InputBuffer&>(memory).GetMemoryRequestQueue();
     tag=mq->GetFirstEvent(&p,&bytes);int count=0;bool valid=true;
     while(p){++count;valid=valid&&tag==1;const auto* prev=p;tag=mq->GetNextEvent(prev,&p,&bytes);}
