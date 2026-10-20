@@ -42,6 +42,9 @@ namespace BrnGui
         static const s32 KI_PFX_HOOK_NAME_LENGTH         = 128;
         static const s32 KI_NUM_TOGGLEABLE_RACE_HUD_ITEMS = 22;
 
+        // ARTIST827E5D38/40: real derived vtable and queue-unconstructed flag only.
+        GuiDebugComponent();
+
         // ARTIST82505488; real two-phase provider, unselected by the
         // current module which still lacks this contained debug owner.
         void Construct(GuiModule* lpGuiModule);
@@ -70,6 +73,7 @@ namespace BrnGui
     protected:
         const char* GetName() const override;
         const char* GetPath() const override;
+        void OnActivate() override;
 
         void DrawDebugFrame1280(CgsDev::Debug2DImmediateRender* lpRender,
             Vector4 lvFrame, CgsDev::RGBA lColour, f32 lfBorderSize);
@@ -109,6 +113,7 @@ namespace BrnGui
         static void AutosaveProfileCallback(void* lpUserData);
         static void SaveProfileCallback(void* lpUserData);
         static void LoadProfileCallback(void* lpUserData);
+        static void ShowKeyboardCallback(void* lpUserData);
         static void EnterCarSelectCallback(void* lpUserData);
         static void TriggerIntroCallback(void* lpUserData);
         static void TriggerPostEventCallback(void* lpUserData);

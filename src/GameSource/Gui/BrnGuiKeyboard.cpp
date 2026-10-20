@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiKeyboard.h"
+#include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnGui
@@ -52,5 +53,24 @@ namespace BrnGui
     bool BrnGuiKeyboard::IsShown() const
     {
         return mKeyboard.IsShown();
+    }
+
+    // ARTIST824F5B00. Keep this wrapper unmounted until XShowKeyboardUI has its
+    // real platform provider; its true result does not prove a dialog opened.
+    bool BrnGuiKeyboard::Show(const CgsGui::CgsUtf16* lpDefaultText,
+        const CgsGui::CgsUtf16* lpTitleText, const CgsGui::CgsUtf16* lpDescriptionText,
+        CgsGui::GuiKeyboardListener& lrListener)
+    {
+        if (mKeyboard.IsShown())
+            return false;
+        if (mpSystemUserProfile == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpSystemUserProfile", "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.cpp", 47);
+            CgsDev::Assert::EndAssert();
+        }
+        mKeyboard.Show(mpSystemUserProfile->GetUserIndex(), lpDefaultText,
+            lpTitleText, lpDescriptionText, lrListener);
+        return true;
     }
 }

@@ -24,6 +24,8 @@
 
 namespace BrnGui
 {
+    struct GuiDebugComponent;
+
     // The on-screen GUI keyboard this host owns a pointer to. Only the pointer slot is
     // referenced by this TU; the keyboard type itself is not modelled here.
     class BrnGuiKeyboard;
@@ -40,6 +42,8 @@ namespace BrnGui
         void Destruct();
 
     private:
+        friend struct GuiDebugComponent;
+
         // The keyboard finished: log the entered text (or the cancel) to the debug channel.
         virtual void KeyboardClosed(const CgsGui::CgsUtf16* lpResultText);
 

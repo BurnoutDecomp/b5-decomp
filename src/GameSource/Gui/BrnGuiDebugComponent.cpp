@@ -9,6 +9,7 @@
 // convention; the stringized condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiDebugComponent.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Online/BrnOnlineInstantResults.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 #include <cmath>
@@ -20,12 +21,17 @@
 
 #include "GameShared/GameClasses/Core/CgsID.h"   // CgsIDCompress (TriggerPostEvent's unlock ids)
 #include "GameSource/Gui/BrnGuiModule.h"         // GuiModule::mGuiCache (TriggerPostEvent)
+#include "GameSource/Gui/BrnGuiKeyboard.h"
+#include "GameSource/Gui/BrnGuiKeyboardHost.h"
 
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 
 #include <cstring>                               // strlen / strncpy / memset
+
+// Original byte82FB5098 is owned by the actual Apt communicator TU.
+extern bool gbLogGuiAudioTriggers;
 
 // Existing compatibility provider; the original wrapper always disables screen checking.
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -35,6 +41,46 @@ namespace
 {
     // ARTIST82FB5920: original file-global count, not reset by Construct.
     u32 guGuiDebugUpdateCount = 0;
+
+    const char* const gpcRaceHudElementLabels[21] =
+    {
+        "GAME_ICON",
+        "HUD_MESSAGES",
+        "BOOST_BAR",
+        "BOOST_MSGS",
+        "COUNTDOWN",
+        "COUNTDOWN_RENDERS",
+        "EVENT_INFO",
+        "DISTRICT_MARKER",
+        "SAT_NAV",
+        "SAT_NAV_STATIC",
+        "PLAYER_POSITION_TABLE",
+        "FRIENDS_LIST",
+        "REPLAY_INDICATOR",
+        "ABOVE_CAR_ICONS",
+        "EVENT_END_TIMER",
+        "ROAD_RULE_CPT",
+        "PREEVENT_OVERLAY",
+        "MUGSHOT_CPT",
+        "PAYBACK_CPT",
+        "PLAYER_STATS_CPT",
+        "SHOWTIME_BAR",
+    };
+
+    // ARTIST824FD478 string constants, read as UTF-16BE code units.
+    const CgsGui::CgsUtf16 gacShowKeyboardDefaultText[] = {
+        0x0044, 0x0065, 0x0066, 0x0061, 0x0075, 0x006C, 0x0074,
+        0x0020, 0x0054, 0x0065, 0x0078, 0x0074, 0x0000
+    };
+    const CgsGui::CgsUtf16 gacShowKeyboardTitleText[] = {
+        0x0054, 0x0069, 0x0074, 0x006C, 0x0065, 0x0020, 0x0054,
+        0x0065, 0x0078, 0x0074, 0x0000
+    };
+    const CgsGui::CgsUtf16 gacShowKeyboardDescriptionText[] = {
+        0x0044, 0x0065, 0x0073, 0x0063, 0x0072, 0x0069, 0x0070,
+        0x0074, 0x0069, 0x006F, 0x006E, 0x0020, 0x0054, 0x0065,
+        0x0078, 0x0074, 0x0000
+    };
 }
 
 namespace BrnGui
@@ -43,6 +89,13 @@ namespace BrnGui
 // X360 off_82FB5080 -- the live singleton instance, populated when the debug component
 // is constructed. Defaults to null until then.
 GuiDebugComponent* GuiDebugComponent::mspSingletonThis = nullptr;
+
+// ARTIST827E5D38/40. No module, singleton, display, PFX, base-active or link field reset.
+GuiDebugComponent::GuiDebugComponent()
+    : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+{
+    mInputQueue.MarkUnconstructed();
+}
 
 // ARTIST82505488. The original base Construct call is folded to
 // the empty8284CB38 body, so it has no source operation here. In particular,
@@ -201,6 +254,78 @@ GuiDebugComponent* GuiDebugComponent::GetSingletonPtr()
     GuiDebugComponent* lpSingleton = mspSingletonThis;
     CGS_ASSERT( lpSingleton != nullptr, "mspSingletonThis" );
     return lpSingleton;
+}
+
+void GuiDebugComponent::OnActivate()
+{
+    RegisterVariable(&mbRenderGui, "Render GUI Objects");
+    RegisterVariable(&mbDebugOfflineInstantResults, "Debug Offline Results Screen");
+    RegisterVariable(&mbDebugOnlineInstantResults, "Debug Online Results Screen");
+    RegisterFunction(&GuiDebugComponent::EnterCarSelectCallback, this, "Trigger Car Select");
+    RegisterFunction(&GuiDebugComponent::TriggerIntroCallback, this, "Trigger Intro");
+    RegisterFunction(&GuiDebugComponent::TriggerPostEventCallback, this, "Trigger Offline Post Event");
+    RegisterVariable(&miDebugFinishPos, "    Finish position:");
+    SetRange(&miDebugFinishPos, 1, 8);
+    RegisterVariable(&mbDebugFinishRankup, "    Do rank-up in post-event:");
+    RegisterVariable(&miDebugPlayerRank, "    Rank at start of post-event:");
+    SetRange(&miDebugPlayerRank, 0, 6);
+    RegisterVariable(&mbDebugFinishUnlockNormalCar, "    Do unlock livery car (BR end):");
+    RegisterVariable(&mbDebugFinishUnlockFreeCar, "    Do unlock free car (rank up):");
+    RegisterVariable(&mbDebugFinishUnlockRival, "    Do unlock rival:");
+    RegisterFunction(&GuiDebugComponent::OpenCrashNavCallback, this, "Trigger crash nav");
+    RegisterFunction(&GuiDebugComponent::MiniMapSwitchCallback, this, "Toggle MiniMap Visibility");
+    RegisterVariable(&mbMiniMapVisible, "   MiniMap Visibility: ");
+    SetReadOnly(&mbMiniMapVisible, true);
+    RegisterVariable(&mbSpeedoVisible, "Speedo Visibility: ");
+    RegisterFunction(&GuiDebugComponent::ToggleShow43AreaCallback, this, "Show/Hide 4:3 Area");
+    RegisterFunction(&GuiDebugComponent::ToggleShowSafeAreaCallback, this, "Show/Hide Safe Area");
+    RegisterVariable(&mfSafePercent, "   Safe Area:");
+    SetRange(&mfSafePercent, 70.0f, 100.0f);
+    RegisterFunction(&GuiDebugComponent::ChangeFontSpacingCallback, this, "Change Font Spacing");
+    RegisterVariable(&mfFontSpacing, "   Spacing percentage:");
+    SetRange(&mfFontSpacing, 30.0f, 250.0f);
+    // Actual inherited mpGuiView, then the shared View mbUpdateFlash field.
+    RegisterVariable(&mpGuiModule->mpGuiView->mbUpdateFlash, "Update Flash");
+    RegisterFunction(&GuiDebugComponent::BootupProfileCallback, this, "Bootup Load/Save Profile");
+    RegisterFunction(&GuiDebugComponent::AutosaveProfileCallback, this, "Autosave Profile");
+    RegisterFunction(&GuiDebugComponent::SaveProfileCallback, this, "Save Profile");
+    RegisterFunction(&GuiDebugComponent::LoadProfileCallback, this, "Load Profile");
+    RegisterFunction(&GuiDebugComponent::ShowKeyboardCallback, this, "Show Keyboard");
+    RegisterVariable(&::gbLogGuiAudioTriggers, "Toggle Audio Trigger Debug Spew");
+    RegisterFunction(&GuiDebugComponent::PlayMovieCallback, this, "Play/stop test movie");
+    RegisterFunction(&GuiDebugComponent::RotateThroughFontsCallback, this, "Select next font as default");
+    RegisterFunction(&GuiDebugComponent::RotateThroughFontEffectsCallback, this, "Select next font effect");
+    RegisterFunction(&GuiDebugComponent::TriggerPFXCallback, this, macCurrentPFXHookName);
+    RegisterVariable(&miCurrentPFXHookIndex, "  Current Hook");
+    SetRange(&miCurrentPFXHookIndex, -1, -1);
+    RegisterFunction(&GuiDebugComponent::TriggerClosePFXCallback, this, "Trigger PFX CloseMenu");
+    RegisterFunction(&GuiDebugComponent::ToggleGenericHUDPriorityOverrideCallback, this,
+        "Toggle Generic HUD Priority Event Overrides");
+    RegisterVariable(&mbPriEventOverride, "Priority Overrides On");
+    RegisterVariable(&miScreenFlowStreamingMode, "Screen Flow Streaming");
+    SetOptions(&miScreenFlowStreamingMode, maStreamingOptions);
+    SetRange(&miScreenFlowStreamingMode, 0, 2);
+    RegisterFunction(&GuiDebugComponent::TriggerEATraxComponentCallback, this,
+        "Components", "Trigger EA Trax Component");
+    RegisterFunction(&GuiDebugComponent::TriggerOnlineInviteCallback, this,
+        "Components", "Trigger Receive Online Invite");
+    RegisterFunction(&GuiDebugComponent::TriggerPaybackComponent, this,
+        "Components", "Trigger Payback Component");
+    RegisterVariable(&mbWorstCaseHudActive, "Race HUD Toggling", "Enable Worst Case HUD");
+    RegisterVariable(&mbToggleableRaceHUDEnabled, "Race HUD Toggling", "Enable Toggling Race HUD");
+    SetChangeCallback(&mbToggleableRaceHUDEnabled,
+        &GuiDebugComponent::ToggleRaceHudComponentsCallback,
+        reinterpret_cast<void*>(static_cast<uintptr_t>(21)));
+    for (s32 liItem = 0; liItem < 21; ++liItem)
+    {
+        RegisterVariable(&mabTogglableRaceHUDElementsState[liItem],
+            "Race HUD Toggling", gpcRaceHudElementLabels[liItem]);
+        SetChangeCallback(&mabTogglableRaceHUDElementsState[liItem],
+            &GuiDebugComponent::ToggleRaceHudComponentsCallback,
+            reinterpret_cast<void*>(static_cast<uintptr_t>(liItem)));
+    }
+    CgsGui::GuiEvent<500> lEnumerateHooks;
+    mInputQueue.AddEvent(&lEnumerateHooks, 500, sizeof(lEnumerateHooks));
 }
 
 // ARTIST8250CFE0..CFF0: original empty tag, one unwritten byte.
@@ -730,6 +855,28 @@ void GuiDebugComponent::LoadProfileCallback(void* lpUserData)
         CgsDev::Assert::EndAssert();
     }
     static_cast<GuiDebugComponent*>(lpUserData)->LoadProfile();
+}
+
+// ARTIST824FD478. The native callback asserts on null userdata, then continues.
+void GuiDebugComponent::ShowKeyboardCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "ShowKeyboardCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1166);
+        CgsDev::Assert::EndAssert();
+    }
+
+    GuiDebugComponent* lpThis = static_cast<GuiDebugComponent*>(lpUserData);
+    lpThis->mpGuiModule->mKeyboardHost.mpGuiKeyboard->Show(
+        gacShowKeyboardDefaultText,
+        gacShowKeyboardTitleText,
+        gacShowKeyboardDescriptionText,
+        lpThis->mpGuiModule->mKeyboardHost);
 }
 
 // Post event 495 for the hook picked in the debug menu: every maximum weight 1.0 and the hook's
