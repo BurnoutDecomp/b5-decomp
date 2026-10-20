@@ -25,6 +25,7 @@
 #include "GameSource/Gui/Flow/Screen/BrnScreenFlow.h"                   // BrnGui::BrnScreenFlow (the 61-state front-end SCREEN flow)
 #include "GameSource/Gui/BrnGuiKeyboard.h"
 #include "GameSource/Gui/BrnGuiKeyboardHost.h"
+#include "GameSource/Gui/BrnGuiProfileHost.h"
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
@@ -254,8 +255,8 @@ namespace BrnGui
         // GameState module publishes as game action 193 -- see the FLAG in
         // BrnGameModule.cpp. The X360 reaches the embedded manager by offset from inside
         // GuiModule::Update itself, so no accessor is emitted there.
-        ProfileManager&       GetProfileManager()       { return mProfileManager; }
-        const ProfileManager& GetProfileManager() const { return mProfileManager; }
+        ProfileManager&       GetProfileManager()       { return mProfileHost.GetProfileManager(); }
+        const ProfileManager& GetProfileManager() const { return mProfileHost.mProfileManager; }
 
         // X360 GuiModule::Prepare @0x82518D68 STAGE 14: `if (!WorldDataController::Prepare(
         // guiModule + 307836, gameDataInputBuffer)) return 0;`. The controller is a GuiModule
@@ -518,7 +519,7 @@ namespace BrnGui
         GuiOverlaysDirector mOverlaysDirector;   // console +0xA1B10 (662288)
 
         KeyboardHost mKeyboardHost; // ARTIST gm+681672
-        ProfileManager    mProfileManager;  // X360 +681696 (the REAL save/load manager)
+        ProfileHost mProfileHost; // ARTIST gm+A66D0; actual contained manager is host+10.
         // ---- [profile-save 2026-08-27] the module's AUTOSAVE latch + throttle ------------
         // X360 GuiModule::Update tail @0x825295CC..0x825296A4:
         //   r30 = module + 0x18D844 (1628228) -- the autosave-PENDING byte, raised by the
@@ -538,19 +539,6 @@ namespace BrnGui
         // + Update, so the byte has to survive between them -- it is written by the event
         // walk and consumed (and cleared) by the tail in the same frame.
         bool mbForceProfileAutosave;        // X360 Update stack byte var_430 (v142)
-        // The completion handler the autosave task reports to. On the console the argument is
-        // the BrnGui::ProfileHost the module embeds at +681680 (the ProfileManager sits inside
-        // it at +16), and ProfileHost::HandleProfileTaskResult @0x827E21E0 is a pure diagnostic
-        // ("SaveLoad: Finished" under message-filter bit 0). This build embeds the
-        // ProfileManager directly rather than through a ProfileHost, so the handler is a
-        // module-owned object carrying that same body -- see BrnGuiProfileHost.cpp for the
-        // console original. DELETE-WHEN the module embeds a real ProfileHost.
-        class ProfileAutosaveResultHandler : public ProfileTaskResultHandler
-        {
-        public:
-            virtual void HandleProfileTaskResult();
-        };
-        ProfileAutosaveResultHandler mProfileAutosaveResultHandler;
         BrnGuiKeyboard mGuiKeyboard; // ARTIST gm+1545808
         CgsGui::SystemUserProfile mSystemUserProfile; // X360 +949152 (sign-in watcher the manager listens to)
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)

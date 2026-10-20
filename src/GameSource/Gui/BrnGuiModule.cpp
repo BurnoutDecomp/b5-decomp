@@ -1048,7 +1048,7 @@ namespace BrnGui
         mGuiAccessPointers.SetGDMReceiverQueue(&mGDMReceiverQueue);
         mGuiAccessPointers.SetSerialiser(&mGuiModuleSerialiser);
 
-        mProfileManager.Construct(mGuiCache, mSystemUserProfile,
+        mProfileHost.GetProfileManager().Construct(mGuiCache, mSystemUserProfile,
                                   mViewModule.GetLanguageManager());
         // ARTIST825187CC/D0/D4: real contained keyboard and listener host.
         mGuiKeyboard.Construct();
@@ -1366,7 +1366,7 @@ namespace BrnGui
         mProfileHeap.Construct(s_profileHeapBacking, static_cast<s32>(sizeof(s_profileHeapBacking)));
         mProfileLinear.Construct();
         mProfileLinear.Create(s_profileLinearBacking, sizeof(s_profileLinearBacking));
-        mProfileManager.Prepare(&mProfileHeap, &mProfileLinear);
+        mProfileHost.GetProfileManager().Prepare(&mProfileHeap, &mProfileLinear);
 
         // Install the PC-boundary blank LIVE-REVENGE block (see the static above): the
         // console's network module does this via SetLiveRevengeProfile (GUI event 351);
@@ -1388,7 +1388,7 @@ namespace BrnGui
         // and never loaded into, so it answered mbIsNewProfile = 1 on every boot, for ever.
         // The case-350 arm now does the console's install and the static is gone.
         s_pcLiveRevengeProfile.Clear();
-        mProfileManager.SetLiveRevengeProfile(&s_pcLiveRevengeProfile);
+        mProfileHost.GetProfileManager().SetLiveRevengeProfile(&s_pcLiveRevengeProfile);
 
         // X360 GuiModule::Prepare @0x82518D68 STAGE 3, line 104: `*(gm + 660992) = gm +
         // 1005332`, i.e. the analyzer adopts the shared GuiAccessPointers block (the same
@@ -1413,7 +1413,7 @@ namespace BrnGui
             rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
         mHudFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mHudStatePool,
-                         &mProfileManager);
+                         &mProfileHost.GetProfileManager());
         mHudInQueue.Construct();
         mHudFlow.SetInEventQueue(&mHudInQueue);
 
@@ -1431,7 +1431,7 @@ namespace BrnGui
         mScreenStatePool.Construct();
         mScreenStatePool.Create(s_screenStatePoolBacking, sizeof(s_screenStatePoolBacking));
         mScreenFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
-                            mProfileManager);
+                            mProfileHost.GetProfileManager());
         mScreenInQueue.Construct();
         mScreenFlow.SetInEventQueue(&mScreenInQueue);
 
@@ -1785,7 +1785,7 @@ namespace BrnGui
     bool GuiModule::Release()
     {
         mbRenderInputCompletedPC = false;
-        mProfileManager.Release();   // detach the sign-in listener + release the SLS
+        mProfileHost.GetProfileManager().Release();   // detach the sign-in listener + release the SLS
         mScreenFlow.Release();       // staged: current state OnLeave + ScriptedFsm release
         mHudFlow.Release();
         mOverlayFlow.Release();
@@ -1796,21 +1796,6 @@ namespace BrnGui
         mMovieManager.Release();
         return true;
     }
-
-    // ---------------------------------------------------------------------------
-// [profile-save] GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult
-//   The body of BrnGui::ProfileHost::HandleProfileTaskResult @0x827E21E0 -- a pure
-//   diagnostic; the console does nothing else when a profile task finishes. Hosted on a
-//   module-owned object because this build embeds the ProfileManager directly instead of
-//   through a ProfileHost (see the header note on the member).
-// ---------------------------------------------------------------------------
-void GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult()
-{
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint << "SaveLoad: Finished\n";
-    }
-}
 
 void GuiModule::Destruct()
     {
@@ -2015,14 +2000,14 @@ void GuiModule::Destruct()
     // sign-in-gate deviation, but retains the original autosave-enabled and image-copy branches.
     void GuiModule::AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo)
     {
-        if (lpImageFileInfo != 0 && !mProfileManager.AutosaveIsEnabled())
+        if (lpImageFileInfo != 0 && !mProfileHost.GetProfileManager().AutosaveIsEnabled())
         {
-            mProfileManager.CopyImageToBuffer(lpImageFileInfo);
+            mProfileHost.GetProfileManager().CopyImageToBuffer(lpImageFileInfo);
         }
 
-        if (mProfileManager.AutosaveIsEnabled())
+        if (mProfileHost.GetProfileManager().AutosaveIsEnabled())
         {
-            mProfileManager.Autosave(&mProfileAutosaveResultHandler,
+            mProfileHost.GetProfileManager().Autosave(&mProfileHost,
                                      lpImageFileInfo != 0 ? 1 : 0, lpImageFileInfo);
             mbProfileAutosavePending  = false;
             mfLastProfileAutosaveTime = mGuiCache.GetTime();
@@ -2101,7 +2086,7 @@ void GuiModule::Destruct()
                     {
                         const BrnGui::GuiEventProgressionProfileData* lpProfileData =
                             reinterpret_cast<const BrnGui::GuiEventProgressionProfileData*>(lpEvent);
-                        mProfileManager.SetProgressionProfile(lpProfileData->mpProfile,
+                        mProfileHost.GetProfileManager().SetProgressionProfile(lpProfileData->mpProfile,
                                                               lpProfileData->mpProgressionData);
                     }
                     // fall through -- the record also feeds GuiCache::mpProfile (case 350 below)
@@ -2270,8 +2255,8 @@ void GuiModule::Destruct()
                     break;
 
                 case 359:   // Image-file records loaded by ProfileManager (ARTIST GuiModule::Update case 359)
-                    mProfileManager.LoadImageFiles(
-                        &mProfileAutosaveResultHandler,
+                    mProfileHost.GetProfileManager().LoadImageFiles(
+                        &mProfileHost,
                         reinterpret_cast<const CgsGui::ImageFileInfo*>(lpEvent));
                     break;
 
@@ -3262,19 +3247,19 @@ void GuiModule::Destruct()
         //          channel). The world-side pool free/restore around the swap is the
         //          un-reconstructed world collision pool -- FLAG'd absent (no world on
         //          the PC boot path); the manager's own state machine is driven fully. --
-        mProfileManager.Update();
-        if (mProfileManager.PendingCollisionWorldInvalidate())
+        mProfileHost.GetProfileManager().Update();
+        if (mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate())
         {
             // FLAG PC-platform leaf: the console frees the world collision pool here.
-            mProfileManager.SetCollisionWorldValid(false);
+            mProfileHost.GetProfileManager().SetCollisionWorldValid(false);
         }
-        if (mProfileManager.PendingCollisionWorldValidate())
+        if (mProfileHost.GetProfileManager().PendingCollisionWorldValidate())
         {
             // FLAG PC-platform leaf: the console restores the world collision pool here.
-            mProfileManager.SetCollisionWorldValid(true);
+            mProfileHost.GetProfileManager().SetCollisionWorldValid(true);
         }
         {
-            CgsGui::GuiEventQueueSmall& lrProfileOut = mProfileManager.GetOutEventQueue();
+            CgsGui::GuiEventQueueSmall& lrProfileOut = mProfileHost.GetProfileManager().GetOutEventQueue();
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             s32 liId = lrProfileOut.GetFirstEvent(&lpEvent, &liSize);
@@ -3304,7 +3289,7 @@ void GuiModule::Destruct()
         //         if ((v142 | r11) == 1) {                        // v142 == the FORCE flag
         //             if (v143 == 1) GuiModule::AutosaveProfile(v186);   // with an image record
         //             else if (*(module + 949156) == 1 && *(module + 686280)) {
-        //                 ProfileManager::Autosave(&mProfileManager, &host, 0, 0);
+        //                 ProfileManager::Autosave(&mProfileHost.GetProfileManager(), &host, 0, 0);
         //                 *(module + 1628228) = 0;
         //                 *(module + 1628224) = GuiCache::GetTime();
         //             }
@@ -3319,7 +3304,7 @@ void GuiModule::Destruct()
         //    (`*(a1 + 19272) = 0;`) and its ONLY writer is a GuiCache::RecEvent @0x8250DDF0 arm
         //    for an event id this build does not route, so it is 0 for the whole run: no
         //    suppression. Reproduced as the console's initial value rather than as a fake read.
-        //  * module+686280 == mProfileManager.mSaveLoadSystem's autosave-enabled word, which is
+        //  * module+686280 == mProfileHost.GetProfileManager().mSaveLoadSystem's autosave-enabled word, which is
         //    exactly ProfileManager::AutosaveIsEnabled() (the committed accessor over the same
         //    word) -- tested below.
         //  * module+949156 == mSystemUserProfile.miState (1 == E_USERSIGNINSTATE_SIGNEDIN).
@@ -3346,13 +3331,13 @@ void GuiModule::Destruct()
                 {
                     AutosaveProfile(&lSaveImageInfo);
                 }
-                else if (mProfileManager.AutosaveIsEnabled())
+                else if (mProfileHost.GetProfileManager().AutosaveIsEnabled())
                 {
                     // The console's 4-arg call with count 0 / records NULL: save the profile
                     // image with no image files attached. The handler is the ProfileHost the
                     // module embeds; this build drives the manager directly, so it is the
                     // manager's own task-result handler that the boot states already use.
-                    mProfileManager.Autosave(&mProfileAutosaveResultHandler, 0, 0);
+                    mProfileHost.GetProfileManager().Autosave(&mProfileHost, 0, 0);
                     mbProfileAutosavePending  = false;
                     mfLastProfileAutosaveTime = mGuiCache.GetTime();
 

@@ -446,10 +446,9 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         else
         {
             BrnGui::GuiEventUpdateHud lHudEvent;
-            lHudEvent.miSpeedMph = static_cast<s32>(lpRaceCarState->mfSpeedMPH);  // @972
-            lHudEvent.miRPM      = static_cast<s32>(lpRaceCarState->mfRPM);       // @984
-            lHudEvent.mi8Gear    = lpRaceCarState->mi8Gear;                       // @1092
-            lHudEvent.mau8Pad[0] = 0; lHudEvent.mau8Pad[1] = 0; lHudEvent.mau8Pad[2] = 0;
+            lHudEvent.miPlayerMPH = static_cast<s32>(lpRaceCarState->mfSpeedMPH);  // @972
+            lHudEvent.miPlayerRPM = static_cast<s32>(lpRaceCarState->mfRPM);       // @984
+            lHudEvent.miPlayerGear = static_cast<s32>(lpRaceCarState->mi8Gear);   // @1092, extsb/stw
             // (direct queue push -- AddGuiEvent<GuiEventUpdateHud> @0x823DA5C8 ==
             // AddEvent(&event, 147, 12))
             lpGuiInputBuffer->GetGuiEvents()->AddEvent(

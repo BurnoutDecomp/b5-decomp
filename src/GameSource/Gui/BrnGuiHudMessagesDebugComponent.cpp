@@ -47,6 +47,14 @@ namespace BrnGui
         return false;
     }
 
+    // ARTIST825298A0..A8 inlines the original h:164 setter into GuiModule::Update.
+    // No assertion, default controller or readiness operation is performed here.
+    void GuiHudMessagesDebugComponent::SetController(
+        const BrnResource::HudMessageController* lpMessageController)
+    {
+        mpMessageController = lpMessageController;
+    }
+
     bool GuiHudMessagesDebugComponent::ControllerIsValid() const
     {
         return mpMessageController != 0;
