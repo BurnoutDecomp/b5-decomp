@@ -13,6 +13,7 @@
 
 #include <cstdlib>   // malloc / free
 #include <cstdio>    // snprintf (boot-video diagnostics)
+#include <cstring>   // strlen / memset (X360 QueueNextMovie path construction)
 extern "C" void* XPhysicalAlloc(unsigned long, unsigned long, unsigned long, unsigned long);
 extern "C" void XPhysicalFree(void*);
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // ResolveResourceType
@@ -35,10 +36,32 @@ namespace BrnGui
         void BuildMoviePath(char* lpacBuffer, u32 luBufferSize, const char* lpcName)
         {
             const char* lpcDir = "VIDEOS\\";
-            u32 lu = 0;
-            for (; lpcDir[lu] != 0 && lu < luBufferSize - 1u; ++lu) lpacBuffer[lu] = lpcDir[lu];
-            for (u32 li = 0; lpcName[li] != 0 && lu < luBufferSize - 1u; ++li, ++lu) lpacBuffer[lu] = lpcName[li];
-            lpacBuffer[lu] = 0;
+            char* lpcDest = lpacBuffer;
+            do
+            {
+                const char lc = *lpcDir++;
+                *lpcDest++ = lc;
+            } while (lpcDest[-1] != 0);
+
+            const u32 luSourceLength = static_cast<u32>(std::strlen(lpcName));
+            const u32 luDestLength = static_cast<u32>(std::strlen(lpacBuffer));
+            const u32 luBytes = luBufferSize;
+            if (luSourceLength + luDestLength >= luBytes - 1u)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1",
+                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                    75);
+                CgsDev::Assert::EndAssert();
+            }
+
+            lpcDest = lpacBuffer + luDestLength;
+            do
+            {
+                const char lc = *lpcName++;
+                *lpcDest++ = lc;
+            } while (lpcDest[-1] != 0);
         }
 
         // Derive the movie's audio stream path "SOUND\STREAMS\<base>.SNS" from the video file name
@@ -575,49 +598,95 @@ namespace BrnGui
     // ---- QueueNextMovie (ARTIST 0x824FF898) ----------------------------------------------------------
     bool MovieManager::QueueNextMovie()
     {
+        if (mQueuedMovie.mVideoResourceId == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                " no movie queued, but we are attempting to queue one up?",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
+                759);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mMoviePlayer.IsFinished())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                " we're attempting to queue a movie when the current one has not finished playing!",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
+                760);
+            CgsDev::Assert::EndAssert();
+        }
+
         mPlayingMovie.Copy(&mQueuedMovie);
-        mQueuedMovie.Prepare();   // dequeue/reset
-        macMovieNameBuffer[0] = 0;
+        mQueuedMovie.Prepare();
+        std::memset(macMovieNameBuffer, 0, sizeof(macMovieNameBuffer));
 
         mMoviePlayer.SetRectangle(mPlayingMovie.mafRectangle[0], mPlayingMovie.mafRectangle[1],
                                   mPlayingMovie.mafRectangle[2], mPlayingMovie.mafRectangle[3]);
         mMoviePlayer.SetCrossfade(mPlayingMovie.miCrossfadeInFrames, mPlayingMovie.miCrossfadeOutFrames);
 
-        // Pick the localized VideoFile from the acquired VideoDataResource. (GetResource avoids the
-        // ResourcePtr null-assert.) [stub: language->code map; X360 selects per-language + sound flags.]
-        void* lpResource = 0;
-        mpVideoDataResource.GetResource(&lpResource);
-        if (lpResource == 0)
+        // The original .data pointers resolve to these exact code strings. The language table below
+        // controls the video selection; the per-file sound flag controls whether that code replaces EN.
+        mpcLanguageCode = "EN";
+        const char* lpcLocalizedLanguageCode = mpcLanguageCode;
+        CgsResource::VideoDataResource::EVideoLanguage leVideoLanguage =
+            CgsResource::VideoDataResource::E_VIDEOLANGUAGE_ENGLISH;
+        int liVideoFileAssertLine = 786;
+        switch (static_cast<CgsLanguage::ELanguage>(meLanguage))
         {
-            CgsDev::Log::WriteToLog("[MovieManager] QueueNextMovie: no VideoDataResource resolved\n");
-            return false;
+            case CgsLanguage::E_LANGUAGE_FRENCH:
+                leVideoLanguage = CgsResource::VideoDataResource::E_VIDEOLANGUAGE_FRENCH;
+                lpcLocalizedLanguageCode = "FR";
+                liVideoFileAssertLine = 798;
+                break;
+            case CgsLanguage::E_LANGUAGE_GERMAN:
+                leVideoLanguage = CgsResource::VideoDataResource::E_VIDEOLANGUAGE_GERMAN;
+                lpcLocalizedLanguageCode = "GE";
+                liVideoFileAssertLine = 810;
+                break;
+            case CgsLanguage::E_LANGUAGE_ITALIAN:
+                leVideoLanguage = CgsResource::VideoDataResource::E_VIDEOLANGUAGE_ITALIAN;
+                lpcLocalizedLanguageCode = "IT";
+                liVideoFileAssertLine = 822;
+                break;
+            case CgsLanguage::E_LANGUAGE_JAPANESE:
+                leVideoLanguage = CgsResource::VideoDataResource::E_VIDEOLANGUAGE_JAPANESE;
+                lpcLocalizedLanguageCode = "JA";
+                liVideoFileAssertLine = 834;
+                break;
+            case CgsLanguage::E_LANGUAGE_SPANISH:
+                leVideoLanguage = CgsResource::VideoDataResource::E_VIDEOLANGUAGE_SPANISH;
+                lpcLocalizedLanguageCode = "SP";
+                liVideoFileAssertLine = 846;
+                break;
         }
-        CgsResource::VideoDataResource* lpVideoData = static_cast<CgsResource::VideoDataResource*>(lpResource);
+
         CgsResource::VideoDataResource::VideoFile* lpVideoFile =
-            lpVideoData->GetVideoFile(static_cast<CgsResource::VideoDataResource::EVideoLanguage>(meLanguage));
-        if (lpVideoFile == 0 || lpVideoFile->GetName() == 0)
+            mpVideoDataResource->GetVideoFile(leVideoLanguage);
+        if (lpVideoFile == 0)
         {
-            CgsDev::Log::WriteToLog("[MovieManager] QueueNextMovie: no VideoFile/name for the language\n");
-            return false;
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpVideoFile",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
+                liVideoFileAssertLine);
+            CgsDev::Assert::EndAssert();
         }
-        mpcLanguageCode = "en";
+
+        if (lpVideoFile->IsLocalisedSoundAvailable(leVideoLanguage))
+            mpcLanguageCode = lpcLocalizedLanguageCode;
+
+        if (mpcLanguageCode == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mpcLanguageCode",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
+                856);
+            CgsDev::Assert::EndAssert();
+        }
 
         BuildMoviePath(macMovieNameBuffer, sizeof(macMovieNameBuffer), lpVideoFile->GetName());
-        mMoviePlayer.SetMovieFile(macMovieNameBuffer, mPlayingMovie.mbPreload);
-        // [PC] derive the matching EA-XMA sound stream path (SOUND\STREAMS\<base>.SNS) and decode it
-        // NOW -- ahead of MoviePlayer::Play(). The player is wall-clock driven (Play() stamps
-        // muStartTick), so decoding between Play() and the audio Start() would let the video clock run
-        // on during the (heavy, synchronous) decode and leave the audio lagging the video by the decode
-        // time. Decoding here keeps the later Play()+Start() instant and frame-aligned.
-        BuildSoundStreamPath(g_acSoundStreamPath, sizeof(g_acSoundStreamPath), lpVideoFile->GetName());
-        if (MovieAudioPcLeafEnabled())
-            g_movieAudio.Load(g_acSoundStreamPath);
-        {
-            char lac[300];
-            std::snprintf(lac, sizeof(lac), "[MovieManager] QueueNextMovie: file '%s' (audio '%s')\n",
-                          macMovieNameBuffer, g_acSoundStreamPath);
-            CgsDev::Log::WriteToLog(lac);
-        }
         return true;
     }
 
@@ -740,6 +809,24 @@ namespace BrnGui
                 if (!lbPrepared)
                     break;
                 QueueNextMovie();
+                // [PC leaf] Keep the existing optional MovieAudioPC handoff outside the ARTIST
+                // QueueNextMovie body but at its selected PC caller. BuildMoviePath writes the
+                // exact "VIDEOS\\" prefix and copies the selected VideoFile::GetName verbatim,
+                // so this offset recovers that same selected name without a localized-audio
+                // filename rule. Decode/load before the later MoviePlayer::Prepare/Play step,
+                // preserving the old audio-before-video-clock ordering.
+                const char* const lpcSelectedVideoFileName =
+                    macMovieNameBuffer + (sizeof("VIDEOS\\") - 1u);
+                BuildSoundStreamPath(g_acSoundStreamPath, sizeof(g_acSoundStreamPath),
+                                     lpcSelectedVideoFileName);
+                if (MovieAudioPcLeafEnabled())
+                    g_movieAudio.Load(g_acSoundStreamPath);
+                {
+                    char lac[300];
+                    std::snprintf(lac, sizeof(lac), "[MovieManager] QueueNextMovie: file '%s' (audio '%s')\n",
+                                  macMovieNameBuffer, g_acSoundStreamPath);
+                    CgsDev::Log::WriteToLog(lac);
+                }
                 meState = E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER;
             }
             break;
@@ -784,8 +871,8 @@ namespace BrnGui
             else
             {
                 // [diag] the (synchronous) player open failed -> skip rather than spin/retry every frame.
-                // [PC] QueueNextMovie already decoded this movie's sound stream and claimed the
-                // (silent) output voice for it; release it on the skip exactly as the finished
+                // [PC leaf] The selected WAITING_FOR_MEMORY caller loaded this movie's sound
+                // stream before MoviePlayer::Prepare; release it on the skip exactly as the finished
                 // path does, or the never-started stream pins the voice (g_finished stays false)
                 // and the menu-music stream can never reclaim the output afterwards -- the
                 // "menu music stops for good after the first missing-attract skip" fault.
