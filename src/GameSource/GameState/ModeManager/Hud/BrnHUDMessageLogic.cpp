@@ -1202,8 +1202,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
             if (!(mfBlueTeamIsAheadTime <= KF_BLUE_TEAM_ESCAPE_SECONDS))
             {
                 GameStateModuleIO::BlueTeamIsEscapingAction lAction;
-                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_ESCAPING,
-                                      sizeof(lAction));
+                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_ESCAPING);
                 mfBlueTeamIsAheadTime = KF_ZERO_SECONDS;
             }
         }
@@ -1273,15 +1272,15 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
             if (!(mfBlueTeamIsBehindTime <= KF_BLUE_TEAM_BEHIND_SECONDS))
             {
                 GameStateModuleIO::BlueTeamIsBehindYouAction lAction;
-                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_BEHIND_YOU,
-                                      sizeof(lAction));
+                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_BEHIND_YOU);
                 mfBlueTeamIsBehindTime = KF_ZERO_SECONDS;
             }
         }
     }
 }
 
-// X360 0x82395548. Select the lowest race-position, non-eliminated team-1 car. Each time it
+// X360 0x82395548. Select the lowest race-position non-eliminated car passing the original
+// short-circuit team queries (first != 1 || second != 0). Each time it
 // crosses the next mile or kilometre boundary, consume that boundary; post action 164 only while
 // the mode is in progress. Prepare seeds each boundary to 5, and the console decrements even when
 // the mode-progress byte suppresses the action.
@@ -1320,9 +1319,9 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
             {
                 const GameStateModuleIO::EPlayerTeam leCandidateTeam =
                     lpScoringSystem->GetPlayerTeam(leCandidateIndex);
-                if (leCandidateTeam == GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM &&
-                    lpScoringSystem->GetPlayerTeam(leCandidateIndex) !=
-                        GameStateModuleIO::E_PLAYER_TEAM_NONE &&
+                if ((leCandidateTeam != GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM ||
+                     lpScoringSystem->GetPlayerTeam(leCandidateIndex) !=
+                         GameStateModuleIO::E_PLAYER_TEAM_NONE) &&
                     liCandidateRacePosition < liBestRacePosition)
                 {
                     liBestRacePosition = liCandidateRacePosition;
@@ -1352,8 +1351,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
                     lAction.mfDistanceInMetres = lfNextMileBoundaryMetres;
                     lAction.meRaceCarIndex = leLeadingTeamCarIndex;
                     lAction.mbIsBoundaryInMiles = true;
-                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY,
-                                          sizeof(lAction));
+                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY);
                 }
                 mfNextMileBoundaryForMessage -= KF_BOUNDARY_STEP;
             }
@@ -1368,8 +1366,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
                     lAction.mfDistanceInMetres = lfNextKMBoundaryMetres;
                     lAction.meRaceCarIndex = leLeadingTeamCarIndex;
                     lAction.mbIsBoundaryInMiles = false;
-                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY,
-                                          sizeof(lAction));
+                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY);
                 }
                 mfNextKMBoundaryForMessage -= KF_BOUNDARY_STEP;
             }
