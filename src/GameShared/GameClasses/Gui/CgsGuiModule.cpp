@@ -23,7 +23,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpViewModule",
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModule.cpp", 64);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 64);
             CgsDev::Assert::EndAssert();
         }
         CgsModule::ModuleSingleBuffered::Construct();
@@ -77,7 +77,7 @@ namespace CgsGui
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Unknown prepare state",
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModule.cpp", 188);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 188);
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -112,7 +112,7 @@ namespace CgsGui
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Unknown release state",
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModule.cpp", 261);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 261);
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -159,7 +159,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "..\..\..\GameShared\GameClasses\Module/CgsModuleUtils.h", 238);
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
             CgsDev::Assert::EndAssert();
         }
         lpModelInput->LockForWrite();
@@ -174,7 +174,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "..\..\..\GameShared\GameClasses\Module/CgsModuleUtils.h", 248);
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
             CgsDev::Assert::EndAssert();
         }
         lpModelInput->UnlockForWrite();

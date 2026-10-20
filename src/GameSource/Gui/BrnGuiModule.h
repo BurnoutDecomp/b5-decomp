@@ -1,7 +1,7 @@
 #ifndef BRN_GUI_MODULE_H
 #define BRN_GUI_MODULE_H
 
-#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h" // actual shared base and Model owner (CP15/16)
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
@@ -56,7 +56,7 @@
 // in for the GuiResourceModule module dispatch (ServiceFsmBundleRequests).
 namespace BrnGui
 {
-    class GuiModule : public CgsModule::ModuleSingleBuffered
+    class GuiModule : public CgsGui::GuiModule
     {
     public:
         // [gateui r4] X360 `BrnGui::GuiModule::Construct` @0x82518028 is NOT the module
@@ -500,9 +500,9 @@ namespace BrnGui
 
         // The per-flow in-queues (every observed event is fanned into the subscribing
         // flow's queue) + the module GUI-OUT queue the game bridge drains.
-        CgsModule::VariableEventQueue<18432, 16> mScreenInQueue;
-        CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
-        CgsModule::VariableEventQueue<18432, 16> mOverlayInQueue;
+        ::InputBuffer::GuiEventQueue mScreenInQueue;
+        ::InputBuffer::GuiEventQueue mHudInQueue;
+        ::InputBuffer::GuiEventQueue mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
         // [FLAG PC seam] the console's GUI out-event loop-back (CgsGui::GuiModule +111644):
         // CgsGui::GuiModule::Update appends the frame's out-events there and the next
@@ -517,7 +517,7 @@ namespace BrnGui
         // pumps AlwaysAvailableComponentsManager::Update against it each frame -- the same
         // observer contract the console's EventInterpreterModule drives (deliver via
         // SetInEventQueue's queue, pump via UpdateObservers).
-        CgsModule::VariableEventQueue<18432, 16> mAlwaysAvailInQueue;
+        ::InputBuffer::GuiEventQueue mAlwaysAvailInQueue;
 
         // The registered event OBSERVERS (the console EventInterpreterModule's observer
         // list): the three flows plus the always-available components manager -- the AAC

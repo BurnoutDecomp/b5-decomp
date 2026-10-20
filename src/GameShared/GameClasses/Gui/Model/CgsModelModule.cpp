@@ -176,7 +176,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpEventObserver != NULL",
-                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModule.cpp", 518);
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 518);
             CgsDev::Assert::EndAssert();
         }
         mEventInterpreter.RegisterForEvent(lpEventObserver, liEventType);
@@ -193,7 +193,7 @@ namespace CgsGui
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for input";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModule.cpp", 373);
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 373);
             CgsDev::Assert::EndAssert();
         }
         lpInput->AddGuiEvents(lpEvents);
@@ -211,7 +211,7 @@ namespace CgsGui
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for input";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModule.cpp", 392);
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 392);
             CgsDev::Assert::EndAssert();
         }
         lpInput->AddGuiEvents(lpEvents);

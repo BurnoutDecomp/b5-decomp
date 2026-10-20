@@ -17,7 +17,7 @@ namespace CgsGui
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid input queue in GuiModule::BridgeFromInputToView";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 42);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 42);
             CgsDev::Assert::EndAssert();
         }
         mpGuiView->AddViewState<32768, 16>(lpInput->GetGuiEvents(), lpViewInput);
@@ -32,7 +32,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpEventQueue != NULL",
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 60);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 60);
             CgsDev::Assert::EndAssert();
         }
         mGuiModel.AddGuiEvents(lpEventQueue, lpModelInput);
@@ -53,14 +53,14 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutput != NULL",
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 94);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 94);
             CgsDev::Assert::EndAssert();
         }
         if (!lpModelOutput->GetGuiResourceRequestQueue())
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpModelOutput->GetGuiResourceRequestQueue()",
-                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 96);
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 96);
             CgsDev::Assert::EndAssert();
         }
         if (lpModelOutput->GetGuiResourceRequestQueue()->GetLength() > 0)

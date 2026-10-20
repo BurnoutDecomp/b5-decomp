@@ -65,7 +65,7 @@ namespace ModelIO
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModuleIO.cpp", 88);
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 88);
             CgsDev::Assert::EndAssert();
         }
         mGuiEvents.Append<18432, 16>(*lpEvents);
@@ -82,7 +82,7 @@ namespace ModelIO
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModuleIO.cpp", 105);
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 105);
             CgsDev::Assert::EndAssert();
         }
         mGuiEvents.Append<32768, 16>(*lpEvents);
