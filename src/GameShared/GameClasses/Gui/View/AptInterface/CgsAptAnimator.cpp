@@ -56,10 +56,14 @@ namespace CgsGui
         miNumChannels       = liNumChannels;
         mpaChannelTypeNames = lpaChannelTypeNames;
 
-        // Fill the channel list with default (inactive) animation channels.
+        // ARTIST 828590D4..82859128 constructs one inactive channel template
+        // before copying it into the array. The C++ constructor installs only
+        // the embedded interpolator's vtable; it does not initialize its data.
+        AnimChannel lDefaultChannel;
+        lDefaultChannel.Construct();
         for (s32 liChannel = 0; liChannel < liNumChannels; ++liChannel)
         {
-            maAnimChannels.Append(AnimChannel());
+            maAnimChannels.Append(lDefaultChannel);
         }
 
         // Build the apt control bridge to the target component and register it.
