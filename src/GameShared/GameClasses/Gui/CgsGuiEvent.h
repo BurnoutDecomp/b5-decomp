@@ -100,6 +100,51 @@ namespace CgsGui
     static_assert(sizeof(GuiEvent<497>) == 1 && sizeof(GuiEvent<500>) == 1,
                   "PFX tags497 and500 are one-byte empty events");
 
+    // ARTIST GuiDebug callbacks post these original tags as one unwritten byte.
+    // Their record type/size belongs to the queue; no generic event prefix is stored.
+    template <>
+    struct GuiEvent<226> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 226; }
+    };
+    static_assert(sizeof(GuiEvent<226>) == 1, "ARTIST GuiDebug tag226 is one byte");
+    template <>
+    struct GuiEvent<227> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 227; }
+    };
+    static_assert(sizeof(GuiEvent<227>) == 1, "ARTIST GuiDebug tag227 is one byte");
+    template <>
+    struct GuiEvent<228> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 228; }
+    };
+    static_assert(sizeof(GuiEvent<228>) == 1, "ARTIST GuiDebug tag228 is one byte");
+    template <>
+    struct GuiEvent<229> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 229; }
+    };
+    static_assert(sizeof(GuiEvent<229>) == 1, "ARTIST GuiDebug tag229 is one byte");
+    template <>
+    struct GuiEvent<230> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 230; }
+    };
+    static_assert(sizeof(GuiEvent<230>) == 1, "ARTIST GuiDebug tag230 is one byte");
+    template <>
+    struct GuiEvent<288> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 288; }
+    };
+    static_assert(sizeof(GuiEvent<288>) == 1, "ARTIST GuiDebug tag288 is one byte");
+    template <>
+    struct GuiEvent<511> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 511; }
+    };
+    static_assert(sizeof(GuiEvent<511>) == 1, "ARTIST GuiDebug tag511 is one byte");
+
     // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
     // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /
     // OutputInternalState channels) builds and hands to VariableEventQueue::AddEvent. It boxes an

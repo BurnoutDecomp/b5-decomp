@@ -7,6 +7,7 @@
 
 namespace CgsResource { class DebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
+namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 
 // CgsDev::DebugComponent - the base every in-game debug component derives from (perfmon
 // overlays, the takedown/mode-manager debug menus, etc.). Subclasses register their member
@@ -48,10 +49,12 @@ namespace CgsDev
         struct ResourceConstructorTag {};
         explicit DebugComponent(ResourceConstructorTag) {}
 
-        // ARTIST827E5D50 installs the HUD debug vtable without writing base
-        // data. Keep this actual GUI owner separate from the active default
-        // constructor and from the Resource-only initialization path above.
+        // ARTIST827E5D50/5C/68 install the actual HUD/SatNav/Cache GUI
+        // debug vtables without writing base data. These owners stay separate
+        // from the active default and Resource-only initialization paths.
         friend struct BrnGui::GuiHudMessagesDebugComponent;
+        friend struct BrnGui::SatNavDebugComponent;
+        friend struct BrnGui::GuiCacheDebugComponent;
         struct GuiConstructorTag {};
         explicit DebugComponent(GuiConstructorTag) {}
 

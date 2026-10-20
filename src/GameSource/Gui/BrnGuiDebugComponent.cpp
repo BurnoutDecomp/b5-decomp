@@ -196,6 +196,315 @@ GuiDebugComponent* GuiDebugComponent::GetSingletonPtr()
     return lpSingleton;
 }
 
+// ARTIST8250CFE0..CFF0: original empty tag, one unwritten byte.
+void GuiDebugComponent::TriggerIntro()
+{
+    CgsGui::GuiEvent<288> lEvent;
+    mInputQueue.AddEvent(&lEvent, 288, sizeof(lEvent));
+}
+
+// ARTIST8250D140..D150: original empty tag, one unwritten byte.
+void GuiDebugComponent::RotateThroughFonts()
+{
+    CgsGui::GuiEvent<226> lEvent;
+    mInputQueue.AddEvent(&lEvent, 226, sizeof(lEvent));
+}
+
+// ARTIST8250D090..D0A0: original empty tag, one unwritten byte.
+void GuiDebugComponent::RotateThroughFontEffects()
+{
+    CgsGui::GuiEvent<227> lEvent;
+    mInputQueue.AddEvent(&lEvent, 227, sizeof(lEvent));
+}
+
+// ARTIST8250D578..D588: original empty tag, one unwritten byte.
+void GuiDebugComponent::PlayMovie()
+{
+    CgsGui::GuiEvent<511> lEvent;
+    mInputQueue.AddEvent(&lEvent, 511, sizeof(lEvent));
+}
+
+// ARTIST8250D628..D638: original empty tag, one unwritten byte.
+void GuiDebugComponent::OpenCrashNav()
+{
+    CgsGui::GuiEvent<228> lEvent;
+    mInputQueue.AddEvent(&lEvent, 228, sizeof(lEvent));
+}
+
+// ARTIST8250D6D8..D6E8: original empty tag, one unwritten byte.
+void GuiDebugComponent::OpenCarSelect()
+{
+    CgsGui::GuiEvent<229> lEvent;
+    mInputQueue.AddEvent(&lEvent, 229, sizeof(lEvent));
+}
+
+// ARTIST8250D828..D838: original empty tag, one unwritten byte.
+void GuiDebugComponent::TriggerClosePFX()
+{
+    CgsGui::GuiEvent<497> lEvent;
+    mInputQueue.AddEvent(&lEvent, 497, sizeof(lEvent));
+}
+
+// ARTIST8250D1F0..D214 stores the actual f32 payload, with no event prefix.
+void GuiDebugComponent::ChangeFontSpacing()
+{
+    const f32 lfSpacing = mfFontSpacing * 0.01f;
+    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lfSpacing),
+        62, sizeof(lfSpacing));
+}
+
+// ARTIST8250D2B0..D2D0 toggles the actual flag but does not fill the tag byte.
+void GuiDebugComponent::ToggleGenericHUDPriorityOverride()
+{
+    mbPriEventOverride = !mbPriEventOverride;
+    CgsGui::GuiEvent<230> lEvent;
+    mInputQueue.AddEvent(&lEvent, 230, sizeof(lEvent));
+}
+
+// ARTIST8250D4B8..D4DC publishes the same bool stored in the actual member.
+void GuiDebugComponent::MiniMapSwitch()
+{
+    const bool lbVisible = !mbMiniMapVisible;
+    mbMiniMapVisible = lbVisible;
+    mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lbVisible),
+        205, sizeof(lbVisible));
+}
+
+// ARTIST824ED1C8..D4 /824ED270..27C inline the two original simple toggles.
+void GuiDebugComponent::ToggleShow43Area()
+{
+    mbShow43Area = !mbShow43Area;
+}
+
+void GuiDebugComponent::ToggleShowSafeArea()
+{
+    mbShowSafeArea = !mbShowSafeArea;
+}
+
+// ARTIST8250D648; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::EnterCarSelectCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "EnterCarSelectCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1101);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->OpenCarSelect();
+}
+
+// ARTIST8250CF50; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::TriggerIntroCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid data pointer sent to GuiDebugComponent::TriggerIntro";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 753);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->TriggerIntro();
+}
+
+// ARTIST82513140; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::TriggerPostEventCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid data pointer sent to GuiDebugComponent::TriggerPostEventCallback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 766);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->TriggerPostEvent();
+}
+
+// ARTIST8250D598; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::OpenCrashNavCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "OpenCrashNavCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1075);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->OpenCrashNav();
+}
+
+// ARTIST8250D428; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::MiniMapSwitchCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "MiniMapSwitchCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1008);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->MiniMapSwitch();
+}
+
+// ARTIST824ED138; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::ToggleShow43AreaCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "ToggleShow43AreaCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1036);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->ToggleShow43Area();
+}
+
+// ARTIST824ED1E0; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::ToggleShowSafeAreaCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "ToggleShowSafeAreaCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1049);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->ToggleShowSafeArea();
+}
+
+// ARTIST8250D160; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::ChangeFontSpacingCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 887);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->ChangeFontSpacing();
+}
+
+// ARTIST8250D4E8; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::PlayMovieCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "PlayMovieCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1022);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->PlayMovie();
+}
+
+// ARTIST8250D0B0; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::RotateThroughFontsCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 873);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->RotateThroughFonts();
+}
+
+// ARTIST8250D000; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::RotateThroughFontEffectsCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 859);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->RotateThroughFontEffects();
+}
+
+// ARTIST8250D6F8; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::TriggerPFXCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "TriggerPFXCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1179);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->TriggerPFX();
+}
+
+// ARTIST8250D798; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::TriggerClosePFXCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "TriggerPFXCloseCallback: Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1192);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->TriggerClosePFX();
+}
+
+// ARTIST8250D220; plain void(void*) callback, original assert-and-continue.
+void GuiDebugComponent::ToggleGenericHUDPriorityOverrideCallback(void* lpUserData)
+{
+    if (!lpUserData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Invalid data in the callback";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 900);
+        CgsDev::Assert::EndAssert();
+    }
+    static_cast<GuiDebugComponent*>(lpUserData)->ToggleGenericHUDPriorityOverride();
+}
+
 // Post event 495 for the hook picked in the debug menu: every maximum weight 1.0 and the hook's
 // name (asserted to fit the event's 32-character name field, then strncpy'd). Nothing is posted
 // while no hook is selected (index -1). The console never writes the GUID word; it is zeroed here
