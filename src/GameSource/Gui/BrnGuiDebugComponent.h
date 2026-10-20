@@ -67,12 +67,41 @@ namespace BrnGui
         const char* GetName() const override;
         const char* GetPath() const override;
 
+        // Actual nonvirtual members inlined into the original debug callbacks.
+        void TriggerIntro();
+        void RotateThroughFonts();
+        void RotateThroughFontEffects();
+        void ChangeFontSpacing();
+        void ToggleGenericHUDPriorityOverride();
+        void MiniMapSwitch();
+        void PlayMovie();
+        void ToggleShow43Area();
+        void ToggleShowSafeArea();
+        void OpenCrashNav();
+        void OpenCarSelect();
+        void TriggerClosePFX();
+
         // Post the selected post-FX hook (by name, every maximum weight 1.0) to the GUI.
         void TriggerPFX();
         // Post a made-up offline post-event result built from the debug finish settings.
         void TriggerPostEvent();
 
     private:
+        static void EnterCarSelectCallback(void* lpUserData);
+        static void TriggerIntroCallback(void* lpUserData);
+        static void TriggerPostEventCallback(void* lpUserData);
+        static void OpenCrashNavCallback(void* lpUserData);
+        static void MiniMapSwitchCallback(void* lpUserData);
+        static void ToggleShow43AreaCallback(void* lpUserData);
+        static void ToggleShowSafeAreaCallback(void* lpUserData);
+        static void ChangeFontSpacingCallback(void* lpUserData);
+        static void PlayMovieCallback(void* lpUserData);
+        static void RotateThroughFontsCallback(void* lpUserData);
+        static void RotateThroughFontEffectsCallback(void* lpUserData);
+        static void TriggerPFXCallback(void* lpUserData);
+        static void TriggerClosePFXCallback(void* lpUserData);
+        static void ToggleGenericHUDPriorityOverrideCallback(void* lpUserData);
+
         // The single live GuiDebugComponent instance, set when the debug component is created.
         static GuiDebugComponent* mspSingletonThis;
 

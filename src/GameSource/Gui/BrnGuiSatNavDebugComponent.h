@@ -48,6 +48,9 @@ namespace BrnGui
     struct SatNavDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        // ARTIST827E5D5C/64: derived vtable and actual queue-unconstructed byte only.
+        SatNavDebugComponent();
+
         // Bind the GUI module, clear the toggles, seed alpha 90 and the rect from the live
         // sat-nav viewport rect.
         void Construct(GuiModule* lpGuiModule);
@@ -62,7 +65,7 @@ namespace BrnGui
 
     protected:
         const char* GetName() const override;   // @0x824ED338 -> "Sat Nav"
-        const char* GetPath() const override;   // debug-menu group path (out of batch)
+        const char* GetPath() const override;   // @0x824ED348 -- ICF-shared "Gui" body; the SatNav vtable attests this slot.
         void OnActivate() override;             // @0x82513280 -- register every editable
 
         void TriggerSatNavParamUpdate();     // BrnGuiSatNavDebugComponent.cpp:223 (out of batch)

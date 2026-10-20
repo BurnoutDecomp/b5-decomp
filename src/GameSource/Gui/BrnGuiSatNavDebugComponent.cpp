@@ -15,6 +15,28 @@
 
 namespace BrnGui
 {
+    // Original C++ initialization writes no module/toggle/status/base data.
+    SatNavDebugComponent::SatNavDebugComponent()
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+    {
+        mInputQueue.MarkUnconstructed();
+    }
+
+    // Actual enclosing module Destruct82507720..A4 inlines this derived body.
+    void SatNavDebugComponent::Destruct()
+    {
+        if (!mpGuiModule)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpGuiModule != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp", 84);
+            CgsDev::Assert::EndAssert();
+        }
+        mpGuiModule = 0;
+        mInputQueue.Destruct();
+        // The original following base call is folded to empty8284CB38.
+    }
+
     // The three module-scope view-distance / max-speed tuning globals the menu edits by &address.
     // Owned (defined) by the sat-nav renderer TU (X360 rodata flt_82F259D0 / flt_82F259CC /
     // flt_82F258E4); declared extern here so OnActivate can register their addresses.
@@ -47,13 +69,19 @@ namespace BrnGui
         return "Sat Nav";
     }
 
+    // ARTIST vtable 0x820CE830 slot 4 points to the ICF-shared 0x824ED348 body.
+    const char* SatNavDebugComponent::GetPath() const
+    {
+        return "Gui";
+    }
+
     // The base Construct, the module binding, the input queue, every toggle off, alpha 90, and the
     // four rect corners copied out of the live sat-nav viewport rect.
     void SatNavDebugComponent::Construct(GuiModule* lpGuiModule)
     {
         CGS_ASSERT(lpGuiModule != 0, "Invalid Gui module passed to SatNavDebugComponent::Construct");
 
-        CgsDev::DebugComponent::Construct();
+        // Original base Construct resolves to empty8284CB38; no base data reset.
         mpGuiModule = lpGuiModule;
         mInputQueue.Construct();
 
