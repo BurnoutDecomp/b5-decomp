@@ -1,0 +1,29 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        Array_MugshotInfo_20.cpp
+        Array_ProfileEvent_175.cpp
+        Array_Race_64.cpp
+        BrnProfile.cpp
+        BrnProfile_SaveImage.cpp
+        BrnProgressionDebugComponent.cpp
+        BrnProgressionManager.cpp
+        BrnProgressionManager_Completion.cpp
+        BrnProgressionManager_EventFinish.cpp
+        BrnProgressionManager_GameStats.cpp
+        BrnProgressionManager_Lifecycle.cpp
+        BrnProgressionManager_Medals.cpp
+        BrnProgressionManager_PreWorldUpdate.cpp
+        BrnProgressionManager_Rivals.cpp
+        BrnProgressionManager_Unlocks.cpp
+        BrnProgressionManager_wBT_05.cpp
+        ResourcePtr_BrnProgressionProgressionData.cpp
+
+    PUBLIC
+        BrnDerivedCars.h
+        BrnProfile.h
+        BrnProgressionCarData.h
+        BrnProgressionDebugComponent.h
+        BrnProgressionLiveryData.h
+        BrnProgressionManager.h
+        BrnProgressionRivalData.h
+)

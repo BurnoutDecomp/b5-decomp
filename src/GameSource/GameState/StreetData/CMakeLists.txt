@@ -1,0 +1,27 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnChallengeHighScoreEntry.cpp
+        BrnGameStateStreetManager.cpp
+        BrnGameStateStreetManager_FindRivalsByDistrict.cpp
+        BrnGameStateStreetManager_Prepare.cpp
+        BrnGameStateStreetManager_Prepare2.cpp
+        BrnGameStateStreetManager_SetupParRivals.cpp
+        BrnGameStateStreetManager_wB_03.cpp
+        BrnGameStateStreetManager_wB_04.cpp
+        BrnGameStateStreetManager_wB_05.cpp
+        BrnGameStateStreetManager_wB_06.cpp
+        BrnGameStateStreetManager_wB_07.cpp
+        BrnGameStateStreetManager_wC_00.cpp
+        BrnGameStateStreetManager_wC_02.cpp
+        BrnGameStateStreetManager_wC_03.cpp
+        BrnGameStateStreetManager_wR_01.cpp
+        BrnGameStateStreetManager_wR_10.cpp
+        BrnGameStateStreetManager_wR_11.cpp
+        BrnStreetManagerDebugComponent.cpp
+        BrnStreetManagerDebugComponent_wO_01.cpp
+
+    PUBLIC
+        BrnChallengeHighScoreEntry.h
+        BrnGameStateStreetManager.h
+        BrnStreetManagerDebugComponent.h
+)
