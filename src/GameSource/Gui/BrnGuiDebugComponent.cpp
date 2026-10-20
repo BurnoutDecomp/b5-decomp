@@ -10,9 +10,11 @@
 
 #include "GameSource/Gui/BrnGuiDebugComponent.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Online/BrnOnlineInstantResults.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 #include <cmath>
+#include <cfloat>
 #include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
@@ -81,6 +83,49 @@ namespace
         0x0074, 0x0069, 0x006F, 0x006E, 0x0020, 0x0054, 0x0065,
         0x0078, 0x0074, 0x0000
     };
+    // ARTIST 0x82F2759C..0x82F275BB: four mutable {event id, threshold} rows.
+    struct WorstCaseHudScheduleEntry
+    {
+        s32 miEventId;
+        f32 mfThreshold;
+    };
+    static WorstCaseHudScheduleEntry gaWorstCaseHudSchedule[4] =
+    {
+        { 6,   0.5f },
+        { 333, 0.5f },
+        { 343, 0.5f },
+        { 335, 1.0f },
+    };
+    static_assert(sizeof(WorstCaseHudScheduleEntry) == 8, "ARTIST schedule rows are 8 bytes");
+
+    // These POD records reproduce the original raw payloads. The event-144 wire record
+    // has no CgsGui header and the six-button row is only its two 32-bit payload words.
+    struct WorstCaseRunFsmPayload
+    {
+        CgsID mFsmId;
+        CgsID mInitialStateId;
+        BrnGui::EHUDFSMs meFsmToRun;
+        BrnGui::GuiFlow meFlowToUse;
+    };
+    static_assert(sizeof(WorstCaseRunFsmPayload) == 24, "ARTIST id-144 payload is 24 bytes");
+
+    struct WorstCaseControllerInputPayload
+    {
+        u32 muPadId;       // ARTIST leaves +0 unwritten.
+        s32 miButtonId;
+    };
+    static_assert(sizeof(WorstCaseControllerInputPayload) == 8, "ARTIST id-6 payload is 8 bytes");
+
+    // The X360 reuses one stack region for ids 93, 333, and 239. Default-initialize this
+    // union without braces so stores remain limited to the exact native fields.
+    union WorstCaseHudSharedPayload
+    {
+        BrnGui::GuiEventPrepareForModeStart mPrepareForModeStart;
+        BrnGui::GuiEventRoadRuleEnter mRoadRuleEnter;
+        BrnGui::GuiEventRaceDistanceRemaining mRaceDistanceRemaining;
+    };
+    static_assert(sizeof(WorstCaseHudSharedPayload) == 152, "shared native stack region is 152 bytes");
+    static_assert(sizeof(BrnGui::GuiEventRoadRuleEnter) == 112, "ARTIST id-333 payload is 112 bytes");
 }
 
 namespace BrnGui
@@ -235,6 +280,163 @@ void GuiDebugComponent::Destruct()
     }
     mpGuiModule = 0;
     mInputQueue.Destruct();
+}
+
+
+// ARTIST8250CBC8. This helper has a native typed-input caller in GuiModule::Update, but that
+// caller is not mounted by the selected host no-argument Update path. Keep the real provider
+// and its queue/payload contract independently reviewable until that wrapper is recovered.
+void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
+{
+    WorstCaseHudSharedPayload lSharedPayload;
+
+    if (!lpGuiInputBuffer)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpGuiInputBuffer",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 403);
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (mbWorstCaseHudActive)
+    {
+        CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue =
+            lpGuiInputBuffer->GetGuiEvents();
+        if (!lpEventQueue)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEventQueue != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 435);
+            CgsDev::Assert::EndAssert();
+        }
+
+        if (!mbWorstCaseHudAlreadyActive)
+        {
+            mbWorstCaseHudAlreadyActive = true;
+            mfWorstCaseUpdateTime = 0.0f;
+
+            WorstCaseRunFsmPayload lRunFsm;
+            lRunFsm.mFsmId = CgsIDCompress("BRNEVENTFSM");
+            lRunFsm.mInitialStateId = 0;
+            lRunFsm.meFsmToRun = E_GUI_HUD_EVENT;
+            lRunFsm.meFlowToUse = E_GUIFLOW_HUD;
+            lpEventQueue->AddEvent(&lRunFsm, 144);
+
+            lSharedPayload.mPrepareForModeStart.mPursuedCarId = 0;
+            lSharedPayload.mPrepareForModeStart.miCurrentRound = 0;
+            lSharedPayload.mPrepareForModeStart.meGameModeType = 15;
+            lSharedPayload.mPrepareForModeStart.muEventJunctionID = 0;
+            lSharedPayload.mPrepareForModeStart.muJunctionID = 0;
+            // Checkpoint arrays, road-rage threshold, and tail bytes are untouched.
+            lSharedPayload.mPrepareForModeStart.mfNeedForBronze = 0.0f;
+            lSharedPayload.mPrepareForModeStart.mfNeedForSilver = 0.0f;
+            lSharedPayload.mPrepareForModeStart.mfNeedForGold = 0.0f;
+            lSharedPayload.mPrepareForModeStart.mfModeTimeLimit = 0.0f;
+            lSharedPayload.mPrepareForModeStart.miPursuitRivalTotalDamage = -1;
+            lSharedPayload.mPrepareForModeStart.mu8CheckpointCount = 0;
+            lSharedPayload.mPrepareForModeStart.mu8DifficultyLevel = 0;
+            lSharedPayload.mPrepareForModeStart.mu8CarCount = 8;
+            lSharedPayload.mPrepareForModeStart.mbIsOnline = 1;
+            lSharedPayload.mPrepareForModeStart.mbOnlineLobbyTransition = 0;
+            lpEventQueue->AddEvent(&lSharedPayload.mPrepareForModeStart, 93);
+
+            GuiEventUpdateSatNav::msbForceWorstCase = true;
+            GuiEventNetworkPlayerList::msbWorstCaseHudActive = true;
+            GuiEventNetworkPlayerStatus::msbWorstCaseHudActive = true;
+            GuiEventRoadRuleUpdate::msbWorstCaseHudActive = true;
+            GuiRaceCarInfoEvent::msbForceWorstCase = true;
+        }
+
+        mfWorstCaseUpdateTime += mpGuiModule->mGuiCache.GetTimeStep();
+        for (s32 liSchedule = 0; liSchedule < 4; ++liSchedule)
+        {
+            WorstCaseHudScheduleEntry& lrSchedule =
+                gaWorstCaseHudSchedule[liSchedule];
+            if (mfWorstCaseUpdateTime > lrSchedule.mfThreshold)
+            {
+                switch (lrSchedule.miEventId)
+                {
+                case 6:
+                {
+                    WorstCaseControllerInputPayload lButton;
+                    lButton.miButtonId = 40;
+                    lpEventQueue->AddEvent(&lButton, 6);
+                    lrSchedule.mfThreshold = FLT_MAX;
+                    break;
+                }
+                case 333:
+                {
+                    lSharedPayload.mRoadRuleEnter.mRoadId = static_cast<CgsID>(0x60DA2);
+                    lSharedPayload.mRoadRuleEnter.maAILeaderId[0] = 0;
+                    lSharedPayload.mRoadRuleEnter.maeRoadRuleLeaderType[0] =
+                        E_ROADRULELEADERTYPE_FRIEND;
+                    lSharedPayload.mRoadRuleEnter.maiBestValues[0] = 0x147260;
+                    lSharedPayload.mRoadRuleEnter.miRoadIndex =
+                        static_cast<BrnStreetData::RoadIndex>(1);
+                    lSharedPayload.mRoadRuleEnter.maFriendLeader[0].Construct("sk8trMhole");
+                    lSharedPayload.mRoadRuleEnter.mabChallenge[0] = false;
+                    lpEventQueue->AddEvent(&lSharedPayload.mRoadRuleEnter, 333);
+                    break;
+                }
+                case 343:
+                {
+                    BrnGui::GuiEventRoadRuleChangeMode lChangeMode;
+                    lChangeMode.meScoreType =
+                        BrnGameState::E_ACTIVE_ROAD_RULE_OFFLINE_TIME;
+                    lpEventQueue->AddEvent(&lChangeMode, 343);
+                    lrSchedule.mfThreshold = FLT_MAX;
+                    break;
+                }
+                case 335:
+                {
+                    BrnGui::GuiEventRoadRuleBegin lRoadRuleBegin;
+                    lRoadRuleBegin.meRuleType = BrnStreetData::E_SCORE_TYPE_TIME;
+                    lpEventQueue->AddEvent(&lRoadRuleBegin, 335);
+                    lrSchedule.mfThreshold = FLT_MAX;
+                    break;
+                }
+                }
+            }
+        }
+
+        GuiEventRoadRuleUpdate::msfWorstCaseTimeElapsed = mfWorstCaseUpdateTime;
+        GuiEventNetworkPlayerStatus::msbStatusSwitch =
+            !GuiEventNetworkPlayerStatus::msbStatusSwitch;
+        // Original id 239 posts the shared stack bytes without refreshing this record.
+        lpEventQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lSharedPayload), 239,
+            static_cast<s32>(sizeof(BrnGui::GuiEventRaceDistanceRemaining)));
+    }
+    else
+    {
+        if (mbWorstCaseHudAlreadyActive)
+        {
+            CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue =
+                lpGuiInputBuffer->GetGuiEvents();
+            if (!lpEventQueue)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpEventQueue != NULL",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 411);
+                CgsDev::Assert::EndAssert();
+            }
+
+            WorstCaseRunFsmPayload lRunFsm;
+            lRunFsm.mFsmId = CgsIDCompress("BRNFBFSM");
+            lRunFsm.mInitialStateId = 0;
+            lRunFsm.meFsmToRun = E_GUI_HUD_EVENT;
+            lRunFsm.meFlowToUse = E_GUIFLOW_HUD;
+            lpEventQueue->AddEvent(&lRunFsm, 144);
+
+            GuiEventUpdateSatNav::msbForceWorstCase = false;
+            GuiEventRoadRuleUpdate::msfWorstCaseTimeElapsed = 0.0f;
+            GuiEventNetworkPlayerList::msbWorstCaseHudActive = false;
+            GuiEventNetworkPlayerStatus::msbWorstCaseHudActive = false;
+            GuiEventRoadRuleUpdate::msbWorstCaseHudActive = false;
+            GuiRaceCarInfoEvent::msbForceWorstCase = false;
+        }
+        mbWorstCaseHudAlreadyActive = false;
+    }
 }
 
 // Actual native vtable820CE7E0 slots3/4, including shared ICF GetPath.
