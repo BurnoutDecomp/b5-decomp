@@ -133,8 +133,20 @@ struct UpdatePlayerSkillsNetEvent
 static const s32 KI_ACTION_UPDATE_PLAYER_SKILLS      = 168;
 static const s32 KI_ACTION_UPDATE_PLAYER_SKILLS_SIZE = 68;
 
-// The "road-rule beaten" net event (type 169 / 0x18 bytes): the beaten road id quadword.
-struct RoadRuleBeatenNetEvent { u64 mu64RoadID; u8 maPad[0x18 - 8]; };
+// ARTIST action169 is 24 bytes: ID at0, message selector at8, skill at12, owner at16.
+// ProcessNewRoadScore (823454BC..82345554) and ProcessNetworkRoadRulePB
+// (823458EC..82345968) write every named field; only alignment tail bytes are unwritten.
+struct RoadRuleBeatenNetEvent
+{
+    u64 mu64RoadID;
+    s32 miActionValue;
+    BurnoutSkillzData::EBurnoutSkillType meSkill;
+    EActiveRaceCarIndex meNewOwner;
+};
+static_assert(offsetof(RoadRuleBeatenNetEvent, miActionValue) == 8 &&
+              offsetof(RoadRuleBeatenNetEvent, meSkill) == 12 &&
+              offsetof(RoadRuleBeatenNetEvent, meNewOwner) == 16 &&
+              sizeof(RoadRuleBeatenNetEvent) == 24, "ARTIST action169 producer layout");
 
 // ----------------------------------------------------------------------------
 // Construct.
@@ -510,10 +522,15 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
 
         CGS_ASSERT(mpStreetManager, "mpStreetManager");
 
-        // "Road rule beaten" action (type 169) carries the beaten road id.
+        // Original action169 selector2 announces the local record; skill0 maps to12,
+        // all other score types to13. Store the owner before the road lookup as in ARTIST.
+        RoadRuleBeatenNetEvent lBeatenEvent;
+        lBeatenEvent.meNewOwner = leLocalActiveRaceCarIndex;
+        lBeatenEvent.miActionValue = 2;
+        lBeatenEvent.meSkill = static_cast<BurnoutSkillzData::EBurnoutSkillType>(
+            leScoreType == BrnStreetData::E_SCORE_TYPE_TIME ? 12 : 13);
         const BrnStreetData::Road* lpRoad =
             mpStreetManager->GetStreetData()->GetRoad(liChallengeIndex);
-        RoadRuleBeatenNetEvent lBeatenEvent;
         lBeatenEvent.mu64RoadID = lpRoad->GetId();
         CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
         CGS_ASSERT(lpOutputBuffer->GetGameActionQueue(), "lpOutputBuffer->GetGameActionQueue()");
@@ -626,26 +643,26 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
                 {
                     CGS_ASSERT(mpStreetManager, "mpStreetManager");
 
-                    // Push a "set road rule" notification: type 149 (tie -> notify) or the
-                    // local "set" path (a flag word). The console selects the score-type index
-                    // 12 or 13 (time vs crash) and notes whether the sender already holds it.
-                    s32 liSetFlag;
+                    // ARTIST writes the skill before choosing selector0/1. If the local car
+                    // was the previous holder, notification149 precedes the action169 post.
+                    RoadRuleBeatenNetEvent lBeatenEvent;
+                    lBeatenEvent.meSkill = static_cast<BurnoutSkillzData::EBurnoutSkillType>(
+                        leScoreType == BrnStreetData::E_SCORE_TYPE_TIME ? 12 : 13);
                     if (leLocalPlayersActiveRaceCarIndex == leHighScoreRaceCarIndex)
                     {
-                        liSetFlag = 0;
+                        lBeatenEvent.miActionValue = 0;
                         s32 liNotification = 45;
                         lpActionQueueImpl->AddEvent(
                             reinterpret_cast<const CgsModule::Event*>(&liNotification), 149, 4);
                     }
                     else
                     {
-                        liSetFlag = 1;
+                        lBeatenEvent.miActionValue = 1;
                     }
-                    (void)liSetFlag;
+                    lBeatenEvent.meNewOwner = leSenderRaceCarIndex;
 
                     const BrnStreetData::Road* lpRoad =
                         mpStreetManager->GetStreetData()->GetRoad(liChallengeIndex);
-                    RoadRuleBeatenNetEvent lBeatenEvent;
                     lBeatenEvent.mu64RoadID = lpRoad->GetId();
                     CGS_ASSERT(lpActionQueue, "lpActionQueue");
                     lpActionQueueImpl->AddEvent(
