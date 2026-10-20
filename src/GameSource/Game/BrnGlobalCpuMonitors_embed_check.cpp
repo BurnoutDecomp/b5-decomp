@@ -3,22 +3,23 @@
 #include <cstddef>
 
 // Embed check for BrnGame::BrnCpuMonitors::Construct @ 0x823A90A8.
-// 39 s32 handle fields with a reserved word at +0x8 (asm hole) -> sizeof == 160.
-// Verify the asm-pinned offsets: first handle @0, reserved @8, NetworkAIRaceCar @0xC,
-// last handle (SoundUpdate) @0x9C=156.
+// Forty contiguous s32 handle slots occupy offsets +0x00..+0x9C (size 160).
+// NetworkAIRaceCar is at +0x08 and Replay is at +0x40; there is no reserved hole.
 using BrnGame::BrnCpuMonitors;
 
-static_assert(sizeof(BrnCpuMonitors) == 160, "BrnCpuMonitors handle-block size (40 slots incl +0x8 reserved)");
+static_assert(sizeof(BrnCpuMonitors) == 160, "BrnCpuMonitors has 40 contiguous s32 handle slots");
 static_assert(offsetof(BrnCpuMonitors, miUT_TotalUpdate) == 0, "first handle at +0");
-static_assert(offsetof(BrnCpuMonitors, mReserved08) == 0x08, "asm hole word at +0x8");
-static_assert(offsetof(BrnCpuMonitors, miUT_NetworkAIRaceCar) == 0x0C, "handle[2] at +0xC");
+static_assert(offsetof(BrnCpuMonitors, miUT_NetworkAIRaceCar) == 0x08, "Network + AI + Racecar handle at +0x08");
+static_assert(offsetof(BrnCpuMonitors, miUT_Network) == 0x0C, "Network handle at +0x0C");
+static_assert(offsetof(BrnCpuMonitors, miUT_Replay) == 0x40, "Replay handle at +0x40");
 static_assert(offsetof(BrnCpuMonitors, miUT_SoundUpdate) == 0x9C, "last handle at +0x9C");
 
 void BrnGlobalCpuMonitors_embed_check()
 {
     BrnCpuMonitors mon;
     mon.Construct();
-    // post-condition: every handle is the -1 "unregistered" sentinel
+    // The +0x08 handle is intentionally not seeded by ARTIST Construct; this
+    // compile-only probe checks its layout and does not read its value.
     (void)mon.miUT_TotalUpdate;
     (void)mon.miUT_SoundUpdate;
 }
