@@ -46,10 +46,10 @@ namespace EventInterpreterModuleIO
         CgsModule::IOBuffer::Construct();
         mGuiOutEvents.Construct();
         mGuiOutResource.Construct();
-        mGuiOutView.Construct();
+        mGuiOutView.CgsModule::VariableEventQueue<65536, 16>::Construct();
         mGuiOutEvents.Clear();
         mGuiOutResource.Clear();
-        mGuiOutView.Clear();
+        mGuiOutView.CgsModule::VariableEventQueue<65536, 16>::Clear();
     }
 
     // Inlined at ARTIST 0x8285A380..0x8285A3A0.
@@ -57,7 +57,7 @@ namespace EventInterpreterModuleIO
     {
         mGuiOutEvents.Destruct();
         mGuiOutResource.Destruct();
-        mGuiOutView.Destruct();
+        mGuiOutView.CgsModule::VariableEventQueue<65536, 16>::Destruct();
         CgsModule::IOBuffer::Destruct();
     }
 

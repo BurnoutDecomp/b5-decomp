@@ -1,125 +1,268 @@
-#include "types.hpp"
-#include <new>   // placement new (construct owned sub-objects at their byte offsets)
-
-// CgsGui::ModelModule::ModelModule  -- constructor.  Reconstructed from
-// BURNOUT_X360_ARTIST.XEX @ 0x827E4F10.
-//
-// ModelModule is the GUI model subsystem module: per the DecFIGS DWARF
-// (CgsModelModule.h) it is
-//   struct CgsGui::ModelModule : public CgsModule::ModuleSingleBuffered {
-//       ModelPrepareStage      mePrepareStage;     // :189
-//       ModelReleaseStage      meReleaseStage;     // :190
-//       EventInterpreterModule mEventInterpreter;  // :193   (at this+0x230 per asm)
-//       GuiResourceModule      mGuiResource;        // :194   (at this+0x18040 per asm)
-//   };
-// Both the base (ModuleSingleBuffered) and the owned mGuiResource sub-object are
-// ModuleSingleBuffered-shaped: their construction installs a base-most vtable at +0x000,
-// builds two EA::Thread::RWMutex read/write locks at +0x010 and +0x118, then installs
-// the most-derived vtable at +0x000. The X360 ctor inlines both (the base ctor and the
-// mGuiResource member ctor), so the function performs:
-//
-//   *(this+0x000)       = gpModuleBaseVTable          ; base-most vtable
-//   RWMutex(this+0x010, 0, 1)                          ; base read/write lock A
-//   RWMutex(this+0x118, 0, 1)                          ; base read/write lock B
-//   *(this+0x000)       = gpModelModuleVTable          ; most-derived (ModelModule) vtable
-//   EventInterpreterModule::EventInterpreterModule(this+0x230)   ; mEventInterpreter
-//   *(this+0x18040)     = gpModuleBaseVTable           ; mGuiResource base-most vtable
-//   RWMutex(this+0x18050, 0, 1)                         ; mGuiResource lock A
-//   RWMutex(this+0x18158, 0, 1)                         ; mGuiResource lock B
-//   *(this+0x18040)     = gpGuiResourceModuleVTable    ; mGuiResource most-derived vtable
-//   return this
-//
-// (The pseudocode word-indices a1[24592]/a1[24596]/a1[24662] are byte offsets
-//  0x18040/0x18050/0x18158 -- matching the asm `addis r30,r31,2; addi r30,r30,-0x7FC0`
-//  i.e. this + 0x20000 - 0x7FC0 == this + 0x18040.)
-//
-// Because the surrounding multi-megabyte ModuleSingleBuffered layout is not yet modelled
-// (the committed CgsModuleSingleBuffered.h is a small declarative slice whose sizeof does
-// not reproduce the +0x230 / +0x18040 member offsets), every touched location is
-// addressed by its X360 byte offset through a char* view of `this` -- the same approach
-// the sibling subsystem-module ctor BrnDirector::DirectorModule::DirectorModule uses.
-// Only the locations the constructor actually writes are reproduced.
+#include "GameShared/GameClasses/Gui/Model/CgsModelModule.h"
+#include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 namespace CgsGui
 {
-    // The owned EventInterpreterModule sub-object: declaration-only here (its real home is
-    // CgsEventInterpreterModule.{h,cpp}; the per-TU `cl /c` gate does not link, so the body
-    // resolves at link time). Constructed in place at this+0x230.
-    struct EventInterpreterModule { EventInterpreterModule(); };
+    // ARTIST827E4F10 constructs the real base and the two embedded owners. C++
+    // performs their construction and vptr installation without console offsets.
+    ModelModule::ModelModule() = default;
 
-    // The owned GuiResourceModule sub-object (DWARF CgsModelModule.h:194). It is itself a
-    // ModuleSingleBuffered derivative; its in-place construction is inlined by the X360
-    // ctor as the vtable+RWMutex sequence at this+0x18040 (see above). Declared here only
-    // for the named offset documentation; constructed by raw store + RWMutex below because
-    // the X360 inlined it (no out-of-line ctor symbol is called).
-    struct GuiResourceModule;
-}
-
-namespace EA
-{
-    namespace Thread
+    // ARTIST82847760; the bool remains in r4 across the Interpreter call.
+    void ModelModule::Construct(bool lbHighDef)
     {
-        // Engine threading primitive (external; EAThread SDK, not project-owned). The two
-        // arguments are the (lockRecursively, intraProcess)-style construction flags the
-        // call site passes (r4 = 0, r5 = 1). Member-ctor form: r3 = this.
-        struct RWMutex
-        {
-            RWMutex(int liArg0, int liArg1);
-        };
+        CgsModule::ModuleSingleBuffered::Construct();
+        mEventInterpreter.Construct();
+        mGuiResource.Construct(lbHighDef);
+        mePrepareStage = E_PREPARE_START;
+        meReleaseStage = E_RELEASE_DONE;
+        mbIsNewModule = true;
     }
-}
 
-namespace CgsGui
-{
-    // Vtable symbols installed by the constructor (defined elsewhere -- external data).
-    //   gpModuleBaseVTable        -- the ModuleSingleBuffered base-most vtable (off_820CE500),
-    //                                installed first at +0x000 of both this and mGuiResource.
-    //   gpModelModuleVTable       -- ModelModule's most-derived vtable (off_820D11D0).
-    //   gpGuiResourceModuleVTable -- GuiResourceModule's most-derived vtable (off_820CF080).
-    extern void* const gpModuleBaseVTable;
-    extern void* const gpModelModuleVTable;
-    extern void* const gpGuiResourceModuleVTable;
-
-    // Declaration-only skeleton: the ctor addresses its fields by byte offset (the full
-    // ~0x18000+ layout is not yet modelled). The default ctor is the X360 @0x827E4F10 body.
-    struct ModelModule
+    // ARTIST828477E0. Each successful stage falls through in the same call.
+    bool ModelModule::Prepare(s32 liAptPersistentBundleBank, s32 liAptStreamedBundleBank,
+        s32 liFontBundleBank, s32 liFSMBundleBank, s32 liLanguageBundleBank,
+        s32 liTexturesBundlePoolId, s32 liGlobalTexturePoolId)
     {
-        ModelModule();
-    };
+        switch (mePrepareStage)
+        {
+        case E_PREPARE_START:
+            mePrepareStage = E_PREPARE_START;
+            [[fallthrough]];
+        case E_PREPARE_MANAGER:
+            mePrepareStage = E_PREPARE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                return false;
+            [[fallthrough]];
+        case E_PREPARE_EVENT_INTERPRETER:
+            mePrepareStage = E_PREPARE_EVENT_INTERPRETER;
+            if (!mEventInterpreter.Prepare())
+                return false;
+            [[fallthrough]];
+        case E_PREPARE_RESOURCE_MANAGER:
+            mePrepareStage = E_PREPARE_RESOURCE_MANAGER;
+            if (!mGuiResource.Prepare(liAptPersistentBundleBank, liAptStreamedBundleBank,
+                liFontBundleBank, liFSMBundleBank, liLanguageBundleBank,
+                liTexturesBundlePoolId, liGlobalTexturePoolId))
+                return false;
+            [[fallthrough]];
+        case E_PREPARE_DONE:
+            meReleaseStage = E_RELEASE_START;
+            mePrepareStage = E_PREPARE_DONE;
+            return true;
+        default:
+            CGS_ASSERT(false, "Unknown prepare stage");
+            return false;
+        }
+    }
 
-    // X360 byte offsets the ctor writes (authoritative, from the asm / pseudocode).
-    static const int KI_BASE_VTABLE          = 0x00000;
-    static const int KI_BASE_RWMUTEX_A       = 0x00010;
-    static const int KI_BASE_RWMUTEX_B       = 0x00118;
-    static const int KI_EVENT_INTERPRETER    = 0x00230;
-    static const int KI_GUIRESOURCE          = 0x18040;
-    static const int KI_GUIRESOURCE_RWMUTEX_A = 0x18050;  // KI_GUIRESOURCE + 0x10
-    static const int KI_GUIRESOURCE_RWMUTEX_B = 0x18158;  // KI_GUIRESOURCE + 0x118
-
-    ModelModule::ModelModule()
+    // ARTIST82847920 + release postincrement828471F0. Base is released first,
+    // followed by Interpreter and Resource; this order is intentional.
+    bool ModelModule::Release()
     {
-        char* lpcThis = reinterpret_cast<char*>(this);
+        const auto Advance = [this]() {
+            meReleaseStage = static_cast<ModelReleaseStage>(meReleaseStage + 1);
+            CGS_ASSERT(meReleaseStage <= E_RELEASE_DONE,
+                "leEnumIndex <= ModelModule::E_RELEASE_DONE");
+        };
+        switch (meReleaseStage)
+        {
+        case E_RELEASE_START:
+            Advance();
+            [[fallthrough]];
+        case E_RELEASE_MANAGER:
+            if (!CgsModule::ModuleSingleBuffered::Release())
+                return false;
+            Advance();
+            [[fallthrough]];
+        case E_RELEASE_EVENT_INTERPRETER:
+            if (!mEventInterpreter.Release())
+                return false;
+            Advance();
+            [[fallthrough]];
+        case E_RELEASE_RESOURCE_MANAGER:
+            if (!mGuiResource.Release())
+                return false;
+            Advance();
+            [[fallthrough]];
+        case E_RELEASE_DONE:
+            mePrepareStage = E_PREPARE_START;
+            return true;
+        default:
+            CGS_ASSERT(false, "Unknown release stage");
+            return false;
+        }
+    }
 
-        // --- base (CgsModule::ModuleSingleBuffered) sub-object, inlined ---
-        // Install the base-most vtable, build the two base read/write locks, then install
-        // the most-derived (ModelModule) vtable -- the standard ctor vtable hand-off.
-        *reinterpret_cast<void**>(lpcThis + KI_BASE_VTABLE) =
-            const_cast<void*>(gpModuleBaseVTable);
-        new (lpcThis + KI_BASE_RWMUTEX_A) EA::Thread::RWMutex(0, 1);
-        new (lpcThis + KI_BASE_RWMUTEX_B) EA::Thread::RWMutex(0, 1);
-        *reinterpret_cast<void**>(lpcThis + KI_BASE_VTABLE) =
-            const_cast<void*>(gpModelModuleVTable);
+    // Native Model table820D11D0+0x0C points at the shared822A93A0 thunk.
+    void ModelModule::Destruct()
+    {
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
 
-        // --- mEventInterpreter (EventInterpreterModule) at +0x230 ---
-        new (lpcThis + KI_EVENT_INTERPRETER) EventInterpreterModule();
+    // ARTIST8285DE98. This phase deliberately creates no Resource input/output.
+    void ModelModule::PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack, ModelIO::OutputBuffer* lpOutput)
+    {
+        EventInterpreterModuleIO::InputBuffer* lpInterpreterInput = 0;
+        EventInterpreterModuleIO::OutputBuffer* lpInterpreterOutput = 0;
+        lpInputBufferStack->CreateIOBuffer(&lpInterpreterInput, "Gui EventInterpreter");
+        lpOutputBufferStack->CreateIOBuffer(&lpInterpreterOutput, "Gui EventInterpreter");
+        mEventInterpreter.PreWorldUpdate(lpInterpreterInput, lpInterpreterOutput);
+        const EventInterpreterModuleIO::OutputBuffer* lpInterpreterRead = lpInterpreterOutput;
+        CgsModule::LockBuffersForIO(lpOutput, lpInterpreterRead);
+        BridgeOutEventInterpreter(lpOutput, lpInterpreterRead);
+        CgsModule::UnlockBuffersForIO(lpOutput, lpInterpreterRead);
+        lpOutputBufferStack->DestroyIOBuffer(&lpInterpreterOutput);
+        lpInputBufferStack->DestroyIOBuffer(&lpInterpreterInput);
+    }
 
-        // --- mGuiResource (GuiResourceModule, itself ModuleSingleBuffered) at +0x18040 ---
-        // The X360 inlined this member's ctor as the same vtable+RWMutex sequence.
-        *reinterpret_cast<void**>(lpcThis + KI_GUIRESOURCE) =
-            const_cast<void*>(gpModuleBaseVTable);
-        new (lpcThis + KI_GUIRESOURCE_RWMUTEX_A) EA::Thread::RWMutex(0, 1);
-        new (lpcThis + KI_GUIRESOURCE_RWMUTEX_B) EA::Thread::RWMutex(0, 1);
-        *reinterpret_cast<void**>(lpcThis + KI_GUIRESOURCE) =
-            const_cast<void*>(gpGuiResourceModuleVTable);
+    // ARTIST8285F360. Resource remains alive across Interpreter->Resource and
+    // both output bridges, then all four fresh buffers retire in reverse order.
+    void ModelModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        ModelIO::InputBuffer* lpInput, ModelIO::OutputBuffer* lpOutput)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateInputPM);
+        lpInput->LockForRead();
+        GuiResourceModuleIO::InputBuffer* lpResourceInput = 0;
+        GuiResourceModuleIO::OutputBuffer* lpResourceOutput = 0;
+        EventInterpreterModuleIO::InputBuffer* lpInterpreterInput = 0;
+        EventInterpreterModuleIO::OutputBuffer* lpInterpreterOutput = 0;
+        lpInputBufferStack->CreateIOBuffer(&lpResourceInput, "Gui Resource");
+        lpOutputBufferStack->CreateIOBuffer(&lpResourceOutput, "Gui Resource");
+        lpInputBufferStack->CreateIOBuffer(&lpInterpreterInput, "Gui EventInterpreter");
+        lpOutputBufferStack->CreateIOBuffer(&lpInterpreterOutput, "Gui EventInterpreter");
+
+        CgsModule::LockBuffersForIO(lpInterpreterInput);
+        BridgeInEventInterpreter(lpInterpreterInput, lpInput);
+        CgsModule::UnlockBuffersForIO(lpInterpreterInput);
+        CgsModule::LockBuffersForIO(lpResourceInput);
+        BridgeInGuiResource(lpResourceInput, lpInput);
+        CgsModule::UnlockBuffersForIO(lpResourceInput);
+        lpInput->UnlockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateInputPM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateMainPM);
+        mEventInterpreter.Update(lpInterpreterInput, lpInterpreterOutput);
+        const EventInterpreterModuleIO::OutputBuffer* lpInterpreterRead = lpInterpreterOutput;
+        CgsModule::LockBuffersForIO(lpResourceInput, lpInterpreterRead);
+        BridgeEventInterpreterToGuiResource(lpResourceInput, lpInterpreterRead);
+        CgsModule::UnlockBuffersForIO(lpResourceInput, lpInterpreterRead);
+        mGuiResource.Update(lpResourceInput, lpResourceOutput);
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateMainPM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateOutputPM);
+        const GuiResourceModuleIO::OutputBuffer* lpResourceRead = lpResourceOutput;
+        CgsModule::LockBuffersForIO(lpOutput, lpInterpreterRead, lpResourceRead);
+        BridgeOutEventInterpreter(lpOutput, lpInterpreterRead);
+        BridgeOutGuiResource(lpOutput, lpResourceRead);
+        CgsModule::UnlockBuffersForIO(lpOutput, lpInterpreterRead, lpResourceRead);
+        lpOutputBufferStack->DestroyIOBuffer(&lpInterpreterOutput);
+        lpInputBufferStack->DestroyIOBuffer(&lpInterpreterInput);
+        lpOutputBufferStack->DestroyIOBuffer(&lpResourceOutput);
+        lpInputBufferStack->DestroyIOBuffer(&lpResourceInput);
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateOutputPM);
+    }
+
+    // ARTIST82852CF8..D4C. RegisterForEvent's result is not an added
+    // Model success contract: the original public method is void.
+    void ModelModule::AddGuiEventObserver(EventObserver* lpEventObserver, s32 liEventType)
+    {
+        if (!lpEventObserver)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEventObserver != NULL",
+                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModule.cpp", 518);
+            CgsDev::Assert::EndAssert();
+        }
+        mEventInterpreter.RegisterForEvent(lpEventObserver, liEventType);
+    }
+
+    // ARTIST8285DF50 -> 8285B210. Used by both original directors.
+    void ModelModule::AddGuiEvents(const ModelIO::InputBuffer::GuiEventQueue* lpEvents,
+        ModelIO::InputBuffer* lpInput)
+    {
+        if (!lpInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Not locked for input";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModule.cpp", 373);
+            CgsDev::Assert::EndAssert();
+        }
+        lpInput->AddGuiEvents(lpEvents);
+    }
+
+    // ARTIST8285DFF8 -> 8285B2C0. A missing handle asserts and continues;
+    // there is no invented success result or null fallback.
+    void ModelModule::AddGuiEvents(const ModelIO::InputBuffer::GuiEventInputQueue* lpEvents,
+        ModelIO::InputBuffer* lpInput)
+    {
+        if (!lpInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Not locked for input";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModule.cpp", 392);
+            CgsDev::Assert::EndAssert();
+        }
+        lpInput->AddGuiEvents(lpEvents);
+    }
+
+    // ARTIST8285E0A0: only a nonempty GUI queue reaches Interpreter.
+    void ModelModule::BridgeInEventInterpreter(
+        EventInterpreterModuleIO::InputBuffer* lpInterpreterInput,
+        const ModelIO::InputBuffer* lpInput)
+    {
+        const ModelIO::InputBuffer::GuiEventInputQueue* lpInputEventQueue = lpInput->GetEventQueue();
+        CGS_ASSERT(lpInputEventQueue != 0, "lpInputEventQueue != NULL");
+        if (lpInputEventQueue->GetLength() > 0)
+            lpInterpreterInput->AddGuiEvents(*lpInputEventQueue);
+    }
+
+    // Both forwarding seats are inlined in8285F360; const input accessors
+    // preserve the read lock held by the original caller.
+    void ModelModule::BridgeInGuiResource(GuiResourceModuleIO::InputBuffer* lpResourceInput,
+        const ModelIO::InputBuffer* lpInput)
+    {
+        lpResourceInput->AddResourceRequests(lpInput->GetLoadRequests());
+    }
+
+    void ModelModule::BridgeEventInterpreterToGuiResource(
+        GuiResourceModuleIO::InputBuffer* lpResourceInput,
+        const EventInterpreterModuleIO::OutputBuffer* lpInterpreterOutput)
+    {
+        lpResourceInput->AddResourceRequests(lpInterpreterOutput->GetResourceEventQueue());
+    }
+
+    // ARTIST8285B148. GUI and View are independent channels; use their actual
+    // reference-taking append APIs, with no pointer reinterpretation.
+    void ModelModule::BridgeOutEventInterpreter(ModelIO::OutputBuffer* lpOutput,
+        const EventInterpreterModuleIO::OutputBuffer* lpInterpreterOutput)
+    {
+        CGS_ASSERT(lpOutput != 0,
+            "Invalid pointer to the output buffer in ModelModule::BridgeOutEventInterpreter");
+        lpOutput->AddGuiOutEvents(*lpInterpreterOutput->GetOutEventQueue());
+        lpOutput->AddViewOutEvents(*lpInterpreterOutput->GetViewEventQueue());
+    }
+
+    // ARTIST8285E120: resource requests are conditional; notifications always append.
+    void ModelModule::BridgeOutGuiResource(ModelIO::OutputBuffer* lpOutput,
+        const GuiResourceModuleIO::OutputBuffer* lpResourceOutput)
+    {
+        CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+        CGS_ASSERT(lpResourceOutput->GetResourceRequestQueue() != 0,
+            "lpResourceOutputBuffer->GetResourceRequestQueue() != NULL");
+        if (lpResourceOutput->GetResourceRequestQueue()->GetLength() > 0)
+            lpOutput->SetGuiResourceRequestQueue(lpResourceOutput->GetResourceRequestQueue());
+        lpOutput->AddLoadNotifications(*lpResourceOutput->GetLoadNotifications());
     }
 }

@@ -14,8 +14,8 @@
 //   290 image-info record (48B)   291 gallery-count reply (8B)   292 load-complete bitfield (16B)
 //   293 single empty/abort byte (1B) 294 image-save request (16B) 295 prepare-render record (48B)
 //   299 show-gamercard (8B)        49  rival-hit / line-up-delete (8B)
-// The DecFIGS DWARF spells these as E_ACTION_IMAGE_GALLERY_* but with PS3-DRIFTED values
-// (275..279, off by 15 from the X360 immediates); the X360 immediates above win. They are named
+// The DecFIGS DWARF spells these as E_ACTION_IMAGE_GALLERY_* at 275..279; the X360 producer and
+// bridge attest 289..293, a +14 shift. The X360 immediates above win. They are named
 // as local constants (not enum members against the wrong values) -- mirrors the BrnMugshotManager
 // precedent (KI_GAME_ACTION_START_MUGSHOT = 213 used directly).
 //
@@ -24,6 +24,7 @@
 
 #include <cstring>   // std::memcpy / std::memset (model the X360 XMemCpy / XMemSet block intrinsics)
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
+#include "GameSource/GameState/BrnGameActions.h" // typed image-gallery action record shapes 289..293
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsID.h"                     // CgsID, CgsIDCompress
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // CgsSystem::DateAndTime
@@ -77,7 +78,7 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
     // type 290 (48 bytes): one gallery image-info record (built from a MugshotInfo). Field offsets are
     // the X360 stack-store map of ProcessLockRequest (0x82385194..0x823851D8, base var_60) and the
     // populated branch of ProcessScrollImagesEvent (0x82384E04..0x82384E40, base var_100): the three
-    // image words lead at +0x00/+0x04/+0x08, then the 8-byte date (NOT 8-aligned), word2C, the slot
+    // image words lead at +0x00/+0x04/+0x08, then the 8-byte WorldRegion (NOT 8-aligned), word2C, the slot
     // index, and the 16-byte unique-player-id is the TRAILING field (memcpy'd to +0x1C), with the two
     // trailing flag bytes at +0x2C/+0x2D.
     // pack(1): the u64 date sits at the non-8-aligned +0x0C, so natural alignment would insert a
@@ -88,7 +89,7 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         s32 miImageWord0;   // +0x00 (MugshotInfo +0x18; std lwz 0(r31+0x18))
         s32 miImageWord1;   // +0x04 (MugshotInfo +0x1C)
         s32 miImageWord2;   // +0x08 (MugshotInfo +0x20)
-        u64 mu64DateTaken;  // +0x0C (MugshotInfo +0x24, 8B std at var_54; not 8-aligned)
+        u64 mu64WorldRegionRaw; // +0x0C (MugshotInfo +0x24, 8B std at var_54; not 8-aligned)
         s32 miImageWord2C;  // +0x14 (MugshotInfo +0x2C)
         s32 miSlotIndex;    // +0x18 (the on-screen slot the record is for; stw from a2[1])
         BrnProgression::MugshotInfo::UniquePlayerIDImage mUniquePlayerID; // +0x1C (16B, memcpy from MugshotInfo+0)
@@ -96,12 +97,28 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         u8  mbIsDeletePreview; // +0x2D (1 in delete preview, 0 otherwise)
         u8  maPad[0x30 - 0x2E];
     };
-    static_assert(offsetof(ImageInfoEvent, mu64DateTaken) == 0x0C, "date@0x0C");
+    static_assert(offsetof(ImageInfoEvent, mu64WorldRegionRaw) == 0x0C, "world region@0x0C");
     static_assert(offsetof(ImageInfoEvent, miImageWord2C) == 0x14, "word2C@0x14");
     static_assert(offsetof(ImageInfoEvent, miSlotIndex)   == 0x18, "slot@0x18");
     static_assert(offsetof(ImageInfoEvent, mUniquePlayerID) == 0x1C, "uniqueId@0x1C");
     static_assert(offsetof(ImageInfoEvent, mu8LockedFlag) == 0x2C, "locked@0x2C");
     static_assert(sizeof(ImageInfoEvent) == 0x30, "ImageInfoEvent==48");
+    static_assert(sizeof(ImageInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction),
+                  "producer image-info bytes match the typed action record");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mCaptureDate) ==
+                  offsetof(ImageInfoEvent, miImageWord0), "producer date words match action +0x00");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mWorldRegion) ==
+                  offsetof(ImageInfoEvent, mu64WorldRegionRaw), "producer region bytes match action +0x0C");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miNumCaptures) ==
+                  offsetof(ImageInfoEvent, miImageWord2C), "producer capture count matches action +0x14");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miSlotIndex) ==
+                  offsetof(ImageInfoEvent, miSlotIndex), "producer slot matches action +0x18");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mPlayerName) ==
+                  offsetof(ImageInfoEvent, mUniquePlayerID), "producer player id matches action +0x1C");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbLocked) ==
+                  offsetof(ImageInfoEvent, mu8LockedFlag), "producer lock byte matches action +0x2C");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbHasDeleted) ==
+                  offsetof(ImageInfoEvent, mbIsDeletePreview), "producer delete byte matches action +0x2D");
 
     // type 290 (48 bytes): an EMPTY gallery slot record (no mugshot present). Field offsets are the
     // X360 stack-store map of the empty branch of ProcessScrollImagesEvent (0x82384E7C..0x82384EA8,
@@ -130,6 +147,8 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
     static_assert(offsetof(EmptySlotInfoEvent, mu8FlagB)   == 0x2C, "flagB@0x2C");
     static_assert(offsetof(EmptySlotInfoEvent, mu8FlagC)   == 0x2D, "flagC@0x2D");
     static_assert(sizeof(EmptySlotInfoEvent) == 0x30, "EmptySlotInfoEvent==48");
+    static_assert(sizeof(EmptySlotInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction),
+                  "empty-slot record uses the same 48-byte action wire");
 
     // type 292 (16 bytes): the gallery's live-mugshot bitfield (rebuilt after a delete). Field offsets
     // are the X360 stack-store map of ProcessDeleteRequest (0x82385660/0x82385668, base var_E0): the
@@ -141,6 +160,11 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         s32 miPad04;            // +0x04 (never written by the asm)
         u64 mu64LiveBits;       // +0x08 (one bit per live mugshot index; std r21 @var_D8)
     };
+    static_assert(sizeof(LoadCompleteEvent) == sizeof(GameStateModuleIO::ImageGalleryDataAction),
+                  "producer bit-set record matches typed action 292");
+    static_assert(offsetof(LoadCompleteEvent, mu64LiveBits) ==
+                  offsetof(GameStateModuleIO::ImageGalleryDataAction, mActiveBitArray),
+                  "producer occupancy bits start at action +0x08");
 
     // type 294 (16 bytes): a save request (file id, texture size, texture buffer ptr). The asm
     // (RequestImageSave 0x82384868) writes only +0x00/+0x04/+0x08; +0x0C is trailing pad it never
@@ -255,6 +279,14 @@ void GameStateImageManagerBase::HandleImageGalleryCountRequest(const ImageGaller
     CGS_ASSERT(mpProgression != nullptr, "mpProgression");
 
     struct CountReply { s32 meImageGalleryType; s32 miCount; } lReply;
+    static_assert(sizeof(CountReply) == sizeof(GameStateModuleIO::ImageGalleryCountAction),
+                  "producer count reply matches typed action 291");
+    static_assert(offsetof(CountReply, meImageGalleryType) ==
+                  offsetof(GameStateModuleIO::ImageGalleryCountAction, meImageType),
+                  "producer gallery type matches action +0x00");
+    static_assert(offsetof(CountReply, miCount) ==
+                  offsetof(GameStateModuleIO::ImageGalleryCountAction, miUsedCount),
+                  "producer gallery count matches action +0x04");
     lReply.meImageGalleryType = lpImageGalleryCountReqEvent->meImageGalleryImageType;
     lReply.miCount            = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryCountReqEvent->meImageGalleryImageType);
 
@@ -301,6 +333,12 @@ void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBu
         CgsNetwork::NetworkTexture* mpTexture;     // +0x00 (null when the slot is not rendered)
         s32                         miSlotIndex;   // +0x04
     };
+    static_assert(sizeof(ImageToRenderEvent) ==
+                  sizeof(GameStateModuleIO::ImageGalleryRenderImageAction),
+                  "producer render record matches typed action 289");
+    static_assert(offsetof(ImageToRenderEvent, miSlotIndex) ==
+                  offsetof(GameStateModuleIO::ImageGalleryRenderImageAction, miTextureIndex),
+                  "render slot follows the native-width texture pointer");
 
     for (s32 liSlotIndex = 0; liSlotIndex < KI_NUM_PICTURES; ++liSlotIndex)
     {
@@ -622,7 +660,7 @@ void GameStateImageManagerBase::ProcessLockRequest(const ImageGalleryRequestEven
         lImageInfo.miSlotIndex     = lpImageGalleryReqEvent->miSlotIndex;
         lImageInfo.mu8LockedFlag   = lpMugshotInfo->GetLockedFlag();
         lImageInfo.mbIsDeletePreview = 0;
-        lImageInfo.mu64DateTaken   = lpMugshotInfo->GetDateTaken();
+        lImageInfo.mu64WorldRegionRaw = lpMugshotInfo->GetDateTaken();
         lImageInfo.miImageWord2C   = lpMugshotInfo->GetImageWord2C();
         lImageInfo.miImageWord0    = lpMugshotInfo->GetImageWord0();
         lImageInfo.miImageWord1    = lpMugshotInfo->GetImageWord1();
@@ -653,7 +691,7 @@ namespace
             lImageInfo.miSlotIndex      = liStartSlotIndex;
             lImageInfo.mbIsDeletePreview = lu8IsDeletePreview;
             lImageInfo.mu8LockedFlag    = lpMugshotInfo->GetLockedFlag();
-            lImageInfo.mu64DateTaken    = lpMugshotInfo->GetDateTaken();
+            lImageInfo.mu64WorldRegionRaw = lpMugshotInfo->GetDateTaken();
             lImageInfo.miImageWord2C    = lpMugshotInfo->GetImageWord2C();
             lImageInfo.miImageWord0     = lpMugshotInfo->GetImageWord0();
             lImageInfo.miImageWord1     = lpMugshotInfo->GetImageWord1();

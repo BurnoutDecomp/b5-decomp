@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
@@ -108,6 +109,36 @@ namespace CgsGui
             : GuiEvent<45>(4, 12),
               meSuspensionType(lbResume ? E_SUSPENSION_TYPE_RESUME : E_SUSPENSION_TYPE_SUSPEND) {}
     };
+
+    // ARTIST8285B8A0/B900/B960/B9C0 and ProcessOutEvents8285E1D0.
+    // These are flat queue payloads; GuiEvent<N>'s host wrapper is not copied.
+    struct GuiEventRegisterForEvents : public CgsModule::Event
+    {
+        s32 miEventType;
+        EventObserver* lpEventObserver;
+    };
+    struct GuiEventUnRegisterForEvents : public GuiEventRegisterForEvents {};
+    struct GuiEventPriorityRegisterForEvents : public CgsModule::Event
+    {
+        s32 miEventType;
+        s32 miEventTypeOverridden[KI_MAX_EVENTS_PER_OBSERVER];
+        u32 muOverrideCount;
+        EventObserver* lpEventObserver;
+    };
+    struct GuiEventPriorityUnRegisterForEvents : public GuiEventRegisterForEvents {};
+    struct GuiEventPriorityStopBlocking : public CgsModule::Event
+    {
+        EventObserver* lpEventObserver;
+    };
+
+    static_assert(offsetof(GuiEventRegisterForEvents, lpEventObserver) ==
+        (sizeof(void*) == 8 ? 8 : 4), "Registration retains the complete observer pointer");
+    static_assert(offsetof(GuiEventPriorityRegisterForEvents, muOverrideCount) == 0x964,
+        "ARTIST600-element priority list followed by count");
+    static_assert(offsetof(GuiEventPriorityRegisterForEvents, lpEventObserver) == 0x968,
+        "Priority observer follows the count");
+    static_assert(sizeof(GuiEventPriorityRegisterForEvents) ==
+        (sizeof(void*) == 8 ? 2416 : 2412), "Priority registration widens the observer pointer");
 
     struct StateInterface
     {

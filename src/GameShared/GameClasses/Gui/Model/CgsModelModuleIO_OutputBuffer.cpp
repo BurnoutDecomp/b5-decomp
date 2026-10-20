@@ -53,7 +53,7 @@ namespace ModelIO
         mLoadNotifications.Construct();
         mResourceRequestQueue.Construct();
         mGuiOutEvents.Construct();
-        mViewOutEvents.Construct();
+        mViewOutEvents.CgsModule::VariableEventQueue<65536, 16>::Construct();
         Clear();
     }
 
@@ -63,7 +63,7 @@ namespace ModelIO
         mLoadNotifications.Clear();
         mResourceRequestQueue.Clear();
         mGuiOutEvents.Clear();
-        mViewOutEvents.Clear();
+        mViewOutEvents.CgsModule::VariableEventQueue<65536, 16>::Clear();
     }
 
     // ARTIST 0x82857DF8: queue destruction precedes base destruction.
@@ -72,7 +72,7 @@ namespace ModelIO
         mLoadNotifications.Destruct();
         mResourceRequestQueue.Destruct();
         mGuiOutEvents.Destruct();
-        mViewOutEvents.Destruct();
+        mViewOutEvents.CgsModule::VariableEventQueue<65536, 16>::Destruct();
         CgsModule::IOBuffer::Destruct();
     }
 

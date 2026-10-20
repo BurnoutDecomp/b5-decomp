@@ -11,7 +11,7 @@
 //   2. DecFIGS DWARF (declaration shape): the nested-type member list / order, the two
 //      stage enums, and the class member layout
 //      (references/DecFIGS/dwarfdump/.../CgsEventInterpreterModule.h). KI_MAX_OBSERVERS==4
-//      and KI_MAX_EVENTS_PER_OBSERVER==576 / BitArray<576u> are X360 values (CgsGuiEvent.h).
+//      and KI_MAX_EVENTS_PER_OBSERVER==600 / BitArray<600u> are X360 values (CgsGuiEvent.h).
 //   3. Feb-2007 partial source (style + inlined-helper shapes):
 //      references/Feb-2007/.../Gui/Model/CgsEventInterpreterModule.h -- the nested observer
 //      structs' inline Construct/Register/UnRegister/IsRegistered bodies are restored from it.
@@ -20,8 +20,7 @@
 // prepare-stage operator++ also appear in a sibling partial header
 // (GameShared/GameClasses/Gui/CgsEventInterpreterModule.h) that backs the bit-op-only TUs.
 // This header is the canonical full-class home the DWARF cites
-// (CgsEventInterpreterModule.h:53); it is self-contained and only #included by this module's
-// own .cpp.
+// (CgsEventInterpreterModule.h:53); it is self-contained and the single class home used by the Model and legacy include path.
 
 #include "types.hpp"
 
@@ -68,15 +67,20 @@ namespace CgsGui
     // followed by the single event id the observer wants removed / blocked (Feb-2007
     // CgsGuiEventTypeDefs.h). They are stored inline in each ObjectEventObserver and pushed
     // verbatim (size 4 payload) by ProcessInEvents.
-    struct GuiEventPriorityRemoval : public GuiEvent<E_GUI_PRIORITY_REMOVAL>
+    struct GuiEventPriorityRemoval : public CgsModule::Event
     {
         s32 miRemovedEventId;
     };
 
-    struct GuiEventPriorityBlocking : public GuiEvent<E_GUI_PRIORITY_BLOCKING>
+    struct GuiEventPriorityBlocking : public CgsModule::Event
     {
         s32 miBlockingEventId;
     };
+
+    static_assert(sizeof(GuiEventPriorityRemoval) == 4, "ARTIST priority-removal payload");
+    static_assert(sizeof(GuiEventPriorityBlocking) == 4, "ARTIST priority-blocking payload");
+    static_assert(sizeof(CgsContainers::BitArray<KI_MAX_EVENTS_PER_OBSERVER>) == 80,
+        "ARTIST Interpreter masks contain ten u64 words");
 
     class EventInterpreterModule : public CgsModule::ModuleSingleBuffered
     {
@@ -89,7 +93,7 @@ namespace CgsGui
         // VariableEventQueue<18432,16>: mInternalEventQueue is the spill queue for
         // E_GUI_OUT_INTERNAL_EVENT records, and each mInProcessQueues[i] (one per observer)
         // is the per-observer in-flight queue ProcessInEvents fills then hands the observer.
-        typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
+        typedef ::InputBuffer::GuiEventQueue GuiEventQueue;
 
         // CgsEventInterpreterModule.h:56 (DWARF). The stages Prepare() steps through.
         enum EventInterpreterPrepareStage
@@ -149,6 +153,8 @@ namespace CgsGui
                 mOverriddenEventListBitArray.UnSetAll();
                 for (u32 luIndex = 0; luIndex < luOverrideCount; ++luIndex)
                 {
+                    CGS_ASSERT(static_cast<u32>(lpaEventTypeOverrides[luIndex]) <
+                        static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                     mOverriddenEventListBitArray.SetBit(
                         static_cast<u32>(lpaEventTypeOverrides[luIndex]));
                 }
@@ -177,6 +183,8 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
+                CGS_ASSERT(static_cast<u32>(liEventType) <
+                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 mEventListBitArray.SetBit(static_cast<u32>(liEventType));
             }
 
@@ -185,6 +193,8 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
+                CGS_ASSERT(static_cast<u32>(liEventType) <
+                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 mEventListBitArray.UnSetBit(static_cast<u32>(liEventType));
             }
 
@@ -193,6 +203,8 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
+                CGS_ASSERT(static_cast<u32>(liEventType) <
+                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 return mEventListBitArray.IsBitSet(static_cast<u32>(liEventType));
             }
         };
@@ -226,6 +238,8 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
+                CGS_ASSERT(static_cast<u32>(liEventType) <
+                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 return mEventListBitArray.IsBitSet(static_cast<u32>(liEventType));
             }
 

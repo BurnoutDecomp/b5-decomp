@@ -53,5 +53,12 @@ namespace ModelIO
         CGS_ASSERT(lpResourceRequestQueue != nullptr, "lpResourceRequestQueue != NULL");
         mResourceRequestQueue.Append(*lpResourceRequestQueue);
     }
+    // ARTIST8284E0A0, inlined/named by Model.Update's resource bridge.
+    const InputBuffer::GuiEventQueueSmall* InputBuffer::GetLoadRequests() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mLoadRequests;
+    }
+
 }
 }
