@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModule.h"
 
-namespace CgsModule { class IOBufferStack; }
+namespace CgsModule { struct IOBufferStack; }
 
 namespace CgsGui
 {

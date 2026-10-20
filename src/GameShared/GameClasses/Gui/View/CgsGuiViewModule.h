@@ -38,7 +38,7 @@ namespace CgsGraphics { class Im3dRenderBuffer; }
 // their real homes in would force a large transitive header cascade into this skeleton
 // header). Their concrete homes live with the IO/memory/RenderWare TUs that own them.
 struct RGBA;                          // GUI clear/tint colour (passed by const ptr to Construct)
-namespace CgsModule { struct Event; class IOBufferStack; } // base module event record (ProcessIncomingLoadNotification arg)
+namespace CgsModule { struct Event; struct IOBufferStack; } // base module event record (ProcessIncomingLoadNotification arg)
 namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
 namespace rw { class IResourceAllocator; }
 namespace CgsGui
