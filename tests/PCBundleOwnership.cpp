@@ -13,8 +13,11 @@
 #include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
+static bool allowExpectedCallbackAssert = false;
+static int callbackAssertions = 0;
 #undef CGS_ASSERT
-#define CGS_ASSERT(c, m) do { if (!(c)) { std::printf("ASSERT %s\n", m); std::abort(); } } while (0)
+#define CGS_ASSERT(c, m) do { if (!(c)) { if (allowExpectedCallbackAssert) ++callbackAssertions; \
+    else { std::printf("ASSERT %s\n", m); std::abort(); } } } while (0)
 namespace CgsDev {
 struct Message { static const int gxMessageFilterFlags = 0; };
 struct TestLog { template<class T> TestLog& operator<<(const T&) { return *this; } };
@@ -22,6 +25,7 @@ namespace Log { static TestLog sink; static TestLog* gpDebugPrint = &sink; }
 }
 
 using namespace CgsResource;
+#include "pc_apt_callback_fixture.h"
 static std::map<std::string, std::vector<char>> files;
 static int reads;
 static std::vector<char> fixups;
@@ -93,6 +97,7 @@ Pool::ECreateResult Pool::CreateEntry(const NewResource* resource, Entry** entry
 bool Pool::RemoveReference(u32 slot) {
     CGS_ASSERT(slot < muMaxResources && mpx8ResourceStatuses[slot], "release live slot");
     if (--mpiResourceRefCounts[slot] > 0) return false;
+    AptBoundaryFixture::Retiring(mpResourceEntries[slot].mResource.m_baseResources[0]);
     for (void*& ptr : mpResourceEntries[slot].mResource.m_baseResources) { std::free(ptr); ptr = nullptr; }
     mpx8ResourceStatuses[slot] = 0;
     return true;
@@ -133,6 +138,29 @@ static void File(const char* name, std::initializer_list<u64> ids, u32 type = 12
         ++i;
     }
 }
+#ifndef PC_APT_SKIP_CALLBACKS
+static void CallbackFile(const char* name) {
+    const u64 ids[2] = {781, 782};
+    const u32 count = 2;
+    const u32 payload = static_cast<u32>(sizeof(BundleV2) + count * sizeof(BundleV2::ResourceEntry));
+    auto& bytes = files[Key(name)]; bytes.assign(payload + count * (256 + 16 + 16), 0);
+    auto* header = reinterpret_cast<BundleV2*>(bytes.data());
+    header->muVersion = BundleV2::KU_VERSION; header->muPlatform = BundleV2::KU_PLATFORM;
+    header->muResourceEntriesCount = count; header->muResourceEntriesOffset = sizeof(BundleV2);
+    header->mauResourceDataOffset[0] = payload;
+    header->mauResourceDataOffset[1] = payload + count * 256;
+    header->mauResourceDataOffset[2] = payload + count * (256 + 16);
+    auto* entries = reinterpret_cast<BundleV2::ResourceEntry*>(bytes.data() + sizeof(BundleV2));
+    for (u32 i = 0; i < count; ++i) {
+        entries[i].mResourceId.SetHash(ids[i]); entries[i].muResourceTypeId = 30;
+        for (u32 t = 0; t < 3; ++t) {
+            const u32 span = t ? 16 : 256;
+            entries[i].mauUncompressedSizeAndAlignment[t] = 0x40000000u | span;
+            entries[i].mauDiskOffset[t] = i * span;
+        }
+    }
+}
+#endif
 static int checks, failures;
 static void Check(bool ok, const char* name) { ++checks; if (!ok) { ++failures; std::printf("FAIL %s\n", name); } }
 
@@ -376,6 +404,99 @@ int main() {
               && CgsGui::s_uAttributedAptDataCount == 0,
               "final GUI registry retirement drops the released lead and attributed bytes");
     }
+#ifndef PC_APT_SKIP_CALLBACKS
+    {
+        using namespace AptBoundaryFixture;
+        using namespace CgsResource::PCAptOwnership;
+        FixturePool pool;
+        CallbackFile("callback.bundle");
+        Check(loader.LoadBundle("callback.bundle", &pool, Resolve) == 2,
+              "callback fixture uses a production-loaded Apt resource bundle");
+        mpPool = &pool;
+        mpHeader = static_cast<CgsGui::AptDataHeader*>(pool.entries[pool.Slot(781)].mResource.m_baseResources[0]);
+        *mpHeader = {};
+        mpHeader->mpAptData = 64; mpHeader->mpConstData = 128; mpHeader->muSizeOfHeader = 256;
+        mpHeader->meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
+        CgsGui::gAptResourceSpanBase = 0x1234; CgsGui::gAptResourceSpanSize = 9;
+        gpAptFreeAnimationHook = &AptFixtureFreeHook;
+        AptFile* file = new AptFile;
+        AptFilePtr incoming{file};
+        const int completeBefore = mnCompletions;
+        CgsGui::AptCallbackFile::LoadAnimation("callback", &incoming);
+        Check(incoming.pData == nullptr && file->mpData == mpRoot && file->mnState == 3
+              && mpHeader->meCurrentState == CgsGui::AptDataHeader::E_APTDATASTATE_ACTIVE,
+              "production LoadAnimation publishes ACTIVE after completion and consumes its handle");
+        Check(mbPinnedAtCompletion && mbCompletionArguments && mnCompletions == completeBefore + 1,
+              "production callback pins both real members before calling the completion boundary");
+        Check(muSpanBaseAtCompletion == reinterpret_cast<uintptr_t>(mpHeader) && muSpanSizeAtCompletion == 256
+              && CgsGui::gAptResourceSpanBase == 0x1234 && CgsGui::gAptResourceSpanSize == 9,
+              "production LoadAnimation supplies native data/const/span fields and restores the caller span");
+        Check(file->mnRefCount == 1 && pool.Refs(781) == 2 && pool.Refs(782) == 2,
+              "production callback balances its temporary handles and leaves one file-owned bundle pin");
+        AptSharedPtrIncRef(file); incoming.pData = file;
+        CgsGui::AptCallbackFile::LoadAnimation("callback", &incoming);
+        Check(incoming.pData == nullptr && file->mnRefCount == 1 && pool.Refs(781) == 2
+              && mnCompletions == completeBefore + 1,
+              "production duplicate callback neither reparses the movie nor acquires another pin");
+        CgsGui::AptDataHeader other{};
+        other.meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
+        CgsGui::AptDataHeader* original = mpHeader;
+        mpHeader = &other;
+        const int mismatchAssertions = callbackAssertions;
+        AptSharedPtrIncRef(file); incoming.pData = file;
+        allowExpectedCallbackAssert = true;
+        CgsGui::AptCallbackFile::LoadAnimation("callback", &incoming);
+        allowExpectedCallbackAssert = false;
+        mpHeader = original;
+        Check(callbackAssertions == mismatchAssertions + 1 && incoming.pData == nullptr
+              && file->mnRefCount == 1 && file->mnState == 3 && file->mpData == mpRoot
+              && pool.Refs(781) == 2 && mnCompletions == completeBefore + 1,
+              "production mismatched duplicate rejects the new header without invalidating the live file");
+        Check(loader.UnloadBundle("callback.bundle", &pool) == 0 && pool.Refs(781) == 1,
+              "native callback regression logically unloads while its imported data stays alive");
+        const void* deletedKey = file;
+        const int deletesBefore = mnDeletes;
+        mbWatch = true; mCalls.clear();
+        AptSharedPtr<AptFile>::Dispose(file); file = nullptr;
+        mbWatch = false;
+        Check(std::string(mCalls.begin(), mCalls.end()) == "IUFR",
+              "production AptFile destructor orders loader invalidation, Unresolve, FreeAnimation, resource retirement");
+        Check(mbActiveAtUnresolve && mbLoadedAtFree && mbLoadedAtRetirement,
+              "production FreeAnimation marks the still-owned header LOADED before its bytes retire");
+        Check(mnResolveContext == reinterpret_cast<intptr_t>(reinterpret_cast<char*>(original) + 64)
+              && mbHeaderFieldsPreserved,
+              "native callback state writes preserve data, const and size fields through actual teardown");
+        Check(mnDeletes == deletesBefore + 1 && pool.Used() == 0 && !Release(deletedKey),
+              "production native destructor releases its one lease and every bundle member exactly once");
+    }
+    {
+        using namespace AptBoundaryFixture;
+        CgsGui::AptDataHeader missing{};
+        missing.mpAptData = 64; missing.mpConstData = 128; missing.muSizeOfHeader = 256;
+        missing.meCurrentState = CgsGui::AptDataHeader::E_APTDATASTATE_LOADED;
+        mpHeader = &missing; mpPool = nullptr;
+        AptFile* file = new AptFile;
+        AptFilePtr incoming{file};
+        const int completionsBefore = mnCompletions;
+        const int assertionsBefore = callbackAssertions;
+        allowExpectedCallbackAssert = true;
+        CgsGui::AptCallbackFile::LoadAnimation("missing", &incoming);
+        allowExpectedCallbackAssert = false;
+        Check(incoming.pData == nullptr && file->mpData == nullptr && file->mnState == 0,
+              "production missing-owner callback cannot publish a ready movie root");
+        Check(mnCompletions == completionsBefore && callbackAssertions == assertionsBefore + 1
+              && missing.meCurrentState == CgsGui::AptDataHeader::E_APTDATASTATE_LOADED,
+              "production failed callback neither executes completion nor invents an ACTIVE header");
+        Check(file->mnRefCount == 1 && CgsGui::gAptResourceSpanBase == 0x1234
+              && CgsGui::gAptResourceSpanSize == 9,
+              "production failed callback consumes its incoming reference and restores the span");
+        mCalls.clear();
+        AptSharedPtr<AptFile>::Dispose(file); file = nullptr;
+        Check(std::string(mCalls.begin(), mCalls.end()) == "I",
+              "production failed-file destructor does not Unresolve or free an unowned data block");
+        mpHeader = nullptr;
+    }
+#endif
     std::printf("PCBundleOwnership: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
