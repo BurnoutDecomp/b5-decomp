@@ -13,6 +13,8 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // BitArray<64u> (RoadRulesNewRulersAction)
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // FastBitArray<30> (ImageGalleryDataAction)
+#include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // DateAndTime (ImageGalleryImageInfoAction)
 #include "GameSource/GameState/BrnCgsPlayerName.h"          // CgsNetwork::PlayerName (the road-rule score records)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
 #include "SharedClasses/Trigger/BrnRegion.h"                  // BrnTrigger::BoxRegion (BroadcastModeFinishLinesAction::mBoxRegion)
@@ -1066,11 +1068,21 @@ enum EGameActionType
     E_ACTION_START_GAME_THROUGH_PLAYER_JOIN              = 235,
     E_ACTION_RESTART_TRAFFIC                             = 236,
     E_ACTION_REQUEST_GAMERCARD                           = 239,
+    // Image-gallery records: DecFIGS names them at 275..279; ARTIST producers and this
+    // translator attest the X360 action IDs 289..293 (the same 14-seat shift throughout).
+    E_ACTION_IMAGE_GALLERY_RENDER_IMAGE                  = 289,
+    E_ACTION_IMAGE_GALLERY_IMAGE_INFO                    = 290,
+    E_ACTION_IMAGE_GALLERY_COUNT_ACTION                  = 291,
+    E_ACTION_IMAGE_GALLERY_DATA_ACTION                   = 292,
+    E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE                 = 293,
     //   296 band +14: the bridge copies {texture pointer, player name} into event 48.
     E_ACTION_DXT_DECODE_IMAGE                            = 296,
+    // X360-only debug flow: PreWorldUpdate posts maCompletedChallenges as one FastBitArray<15>
+    // word; TranslateGameActionsToGuiEvents forwards that bitset to GUI event 596.
+    E_ACTION_DEVELOPER_CHALLENGES_COMPLETED                = 298,
     //   FLAG -- names unrecovered. Ids 18..21 are the four the console inserted ahead of the
     //   reference's 18 (CHECK_FOR_LOADING_SCREEN sits at 22), and 299 lies past the reference's
-    //   COUNT; no reference enumerator exists for any of them. Each is named after its producer
+    //   COUNT; no reference enumerator exists for those values. Each is named after its producer
     //   and the local name the bridge's assert gives the record (18 is E_ACTION_EVENT_SCORE_TO_UPLOAD
     //   above).
     //   19  GameStateModule::OnProfileLoaded: a pointer to the profile's pending uploads (size 4).
@@ -3925,6 +3937,58 @@ struct RequestGamerCardAction : public GameAction<E_ACTION_REQUEST_GAMERCARD>
 {
     BrnNetwork::PlayerName mPlayerName;                        // +0x00 (16)
 };
+
+// Image-gallery actions 289..293. DecFIGS BrnGameActions.h:5295..5350 names the records;
+// the GameStateImageManagerBase producers and ARTIST bridge pin the X360 values and record
+// offsets. The producer TU still builds its byte-for-byte stack records; these shared types
+// give the bridge the same fields and widths without changing those producer stores.
+struct ImageGalleryRenderImageAction : public GameAction<E_ACTION_IMAGE_GALLERY_RENDER_IMAGE>
+{
+    const CgsNetwork::NetworkTexture* mpTexture;                // +0x00 (4B on X360)
+    s32                               miTextureIndex;           // +0x04 (X360; native pointer width on PC)
+};
+static_assert(offsetof(ImageGalleryRenderImageAction, miTextureIndex) == sizeof(void*),
+              "render-image slot follows the native-width texture pointer");
+static_assert(sizeof(ImageGalleryRenderImageAction) == (sizeof(void*) == 8 ? 16 : 8),
+              "render-image action is pointer plus slot index");
+
+struct ImageGalleryImageInfoAction : public GameAction<E_ACTION_IMAGE_GALLERY_IMAGE_INFO>
+{
+    CgsSystem::DateAndTime mCaptureDate;                        // +0x00 (12)
+    BrnWorld::WorldRegion  mWorldRegion;                        // +0x0C (8)
+    s32                    miNumCaptures;                       // +0x14
+    s32                    miSlotIndex;                         // +0x18
+    CgsNetwork::PlayerName mPlayerName;                         // +0x1C (16)
+    bool                   mbLocked;                            // +0x2C
+    bool                   mbHasDeleted;                        // +0x2D
+};
+static_assert(offsetof(ImageGalleryImageInfoAction, mCaptureDate) == 0x00, "capture date@0x00");
+static_assert(offsetof(ImageGalleryImageInfoAction, mWorldRegion) == 0x0C, "world region@0x0C");
+static_assert(offsetof(ImageGalleryImageInfoAction, miNumCaptures) == 0x14, "capture count@0x14");
+static_assert(offsetof(ImageGalleryImageInfoAction, miSlotIndex) == 0x18, "slot@0x18");
+static_assert(offsetof(ImageGalleryImageInfoAction, mPlayerName) == 0x1C, "player name@0x1C");
+static_assert(offsetof(ImageGalleryImageInfoAction, mbLocked) == 0x2C, "locked@0x2C");
+static_assert(offsetof(ImageGalleryImageInfoAction, mbHasDeleted) == 0x2D, "deleted@0x2D");
+static_assert(sizeof(ImageGalleryImageInfoAction) == 0x30, "image-info action is 48 bytes");
+
+struct ImageGalleryCountAction : public GameAction<E_ACTION_IMAGE_GALLERY_COUNT_ACTION>
+{
+    EImageGalleryType meImageType;                              // +0x00
+    s32               miUsedCount;                              // +0x04
+};
+static_assert(sizeof(ImageGalleryCountAction) == 8, "gallery-count action is 8 bytes");
+
+struct ImageGalleryDataAction : public GameAction<E_ACTION_IMAGE_GALLERY_DATA_ACTION>
+{
+    EImageGalleryType      meImageType;                         // +0x00
+    CgsContainers::FastBitArray<30> mActiveBitArray;             // +0x08 (one u64 field)
+};
+static_assert(offsetof(ImageGalleryDataAction, mActiveBitArray) == 8,
+              "gallery-data bit array follows the four-byte enum and four-byte alignment gap");
+static_assert(sizeof(ImageGalleryDataAction) == 16, "gallery-data action is 16 bytes");
+
+struct ImageGalleryLoadCompleteAction : public GameAction<E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE> {};
+static_assert(sizeof(ImageGalleryLoadCompleteAction) == 1, "gallery-load-complete action is one byte");
 
 // 296 -- decode a received DXT image. Console 20 bytes; the texture pointer is 8 bytes on the
 // host, so the name lands at +0x08 here.

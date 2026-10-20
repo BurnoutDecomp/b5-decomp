@@ -59,13 +59,6 @@ namespace CgsGui
     //   +0x3C SetLanguageManager(CgsLanguage::LanguageManager*)
     //   +0x40 SetReplaySerialiser(void*)
 
-    // The two per-frame CPU monitors ViewModule::Update brackets its phases with
-    // (X360 dword_82F3312C the view-event dispatch / dword_82F33128 the Apt update).
-    // Registered by the un-homed perf-monitor setup TU; -1 handles no-op
-    // Start/StopMonitor until it lands.
-    static s32 giViewEventsMonitor = -1;   // dword_82F3312C
-    static s32 giViewAptMonitor    = -1;   // dword_82F33128
-
     namespace
     {
         // The view-state payload BODIES (the AddViewState writers queue the event body
@@ -272,9 +265,9 @@ namespace CgsGui
         lpInput->LockForRead();
         lpOutput->LockForWrite();
 
-        CgsDev::PerfMonCpu::StartMonitor(giViewEventsMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(miViewProcessIncomingEventsPM);
         ProcessIncomingViewEvents(&lpInput->GetEvents(), lpOutput);
-        CgsDev::PerfMonCpu::StopMonitor(giViewEventsMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(miViewProcessIncomingEventsPM);
 
         lpInput->UnlockForRead();
 
@@ -284,10 +277,10 @@ namespace CgsGui
         mfUpdateTimeDelta = mfCurrentTime - lfPrevUpdateTime;
         const s32 liDeltaMs = static_cast<s32>(mfUpdateTimeDelta * 1000.0f);
 
-        CgsDev::PerfMonCpu::StartMonitor(giViewAptMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(miAptAuxUpdatePM);
         if (mbUpdateFlash)
             mAptAux.Update(liDeltaMs);
-        CgsDev::PerfMonCpu::StopMonitor(giViewAptMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(miAptAuxUpdatePM);
 
         lpOutput->UnlockForWrite();
     }

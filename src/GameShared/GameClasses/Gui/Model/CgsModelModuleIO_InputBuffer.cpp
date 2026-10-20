@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
 
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
@@ -51,6 +52,40 @@ namespace ModelIO
     {
         static_assert(offsetof(InputBuffer, mGuiEvents)    == 0x0004, "mGuiEvents @ +0x0004");
         static_assert(offsetof(InputBuffer, mLoadRequests) == 0x8014, "mLoadRequests @ +0x8014 (32788)");
+    }
+
+    // ARTIST8285B210..B2BC. Both typed source overloads use the same
+    // destination, with their original distinct Append capacities.
+    void InputBuffer::AddGuiEvents(const GuiEventQueue* lpEvents)
+    {
+        if (!IsBufferLockedForWriting())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Not locked for writing\n";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModuleIO.cpp", 88);
+            CgsDev::Assert::EndAssert();
+        }
+        mGuiEvents.Append<18432, 16>(*lpEvents);
+    }
+
+    // ARTIST8285B2C0, CgsModelModuleIO.cpp:105. Preserve the formatted
+    // assertion and continuation, then append the real source queue.
+    void InputBuffer::AddGuiEvents(const GuiEventInputQueue* lpEvents)
+    {
+        if (!IsBufferLockedForWriting())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Not locked for writing\n";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\..\..\GameShared\GameClasses\Gui/Model/CgsModelModuleIO.cpp", 105);
+            CgsDev::Assert::EndAssert();
+        }
+        mGuiEvents.Append<32768, 16>(*lpEvents);
     }
 
     // X360 0x8250C658. Event-type id 39 is the X360 AddEvent literal; payload size widens on PC.

@@ -1,64 +1,87 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"
-
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
-#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // CgsGuiModuleIO::{Input,Output}Buffer
-#include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"     // ModelIO::OutputBuffer
-#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"      // ViewModule / ViewIO::InputBuffer
-
-// CgsGui::GuiModule -- the per-frame module bridges. Reconstructed from
-// BURNOUT_X360_ARTIST.XEX (DWARF primary file
-// gameshared/gameclasses/gui/CgsGuiModuleBridges.cpp, cited by the X360 assert paths).
-//
-// Bodied here (2 ledger functions):
-//   GuiModule::BridgeFromInputToView   @0x8285B088  (called by GuiModule::Update)
-//   GuiModule::BridgeFromModelToOutput @0x8285DD40  (called by GuiModule::Update and
-//                                                    GuiModule::PreWorldUpdate)
-//
-// BridgeFromInputToView (asm walk): assert the module input buffer (cpp:42; the
-// StrStream message build folds to CGS_ASSERT; no early-out), then hand its inbound
-// GUI-event queue to the view module at this+0x1B400:
-//   ViewModule::AddViewState<32768,16>(lpInput->GetGuiEvents(), lpViewInput).
-//
-// BridgeFromModelToOutput (asm walk): assert lpOutput (cpp:94, no early-out); assert
-// the model output's resource-request queue handle (cpp:96 -- the truncated X360
-// symbol "GetGui" is GetGuiResourceRequestQueue, proven by the queue types: its result
-// feeds VariableEventQueue<2048,16>::GetLength and the <2048>-appending
-// SetGuiResourceRequestQueue). When that queue is non-empty, forward it into the
-// module output buffer; then always forward the model's GUI out-events
-// (CgsGuiModuleIO::OutputBuffer::AddGuiOutEvents, the 18432-source overload
-// @0x8285AE20) and accumulate the model's load notifications into this module's own
-// queue at this+0x1B41C (VariableEventQueue<18432,16>::Append<4096,16>).
+#include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsGui
 {
-    // @ 0x8285B088
+    // ARTIST8285B088; original diagnostic and assert-and-continue behavior.
     void GuiModule::BridgeFromInputToView(ViewIO::InputBuffer* lpViewInput,
-                                          const CgsGuiModuleIO::InputBuffer* lpInput)
+        const CgsGuiModuleIO::InputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != NULL, "Invalid input queue in GuiModule::BridgeFromInputToView");
-
-        mpViewModule->AddViewState<32768, 16>(lpInput->GetGuiEvents(), lpViewInput);
+        if (!lpInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid input queue in GuiModule::BridgeFromInputToView";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 42);
+            CgsDev::Assert::EndAssert();
+        }
+        mpGuiView->AddViewState<32768, 16>(lpInput->GetGuiEvents(), lpViewInput);
     }
 
-    // @ 0x8285DD40
-    void GuiModule::BridgeFromModelToOutput(CgsGuiModuleIO::OutputBuffer* lpOutput,
-                                            const ModelIO::OutputBuffer* lpModelOutput)
+    // Inlined in ARTIST8286030C..350; DecFIGS B9F868 gives the helper name.
+    void GuiModule::BridgeFromInputToModel(ModelIO::InputBuffer* lpModelInput,
+        const CgsGuiModuleIO::InputBuffer* lpInput)
     {
-        CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
-        CGS_ASSERT(lpModelOutput->GetGuiResourceRequestQueue() != NULL,
-                   "lpModelOutput->GetGuiResourceRequestQueue()");
-
-        // Forward the model's resource requests only when there are any this frame.
-        if (lpModelOutput->GetGuiResourceRequestQueue()->GetLength() > 0)
+        const auto* lpEventQueue = lpInput->GetGuiEvents();
+        if (!lpEventQueue)
         {
-            lpOutput->SetGuiResourceRequestQueue(
-                reinterpret_cast<const CgsGuiModuleIO::OutputBuffer::GuiResourceRequestQueueStorage*>(
-                    lpModelOutput->GetGuiResourceRequestQueue()));
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEventQueue != NULL",
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 60);
+            CgsDev::Assert::EndAssert();
         }
+        mGuiModel.AddGuiEvents(lpEventQueue, lpModelInput);
+    }
 
-        // Always forward the model's GUI out-events and accumulate its load
-        // notifications into this module's own queue.
+    // Inlined in ARTIST82860474..490; DecFIGS BA2628 names the helper.
+    void GuiModule::BridgeFromModelToView(ViewIO::InputBuffer* lpViewInput,
+        const ModelIO::OutputBuffer* lpModelOutput)
+    {
+        mpGuiView->AddViewState<65536, 16>(lpModelOutput->GetViewOutEvents(), lpViewInput);
+    }
+
+    // ARTIST8285DD40. Both resource queues now use their canonical owner type.
+    void GuiModule::BridgeFromModelToOutput(CgsGuiModuleIO::OutputBuffer* lpOutput,
+        const ModelIO::OutputBuffer* lpModelOutput)
+    {
+        if (!lpOutput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutput != NULL",
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 94);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpModelOutput->GetGuiResourceRequestQueue())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpModelOutput->GetGuiResourceRequestQueue()",
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\gui\CgsGuiModuleBridges.cpp", 96);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpModelOutput->GetGuiResourceRequestQueue()->GetLength() > 0)
+            lpOutput->SetGuiResourceRequestQueue(lpModelOutput->GetGuiResourceRequestQueue());
         lpOutput->AddGuiOutEvents(lpModelOutput->GetGuiOutEvents());
-        mLoadNotifications.Append(*lpModelOutput->GetLoadNotifications());
+        mStoredGuiEvents.Append<4096, 16>(*lpModelOutput->GetLoadNotifications());
+    }
+
+    // ARTIST8285DE10..E90, recovered from the bounded image, not a one-feed
+    // approximation of the larger PS3 body. The three destinations/order match.
+    void GuiModule::BridgeFromViewToOutput(CgsGuiModuleIO::OutputBuffer* lpOutput,
+        const ViewIO::OutputBuffer* lpViewOutput)
+    {
+        mStoredGuiEvents.Append<18432, 16>(*lpViewOutput->GetGuiEventQueue());
+        lpOutput->AddGuiOutEvents(mpGuiView->GetCustomRendererManager()->GetOutputEventQueue());
+        lpOutput->AddGuiOutEvents(&mpGuiView->GetOutputEventQueue());
+    }
+
+    // Inlined in ARTIST82860564..578; DecFIGS BA4208 names this bridge.
+    void GuiModule::BridgeFromOutputToGui(const CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        mStoredGuiEvents.Append<18432, 16>(*lpOutput->GetOutEventQueue());
     }
 }

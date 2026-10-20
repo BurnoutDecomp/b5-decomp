@@ -421,7 +421,7 @@ void EventInterpreterModule::ProcessInEvents(GuiEventInputQueue* lpCurrentEvents
             liEventType = lpCurrentEvents->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
 
-        lrSlot.mpObserver->ProcessEvents(&lrWorkingQueue);
+        lrSlot.mpObserver->SetInEventQueue(&lrWorkingQueue);
     }
 }
 
@@ -478,37 +478,35 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
         case E_GUI_OUT_REGISTER_FOR_EVENT:
         {
             // serialised record: { s32 eventType@+0; EventObserver* observer@+4 }
-            const s32* lpPayload = reinterpret_cast<const s32*>(lpEvent);
-            RegisterForEvent(reinterpret_cast<EventObserver*>(lpPayload[1]), lpPayload[0]);
+            const auto* lpRecord = reinterpret_cast<const GuiEventRegisterForEvents*>(lpEvent);
+            RegisterForEvent(lpRecord->lpEventObserver, lpRecord->miEventType);
             break;
         }
         case E_GUI_OUT_UNREGISTER_FOR_EVENT:
         {
-            const s32* lpPayload = reinterpret_cast<const s32*>(lpEvent);
-            UnRegisterForEvent(reinterpret_cast<EventObserver*>(lpPayload[1]), lpPayload[0]);
+            const auto* lpRecord = reinterpret_cast<const GuiEventUnRegisterForEvents*>(lpEvent);
+            UnRegisterForEvent(lpRecord->lpEventObserver, lpRecord->miEventType);
             break;
         }
         case E_GUI_OUT_PRIORITY_REGISTER_FOR_EVENT:
         {
             // payload: { s32 eventType@+0; EventObserver* observer@+0x964;
             //            const s32 overrides[]@+4; u32 overrideCount@+0x968 }
-            const s32* lpPayload = reinterpret_cast<const s32*>(lpEvent);
-            RegisterPriorityEvent(reinterpret_cast<EventObserver*>(lpPayload[0x968 / 4]),
-                                  lpPayload[0],
-                                  &lpPayload[1],
-                                  static_cast<u32>(lpPayload[0x964 / 4]));
+            const auto* lpRecord = reinterpret_cast<const GuiEventPriorityRegisterForEvents*>(lpEvent);
+            RegisterPriorityEvent(lpRecord->lpEventObserver, lpRecord->miEventType,
+                lpRecord->miEventTypeOverridden, lpRecord->muOverrideCount);
             break;
         }
         case E_GUI_OUT_PRIORITY_UNREGISTER_FOR_EVENT:
         {
-            const s32* lpPayload = reinterpret_cast<const s32*>(lpEvent);
-            UnregisterPriorityEvent(reinterpret_cast<EventObserver*>(lpPayload[1]), lpPayload[0]);
+            const auto* lpRecord = reinterpret_cast<const GuiEventPriorityUnRegisterForEvents*>(lpEvent);
+            UnregisterPriorityEvent(lpRecord->lpEventObserver, lpRecord->miEventType);
             break;
         }
         case E_GUI_OUT_PRIORITY_STOP_BLOCKING:
         {
-            const s32* lpPayload = reinterpret_cast<const s32*>(lpEvent);
-            StopPriorityEventBlocking(reinterpret_cast<EventObserver*>(lpPayload[0]));
+            const auto* lpRecord = reinterpret_cast<const GuiEventPriorityStopBlocking*>(lpEvent);
+            StopPriorityEventBlocking(lpRecord->lpEventObserver);
             break;
         }
         case E_GUI_OUT_REQUEST_RESOURCE:
@@ -589,6 +587,8 @@ void EventInterpreterModule::PriorityObjectEventObserver::RegisterForEvent(
 {
     CGS_ASSERT((liEventType > E_GUI_INVALID) && (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                "Cannot register for invalid events");
+    CGS_ASSERT(static_cast<u32>(liEventType) < static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER),
+        "luIndex < NUMBITS");
     mEventListBitArray.SetBit(static_cast<u32>(liEventType));
 
     const sMapEntry lMapEntry(lpaEventTypeOverrides, lruOverrideCount);
@@ -709,6 +709,99 @@ bool EventInterpreterModule::RegisterPriorityEvent(EventObserver* lpEventObserve
     lpPriorityObserver->RegisterForEvent(liEventType, lpaEventOverrides, luOverrideCount);
     CGS_ASSERT(mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS,
                "mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS");
+    return true;
+}
+
+// These are the missing phase bodies for the canonical full Interpreter class.
+// Insert into Model/CgsEventInterpreterModule.cpp; no second class definition.
+
+// ARTIST82857E50: both live counts, all four plain/priority slots, four working
+// queues and the internal queue are constructed. Native masks contain ten words.
+void EventInterpreterModule::Construct()
+{
+    CgsModule::ModuleSingleBuffered::Construct();
+    mnNumberEventObservers = 0;
+    mnNumberPriorityEventObservers = 0;
+    for (s32 liIndex = 0; liIndex < KI_MAX_OBSERVERS; ++liIndex)
+    {
+        maEventObservers[liIndex].Construct();
+        maPriorityEventObservers[liIndex].Construct();
+        mInProcessQueues[liIndex].Construct();
+    }
+    mePrepareStage = E_PREPARE_START;
+    meReleaseStage = E_RELEASE_DONE;
+    mInternalEventQueue.Construct();
+    mbIsNewModule = true;
+}
+
+// Native Interpreter table820D1068+0x0C shares the822A93A0 base thunk.
+void EventInterpreterModule::Destruct()
+{
+    CgsModule::ModuleSingleBuffered::Destruct();
+}
+
+// ARTIST8285F5F8, complete asm body. Internal events remain queued during this
+// phase; only normal Update imports and clears them.
+void EventInterpreterModule::PreWorldUpdate(InputBuffer* lpInput, OutputBuffer* lpOutput)
+{
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+    ProcessInEvents(lpInput->GetEventQueue());
+    lpInput->UnlockForRead();
+    PreUpdateObservers();
+    ProcessOutEvents(lpOutput, true);
+    lpOutput->UnlockForWrite();
+}
+
+// ARTIST8285F670. The input queue is intentionally mutable under its read lock,
+// matching the existing native-shaped GetEventQueue API.
+void EventInterpreterModule::Update(InputBuffer* lpInput, OutputBuffer* lpOutput)
+{
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+    lpInput->GetEventQueue()->Append(mInternalEventQueue);
+    mInternalEventQueue.Clear();
+    ProcessInEvents(lpInput->GetEventQueue());
+    lpInput->UnlockForRead();
+    UpdateObservers();
+    ProcessOutEvents(lpOutput, false);
+    lpOutput->UnlockForWrite();
+}
+
+// ARTIST82847E40 export hole; complete bounded50-instruction image read.
+s32 EventInterpreterModule::FindPriorityObserverInEventObserverList(
+    EventObserver* lpEventObserver, PriorityObjectEventObserver** lppFoundObserver)
+{
+    *lppFoundObserver = 0;
+    for (s32 liIndex = 0; liIndex < mnNumberPriorityEventObservers; ++liIndex)
+    {
+        PriorityObjectEventObserver* lpSlot = &maPriorityEventObservers[liIndex];
+        if (lpSlot->mpObserver == lpEventObserver)
+        {
+            *lppFoundObserver = lpSlot;
+            return liIndex;
+        }
+        if (lpSlot->mpObserver == 0)
+        {
+            CGS_ASSERT(false,
+                "Should not reach a null value while searching the event observer list: ");
+            break;
+        }
+    }
+    return -1;
+}
+
+// ARTIST82858128 export hole. An absent priority slot returns false; a present
+// slot calls its real unregister body and returns true.
+bool EventInterpreterModule::UnregisterPriorityEvent(EventObserver* lpEventObserver,
+    s32 liEventType)
+{
+    CGS_ASSERT(lpEventObserver != 0, "lpEventObserver != NULL");
+    PriorityObjectEventObserver* lpPriorityObserver = 0;
+    FindPriorityObserverInEventObserverList(lpEventObserver, &lpPriorityObserver);
+    if (lpPriorityObserver == 0)
+        return false;
+    lpPriorityObserver->UnRegisterForEvent(liEventType);
     return true;
 }
 

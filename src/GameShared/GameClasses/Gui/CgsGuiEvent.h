@@ -22,7 +22,7 @@ namespace CgsGui
     // most KI_MAX_OBSERVERS observer slots and queues at most KI_MAX_EVENTS_PER_OBSERVER
     // events per observer per frame. Declared additively alongside the queue-size set.
     const s32 KI_MAX_OBSERVERS           = 4;
-    const s32 KI_MAX_EVENTS_PER_OBSERVER = 576;
+    const s32 KI_MAX_EVENTS_PER_OBSERVER = 600; // ARTIST8284EA60/EAC8, not DecFIGS576
 
     // Base of every GUI event. The X360 emitters fill a small fixed header before
     // pushing the record onto a queue: muHeader0 / muHeader2 are queue bookkeeping
@@ -166,4 +166,12 @@ namespace CgsGui
 
         GuiEventQueueLarge mGuiEventQueue;
     };
+}
+
+// Complete the existing GUI-state queue spelling. The Interpreter owns these
+// actual queue objects, and EventObserver/BrnBaseFlow pass them by this type.
+// ARTIST uses the18432-byte specialization; this wrapper adds no fields.
+namespace InputBuffer
+{
+    class GuiEventQueue : public CgsModule::VariableEventQueue<18432, 16> {};
 }

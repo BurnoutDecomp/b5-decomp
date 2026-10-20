@@ -45,7 +45,7 @@ namespace ModelIO
         // VariableEventQueue<18432,16>::Append<18432,16> target in AddGuiOutEvents).
         typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
         // The large view-event queue (65536, Append<65536,16> target in AddViewOutEvents).
-        typedef CgsModule::VariableEventQueue<65536, 16> GuiViewEventQueue;
+        typedef CgsGui::GuiEventQueueBase<65536, 16> GuiViewEventQueue;
         // The small load-notification queue (4096; AddLoadNotifications appends an 18432-byte
         // source into it via VariableEventQueue<4096,16>::Append<18432,16>).
         typedef CgsModule::VariableEventQueue<4096, 16>  GuiNotificationQueue;
@@ -104,6 +104,10 @@ namespace ModelIO
     {
         // CgsModelModuleIO.h:90 + CgsGuiEvent.h GuiEventInputQueue typedef.
         typedef CgsGui::GuiEventQueueBase<32768, 16> GuiEventInputQueue;
+        // The original director source is a distinct 18432-byte queue. This
+        // alias changes no InputBuffer storage or existing 32768-byte API.
+        typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
+
         // CgsModelModuleIO.h:91 -- the small load-request queue.
         typedef CgsGui::GuiEventQueueSmall           GuiEventQueueSmall;
 
@@ -121,6 +125,13 @@ namespace ModelIO
         // is locked-for-writing (status bit 3, "Not locked for writing\n"), returns the handle to
         // the GUI-event queue at this+4 (&mGuiEvents). Homed by CgsModelModuleIO.cpp.
         GuiEventInputQueue* GetEventQueueNonConst();
+
+        // ARTIST8285B210; DecFIGS h:61. Real director queue publisher.
+        void AddGuiEvents(const GuiEventQueue* lpEvents);
+
+        // ARTIST8285B2C0; DecFIGS h:66. Append a full input queue under
+        // the write lock. The original return type is void.
+        void AddGuiEvents(const GuiEventInputQueue* lpEvents);
 
         // CgsModelModuleIO.h:79 (DWARF). X360 0x8250C658: asserts this buffer is
         // locked-for-writing (status bit 3, "Not locked for writing\n"), then pushes the
