@@ -2428,6 +2428,17 @@ namespace
                 break;
             }
 
+            // ARTIST 0x823ED5C8..0x823ED608: assert the action then copy the whole image-file
+            // record array to GUI 359. The X360 3x16-byte record widens to 3x24 bytes here.
+            case 295: // ImageManager::KI_EVENT_PREPARE_RENDER
+            {
+                CGS_ASSERT(lpAction != 0, "lpLoadImagesAction");
+                BrnGui::GuiEventLoadImageFiles lEvent;
+                std::memcpy(lEvent.maImageFileInfo, lpAction, sizeof(lEvent.maImageFileInfo));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 152..160  the free-burn challenge family (online free-burn lobby) ------------
             // The online time-out clock: the {seconds, fraction} record becomes GUI 108.
             case BrnGameState::GameStateModuleIO::E_ACTION_MODE_TIME_REMAINING:
@@ -2611,6 +2622,51 @@ namespace
                 BrnGui::GuiDeveloperChallengesCompleted lEvent;
                 std::memcpy(&lEvent.mCompletedDeveloperChallenges, lpAction,
                             sizeof(lEvent.mCompletedDeveloperChallenges));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EDA38..0x823EDA80: action 240 publishes the 16-byte holder name
+            // followed by the removal flag as raw GUI event 122 (17 bytes total).
+            case BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse::KI_GAME_ACTION_TYPE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpTargetScoreAction");
+                const auto* lpResponse = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse*>(lpAction);
+                BrnGui::GuiEventScoreboardResponseEvScoreTarget lEvent;
+                std::memcpy(lEvent.maData, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
+                lEvent.maData[16] = static_cast<u8>(lpResponse->mbRemoved);
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EDA84..0x823EDAC4: action 241's 16 raw name bytes are copied over
+            // the full GUI-event-123 object before AddGuiEvent queues all 16 bytes.
+            case BrnGameState::GameStateModuleIO::DldScoreboardResponse::KI_GAME_ACTION_TYPE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpDldChallengeableAction");
+                const auto* lpResponse = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::DldScoreboardResponse*>(lpAction);
+                BrnGui::GuiEventScoreboardDownloadedChallengeable lEvent;
+                static_assert(sizeof(lEvent) == sizeof(*lpResponse),
+                              "ARTIST case 241 copies the same 16-byte record to GUI event 123");
+                std::memcpy(&lEvent, lpResponse, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EC84C..0x823EC89C: action 288 answers an event-data request with
+            // {event id, score, player name[16]}. The GUI-332 consumer reads those bytes at
+            // +0/+8/+0xC; the final four bytes of this 32-byte local are never written.
+            case BrnGameState::GameStateModuleIO::TargetEventDataResponse::KI_GAME_ACTION_TYPE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpChallengeEventDataAction");
+                const auto* lpResponse = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::TargetEventDataResponse*>(lpAction);
+                BrnGui::GuiEventChallengedEventDataResponse lEvent;
+                std::memcpy(&lEvent, &lpResponse->mEventId, sizeof(lpResponse->mEventId));
+                lEvent.muHeader2 = static_cast<u32>(lpResponse->miScore);
+                std::memcpy(lEvent.maPayload, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }

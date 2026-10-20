@@ -174,12 +174,6 @@ namespace
     static_assert(sizeof(BrnNetwork::LiveRevengeProfile) == 30016,
                   "the live-revenge block is the 30016-byte segment the profile manager copies");
 
-    // The shared access-pointer bundle the HUD flow's state interface hands its GUI
-    // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
-    // AptAux singleton). The console's view module owns the equivalent module-shared
-    // GuiAccessPointers instance.
-    CgsGui::GuiAccessPointers s_GuiAccessPointers;
-
     // The subscription record the states post through StateInterface::RegisterForEvents
     // (X360 wire records 34/35: { s32 miEventType; EventObserver* } -- only the leading
     // event-type word matters to the dispatch table; the pointer is the posting observer).
@@ -852,6 +846,8 @@ namespace BrnGui
         mMovieManager.Construct();
         // ARTIST82518B88 initializes the actual boot-movie owner byte.
         mbBootMovieMode = true;
+        // ARTIST82518858: distinct from primary Prepare and release stages.
+        muPrepare2State = 0;
         // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
@@ -881,6 +877,8 @@ namespace BrnGui
         // AptRenderHandler::mpCustomRendererManager -- until this leg NOTHING in the PC
         // build instantiated it, so `_type='PlayerImage'` on the licence card (and every
         // other custom control) had nowhere to resolve to.
+        // ARTIST82518BF0..C0C: the real receiver owns its backing storage.
+        mGDMReceiverQueue.Construct();
         mGuiModuleSerialiser.Construct(); // ARTIST82518C4C, before manager Construct
         mCustomRendererManager.Construct();
 
@@ -998,10 +996,14 @@ namespace BrnGui
         // ViewModule::GetFlaptManager, and this GuiCache are the four live owners.
         // AptAux itself is installed during Prepare below because the PC runtime host
         // constructs that singleton there; the other three owners already exist.
-        s_GuiAccessPointers.Construct();
-        s_GuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
-        s_GuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
-        s_GuiAccessPointers.SetGuiCache(&mGuiCache);
+        mGuiAccessPointers.Construct();
+        mGuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
+        mGuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
+        mGuiAccessPointers.SetGuiCache(&mGuiCache);
+        // ARTIST82518CE8/D24: publish the actual contained receiver and serialiser.
+        // The serialiser's static buffer is allocated by the replay owner later.
+        mGuiAccessPointers.SetGDMReceiverQueue(&mGDMReceiverQueue);
+        mGuiAccessPointers.SetSerialiser(&mGuiModuleSerialiser);
 
         mProfileManager.Construct(mGuiCache, mSystemUserProfile,
                                   mViewModule.GetLanguageManager());
@@ -1176,7 +1178,7 @@ namespace BrnGui
         // Complete the shared access bundle with the AptAux singleton created by the
         // PC runtime host above.  Construct already installed the language, Flapt, and
         // GuiCache owners exactly as the X360 GuiModule::Construct does.
-        s_GuiAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+        mGuiAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
 
         // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 7 -------------------------------
         //   v27 = (*(*(v3+311952) + 4))(v3+311952, rwGeneralResource, rwLinearResource);
@@ -1260,7 +1262,7 @@ namespace BrnGui
         // bodied as the de-inlined form in BrnGuiHudMessageAnalyzer.cpp. Without it
         // mpAccessPointers is never written and TriggerChallengeEndedMessage /
         // HandleStuntPerformed dereference it (mpAccessPointers->mpLanguageManager).
-        mHudMessageAnalyzer.SetAccessPointers(&s_GuiAccessPointers);
+        mHudMessageAnalyzer.SetAccessPointers(&mGuiAccessPointers);
 
         // FLAG PC stand-in (main-menu wave, 2026-08-29): the console threads a specific
         // rw resource allocator from the (still-parked) GUI resource slice through
@@ -1275,7 +1277,7 @@ namespace BrnGui
         rw::IResourceAllocator* lpFlowAllocator =
             rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
-        mHudFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mHudStatePool,
+        mHudFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mHudStatePool,
                          &mProfileManager);
         mHudInQueue.Construct();
         mHudFlow.SetInEventQueue(&mHudInQueue);
@@ -1284,7 +1286,7 @@ namespace BrnGui
         // prepares all three flows here).
         mOverlayStatePool.Construct();
         mOverlayStatePool.Create(s_overlayStatePoolBacking, sizeof(s_overlayStatePoolBacking));
-        mOverlayFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mOverlayStatePool);
+        mOverlayFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mOverlayStatePool);
         mOverlayInQueue.Construct();
         mOverlayFlow.SetInEventQueue(&mOverlayInQueue);
 
@@ -1293,7 +1295,7 @@ namespace BrnGui
         // state's Construct consumes it; the manager is a shell until reconstructed).
         mScreenStatePool.Construct();
         mScreenStatePool.Create(s_screenStatePoolBacking, sizeof(s_screenStatePoolBacking));
-        mScreenFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
+        mScreenFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
                             mProfileManager);
         mScreenInQueue.Construct();
         mScreenFlow.SetInEventQueue(&mScreenInQueue);
@@ -1516,6 +1518,27 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(
             "[GuiModule] flow controller live (HUD flow registered; awaiting GuiEventRunFsm).\n");
         mbPrepared = true;
+        return true;
+    }
+
+    // ARTIST825194B8: the enclosing second-prepare owner. Keep the unsigned
+    // stage tests and original wait/continuation behavior; no readiness surrogate.
+    bool GuiModule::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+    {
+        if (muPrepare2State < 2)
+        {
+            muPrepare2State = 1;
+            if (!mWorldDataController.Prepare2(lpGameDataInput))
+                return false;
+        }
+        else if (muPrepare2State >= 3)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid prepare state", "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 658);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+        muPrepare2State = 2;
         return true;
     }
 
@@ -1847,6 +1870,8 @@ void GuiModule::Destruct()
                                                               lpProfileData->mpProgressionData);
                     }
                     // fall through -- the record also feeds GuiCache::mpProfile (case 350 below)
+                case 27:    // Actual Sku notification -> the cache enum owner.
+                case 29:    // Actual language notification -> the cache enum owner.
                 case 330:   // GuiEventSetRoadRuleScoreMode -- the road-rule panel mode word
                 case 335:   // GuiEventRoadRuleBegin -- the rule's score type marked active
                 case 336:   // GuiEventRoadRuleEnd   -- the rule's score type marked inactive
@@ -1995,6 +2020,12 @@ void GuiModule::Destruct()
                     break;
                 case 584:
                     mFreeburnChallengeManager.EndNotActiveChallenge();
+                    break;
+
+                case 359:   // Image-file records loaded by ProfileManager (ARTIST GuiModule::Update case 359)
+                    mProfileManager.LoadImageFiles(
+                        &mProfileAutosaveResultHandler,
+                        reinterpret_cast<const CgsGui::ImageFileInfo*>(lpEvent));
                     break;
 
                 case 356:   // [profile-save] GuiAutosaveRequestEvent -- THE AUTOSAVE LATCH
@@ -3134,7 +3165,7 @@ void GuiModule::Destruct()
         // console skips the whole overlay tick below until the prepare state machine reaches
         // DONE (`clrlwi r11, r3, 0x18 ; cmplwi 0 ; beq 0x8252A2CC`).
         const bool lbAlwaysAvailReady =
-            mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
+            mAlwaysAvailableComponentsManager.Prepare(&mGuiAccessPointers);
         mAlwaysAvailableComponentsManager.Update();
         if (lbAlwaysAvailReady)
         {

@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"               // BrnGui::ColourCalibrationScreen (embedded; DWARF BrnGuiModule.h:506)
 #include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
 #include "SharedClasses/BrnSharedConstants.h"                 // BrnUpdateSet (the frame update set)                  // BrnGui::EffectsArbitrator (embedded; X360 gm+1546880)
@@ -93,6 +95,9 @@ namespace BrnGui
         void SetMovieBootMode(bool lbBootMovieMode) { mbBootMovieMode = lbBootMovieMode; }
 
         bool Prepare() override;
+        // ARTIST825194B8; original native vtable+0x5C. The selected host
+        // keeps PrepareWorldData2 until the outer phase is migrated as a whole.
+        virtual bool Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
         bool Release() override;
         void Destruct() override;
         void Update() override;
@@ -156,6 +161,8 @@ namespace BrnGui
                                               const char* lpcActionName,
                                               const char* lpcLabel);
 
+        // DecFIGS BrnGuiModule.h:667; ARTIST owns this bundle by value.
+        CgsGui::GuiAccessPointers* GetGuiAccessPointers() { return &mGuiAccessPointers; }
         MovieManager* GetMovieManager() { return &mMovieManager; }
         ViewModule* GetViewModule() { return &mViewModule; }
         AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager()
@@ -297,6 +304,10 @@ namespace BrnGui
         // CompleteLoading::OnLeave owns the later false transition.
         bool mbBootMovieMode;
 
+        // ARTIST-only second-prepare word (Construct82518858). DecFIGS lacks
+        // this addition; the host member name is a projection of that owner.
+        u32 muPrepare2State;
+
         // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
         // buffer itself lives on the update IO stack and is re-created per sub-step).
         CgsGui::CgsGuiModuleIO::InputBuffer* mpGuiEventInputBuffer;
@@ -377,6 +388,8 @@ namespace BrnGui
         // Constructs it and binds it into the cache (SetWorldDataController); Prepare stage 14
         // runs its acquire machine. It MUST outlive every flow state that resolves a car.
         WorldDataController mWorldDataController;   // X360 +307836
+        CgsGui::GuiAccessPointers mGuiAccessPointers; // ARTIST gm+1005332
+        CgsGui::GuiAccessPointers::GuiEventReceiverQueue mGDMReceiverQueue; // gm+1628232
         GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
         // [H3b] the shared map-icon manager (X360 +1088304; ctor from GuiModule::GuiModule
         // @0x827E5D7C, Construct + GuiCache::SetMapIconManager from GuiModule::Construct).

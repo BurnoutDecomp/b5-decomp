@@ -14,6 +14,7 @@
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // image-gallery occupancy response (522)
 #include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
+#include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // native-width image-load payload records
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // image-gallery capture date (518)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // EImageGalleryType (520 / 522)
 #include "SharedClasses/World/BrnWorldRegion.h" // BrnWorld::WorldRegion (518)
@@ -219,7 +220,17 @@ namespace BrnGui
         BrnNetwork::LiveRevengeProfile* mpLiveRevengeProfile;   // +0x00
         s32 GetEventType() const { return 351; }
     };  // id 351 size 4 on the console
-    struct GuiEventLoadImageFiles : public CgsGui::GuiEvent<359> { u8 maPayload[36]; };  // id 359 size 48 (12B GuiEvent header + opaque payload)
+    // ARTIST posts the three ImageFileInfo records directly; the DecFIGS GuiEvent<354> base
+    // has no data members. Keep the X360 id (359) and widen the record pointers on the host.
+    struct GuiEventLoadImageFiles : public CgsModule::Event
+    {
+        CgsGui::ImageFileInfo maImageFileInfo[3];
+        s32 GetEventType() const { return 359; }
+    };
+    static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
+                  "ImageFileInfo carries a native 64-bit buffer pointer");
+    static_assert(sizeof(GuiEventLoadImageFiles) == 72,
+                  "three host-native image-file records widen the X360 48-byte event");
     struct GuiEventMedalUpdate { u8 maData[8]; s32 GetEventType() const { return 307; } };  // id 307 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventMiniMapSwitch { u8 maData[1]; s32 GetEventType() const { return 205; } };  // id 205 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventMustFixCarFirst { u8 maData[1]; s32 GetEventType() const { return 552; } };  // id 552 size 1 (raw; size not GuiEvent-shaped)
