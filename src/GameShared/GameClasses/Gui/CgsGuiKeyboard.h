@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/CgsXOverlapped.h"
 
 // CgsGui::GuiKeyboard — the X360 on-screen (virtual) keyboard front end. Recovered from
 // BURNOUT_X360_ARTIST.XEX. The X360 build drives the XDK system keyboard UI
@@ -53,9 +54,7 @@ namespace CgsGui
 
     private:
         CgsUtf16             maResultBuffer[512];  // +0x000
-        // CgsXOverlapped (28-byte XOVERLAPPED wrapper, homed in System/X360). Stored as a
-        // raw 28-byte block so this header does not depend on the X360-only wrapper class.
-        u8                   maOverlapped[28];     // +0x400
+        CgsSystem::CgsXOverlapped mOverlapped;      // +0x400; actual contained XDK wrapper
         GuiKeyboardListener* mpListener;           // +0x41C
     };
 }
