@@ -317,6 +317,9 @@ namespace BrnGui
         // Keep current no-arg host Prepare selected until the complete native chain is ready.
         void PrepareNativeDebugComponents();
 
+        // Extracted ARTIST8251A4D4..8251A538; dormant until the typed PreWorld chain is selected.
+        void PublishNativeMovieResourceRequest(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+
         // Extracted native blocks: Prepare82519360..C4,
         // Update82529CA8..DD0 and Release824F917C..B0. These remain
         // uncalled by the selected host lifecycle until native composition.

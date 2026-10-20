@@ -63,6 +63,9 @@ namespace BrnGui
 
         // ARTIST8250C998; original typed GUI input reader/publisher.
         void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
+        // ARTIST8250CBC8. Its native GuiModule::Update caller is not selected by this
+        // host build yet; keep the typed input path independently reviewable.
+        void UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
 
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
 

@@ -401,6 +401,8 @@ struct GuiEventUpdateSatNav
 
     SatNavIconInfo maIconInfo[KI_MAX_SAT_NAV_ICONS]; // @0x000 .. 0x8FF
     s32            miNumIcons;                        // @0x900
+    // ARTIST BSS 0x82FB508A; written by GuiDebugComponent::UpdateWorstCaseHUD.
+    static inline bool msbForceWorstCase = false;
 
     // ADDITIVE GROW (CgsGui::GuiModule::AddGuiEvent<GuiEventUpdateSatNav> @0x823D93A0):
     // the producer queues this event with the compile-time id 199 (inlined GetEventType()).
@@ -411,8 +413,8 @@ struct GuiEventUpdateSatNav
     // ---- reconstructed out-of-line bodies (X360 ARTIST) ----
     // @0x823B1980 — recompute the "worst case" sat-nav icon set: validate the active
     // icons, compact the located player-position icon to the front, then synthesise a
-    // ring of placeholder icons. Returns `this`.
-    GuiEventUpdateSatNav* DoWorstCase();
+    // ring of placeholder icons. The native member returns void.
+    void DoWorstCase();
 
     // @0x823A6B30 — range-check + return the leading icon's icon-type byte (a static
     // helper the CrashNavMap callers use). Reads maIconInfo[0].mi8IconType.

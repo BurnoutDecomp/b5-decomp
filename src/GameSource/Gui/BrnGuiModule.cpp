@@ -1,5 +1,6 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // original movie acquire request
 #include "SDKs/EA/GameTalk/GameTalk.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
@@ -1804,6 +1805,23 @@ namespace BrnGui
         gpActiveMovieManager = 0;
         mMovieManager.Release();
         return true;
+    }
+
+    // Extracted ARTIST8251A4D4..8251A538. Only the future typed PreWorld phase calls this block.
+    void GuiModule::PublishNativeMovieResourceRequest(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
+    {
+        const CgsResource::ID lResourceId = mMovieManager.PendingVideoDataResourceRequest();
+        if (lResourceId.GetHash() == 0)
+            return;
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser = mMovieManager.GetRecieverQueue();
+        lRequest.miEventId = MovieManager::KI_VIDEO_DATA_RESOURCE_EVENT_ID;
+        lRequest.miPoolId = 11;
+        lRequest.mResourceId = lResourceId;
+        lpGuiOutput->LockForWrite();
+        lpGuiOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 4);
+        lpGuiOutput->UnlockForWrite();
     }
 
     // Native primary Prepare82519218..54 only. This original registration block is
@@ -3742,7 +3760,7 @@ void GuiModule::Destruct()
 
         // ---- 6. the MovieManager pump (receiver -> RecvEvent -> Update -> 510 back) ---
         {
-            CgsModule::VariableEventQueue<1024, 16>* lpRecv = mMovieManager.GetReceiverQueue();
+            CgsModule::BaseEventReceiverQueue* lpRecv = mMovieManager.GetReceiverQueue();
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             s32 liId = lpRecv->GetFirstEvent(&lpEvent, &liSize);

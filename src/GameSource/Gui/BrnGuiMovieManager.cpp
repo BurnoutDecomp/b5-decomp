@@ -1,4 +1,8 @@
 #include "GameSource/Gui/BrnGuiMovieManager.h"
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h" // collision memory response owner
+#include "GameSource/Resource/BrnGameDataModuleIO.h" // original typed Prepare producer
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // LoadBundleRequest
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // original state diagnostic
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"      // BundleLoader (PC sync loader)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h"  // RegisterAllResourceTypes
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
@@ -303,6 +307,53 @@ namespace BrnGui
         return meState == E_MOVIEMANAGERSTATE_IDLE;
     }
 
+    // ARTIST82514780. The original I/O overload remains unselected by the PC host Prepare.
+    bool MovieManager::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const BrnResource::GameDataIO::OutputBuffer*, CgsLanguage::ELanguage leLanguage)
+    {
+        switch (meState)
+        {
+        case E_MOVIEMANAGERSTATE_CONSTRUCTED:
+        case E_MOVIEMANAGERSTATE_RELEASED:
+        {
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 2;
+            lRequest.SetFileName("VIDEOS\\VIDEOLIST.BUNDLE");
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = false;
+            lRequest.mbUseHDCache = false;
+            lRequest.miPoolId = 11;
+            lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(&lRequest, 2);
+        }
+            [[fallthrough]];
+        case E_MOVIEMANAGERSTATE_PREPARING_LOADING_BUNDLE:
+            meState = E_MOVIEMANAGERSTATE_PREPARING_LOADING_BUNDLE;
+            if (mReceiverQueue.GetLength() < 1)
+                return false;
+            mReceiverQueue.Clear();
+            mPlayingMovie.Prepare();
+            mQueuedMovie.Prepare();
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
+            meCarPoolState = E_CARPOOLSTATE_VALID;
+            meLanguage = leLanguage;
+            meState = E_MOVIEMANAGERSTATE_IDLE;
+            return true;
+        default:
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Unhandled state [" << static_cast<s32>(meState)
+                    << "] in MovieManager::Prepare";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 155);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+        }
+    }
+
     bool MovieManager::Release()
     {
         if (!mMoviePlayer.Release())
@@ -316,7 +367,7 @@ namespace BrnGui
             g_movieAudio.Release();        // [PC leaf, opt-in] free the decoded movie-audio buffer
         mPlayingMovie.Release();
         mQueuedMovie.Release();
-        mReceiverQueue.Release();
+        mReceiverQueue.Clear(); // Retain the selected host Release queue drain with its real receiver.
         for (u32 li = 0; li < 3; ++li)
         {
             if (mapPoolBacking[li] != 0) { free(mapPoolBacking[li]); mapPoolBacking[li] = 0; }
@@ -435,6 +486,14 @@ namespace BrnGui
         }
     }
 
+    // Inlined at ARTIST82519894..825198B0; the method records the returned block backing.
+    void MovieManager::FreeCollisionPoolMemory(
+        const BrnResource::GameDataIO::SwapOutCollisionWorldResponse* lpResponse)
+    {
+        muFirstCollisionBlockAddress = reinterpret_cast<uintptr_t>(lpResponse->GetResource().m_baseResources[0]);
+        muNumCollisionBlocks = lpResponse->GetDescriptor().m_baseResourceDescriptors[0].m_size >> 20;
+    }
+
     // SetCarPoolValid (ARTIST @0x824EAF78): the GUI car-pool-validation flow hands back the re-validated
     // car-pool resource + descriptor and sets meCarPoolState to VALID(0) when lbValid, else INVALID(3).
     // asm: stw (0 if a2 else 3) -> +0xC ; copy 3 dwords from a3 -> +0xDB0 ; copy 6 dwords from a4 -> +0xDBC.
@@ -495,16 +554,20 @@ namespace BrnGui
         if (meState == E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE)
         {
             meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE;
-            CGS_ASSERT(IsMovieQueued(), "IsMovieQueued()");
+            if (!IsMovieQueued())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("IsMovieQueued()",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 641);
+                CgsDev::Assert::EndAssert();
+            }
             lId.SetHash(mQueuedMovie.mVideoResourceId);
         }
         else
         {
-            // asm: CgsResource::ID::HashString(&unk_820046A7) -- default video-name hash. The literal at
-            // 0x820046A7 is address-only in the export, so the argument is an honest placeholder (the empty
-            // string), matching the existing VideoDefinition::Prepare reconstruction.
+            // ARTIST824F7880..8C calls HashString on the attested empty literal at 0x820046A7.
             lId.SetHash(static_cast<u64>(CgsResource::ID::HashString(
-                reinterpret_cast<const u8*>(""))));   // [unrecoverable: literal @0x820046A7]
+                reinterpret_cast<const u8*>(""))));
         }
         return lId;
     }
