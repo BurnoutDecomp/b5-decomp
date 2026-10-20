@@ -87,7 +87,7 @@ namespace CgsGuiModuleIO
 #include "gui_iface_methods.inc"
 
 using BrnGameState::GameStateModuleIO::GameStateToGuiInterface;
-using CgsGui::CgsGuiModuleIO::InputBuffer;
+using RecordingGuiInputBuffer = CgsGui::CgsGuiModuleIO::InputBuffer;
 using CgsGui::CgsGuiModuleIO::PostedEvent;
 
 static void Check(bool lbPass, const char* lpcName)
@@ -129,7 +129,7 @@ static bool Triple(const PostedEvent& lrEvent, s32 liAggressor, s32 liVictim, s3
 }
 
 static GameStateToGuiInterface gInterface;   // static storage: the queues' inline arrays live here
-static InputBuffer             gInput;
+static RecordingGuiInputBuffer gInput;
 
 int main()
 {
