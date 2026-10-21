@@ -43,6 +43,24 @@ namespace BrnGui
             E_SUBSTATE_COUNT                  = 8,
         };
 
+        // DecFIGS BrnOnlineSelectRoute.h:134 / :142. The X360 SelectRound body confirms
+        // the two directions and the menu-option ids.
+        enum ESelectRound
+        {
+            E_SELECT_ROUND_FORWARDS  = 0,
+            E_SELECT_ROUND_BACKWARDS = 1,
+            E_SELECT_ROUND_COUNT     = 2,
+        };
+
+        enum EMainMenuOptions
+        {
+            E_MAIN_MENU_OPTION_NEXT    = 0,
+            E_MAIN_MENU_OPTION_EDIT    = 1,
+            E_MAIN_MENU_OPTION_PRESET  = 2,
+            E_MAIN_MENU_OPTION_FINISHED= 3,
+            E_MAIN_MENU_OPTION_COUNT   = 4,
+        };
+
         // compiler-emitted: constructs the members below and nothing else.
         OnlineSelectRoute();
 
@@ -55,7 +73,40 @@ namespace BrnGui
             *lpuNumberOfResources = static_cast<u32>(miNumResourcesToLoad);
         }
 
+        virtual void OnEnter() override;
+        virtual void OnLeave() override;
+        virtual void Update() override;
+
     private:
+        void CheckForCompletedLoads();
+        void HandleControllerInput(const CgsModule::Event* lpEvent);
+        void HandleControllerInputSelectMainOption(const CgsModule::Event* lpEvent);
+        void HandleControllerInputSelectCheckpoint(const CgsModule::Event* lpEvent);
+        void HandleControllerInputSelectPoint(const CgsModule::Event* lpEvent);
+        void HandleControllerInputSelectPresetEvent(const CgsModule::Event* lpEvent);
+        void HandleControllerAxis(const CgsModule::Event* lpEvent);
+        void HandleGuiCacheEvent(const CgsModule::Event* lpEvent);
+        void HandleInGameEvent(const CgsModule::Event* lpEvent);
+        void HandleInGameFailedEvent(const CgsModule::Event* lpEvent);
+
+        void SetupNormalRoute();
+        void SelectRound(ESelectRound leDirection);
+        void ShowMainMenu();
+        void ShowSelectCheckpointMenu();
+        void ShowPresetEvents();
+        void SetupPreSetRaceToggle();
+        void UpdateAfterToggleChange(SelectRoutes::EChangedItem leChangedItem);
+        void UpdateIconManager();
+        void UpdateCursor();
+        void SetActiveLandmarks();
+        void PlaceCursorOnLandmark();
+        s32 GetNumBoundingBoxCoords() const;
+        Vector3 GetZoomBoundingBoxCoord(s32 liIndex) const;
+        f32 CalculateZoomFactor();
+        void SetupHelpBar(bool lbEditingRoute);
+        void DisplayCurrentRound();
+        void DisplayEventName();
+
         // Pop the "route too short" overlay with the current route length and the minimum.
         // Body in the .cpp.
         void DisplayTooShortRouteMessage();
