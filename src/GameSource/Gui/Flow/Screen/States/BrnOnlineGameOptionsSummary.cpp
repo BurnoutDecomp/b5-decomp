@@ -35,6 +35,7 @@
 #include "GameSource/Gui/Events/BrnGuiEventNetworkCreateGame.h"           // GuiEventNetworkCreateGame
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"           // GuiEventNetworkGameParams
 #include "GameSource/Input/GameInputActions.h"                            // EGameInputActions
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "SharedClasses/DataLists/ChallengeListEntry.h"                   // BrnResource::ChallengeListEntry
 
 namespace BrnGui
@@ -271,6 +272,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::OnEnter()
     {
+        CreateMatchTracePC::SummaryEntered();
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         mMenuOptions.Construct(KAC_MENU_OPTIONS_COMPONENT, mpStateInterface, KI_MAX_CREATE_GAME_OPTIONS,
@@ -403,6 +405,8 @@ namespace BrnGui
                 mRouteInfoDisplay.miNumComponentsLoaded = GuiNetworkRouteInfo::KI_NUM_COMPONENTS_TO_LOAD;
                 ShowGameOptionsScreen();
                 mHelpBar.SetupComponent();
+                CreateMatchTracePC::SummaryReady(miCurrentRound, mMenuOptions.GetHighlightedIndex(),
+                    *reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage));
             }
         }
     }
@@ -620,6 +624,7 @@ namespace BrnGui
         {
             GuiEventNetworkGameParams lGameParams = *lpParams;
             PostWire(mpStateInterface, GuiEventNetworkGameParamsWire(lGameParams));
+            CreateMatchTracePC::Parameters(CreateMatchTracePC::E_PARAMS_SUMMARY_SUBMIT, lGameParams);
         }
 
         meSubState = E_SUBSTATE_WAIT_IN_GAME;
@@ -810,6 +815,8 @@ namespace BrnGui
         default:
             break;
         }
+        if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
+            CreateMatchTracePC::SummaryReady(miCurrentRound, mMenuOptions.GetHighlightedIndex(), *lpParams);
     }
 
     // ================================================================================

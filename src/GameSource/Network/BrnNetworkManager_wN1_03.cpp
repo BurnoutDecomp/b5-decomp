@@ -14,6 +14,7 @@
 #include "GameSource/GameState/BrnGameEvents.h"                                            // LocalPlayerDisconnectedEvent
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                                      // GuiEventNetworkPlayerImage / CustomMatchResults / CamStatus
 #include "GameSource/Gui/Events/BrnGuiEventNetworkPlayerStats.h"                           // GuiEventNetworkPlayerStats
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                  // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                                // GuiEventShowLoginQuestion / GuiEventNetworkDisconnected
@@ -427,6 +428,7 @@ namespace BrnNetwork
         lEvent.miTimeLimit         = lGameParams.TimeLimit();
 
         GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lEvent, lEvent.GetEventType());
+        BrnGui::CreateMatchTracePC::Parameters(BrnGui::CreateMatchTracePC::E_PARAMS_SERVER_READBACK, lEvent);
     }
 
     // ----------------------------------------------------------------------------------------

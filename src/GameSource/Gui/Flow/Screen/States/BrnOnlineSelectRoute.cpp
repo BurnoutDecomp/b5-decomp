@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameSource/Gui/BrnGuiShared.h"
 #include <cstring>
 #include <cmath>
@@ -220,6 +221,7 @@ namespace
     // here; the state switches from resource loading to component loading in Update.
     void OnlineSelectRoute::OnEnter()
     {
+        CreateMatchTracePC::RouteEntered();
         mpStateInterface->RegisterForEvents(maiEventToObserve, 10);
 
         MainMapComponent::MainMapParameterBundle lMapParameters;
@@ -386,6 +388,12 @@ namespace
         }
 
         mCursor.Update();
+        if (CreateMatchTracePC::Enabled() && meSubState == E_SUBSTATE_SELECTING_MAIN_OPTION)
+        {
+            const bool lbRouteInfo = lpTracker->IsRouteInfoAvailable();
+            CreateMatchTracePC::RouteReady(mSelectRoutes.GetCurrentRound(), mpGuiCache->miOnlineNumRounds,
+                mMenuOptions.GetHighlightedId(), lbRouteInfo, lbRouteInfo ? lpTracker->GetRouteDistance() : 0.0);
+        }
     }
 
     // ARTIST @0x8249DDA8. Resources first, then wait for all registered components; only

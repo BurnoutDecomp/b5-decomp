@@ -5107,3 +5107,103 @@ namespace BrnGui
         return &mPreRaceData.mMessages[liIndex];
     }
 }
+
+namespace BrnGui
+{
+    const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event*
+    GuiCache::GetPresetEventFromEventID(s32 liEventID) const
+    {
+        typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event Event;
+
+        // ARTIST sub_8241E5D0 starts at unsigned index zero, checks the array's
+        // constructed sentinel, then compares the unsigned index against live count.
+        for (u32 luIndex = 0; ; ++luIndex)
+        {
+            if (mEventsCtorSentinel == -1)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "Array used before Construct/Clear was called",
+                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
+                    336);
+                CgsDev::Assert::EndAssert();
+            }
+
+            if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
+                break;
+
+            // ARTIST 0x8241E430: the generic array accessor repeats the constructed
+            // and unsigned bounds checks before calling CgsContainers::Arr.
+            if (mEventsCtorSentinel == -1)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "Array used before Construct/Clear was called",
+                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
+                    336);
+                CgsDev::Assert::EndAssert();
+            }
+            if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "luEventIndex < maEvents.GetLength()",
+                    "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
+                    2014);
+                CgsDev::Assert::EndAssert();
+            }
+
+            // ARTIST 0x8241D4F8: CgsContainers::Arr repeats the CgsArray checks.
+            if (mEventsCtorSentinel == -1)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "Array used before Construct/Clear was called",
+                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
+                    538);
+                CgsDev::Assert::EndAssert();
+            }
+            if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lBoundsMessage(CgsDev::Assert::gpcMessageBuffer,
+                                                 CgsDev::Assert::giMessageBufferSize);
+                lBoundsMessage << "Array index out of bounds. Index: " << luIndex
+                               << ", length: " << static_cast<u32>(mEventsCtorSentinel);
+                CgsDev::Assert::FireAssert(
+                    CgsDev::Assert::gpcMessageBuffer,
+                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
+                    539);
+                CgsDev::Assert::EndAssert();
+            }
+
+            const Event* lpEvent =
+                reinterpret_cast<const Event*>(&maEventsStorage[0x2C * luIndex]);
+            if (lpEvent == 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "lpEvent",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h",
+                    4664);
+                CgsDev::Assert::EndAssert();
+            }
+
+            if (lpEvent->GetEventID() == liEventID)
+                return lpEvent;
+        }
+
+        // The local X360 StrStream starts in decimal mode. Preserve the original prefix,
+        // signed event ID, newline, assert location, and null return after FireAssert.
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                   CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Couldn't find preset event with ID " << liEventID << "\n";
+        CgsDev::Assert::FireAssert(
+            CgsDev::Assert::gpcMessageBuffer,
+            "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h",
+            4672);
+        CgsDev::Assert::EndAssert();
+        return 0;
+    }
+}
