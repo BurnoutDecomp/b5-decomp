@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceServerInfo.h"
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // full ServerInterfaceDirtySock (GetLobbyAPIRef)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
@@ -17,16 +18,6 @@
 // The component reads the lobby's tagfield "config" / "self" / "pred" records via
 // LobbyApiInfo/Status and pulls named fields out of them. URLs are formatted with the
 // current hardware language code substituted in.
-
-// CgsSystem::HardwareSku::FindLanguage is homed in CgsHardwareSku{PS3,PC}.cpp with no
-// shared header; declared minimally so FindUrl can call it.
-namespace CgsSystem
-{
-    namespace HardwareSku
-    {
-        s32 FindLanguage();
-    }
-}
 
 namespace CgsNetwork
 {

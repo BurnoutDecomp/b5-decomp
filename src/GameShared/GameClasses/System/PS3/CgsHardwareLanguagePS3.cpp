@@ -1,40 +1,39 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/System/CgsHardwareLanguage.h"
+
+// The Windows raw input is provided in CgsHardwareSkuPC.cpp. Keep the existing
+// Xbox-backed provider for non-Windows targets without defining a second PC leaf.
+#if !defined(_WIN32)
 
 extern "C" int XTLGetLanguage();
 extern "C" int XGetGameRegion();
 
 namespace CgsSystem
 {
-class HardwareLanguage
-{
-public:
-    static int GetHardwareLanguage();
-};
-
-int HardwareLanguage::GetHardwareLanguage()
+const CgsLanguage::ELanguage HardwareLanguage::GetHardwareLanguage()
 {
     switch (XTLGetLanguage())
     {
         case 1:
-            return (XGetGameRegion() == 767) + 7;
+            return static_cast<CgsLanguage::ELanguage>((XGetGameRegion() == 767) + 7);
         case 2:
-            return 16;
+            return static_cast<CgsLanguage::ELanguage>(16);
         case 3:
-            return 11;
+            return static_cast<CgsLanguage::ELanguage>(11);
         case 4:
-            return 10;
+            return static_cast<CgsLanguage::ELanguage>(10);
         case 5:
-            return 22;
+            return static_cast<CgsLanguage::ELanguage>(22);
         case 6:
-            return 15;
+            return static_cast<CgsLanguage::ELanguage>(15);
         case 7:
-            return 17;
+            return static_cast<CgsLanguage::ELanguage>(17);
         case 8:
-            return 1;
+            return static_cast<CgsLanguage::ELanguage>(1);
         case 9:
-            return 21;
+            return static_cast<CgsLanguage::ELanguage>(21);
         default:
-            return 7;
+            return static_cast<CgsLanguage::ELanguage>(7);
     }
 }
 }
+#endif
