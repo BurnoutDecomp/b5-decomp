@@ -1,0 +1,32 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnModeManager.cpp
+        BrnModeManager_Accessors.cpp
+        BrnModeManager_AssertLayout.cpp
+        BrnModeManager_CheckpointSetup.cpp
+        BrnModeManager_EmbedGate.cpp
+        BrnModeManager_Finish.cpp
+        BrnModeManager_IntroPlay.cpp
+        BrnModeManager_Lifecycle.cpp
+        BrnModeManager_OnlineGrid.cpp
+        BrnModeManager_Prepare.cpp
+        BrnModeManager_Start.cpp
+        BrnModeManager_TransmitCrash.cpp
+        BrnModeManager_UpdateMode.cpp
+        BrnModeManager_wBT_05.cpp
+        BrnModeManager_wN3_01.cpp
+        BrnModeManager_wN3_02.cpp
+        BrnModeManager_WorldTick.cpp
+        BrnModeManager_wW_01.cpp
+        ModeManager_gUI_00.cpp
+
+    PUBLIC
+        BrnModeManager.h
+)
+
+add_subdirectory(ChallengeManager)
+add_subdirectory(Debug)
+add_subdirectory(GameModes)
+add_subdirectory(GameModeStates)
+add_subdirectory(Hud)
+add_subdirectory(Scoring)

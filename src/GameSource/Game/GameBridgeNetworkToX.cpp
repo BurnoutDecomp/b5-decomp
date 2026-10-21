@@ -30,6 +30,7 @@
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameSource/Game/GameBridgeNetworkToX.h"
 #include "GameSource/Game/GameBridgeGameStateToX.h"    // BrnGame::PushGuiEvent (the shared GUI event push)
 
@@ -888,6 +889,7 @@ namespace BrnGame
                                   "the ten round events span 440 bytes on both sides");
                     std::memcpy(lEvent.maEvents, lpParamsChangedEvent->maEvents, sizeof(lEvent.maEvents));
                     PushGuiEvent(lEvent, lpGuiInput);
+                    BrnGui::CreateMatchTracePC::Parameters(BrnGui::CreateMatchTracePC::E_PARAMS_GUI_OUTPUT, lEvent);
                     break;
                 }
                 case NetIO::NetworkOutPlayerRemovedEvent::KI_EVENT_TYPE:                    // 17 (only when not leaving)

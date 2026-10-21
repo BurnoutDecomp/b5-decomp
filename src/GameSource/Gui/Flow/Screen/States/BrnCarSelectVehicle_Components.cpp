@@ -20,6 +20,7 @@
 //  10 HighlightNext  11 HighlightPrevious  12 HighlightIndex
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectVehicle.h"
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: one readiness receipt per context
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
@@ -454,6 +455,12 @@ namespace BrnGui
             mHelpItemContinue.SetItem("$GENERAL_OPTION_CONTINUE",
                                       ButtonIconComponent::E_PADBUTTON_SELECT,
                                       ButtonIconComponent::E_PADBUTTON_INVISIBLE);
+            // FLAG PC diagnostic: the original !IsLoading branch already enabled Continue.
+            if (meCurrentState == E_CARSELECT_VISIBLE_INTERACTIVE)
+                CreateMatchTracePC::VehicleReady(static_cast<s32>(meCurrentState),
+                    static_cast<s32>(meCarSelectType), mbCarChangeInProgress,
+                    mfCarouselXOffset, mbVoiceOverPlaying,
+                    mCurrentSetupInfo.mCarId, miMostRecentDropInId);
         }
 
         // Slide the five icons by the live carousel scroll offset.

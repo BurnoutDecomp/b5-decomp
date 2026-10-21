@@ -1454,6 +1454,8 @@ namespace BrnGui
         // (+0xA800) to the route info as an inlined address.
         friend struct OnlineLoading;
         friend struct OnlineGameOptionsSummary;
+        // ARTIST route state inlines the same options mirror and round-count reads.
+        friend struct OnlineSelectRoute;
 
         // [gateui] Same exposure rule for the HUD-message DIRECTOR: its
         // CheckMessageIsAvailable @0x824F2B28 inlines exactly two raw loads off the cache --

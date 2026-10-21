@@ -1092,7 +1092,7 @@ void LoadingScriptedState::Update()
         lrGui.GetGuiOutQueue()->Clear();
         lrGui.SetFrameUpdateSet(lUpdateSet);
         lrGui.SetGuiEventInputBuffer(lpGuiInput);
-        lrGui.Update();
+        lrGui.Update(&s_GameDataInput, &s_GameDataOutput);
         lpGuiOutput->LockForWrite();
         lpGuiOutput->AddGuiOutEvents(lrGui.GetGuiOutQueue());
         lpGuiOutput->UnlockForWrite();
@@ -1581,12 +1581,12 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         lpGameModule->BridgeGameToGui(lpGuiInput);
         lpGuiInput->UnlockForWrite();
 
-        // FLAG PC-platform leaf: execute the existing GUI port, then publish its
-        // current output to this frame's buffer before resource/game consumers.
+        // FLAG PC-platform leaf: execute the GUI port with this caller-owned
+        // GameData pair, then publish its current output before consumers.
         BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
         lrGui.SetGuiEventInputBuffer(lpGuiInput);
         lrGui.SetFrameUpdateSet(static_cast<BrnUpdateSet>(0x40));
-        lrGui.Update();
+        lrGui.Update(lpGameDataInput, lpGameDataOutput);
         lpGuiOutput->Clear();
         lpGuiOutput->LockForWrite();
         lpGuiOutput->AddGuiOutEvents(lrGui.GetGuiOutQueue());

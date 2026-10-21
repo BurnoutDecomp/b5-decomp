@@ -21,9 +21,12 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"         // BrnGui::MenuComponent
 #include "SharedClasses/World/BrnWorldRegion.h"                             // BrnWorld::ECounty
 
+namespace CgsModule { struct Event; }
+
 namespace BrnGui
 {
     class GuiCache;
+    struct GuiEventNetworkGameParams;
 
     struct SelectRoutes : public CgsGui::GuiComponent
     {
@@ -64,6 +67,32 @@ namespace BrnGui
             BrnWorld::ECounty           maeSelectedCounty[KI_MAX_ROUNDS];       // +0x3C
         };
 
+        virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                               const char* lpacParentName) override;
+        void Setup(const GuiEventNetworkGameParams* lpGameParams, GuiCache* lpGuiCache);
+        void Update();
+        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);
+        void Show();
+        void Hide();
+        void SetupMenuText();
+        void HighlightAddCheckpoint();
+
+        // PC state-queue boundary: ARTIST reads the header-stripped 8-byte
+        // {padId, buttonId} record. DWARF spells GuiEventControllerInputPressed*;
+        // the canonical PC event also contains its explicit 12-byte queue header.
+        EChangedItem HandleControllerInput(const CgsModule::Event* lpControllerEvent);
+
+        s32 GetNumberCheckpoints(s32 liRoundNumber) const;
+        u32 GetStartLightTriggerID(s32 liRoundNumber) const;
+        u32 GetStartPointEventIndex(s32 liRoundNumber) const;
+        void SetCurrentRound(s32 liRoundNumber);
+        s32 GetCurrentRound() const;
+        EMenuItemType GetCurrentMenuItemType() const;
+        void SetStartLightTriggerID(s32 liRoundNumber, u32 luStartLightTriggerID);
+        void SetCurrentlySelectedCheckpointLandmark(s32 liRoundNumber,
+                                                    BrnGameState::LandmarkIndex lLandmarkIndex);
+        void RemoveLastCheckpoint();
+
         // absolute menu-item index of the highlighted row, or 0 when no row
         // is highlighted.
         s32 GetCurrentlySelectedCheckpointIndex() const;
@@ -75,7 +104,7 @@ namespace BrnGui
         // the landmark for the checkpoint the highlighted row stands for.
         BrnGameState::LandmarkIndex GetCurrentlySelectedCheckpointLandmark(s32 liRoundNumber) const;
 
-        // classify a menu row (its own ledger function, declaration only).
+        // classify an absolute menu row for the current round.
         EMenuItemType GetMenuItemType(s32 liItemIndex) const;
 
         // Copy a preset event's route (start trigger, checkpoints, counties) into the current
@@ -83,6 +112,9 @@ namespace BrnGui
         void SetRouteFromPresetEvent(s32 liPresetEventID);
 
     private:
+        static const s32 KI_NUM_DISPLAYABLE_CHECKPOINTS = 6;
+        bool SelectRandomLandmark(s32 liCheckpointItem, BrnWorld::ECounty leCounty);
+
         // Pick a random online landmark (checkpoint) / finish point for the given checkpoint row
         // of liRoundNumber, in leCounty (E_COUNTY_COUNT == anywhere), and return its landmark;
         // -1 when nothing qualifies. Bodies in the .cpp.

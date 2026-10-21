@@ -1,0 +1,47 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnBurningRoute.cpp
+        BrnBurnoutSkillzManager.cpp
+        BrnCrashMode.cpp
+        BrnFaceOffMode.cpp
+        BrnGameMode.cpp
+        BrnGameModeParams.cpp
+        BrnOfflineGameMode.cpp
+        BrnOnlineBurningHomeRunMode.cpp
+        BrnOnlineBurningHomeRunMode_wBT_05.cpp
+        BrnOnlineBurningHomeRunMode_wN3_01.cpp
+        BrnOnlineFreeBurnLobbyMode.cpp
+        BrnOnlineFreeBurnMode.cpp
+        BrnOnlineGameMode.cpp
+        BrnOnlineRaceMode.cpp
+        BrnOnlineRoadRageMode.cpp
+        BrnOnlineShowtimeMode.cpp
+        BrnOnlineStuntRunMode.cpp
+        BrnPursuitMode.cpp
+        BrnRaceMode.cpp
+        BrnRoadRageMode.cpp
+        BrnStuntAttackMode.cpp
+        BrnSurvivor.cpp
+
+    PUBLIC
+        BrnBurningRoute.h
+        BrnBurnoutSkillzManager.h
+        BrnCrashMode.h
+        BrnFaceOffMode.h
+        BrnGameMode.h
+        BrnGameModeParams.h
+        BrnOfflineGameMode.h
+        BrnOnlineBurningHomeRunMode.h
+        BrnOnlineFreeBurnLobbyMode.h
+        BrnOnlineFreeBurnMode.h
+        BrnOnlineGameMode.h
+        BrnOnlineRaceMode.h
+        BrnOnlineRoadRageMode.h
+        BrnOnlineShowtimeMode.h
+        BrnOnlineStuntRunMode.h
+        BrnPursuitMode.h
+        BrnRaceMode.h
+        BrnRoadRageMode.h
+        BrnStuntAttackMode.h
+        BrnSurvivor.h
+)

@@ -26,8 +26,10 @@ namespace
             const CgsInput::InputIO::OutputBuffer*) = &BrnGame::BrnGameModule::BridgeControllerToDirector;
         void (BrnGame::BrnGameModule::*lpWorld)(BrnWorldIO::UpdateInputBuffer*,
             const CgsInput::InputIO::OutputBuffer*) = &BrnGame::BrnGameModule::BridgeControllerToWorld;
-        void (BrnGame::BrnGameModule::*lpGs)(BrnGameState::GameStateModule*,
-            const CgsInput::InputIO::OutputBuffer*, s32) = &BrnGame::BrnGameModule::BridgeControllerToGameState;
+        void (BrnGame::BrnGameModule::*lpGs)(
+            BrnGameState::GameStateModuleIO::PreWorldInputBuffer*,
+            const CgsInput::InputIO::OutputBuffer*, bool) =
+                &BrnGame::BrnGameModule::BridgeControllerToGameState;
         void (BrnGame::BrnGameModule::*lpGui)(CgsGui::CgsGuiModuleIO::InputBuffer*,
             const CgsInput::InputIO::OutputBuffer*) = &BrnGame::BrnGameModule::BridgeControllerToGui;
         (void)lpGet; (void)lpMap; (void)lpDir; (void)lpWorld; (void)lpGs; (void)lpGui;

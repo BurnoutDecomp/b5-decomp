@@ -9,13 +9,13 @@ target_sources(${PROJECT_NAME}
         BrnGameModule_wN1_02.cpp
         BrnGameModuleIO.cpp
         BrnGlobalCpuMonitors.cpp
-        #BrnGlobalCpuMonitors_embed_check.cpp # TODO: Broken for now
+        BrnGlobalCpuMonitors_embed_check.cpp
         BrnHarnessWinTeleport.cpp
         BrnLoadingScreenRenderer.cpp
         BrnLUACall.cpp
         BrnLUACallbackHelper.cpp
         GameBridgeControllerToX.cpp
-        #GameBridgeControllerToX_embed_check.cpp # TODO: Broken for now
+        GameBridgeControllerToX_embed_check.cpp
         GameBridgeDirectorToX.cpp
         GameBridgeGameStateToX.cpp
         GameBridgeGameStateToX_Controller.cpp
