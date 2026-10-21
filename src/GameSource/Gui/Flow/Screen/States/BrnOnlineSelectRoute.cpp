@@ -1370,7 +1370,11 @@ namespace
             GuiTracker::TrackerInformation& lrItem =
                 lSetTrackerEvent.mTrackedDataInfo[liCheckpoint];
             lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
-            lrItem.mv3Position = lIconInfo.GetPositionLane();
+            const Vector4& lv4Position = lIconInfo.GetPositionLane();
+            lrItem.mv3Position.x = lv4Position.x;
+            lrItem.mv3Position.y = lv4Position.y;
+            lrItem.mv3Position.z = lv4Position.z;
+            lrItem.mv3Position.w = lv4Position.w;
             lrItem.mTargetJunctionId = 0;
             const s16 li16LandmarkIndex = lIconInfo.GetLandmarkIndexHalf();
             lrItem.mTargetLandmarkIndex = static_cast<u16>(li16LandmarkIndex);
