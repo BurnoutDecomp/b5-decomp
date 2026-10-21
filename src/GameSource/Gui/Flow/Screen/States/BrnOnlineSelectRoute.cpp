@@ -1402,7 +1402,9 @@ namespace
 
     void OnlineSelectRoute::UpdateCursor()
     {
-        Vector2 lav2IconPositions[36];
+        // ARTIST reserves a 0x1330-byte frame; DecFIGS UpdateCursor constructs
+        // 0x121 Vector2 entries here, not the 576-byte slice inferred by Hex-Rays.
+        Vector2 lav2IconPositions[289];
         s32 liNumIcons = 0;
         mpIconManager->GetSatNavIconPositions(lav2IconPositions, &liNumIcons);
         const GuiCursor::SnapResults lSnap =
