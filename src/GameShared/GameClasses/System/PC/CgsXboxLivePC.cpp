@@ -9,13 +9,402 @@
 //                      with the shared PC identity (BP_LAN=0 opts out).
 //                      (CgsPcNetIdentity.h) as its gamertag and XUID.
 // Win32 error codes used: 0 ERROR_SUCCESS, 18 ERROR_NO_MORE_FILES, 87 ERROR_INVALID_PARAMETER.
+// The keyboard below is explicitly native PC policy, including cancellation;
+// it does not claim the unavailable XAM keyboard flag/layout/status contract.
 // ============================================================================
+
+// The native controls need USER/GDI declarations before any lean engine headers.
+#ifdef NOUSER
+#undef NOUSER
+#endif
+#ifdef NOGDI
+#undef NOGDI
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/CgsXOverlapped.h"   // XOVERLAPPED
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 #include "GameShared/GameClasses/System/PC/CgsPcNetIdentity.h"
 
 #include <cstring>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <string>
+
+// FLAG PC-platform leaf: one native Unicode EDIT window, driven by the existing
+// host message pump. This is explicit PC UI/status policy, not recovered XAM.
+namespace CgsSystem { namespace KeyboardPC
+{
+    namespace
+    {
+        struct Operation
+        {
+            XOVERLAPPED* mpOverlapped = nullptr;
+            u16* mpResult = nullptr;
+            u32 muCapacity = 0;
+            std::wstring mDefault, mTitle, mPrompt, mAccepted;
+            u32 muStatus = ERROR_IO_PENDING;
+            bool mbPublished = false;
+            bool mbAbandoned = false;
+        };
+        std::mutex sMutex;
+        std::shared_ptr<Operation> spOperation;
+        std::atomic<bool> sbCapture(false), sbVisible(false);
+        bool sbNeedRelease = false;       // protected by sMutex
+        bool sbDebugControlsNeutral = false; // protected by sMutex; fresh after each release latch
+        bool sbOwnerClosing = false;      // protected by sMutex
+        HWND spOwner = nullptr;           // only the main window thread uses HWNDs
+        HWND spWindow = nullptr;
+        std::shared_ptr<Operation> spUiOperation; // main window thread only
+        const wchar_t KAC_WINDOW_CLASS[] = L"BurnoutPCKeyboard";
+        const int KI_EDIT = 101;
+
+        bool KeysReleased()
+        {
+            for (int liKey = 1; liKey < 256; ++liKey)
+                if ((GetAsyncKeyState(liKey) & 0x8000) != 0) return false;
+            return true;
+        }
+
+        std::wstring CopyText(const u16* lpText, u32 luMaximum = 0xffffffffu)
+        {
+            std::wstring lText;
+            if (lpText != nullptr)
+                for (u32 lu = 0; lu < luMaximum && lpText[lu] != 0; ++lu)
+                    lText.push_back(static_cast<wchar_t>(lpText[lu]));
+            return lText;
+        }
+
+        bool ValidUtf16(const std::wstring& lrText)
+        {
+            for (size_t lu = 0; lu < lrText.size(); ++lu)
+            {
+                const u16 luUnit = static_cast<u16>(lrText[lu]);
+                if (luUnit >= 0xd800 && luUnit <= 0xdbff)
+                {
+                    if (++lu == lrText.size() || lrText[lu] < 0xdc00 || lrText[lu] > 0xdfff) return false;
+                }
+                else if (luUnit >= 0xdc00 && luUnit <= 0xdfff) return false;
+            }
+            return true;
+        }
+
+        u32 NativeFailure()
+        {
+            const DWORD luError = GetLastError();
+            return luError != ERROR_SUCCESS ? static_cast<u32>(luError) : ERROR_GEN_FAILURE;
+        }
+
+        // Caller holds sMutex; only API callers publish to their live title storage.
+        // Native window callbacks only change owned Operation data. API publication
+        // may also run on the main thread in the existing serial frame mode.
+        // Terminal data precedes status.
+        void Publish(Operation& lrOperation)
+        {
+            if (lrOperation.mbPublished || lrOperation.mbAbandoned || lrOperation.muStatus == ERROR_IO_PENDING) return;
+            if (lrOperation.muStatus == ERROR_SUCCESS)
+            {
+                for (size_t lu = 0; lu < lrOperation.mAccepted.size(); ++lu)
+                    lrOperation.mpResult[lu] = static_cast<u16>(lrOperation.mAccepted[lu]);
+                lrOperation.mpResult[lrOperation.mAccepted.size()] = 0;
+            }
+            lrOperation.mpOverlapped->InternalHigh = 0; // PC policy: this keyboard supplies no byte-count result.
+            lrOperation.mpOverlapped->dwExtendedError = lrOperation.muStatus;
+            lrOperation.mpOverlapped->InternalLow = lrOperation.muStatus;
+            lrOperation.mbPublished = true;
+        }
+
+        void Complete(const std::shared_ptr<Operation>& lpOperation, u32 luStatus, std::wstring* lpAccepted = nullptr)
+        {
+            std::lock_guard<std::mutex> lLock(sMutex);
+            if (spOperation != lpOperation || lpOperation->mbAbandoned || lpOperation->muStatus != ERROR_IO_PENDING) return;
+            if (lpAccepted != nullptr) lpOperation->mAccepted.swap(*lpAccepted);
+            lpOperation->muStatus = luStatus;
+            sbNeedRelease = true;
+            sbDebugControlsNeutral = false;
+        }
+
+        LRESULT CALLBACK KeyboardProc(HWND lpWindow, UINT luMessage, WPARAM luWParam, LPARAM liLParam)
+        {
+            const std::shared_ptr<Operation> lpOperation = spUiOperation;
+            try
+            {
+                switch (luMessage)
+                {
+                case WM_CREATE:
+                {
+                    const HINSTANCE lpModule = GetModuleHandleW(nullptr);
+                    HWND laControls[4] = {};
+                    laControls[0] = CreateWindowExW(0, L"EDIT", lpOperation->mPrompt.c_str(),
+                            WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+                            16, 12, 472, 48, lpWindow, nullptr, lpModule, nullptr);
+                    if (!laControls[0]) { Complete(lpOperation, NativeFailure()); return -1; }
+                    laControls[1] = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                            16, 66, 472, 26, lpWindow, reinterpret_cast<HMENU>(static_cast<INT_PTR>(KI_EDIT)), lpModule, nullptr);
+                    if (!laControls[1]) { Complete(lpOperation, NativeFailure()); return -1; }
+                    laControls[2] = CreateWindowExW(0, L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                            300, 112, 88, 28, lpWindow, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDOK)), lpModule, nullptr);
+                    if (!laControls[2]) { Complete(lpOperation, NativeFailure()); return -1; }
+                    laControls[3] = CreateWindowExW(0, L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                            400, 112, 88, 28, lpWindow, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDCANCEL)), lpModule, nullptr);
+                    if (!laControls[3]) { Complete(lpOperation, NativeFailure()); return -1; }
+                    for (HWND lpControl : laControls)
+                    {
+                        SendMessageW(lpControl, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
+                    }
+                    SendMessageW(laControls[1], EM_LIMITTEXT, lpOperation->muCapacity - 1, 0);
+                    if (!SetWindowTextW(laControls[1], lpOperation->mDefault.c_str()))
+                    { Complete(lpOperation, NativeFailure()); return -1; }
+                    SendMessageW(laControls[1], EM_SETSEL, 0, -1); // PC policy: select the supplied default for editing.
+                    return 0;
+                }
+                case DM_GETDEFID:
+                    return MAKELRESULT(IDOK, DC_HASDEFID);
+                case WM_COMMAND:
+                    if (LOWORD(luWParam) == IDOK && HIWORD(luWParam) == BN_CLICKED)
+                    {
+                        wchar_t laText[512] = {};
+                        SetLastError(ERROR_SUCCESS);
+                        const int liCount = GetWindowTextW(GetDlgItem(lpWindow, KI_EDIT), laText, lpOperation->muCapacity);
+                        if (liCount == 0 && GetLastError() != ERROR_SUCCESS) Complete(lpOperation, NativeFailure());
+                        else
+                        {
+                            std::wstring lAccepted(laText, static_cast<size_t>(liCount));
+                            if (ValidUtf16(lAccepted)) Complete(lpOperation, ERROR_SUCCESS, &lAccepted);
+                            else Complete(lpOperation, ERROR_NO_UNICODE_TRANSLATION);
+                        }
+                        DestroyWindow(lpWindow);
+                        return 0;
+                    }
+                    if (LOWORD(luWParam) != IDCANCEL || HIWORD(luWParam) != BN_CLICKED) break;
+                    // Fall through to the native Cancel/X close path.
+                case WM_CLOSE:
+                    Complete(lpOperation, ERROR_CANCELLED);
+                    DestroyWindow(lpWindow);
+                    return 0;
+                case WM_DESTROY:
+                    Complete(lpOperation, ERROR_OPERATION_ABORTED);
+                    return 0;
+                case WM_NCDESTROY:
+                    spWindow = nullptr;
+                    spUiOperation.reset();
+                    sbVisible.store(false, std::memory_order_release);
+                    return DefWindowProcW(lpWindow, luMessage, luWParam, liLParam);
+                }
+            }
+            catch (const std::bad_alloc&)
+            {
+                Complete(lpOperation, ERROR_NOT_ENOUGH_MEMORY);
+                if (luMessage == WM_CREATE) return -1;
+                DestroyWindow(lpWindow);
+                return 0;
+            }
+            return DefWindowProcW(lpWindow, luMessage, luWParam, liLParam);
+        }
+    }
+
+    bool IsCapturingInput() { return sbCapture.load(std::memory_order_acquire); }
+
+    bool BlockGameInput(bool lbControlsNeutral)
+    {
+        if (!IsCapturingInput()) return false;
+        std::lock_guard<std::mutex> lLock(sMutex);
+        if (sbNeedRelease && lbControlsNeutral && sbDebugControlsNeutral && KeysReleased()) sbNeedRelease = false;
+        if (!sbNeedRelease && !sbVisible.load(std::memory_order_acquire) &&
+            (!spOperation || spOperation->muStatus != ERROR_IO_PENDING))
+            sbCapture.store(false, std::memory_order_release);
+        return true; // The release frame is consumed too; held closing input never reaches the game.
+    }
+
+    bool BlockDebugInput(bool lbControlsNeutral)
+    {
+        if (!IsCapturingInput()) return false;
+        std::lock_guard<std::mutex> lLock(sMutex);
+        sbDebugControlsNeutral = lbControlsNeutral;
+        return true; // Only BlockGameInput releases capture, after both input owners are neutral.
+    }
+
+    void Forget(XOVERLAPPED* lpOverlapped)
+    {
+        std::lock_guard<std::mutex> lLock(sMutex);
+        if (spOperation && spOperation->mpOverlapped == lpOverlapped)
+        {
+            spOperation->mbAbandoned = true;
+            spOperation->mpOverlapped = nullptr;
+            spOperation->mpResult = nullptr;
+            spOperation.reset();
+            sbNeedRelease = true;
+            sbDebugControlsNeutral = false;
+        }
+    }
+
+    void Pump(HWND__* lpOwner)
+    {
+        std::shared_ptr<Operation> lpOperation;
+        bool lbCreate = false, lbClose = false;
+        {
+            std::lock_guard<std::mutex> lLock(sMutex);
+            spOwner = lpOwner;
+            lpOperation = spOperation;
+            lbClose = spWindow != nullptr && (sbOwnerClosing || spUiOperation != lpOperation ||
+                      !lpOperation || lpOperation->muStatus != ERROR_IO_PENDING);
+            lbCreate = !sbOwnerClosing && lpOperation && lpOperation->muStatus == ERROR_IO_PENDING && !sbNeedRelease;
+        }
+        if (lbClose) DestroyWindow(spWindow); // Pump is on the creating thread; no mutex crosses a Win32 call.
+        if (!lbCreate || spWindow != nullptr) return;
+        DWORD luProcess = 0;
+        if (!IsWindow(lpOwner) || GetWindowThreadProcessId(lpOwner, &luProcess) != GetCurrentThreadId() ||
+            luProcess != GetCurrentProcessId())
+        { Complete(lpOperation, ERROR_INVALID_WINDOW_HANDLE); return; }
+        WNDCLASSW lClass = {};
+        lClass.lpfnWndProc = KeyboardProc;
+        lClass.hInstance = GetModuleHandleW(nullptr);
+        lClass.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+        lClass.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<INT_PTR>(COLOR_BTNFACE + 1));
+        lClass.lpszClassName = KAC_WINDOW_CLASS;
+        if (!RegisterClassW(&lClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        { Complete(lpOperation, NativeFailure()); return; }
+        RECT lOwnerRect = {};
+        GetWindowRect(lpOwner, &lOwnerRect);
+        RECT lRect = {0, 0, 504, 156};
+        const DWORD luStyle = WS_POPUP | WS_CAPTION | WS_SYSMENU;
+        AdjustWindowRectEx(&lRect, luStyle, FALSE, WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT);
+        spUiOperation = lpOperation;
+        spWindow = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT, KAC_WINDOW_CLASS,
+            lpOperation->mTitle.c_str(), luStyle, lOwnerRect.left + 24, lOwnerRect.top + 24,
+            lRect.right - lRect.left, lRect.bottom - lRect.top, lpOwner, nullptr, lClass.hInstance, nullptr);
+        if (spWindow == nullptr)
+        { Complete(lpOperation, NativeFailure()); spUiOperation.reset(); return; }
+        sbVisible.store(true, std::memory_order_release);
+        ShowWindow(spWindow, SW_SHOW);
+        SetFocus(GetDlgItem(spWindow, KI_EDIT));
+    }
+
+    bool ProcessMessage(tagMSG* lpMessage)
+    {
+        return spWindow != nullptr && IsDialogMessageW(spWindow, lpMessage) != FALSE;
+    }
+
+    void OwnerClosing(HWND__* lpOwner)
+    {
+        {
+            std::lock_guard<std::mutex> lLock(sMutex);
+            if (spOwner != nullptr && spOwner != lpOwner) return;
+            sbOwnerClosing = true;
+            if (spOperation)
+            {
+                spOperation->mbAbandoned = true;
+                spOperation->mpOverlapped = nullptr;
+                spOperation->mpResult = nullptr;
+                spOperation.reset();
+            }
+            sbNeedRelease = true;
+            sbDebugControlsNeutral = false;
+        }
+        if (spWindow != nullptr) DestroyWindow(spWindow);
+    }
+
+    bool TryResult(XOVERLAPPED* lpOverlapped, u32* lpResult, u32& lrStatus)
+    {
+        std::lock_guard<std::mutex> lLock(sMutex);
+        if (!spOperation || spOperation->mpOverlapped != lpOverlapped) return false;
+        // The supported original polling record has hEvent==0: ARTIST returns996
+        // while pending even if bWait is true. No guest32 word is cast to HANDLE.
+        if (spOperation->muStatus == ERROR_IO_PENDING) lrStatus = ERROR_IO_INCOMPLETE;
+        else
+        {
+            Publish(*spOperation);
+            if (lpResult != nullptr) *lpResult = lpOverlapped->InternalHigh;
+            lrStatus = spOperation->muStatus;
+        }
+        return true;
+    }
+
+    bool TryCancel(XOVERLAPPED* lpOverlapped, u32& lrStatus)
+    {
+        std::lock_guard<std::mutex> lLock(sMutex);
+        if (!spOperation || spOperation->mpOverlapped != lpOverlapped) return false;
+        if (spOperation->muStatus == ERROR_IO_PENDING)
+        { spOperation->muStatus = ERROR_CANCELLED; sbNeedRelease = true; sbDebugControlsNeutral = false; }
+        Publish(*spOperation); // Logical I/O cancellation is complete before return; Pump closes owned UI.
+        lrStatus = ERROR_SUCCESS;
+        return true;
+    }
+
+    u32 Begin(u32 luUser, u32 luFlags, const u16* lpDefault, const u16* lpTitle,
+              const u16* lpPrompt, u16* lpResult, u32 luCapacity, XOVERLAPPED* lpOverlapped)
+    {
+        static_assert(sizeof(wchar_t) == 2, "Win32 Unicode controls use UTF16 code units");
+        u32 luError = ERROR_SUCCESS;
+        std::shared_ptr<Operation> lpOperation;
+        try
+        {
+            if (lpOverlapped == nullptr) return ERROR_INVALID_PARAMETER;
+            if (lpResult == nullptr || luCapacity != 512 || luUser >= 4) luError = ERROR_INVALID_PARAMETER;
+            else if (luFlags != 0x30000064u || lpOverlapped->InternalContext != 0 ||
+                     lpOverlapped->hEvent != 0 || lpOverlapped->pCompletionRoutine != 0 ||
+                     lpOverlapped->dwCompletionContext != 0) luError = ERROR_NOT_SUPPORTED;
+            else
+            {
+                lpOperation = std::make_shared<Operation>();
+                lpOperation->mpOverlapped = lpOverlapped;
+                lpOperation->mpResult = lpResult;
+                lpOperation->muCapacity = luCapacity;
+                lpOperation->mDefault = CopyText(lpDefault, luCapacity - 1);
+                if (lpOperation->mDefault.size() == luCapacity - 1 && lpOperation->mDefault.back() >= 0xd800 &&
+                    lpOperation->mDefault.back() <= 0xdbff) lpOperation->mDefault.pop_back();
+                lpOperation->mTitle = CopyText(lpTitle);
+                lpOperation->mPrompt = CopyText(lpPrompt);
+                if (!ValidUtf16(lpOperation->mDefault) || !ValidUtf16(lpOperation->mTitle) || !ValidUtf16(lpOperation->mPrompt))
+                    luError = ERROR_NO_UNICODE_TRANSLATION;
+            }
+        }
+        catch (const std::bad_alloc&) { luError = ERROR_NOT_ENOUGH_MEMORY; }
+        std::lock_guard<std::mutex> lLock(sMutex);
+        if (spOperation && (spOperation->muStatus == ERROR_IO_PENDING || !spOperation->mbPublished))
+        {
+            if (spOperation->mpOverlapped == lpOverlapped) return ERROR_BUSY; // Never overwrite another in-flight call.
+            luError = ERROR_BUSY;
+        }
+        if (sbOwnerClosing) luError = ERROR_OPERATION_ABORTED;
+        if (luError != ERROR_SUCCESS)
+        {
+            // A failed new request must not retain a completed result at the same address.
+            // The live/unpublished case above is still BUSY and keeps its original identity.
+            if (spOperation && spOperation->mpOverlapped == lpOverlapped)
+            {
+                spOperation->mbAbandoned = true;
+                spOperation->mpOverlapped = nullptr;
+                spOperation->mpResult = nullptr;
+                spOperation.reset();
+            }
+            lpOverlapped->InternalHigh = 0;
+            lpOverlapped->dwExtendedError = luError;
+            lpOverlapped->InternalLow = luError;
+            return luError;
+        }
+        spOperation = lpOperation;
+        lpOverlapped->InternalHigh = 0;
+        lpOverlapped->dwExtendedError = 0;
+        lpOverlapped->InternalLow = ERROR_IO_PENDING;
+        sbNeedRelease = true; // Do not reuse the game's opening key/button inside the native UI.
+        sbDebugControlsNeutral = false;
+        sbCapture.store(true, std::memory_order_release);
+        return ERROR_IO_PENDING;
+    }
+} }
+
+extern "C" u32 XShowKeyboardUI(u32 luUser, u32 luFlags, const u16* lpDefault, const u16* lpTitle,
+                               const u16* lpPrompt, u16* lpResult, u32 luCapacity, PXOVERLAPPED lpOverlapped)
+{
+    return CgsSystem::KeyboardPC::Begin(luUser, luFlags, lpDefault, lpTitle, lpPrompt, lpResult, luCapacity, lpOverlapped);
+}
 
 namespace
 {
@@ -79,6 +468,8 @@ namespace
 // its owner's Construct wrote and reads as finished successfully.
 extern "C" u32 XGetOverlappedResult(PXOVERLAPPED lpXOverlapped, u32* lpdwResult, u32 /*bWait*/)
 {
+    u32 luKeyboardStatus = 0;
+    if (CgsSystem::KeyboardPC::TryResult(lpXOverlapped, lpdwResult, luKeyboardStatus)) return luKeyboardStatus;
     if (lpXOverlapped == 0)
         return KU_ERROR_SUCCESS;
     if (lpXOverlapped->InternalLow == KU_ERROR_IO_PENDING)
@@ -92,14 +483,18 @@ extern "C" u32 XGetOverlappedResult(PXOVERLAPPED lpXOverlapped, u32* lpdwResult,
 // extended-error word).
 extern "C" u32 XGetOverlappedExtendedError(PXOVERLAPPED lpXOverlapped)
 {
+    u32 luKeyboardStatus = 0;
+    if (CgsSystem::KeyboardPC::TryResult(lpXOverlapped, nullptr, luKeyboardStatus)) return luKeyboardStatus;
     if (lpXOverlapped == 0)
         return KU_ERROR_SUCCESS;
     return lpXOverlapped->dwExtendedError;
 }
 
 // [PC platform leaf] Cancels an asynchronous call; 0, nothing is in flight.
-extern "C" u32 XCancelOverlapped(void* /*lpOverlapped*/)
+extern "C" u32 XCancelOverlapped(void* lpOverlapped)
 {
+    u32 luKeyboardStatus = 0;
+    if (CgsSystem::KeyboardPC::TryCancel(static_cast<XOVERLAPPED*>(lpOverlapped), luKeyboardStatus)) return luKeyboardStatus;
     return KU_ERROR_SUCCESS;
 }
 
@@ -127,16 +522,13 @@ extern "C" void* XMemSet(void* lpDest, s32 liValue, u32 luCount)
 // Notifications
 // ---------------------------------------------------------------------------
 
-extern "C" __declspec(dllimport) void* __stdcall CreateEventW(void* lpEventAttributes, int bManualReset,
-                                                           int bInitialState, const wchar_t* lpName);
-
 // [PC platform leaf] Creates a system-notification listener. The console always hands back a
 // handle (the buddy manager asserts on it and CloseHandle()s it on Destruct), so the PC returns a
 // real kernel event that is never signalled: the handle is valid and closable, and XNotifyGetNext
 // below never has a notification to dequeue from it.
 extern "C" void* XNotifyCreateListener(unsigned long long /*qwAreas*/)
 {
-    return CreateEventW(0, 1, 0, 0);
+    return CreateEventW(nullptr, TRUE, FALSE, nullptr);
 }
 
 // [PC platform leaf] Dequeues one system notification; 0 == nothing pending.

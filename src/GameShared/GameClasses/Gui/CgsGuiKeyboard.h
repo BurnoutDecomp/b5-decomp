@@ -51,6 +51,11 @@ namespace CgsGui
         // clear mpListener and call listener->KeyboardClosed(resultText) — passing the
         // result buffer on success or null when the op errored.
         void Update();
+#if defined(_WIN32) && !defined(_XBOX)
+        // FLAG PC-platform leaf: owner teardown drops the native operation and listener.
+        // It does not report an accepted string or call a listener being released.
+        void AbandonPlatformOperation();
+#endif
 
     private:
         CgsUtf16             maResultBuffer[512];  // +0x000

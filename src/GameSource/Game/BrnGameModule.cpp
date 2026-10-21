@@ -8,6 +8,7 @@
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Input/GameInputActions.h" // E_GAMEINPUTACTIONS_START (X360 action slot 8)
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
@@ -5059,8 +5060,8 @@ namespace BrnGame
     //               gm+0x9A0B0C == &mTimerStatusInterface) ; UnlockForWrite ; StopMonitor
     //   0x823C5720  mInputModule (gm+0x6E9630) vtable+0x44 == InputModule::PreWorldUpdate(inStack,
     //               outStack, buffer, lpInputModuleOutput, *(gm+0x9A0622) == 0 -- !mbDiskError)
-    //   0x823C5738..0x823C57E8  if (miInputModuleState == 1): the START-pressed port scan (or the invite
-    //               relaunch's port), miInputModuleState = 2   -- [FLAG, below]
+    //   0x823C5738..0x823C57F8  if (miInputModuleState == 1): select the invite user or first
+    //               START-pressed pad, then set miInputModuleState = 2
     //   0x823C5808  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- caller unactivated
     //   0x823C57F8  StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
     // =========================================================================================
@@ -5081,15 +5082,42 @@ namespace BrnGame
         mInputModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
                                     lpInputModulePreWorldInputBuffer, lpInputModuleOutput, !mbDiskError);
 
-        // The console's START-pressed port: KU_NUMBER_OF_PADS (4) unless the scan below finds one.
+        // The selection path keeps the original no-user sentinel until state 1 finds a user.
         u32 liStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
-        // [FLAG, not reconstructed -- dead on this build] 0x823C5738..0x823C57E8: while
-        // miInputModuleState == 1 the console read-locks lpInputModuleOutput and takes the invite
-        // relaunch's port (HasGameBeenRebootedDueToInvite -> the launch data's first word, asserting
-        // "lpLaunchData" at BrnGameModuleUpdateFunctions.cpp:71) or the first of the four pads whose
-        // START action (record +0x5C, maActionInfo[8].muStatus bit 1) was pressed, then sets the state to
-        // 2. This build seeds miInputModuleState = 4 in Construct (the PC input bring-up) and the only
-        // 0 -> 1 edge (BridgeGuiToGame case 90) needs 0, so the block can never run here.
+        if (miInputModuleState == 1)
+        {
+            lpInputModuleOutput->LockForRead();
+            if (mHardware.HasGameBeenRebootedDueToInvite())
+            {
+                BrnHW::System360HW* lpLaunchData = GetSoftRebootData();
+                if (lpLaunchData == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpLaunchData",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModuleUpdateFunctions.cpp", 71);
+                    CgsDev::Assert::EndAssert();
+                }
+                liStartPressedPort = lpLaunchData->mdwUserIndex;
+                miInputModuleState = 2;
+            }
+            else
+            {
+                for (s32 liPort = 0; liPort < CgsInput::KU_NUMBER_OF_PADS; ++liPort)
+                {
+                    const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
+                        lpInputModuleOutput->GetPadInfo(liPort);
+                    if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0)
+                    {
+                        liStartPressedPort = static_cast<u32>(liPort);
+                        miInputModuleState = 2;
+                        break;
+                    }
+                }
+            }
+            lpInputModuleOutput->UnlockForRead();
+        }
+        // This remains an idle/rebind transition: construction starts at state 4; an unbind
+        // completion returns to 0, and BridgeGuiToGame event 90 can arm state 1 again.
         // Original 0x823C5808: query only after the input module has published its pad output.
         QueryRequestDoStepFrame(lpInputModuleOutput);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
