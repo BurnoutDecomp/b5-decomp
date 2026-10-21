@@ -14,6 +14,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
+#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h" // private pre-overwrite diagnostic
+
 #include <cstring>
 
 namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
@@ -695,6 +697,7 @@ namespace Module
                                  Io::RootOutputBuffer* lpSoundModuleOutputBuffer,
                                  BrnUpdateSet leUpdateSet)
     {
+        CgsSystem::RwacCommandTracePC::MarkProducerFrame(mpSystem);
         CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
         CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
         CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");
