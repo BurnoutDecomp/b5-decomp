@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"           // CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"   // GetHull / GetHullRuntime / maaRaceCarHulls
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPvsDiag.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"      // traffic capacities / sentinels
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"          // Param, transforms, history and slow data
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"        // Vehicle, Axle and VehicleAxles
@@ -2103,6 +2104,37 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
     const f32 lfStepX = 170.0f / static_cast<f32>(luColumns);
     const f32 lfStepY = 170.0f / static_cast<f32>(luRows);
     const Vector2 lSize = {lfStepX, lfStepY, 0.0f, 0.0f};
+
+    // One non-blocking snapshot copy; scratch is thread-local and outside both game layouts.
+    PvsDiag::Snapshot* lpPvsDiagSnapshot = nullptr;
+    PvsDiag::DrawSample* lpPvsDiagDraw = nullptr;
+    if (PvsDiag::Enabled())
+    {
+        static thread_local PvsDiag::Snapshot lPvsDiagSnapshot;
+        static thread_local PvsDiag::DrawSample lPvsDiagDraw;
+        if (PvsDiag::CopyPending(lPvsDiagSnapshot))
+        {
+            lpPvsDiagSnapshot = &lPvsDiagSnapshot;
+            lpPvsDiagDraw = &lPvsDiagDraw;
+            lPvsDiagDraw.mpModule = mpModule;
+            lPvsDiagDraw.mpPvs = lpPvs;
+            lPvsDiagDraw.mbRunningWorstCase = mpModule->mbDEBUGRunningWorstCase;
+            lPvsDiagDraw.mbDrawToggle = mbDrawActiveHulls;
+            lPvsDiagDraw.mbDecisionFrame = mpModule->mbDecisionFrame;
+            lPvsDiagDraw.muFramesSinceDecision = mpModule->muFramesSinceDecision;
+            lPvsDiagDraw.mbDataReady = mpModule->mpData.HasMemoryResource();
+            lPvsDiagDraw.mbPvsPresent = lpPvs != nullptr;
+            lPvsDiagDraw.mbMappingTruncated = false;
+            lPvsDiagDraw.muCellsX = lpPvs->muNumCells_X;
+            lPvsDiagDraw.muCellsZ = lpPvs->muNumCells_Z;
+            lPvsDiagDraw.muTotalCells = lpPvs->muNumCells;
+            lPvsDiagDraw.muDrawRows = luRows;
+            lPvsDiagDraw.muBoxCalls = 0;
+            lPvsDiagDraw.muMappingCount = 0;
+            lPvsDiagDraw.mfBoxStepX = lfStepX;
+            lPvsDiagDraw.mfBoxStepY = lfStepY;
+        }
+    }
     for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
     {
         const u16 luHull = mpModule->mActiveHulls.GetItem(luActive);
@@ -2113,6 +2145,23 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
             0.0f, 0.0f};
         // Vector DrawBox takes position+size; scalar DrawBox takes min/max.
         lpDisplay->DrawBox(lPosition, lSize, 0x88FFFF00u);
+        if (lpPvsDiagDraw != nullptr)
+        {
+            ++lpPvsDiagDraw->muBoxCalls;
+            if (lpPvsDiagDraw->muMappingCount < KU_MAX_ACTIVE_HULLS)
+            {
+                PvsDiag::DrawBoxRecord& lrRecord =
+                    lpPvsDiagDraw->maBoxes[lpPvsDiagDraw->muMappingCount++];
+                lrRecord.muHull = luHull;
+                lrRecord.muColumns = luHullColumns;
+                lrRecord.muColumn = static_cast<u32>(luHull) % luHullColumns;
+                lrRecord.muRow = static_cast<u32>(luHull) / luHullColumns;
+            }
+            else
+            {
+                lpPvsDiagDraw->mbMappingTruncated = true;
+            }
+        }
     }
 
     Vector2 lStart = {80.0f, 80.0f, 0.0f, 0.0f};
@@ -2136,6 +2185,15 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
         lStart.y += lfStepY;
         lEnd.y += lfStepY;
     } while (luLines);
+
+    if (lpPvsDiagSnapshot != nullptr && lpPvsDiagDraw != nullptr)
+    {
+        if (!PvsDiag::ConsumeIfMatching(*lpPvsDiagSnapshot, *lpPvsDiagDraw))
+        {
+            PvsDiag::InvalidateIfToggleMismatch(
+                lpPvsDiagSnapshot->mePhase, mpModule->mbDEBUGRunningWorstCase);
+        }
+    }
 }
 
 // ARTIST 0x8275C938. Even with another local player, this reads car zero and
