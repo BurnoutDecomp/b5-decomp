@@ -44,6 +44,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"                   // GetLastActiveRaceCarInterface
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"    // GetProfile, RequestUpdateRivals
 #include "GameSource/GameState/Progression/BrnProfile.h"               // Profile::FindCar
 #include "GameSource/GameState/Progression/BrnProgressionCarData.h"    // CarData::GetUnlockDeformationAmount
