@@ -102,17 +102,6 @@ const s32 OnlineMarkMan::maiEventToObserve[5] =
     { KI_EVENT_CONTROLLER_ACTION, KI_EVENT_CONNECTION_LOST, KI_EVENT_APT_TRIGGER,
       KI_EVENT_GUI_CACHE, KI_EVENT_ONLINE_SCREEN_ADVANCE };
 const s32 OnlineMarkMan::miNumEventsObserved = 5;
-    // FLAG boundary no-op: the apt-component watcher half of the cache the X360 reaches is
-    // not on the committed GuiCache public API. Faithful default is a no-op; mirrors the
-    // committed BrnGui::BootLegalCacheBoundary::ClearExpectedAptComponentList body. GROW when
-    // the GuiCache apt-component watcher lands.
-    namespace OnlineMarkManCacheBoundary
-    {
-        void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, s32 /*liFlow*/)
-        {
-        }
-    }
-
     // ---- SetExpectedComponent @ 0x82483AC0 -------------------------------------
     // Append the hash of an expected APT-component name to the table. Asserts there
     // is room (count < 9), inline-strlens the name (length EXCLUDES the NUL terminator,
@@ -154,7 +143,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-        OnlineMarkManCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 0);
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
     }
 
     // ---- OnEnter ---------------------------------------------------------------

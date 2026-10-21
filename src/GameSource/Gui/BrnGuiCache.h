@@ -1456,6 +1456,8 @@ namespace BrnGui
         friend struct OnlineGameOptionsSummary;
         // ARTIST route state inlines the same options mirror and round-count reads.
         friend struct OnlineSelectRoute;
+        // ARTIST POST_ON_IR reads the original round and lobby snapshots inline.
+        friend struct OnlineInstantResultsState;
 
         // [gateui] Same exposure rule for the HUD-message DIRECTOR: its
         // CheckMessageIsAvailable @0x824F2B28 inlines exactly two raw loads off the cache --

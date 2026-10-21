@@ -341,4 +341,18 @@ namespace BrnGui
 
         GetSelectable(liRow)->SetIconState(liColumn, luState);
     }
+    // ARTIST824E6E78. This registers the rows themselves through their existing helper.
+    void Table::AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache)
+    {
+        for (s32 liRow = 0; liRow < miNumRows; ++liRow)
+            maRows[liRow].AppendExpectedAptComponent(leFlow, lpGuiCache);
+    }
+
+    // ARTIST82494704..740, DecFIGS BrnTable.h:436. No dirty/ready state is fabricated.
+    void Table::SetEnableShowingAnim(bool lbEnable)
+    {
+        mbEnableShowingAnim = lbEnable;
+        for (s32 liRow = 0; liRow < miNumRows; ++liRow)
+            maRows[liRow].SetEnableShowingAnim(mbEnableShowingAnim);
+    }
 }

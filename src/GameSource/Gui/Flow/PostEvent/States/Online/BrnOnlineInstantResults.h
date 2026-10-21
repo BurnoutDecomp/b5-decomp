@@ -2,13 +2,16 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
-#include "GameSource/Gui/Events/BrnGuiEventOnlinePostEvent.h"   // GuiEventOnlinePostEvent (by value)
+#include "GameSource/Gui/Events/BrnGuiEventOnlinePostEvent.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
+#include "GameSource/Gui/Flow/Shared/Components/BrnTable.h"
+#include "GameSource/Gui/BrnGuiTextField.h"
+#include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"
 
-// BrnGui::OnlineInstantResultsState - the online "instant results" post-event GUI
-// state. Layout/virtuals from the reference declaration (BrnOnlineInstantResults.h); offsets
-// from the console asm. The inline resource accessor hands out the static table and its count.
-// Only the members the reconstructed bodies read are named; the console span between them is
-// kept as padding.
+// ARTIST POST_ON_IR owner. Member names follow DecFIGS where the target agrees;
+// the third animator, team fields and points heading are ARTIST additions, named
+// from OnEnter's actual component bindings. Console offsets are evidence only.
 namespace CgsDev { struct Debug2DImmediateRender; }
 
 namespace BrnGui
@@ -65,6 +68,11 @@ namespace BrnGui
         static const s32       KI_NUM_ONLINE_AWARD_TYPES = 11;
         static const AwardData KA_AWARD_OVERALL[KI_NUM_ONLINE_AWARD_TYPES];
 
+        OnlineInstantResultsState();
+        virtual void OnEnter() override;
+        virtual void OnLeave() override;
+        virtual void Update() override;
+
         // Hands the instant-results screen's resource list out.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const
@@ -77,19 +85,67 @@ namespace BrnGui
         void RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay);
 
     private:
-        // BrnOnlineInstantResults.cpp. Clear the ticker, then (in the
-        // standings-update sub-state) post one custom ticker message per award given.
+        void CheckForCompletedLoads();
+        void PopulateNameAndTimeTableCells(const GuiEventOnlinePostEvent* lpEvent);
+        void UpdateDirtyFlags(const GuiEventOnlinePostEvent* lpEvent);
+        void ReorderResultsTable();
+        s32 GetOnlinePlayerIndexFromTablePosition(s32 liTablePosition);
+        GuiEventOnlinePostEvent::Record* GetOnlinePlayerFromTablePosition(s32 liTablePosition);
+        GuiEventOnlinePostEvent::Record* GetOnlinePlayerFromSortedTablePosition(s32 liTablePosition);
+        // ARTIST r6/r7/r8 are three independent bools; older DecFIGS has only r6.
+        void SetAptData(s32 liRow, const GuiEventOnlinePostEvent::Record* lpPlayer,
+                        bool lbResultsForThisRoundOnly, bool lbHideRepeatedTeam,
+                        bool lbTeamResults);
         void FillOutTicker();
+        void HandleControllerInputPressed(const CgsGui::GuiEventControllerInputPressed* lpEvent);
+        void HandleControllerInputFinalStandingsSubState(
+            const CgsGui::GuiEventControllerInputPressed* lpEvent);
+        void HandleDisconnectedEvent(const CgsGui::GuiEventNetworkDisconnected* lpEvent);
+        void SetResultColumnHeading();
+        void SetRoundText();                         // ARTIST-only emitted helper
+        void UpdateCurrentScreenDisplay();            // ARTIST-only emitted helper
+        void UpdateStuntRunColoursAndScores();        // ARTIST-only emitted helper
+        void LeaveScreen();
 
-        static const CgsGui::sResourceTuple maResourceTuplesToLoad[];  // .rdata, 1 entry
-        static const s32                    miNumResourcesToLoad;      // .rdata, == 1
+        static const CgsGui::sResourceTuple maResourceTuplesToLoad[];
+        static const s32 miNumResourcesToLoad;
 
-        EInternalState          meCurrentState;                      // console +0x38
-        // console +0x3C..+0xB153: mTable, maTextFields[40], maIcons[8], the two animation
-        // components, maapTableCellComponentPtrs, mTableData, maTableRowDataSets[16],
-        // miItemsLoaded, muNumTextFilesToLoad, mDisconnectedEvent.
-        u8                      maPadToOnlinePostEvent[0xB154 - 0x3C];
-        GuiEventOnlinePostEvent mOnlinePostEvent;                    // console +0xB154
-        GuiCache*               mpGuiCache;                          // console +0xB38C
+        EInternalState meCurrentState;
+        Table mTable;
+        TextField maTextFields[40];
+        IconComponent maIcons[8];
+        AnimationComponent mAnimationComponent;
+        AnimationComponent mButtonAnimationComponent;
+        AnimationComponent mGamerTagColourAnimationComponent;
+        CgsGui::GuiComponent* maapTableCellComponentPtrs[16][16];
+        TableDataSet mTableData;
+        TableRowDataSet maTableRowDataSets[16];
+        u32 miItemsLoaded;
+        u32 muNumTextFilesToLoad;
+        CgsGui::GuiEventNetworkDisconnected mDisconnectedEvent;
+        GuiEventOnlinePostEvent mOnlinePostEvent;
+        GuiCache* mpGuiCache;
+        GuiEventOnlineEventFinishingOrder mOnlineFinishingOrder;
+        s32 maiOnlinePlayersIndexFromTablePosition[8];
+        f32 mfUpdateTimer;
+        f32 mfTableHadDataDuration;
+        BrnGameState::GameStateModuleIO::EGameModeType meCurrentGameMode;
+        bool mabDirty[8];
+        TextField mTitleTextfield;
+        TextField mWinnerGamertag;
+        TextField mCurrentRound;
+        TextField mYourTeamScoreHeading;
+        TextField mRivalTeamScoreHeading;
+        TextField mYourTeamScore;
+        TextField mRivalTeamScore;
+        TextField mYourTeamIs;
+        TextField mResultColumnHeading;
+        TextField mRevengeColumnHeading;
+        TextField mPointsColumnHeading;
+        bool mbPlayerCanLeave;
+        bool mbAbortDueToDisconnects;
+        bool mbLeaveNextUpdate;
+        bool mbCachedDisconnectEvent;
+        bool mbReceivedFinishedModeResults;
     };
 }

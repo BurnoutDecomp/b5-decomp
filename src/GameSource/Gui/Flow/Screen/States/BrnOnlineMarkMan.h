@@ -20,22 +20,11 @@
 // (+0x40), muNumExpectedComponents (+0x64), mTimeField (+0x68), mTimeFieldIcon (+0x190).
 // Both expected-component helpers and the per-internal-state updates are private there.
 //
-// The GuiCache watcher entry the X360 reaches (ClearExpectedAptComponentList) is
-// declared as a free boundary helper taking the cache pointer + flow (mirrors
-// BootLegalCacheBoundary::ClearExpectedAptComponentList).
+// The expected-component lifecycle calls the original GuiCache watcher directly.
 // ============================================================================
 
 namespace BrnGui
 {
-    // FLAG boundary helper: the apt-component watcher half of the cache the X360 reaches
-    // (mpGuiCache->ClearExpectedAptComponentList(flow)). Declared free so this state stays
-    // off raw cache offsets; body links from the GuiCache boundary TU. (Same convention as
-    // BrnGui::BootLegalCacheBoundary::ClearExpectedAptComponentList.)
-    namespace OnlineMarkManCacheBoundary
-    {
-        void ClearExpectedAptComponentList(GuiCache* lpCache, s32 liFlow);   // X360 boundary
-    }
-
     struct OnlineMarkMan : public CgsGui::State
     {
         // DWARF BrnOnlineMarkMan.h:73

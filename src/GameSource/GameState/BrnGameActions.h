@@ -143,15 +143,11 @@ enum EGameActionType
     // so id and record identity are attested at one site -- the same class of proof that pinned
     // E_ACTION_ONLINE_ROUND_RESULT (230) and E_ACTION_SET_UP_ALL_DRIVE_THRUS (45). DWARF 221 + 8,
     // exactly the shift its neighbour ONLINE_ROUND_RESULT (222 -> 230) carries.
-    // [!] SIZE MISMATCH NOTED, NOT PAPERED OVER: the console posts 264 (0x108) while
-    // `struct OnlineGameResults` below documents sizeof == 260 (65 u32 words, +0xDC + 40 == 0x104).
-    // That 4-byte delta is a TAIL-PAD question for the record's owner (the same shape as
-    // StartModeIntroAction's 603 -> 604), not evidence against the id: 260 is not any other
-    // record's size either. Left as a flagged residue.
-    // 229 was unoccupied in this enum (checked: no duplicate values remain) and NO consumer
-    // anywhere in src/ dispatches on this enumerator -- grep-verified, its only uses are the
-    // record's own GameAction<> tag and BrnGameStateSharedIO.h's re-home note -- so the move is a
-    // pure value correction with no call-site churn.
+    // The defined fields end at +0x104; the leading eight-byte CgsID gives this
+    // record eight-byte alignment and a 264-byte object extent. The producer's
+    // 264-byte queue size includes four trailing alignment bytes (asserted below).
+    // The game-state bridge forwards this tagged action to the existing network
+    // action queue; StateManager::ProcessGameStateActions consumes its typed results.
     E_ACTION_ONLINE_GAME_RESULT         = 229,   // DWARF :231 gives 221 (+8 X360); producer-pinned, size 264
     // ⛔ VALUE CORRECTION 2026-08-26 (stuntrace waveB fix round) -- was the PS3-DWARF 222.
     // X360-attested at BOTH ends: ModeManager::SendModeStopMessages @0x8234BEC0 posts
@@ -2181,7 +2177,7 @@ struct SetUpAllDriveThrusAction : public GameAction<E_ACTION_SET_UP_ALL_DRIVE_TH
 // X360 0x8231CA38 (SetPosition) / 0x82558580 (GetPosition). Per-player online-round result action:
 // a position-indexed table of finishing slots plus a list of mid-round disconnects. DWARF
 // BrnGameActions.h:5227 (true owning home). Minimal slice -- only the members the two reconstructed
-// bodies touch are declared; Construct is declared-only (own ledger entry). GameAction<T>
+// bodies touch are declared; Construct is recovered from the inlined ARTIST producer. GameAction<T>
 // is an empty tag base, so instance data starts at +0x00 (matches the X360 a1[0] / (a1+8) access:
 // maPlayerPosition[8] at +0x00, maDisconnectedPlayers Array<NetworkPlayerID,8> at +0x20 with its count
 // word at +0x40 == a1[16]). NetworkPlayerID == s32 (committed BrnNetwork::NetworkPlayerID).
@@ -2190,7 +2186,7 @@ struct OnlineRoundResults : public GameAction<E_ACTION_ONLINE_ROUND_RESULT>
     static const s32 KI_POSITION_DISCONNECTED = -1;   // DWARF :5230 (GetPosition's disconnected sentinel)
     static const s32 KI_MAX_PLAYERS           = 8;    // == BrnWorld::KI_MAX_ACTIVE_RACE_CARS
 
-    void                        Construct();                                                       // declared-only
+    void                        Construct();                                                       // inlined at 0x8234C2F4..0x8234C310
     void                        SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition); // 0x8231CA38
     s32                         GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const;           // 0x82558580
     // The winner is the player in first place (the word at +0x00).
@@ -2204,8 +2200,9 @@ private:
 // X360 online end-of-game results (DWARF home BrnGameActions.h:5153,
 // : public GameAction<E_ACTION_ONLINE_GAME_RESULT>). Re-homed here from the provisional
 // u32 mauWords[65] blob that used to live in BrnGameStateSharedIO.h (kept it there only because
-// GameAction<>/EGameActionType weren't visible -- they are here). sizeof == 260 (65 u32 words),
-// matching the old blob + the X360 operator= word count. LAYOUT IS X360-AUTHORITATIVE (the PS3
+// GameAction<>/EGameActionType weren't visible -- they are here). Defined data spans260 bytes;
+// the eight-byte-aligned object occupies264, matching the ARTIST action229 producer.
+// Its operator= copies the defined data and leaves only tail padding. LAYOUT IS X360-AUTHORITATIVE (the PS3
 // DecFIGS DWARF lists a different/leaner field set past +0x24); the X360 anchors force round-count
 // @0x28 and the EGameModeType discriminant @0x34. Methods Clear/Set*/Get*/operator= are defined in
 // BrnGameActions.cpp.
@@ -2241,6 +2238,8 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     s32             maiRoundStuntScores[KI_MAX_ROUNDS];     // +0xB4 (40) stunt score
     s32             maiRoundStuntMultipliers[KI_MAX_ROUNDS];// +0xDC (40) stunt multiplier
 };
+static_assert(sizeof(OnlineGameResults) == 264, "ARTIST action229 payload extent");
+static_assert(sizeof(OnlineRoundResults) == 68, "ARTIST action230 payload extent");
 
 // X360 0x8232CEB0 (StuntModeScoring::DealWithStunt reads it). The "a world stunt element was
 // performed" action: the 64-bit element key plus a stunt-element discriminant. DWARF home
