@@ -9,7 +9,7 @@
 
 #include <cstddef>                                            // offsetof (uncalled _AssertLayout)
 
-namespace BrnGui { class GuiCache; }
+namespace BrnGui { class GuiCache; struct OnlineSelectRoute; }
 namespace BrnGui { struct CrashNavMap; }  // friend of MainMapComponent (reads mfWorldZoomScaleFactor by name)  // mpGuiCache (pointer only; full type GameSource/Gui/BrnGuiCache.h)
 
 // BrnMainMap.h
@@ -224,7 +224,10 @@ namespace BrnGui
         }
         // DWARF spells this return type fully qualified (`const rw::math::vpu::Vector4&`);
         // `Vector4` is the file-wide typedef of exactly that type (BrnCommonTypes.h:14).
-        const Vector4& GetDisplayRect() const;                // DWARF h:346
+        const Vector4& GetDisplayRect() const                 // DWARF h:346; X360 OnEnter @0x82491364 reads mv4DisplayRect (+0x5830).
+        {
+            return mv4DisplayRect;
+        }
         ZoomFactor GetZoomLevel() const;                      // DWARF h:362
         // DWARF h:435, return type float32_t. This is the DWARF-supplied name for the
         // float-valued zoom accessor; wave-J CrashNavMap::UpdateIconManager reads that
@@ -234,7 +237,13 @@ namespace BrnGui
         // is inlined everywhere and the DWARF carries no body hint) -- callers that need
         // specifically the +1632 quantity should say so at the call site.
         f32        GetZoomFactor() const;                     // DWARF h:435
-        void       SetActive(bool lbActive);                  // DWARF h:449
+        // DWARF h:449. The console inlines the named flag write in OnlineSelectRoute's
+        // ShowMainMenu/ShowSelectCheckpointMenu/ShowPresetEvents (ARTIST 82493118,
+        // 82493278, 8249346C).
+        void       SetActive(bool lbActive)
+        {
+            mbIsActive = lbActive;
+        }
         bool       IsActive() const;                          // DWARF h:465
 
     private:
@@ -244,6 +253,7 @@ namespace BrnGui
         // it, so friendship -- not a fabricated getter -- is the honest exposure, exactly as
         // BrnGuiCache.h and BrnMapIconManager.h do for their own consumer screens.
         friend struct CrashNavMap;
+        friend struct OnlineSelectRoute;
 
         Vector2 CalculateOffsetWorldCentre(Vector2 lv2Centre, OffsetPadding lePadding);
         Vector2 CalculateViewPaddingOffset();

@@ -57,6 +57,7 @@ namespace BrnGui
     struct PreRaceFlyByState;        // friend (wave J; BrnPreRaceFlyBy.h declares it as a struct)
     struct SatNavComponent;          // friend (H3a; the owner-change pokes + the Construct icon-count reset)
     struct GuiNetworkRouteInfo;      // friend (the online route map; see the friend note below)
+    struct OnlineSelectRoute;        // friend (the online route-selection screen)
 
     class MapIconManager
     {
@@ -307,6 +308,12 @@ namespace BrnGui
         // muSelectedJunctionID (stwx junction, mgr, 0xAA10) @0x824DE004..0x824DE014.
         friend struct CrashNavMapMain;
         friend struct GuiNetworkRouteInfo;  // the online route map: icon-set owner pokes (UpdateIconManager / SetupMap)
+        // OnlineSelectRoute::UpdateIconManager @0x824A9568 stores selected trigger,
+        // selected checkpoint and route-owner state directly. The DWARF names setters
+        // for these values, but none has an X360 ledger entry; the route caller contains
+        // the stores inline. Friendship keeps the recovered stores faithful without
+        // adding host-only setter APIs or changing this layout.
+        friend struct OnlineSelectRoute;
         friend struct PreRaceFlyByState;
         friend struct SatNavComponent;   // H3a: Update's owner-change pokes (mbIsDisplayingEventInfo /
                                          // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset
