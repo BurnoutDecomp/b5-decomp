@@ -29,7 +29,7 @@
 
 #include "types.hpp"
 
-namespace BrnGui { struct GuiDebugComponent; }
+namespace BrnGui { class GuiModule; struct GuiDebugComponent; }
 
 namespace CgsGui
 {
@@ -61,8 +61,15 @@ namespace CgsGui
         };
 
     public:
+        // DecFIGS h:490 declares SetUserIndex(uint32_t); ARTIST 82528AF4 stores the
+        // event word at miUserIndex (+0x00), matching this inline setter's single store.
+        void SetUserIndex(u32 luUserIndex) { miUserIndex = luUserIndex; }
+
         // DecFIGS h:492; ARTIST824F5B70 loads this actual user index.
         u32 GetUserIndex() const { return miUserIndex; }
+
+        // DecFIGS CgsGuideIntegration.h:472; inlined by ARTIST82518798/A0/A8.
+        void Construct();
 
         // X360 0x8284CCF8 -- one-time setup: no user (miUserIndex=4), not ready (miState=0),
         // create the Xbox system-area notification listener. Returns true.
@@ -98,6 +105,9 @@ namespace CgsGui
         // failure; the X360 module writes the field without an accessor, so the save/load
         // front-end is befriended rather than fabricating a setter the binary lacks.
         friend class SaveLoadSystem;
+        // ARTIST GuiModule::Update event 143 stores miUserIndex then calls this private
+        // refresh at 0x82528AF8; grant that existing owner access without changing layout.
+        friend class BrnGui::GuiModule;
         // ARTIST82523970/82523AD0/82527998 and825238E0 read actual miState==1.
         friend struct BrnGui::GuiDebugComponent;
 
