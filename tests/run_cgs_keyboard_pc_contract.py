@@ -13,12 +13,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from fxgs_common import REPO, WORKFLOW, settings
+from fxgs_common import REPO, WORKFLOW, definition, settings
 
 TAG = "CgsKeyboardPCContract"
 NUMERIC = re.compile(r"CgsKeyboardPCContract: (\d+) checks, (\d+) failures")
 EXPECTED_CHECKS = 157
 MAX_RUNTIME_SECONDS = 30
+EXPECTED_SPRINTF_DEFINITION_UTF8_LF_SHA256 = "ca8ec6863b82da887387d5f211a63e3d36593f3bde74fd0ec3387362e2bf69c7"
+EXPECTED_SPRINTF_PROVIDER_SHA256 = "2f666e89be717d0c8c1848ac6ebae0e4ac6c26c9cdffa39148e3e523182299e0"
 
 
 def sha256(path):
@@ -41,6 +43,28 @@ def run_fixture(output):
         REPO / "src/GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp",
         REPO / "src/GameShared/GameClasses/System/X360/CgsXOverlappedX360.cpp",
     ]
+    identity_source = REPO / "src/GameShared/GameClasses/System/PC/CgsPcNetIdentity.cpp"
+    string_utils_source = REPO / "src/GameShared/GameClasses/Core/CgsStringUtils.cpp"
+    sprintf_signature = "void CgsCore::SPrintf("
+    # Select the exact canonical provider body. Compiling all of string-utils
+    # would pull unrelated CGSSTRNLOWER/assert-system dependencies into a keyboard
+    # fixture. No formatting implementation is recreated here.
+    string_utils_lf = string_utils_source.read_bytes().replace(b"\r\n", b"\n").decode("utf-8-sig")
+    sprintf_definition = definition(string_utils_lf, sprintf_signature)
+    sprintf_definition_path = output / "CgsKeyboardSPrintfDefinition.inc"
+    sprintf_definition_path.write_bytes(sprintf_definition.encode("utf-8"))
+    sprintf_provider = output / "CgsKeyboardSPrintfProvider.cpp"
+    sprintf_provider.write_text(
+        '#include "GameShared/GameClasses/Core/CgsStringUtils.h"\n'
+        '#include <cstdarg>\n#include <stdio.h>\n'
+        '#include "CgsKeyboardSPrintfDefinition.inc"\n',
+        encoding="utf-8", newline="\n",
+    )
+    if sha256(sprintf_definition_path) != EXPECTED_SPRINTF_DEFINITION_UTF8_LF_SHA256:
+        raise ValueError("Canonical SPrintf definition differs from the reviewed source pin")
+    if sha256(sprintf_provider) != EXPECTED_SPRINTF_PROVIDER_SHA256:
+        raise ValueError("Generated SPrintf provider differs from the reviewed source pin")
+    linked_sources = [*production_sources, identity_source, sprintf_provider]
     toolchain_inputs = [
         WORKFLOW / "tools/build/msvc_flags.txt",
         WORKFLOW / "tools/build/msvc_includes.txt",
@@ -59,6 +83,19 @@ def run_fixture(output):
         }
         for path in input_files
     ]
+    # The parent CI validator has an exact nine-record input_hashes contract.
+    # Keep it intact and retain these additional, genuinely consumed providers
+    # as additive source-integrity observations in the same hashed result.json.
+    link_dependency_hashes = [
+        {"path": str(path.resolve()), "bytes": path.stat().st_size,
+         "sha256": sha256(path), "kind": kind}
+        for path, kind in (
+            (identity_source, "source"),
+            (string_utils_source, "source"),
+            (sprintf_provider, "generated_canonical_provider"),
+            (sprintf_definition_path, "extracted_canonical_definition"),
+        )
+    ]
 
     includes = " ".join(
         '/I"' + str(WORKFLOW / path) + '"'
@@ -69,7 +106,7 @@ def run_fixture(output):
         "cl " + " ".join(settings("msvc_flags.txt"))
         + " /D_ALLOW_KEYWORD_MACROS=1 " + includes
         + ' "' + str(test_cpp) + '"'
-        + "".join(' "' + str(source) + '"' for source in production_sources)
+        + "".join(' "' + str(source) + '"' for source in linked_sources)
         + ' /Fe:"' + str(executable) + '" /link /OPT:REF user32.lib gdi32.lib'
     )
     build_script = output / "build.cmd"
@@ -181,6 +218,21 @@ def run_fixture(output):
         "failures": failures,
         "command": command,
         "input_hashes": input_receipt,
+        "link_dependency_hashes": link_dependency_hashes,
+        "provider_extraction": {
+            "canonical_source": str(string_utils_source.resolve()),
+            "canonical_source_raw_sha256": sha256(string_utils_source),
+            "signature": sprintf_signature,
+            "source_eol_selection": "CRLF_to_LF_only",
+            "definition": str(sprintf_definition_path.resolve()),
+            "definition_utf8_lf_bytes": sprintf_definition_path.stat().st_size,
+            "definition_utf8_lf_sha256": sha256(sprintf_definition_path),
+            "definition_expected_utf8_lf_sha256": EXPECTED_SPRINTF_DEFINITION_UTF8_LF_SHA256,
+            "provider": str(sprintf_provider.resolve()),
+            "provider_bytes": sprintf_provider.stat().st_size,
+            "provider_sha256": sha256(sprintf_provider),
+            "provider_expected_sha256": EXPECTED_SPRINTF_PROVIDER_SHA256,
+        },
         "executable": executable_info,
         "retained_outputs": {
             "build_stdout": "build.stdout.txt",
@@ -188,6 +240,8 @@ def run_fixture(output):
             "run_stdout": "run.stdout.txt",
             "run_stderr": "run.stderr.txt",
             "build_script": "build.cmd",
+            "sprintf_provider": "CgsKeyboardSPrintfProvider.cpp",
+            "sprintf_definition": "CgsKeyboardSPrintfDefinition.inc",
         },
     }
     (output / "build.stdout.txt").write_text(build_stdout, encoding="utf-8")
