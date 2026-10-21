@@ -672,15 +672,14 @@ namespace BrnGame
         // module's Prepare (vtable+0x58) once per frame and only posts the two id-144 RunFsm
         // records when it finally reports done. That is now where ours runs.
 
-        // ---- input bring-up (PC stand-in for the unreconstructed input setup pass) --------
-        // The console input module's Prepare constructs its output buffer, scans the pads and
-        // flips the module state to "ready / player-0 assigned"; none of that pass is
-        // reconstructed, so seed the observable outcome here: the real OutputBuffer::Construct
-        // (@0x828F85E0), port 0 assigned, module ready (==4), and the GUI accepting controller
-        // input (the console sets it from the GUI flow state -- FLAG follow-on).
+        // FLAG PC-platform leaf: retain the persistent host input buffer and existing
+        // GUI-enable policy. Player selection follows the recovered original bind chain.
         mPcInputOutputBuffer.Construct();
-        miInputModuleState        = 4;
-        miPlayer0ControllerPort   = 0;
+        // ARTIST823CAA14/7C/AC: both port words start at4; bind state starts at0.
+        // BootLegal90 arms state1; only a real START selection advances it to2.
+        miPlayer0ControllerPort   = CgsInput::KU_NUMBER_OF_PADS;
+        miSecondaryControllerPort = CgsInput::KU_NUMBER_OF_PADS;
+        miInputModuleState        = 0;
         mbGuiAcceptsControllerInput = true;
 
         // ---- the GUI flow-FSM bridge state ------------------------------------------
@@ -4286,6 +4285,7 @@ namespace BrnGame
 
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
                 bool lbInputPreWorldFilledPC = false;
+                u32 luStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
 
                 // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] THE INPUT PRE-WORLD LEG -- the first
                 // leg of the console's update step, and the one that carries the game's rumble requests
@@ -4298,12 +4298,19 @@ namespace BrnGame
                 // So it runs in the in-game state and in every loading-scripted state, whatever the load
                 // stage (the network buffer's gate below additionally needs stage 8). Arguments as the
                 // console loads them: the update input/output buffer stacks and the input module's
-                // output buffer (the PC keeps that one as mPcInputOutputBuffer). The START-pressed port
-                // it returns feeds only the flagged pad scan (see the body), so it is not consumed here.
+                // output buffer (the PC keeps that one as mPcInputOutputBuffer). Preserve the
+                // actual selected word for the original post-world bind and GUI143 producer.
                 if (lbRunFullModuleCascade)
                 {
-                    DoUpdate_InputPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                                           &mPcInputOutputBuffer);
+                    // FLAG PC-platform leaf: these results live in a persistent buffer here;
+                    // the original frame-owned OutputBuffer is freshly constructed each step.
+                    // Last-step consumers have finished before this new producer pass.
+                    mPcInputOutputBuffer.LockForWrite();
+                    mPcInputOutputBuffer.GetBindResultQueue()->Clear();
+                    mPcInputOutputBuffer.GetUnbindResultQueue()->Clear();
+                    mPcInputOutputBuffer.UnlockForWrite();
+                    luStartPressedPort = DoUpdate_InputPreWorld(
+                        mpUpdateInputBufferStack, mpUpdateOutputBufferStack, &mPcInputOutputBuffer);
                     lbInputPreWorldFilledPC = !mbDiskError;
                 }
 
@@ -4337,6 +4344,14 @@ namespace BrnGame
                         lpWorldOutput->UnlockForRead();
                     }
                 }
+
+                // ARTIST823F1554..156C: the same selected word feeds InputPostWorld
+                // after the world's producer and before GUI. The existing helper owns the
+                // mapping/bind requests; next PreWorld publishes its actual bind result.
+                if (lbRunFullModuleCascade)
+                    DoUpdate_InputPostWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                           mGameStateModule.GetOutputBuffer(), mpWorldUpdateOutputBuffer,
+                                           luStartPressedPort);
 
                 // ---- the RESOURCE tick (FLAG PC placement: the console's own thread) -------
                 // The X360 runs BrnGameModule::ResourceUpdateThread @0x823BC9B8 concurrently
@@ -4401,6 +4416,12 @@ namespace BrnGame
                     }
 
                     mpGuiInputBuffer->LockForWrite();
+                    // ARTISTDoUpdate_GUI823F0920..0944: publish the actual selection,
+                    // not the no-user sentinel and not a preselected virtual pad index.
+                    if (luStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
+                        mpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&luStartPressedPort),
+                            143, sizeof(luStartPressedPort));
                     // ⭐ [boost-bar 206 wave] the world->GUI vehicle bridge (the console's
                     // DoUpdate_GUI @0x823F0758 calls BridgeWorldToGui under its own GUI-input
                     // write bracket) -- the read bracket mirrors the BridgeWorldToDirector
@@ -4810,6 +4831,15 @@ namespace BrnGame
                         lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
                         lpGameStateOutput->UnlockForWrite();
                     }
+                }
+
+                // ARTIST823F2010..2028: consume actual bind/unbind replies at the
+                // last input-output use. HandleInputBindResult alone advances3->4.
+                if (lbRunFullModuleCascade)
+                {
+                    mPcInputOutputBuffer.LockForRead();
+                    BridgeInputToGame(&mPcInputOutputBuffer);
+                    mPcInputOutputBuffer.UnlockForRead();
                 }
 
                 // Every current-frame GUI consumer has finished. This also drops a

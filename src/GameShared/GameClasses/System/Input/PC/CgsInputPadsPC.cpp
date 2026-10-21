@@ -1445,6 +1445,15 @@ namespace CgsInput
                     lafActionValue[liAction] = 1.0f;      // a key has no travel
                 labFromKey[liAction]     = labFromKey[liAction]     || lbFromKey;
                 labFromHarness[liAction] = labFromHarness[liAction] || lbFromHarness;
+
+                // FLAG PC-platform leaf: one real scoped Start tap is the same Start
+                // control as P/pad START, which already publish8 and45. Reuse this
+                // consumed tap; a second WaitForSingleObject would lose an auto-reset event.
+                if (lbFromHarness && liAction == E_GAMEINPUTACTIONS_GUI_START)
+                {
+                    lafActionValue[E_GAMEINPUTACTIONS_START] = 1.0f;
+                    labFromHarness[E_GAMEINPUTACTIONS_START] = true;
+                }
             }
         }
 
@@ -1591,10 +1600,12 @@ namespace CgsInput
     //     walk DeviceX360Pad::BindToPort's 2 s force-feedback prime loop for nothing.
     //   * Not focus-gated (unlike UpdatePlayer0's read): nothing is read into the game here -- this is
     //     presence, and a pad is a device in someone's hands whichever window has the focus.
-    //   * Player 0 stays bound to port 0 (BindPlayerToPort is idempotent for the same pair -- it
-    //     answers E_BINDRESULTOK with no store). A pad that is unplugged keeps its player, as on the
-    //     console (UnBindPlayer is the bind chain's, not the scan's).
-    // DELETE-WHEN InputPads::Update and the InputPostWorld bind chain land.
+    //   * This device-presence scan does not assign a player. The recovered original
+    //     InputPostWorld request/result chain owns BindPlayerToPort after a real START.
+    //     A pad that is unplugged keeps its player, as on the console (UnBindPlayer is
+    //     the bind chain's, not the scan's). Keyboard/scoped input already uses virtual
+    //     port0 in UpdatePlayer0; no physical XInput device is fabricated here.
+    // DELETE-WHEN the native host device scan is owned by InputPads::Update.
     // ============================================================================================
     void InputPadsPC::UpdatePadDevices(InputPads* lpPads)
     {
@@ -1614,7 +1625,6 @@ namespace CgsInput
             lrPad.BindToPort(KU_PC_PAD_PORT, Device::E_PAD_DEVICE_TYPE);
         }
 
-        lpPads->BindPlayerToPort(0, static_cast<s32>(KU_PC_PAD_PORT));
     }
 }
 
