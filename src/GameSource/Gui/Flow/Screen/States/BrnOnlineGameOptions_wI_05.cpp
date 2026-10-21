@@ -1,6 +1,7 @@
 // wave-I partfile
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: optional slot-only receipts
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::PlayAptMovie
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache / GuiFlow
@@ -61,6 +62,7 @@ namespace BrnGui
                 if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                          static_cast<u32>(miNumResourcesToLoad)))
                 {
+                    CreateMatchTracePC::ResourcesReady(miNumResourcesToLoad);
                     mpStateInterface->PlayAptMovie(KAC_APT_MOVIE_NAME, KI_APT_MOVIE_LEVEL);
                     meSubState = E_SUBSTATE_LOADING_COMPONENTS;
                 }
@@ -72,6 +74,7 @@ namespace BrnGui
                 if (mpGuiCache != 0 &&
                     mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
                 {
+                    CreateMatchTracePC::ComponentsReady();
                     mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
                     // The route panel's components came up with the rest of the screen, so
@@ -85,6 +88,10 @@ namespace BrnGui
                     mpCommonOptions = KAE_COMMON_OPTIONS;
 
                     ShowGameOptionsScreen();
+                    CreateMatchTracePC::OptionsReady(
+                        static_cast<s32>(meSubState), miStartItem,
+                        mCreateGameToggles.miSelectableCount,
+                        mCreateGameToggles.miHighlightedIndex);
                 }
                 break;
 

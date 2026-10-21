@@ -5,6 +5,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: optional slot-only receipts
 #include <cstring>                                                       // memcpy
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -103,6 +104,47 @@ namespace BrnGui
         };
     }
 
+    namespace
+    {
+        // FLAG PC diagnostic: read the real Rounds row/selection without changing it.
+        // GetId is the canonical const inline Selectable accessor, not an animation getter.
+        CreateMatchTracePC::RoundValue ReadCreateMatchRoundTrace(
+            const MenuToggleGroupVarSize<5>& lGroup)
+        {
+            CreateMatchTracePC::RoundValue lValue = {};
+            const s32 liRow = lGroup.miHighlightedIndex;
+            if (liRow < 0 || liRow >= lGroup.miSelectableCount || liRow >= 5)
+                return lValue;
+            if (lGroup.maSelectables[liRow] != &lGroup.maItems[liRow])
+                return lValue;
+            const MenuToggle& lToggle = lGroup.maItems[liRow];
+            if (!lToggle.IsActive() || !lToggle.IsHighlighted())
+                return lValue;
+            const u64 luRowId = lToggle.GetId();
+            if (luRowId != CreateMatchOption::E_OPTION_ROUNDS &&
+                luRowId != CreateMatchOption::E_OPTION_ROUNDS_EVEN)
+                return lValue;
+            const s32 liChoice = lToggle.mItemText.miHighlightedIndex;
+            if (liChoice < 0 || liChoice >= lToggle.mItemText.miSelectableCount ||
+                liChoice >= TextSelection::KI_MAX_ITEMS_PER_SELECTION)
+                return lValue;
+            // The actual selection table is checked against its canonical owning array
+            // before reading the selected object; no offset/pointer plausibility probe.
+            if (lToggle.mItemText.maSelectables[liChoice] !=
+                &lToggle.mItemText.maSelectionItems[liChoice])
+                return lValue;
+            if (!lToggle.mItemText.maSelectionItems[liChoice].IsActive() ||
+                !lToggle.mItemText.maSelectionItems[liChoice].IsHighlighted())
+                return lValue;
+            lValue.mbValid = true;
+            lValue.miRow = liRow;
+            lValue.muRowId = luRowId;
+            lValue.miChoice = liChoice;
+            lValue.muChoiceId = lToggle.mItemText.maSelectionItems[liChoice].GetId();
+            return lValue;
+        }
+    }
+
     // ----------------------------------------------------- HandleControllerInputCreateGame
     void OnlineGameOptions::HandleControllerInputCreateGame(const CgsModule::Event* lpEvent)
     {
@@ -113,6 +155,11 @@ namespace BrnGui
         const ControllerButtonPayload* lpInput =
             reinterpret_cast<const ControllerButtonPayload*>(lpEvent);
         const s32 leAction = lpInput->miButtonId;
+
+        CreateMatchTracePC::RoundValue lTraceBefore = {};
+        if (CreateMatchTracePC::Enabled() &&
+            (leAction == KI_ACTION_GUI_LEFT || leAction == KI_ACTION_GUI_RIGHT))
+            lTraceBefore = ReadCreateMatchRoundTrace(mCreateGameToggles);
 
         switch (leAction)
         {
@@ -274,6 +321,9 @@ namespace BrnGui
                     RequestPresetEvents();
                 }
 
+                if (CreateMatchTracePC::Enabled())
+                    CreateMatchTracePC::RoundsAccepted(leAction, lTraceBefore,
+                        ReadCreateMatchRoundTrace(mCreateGameToggles));
                 TriggerSound(leAction);
             }
             break;
@@ -294,6 +344,9 @@ namespace BrnGui
                     RequestPresetEvents();
                 }
 
+                if (CreateMatchTracePC::Enabled())
+                    CreateMatchTracePC::RoundsAccepted(leAction, lTraceBefore,
+                        ReadCreateMatchRoundTrace(mCreateGameToggles));
                 TriggerSound(leAction);
             }
             break;

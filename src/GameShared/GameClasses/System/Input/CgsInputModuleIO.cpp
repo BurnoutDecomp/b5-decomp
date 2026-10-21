@@ -37,6 +37,31 @@ namespace InputIO
 
 // =====================  PostWorldInputBuffer  =====================
 
+// ARTIST 0x828F8578. Construct the owned 8/8/4 queues before the first post,
+// then clear their lengths and initialize the two wheel-spring values.
+void PostWorldInputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mBindRequestQueue.Construct();
+    mUnBindRequestQueue.Construct();
+    mPadMappingQueue.Construct();
+    mBindRequestQueue.Clear();
+    mUnBindRequestQueue.Clear();
+    mPadMappingQueue.Clear();
+    mWheelFFSpring.mfSpringCoefficient = 0.0f;
+    mWheelFFSpring.mfSpringSaturation = 0.0f;
+}
+
+// ARTIST 0x828EF880. The original clears the three lengths in reverse order
+// before retiring the IOBuffer status; queue backing remains owned by this object.
+void PostWorldInputBuffer::Destruct()
+{
+    mPadMappingQueue.Destruct();
+    mUnBindRequestQueue.Destruct();
+    mBindRequestQueue.Destruct();
+    CgsModule::IOBuffer::Destruct();
+}
+
 // X360 0x828E6A88 - read-lock accessor for the bind-request queue (this+4).
 // Caller: CgsInput::InputModule::ProcessBindRequestQueue.
 const PostWorldInputBuffer::BindRequestQueue* PostWorldInputBuffer::GetBindRequestQueue() const

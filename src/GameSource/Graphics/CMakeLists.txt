@@ -1,0 +1,36 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnBlobbyShadowManager.cpp
+        BrnBlobbyShadowManager_embed_check.cpp
+        BrnCoronaManager.cpp
+        BrnCoronaTypeParams.cpp
+        BrnEffectsArbitrator.cpp
+        BrnRendererMemory.cpp
+        BrnRendererModule.cpp
+        BrnRendererModule_wBT_01.cpp
+        BrnRendererModuleDebugComponent.cpp
+        BrnRendererModuleIO.cpp
+        BrnRendererModuleIO_Dispatch_IOHelper.cpp
+        BrnRendererModuleIO_embed_check.cpp
+        BrnRendererModuleIO_OutputBuffer_Accessors.cpp
+        BrnShaderConstantsFrame.cpp
+        BrnShadowMapRenderManager.cpp
+        BrnSkyDomeManager.cpp
+        BrnSunCorona.cpp
+
+    PUBLIC
+        BrnAntiAliasTiling.h
+        BrnBlobbyShadowManager.h
+        BrnCoronaManager.h
+        BrnEffectsArbitrator.h
+        BrnRendererMemory.h
+        BrnRendererModule.h
+        BrnRendererModuleIO.h
+        BrnShaderConstantsFrame.h
+        BrnShadowMapRenderManager.h
+        BrnSkyDomeManager.h
+        BrnSunCorona.h
+)
+
+add_subdirectory(ImmediateMode)
+add_subdirectory(PostFx)

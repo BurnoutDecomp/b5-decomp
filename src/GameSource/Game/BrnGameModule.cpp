@@ -3812,7 +3812,10 @@ namespace BrnGame
     // manager has a separate class-limit policy and is not driven by this host path.
     void BrnGameModule::PublishCarSelectionToGui()
     {
-        const bool lbListening = mGuiModule.IsScreenFlowObserving(412);
+        // This stand-in publishes the junkyard's 406/412 pair. Online options
+        // also observes 412, but binds cache 64 before requesting its list with 409.
+        const bool lbListening = mGuiModule.IsScreenFlowObserving(406)
+                              && mGuiModule.IsScreenFlowObserving(412);
         if (!lbListening)
         {
             mbCarSelectionPublished = false;   // re-arm for the next entry

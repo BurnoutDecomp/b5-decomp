@@ -24,6 +24,7 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                                      // the network GUI payload types
 #include "GameSource/Gui/Events/BrnGuiEventNetworkCreateGame.h"                            // BrnGui::GuiEventNetworkCreateGame
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"                            // BrnGui::GuiEventNetworkGameParams
+#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameSource/Gui/Events/BrnGuiEventNetworkPlayerStats.h"                           // BrnGui::GuiEventNetworkPlayerStats
 #include "GameSource/Network/BrnNetworkGameParams.h"                                       // BrnNetwork::GameParams
 #include "GameSource/Network/BrnNetworkManager.h"
@@ -1438,6 +1439,8 @@ namespace BrnNetwork
             case KI_GUI_EVENT_NETWORK_GAME_PARAMS:
                 CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame(),
                            "mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame()");
+                BrnGui::CreateMatchTracePC::Parameters(BrnGui::CreateMatchTracePC::E_PARAMS_CONSUMED,
+                    *static_cast<const BrnGui::GuiEventNetworkGameParams*>(lpPayload));
                 ModifyGame(static_cast<const BrnGui::GuiEventNetworkGameParams*>(lpPayload));
                 break;
 
