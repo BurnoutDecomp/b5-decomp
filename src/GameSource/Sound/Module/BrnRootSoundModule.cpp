@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
@@ -15,8 +16,6 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
 #include <cstring>
-
-namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (ctor 0x827E4808, Construct 0x826AF350, Prepare 0x826FABF8), cross-checked against the DecFIGS

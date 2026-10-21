@@ -32,6 +32,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the one-shot mount witness)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex / GetFreeburnChallengeManager / GetWorldDataController
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"             // GuiEventUpdateSatNav::SatNavIconInfo
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"  // FreeburnChallengeManager::IsActive / GetCurrentAction; BrnResource::ChallengeListEntryAction
@@ -44,11 +45,6 @@
 
 // The game-mode enum Update switches on; BrnGuiCache.h already pulls the owning header in.
 namespace GsmIO = BrnGameState::GameStateModuleIO;
-
-// CgsSystem::HardwareSku::FindLanguage @0x8241FB4C is a namespace free function with no
-// reconstructed header home (bodies live in CgsHardwareSku{PC,PS3}.cpp); declare the exact
-// symbol here so Prepare can resolve the current SKU language.
-namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
 namespace BrnGui
 {

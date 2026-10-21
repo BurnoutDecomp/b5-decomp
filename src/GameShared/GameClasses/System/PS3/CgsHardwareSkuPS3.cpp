@@ -1,25 +1,16 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
+#include "GameShared/GameClasses/System/CgsHardwareLanguage.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+// The selected Windows provider TU owns the ARTIST selector on PC.
+#if !defined(_WIN32)
 namespace CgsSystem
 {
-class HardwareLanguage
+// ARTIST 0x828D7128: retain every SKU branch and its original language allowlist.
+const CgsLanguage::ELanguage HardwareSku::FindLanguage()
 {
-public:
-    static s32 GetHardwareLanguage();
-};
-
-class HardwareSku
-{
-public:
-    static s32 GetSku();
-    static s32 FindLanguage();
-};
-
-s32 HardwareSku::FindLanguage()
-{
-    const s32 liSku = HardwareSku::GetSku();
+    const s32 liSku = static_cast<s32>(HardwareSku::GetSku());
     s32 liLanguage = HardwareLanguage::GetHardwareLanguage();
 
     switch (liSku)
@@ -27,10 +18,10 @@ s32 HardwareSku::FindLanguage()
         case 0:
         case 4:
         case 5:
-            return 7;
+            return static_cast<CgsLanguage::ELanguage>(7);
 
         case 1:
-            return 8;
+            return static_cast<CgsLanguage::ELanguage>(8);
 
         case 2:
             switch (liLanguage)
@@ -39,13 +30,13 @@ s32 HardwareSku::FindLanguage()
                 case 11:
                 case 15:
                 case 22:
-                    return liLanguage;
+                    return static_cast<CgsLanguage::ELanguage>(liLanguage);
                 default:
-                    return 10;
+                    return static_cast<CgsLanguage::ELanguage>(10);
             }
 
         case 3:
-            return 16;
+            return static_cast<CgsLanguage::ELanguage>(16);
 
         case 6:
             switch (liLanguage)
@@ -57,14 +48,15 @@ s32 HardwareSku::FindLanguage()
                 case 15:
                 case 16:
                 case 22:
-                    return liLanguage;
+                    return static_cast<CgsLanguage::ELanguage>(liLanguage);
                 default:
-                    return 7;
+                    return static_cast<CgsLanguage::ELanguage>(7);
             }
 
         default:
             CGS_ASSERT(false, "Unknown sku or no sku set");
-            return 7;
+            return static_cast<CgsLanguage::ELanguage>(7);
     }
 }
 }
+#endif
