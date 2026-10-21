@@ -2119,6 +2119,19 @@ void GuiModule::Destruct()
         {
             switch (liId)
             {
+                case 141:   // ARTIST82528ACC..AE0: reply with this module's actual keyboard.
+                {
+                    // FLAG PC-platform leaf: the existing no-argument GUI pump publishes
+                    // through mGuiOutQueue and its subscription-filtered observer loop-back.
+                    GuiEventKeyboardResponse lResponse;
+                    lResponse.lpKeyboard = &mGuiKeyboard;
+                    if (mGuiOutQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                             lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse))))
+                        RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                         lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse)));
+                    break;
+                }
+
                 case 143:   // ARTIST 82528AE8..AF8: user-index word, then sign-in refresh.
                     mSystemUserProfile.SetUserIndex(*reinterpret_cast<const u32*>(lpEvent));
                     mSystemUserProfile.UpdateUserSigninState();
@@ -2900,6 +2913,19 @@ void GuiModule::Destruct()
                     mGuiOutQueue.AddEvent(
                         lpRawEvent, static_cast<s32>(luEventType),
                         static_cast<s32>(luPayloadSize));
+
+                    if (luEventType == 141u)
+                    {
+                        // FLAG PC-platform leaf: this existing channel-40 drain has no
+                        // module-inbound bus round-trip. Execute the original141 reply
+                        // here, as for144/507 above; the subscribed state reads142 next tick.
+                        GuiEventKeyboardResponse lResponse;
+                        lResponse.lpKeyboard = &mGuiKeyboard;
+                        if (mGuiOutQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                                 lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse))))
+                            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                             lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse)));
+                    }
 
                     // ProcessOutEvents also returns the unwrapped event to the interpreter's
                     // observer fan-out.  This is why a state that posts voice-over event 466

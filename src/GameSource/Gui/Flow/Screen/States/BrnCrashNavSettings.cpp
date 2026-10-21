@@ -33,23 +33,16 @@
 //       mbAvailable == false as a result. SteelWheelsSponsorCode and
 //       OnInputSponsorProductCode branch on GetSku() four times between them; calling it
 //       is an LNK2019 (verified absent from build/game/Burnout_PC.map).
-//   (b) The on-screen keyboard is X360 XDK. BrnGui::BrnGuiKeyboard::Show @0x824F5B00 has NO
-//       DECLARATION in BrnGuiKeyboard.h (which carries only Prepare) and no body, so the
-//       call does not even compile; it tail-calls CgsGui::GuiKeyboard::Show @0x8284CFD8 --
-//       which IS reconstructed, in CgsGuiKeyboard.cpp, but that TU is NOT MOUNTED and its
-//       body calls XShowKeyboardUI, for which there is no PC leaf.
-//       Its string prep is parked with it because CgsUnicode::ConvertUtf8ToUtf16
-//       @0x82835828 is ALSO body-less: the ledger calls it `reviewed`, and CgsUnicode.cpp
-//       (which IS mounted, and does define plenty of other functions) has no definition for
-//       THAT one. Found by the link, not by a gate: exactly the ledger-vs-files divergence
-//       AGENTS.md warns about.
+//   (b) RECOVERED: event142 now prepares the original UTF16 heading and calls the
+//       real BrnGuiKeyboard::Show; its original whole-string converter is bodied.
+// The unrelated hardware-SKU park remains explicit below.
 // ⭐ NEITHER PARK CAN RE-CREATE THE SOFT-LOCK, and that is checked, not assumed: the
 // console's 45/50 (GO_BACK + resume) and 54/55 (TOGGLE_*) arms sit OUTSIDE the
 // `meState == E_STATE_MAIN` gate in HandleControllerInput, so Start/Back leaves this
 // screen from EVERY state, including 3 and 4 (the sponsor-code states). Row 6 therefore
 // parks the SCREEN, never the GAME.
 // ⭐ Each parked site logs once, so the gap is visible in BrnGame.log rather than being a
-// silent drop. RESTORE both verbatim the moment those two leaves land.
+// silent drop. The keyboard tail is restored; the remaining SKU park is separate.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"
@@ -59,6 +52,9 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface, GuiEventNetworkSuspension
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // the state in-queue
+#include "GameSource/Gui/BrnGuiKeyboard.h"                                 // real Show request
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"                         // original heading conversion
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"             // original prompt lookup
 #include "GameSource/Gui/BrnGuiCache.h"                                    // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                            // GuiEventActivateCrashNav / GuiOverlayRequest / GuiFlow
 #include "GameSource/Gui/BrnGuiShared.h"                                   // gGuiResourceIdentifier (the apt movie name)
@@ -181,10 +177,6 @@ namespace BrnGui
 
         // The event-142 payload view: the keyboard pointer is the payload's first word
         // (`lwz r11, 0(r27)`), and the X360 asserts it non-NULL at cpp:237.
-        struct GuiEventKeyboardResponse : public CgsModule::Event
-        {
-            BrnGuiKeyboard* mpKeyboard;   // +0x00
-        };
 
         // { 4, 266, 12, <selector> } -- 16 bytes on channel 40. Update posts it through the
         // inlined OutputGuiEvent<GuiEventNetworkNewsAndTOS>; OnLeave stack-builds the same
@@ -604,40 +596,17 @@ namespace BrnGui
             {
                 const GuiEventKeyboardResponse* lpResponse =
                     reinterpret_cast<const GuiEventKeyboardResponse*>(lpEvent);
-                CGS_ASSERT(lpResponse->mpKeyboard != 0, "lpKeyboardResponse->lpKeyboard");   // cpp:237
+                CGS_ASSERT(lpResponse->lpKeyboard != 0, "lpKeyboardResponse->lpKeyboard");   // cpp:237
 
-                mpGuiKeyboard = lpResponse->mpKeyboard;   // `stw r11, 0x1284` -- a real store
+                mpGuiKeyboard = lpResponse->lpKeyboard;   // `stw r11, 0x1284` -- a real store
 
-                // ⛔ PARKED, AS ONE ARM -- see the file banner (b). Everything after the
-                // latch above exists only to raise the on-screen keyboard, and the whole
-                // tail is missing its links, not its reconstruction:
-                //   * BrnGuiKeyboard::Show @0x824F5B00 is neither declared in
-                //     BrnGuiKeyboard.h nor defined anywhere; its callee
-                //     CgsGui::GuiKeyboard::Show IS reconstructed but sits in the unmounted
-                //     CgsGuiKeyboard.cpp and bottoms out in XShowKeyboardUI, which has no PC
-                //     leaf;
-                //   * CgsUnicode::ConvertUtf8ToUtf16 @0x82835828 -- a real UTF-8 decoder over
-                //     the lead-length table at byte_820DE3C8 -- is `reviewed` in the ledger
-                //     but has NO BODY (a ledger/file divergence found by this wave's link,
-                //     not by any gate).
-                // Parking the heading prep WITH the Show it feeds is deliberate: converting
-                // a string into a buffer nothing can ever display would look like progress
-                // and be none. The console's tail, verbatim, for whoever lands those two:
-                //   CgsUnicode::ConvertUtf8ToUtf16(
-                //       mpStateInterface->GetLanguageManager()->FindString("SPONSOR_CAR_INPUT_CODE"),
-                //       macDialogHeading);                    // dest 0x1204
-                //   macDefaultHeading[0] = 0;                 // `sth r20, 0x1104` (UTF-16 NUL)
-                //   macTitleHeading[0]   = 0;                 // `sth r20, 0x1184`
-                //   mpGuiKeyboard->Show(macDefaultHeading, macTitleHeading,
-                //                       macDialogHeading, mKeyboardListener);
-                static bool sbLoggedKeyboard = false;
-                if (!sbLoggedKeyboard)
-                {
-                    sbLoggedKeyboard = true;
-                    LogParkedPlatformLeaf("Update[keyboard]",
-                                          "BrnGuiKeyboard::Show / XShowKeyboardUI "
-                                          "(+ CgsUnicode::ConvertUtf8ToUtf16, declared but never bodied)");
-                }
+                CgsUnicode::ConvertUtf8ToUtf16(
+                    mpStateInterface->GetLanguageManager()->FindString("SPONSOR_CAR_INPUT_CODE"),
+                    macDialogHeading);
+                macDefaultHeading[0] = 0;
+                macTitleHeading[0] = 0;
+                mpGuiKeyboard->Show(macDefaultHeading, macTitleHeading,
+                                    macDialogHeading, mKeyboardListener);
                 break;
             }
 

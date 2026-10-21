@@ -142,16 +142,13 @@ namespace BrnGui
         virtual void UpdatePanelData();
 
         // ---- private helpers (DWARF order) -------------------------------------------
-        // HandleControllerInput and UpdateEventData are DECLARATION-ONLY: the reference
-        // outline declares both, but the console image has no body for either and no
-        // reconstructed body calls them -- this screen never overrides the
-        // HandleCrashNavInputPressed vtable slot, so the input handler has no caller in
-        // the shipped build. Declaring without defining is correct for a member nothing
-        // calls; it is not a link hole.
+        // HandleControllerInput remains declaration-only: ARTIST82077044 +0x24/+0x28
+        // are single-blr8284CB38. UpdateEventData's SetTracker + virtual UpdatePanelData body is
+        // attested by the ARTIST Update inline pair and DecFIGS private-void shape.
         void HandleControllerInput(const CgsModule::Event* lpEvent);   // cpp:257 (no body in the image)
         void HandleSelect();                                           // cpp:443
         void SetTracker();                                             // cpp:526
-        void UpdateEventData();                                        // cpp:590 (no body in the image)
+        void UpdateEventData();                                        // cpp:590 (ARTIST inline body recovered)
         void ClearTracker();                                           // cpp:607
         void SetEventData();                                           // cpp:627
 
