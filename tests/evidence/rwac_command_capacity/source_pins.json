@@ -25,8 +25,8 @@
       "expected_lf_bytes": 9637
     },
     "tests/RwacCommandCapacity.cpp": {
-      "expected_lf_sha256": "e071c2a4df5cb7bda3e6391a93c6f71cb421ed91e6ac48048f9e7061e430c97d",
-      "expected_lf_bytes": 7812
+      "expected_lf_sha256": "98cbca094e1f00602a6899173c07c38c9990fff60c6ed4a0488b952cf6fbe918",
+      "expected_lf_bytes": 8793
     },
     "tests/run_rwac_command_capacity.py": {
       "expected_lf_sha256": "217f650696cfee3a6de4428241d98132020bd0c0b770ecc8763f279787d73a44",

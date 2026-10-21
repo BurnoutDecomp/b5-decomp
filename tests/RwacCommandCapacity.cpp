@@ -13,6 +13,26 @@
 #include "../vendor/renderware/src/rw/audio/core/PlugIn.cpp"
 #endif
 
+// Fixture-only link closure for the other methods in the complete included TU.
+// Capacity cases call only the real SetAttribute producer and handler. The
+// singleton slot is genuine test storage, not a constructed audio System or a
+// replacement for an engine method. The unused CreateInstance body needs its
+// definition at link time; no capacity case calls that creation path.
+namespace rw { namespace audio { namespace core {
+extern "C" { System* off_83271928 = nullptr; }
+
+// The unused PlugIn::Event body references Send::EventEvent. This boundary has
+// no success result and can never act as an engine implementation: an accidental
+// entry leaves an explicit marker and fails the owned fixture child immediately.
+Send* Send::EventEvent(Send*, int, void* const*)
+{
+    std::fputs("FIXTURE_UNEXPECTED_BOUNDARY rw::audio::core::Send::EventEvent\n", stderr);
+    std::fflush(stderr);
+    ::TerminateProcess(::GetCurrentProcess(), 0xE0420003u);
+    __fastfail(7);
+}
+} } }
+
 namespace
 {
 struct StoppedBeforeWrite {};
