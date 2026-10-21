@@ -1,0 +1,21 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnCountdownState.cpp
+        BrnInProgressState.cpp
+        BrnIntroState.cpp
+        BrnOnlineLoadingState.cpp
+        BrnOutroState.cpp
+        BrnQuitState.cpp
+        BrnResultsState.cpp
+
+    PUBLIC
+        BrnCountdownState.h
+        BrnGameModeState.h
+        BrnInProgressState.h
+        BrnIntroState.h
+        BrnOnlineLoadingState.h
+        BrnOnlineSplashState.h
+        BrnOutroState.h
+        BrnQuitState.h
+        BrnResultsState.h
+)
