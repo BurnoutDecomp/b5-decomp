@@ -23,6 +23,14 @@ extern "C"
 
 namespace CgsGui
 {
+    // DecFIGS CgsGuideIntegration.h:472; ARTIST GuiModule::Construct82518798/A0/A8.
+    void SystemUserProfile::Construct()
+    {
+        mpListener = 0;
+        mhNotifyListener = 0;
+        miUserIndex = KU_USERINDEX_NONE;
+    }
+
     // X360 0x8284CCF8. One-time setup: no user selected (miUserIndex=4), not ready (miState=0),
     // and create the Xbox notification listener for the system areas (qwAreas=1, XNOTIFY_SYSTEM).
     // Returns true.

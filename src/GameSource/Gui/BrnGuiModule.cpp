@@ -1,5 +1,6 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // original movie acquire request
 #include "SDKs/EA/GameTalk/GameTalk.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
@@ -1051,6 +1052,8 @@ namespace BrnGui
         mGuiAccessPointers.SetGDMReceiverQueue(&mGDMReceiverQueue);
         mGuiAccessPointers.SetSerialiser(&mGuiModuleSerialiser);
 
+        // ARTIST82518798/A0/A8: the profile watcher owns these three initial stores.
+        mSystemUserProfile.Construct();
         mProfileHost.GetProfileManager().Construct(mGuiCache, mSystemUserProfile,
                                   mViewModule.GetLanguageManager());
         // ARTIST825187CC/D0/D4: real contained keyboard and listener host.
@@ -1372,7 +1375,28 @@ namespace BrnGui
         // listener, prepares the embedded save/load system, and carves the mugshot
         // circular buffer (X360 hands the 0x26 game-data heap + a module linear; the
         // PC module owns dedicated backing regions -- see the FLAG at the statics).
-        mSystemUserProfile.Prepare();   // X360: CGS_ASSERT'd @BrnGuiModule.cpp:519
+        // ARTIST82519264..82519300: retain call order and assertion continuation.
+        if (!mSystemUserProfile.Prepare())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mSystemUserProfile.Prepare()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 519);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mGuiKeyboard.Prepare(&mSystemUserProfile))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mGuiKeyboard.Prepare(&mSystemUserProfile )",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 523);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mKeyboardHost.Prepare(&mGuiKeyboard))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mKeyboardHost.Prepare(&mGuiKeyboard)",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 525);
+            CgsDev::Assert::EndAssert();
+        }
         mProfileHeap.Construct(s_profileHeapBacking, static_cast<s32>(sizeof(s_profileHeapBacking)));
         mProfileLinear.Construct();
         mProfileLinear.Create(s_profileLinearBacking, sizeof(s_profileLinearBacking));
@@ -1802,6 +1826,22 @@ namespace BrnGui
         if (!mMovieManager.Release())
             return false;
         mProfileHost.GetProfileManager().Release();   // detach the sign-in listener + release the SLS
+        // ARTIST824F92A4..824F930C: profile, keyboard, then keyboard listener host.
+        if (!mSystemUserProfile.Release())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mSystemUserProfile.Release()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 710);
+            CgsDev::Assert::EndAssert();
+        }
+        mGuiKeyboard.Release();
+        if (!mKeyboardHost.Release())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mKeyboardHost.Release()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 712);
+            CgsDev::Assert::EndAssert();
+        }
         mFsmLuaHeap.Destruct();
         if (gpActiveGuiModule == this)
             gpActiveGuiModule = 0;
@@ -2079,6 +2119,11 @@ void GuiModule::Destruct()
         {
             switch (liId)
             {
+                case 143:   // ARTIST 82528AE8..AF8: user-index word, then sign-in refresh.
+                    mSystemUserProfile.SetUserIndex(*reinterpret_cast<const u32*>(lpEvent));
+                    mSystemUserProfile.UpdateUserSigninState();
+                    break;
+
                 case 144:   // GuiEventRunFsm -- the flow-change request (BridgeGameToGui)
                     mFsmController.RunFsm(reinterpret_cast<const GuiEventRunFsm*>(lpEvent));
                     break;
@@ -3292,6 +3337,9 @@ void GuiModule::Destruct()
         //          channel). The world-side pool free/restore around the swap is the
         //          un-reconstructed world collision pool -- FLAG'd absent (no world on
         //          the PC boot path); the manager's own state machine is driven fully. --
+        // ARTIST8252A088/A094: system notifications and keyboard completion precede SLS.
+        mSystemUserProfile.Update();
+        mGuiKeyboard.Update();
         mProfileHost.GetProfileManager().Update();
         if (mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate())
         {
