@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"   // CgsInput::InputPads / DeviceX360Pad (UpdatePadDevices)
 #include "pc/input/XInputPolling.h"
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 
 #include <cstring>   // std::memset
 #include <cstdlib>   // std::getenv (the harness focus-gate bypass)
@@ -1231,7 +1232,7 @@ namespace CgsInput
         XInputState lXState;
         std::memset(&lXState, 0, sizeof(lXState));
         bool lbXPad = false;
-        if (lbPadAllowed)
+        if (lbPadAllowed || CgsSystem::KeyboardPC::IsCapturingInput())
         {
             lbXPad = (ReadHostPad0(&lXState) == KU_XINPUT_ERROR_SUCCESS);
         }
@@ -1477,6 +1478,23 @@ namespace CgsInput
                     if (lfRaw > KF_ACTION_DOWN_THRESHOLD)
                         labFromPad[liAction] = true;
                 }
+            }
+        }
+
+        // FLAG PC-platform leaf: the native keyboard owns keyboard/pad/harness input.
+        // Existing source reads still consume one-shot channels; held controls keep the
+        // release latch closed. The original status pass derives ordinary release edges.
+        if (CgsSystem::KeyboardPC::IsCapturingInput())
+        {
+            bool lbNeutral = lrPad.mfStickLX == 0 && lrPad.mfStickLY == 0 &&
+                             lrPad.mfStickRX == 0 && lrPad.mfStickRY == 0;
+            for (u32 lu = 0; lu < E_GAMEINPUTACTIONS_COUNT; ++lu)
+                if (!(lafActionValue[lu] < KF_ACTION_DOWN_THRESHOLD)) lbNeutral = false;
+            if (CgsSystem::KeyboardPC::BlockGameInput(lbNeutral))
+            {
+                lrPad.mfStickLX = lrPad.mfStickLY = lrPad.mfStickRX = lrPad.mfStickRY = 0;
+                lrPad.mfAxis10 = lrPad.mfAxis14 = 0;
+                for (u32 lu = 0; lu < E_GAMEINPUTACTIONS_COUNT; ++lu) lafActionValue[lu] = 0;
             }
         }
 

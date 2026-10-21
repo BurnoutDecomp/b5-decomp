@@ -19,6 +19,7 @@
 // ----------------------------------------------------------------------------
 
 #include "types.hpp"
+#include <cstddef>
 
 // Minimal XDK XOVERLAPPED slice (real definition lives in the Xbox 360 XDK
 // <xtl.h>). 7 DWORDs == 28 bytes, matching Construct's zero-fill loop (v1 = 7).
@@ -27,12 +28,18 @@ struct XOVERLAPPED
     u32 InternalLow;          // 0x00
     u32 InternalHigh;         // 0x04
     u32 InternalContext;      // 0x08
-    u32 dwExtendedError;      // 0x0C  (read via XGetOverlappedExtendedError)
-    u32 hEvent;               // 0x10
+    u32 hEvent;               // 0x0C  ARTIST XGetOverlappedResult @829271D0
+    u32 pCompletionRoutine;   // 0x10  ARTIST XCAM callback @829882E0
     u32 dwCompletionContext;  // 0x14  (completion routine context)
-    u32 dwReserved;           // 0x18
+    u32 dwExtendedError;      // 0x18  ARTIST XGetOverlappedExtendedError @82927280
 };
 typedef XOVERLAPPED* PXOVERLAPPED;
+
+static_assert(sizeof(XOVERLAPPED) == 28, "Original X360 overlapped width");
+static_assert(offsetof(XOVERLAPPED, hEvent) == 0x0c, "ARTIST event word");
+static_assert(offsetof(XOVERLAPPED, pCompletionRoutine) == 0x10, "ARTIST callback word");
+static_assert(offsetof(XOVERLAPPED, dwExtendedError) == 0x18, "ARTIST extended error word");
+// Native64 HWND/HANDLE/callback values belong to the PC owner, never these guest32 words.
 
 // XDK entry points (real prototypes live in the Xbox 360 XDK <xapi.h>/<xtl.h>);
 // declared here as extern "C" free functions, mirroring the System/PS3 glue
