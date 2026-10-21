@@ -77,6 +77,19 @@ namespace CgsModule { template <s32, s32> class EventReceiverQueue; }   // GuiEv
 namespace BrnGui
 {
 
+class BrnGuiKeyboard;
+
+// DecFIGS BrnGuiEventTypeDefs.h:810-812; ARTIST8250BE54..64 posts id142
+// with one keyboard pointer. This is the stripped payload, naturally pointer-sized
+// on the host, not the former fixed four-byte demangled shell.
+struct GuiEventKeyboardResponse : public CgsModule::Event
+{
+    BrnGuiKeyboard* lpKeyboard;
+    s32 GetEventType() const { return 142; }
+};
+static_assert(sizeof(GuiEventKeyboardResponse) == sizeof(BrnGuiKeyboard*),
+              "keyboard response contains exactly one native pointer");
+
 // The three GUI render/flow layers the cache tracks apt components for (DWARF:
 // BrnGuiEventTypeDefs.h:883 `enum GuiFlow`). Used as the leading selector on the
 // GuiCache apt-component bookkeeping (e.g. AppendExpectedAptComponent) and on the

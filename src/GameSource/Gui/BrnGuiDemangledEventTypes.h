@@ -972,7 +972,7 @@ namespace BrnGui
     static_assert(sizeof(GuiEventCustomeEventDelete) == 120, "id 174 publishes 120 bytes");
     static_assert(sizeof(GuiEventAcceptEventStart)   == 80,  "id 167 publishes 80 bytes");
 
-    struct GuiEventKeyboardResponse { u8 maData[4]; s32 GetEventType() const { return 142; } };  // id 142 size 4
+    // GuiEventKeyboardResponse is recovered in BrnGuiEventTypeDefs.h (native pointer payload).
     // id 272. The payload word is the sign-in flavour the producer asks for (0 = full
     // sign-in, 2 = no-title); the producer-side enum name is unrecovered.
     // Shaped as a GuiEvent<272> subclass, NOT as an opaque POD, because the X360 posts it
