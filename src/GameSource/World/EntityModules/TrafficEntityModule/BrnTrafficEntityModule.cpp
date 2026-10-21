@@ -3314,12 +3314,9 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
 // to PredictHullChanges @0x827348E8 (online, RUNNING) and UpdateRaceCarHulls @0x82721460 (both
 // arms; outlined above, crash parity FX-NETCRASH 2026-09-25).
 //
-// Gated, each with its own reason:
-//   * the baked debug hull-override list (the bool at X360 +0x729F0 selecting the 15-entry
-//     table at unk_820BA81C) -- that byte sits in the un-emitted DWARF :892..:895 window
-//     between mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name.
-//   * the std::_Sort of mActiveHulls -- ::Set<T,N> has no Sort. Order-only: SetDifference is
-//     order-independent, so only the order FillNewHull visits hulls in changes.
+// The original Running Worst Case branch installs the baked 15-hull set; the
+// ordinary branch rebuilds it from the eight per-race-car hull arrays. Both use
+// the same following sort and SetDifference/resource lifecycle.
 // The local-player hull differences also feed the trigger add/remove arrays.
 //
 // The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare,
@@ -3355,26 +3352,36 @@ void TrafficEntityModule::RecalculateActiveHulls(
     const ActiveHullSet lPreviousActiveHulls = mActiveHulls;
     mActiveHulls.Clear();
 
+    // ARTIST8274C9C4..8274CAC0: the original Running Worst Case toggle selects
+    // the 15 native-u16 hull IDs at 820BA81C..820BA83A instead of race-car hulls.
+    if (mbDEBUGRunningWorstCase)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "RecalculateActiveHulls DEBUG hull-override arm (the bool at X360 +0x729F0 "
-            "selects the baked 15-entry hull table at unk_820BA81C) -- that byte lies in the "
-            "DecFIGS un-emitted :892..:895 window, so it has no attested member name");
-    }
-
-    for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
-         leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
-         leRaceCar = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leRaceCar) + 1))
-    {
-        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
-            maaRaceCarHulls[leRaceCar];
-
-        for (u32 luIndex = 0; luIndex < lrRaceCarHulls.GetLength(); ++luIndex)
+        static const u16 kauDEBUGRunningWorstCaseHulls[15] =
         {
-            const u16 luRaceCarHull = lrRaceCarHulls.GetItem(luIndex);
-            CGS_ASSERT(luRaceCarHull < KU_MAX_HULLS, "luRaceCarHull < KU_MAX_HULLS");
-            mActiveHulls.Insert(luRaceCarHull);
+            98, 99, 100, 101, 102,
+            119, 120, 121, 122, 123,
+            140, 141, 142, 143, 144
+        };
+        for (const u16 luHull : kauDEBUGRunningWorstCaseHulls)
+        {
+            mActiveHulls.Insert(luHull);
+        }
+    }
+    else
+    {
+        for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+             leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+             leRaceCar = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leRaceCar) + 1))
+        {
+            const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
+                maaRaceCarHulls[leRaceCar];
+
+            for (u32 luIndex = 0; luIndex < lrRaceCarHulls.GetLength(); ++luIndex)
+            {
+                const u16 luRaceCarHull = lrRaceCarHulls.GetItem(luIndex);
+                CGS_ASSERT(luRaceCarHull < KU_MAX_HULLS, "luRaceCarHull < KU_MAX_HULLS");
+                mActiveHulls.Insert(luRaceCarHull);
+            }
         }
     }
 
