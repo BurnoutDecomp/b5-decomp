@@ -246,6 +246,10 @@ namespace BrnGui {
         void LockForWrite() {} void UnlockForWrite() {}
         auto* GetLoadNotificationsNonConst() { return &mEvents; }
     };
+    struct ProfileHostBoundary {
+        Collaborator* mpProfileManager;
+        Collaborator& GetProfileManager() { return *mpProfileManager; }
+    };
     struct FlowBoundary {
         Intro* mpIntro=nullptr; bool mbEntered=false;
         void Update() {
@@ -269,6 +273,7 @@ namespace BrnGui {
         GuiCache mGuiCache;
         Collaborator mFsmController,mHudMessageDirector,mMovieManager,mProfileManager;
         Collaborator mBurnoutSkillsManager,mFreeburnChallengeManager,mCustomRendererManager,mGuiTracker;
+        ProfileHostBoundary mProfileHost{&mProfileManager};
         NotificationBuffer mModelOutputBuffer;
         FlowBoundary mHudFlow,mScreenFlow,mOverlayFlow;
         bool mbForceProfileAutosave=false,mbProfileAutosavePending=false;
