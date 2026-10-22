@@ -13,8 +13,8 @@
       "expected_lf_bytes": 6148
     },
     "src/GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h": {
-      "expected_lf_sha256": "07aabff48550e7bc10fc30dafa2bc0de5d173e6c7f8b69af20abcad7e0ba5171",
-      "expected_lf_bytes": 20398
+      "expected_lf_sha256": "d9c24a0ba6a3fcd3fb368803c5740f38a34b4382592b2d93b3ae67fccad2455e",
+      "expected_lf_bytes": 20522
     },
     "src/GameSource/Sound/Module/BrnRootSoundModule.cpp": {
       "expected_lf_sha256": "55daf2e155a5a9b1e22317d10d93526ba1fc81327aa0c77ac555a36f1d09435b",
@@ -25,12 +25,12 @@
       "expected_lf_bytes": 9754
     },
     "tests/RwacCommandCapacity.cpp": {
-      "expected_lf_sha256": "256b02ff626f2fe52216c4385c02019851d2764800d3a4ca33a4cb5d1802bb70",
-      "expected_lf_bytes": 8924
+      "expected_lf_sha256": "09aff733a8d23336a23f7524ff47ee3616a98b210cf4ef6979c651dab85cb027",
+      "expected_lf_bytes": 11976
     },
     "tests/run_rwac_command_capacity.py": {
-      "expected_lf_sha256": "217f650696cfee3a6de4428241d98132020bd0c0b770ecc8763f279787d73a44",
-      "expected_lf_bytes": 24181
+      "expected_lf_sha256": "e67e25288b2c6c62aa827e68510027e926906442a70f4343f49565bfe171976a",
+      "expected_lf_bytes": 25334
     },
     "tests/evidence/rwac_command_capacity/PlugIn_b823.cpp": {
       "expected_lf_sha256": "e28e6fd1463b76ddc71d5dd51404787f225034014da99b67cdfdd1882a6a27c8",
@@ -45,5 +45,5 @@
     "original_git_lf_sha256": "e28e6fd1463b76ddc71d5dd51404787f225034014da99b67cdfdd1882a6a27c8",
     "original_git_lf_bytes": 8921
   },
-  "scope": "LF-content pins for the default-off five-source diagnostic, epoch-initialized fixture (System/ring/capacity API), unchanged runner and retained baseline Git-LF source. Raw checkout hashes, byte counts and EOL variants are retained separately at runtime."
+  "scope": "LF-content pins for the default-off five-source diagnostic, epoch-initialized capacity fixture, actual FIRST_PASS_WITNESS formatter regression, unchanged six-label baseline control, and retained baseline Git-LF source. Raw checkout hashes, byte counts and EOL variants are retained separately at runtime."
 }
