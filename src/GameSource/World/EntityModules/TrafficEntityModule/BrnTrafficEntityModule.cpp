@@ -14,6 +14,7 @@
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPvsDiag.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
@@ -120,6 +121,220 @@
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"                       // KU_MAX_HULLS (ManageTriggers)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h" // BrnWorld::CheckVehicleForPowerPark (GenerateNearbyParkedTrafficOutput)
 
+namespace BrnTraffic
+{
+    namespace PvsDiag
+    {
+        Mailbox gMailbox;
+
+        bool Enabled()
+        {
+            static const char* lpcSetting = std::getenv("BRN_TRAFFIC_PVS_DIAG");
+            static const bool sbEnabled =
+                lpcSetting != nullptr && std::strcmp(lpcSetting, "1") == 0;
+            return sbEnabled;
+        }
+
+        static const char* PhaseName(Phase lePhase)
+        {
+            switch (lePhase)
+            {
+            case PHASE_BASELINE: return "baseline";
+            case PHASE_ON: return "on";
+            case PHASE_OFF: return "off";
+            default: return "unknown";
+            }
+        }
+
+        static void AppendIdList(CgsDev::StrStreamBase* lpStream,
+                                 const char* lpcName,
+                                 const u16* lpuIds,
+                                 u32 luCount)
+        {
+            *lpStream << lpcName << "=[";
+            for (u32 lu = 0; lu < luCount; ++lu)
+            {
+                if (lu != 0)
+                    *lpStream << ",";
+                *lpStream << static_cast<s32>(lpuIds[lu]);
+            }
+            *lpStream << "]";
+        }
+
+        static void PublishSlot(const Snapshot& lrSource,
+                                Phase lePhase,
+                                u64 luSetCall,
+                                Snapshot& lrSlot)
+        {
+            lrSlot = lrSource;
+            lrSlot.mePhase = lePhase;
+            lrSlot.muSetCall = luSetCall;
+            lrSlot.muEpoch = ++gMailbox.muNextEpoch;
+        }
+
+        void PublishAfterSet(const Snapshot& lrSource)
+        {
+            if (!Enabled())
+                return;
+
+            TryLock lLock(gMailbox);
+            if (!lLock.Acquired())
+                return;
+
+            const u64 luSetCall = ++gMailbox.muAcceptedSetCalls;
+            if (!lrSource.mbDataReady || !lrSource.mbPvsPresent
+                || lrSource.mpModule == nullptr || lrSource.mpPvs == nullptr
+                || lrSource.muActiveCount > KU_MAX_ACTIVE_HULLS
+                || lrSource.muAddedCount > KU_MAX_ACTIVE_HULLS
+                || lrSource.muRemovedCount > KU_MAX_ACTIVE_HULLS
+                || gMailbox.meNextPhase == PHASE_DONE)
+                return;
+
+            const Phase lePhase = gMailbox.meNextPhase;
+            const bool lbEligible =
+                (lePhase == PHASE_BASELINE
+                    && !lrSource.mbRunningWorstCase && lrSource.muActiveCount != 0)
+                || (lePhase == PHASE_ON && lrSource.mbRunningWorstCase)
+                || (lePhase == PHASE_OFF && !lrSource.mbRunningWorstCase);
+
+            if (gMailbox.mbPending)
+            {
+                if (lbEligible)
+                {
+                    PublishSlot(lrSource, lePhase, luSetCall, gMailbox.mPending);
+                    gMailbox.mbPending = true;
+                }
+                else if ((lePhase == PHASE_ON && !lrSource.mbRunningWorstCase)
+                         || (lePhase == PHASE_OFF && lrSource.mbRunningWorstCase))
+                {
+                    gMailbox.mbPending = false;
+                }
+                return;
+            }
+
+            if (lbEligible)
+            {
+                PublishSlot(lrSource, lePhase, luSetCall, gMailbox.mPending);
+                gMailbox.mbPending = true;
+            }
+        }
+
+        bool CopyPending(Snapshot& lrOut)
+        {
+            TryLock lLock(gMailbox);
+            if (!lLock.Acquired() || !gMailbox.mbPending)
+                return false;
+
+            lrOut = gMailbox.mPending;
+            return true;
+        }
+
+        void InvalidateIfToggleMismatch(Phase lePhase, bool lbCurrentRunningWorstCase)
+        {
+            TryLock lLock(gMailbox);
+            if (!lLock.Acquired() || !gMailbox.mbPending
+                || gMailbox.mPending.mePhase != lePhase)
+                return;
+
+            if ((lePhase == PHASE_ON && !lbCurrentRunningWorstCase)
+                || (lePhase == PHASE_OFF && lbCurrentRunningWorstCase))
+                gMailbox.mbPending = false;
+        }
+
+        static bool DrawMatches(const Snapshot& lrPublished, const DrawSample& lrDraw)
+        {
+            if (lrDraw.mpModule != lrPublished.mpModule || lrDraw.mpPvs != lrPublished.mpPvs
+                || !lrDraw.mbDataReady || !lrDraw.mbPvsPresent || !lrDraw.mbDrawToggle
+                || lrDraw.mbRunningWorstCase != lrPublished.mbRunningWorstCase
+                || lrDraw.muBoxCalls != lrPublished.muActiveCount
+                || lrDraw.muMappingCount != lrPublished.muActiveCount
+                || lrDraw.mbMappingTruncated)
+                return false;
+
+            for (u32 lu = 0; lu < lrPublished.muActiveCount; ++lu)
+            {
+                const DrawBoxRecord& lrBox = lrDraw.maBoxes[lu];
+                const u32 luHull = lrPublished.mauActiveIds[lu];
+                if (lrBox.muHull != lrPublished.mauActiveIds[lu]
+                    || lrBox.muColumns != lrDraw.muCellsX
+                    || lrBox.muColumns == 0
+                    || lrBox.muColumn != luHull % lrBox.muColumns
+                    || lrBox.muRow != luHull / lrBox.muColumns)
+                    return false;
+            }
+            return true;
+        }
+
+        bool ConsumeIfMatching(const Snapshot& lrPublished, const DrawSample& lrDraw)
+        {
+            TryLock lLock(gMailbox);
+            if (!lLock.Acquired() || !DrawMatches(lrPublished, lrDraw)
+                || !gMailbox.mbPending
+                || gMailbox.mPending.muEpoch != lrPublished.muEpoch
+                || gMailbox.mPending.mePhase != lrPublished.mePhase
+                || CgsDev::Log::gpDebugPrint == nullptr)
+                return false;
+
+            const Snapshot& lrSlot = gMailbox.mPending;
+            const u64 luDrawSequence = gMailbox.muDrawSequence + 1;
+            CgsDev::StrStreamBase* lpStream = CgsDev::Log::gpDebugPrint;
+            *lpStream << "[PC-PVS-DIAG][SET] phase=" << PhaseName(lrSlot.mePhase)
+                      << " epoch=" << lrSlot.muEpoch
+                      << " set_call=" << lrSlot.muSetCall
+                      << " decision_frame=" << (lrSlot.mbDecisionFrame ? 1 : 0)
+                      << " frames_since_decision="
+                      << static_cast<s32>(lrSlot.muFramesSinceDecision)
+                      << " running_worst_case=" << (lrSlot.mbRunningWorstCase ? 1 : 0)
+                      << " data_ready=" << (lrSlot.mbDataReady ? 1 : 0)
+                      << " pvs_present=" << (lrSlot.mbPvsPresent ? 1 : 0)
+                      << " consumed_by_draw_seq=" << luDrawSequence
+                      << " active_count=" << static_cast<s32>(lrSlot.muActiveCount) << " ";
+            AppendIdList(lpStream, "active_ids", lrSlot.mauActiveIds, lrSlot.muActiveCount);
+            *lpStream << " ";
+            AppendIdList(lpStream, "added_ids", lrSlot.mauAddedIds, lrSlot.muAddedCount);
+            *lpStream << " ";
+            AppendIdList(lpStream, "removed_ids", lrSlot.mauRemovedIds, lrSlot.muRemovedCount);
+            *lpStream << "\n";
+
+            *lpStream << "[PC-PVS-DIAG][DRAW] phase=" << PhaseName(lrSlot.mePhase)
+                      << " epoch=" << lrSlot.muEpoch
+                      << " draw_seq=" << luDrawSequence
+                      << " decision_frame=" << (lrDraw.mbDecisionFrame ? 1 : 0)
+                      << " frames_since_decision="
+                      << static_cast<s32>(lrDraw.muFramesSinceDecision)
+                      << " running_worst_case=" << (lrDraw.mbRunningWorstCase ? 1 : 0)
+                      << " draw_toggle=" << (lrDraw.mbDrawToggle ? 1 : 0)
+                      << " data_ready=" << (lrDraw.mbDataReady ? 1 : 0)
+                      << " pvs_present=" << (lrDraw.mbPvsPresent ? 1 : 0)
+                      << " cells_x=" << static_cast<s32>(lrDraw.muCellsX)
+                      << " cells_z=" << static_cast<s32>(lrDraw.muCellsZ)
+                      << " total_cells=" << static_cast<s32>(lrDraw.muTotalCells)
+                      << " draw_rows=" << static_cast<s32>(lrDraw.muDrawRows)
+                      << " box_calls=" << static_cast<s32>(lrDraw.muBoxCalls)
+                      << " mapping_count=" << static_cast<s32>(lrDraw.muMappingCount)
+                      << " box_origin=80,80 box_size="
+                      << lrDraw.mfBoxStepX << "," << lrDraw.mfBoxStepY
+                      << " id_cell=[";
+            for (u32 lu = 0; lu < lrDraw.muMappingCount; ++lu)
+            {
+                if (lu != 0)
+                    *lpStream << ";";
+                const DrawBoxRecord& lrBox = lrDraw.maBoxes[lu];
+                *lpStream << static_cast<s32>(lrBox.muHull) << ":"
+                          << static_cast<s32>(lrBox.muColumn) << ","
+                          << static_cast<s32>(lrBox.muRow);
+            }
+            *lpStream << "]\n";
+
+            gMailbox.muDrawSequence = luDrawSequence;
+            gMailbox.mbPending = false;
+            gMailbox.meNextPhase = lrSlot.mePhase == PHASE_BASELINE
+                ? PHASE_ON
+                : lrSlot.mePhase == PHASE_ON ? PHASE_OFF : PHASE_DONE;
+            return true;
+        }
+    }
+}
 namespace BrnTraffic
 {
     namespace
@@ -3314,12 +3529,9 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
 // to PredictHullChanges @0x827348E8 (online, RUNNING) and UpdateRaceCarHulls @0x82721460 (both
 // arms; outlined above, crash parity FX-NETCRASH 2026-09-25).
 //
-// Gated, each with its own reason:
-//   * the baked debug hull-override list (the bool at X360 +0x729F0 selecting the 15-entry
-//     table at unk_820BA81C) -- that byte sits in the un-emitted DWARF :892..:895 window
-//     between mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name.
-//   * the std::_Sort of mActiveHulls -- ::Set<T,N> has no Sort. Order-only: SetDifference is
-//     order-independent, so only the order FillNewHull visits hulls in changes.
+// The original Running Worst Case branch installs the baked 15-hull set; the
+// ordinary branch rebuilds it from the eight per-race-car hull arrays. Both use
+// the same following sort and SetDifference/resource lifecycle.
 // The local-player hull differences also feed the trigger add/remove arrays.
 //
 // The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare,
@@ -3355,26 +3567,36 @@ void TrafficEntityModule::RecalculateActiveHulls(
     const ActiveHullSet lPreviousActiveHulls = mActiveHulls;
     mActiveHulls.Clear();
 
+    // ARTIST8274C9C4..8274CAC0: the original Running Worst Case toggle selects
+    // the 15 native-u16 hull IDs at 820BA81C..820BA83A instead of race-car hulls.
+    if (mbDEBUGRunningWorstCase)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "RecalculateActiveHulls DEBUG hull-override arm (the bool at X360 +0x729F0 "
-            "selects the baked 15-entry hull table at unk_820BA81C) -- that byte lies in the "
-            "DecFIGS un-emitted :892..:895 window, so it has no attested member name");
-    }
-
-    for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
-         leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
-         leRaceCar = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leRaceCar) + 1))
-    {
-        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
-            maaRaceCarHulls[leRaceCar];
-
-        for (u32 luIndex = 0; luIndex < lrRaceCarHulls.GetLength(); ++luIndex)
+        static const u16 kauDEBUGRunningWorstCaseHulls[15] =
         {
-            const u16 luRaceCarHull = lrRaceCarHulls.GetItem(luIndex);
-            CGS_ASSERT(luRaceCarHull < KU_MAX_HULLS, "luRaceCarHull < KU_MAX_HULLS");
-            mActiveHulls.Insert(luRaceCarHull);
+            98, 99, 100, 101, 102,
+            119, 120, 121, 122, 123,
+            140, 141, 142, 143, 144
+        };
+        for (const u16 luHull : kauDEBUGRunningWorstCaseHulls)
+        {
+            mActiveHulls.Insert(luHull);
+        }
+    }
+    else
+    {
+        for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+             leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+             leRaceCar = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leRaceCar) + 1))
+        {
+            const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
+                maaRaceCarHulls[leRaceCar];
+
+            for (u32 luIndex = 0; luIndex < lrRaceCarHulls.GetLength(); ++luIndex)
+            {
+                const u16 luRaceCarHull = lrRaceCarHulls.GetItem(luIndex);
+                CGS_ASSERT(luRaceCarHull < KU_MAX_HULLS, "luRaceCarHull < KU_MAX_HULLS");
+                mActiveHulls.Insert(luRaceCarHull);
+            }
         }
     }
 
@@ -3592,6 +3814,34 @@ void TrafficEntityModule::RecalculateActiveHulls(
     if (lpOutNewHulls->GetLength() != 0 || lpOutOldHulls->GetLength() != 0)
     {
         RebuildGeneratorList();
+    }
+
+    // PC-only diagnostic publication after the completed original active-set computation.
+    // The mailbox is fixed-size and the one-shot lock attempt never waits on a render thread.
+    if (PvsDiag::Enabled())
+    {
+        PvsDiag::Snapshot lPvsDiagSource;
+        lPvsDiagSource.mpModule = this;
+        lPvsDiagSource.mbRunningWorstCase = mbDEBUGRunningWorstCase;
+        lPvsDiagSource.mbDecisionFrame = mbDecisionFrame;
+        lPvsDiagSource.muFramesSinceDecision = muFramesSinceDecision;
+        lPvsDiagSource.mbDataReady = mpData.HasMemoryResource();
+        const Pvs* lpPvsDiag = lPvsDiagSource.mbDataReady ? mpData->mpPvs : nullptr;
+        lPvsDiagSource.mpPvs = lpPvsDiag;
+        lPvsDiagSource.mbPvsPresent = lpPvsDiag != nullptr;
+        lPvsDiagSource.muActiveCount = mActiveHulls.GetLength();
+        for (u32 lu = 0; lu < lPvsDiagSource.muActiveCount && lu < KU_MAX_ACTIVE_HULLS; ++lu)
+            lPvsDiagSource.mauActiveIds[lu] = mActiveHulls.GetItem(lu);
+
+        lPvsDiagSource.muAddedCount = lpOutNewHulls->GetLength();
+        for (u32 lu = 0; lu < lPvsDiagSource.muAddedCount && lu < KU_MAX_ACTIVE_HULLS; ++lu)
+            lPvsDiagSource.mauAddedIds[lu] = lpOutNewHulls->GetItem(lu);
+
+        lPvsDiagSource.muRemovedCount = lpOutOldHulls->GetLength();
+        for (u32 lu = 0; lu < lPvsDiagSource.muRemovedCount && lu < KU_MAX_ACTIVE_HULLS; ++lu)
+            lPvsDiagSource.mauRemovedIds[lu] = lpOutOldHulls->GetItem(lu);
+
+        PvsDiag::PublishAfterSet(lPvsDiagSource);
     }
 }
 

@@ -1,8 +1,22 @@
-// Embed-check for the BrnGame::BrnGameModule controller-bridge family. Forces the six bridge
-// methods + the PadOutputInformation field layout to be referenced so the gate compiles them.
+// Compile-only check for the six BrnGame::BrnGameModule bridge signatures and the
+// X360-attested scalar layout of the input pad record.
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeControllerToX.h"
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
+#include <cstddef>
+
+using CgsInput::InputIO::ActionInfo;
+using CgsInput::InputIO::PadOutputInformation;
+
+static_assert(sizeof(ActionInfo) == 8, "ActionInfo is an 8-byte X360 value/status pair");
+static_assert(offsetof(ActionInfo, mfValue) == 0, "ActionInfo value @ +0");
+static_assert(offsetof(ActionInfo, muStatus) == 4, "ActionInfo status @ +4");
+static_assert(sizeof(PadOutputInformation) == 0x3A4, "pad record stride is 932 bytes");
+static_assert(offsetof(PadOutputInformation, mfStickLX) == 0x00, "stick axis @ +0");
+static_assert(offsetof(PadOutputInformation, maActionInfo) == 0x18, "ActionInfo table @ +0x18");
+static_assert(offsetof(PadOutputInformation, muConnectionWord) == 0x398, "connection/player word @ +0x398");
+static_assert(offsetof(PadOutputInformation, meControllerState) == 0x39C, "controller state @ +0x39C");
+static_assert(offsetof(PadOutputInformation, mbDisconnected) == 0x3A0, "disconnected byte @ +0x3A0");
 
 namespace
 {
