@@ -48,6 +48,9 @@ namespace CgsFsm
         // @ 0x82835E90 -- transition to the state whose id matches: scan the table (GetState/
         // GetStateCount), run the old state's OnLeave + the new state's OnEnter, bump the sequence.
         void SetState(CgsID lStateId);
+        // @ 0x828368A8 -- resolve a Lua-authored numeric state index through GetStateName,
+        // then find the registered state object by its full CgsID (not its array position).
+        const ScriptedState* GetStateByIndex(s32 liStateIndex);
         // @ 0x82836BA8 -- the script's index for the current state (GetInt "GetCurrentStateIndex").
         s32  GetCurrentStateIndex();
 

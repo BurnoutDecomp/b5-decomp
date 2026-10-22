@@ -124,6 +124,28 @@ void ScriptedFsm::SetState(CgsID lStateId)
     lpTarget->OnEnter();
 }
 
+// @ 0x828368A8 -- Lua indices name authored graph nodes, not C++ state-table slots.
+const ScriptedState* ScriptedFsm::GetStateByIndex(s32 liStateIndex)
+{
+    CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
+
+    char lacStateIndex[128];
+    CgsCore::SPrintf(lacStateIndex, 128, "%d", liStateIndex);
+    const CgsID lStateIndexId = CgsIDCompress(lacStateIndex);
+    char lacStateName[128];
+    mLuaState.GetString("GetStateName", lStateIndexId, lacStateName, 128);
+    const CgsID lStateId = CgsIDCompress(lacStateName);
+
+    const s32 liNumStates = GetStateCount();
+    for (s32 liState = 0; liState < liNumStates; ++liState)
+    {
+        const ScriptedState* lpState = GetState(liState);
+        if (lpState->GetId() == lStateId)
+            return lpState;
+    }
+    return nullptr;
+}
+
 // @ 0x82836BA8 -- the script's numeric index for the current state.
 s32 ScriptedFsm::GetCurrentStateIndex()
 {
