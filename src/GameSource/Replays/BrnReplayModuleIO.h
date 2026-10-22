@@ -165,6 +165,9 @@ namespace ReplayIO
     {
         typedef OutputBuffer_PreSim::GuiEventQueue GuiEventQueue;  // same GuiEventQueueSmall typedef
 
+        // ARTIST 0x82652FE0: base flag, eleven named serialiser slots, then GUI queue.
+        void Construct();
+
         // X360 0x823BB278: write-lock (bit 3, "Not locked for writing", :142); returns
         // &mRequestInterface (this+4).
         RequestInterface* GetRequestInterface();

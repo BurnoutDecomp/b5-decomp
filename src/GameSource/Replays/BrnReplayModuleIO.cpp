@@ -170,8 +170,18 @@ namespace ReplayIO
     }
 
     // ====================================================================================
-    // InputBuffer_PostSim accessors (BrnReplayModuleIO.h:145-150).
+    // InputBuffer_PostSim construction and accessors (BrnReplayModuleIO.h:134-150).
     // ====================================================================================
+    // ARTIST 0x82652FE0. IOBufferStack::CreateIOBuffer<InputBuffer_PostSim>
+    // invokes this body for each reused phase-input allocation.
+    void InputBuffer_PostSim::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        for (s32 liSerialiser = 0; liSerialiser < KI_MAX_SERIALISERS; ++liSerialiser)
+            mRequestInterface.mapSerialisers[liSerialiser] = 0;
+        mGuiEventQueue.Construct();
+    }
+
     void InputBuffer_PostSim::_AssertLayout()
     {
         // X360 (32-bit) offsets: mRequestInterface @+0x04 (RequestInterface == BaseSerialiser*[11],

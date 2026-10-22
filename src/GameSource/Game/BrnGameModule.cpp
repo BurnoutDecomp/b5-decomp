@@ -1543,9 +1543,47 @@ namespace BrnGame
             lpUpdateInputBufferStack, "ReplaysPreSim");
         BrnReplays::ReplayIO::InputBuffer_PreSim* const lpReplayInputBuffer = lReplayInput;
 
+        // ARTIST sub_823B6FE0 pointer assertions (CgsModuleUtils.h:259-260).
+        if (lpReplayInputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                259);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpGameStateOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                260);
+            CgsDev::Assert::EndAssert();
+        }
         CgsModule::LockBuffersForIO(lpReplayInputBuffer, lpGameStateOutputBuffer);
         lpReplayInputBuffer->AppendGameActionQueue(lpGameStateOutputBuffer->GetGameActionQueue());
         lpReplayInputBuffer->SetTimerStatusInterface(&mTimerStatusInterface);
+        // ARTIST sub_823B7060 pointer assertions (CgsModuleUtils.h:272-273).
+        if (lpReplayInputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                272);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpGameStateOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                273);
+            CgsDev::Assert::EndAssert();
+        }
         CgsModule::UnlockBuffersForIO(lpReplayInputBuffer, lpGameStateOutputBuffer);
 
         mReplayModule.Update_PreSim(lpReplayInputBuffer, lpReplaysPreSimOutputBuffer, lUpdateSet);
@@ -1580,6 +1618,61 @@ namespace BrnGame
             lpUpdateInputBufferStack, "ReplaysPostSim");
         BrnReplays::ReplayIO::InputBuffer_PostSim* const lpReplayInputBuffer = lReplayInput;
 
+        // ARTIST sub_823B7620 pointer assertions (CgsModuleUtils.h:403-408).
+        if (lpReplayInputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                403);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpWorldOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                404);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpEffectsOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer1",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                405);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpSoundOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer2",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                406);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpDirectorOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer3",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                407);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpGuiOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer4",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                408);
+            CgsDev::Assert::EndAssert();
+        }
         CgsModule::LockBuffersForIO(lpReplayInputBuffer, lpWorldOutputBuffer, lpEffectsOutputBuffer,
                                     lpSoundOutputBuffer, lpDirectorOutputBuffer, lpGuiOutputBuffer);
         lpReplayInputBuffer->AppendRequestInterface(lpWorldOutputBuffer->GetReplayRequestInterface());
@@ -1595,6 +1688,61 @@ namespace BrnGame
             lpReplayInputBuffer->GetRequestInterface();
         lpRequestInterface->RegisterSerialiser(&mDirectorBridgeSerialiser);
         lpRequestInterface->RegisterSerialiser(&mGameModuleSerialiser);
+        // ARTIST sub_823B7760 pointer assertions (CgsModuleUtils.h:428-433).
+        if (lpReplayInputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                428);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpWorldOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                429);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpEffectsOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer1",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                430);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpSoundOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer2",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                431);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpDirectorOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer3",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                432);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpGuiOutputBuffer == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpOutputBuffer4",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h",
+                433);
+            CgsDev::Assert::EndAssert();
+        }
         CgsModule::UnlockBuffersForIO(lpReplayInputBuffer, lpWorldOutputBuffer, lpEffectsOutputBuffer,
                                       lpSoundOutputBuffer, lpDirectorOutputBuffer, lpGuiOutputBuffer);
 
