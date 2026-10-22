@@ -22,6 +22,18 @@ extern "C" void* XMemCpy(void* lpDest, const void* lpSrc, size_t luSize);
 
 namespace BrnReplays
 {
+    // Inlined in ARTIST ReplayModule::Construct @0x82656E20. Keep the
+    // unidentified dword because the original stores -1 at stream+0x13C.
+    void DiskReadStream::Construct()
+    {
+        mUnidentified13C = -1;
+        meStatus = E_STATUS_CLOSED;
+        for (s32 liBlock = 0; liBlock < KI_MAX_STREAM_BLOCKS; ++liBlock)
+            maBlocks[liBlock].mpOwner = this;
+        miLoopStart = 0;
+        miLoopEnd = 0;
+    }
+
     // ARTIST 82659E20..82659EB0 (raw image). Close is idempotent at the
     // request boundary: the original emits a channel-one warning for repeats.
     void DiskReadStream::Close()

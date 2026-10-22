@@ -14,6 +14,7 @@
 #include "GameSource/Replays/BrnReplayRequestInterface.h"        // ReplayIO::RequestInterface
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"          // BaseSerialiser
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"  // AllocatorList
+#include "GameSource/Resource/BrnResourceAllocator.h"               // GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"       // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"       // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
@@ -21,117 +22,37 @@
 
 namespace BrnReplays
 {
-    // =========================================================================================
-    // ReplayModule::Prepare
-    //   v4 = *(this + 0x228);                       // the module's own prepare stage
-    //   if (v4 < 2) {
-    //       *(this + 0x228) = 1;
-    //       if (!ModuleSingleBuffered::Prepare(this)) return 0;
-    //       DebugComponent::Register(this + 6297);
-    //       linear = AllocatorList::GetLinearAllocator(allocatorList, 48);
-    //       *(this + 2168) = linear;  LinearMalloc::SetAlignment(linear, 16);
-    //       *(this + 2300) = LinearMalloc::Malloc(linear, 0x80000);
-    //       *(this + 2312) = LinearMalloc::Malloc(linear, 0x4000);
-    //       *(this + 2320) = rw::IResourceAllocator::AllocateMemoryResource(
-    //                            BrnResource::GetDebugAllocator(), 524360, 16, 0);
-    //       *(this + 2296) = LinearMalloc::Malloc(linear, 0x20000);
-    //   }
-    //   *(this + 0x228) = 1; *(this + 0x22C) = 0; return 1;
-    //
-    // ⭐ WHAT THIS UNBLOCKS, and why it is here at all: BaseSerialiser::mpStaticBuffer is
-    // allocated in exactly ONE place in the whole engine -- StoreSerialisers, below, out of the
-    // linear region THIS function acquires. With no Prepare there is no region, with no region
-    // there is no static buffer, and BrnEffects::EffectsModule::Update returns at
-    // its `GetStaticLayout() == 0` guard before it ever reaches the wheel loop. Measured
-    // (BRN_SKID_PROBE, 2026-09-02):
-    //     [skid-gate] Update REACHED the per-system enables: trails=1 sparks=1 ...
-    //     [skid-gate] EffectsModule::Update RETURNED EARLY at:
-    //                 mEffectsSerialiser.GetStaticLayout() == 0
-    // -- i.e. every tyre mark, spark, piece of debris and Lion effect in the game was behind
-    // this one allocation.
-    //
-    // THE THREE MODULE-OWN BUFFERS ARE ALLOCATED, NOT SKIPPED: they are three LinearMalloc
-    // bumps and leaving them out would silently move every later allocation's address. Their
-    // CONSUMERS (the write/read stream machinery) are not reconstructed, so the pointers are
-    // announced once and not stored -- the region is reserved exactly as the console reserves
-    // it. The debug memory resource is the one piece skipped, and it says so.
-    // =========================================================================================
+    // ARTIST ReplayModule::Prepare @0x82652768. Preserve the derived stage
+    // comparisons, base Prepare/Register order, allocator bank, and allocation order.
     bool ReplayModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
     {
-        // ONCE. The console's guard is `v4 = *(this + 0x228); if (v4 < 2) { ...allocate... }` and
-        // +0x228 belongs to the MODULE BASE: CgsModule::ModuleSingleBuffered::Prepare owns that
-        // stage and advances it past 1 once it has finished, which is what stops the allocations
-        // running twice. This port's base does not expose that slot, so the same "already done"
-        // fact is carried by name. Without it, every frame of loading stage 8 re-entered and
-        // re-bumped the linear region by ~660 KB.
-        // (⚠ This guard is NOT what fixed the null region -- see StoreSerialisers below. It was
-        // written while chasing that, and it is kept because it is right, not because it was the
-        // cause. Correcting the record rather than letting the banner take credit.)
-        // DELETE-WHEN the base's prepare stage is reachable: then read it, as the console does.
-        if (mbPrepared)
+        const u32 luStage = static_cast<u32>(mePrepareStage);
+        if (luStage < static_cast<u32>(E_PREPARE_STAGE_DONE))
         {
-            return true;
-        }
+            mePrepareStage = E_PREPARE_STAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                return false;
 
-        if (lpAllocatorList == 0)
+            mDebugComponent.Register();
+            mpLinearMalloc = lpAllocatorList->GetLinearAllocator(KI_REPLAY_LINEAR_BANK);
+            mpLinearMalloc->SetAlignment(16);
+            mpcPrimaryStreamBuffer =
+                static_cast<char*>(mpLinearMalloc->Malloc(0x80000));
+            mpcHeaderStreamBuffer =
+                static_cast<char*>(mpLinearMalloc->Malloc(0x4000));
+            mpSecondaryStreamBuffer = static_cast<MemBuffer*>(
+                BrnResource::GetDebugAllocator()->AllocateMemoryResource(0x80048, 16, nullptr));
+            mpcHeaderBuffer =
+                static_cast<char*>(mpLinearMalloc->Malloc(0x20000));
+        }
+        else if (luStage >= 3)
         {
-            // The console cannot reach this: stage 8 always has the game-data output buffer.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[replays] ReplayModule::Prepare called with a null allocator list -- "
-                    "no linear region, so no serialiser gets a static buffer\n");
-            }
+            CGS_ASSERT(false, "Invalid Stage\n");
             return false;
         }
 
-        // `CgsDev::DebugComponent::Register(a1 + 6297)` -- the replay debug component is not
-        // registered on this build (its component object is not modelled at that offset).
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[replays] NOT RECONSTRUCTED: ReplayModule::Prepare's "
-                    "CgsDev::DebugComponent::Register(this + 6297) and its "
-                    "rw::IResourceAllocator::AllocateMemoryResource(debug, 524360, 16, 0)\n");
-            }
-        }
-
-        mpLinearMalloc = lpAllocatorList->GetLinearAllocator(KI_REPLAY_LINEAR_BANK);
-        if (mpLinearMalloc == 0)
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[replays] ReplayModule::Prepare: allocator bank 48 has no linear "
-                    "allocator -- serialiser buffers cannot be carved\n");
-            }
-            return false;
-        }
-
-        mpLinearMalloc->SetAlignment(16);
-
-        // The three module-own bumps, in the console's own order and sizes.
-        void* lpStreamBuffer = mpLinearMalloc->Malloc(0x80000);
-        void* lpSmallBuffer  = mpLinearMalloc->Malloc(0x4000);
-        void* lpThirdBuffer  = mpLinearMalloc->Malloc(0x20000);
-        {
-            char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[replays] ReplayModule::Prepare: this=%p linear=%p region up (0x80000=%p "
-                "0x4000=%p 0x20000=%p); their stream consumers are not reconstructed\n",
-                static_cast<void*>(this), static_cast<void*>(mpLinearMalloc),
-                lpStreamBuffer, lpSmallBuffer, lpThirdBuffer);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-
-        mbPrepared = true;
+        mePrepareStage = E_PREPARE_STAGE_MANAGER;
+        meReleaseStage = E_RELEASE_STAGE_START;
         return true;
     }
 

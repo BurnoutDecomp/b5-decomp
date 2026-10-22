@@ -2,6 +2,7 @@
 #include "GameSource/Replays/BrnReplayRequestInterface.h"   // ReplayIO::RequestInterface
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // BaseSerialiser
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList
+#include "GameSource/Resource/BrnResourceAllocator.h"                // GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -12,55 +13,85 @@
 // ============================================================================
 // GameSource/Replays/BrnReplayModule.cpp
 //
-// BrnReplays::ReplayModule -- the constructor + the two off-path module methods.
+// ReplayModule has two distinct construction phases. The native C++ constructor
+// @0x827E03D0 initializes the base locks, the event-queue unconstructed marker,
+// native stream locks, job subobjects, and embedded DebugComponent vtable.
+// ReplayModule::Construct @0x82656E20 performs the logical state initialization,
+// including the debug component and typed stream initializers recovered here.
 //
-//   * ReplayModule::ReplayModule         (runs on every boot)
-//   * ReplayModule::Update_Dispatch
-//   * ReplayModule::WaitForSerialiseJobs
-//   * ReplayModule::Destruct / WaitForOpenReplayFiles / UpdateRestoring_PostSim
-//
-// CONSTRUCTOR, store for store as the console performs it:
-//   the ModuleSingleBuffered base vtable, then the derived ReplayModule vtable
-//   RWMutex construction on the base input buffer's mutex   (+0x10)
-//   RWMutex construction on the base output buffer's mutex  (+0x118)
-//   mGameEventCache marked unconstructed (byte 0)           (+0x23C)
-//   Job construction on the embedded jobs at +0x2B10, at +0x4940 (four of them,
-//     stride +0x350) and at +0x5680
-//   critical-section init on mLockA (+0x3B00) and on mPrimaryDiskReadStream (+0x3F80)
-//   mDebugComponent's vtable (+0x6264) -- its inlined construction
-//
-// In human C++ the two vtable writes + the two RWMutex constructions are the
-// ModuleSingleBuffered base sub-object's own construction, and the two
-// critical-section inits are the EA::Thread::Futex members' own ctors (the committed
-// Futex is exactly that CRITICAL_SECTION-backed lock, reused by name, so its ctor
-// performs the init -- same pattern as CgsGraphics::MoviePlayer; the read stream's own ctor does
-// the second). This body therefore reproduces only the trailing stores past the base.
-//
-// FLAG -- DEFERRED sub-construction. The console ctor chains EA::Jobs::Job::Job(.,0) on
-// each embedded job (+0x2B10, the four at +0x4940, and the +0x5680 serialise job).
-// Those jobs have no complete reconstructed layout (size-only opaque placeholders in
-// the header), so their sub-constructors are NOT chained here -- chaining them would
-// require fabricating the embedded layout/ctor-overload, which the rules forbid. The
-// GPUDiskWriteStream / DataStreamCommandPoster / Futex embeds construct trivially via
-// their real types. Every scalar store the ctor makes IS reproduced by name.
+// The job fields remain opaque placeholders in this B5 source slice; this delta
+// does not claim their native EA::Jobs constructor chain. Other retained bodies are
+// WaitForOpenReplayFiles, Update_Dispatch, WaitForSerialiseJobs, Destruct, and
+// UpdateRestoring_PostSim.
 // ============================================================================
 
 namespace BrnReplays
 {
     ReplayModule::ReplayModule()
     {
-        mbPrepared     = false;   // the module has not prepared (base +0x228)
-        mpLinearMalloc = 0;   // ReplayModule::Prepare acquires it (+0x878)
+        // ARTIST's native constructor initializes the base and stream locks and
+        // chains the EA::Jobs subconstructors. This B5 source retains the event-queue
+        // marker; the job placeholders remain explicitly unconstructed.
+        mGameEventCache.MarkUnconstructed();
+    }
 
-        // Base (ModuleSingleBuffered: both vtables + the two RWMutexes) and the
-        // embedded mGpuWriteStream / mLockA / mPrimaryDiskReadStream / mCommandPoster /
-        // mDebugComponent construct automatically before this body. mLockA's Futex ctor and
-        // the read stream's ctor perform the two critical-section inits the console ctor makes
-        // at +0x3B00 / +0x3F80.
+    // ARTIST 0x82656E20. Initialize the named ReplayModule members and invoke
+    // the existing typed constructors for the embedded debug component and streams.
+    void ReplayModule::Construct()
+    {
+        CgsModule::ModuleSingleBuffered::Construct();
 
-        mGameEventCache.MarkUnconstructed();   // the console stores 0 at +0x23C
+        meReleaseStage = E_RELEASE_STAGE_DONE;
+        mePrepareStage = E_PREPARE_STAGE_START;
+        meState = E_STREAM_STATE_IDLE;
 
-        // Embedded jobs (+0x2B10, the four at +0x4940, +0x5680) sub-construction DEFERRED.
+        // GetDebugAllocator returns the same allocator object passed by ARTIST as
+        // off_82F2C7DC; its assertion is the original null-allocator assertion.
+        mDebugComponent.Construct(this, BrnResource::GetDebugAllocator());
+
+        mbStartPlaying = false;
+        mbStopPlaying = false;
+        mbStartRecording = false;
+        mbStopRecording = false;
+        mfCurrentTime = 0.0f;
+        mbMarkActionReplay = false;
+        mfDebugHudAlpha = 0.0f;
+        mbStartActionReplay = false;
+        mbAutoStart = true;
+
+        mpLinearMalloc = nullptr;
+        mpcPrimaryStreamBuffer = nullptr;
+        mpcHeaderStreamBuffer = nullptr;
+        mpSecondaryStreamBuffer = nullptr;
+        miCurrentFrame = 0;
+        miKeyFrameInterval = 10;
+        meMode = E_MODE_INGAME;
+        miCurrentRecordReel = -1;
+        miCurrentPlayReel = -1;
+        mbStopPlayingRequestReceived = false;
+        mUnidentified5C3E = false;
+
+        mGameEventCache.Construct();
+        mGameDataReceiverQueue.Construct();
+        mWriteStream.Construct();
+        mReadStream.Construct();
+        mGpuWriteStream.Construct();
+        mPrimaryDiskReadStream.Construct();
+        meStreamStage = E_STREAM_STAGE_CLOSED;
+
+        for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
+            mapSerialisers[liSerialiser] = nullptr;
+
+        for (s32 liReel = 0; liReel < 6; ++liReel)
+        {
+            maReels[liReel].macName[0] = 0;
+            maReels[liReel].mbUsed = false;
+        }
+
+        mbIsNewModule = true;
+        mUnidentified5C3C = false;
+        mUnidentified5C3B = false;
+        mUnidentified6260 = 0;
     }
 
     // Vtable slot 3. The debug component's teardown, the game-event cache's, then the module

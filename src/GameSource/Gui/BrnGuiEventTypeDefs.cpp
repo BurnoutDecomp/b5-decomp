@@ -14,11 +14,15 @@
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Core/CgsID.h"           // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"     // CgsUnicode::SafelyTerminate (GuiHudMessage::GetParam)
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h" // CgsNetwork::K_INVALID_PLAYER_ID
 
 #include <cstring>  // std::memcpy -- the DoWorstCase compaction is a 0x30-byte block move.
+
+extern bool gbLogGuiAudioTriggers; // X360 byte_82FB5098, registered by GuiDebugComponent.
 
 namespace BrnGui
 {
@@ -36,6 +40,14 @@ static const f32 KF_WORST_CASE_PHASE_STEP  = 1.5f;   // flt_82004D04
 static const f32 KF_WORST_CASE_PHASE_RESET = 0.0f;   // flt_82001CC0
 static const f32 KF_WORST_CASE_RING_STEP   = 50.0f;  // flt_820138DC (ring Z spacing & X offset)
 
+// ARTIST off_82F2CFC0: 27 exact action labels, read from the calibrated original image.
+static const char* const KAPC_GUI_AUDIO_ACTION_NAMES[27] = {
+    "OnEnter", "OnExit", "OnFocus", "OnLoseFocus", "OnAccept", "OnCancel",
+    "OnTick", "OnChange", "OnUp", "OnDown", "OnLeft", "OnLeftSweep",
+    "OnRight", "OnRightSweep", "Pitch", "Azimuth", "Cutoff", "VolumeMenu",
+    "VolumeMenu2", "VolumeMenu3", "VolumeInGame", "VolumeInGame2", "VolumeInGame3", "VolumeStream",
+    "Off", "On", "SwitchedOn"
+};
 // @0x824F6350 -- copy the three names into their fixed 32-byte fields, force
 // termination at byte 31, then store the action enum between component and label.
 void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
@@ -51,6 +63,17 @@ void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
     CgsCore::SPrintf(macMovie, sizeof(macMovie), lpMovieName);
     macMovie[31] = 0;
     meAction = leAction;
+    if (::gbLogGuiAudioTriggers && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "\nGUI AUDIO TRIGGERS: "
+            << "Received sound action. Sending GuiAudioEvent to Audio guys. Component: "
+            << lpComponentName
+            << " Action: " << KAPC_GUI_AUDIO_ACTION_NAMES[leAction]
+            << " Label: " << lpLabel
+            << " Movie: " << lpMovieName
+            << "\n";
+    }
 }
 
 // @ 0x823A6A20 — zero-extended byte; guards leCounty >= 0 (vacuous for an unsigned

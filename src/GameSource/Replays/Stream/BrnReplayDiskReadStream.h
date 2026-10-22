@@ -13,9 +13,8 @@
 // printed by every assert in this TU ("..\\..\\..\\GameSource\\Replays/Stream/
 // BrnReplayDiskReadStream.cpp").
 //
-// The read ring, service, read/close callbacks and completion/close bodies are
-// recovered in this canonical TU. Construct/Open/OnOpen/OpenCallback/GetStatus
-// remain separate lifecycle dependencies; grow this home without forking it.
+// The read ring, service, read/close callbacks, and Construct initializer are
+// recovered in this canonical TU. Open remains a separate lifecycle dependency.
 //
 // LAYOUT POLICY: member ORDER follows the X360 ARTIST asm offsets (and the DecFIGS
 // BrnReplayDiskReadStream.h DWARF where the two agree); widths are natural PC/x64 (a
@@ -155,6 +154,7 @@ namespace BrnReplays
         // (lwz 0x134 / lwz 0x138), the names are inferred from that use.
         s32             miNormalPriority;                    // X360 +0x134 priority when buffered
         s32             miUrgentPriority;                    // X360 +0x138 priority when starved
+        s32             mUnidentified13C;                    // ARTIST Construct stores -1; role unknown
         // The compound device file handle {device, device-private handle}. The console packed
         // the pair into the two words here; this is the typed value itself.
         CgsFileSystem::Handle mHandle;                       // +0x140 open device file handle
