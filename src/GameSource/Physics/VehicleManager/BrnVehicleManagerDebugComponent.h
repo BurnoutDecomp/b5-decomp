@@ -57,6 +57,7 @@
 #include "BrnCommonTypes.h"                                                  // Vector3, Matrix44Affine
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (real base)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"    // CgsPhysics::PhysicsSimulationIO::OutContactSpy
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h" // line-test result
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"           // EImpactSituation
 
@@ -83,6 +84,17 @@ namespace Vehicle
         // manager and reset every recorded contact/slam/shunt/line-test slot.
         // ------------------------------------------------------------------------------------
         void Construct(VehicleManager* lpVehicleManager);
+
+        // @0x825B7270. Snapshot the last distinct race-car / traffic contact for the
+        // registered "Draw last RC-traffic contact" debug view.
+        void RecordRaceCarTrafficContact(
+            const CgsSceneManager::SceneManagerIO::PotentialContact* lpPotentialContact,
+            s32 liRaceCarIndex, s32 liTrafficIndex);
+
+        // @0x825B7A48. Copy hit points and hit flags from the four-line result into the
+        // debug component's render storage.
+        void RecordStuckInCollisionLineTestResult(
+            const CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc::StreamResult* lpResult);
 
         // ------------------------------------------------------------------------------------
         // @0x825B7880 (114 insns; DWARF BrnVehicleManagerDebugComponent.cpp:1045..1065 by its

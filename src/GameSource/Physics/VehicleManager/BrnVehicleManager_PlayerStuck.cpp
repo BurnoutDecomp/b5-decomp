@@ -543,32 +543,7 @@ namespace
             return;
         }
 
-        // [FLAG header_request] VehicleManagerDebugComponent::RecordStuckInCollisionLineTestResult
-        // @0x825B7A48 (34 insns; DWARF BrnVehicleManagerDebugComponent.h:214) is NOT declared in
-        // the tree's component header, and that header/TU is not this lane's file. Its body is
-        // reproduced INLINE here through the component's existing `friend class VehicleManager`
-        // grant (the seats are the DWARF's own :225/:226 members):
-        //   0x825B7AA0  lbzx hit = result[0xB4 + i]
-        //   0x825B7AB0  stb 1 -> component+0x500+i        (mabStuckInCollisionIntersection[i])
-        //   0x825B7AB4  lvx128 result+0x10*i -> stvx128 component+0x4C0+0x10*i
-        //                                                 (maStuckInCollisionLineTestPoint[i])
-        // DELETE-WHEN the component declares and homes the method; then this block becomes
-        // `mDebugComponent.RecordStuckInCollisionLineTestResult(lpResult);`.
-        CGS_ASSERT(lpResult != nullptr, "lpResult != NULL");   // BrnVehicleManagerDebugComponent.cpp:1197
-        for (s32 liLine = 0; liLine < KI_NUM_STUCK_IN_COLLISION_LINE_TESTS; ++liLine)
-        {
-            if (lpResult->mabHit[liLine] != 0)
-            {
-                mDebugComponent.mabStuckInCollisionIntersection[liLine] = true;
-                const Vector4& lrHit = lpResult->maHitPosition[liLine];
-                Vector3& lrPoint = mDebugComponent.maStuckInCollisionLineTestPoint[liLine];
-                lrPoint.x = lrHit.x;
-                lrPoint.y = lrHit.y;
-                lrPoint.z = lrHit.z;
-                lrPoint.w = lrHit.w;
-            }
-        }
-        // ---- end inlined RecordStuckInCollisionLineTestResult ----
+        mDebugComponent.RecordStuckInCollisionLineTestResult(lpResult); // 0x825C39F0 -> 0x825B7A48
 
         // Lines 0/1 are FL<->RR both ways, 2/3 are FR<->RL both ways (see the Add's store map).
         // A diagonal counts only when BOTH directions hit: geometry between the two wheels.

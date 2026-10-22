@@ -655,10 +655,11 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
     CGS_ASSERT((luTrafficGlobalWord >> 24) == static_cast<u32>(BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE),
                "lTrafficEntityID.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
 
-    // GATE: VehicleManagerDebugComponent::RecordRaceCarTrafficContact @0x825B7270 (140), called
-    // at 0x826401E4. Blocker: its five "last traffic contact" debug seats (+472/+608/+672/+736/
-    // +848 of the debug component) are not modelled; it is a debug-render snapshot with no
-    // gameplay effect. DELETE-WHEN the VehicleManagerDebugComponent traffic block is recovered.
+    // The X360 call at 0x826401E4 snapshots this contact before the outcome classifier runs.
+    // It updates only VehicleManagerDebugComponent's last-contact debug record.
+    mDebugComponent.RecordRaceCarTrafficContact(&lContact,
+                                                static_cast<s32>(lu16RaceCarIndex),
+                                                static_cast<s32>(lu16TrafficIndex));
 
     u32 luImpactResponseFlags = 0;
     VecFloat lvfTrafficSlamMagnitude;
