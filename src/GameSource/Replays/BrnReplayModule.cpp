@@ -60,6 +60,28 @@ namespace BrnReplays
                       "original scalar replay GUI payloads");
         static_assert(sizeof(ReplayPlayReelPayload) ==8 && sizeof(ReplayReelNamePayload) ==260,
                       "original replay play/name payload extents");
+
+        // The current inline CgsModuleUtils helpers keep the lock order but omit
+        // the null checks emitted by ARTIST sub_823B6FE0/sub_823B7060. Keep the
+        // original odd parameter labels and explicit source provenance here.
+        void AssertReplayIOBufferPair(const void* lpDestBuffer, const void* lpSourceBuffer,
+                                      s32 liDestLine, s32 liSourceLine)
+        {
+            static const char KACgsModuleUtilsPath[] =
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h";
+            if (lpDestBuffer == nullptr)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpInputBuffer", KACgsModuleUtilsPath, liDestLine);
+                CgsDev::Assert::EndAssert();
+            }
+            if (lpSourceBuffer == nullptr)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpOutputBuffer0", KACgsModuleUtilsPath, liSourceLine);
+                CgsDev::Assert::EndAssert();
+            }
+        }
     }
 
     ReplayModule::ReplayModule()
@@ -265,10 +287,8 @@ namespace BrnReplays
                                       ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
                                       BrnUpdateSet lUpdateSet)
     {
-        // sub_823B6FE0 receives output in r3 and input in r4. The original helper's
-        // assert spellings are retained even though they call r3 "lpInputBuffer".
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpInputBuffer");
-        CGS_ASSERT(lpInputBuffer != nullptr, "lpOutputBuffer0");
+        // sub_823B6FE0 receives output in r3 and input in r4.
+        AssertReplayIOBufferPair(lpOutputBuffer, lpInputBuffer, 259, 260);
         CgsModule::LockBuffersForIO(lpOutputBuffer, lpInputBuffer);
 
         StoreSerialisers(*lpInputBuffer->GetRequestInterface());
@@ -449,8 +469,7 @@ namespace BrnReplays
             break;
         }
 
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpInputBuffer");
-        CGS_ASSERT(lpInputBuffer != nullptr, "lpOutputBuffer0");
+        AssertReplayIOBufferPair(lpOutputBuffer, lpInputBuffer, 272, 273);
         CgsModule::UnlockBuffersForIO(lpOutputBuffer, lpInputBuffer);
     }
 
@@ -541,6 +560,7 @@ namespace BrnReplays
                                     ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
                                     BrnUpdateSet lUpdateSet)
     {
+        AssertReplayIOBufferPair(lpOutputBuffer, lpInputBuffer, 259, 260);
         CgsModule::LockBuffersForIO(lpOutputBuffer, lpInputBuffer);
 
         LockSerialisers();
@@ -600,6 +620,7 @@ namespace BrnReplays
         SetStatusInterface(lpOutputBuffer->GetStatusInterface());
         mDebugComponent.PostUpdateRecord();
         UnlockSerialisers();
+        AssertReplayIOBufferPair(lpOutputBuffer, lpInputBuffer, 272, 273);
         CgsModule::UnlockBuffersForIO(lpOutputBuffer, lpInputBuffer);
     }
 
