@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/System/CgsXOverlapped.h"   // XOVERLAPPED
 #include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 #include "GameShared/GameClasses/System/PC/CgsPcNetIdentity.h"
+#include "GameShared/GameClasses/System/PC/CgsXUserProfileSettings.h"
 
 #include <cstring>
 #include <atomic>
@@ -605,14 +606,112 @@ extern "C" u32 XUserGetXUID(u32 /*luUserIndex*/, u64* lpXuid)
     return KU_ERROR_SUCCESS;
 }
 
-// [PC platform leaf] Reads the local profile's settings; 87, the caller treats the read as
-// failed and keeps its defaults.
-extern "C" u32 XUserReadProfileSettings(u32 /*luTitleId*/, u32 /*luUserIndex*/,
-                                        u32 /*luNumSettingIds*/, unsigned long* /*lpaSettingIds*/,
-                                        unsigned long* /*lpcbResults*/, void* /*lpResults*/,
-                                        void* /*lpOverlapped*/)
+namespace
 {
-    return KU_ERROR_INVALID_PARAMETER;
+    // FLAG PC-platform leaf: use the same executable-adjacent config.ini
+    // convention as BrnMain::getGameSaveDir. Never read retail AppData settings.
+    bool GetSystemProfileConfigPath(char (&racPath)[MAX_PATH])
+    {
+        const DWORD luLength = GetModuleFileNameA(nullptr, racPath, MAX_PATH);
+        if (luLength == 0 || luLength >= MAX_PATH)
+            return false;
+        DWORD luDirectoryLength = luLength;
+        while (luDirectoryLength > 0 && racPath[luDirectoryLength - 1] != '\\' &&
+               racPath[luDirectoryLength - 1] != '/')
+            --luDirectoryLength;
+        constexpr char KAC_FILENAME[] = "config.ini";
+        if (luDirectoryLength == 0 ||
+            luDirectoryLength + sizeof(KAC_FILENAME) > MAX_PATH)
+            return false;
+        std::memcpy(racPath + luDirectoryLength, KAC_FILENAME, sizeof(KAC_FILENAME));
+        return true;
+    }
+
+    // These are adopted PC defaults, not recovered dashboard account data:
+    // camera0/vibration3 match Xenia's published default system-user profile.
+    // Keys accept exactly one decimal digit within the documented PC ranges.
+    u32 ReadSystemProfileInteger(const char* lpcPath, const char* lpcKey,
+        s32 liDefault, s32 liMaximum, s32& riValue, XUSER_PROFILE_SOURCE& reSource)
+    {
+        char lacValue[3]; // one digit + NUL; a second returned character rejects truncation
+        const DWORD luLength = GetPrivateProfileStringA(
+            "SystemProfile", lpcKey, "", lacValue, sizeof(lacValue), lpcPath);
+        if (luLength == 0)
+        {
+            riValue = liDefault;
+            reSource = XSOURCE_DEFAULT;
+            return ERROR_SUCCESS;
+        }
+        if (luLength != 1 || lacValue[0] < '0' || lacValue[0] > '0' + liMaximum)
+            return ERROR_INVALID_DATA;
+        riValue = lacValue[0] - '0';
+        reSource = XSOURCE_TITLE;
+        return ERROR_SUCCESS;
+    }
+}
+
+// FLAG PC-platform leaf: synchronous reads of the one local PC user's two
+// system preferences. Full native records and pSettings stay inside caller storage.
+// Size queries/short buffers report the sizeof-derived extent without writing records.
+// Indices0..3 share the existing local PC persona/policy; record.user retains
+// the selected port. Invalid indices, titles, settings and async remain errors.
+extern "C" u32 XUserReadProfileSettings(u32 luTitleId, u32 luUserIndex,
+    u32 luNumSettingIds, const u32* lpaSettingIds, u32* lpcbResults,
+    XUSER_READ_PROFILE_SETTING_RESULT* lpResults, XOVERLAPPED* lpOverlapped)
+{
+    if (luTitleId != 0 || luUserIndex >= 4 || luNumSettingIds == 0 ||
+        luNumSettingIds > 32 || !lpaSettingIds || !lpcbResults)
+        return ERROR_INVALID_PARAMETER;
+    if (lpOverlapped)
+        return ERROR_NOT_SUPPORTED;
+    for (u32 lu = 0; lu < luNumSettingIds; ++lu)
+        if (lpaSettingIds[lu] != XPROFILE_GAMER_RACE_CAMERA_LOCATION &&
+            lpaSettingIds[lu] != XPROFILE_OPTION_CONTROLLER_VIBRATION)
+            return ERROR_INVALID_PARAMETER;
+
+    if (!lpResults && *lpcbResults != 0)
+        return ERROR_INVALID_PARAMETER;
+    const u32 luRequired = sizeof(XUSER_READ_PROFILE_SETTING_RESULT) +
+        luNumSettingIds * sizeof(XUSER_PROFILE_SETTING);
+    if (*lpcbResults < luRequired || !lpResults)
+    {
+        *lpcbResults = luRequired;
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+    if (reinterpret_cast<size_t>(lpResults) % alignof(XUSER_PROFILE_SETTING) != 0)
+        return ERROR_INVALID_PARAMETER;
+
+    char lacPath[MAX_PATH];
+    if (!GetSystemProfileConfigPath(lacPath))
+        return ERROR_BAD_PATHNAME;
+    s32 laValues[32];
+    XUSER_PROFILE_SOURCE laSources[32];
+    // Validate every requested value before any result-buffer write. Invalid
+    // configuration never returns success with a partly initialized profile.
+    for (u32 lu = 0; lu < luNumSettingIds; ++lu)
+    {
+        const bool lbCamera = lpaSettingIds[lu] == XPROFILE_GAMER_RACE_CAMERA_LOCATION;
+        const u32 luError = ReadSystemProfileInteger(lacPath,
+            lbCamera ? "RaceCameraLocation" : "ControllerVibration",
+            lbCamera ? 0 : 3, lbCamera ? 2 : 3, laValues[lu], laSources[lu]);
+        if (luError != ERROR_SUCCESS)
+            return luError;
+    }
+
+    std::memset(lpResults, 0, luRequired);
+    lpResults->dwSettingsLen = luNumSettingIds;
+    lpResults->pSettings = reinterpret_cast<XUSER_PROFILE_SETTING*>(lpResults + 1);
+    for (u32 lu = 0; lu < luNumSettingIds; ++lu)
+    {
+        XUSER_PROFILE_SETTING& lrSetting = lpResults->pSettings[lu];
+        lrSetting.source = laSources[lu];
+        lrSetting.user.dwUserIndex = luUserIndex;
+        lrSetting.dwSettingId = lpaSettingIds[lu];
+        lrSetting.data.type = XUSER_DATA_TYPE_INT32;
+        lrSetting.data.nData = laValues[lu];
+    }
+    *lpcbResults = luRequired;
+    return ERROR_SUCCESS;
 }
 
 // [PC platform leaf] Reads other users' profile settings (the gamer-picture keys). The call is
