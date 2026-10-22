@@ -1,4 +1,5 @@
 #pragma once
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/Events/BrnGuiEventSetAvailablePresetRaces.h"
 #include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 #include "GameSource/Gui/Events/BrnGuiCrashEvents.h"
@@ -365,21 +366,7 @@ namespace BrnGui
     // @0x823EBBA4) fills all 12 bytes with payload. Do not re-add it here.
     // Race-distance records are owned by BrnGuiEventTypeDefs.h.
 
-    // id 493 size 4: the GUI's collision-world request (BrnGuiEventTypeDefs.h). The
-    // payload is the request kind; BrnGameModule::BridgeGuiToWorld switches on it.
-    struct GuiEventRequestCollisionWorldEvent
-    {
-        enum EEventType
-        {
-            E_COLLISON_WORLD_INVALIDATE  = 0,
-            E_COLLISON_WORLD_VALIDATE    = 1,
-            E_COLLISON_WORLD_INVALIDATED = 2,
-            E_COLLISON_WORLD_VALIDATED   = 3,
-            E_COLLISON_WORLD_COUNT       = 4,
-        };
-        EEventType meEventType;   // payload +0x00
-        s32 GetEventType() const { return 493; }
-    };
+    // Collision-world event493 is owned by BrnGuiEventTypeDefs.h.
     struct GuiEventReturnDistrict { u8 maData[8]; s32 GetEventType() const { return 196; } };  // id 196 size 8 (raw; size not GuiEvent-shaped)
 
     // Rivalry response records are plain X360 wire records, not 12-byte CgsGui::GuiEvent headers.

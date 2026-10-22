@@ -364,6 +364,10 @@ namespace BrnGui
         // (155/201, the PC sound leaves).
         void DrainFlowOutputQueue(s32 liFlow);
 
+        // ARTIST 0x82507800; reads the base GUI module output queue after its Update.
+        // The selected PC path has no caller for this OutputBuffer-based entry yet.
+        void HandleEventsPostBaseModuleUpdate(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
+
         // @0x824F0D30 -- refresh the two live player-name entries in the language
         // database ("PLAYER_NAME_STRING_ID" / "PLAYER_NAME_STRING_ID_Q"). The X360 asks
         // XUserGetName for the signed-in gamertag; when that FAILS it falls back to the
