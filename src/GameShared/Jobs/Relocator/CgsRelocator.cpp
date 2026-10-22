@@ -1,4 +1,6 @@
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // Start/StopMonitor
@@ -61,15 +63,10 @@ namespace CgsMemory
 
             mbRunning = true;
 
-            // ---- FLAG PC-platform leaf: THE DISPATCH, AND ONLY THE DISPATCH ----
-            // The console submits the job to the global job scheduler, which does not exist
-            // on this build, so the job body runs here instead. Everything either side of
-            // this call - the job wiring, the running latch, the reaping in Update - is the
-            // console's. Same precedent as the collision-generator dispatchers.
-            RelocatorEntry(EA::Jobs::Param(),
-                           EA::Jobs::Param(static_cast<void*>(&mJobData)),
-                           EA::Jobs::Param(),
-                           EA::Jobs::Param());
+            // ARTIST 82868924..38 submits this job to the shared HardwareInit
+            // scheduler. The canonical PC scheduler is already constructed and
+            // initialized by HardwareInit; do not execute the entry inline.
+            CgsSystem::JobManager()->AddJobs(&mJob, 1);
         }
 
         CgsDev::PerfMonCpu::StopMonitor(giRelocatorExecMonitor);
