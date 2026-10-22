@@ -194,7 +194,7 @@ namespace BrnGui
             for (s32 liNextState = 0; liNextState < liNextStateCount; ++liNextState)
             {
                 const s32 liNextStateIndex = laiNextStateIndices[liNextState];
-                CgsGui::State* lpNextState = mStateMachine.GetStateByIndex(liNextStateIndex);
+                const CgsGui::State* lpNextState = mStateMachine.GetStateByIndex(liNextStateIndex);
                 if (lpNextState != 0)
                 {
                     const CgsGui::sResourceTuple* lpNextResources = 0;

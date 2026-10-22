@@ -159,7 +159,21 @@ def main():
         # The control relocates the SAME current-source block; no old revision or
         # synthetic dispatch implementation can satisfy the numeric negative gate.
 
-        dispatch_source = body(GUI, "void GuiModule::DispatchInboundGuiEvents(bool&")
+        dispatch_source = body(GUI, "const CgsModule::Event* GuiModule::DispatchInboundGuiEvents(")
+        dispatch_declaration = statement(
+            read(GUI_H), "const CgsModule::Event* DispatchInboundGuiEvents(")
+        dispatch_cursor_contract = (
+            "lpAfterEvent = 0" in code_only(dispatch_declaration)
+            and in_order(code_only(dispatch_source), [
+                "const CgsModule::Event* lpLastDispatchedEvent = lpAfterEvent;",
+                "lpAfterEvent != 0",
+                "lpInQueue->GetNextEvent(lpAfterEvent, &lpEvent, &liSize)",
+                "lpInQueue->GetFirstEvent(&lpEvent, &liSize)",
+                "lpLastDispatchedEvent = lpEvent;",
+                "lpInQueue->GetNextEvent(lpEvent, &lpNext, &liSize)",
+                "return lpLastDispatchedEvent;",
+            ])
+        )
         profile_case_labels = list(re.finditer(r"(?m)^[ \t]*case 350:", dispatch_source))
         if len(profile_case_labels) != 1:
             raise ValueError("native profile-350 dispatch arm is not unique")
@@ -178,24 +192,32 @@ def main():
         # arms. This fixture compiles its exact Profile-350 arm and common fan-out,
         # with the one-record queue walk kept as a transparent test boundary.
         dispatch = (
-            "void GuiModule::DispatchInboundGuiEvents() {\n"
-            "    if (mpGuiEventInputBuffer == nullptr) return;\n"
+            "const CgsModule::Event* GuiModule::DispatchInboundGuiEvents(\n"
+            "    bool& rbHasSaveImageEvent, CgsGui::ImageFileInfo& lrSaveImageInfo,\n"
+            "    const CgsModule::Event* lpAfterEvent) {\n"
+            "    (void)rbHasSaveImageEvent; (void)lrSaveImageInfo;\n"
+            "    if (mpGuiEventInputBuffer == nullptr) return lpAfterEvent;\n"
             "    mpGuiEventInputBuffer->LockForRead();\n"
             "    const auto* lpInQueue = mpGuiEventInputBuffer->GetGuiEvents();\n"
             "    const CgsModule::Event* lpEvent = nullptr;\n"
             "    s32 liSize = 0;\n"
-            "    s32 liId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);\n"
+            "    const CgsModule::Event* lpLastDispatchedEvent = lpAfterEvent;\n"
+            "    s32 liId = lpAfterEvent != nullptr\n"
+            "        ? lpInQueue->GetNextEvent(lpAfterEvent, &lpEvent, &liSize)\n"
+            "        : lpInQueue->GetFirstEvent(&lpEvent, &liSize);\n"
             "    while (liId >= 0 && lpEvent != nullptr) {\n"
             "        switch (liId) {\n"
             + profile_case
             + "\n            default: break;\n"
             + "        }\n"
             + dispatch_tail
+            + "        lpLastDispatchedEvent = lpEvent;\n"
             + "        const CgsModule::Event* lpNext = nullptr;\n"
             + "        liId = lpInQueue->GetNextEvent(lpEvent, &lpNext, &liSize);\n"
             + "        lpEvent = lpNext;\n"
             + "    }\n"
             + "    mpGuiEventInputBuffer->UnlockForRead();\n"
+            + "    return lpLastDispatchedEvent;\n"
             + "}\n"
         )
         routing = body(GUI, "void GuiModule::RouteEventToFlow(")
@@ -345,10 +367,27 @@ switch(id) {
              and in_order(code_only(dispatch_tail),
                  ["mCustomRendererManager.RecvEvent(lpEvent, liId);",
                   "RouteEventToFlow(lpEvent, liId, liSize);"])),
-            ("current-frame inbound profile precedes one cache handoff before flows",
-             in_order(clean_core, ["DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);",
+            ("dispatcher preserves the optional suffix cursor and last-event return",
+             dispatch_cursor_contract),
+            ("inbound Profile and cache64 cursor ordering reaches the pre-flow handoff",
+             in_order(clean_core, [
+                 "const CgsModule::Event* lpLastInboundEvent =",
+                 "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);",
+                 "lCacheEvent.mpGuiCache = &mGuiCache;",
+                 "mCustomRendererManager.RecvEvent(",
+                 "mpGuiEventInputBuffer->LockForWrite();",
+                 "if (lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),",
+                 "if (lpLastInboundEvent != 0)",
+                 "lpGuiEvents->GetNextEvent(lpLastInboundEvent, &lpLastInboundEvent, &liCacheEventSize);",
+                 "else",
+                 "lpGuiEvents->GetFirstEvent(&lpLastInboundEvent, &liCacheEventSize);",
+                 "mpGuiEventInputBuffer->UnlockForWrite();",
+                 "mDebugComponent.Update(mpGuiEventInputBuffer);",
+                 "mSatNavDebugComponent.Update(mpGuiEventInputBuffer);",
+                 "mGuiCacheDebugComponent.Update(mpGuiEventInputBuffer);",
+                 "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);",
                  "RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,",
-                 "mScreenFlow.Update();", "mScreenInQueue.Clear();",
+                 "mHudFlow.Update();", "mScreenFlow.Update();", "mScreenInQueue.Clear();",
                  "DrainFlowOutputQueue(E_GUIFLOW_SCREEN);"])),
             ("actual producer retains owned pointer/pointer/availability action 193",
              action_line.group(1) == "193" and in_order(code_only(producer_fragment),
