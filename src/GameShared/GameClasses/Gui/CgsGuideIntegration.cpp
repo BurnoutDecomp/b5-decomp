@@ -1,13 +1,13 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/System/PC/CgsXUserProfileSettings.h"
 
 #include <cstring>   // memset / memcpy (UpdateUserName)
 
 // CgsGui::SystemUserProfile -- the X360 XNotify/XUserGetName system-user watcher.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. The Xbox XDK entry points it calls are
-// declared file-locally as honest externs (declared-not-defined; the compile-only gate
-// passes, the BP logic is faithful) -- mirroring the committed X360 network managers
-// (BrnNetworkNotificationManagerX360.cpp / BrnNetworkGamerCardManagerX360.cpp).
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. The PC profile-settings API and
+// its native pointer-bearing records share CgsXUserProfileSettings.h. Other
+// platform imports below retain their existing PC providers.
 extern "C"
 {
     void* XNotifyCreateListener(unsigned long long luqwAreas);
@@ -16,9 +16,6 @@ extern "C"
     int   CloseHandle(void* lhObject);
     u32   XUserGetName(u32 luUserIndex, char* lpszUserName, u32 luCchUserName);
     u32   XUserGetSigninState(u32 luUserIndex);
-    u32   XUserReadProfileSettings(u32 luTitleId, u32 luUserIndex, u32 luNumSettingIds,
-                                   unsigned long* lpaSettingIds, unsigned long* lpcbResults,
-                                   void* lpResults, void* lpOverlapped);
 }
 
 namespace CgsGui
@@ -130,45 +127,52 @@ namespace CgsGui
         }
     }
 
-    // X360 0x8284CE90. Re-read the two profile settings (0x10040027, 0x10040003) for the current
-    // user and forward the derived values to the listener (ProfileSettingsChanged, vtable +4).
-    // Only runs when a real user is selected, the profile is live (miState==1) and a listener is
-    // attached. XUserReadProfileSettings writes an XUSER_READ_PROFILE_SETTINGS_RESULTS into
-    // maReadBuffer; its +4 word is the pointer to the first XUSER_PROFILE_SETTING record.
+    // ARTIST8284CE90: read camera then vibration for the selected signed-in
+    // user, and publish the same derived settings through the real Listener.
+    // The platform API owns native pointer-bearing records, never guest offsets.
     void SystemUserProfile::UpdateProfileSettings()
     {
-        u32 luUserIndex = miUserIndex;
+        const u32 luUserIndex = miUserIndex;
         if (luUserIndex == KU_USERINDEX_NONE || miState != 1 || mpListener == nullptr)
             return;
 
-        unsigned long laSettingIds[2];
-        laSettingIds[0] = 0x10040027;   // var_D0
-        laSettingIds[1] = 0x10040003;   // var_CC
-        unsigned long lcbResults = 0x80;
-        u8 maReadBuffer[128];           // var_B0 -- XUSER_READ_PROFILE_SETTINGS_RESULTS
+        const u32 laSettingIds[2] = {
+            XPROFILE_GAMER_RACE_CAMERA_LOCATION,
+            XPROFILE_OPTION_CONTROLLER_VIBRATION,
+        };
+        // Keep the original128-byte capacity. The native header plus two full
+        // records occupies112 bytes on x64; typed members supply their alignment.
+        constexpr u32 KU_READ_CAPACITY = 128;
+        struct ReadBuffer
+        {
+            XUSER_READ_PROFILE_SETTING_RESULT mResults;
+            XUSER_PROFILE_SETTING maSettings[2];
+            u8 maUnused[KU_READ_CAPACITY - sizeof(XUSER_READ_PROFILE_SETTING_RESULT) -
+                        2 * sizeof(XUSER_PROFILE_SETTING)];
+        } lReadBuffer;
+        static_assert(sizeof(ReadBuffer) == KU_READ_CAPACITY, "original profile-read capacity");
+        u32 lcbResults = sizeof(lReadBuffer);
 
         if (XUserReadProfileSettings(0, luUserIndex, 2, laSettingIds,
-                                     &lcbResults, maReadBuffer, 0))
+                                     &lcbResults, &lReadBuffer.mResults, nullptr))
         {
             CGS_ASSERT(false, " problem reading user settings - check buffer length");
+            // FLAG PC-platform leaf: host assertions can continue. A failed API
+            // published no settings; retain its diagnostic without reading unwritten memory.
+            return;
         }
-        if (lcbResults > 0x80)
+        if (lcbResults > sizeof(lReadBuffer))
         {
             CGS_ASSERT(false, " data returned is too large ");
+            return;
         }
 
-        // RESULTS.pSettings -- pointer to the first XUSER_PROFILE_SETTING record, at buffer +4.
-        // The buffer is the XDK's serialized XUSER_READ_PROFILE_SETTINGS_RESULTS record (an
-        // external platform byte stream; layout fixed by the XDK, not a game class).
-        const u8* lpSetting = *reinterpret_cast<u8**>(maReadBuffer + 4);   // XDK serialized record blob
-
+        const XUSER_PROFILE_SETTING* lpSettings = lReadBuffer.mResults.pSettings;
         ProfileSettings lSettings;
-        // (data.nData - 1) > 1 -- true unless the setting's u32 is 1 or 2.
         lSettings.mbExternalCamera =
-            (static_cast<u32>(*reinterpret_cast<const u32*>(lpSetting + 0x20)) - 1u) > 1u;   // XDK serialized record blob
-        lSettings.miRumble = *reinterpret_cast<const u32*>(lpSetting + 0x48);   // XDK serialized record blob
-
-        mpListener->ProfileSettingsChanged(lSettings); // vtable +4
+            (static_cast<u32>(lpSettings[0].data.nData) - 1u) > 1u;
+        lSettings.miRumble = static_cast<u32>(lpSettings[1].data.nData);
+        mpListener->ProfileSettingsChanged(lSettings);
     }
 
     // X360 0x82852440. Re-derive the current user's sign-in state (XUserGetSigninState) and,

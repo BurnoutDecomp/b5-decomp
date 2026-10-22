@@ -7,6 +7,15 @@ Server=
 Key=
 ; Optional BP_ONLINE_SERVER / BP_ONLINE_KEY environment values override these.
 
+[SystemProfile]
+; Local PC system preferences, read by XUserReadProfileSettings from this INI.
+; These defaults are adopted PC policy, not recovered Xbox dashboard account data.
+; 0 maps to external camera; 1/2 map to the original non-external camera preference.
+RaceCameraLocation=0
+; Raw controller-vibration preference (integer0..3), passed through unchanged.
+ControllerVibration=3
+; Missing/empty keys use0/3. Other values are an error; no partial settings are returned.
+
 [Display]
 Width=1280
 Height=720
