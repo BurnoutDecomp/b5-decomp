@@ -3211,3 +3211,23 @@ namespace BrnGui
     };
     static_assert(sizeof(GuiEventSpecificPresetRaces) == 7704, "ARTIST 823D13B0 posts 0x1E18 bytes");
 }
+
+namespace BrnGui
+{
+    // id 493 size 4: the GUI's collision-world request (BrnGuiEventTypeDefs.h). The
+    // payload is the request kind; BrnGameModule::BridgeGuiToWorld switches on it.
+    struct GuiEventRequestCollisionWorldEvent
+    {
+        enum EEventType
+        {
+            E_COLLISON_WORLD_INVALIDATE  = 0,
+            E_COLLISON_WORLD_VALIDATE    = 1,
+            E_COLLISON_WORLD_INVALIDATED = 2,
+            E_COLLISON_WORLD_VALIDATED   = 3,
+            E_COLLISON_WORLD_COUNT       = 4,
+        };
+        EEventType meEventType;   // payload +0x00
+        s32 GetEventType() const { return 493; }
+    };
+    static_assert(sizeof(GuiEventRequestCollisionWorldEvent) == 4, "ARTIST823DA2CC..D8: GUI493 payload is four bytes");
+}

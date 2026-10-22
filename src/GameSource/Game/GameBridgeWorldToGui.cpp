@@ -748,10 +748,29 @@ void BrnGameModule::BridgeWorldToGui(
     BridgeWorldVehicleDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);              // 0x823EDD68
     BridgeWorldRouteInformationToGui(lpWorldOutputBuffer);
 
-    // FLAG deferred (console order): the world-entity-state -> GuiEventRequestCollisionWorldEvent
-    // tail follows the impact leg; it lands with its consumer.
     BridgeWorldTrafficAndPropDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);       // 0x823EDD84
     BridgeWorldImpactInformationToGui(lpGuiInputBuffer, lpWorldOutputBuffer);        // 0x823EDD94
+
+    // ARTIST823EDD98..EDE08: retain the original sequential status loads and
+    // short-circuit branches, including its invalidating -> VALIDATED arm.
+    BrnGui::GuiEventRequestCollisionWorldEvent lEvent;
+    if (!lpWorldOutputBuffer->GetWorldEntityStatusInterface()->GetCollisionWorldInvalid()
+        || lpWorldOutputBuffer->GetWorldEntityStatusInterface()->GetCollisionWorldInvalidating())
+    {
+        lEvent.meEventType = BrnGui::GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_VALIDATED;
+    }
+    else if (lpWorldOutputBuffer->GetWorldEntityStatusInterface()->GetCollisionWorldInvalid()
+        || lpWorldOutputBuffer->GetWorldEntityStatusInterface()->GetCollisionWorldValidating())
+    {
+        lEvent.meEventType = BrnGui::GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_INVALIDATED;
+    }
+    else
+    {
+        return;
+    }
+    // ARTIST823DA230: the pointer overload preserves the explicit input-pointer
+    // assertion and posts the complete four-byte event493 record.
+    mGuiModule.AddGuiEvent(&lEvent, lpGuiInputBuffer);
 }
 
 // ============================================================================

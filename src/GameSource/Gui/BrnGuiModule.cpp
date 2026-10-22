@@ -2160,7 +2160,7 @@ namespace BrnGui
                 s32 liSize = 0;
                 const s32 liEventId = mEventReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
                 CGS_ASSERT(liEventId == 7, "liEventId == CgsResource::ResourceIO::EVENT_INVALIDATEPOOL");
-                const auto* lpResponse = static_cast<const CgsResource::Events::InvalidatePoolResponse*>(lpEvent);
+                const auto* lpResponse = reinterpret_cast<const CgsResource::Events::InvalidatePoolResponse*>(lpEvent);
                 CGS_ASSERT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
                     "lpInvalidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC");
                 mEventReceiverQueue.Clear(); // Original Clear preserves payload storage.
@@ -2193,7 +2193,7 @@ namespace BrnGui
                 s32 liSize = 0;
                 const s32 liEventId = mEventReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
                 CGS_ASSERT(liEventId == 8, "liEventId == CgsResource::ResourceIO::EVENT_VALIDATEPOOL");
-                const auto* lpResponse = static_cast<const CgsResource::Events::ValidatePoolResponse*>(lpEvent);
+                const auto* lpResponse = reinterpret_cast<const CgsResource::Events::ValidatePoolResponse*>(lpEvent);
                 CGS_ASSERT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
                     "lpValidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC");
                 mEventReceiverQueue.Clear();
@@ -3086,6 +3086,86 @@ void GuiModule::Destruct()
         if (lbAnyServed || liId < 0)
             lpRequests->Clear();
         mModelInputBuffer.UnlockForWrite();
+    }
+
+    // ARTIST82507800; the native caller invokes this immediately after
+    // CgsGui::GuiModule::Update, while the same module OutputBuffer is still live.
+    void GuiModule::HandleEventsPostBaseModuleUpdate(
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        lpOutput->LockForRead();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventType = lpOutput->GetOutEventQueue()->GetFirstEvent(&lpEvent, &liEventSize);
+        while (lpEvent != 0)
+        {
+            switch (liEventType)
+            {
+            case 493:
+            {
+                const GuiEventRequestCollisionWorldEvent* lpRequest =
+                    reinterpret_cast<const GuiEventRequestCollisionWorldEvent*>(lpEvent);
+                switch (lpRequest->meEventType)
+                {
+                case GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_INVALIDATE:
+                    if (meCollisionWorldStateValidationState !=
+                        E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert(
+                            "meCollisionWorldStateValidationState == E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE",
+                            "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1729);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    // ARTIST stbx to GuiModule +0x18D83B.
+                    mbCollisionWorldInvalidateForNetworking = true;
+                    break;
+
+                case GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_VALIDATE:
+                    if (meCollisionWorldStateValidationState !=
+                        E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert(
+                            "meCollisionWorldStateValidationState == E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING",
+                            "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1737);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    // ARTIST stbx to GuiModule +0x18D83C.
+                    mbCollisionWorldValidateForNetworking = true;
+                    break;
+
+                default:
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "Invalid collsion world request output event type",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1745);
+                    CgsDev::Assert::EndAssert();
+                    break;
+                }
+                break;
+            }
+
+            case 508:
+            case 509:
+                mMovieManager.RecvEvent(lpEvent, liEventType);
+                break;
+
+            case 514:
+            case 515:
+                mColourCalibrationScreen.RecvEvent(lpEvent, liEventType);
+                break;
+
+            default:
+                break;
+            }
+
+            liEventType = lpOutput->GetOutEventQueue()->GetNextEvent(
+                lpEvent, &lpEvent, &liEventSize);
+        }
+
+        lpOutput->UnlockForRead();
     }
 
     // Drain one observer's StateInterface output queue -- the per-frame dispatch point for

@@ -186,8 +186,9 @@ namespace BrnGui
     // and tail-calls DrawFrame(x0,y0,x1,y1,colour,border). (The X360 does the four scalings as a VMX
     // splat/multiply cascade; reproduced here as the equivalent per-corner scalar arithmetic.)
     //
-    // NOTE: the console leaves the colour arg register uninitialised (Hex-Rays recovered no colour
-    // arg); we pass opaque white so the outline is visible -- a documented, unavoidable approximation.
+    // ARTIST824F7FD8 loads r8 with 0xFFFF0000; the scalar DrawFrame entry
+    // at8281C960 saves that colour at8281C990 and forwards it to each DrawBox.
+    // The five float arguments occupy f1..f5; r8 is the packed-colour argument.
     // =============================================================================================
     void SatNavDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
@@ -202,7 +203,7 @@ namespace BrnGui
         const f32 lfX1 = lrv4Rect.z * KF_SATNAV_HUD_WIDTH;   // BottomRightX * 1280
         const f32 lfY1 = lrv4Rect.w * KF_SATNAV_HUD_HEIGHT;  // BottomRightY *  720
 
-        lpRender->DrawFrame( lfX0, lfY0, lfX1, lfY1, 0xFFFFFFFFu, KF_SATNAV_OUTLINE_BORDER );
+        lpRender->DrawFrame( lfX0, lfY0, lfX1, lfY1, 0xFFFF0000u, KF_SATNAV_OUTLINE_BORDER );
     }
 
     // =============================================================================================
