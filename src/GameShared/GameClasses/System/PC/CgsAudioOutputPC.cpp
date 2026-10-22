@@ -19,6 +19,7 @@
 #include <cstdlib>   // std::getenv (the BRN_AUDIO_MUTE harness knob)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h" // private pre-overwrite diagnostic
 
 // ===========================================================================
 //  CgsSystem::AudioOutputPC -- XAudio2 2.9 PC output backend (Microsoft's XAudio2
@@ -416,7 +417,8 @@ void SubmitBuffer(int liIndex, bool abPrime = false)
     lBuf.AudioBytes = static_cast<UINT32>(liValues * sizeof(f32));
     lBuf.pAudioData = reinterpret_cast<const BYTE*>(lpBuf);
     lBuf.pContext = reinterpret_cast<void*>(static_cast<intptr_t>(liIndex));
-    g_pSource->SubmitSourceBuffer(&lBuf);
+    const HRESULT lSubmitResult = g_pSource->SubmitSourceBuffer(&lBuf);
+    RwacCommandTracePC::MarkSubmit(lSubmitResult);
 }
 
 void FinishOutput()
@@ -432,16 +434,36 @@ class VoiceCallback : public IXAudio2VoiceCallback
 public:
     void STDMETHODCALLTYPE OnBufferEnd(void* pBufferContext) override
     {
+        RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceCallbackBegin);
         SubmitBuffer(static_cast<int>(reinterpret_cast<intptr_t>(pBufferContext)));
+        RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceCallbackEnd);
     }
     void STDMETHODCALLTYPE OnBufferStart(void*) override {}
     void STDMETHODCALLTYPE OnLoopEnd(void*) override {}
     void STDMETHODCALLTYPE OnStreamEnd() override {}
-    void STDMETHODCALLTYPE OnVoiceError(void*, HRESULT) override {}
+    void STDMETHODCALLTYPE OnVoiceError(void*, HRESULT lResult) override
+    {
+        RwacCommandTracePC::MarkVoiceError(lResult);
+    }
     void STDMETHODCALLTYPE OnVoiceProcessingPassEnd() override {}
     void STDMETHODCALLTYPE OnVoiceProcessingPassStart(UINT32) override {}
 };
 VoiceCallback g_callback;
+
+// FLAG PC-platform leaf: observe critical endpoint/engine failures without
+// making XAudio calls or logging on its callback thread.
+class EngineCallbackTrace : public IXAudio2EngineCallback
+{
+public:
+    void STDMETHODCALLTYPE OnProcessingPassStart() override {}
+    void STDMETHODCALLTYPE OnProcessingPassEnd() override {}
+    void STDMETHODCALLTYPE OnCriticalError(HRESULT lResult) override
+    {
+        RwacCommandTracePC::MarkCriticalError(lResult);
+    }
+};
+EngineCallbackTrace g_engineCallbackTrace;
+bool g_engineCallbackTraceRegistered = false;
 
 // FLAG PC-platform leaf: XAudio2 2.9 normally selects Windows' default render
 // endpoint.  A machine may have active endpoints but no current default (for
@@ -581,6 +603,7 @@ void TestToneFill(s16* lpOut, int liFrames, void* lpUser)
 
 bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* lpUser)
 {
+    RwacCommandTracePC::ConfigureFromEnvironment();
     if (g_pSource)
         return true; // already open
     if (liSampleRate != 48000 || liChannels != 2)
@@ -609,6 +632,14 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         AUDIO_LOG << "[Audio] XAudio2Create failed -- running muted\n";
         Close();
         return false;
+    }
+    g_engineCallbackTraceRegistered = false;
+    if (RwacCommandTracePC::Enabled())
+    {
+        const HRESULT lTraceRegistration =
+            g_pXAudio2->RegisterForCallbacks(&g_engineCallbackTrace);
+        g_engineCallbackTraceRegistered = SUCCEEDED(lTraceRegistration);
+        RwacCommandTracePC::MarkEngineCallbackRegistration(lTraceRegistration);
     }
     UINT32 luEndpointIndex = UINT32_MAX;
     const HRESULT lMasterResult = CreateMasteringVoiceWithEndpointFallback(
@@ -666,6 +697,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         return false;
     }
 
+    RwacCommandTracePC::MarkDeviceOpened();
     AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels
               << " ch (float PCM, final saturation)";
     if (luEndpointIndex != UINT32_MAX)
@@ -689,6 +721,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
 void AudioOutputPC::Close()
 {
+    RwacCommandTracePC::MarkDeviceClosed();
     // DestroyVoice waits for the last callback before buffers, bindings or
     // capture headers are touched. Diagnostic writes have their own drain barrier.
     if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
@@ -696,7 +729,14 @@ void AudioOutputPC::Close()
     if (g_capture) CapturePatchHeader();
     if (g_engCapture) EngineCapturePatchHeader();
     if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
-    if (g_pXAudio2) { g_pXAudio2->Release(); g_pXAudio2 = nullptr; }
+    if (g_pXAudio2)
+    {
+        if (g_engineCallbackTraceRegistered)
+            g_pXAudio2->UnregisterForCallbacks(&g_engineCallbackTrace);
+        g_engineCallbackTraceRegistered = false;
+        g_pXAudio2->Release();
+        g_pXAudio2 = nullptr;
+    }
     if (g_hXAudioDll) { ::FreeLibrary(g_hXAudioDll); g_hXAudioDll = nullptr; }
     SetFill(nullptr, nullptr);
     g_openRate = 0;

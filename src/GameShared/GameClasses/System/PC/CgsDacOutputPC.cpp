@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
+#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h" // private pre-overwrite diagnostic
 
 #include "rw/audio/core/plugins/Dac.h" // Dac + the external-fill support surface
 #include "rw/audio/core/Mixer.h"       // Mixer::KU_FRAME_SIZE
@@ -44,15 +45,28 @@ namespace
         if (!lpSystem || liFrames != rw::audio::core::Mixer::KU_FRAME_SIZE)
             return;
 
+        CgsSystem::RwacCommandTracePC::MarkEngineBegin(lpSystem);
         System::ExecuteCommandsLock(lpSystem);
+        CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
+            CgsSystem::RwacCommandTracePC::CommandLockAcquired, 2);
+        CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
+            CgsSystem::RwacCommandTracePC::CommandPassBegin, 3);
         System::ExecuteCommands(lpSystem);
+        CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
+            CgsSystem::RwacCommandTracePC::CommandPassEnd, 4);
         // Commands may retire the DAC. Read it only AFTER command execution and
         // keep the command lock through the copy of its shared interleave frame.
         Dac* lpDac = s_pDac.load(std::memory_order_acquire);
         int liFrameValid = 0;
         if (lpDac && rw::audio::core::DacIsEngineRunning() &&
             rw::audio::core::DacIsStarted())
+        {
+            CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
+                CgsSystem::RwacCommandTracePC::MixBegin, 5);
             liFrameValid = Dac::Mix(lpDac);
+            CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
+                CgsSystem::RwacCommandTracePC::MixEnd, 6);
+        }
 
         if (liFrameValid == 1)
         {
@@ -90,6 +104,8 @@ namespace
             }
         }
         System::ExecuteCommandsUnlock(lpSystem);
+        CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
+            CgsSystem::RwacCommandTracePC::EngineEnd, 7);
     }
 }
 

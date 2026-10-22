@@ -34,6 +34,11 @@
 
 #include <cstring>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h"
+
 namespace CgsSound
 {
 namespace Playback
@@ -615,10 +620,30 @@ void Environment::Update(f32 af32TimeStep)
     UpdateVoices(lpSystem, af32TimeStep);
     UpdateFactories(af32TimeStep);
 
+    // Snapshot after the full producer pass while the existing System lock is
+    // held. The default-off path performs no ring reads or extra locking.
+    const bool lbTraceEnabled = CgsSystem::RwacCommandTracePC::Enabled();
+    const void* lpRing = 0;
+    unsigned luCursor = 0;
+    unsigned luCapacity = 0;
+    unsigned luHighWater = 0;
+    unsigned luSystemFrame = 0;
+    if (lbTraceEnabled)
+    {
+        lpRing = lpSystem->mpDeferredRingBase;
+        luCursor = lpSystem->muDeferredRingCursor;
+        luCapacity = lpSystem->muCommandBufferSize;
+        luHighWater = lpSystem->muDeferredRingHighWater;
+        luSystemFrame = lpSystem->muFrameCounter;
+    }
+
     CGS_ASSERT(lpSystem->muDeferredRingHighWater < 157286u,
                "Command buffer high water mark.");
 
     rw::audio::core::RwacSystemUnlock(lpSystem);
+    if (lbTraceEnabled)
+        CgsSystem::RwacCommandTracePC::EmitFirstActiveOccupancy(
+            lpSystem, lpRing, luCursor, luCapacity, luHighWater, luSystemFrame);
 }
 
 } // namespace Playback
