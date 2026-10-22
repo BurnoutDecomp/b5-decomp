@@ -1,5 +1,5 @@
 // ============================================================================================
-// BrnPhysics::Vehicle::VehicleManagerDebugComponent - Construct + GetName.
+// BrnPhysics::Vehicle::VehicleManagerDebugComponent - Construct + debug render callbacks.
 //
 // Layout/shape authority: references/DecFIGS/dwarfdump/GameSource/Physics/VehicleManager/
 // BrnVehicleManagerDebugComponent.h (complete member sequence) + the X360 ARTIST asm.
@@ -10,6 +10,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h"
 
 #include <cstddef>                                          // offsetof (layout asserts)
+#include <cstring>                                          // std::memcpy for the manager cache sphere
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"                   // VehicleManager (RecordCrashContact's two bare reads; friend)
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"            // PhysicalTrafficVehicle lookup
@@ -22,7 +23,10 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                         // CgsDev::SimpleStrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"       // DebugUI::GetMetrics
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"    // Draw2DTextJustified
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "rw/math/vpu/vector3_operation.h"                                           // vpu::Add / Subtract / Mult / Normalize
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
@@ -443,6 +447,314 @@ namespace Vehicle
 
             MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR, false);
         }
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RenderWorld @0x8261C2B0
+    //
+    // This is the active component's 3D dispatch. The world-contact-spy branch retains ARTIST's
+    // user-controlled guard; its count producer/reset remains unresolved. The traffic-contact
+    // renderer also depends on the separately proposed RecordRaceCarTrafficContact producer edge.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        if (mbGrindDebugRenderEnabled)
+            RenderGrind();
+
+        // ARTIST @0x8261C2F0 checks mbDisplayWorldContactSpies and calls the original reader here.
+        // The count producer/reset is unresolved; preserve the stored-count loop without a host-only clamp.
+        if (mbDisplayWorldContactSpies)
+            RenderWorldContactSpies(lpRender);
+
+        if (mbDrawLastRaceCarTrafficContact)
+            DrawLastRaceCarTrafficContact(lpRender);
+        if (mbRenderResetLines)
+            RenderResetRays(lpRender);
+        if (mbDrawLastCrashContact)
+            DrawLastCrashContact(lpRender);
+        if (mbDrawCatchupTargets)
+            DrawCatchupTargets(lpRender);
+        if (mbDrawPlayerStuckInCollisionTests)
+            DrawPlayerStuckInCollisionLineTests(lpRender);
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RenderGrind @0x825B6EA8
+    // The console keeps the most recent active race-car slot for each of the three grind overlays.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RenderGrind() const
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
+        const CgsDev::DebugUI::Metrics lMetrics = lDebugInterface.GetUI().GetMetrics();
+
+        f32 lfGrindingDuration = 0.0f;
+        f32 lfGroundingDuration = 0.0f;
+        f32 lfRubbingDuration = 0.0f;
+        u32 luGrindingCar = 0;
+        u32 luGroundingCar = 0;
+        u32 luRubbingCar = 0;
+        const VehicleManager& lrManager = *mpVehicleManager;
+
+        for (s32 liCar = 0; liCar < VehicleManager::KI_MAX_ACTIVE_RACE_CARS; ++liCar)
+        {
+            if (lrManager.mau8FramesSincePlayerGrindingOther[liCar] < 10)
+            {
+                lfGrindingDuration = lrManager.mafPlayerGrindingOtherDurationSeconds[liCar];
+                luGrindingCar = static_cast<u32>(liCar);
+            }
+            if (lrManager.mau8FramesSinceOtherGrindingPlayer[liCar] < 10)
+            {
+                lfGroundingDuration = lrManager.mafOtherGrindingPlayerDurationSeconds[liCar];
+                luGroundingCar = static_cast<u32>(liCar);
+            }
+            if (lrManager.mabRubbingThisUpdate[liCar])
+            {
+                lfRubbingDuration = lrManager.mafRubbingDurationSeconds[liCar];
+                luRubbingCar = static_cast<u32>(liCar);
+            }
+        }
+
+        char lacText[64];
+        const rw::math::vpu::Vector2 lPosition = MakeVector2(lMetrics.mfScreenWidth - 100.0f, 360.0f);
+        if (lfGrindingDuration > 0.0f)
+        {
+            CgsCore::SPrintf(lacText, sizeof(lacText), "Grinding %u: %.1f", luGrindingCar, lfGrindingDuration);
+            lrRender.Draw2DTextJustified(lacText, lPosition, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
+                                         16.0f, 0xFF00FFFFu);
+        }
+        if (lfGroundingDuration > 0.0f)
+        {
+            CgsCore::SPrintf(lacText, sizeof(lacText), "Ground by %u! %.1f", luGroundingCar, lfGroundingDuration);
+            lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.x, 380.0f),
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, 0xFF00FF80u);
+        }
+        if (lfRubbingDuration > 0.0f)
+        {
+            CgsCore::SPrintf(lacText, sizeof(lacText), "Rubbing %u: %.1f", luRubbingCar, lfRubbingDuration);
+            lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.x, 400.0f),
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, 0xFF80FF00u);
+        }
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RenderWorldContactSpies @0x825B7170
+    // ARTIST reader for the retained OutContactSpy records. The display toggle gates this call;
+    // preserve the stored count while the producer/reset owner remains unresolved.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RenderWorldContactSpies(
+        CgsDev::Debug3DImmediateRender* lpRender) const
+    {
+        for (s32 liSpy = 0; liSpy < miNumWorldContactSpies; ++liSpy)
+        {
+            const CgsPhysics::PhysicsSimulationIO::OutContactSpy& lrSpy = maWorldContactSpies[liSpy];
+            lpRender->DrawLine(lrSpy.mPointOnA, lrSpy.mPointOnB, 0xFFFFFFFFu);
+            lpRender->DrawLine(lrSpy.mPointOnA,
+                               rw::math::vpu::Add(lrSpy.mPointOnA, lrSpy.mFrictionStress),
+                               0xFF00FF00u);
+            lpRender->DrawLine(lrSpy.mPointOnA,
+                               rw::math::vpu::Add(lrSpy.mPointOnA,
+                                                  rw::math::vpu::Mult(lrSpy.mNormalStress, 0.001f)),
+                               0xFFFF0000u);
+        }
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RenderResetRays @0x825C9158 (raw ARTIST image words)
+    // The player car's front/rear wheel-pair midpoints seed the two original reset rays.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RenderResetRays(CgsDev::Debug3DImmediateRender* lpRender) const
+    {
+        const VehicleManager& lrManager = *mpVehicleManager;
+        const s32 liPlayerIndex = static_cast<s32>(lrManager.mePlayerActiveRaceCarIndex);
+        const RaceCarPhysics& lrCar = lrManager.maRaceCarVehicles[liPlayerIndex];
+        const Matrix44Affine& lrTransform = lrCar.GetTransform();
+
+        const Vector3& lrFrontRight = lrCar.GetWheel(eFrontRightWheel).GetPosition();
+        const Vector3& lrFrontLeft = lrCar.GetWheel(eFrontLeftWheel).GetPosition();
+        const Vector3& lrRearRight = lrCar.GetWheel(eRearRightWheel).GetPosition();
+        const Vector3& lrRearLeft = lrCar.GetWheel(eRearLeftWheel).GetPosition();
+        CGS_ASSERT((lrFrontRight.x == lrFrontRight.x) && (lrFrontRight.y == lrFrontRight.y)
+                       && (lrFrontRight.z == lrFrontRight.z),
+                   "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
+        CGS_ASSERT((lrFrontLeft.x == lrFrontLeft.x) && (lrFrontLeft.y == lrFrontLeft.y)
+                       && (lrFrontLeft.z == lrFrontLeft.z),
+                   "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
+        CGS_ASSERT((lrRearRight.x == lrRearRight.x) && (lrRearRight.y == lrRearRight.y)
+                       && (lrRearRight.z == lrRearRight.z),
+                   "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
+        CGS_ASSERT((lrRearLeft.x == lrRearLeft.x) && (lrRearLeft.y == lrRearLeft.y)
+                       && (lrRearLeft.z == lrRearLeft.z),
+                   "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
+
+        const Vector3 lvFrontMidpointCarSpace{
+            (lrFrontRight.x + lrFrontLeft.x) * 0.5f,
+            (lrFrontRight.y + lrFrontLeft.y) * 0.5f,
+            (lrFrontRight.z + lrFrontLeft.z) * 0.5f,
+            (lrFrontRight.w + lrFrontLeft.w) * 0.5f };
+        const Vector3 lvRearMidpointCarSpace{
+            (lrRearRight.x + lrRearLeft.x) * 0.5f,
+            (lrRearRight.y + lrRearLeft.y) * 0.5f,
+            (lrRearRight.z + lrRearLeft.z) * 0.5f,
+            (lrRearRight.w + lrRearLeft.w) * 0.5f };
+
+        const Vector3 lvFrontStart{
+            lrTransform.wAxis.x + lrTransform.xAxis.x * lvFrontMidpointCarSpace.x
+                + lrTransform.yAxis.x * lvFrontMidpointCarSpace.y + lrTransform.zAxis.x * lvFrontMidpointCarSpace.z,
+            lrTransform.wAxis.y + lrTransform.xAxis.y * lvFrontMidpointCarSpace.x
+                + lrTransform.yAxis.y * lvFrontMidpointCarSpace.y + lrTransform.zAxis.y * lvFrontMidpointCarSpace.z,
+            lrTransform.wAxis.z + lrTransform.xAxis.z * lvFrontMidpointCarSpace.x
+                + lrTransform.yAxis.z * lvFrontMidpointCarSpace.y + lrTransform.zAxis.z * lvFrontMidpointCarSpace.z,
+            lrTransform.wAxis.w + lrTransform.xAxis.w * lvFrontMidpointCarSpace.x
+                + lrTransform.yAxis.w * lvFrontMidpointCarSpace.y + lrTransform.zAxis.w * lvFrontMidpointCarSpace.z };
+        const Vector3 lvRearStart{
+            lrTransform.wAxis.x + lrTransform.xAxis.x * lvRearMidpointCarSpace.x
+                + lrTransform.yAxis.x * lvRearMidpointCarSpace.y + lrTransform.zAxis.x * lvRearMidpointCarSpace.z,
+            lrTransform.wAxis.y + lrTransform.xAxis.y * lvRearMidpointCarSpace.x
+                + lrTransform.yAxis.y * lvRearMidpointCarSpace.y + lrTransform.zAxis.y * lvRearMidpointCarSpace.z,
+            lrTransform.wAxis.z + lrTransform.xAxis.z * lvRearMidpointCarSpace.x
+                + lrTransform.yAxis.z * lvRearMidpointCarSpace.y + lrTransform.zAxis.z * lvRearMidpointCarSpace.z,
+            lrTransform.wAxis.w + lrTransform.xAxis.w * lvRearMidpointCarSpace.x
+                + lrTransform.yAxis.w * lvRearMidpointCarSpace.y + lrTransform.zAxis.w * lvRearMidpointCarSpace.z };
+
+        const Vector3 lvFrontEnd = lvFrontStart + lrTransform.zAxis * lrManager.mfFrontRayLength;
+        const Vector3 lvRearEnd = lvRearStart - lrTransform.zAxis * lrManager.mfRearRayLength;
+        lpRender->DrawLine(lvFrontStart, lvFrontEnd, 0xFFFFFFFFu);
+        lpRender->DrawLine(lvRearStart, lvRearEnd, 0xFFFFFFFFu);
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::DrawLastRaceCarTrafficContact @0x825B74A0
+    // ========================================================================================
+    void VehicleManagerDebugComponent::DrawLastRaceCarTrafficContact(
+        CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :934
+
+        const Vector3 lvRaceCarHalfExtent = mLastTrafficContact_RaceCarHalfExt;
+        const Vector3 lvTrafficHalfExtent = mLastTrafficContact_TrafficHalfExt;
+        lpRender->DrawBox(Vector3{ -lvRaceCarHalfExtent.x, -lvRaceCarHalfExtent.y,
+                                   -lvRaceCarHalfExtent.z, -lvRaceCarHalfExtent.w },
+                          lvRaceCarHalfExtent, mLastTrafficContact_RaceCarTransform, 0xFF0000FFu);
+        lpRender->DrawBox(Vector3{ -lvTrafficHalfExtent.x, -lvTrafficHalfExtent.y,
+                                   -lvTrafficHalfExtent.z, -lvTrafficHalfExtent.w },
+                          lvTrafficHalfExtent, mLastTrafficContact_TrafficTransform, 0xFF00FF00u);
+
+        const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = mLastTrafficContact_Contact;
+        const Vector3 lvContactNormalEnd = lrContact.mPointOnB + lrContact.mNormal;
+        lpRender->DrawArrow(lrContact.mPointOnB, lvContactNormalEnd, 0xFF00FFFFu);
+
+        const Vector3 lvRaceCarVelocityOffset =
+            rw::math::vpu::Mult(mLastTrafficContact_RaceCarVelocity, 0.1f);
+        lpRender->DrawArrow(mLastTrafficContact_RaceCarTransform.wAxis,
+                            mLastTrafficContact_RaceCarTransform.wAxis + lvRaceCarVelocityOffset,
+                            0xFF0000FFu);
+        const Vector3 lvTrafficVelocityOffset =
+            rw::math::vpu::Mult(mLastTrafficContact_TrafficVelocity, 0.1f);
+        lpRender->DrawArrow(mLastTrafficContact_TrafficTransform.wAxis,
+                            mLastTrafficContact_TrafficTransform.wAxis + lvTrafficVelocityOffset,
+                            0xFF00FF00u);
+
+        const Vector3 lvWorldUp{ 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvActualTextPosition = lvContactNormalEnd - lvWorldUp * 0.1f;
+        lpRender->DrawText(lvActualTextPosition, "actual", 17.0f);
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::DrawLastCrashContact @0x825B7758
+    // ========================================================================================
+    void VehicleManagerDebugComponent::DrawLastCrashContact(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :1006
+
+        const Vector3 lvHalfExtent = mLastCrashContact_RaceCarHalfExt;
+        lpRender->DrawBox(Vector3{ -lvHalfExtent.x, -lvHalfExtent.y,
+                                   -lvHalfExtent.z, -lvHalfExtent.w },
+                          lvHalfExtent, mLastCrashContact_RaceCarTransform, 0xFF0000FFu);
+
+        const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = mLastCrashContact_Contact;
+        lpRender->DrawArrow(lrContact.mPointOnB, lrContact.mPointOnB + lrContact.mNormal, 0xFF00FFFFu);
+
+        const Vector3 lvVelocityOffset = rw::math::vpu::Mult(mLastCrashContact_RaceCarVelocity, 0.1f);
+        lpRender->DrawArrow(mLastCrashContact_RaceCarTransform.wAxis,
+                            mLastCrashContact_RaceCarTransform.wAxis + lvVelocityOffset,
+                            0xFF0000FFu);
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::DrawCatchupTargets @0x825EBF30
+    // ========================================================================================
+    void VehicleManagerDebugComponent::DrawCatchupTargets(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :1093
+
+        const VehicleManager& lrManager = *mpVehicleManager;
+        for (s32 liCar = lrManager.mUsedRaceCars.GetFirstNonZeroBit(); liCar >= 0;
+             liCar = lrManager.mUsedRaceCars.GetNextNonZeroBit(liCar))
+        {
+            const VehicleDriver& lrDriver = lrManager.maRaceCarDrivers[liCar];
+            if (lrDriver.GetNumInterpSteps() <= 0)
+                continue;
+
+            const RaceCarPhysics& lrCar = lrManager.maRaceCarVehicles[liCar];
+            Matrix44Affine lTargetTransform = lrDriver.GetCatchupTargetTransform();
+            const Vector3 lvCOMOffset = lrCar.GetSimpleAttribs()->mCOMOffset;
+            const Vector3 lvTargetCOMOffset =
+                lTargetTransform.zAxis * lvCOMOffset.z
+                + lTargetTransform.xAxis * lvCOMOffset.x
+                + lTargetTransform.yAxis * lvCOMOffset.y;
+            lTargetTransform.wAxis = lTargetTransform.wAxis - lvTargetCOMOffset;
+
+            const Vector3 lvHalfExtent = lrCar.GetHalfExtent();
+            const Vector3 lvBoxMinimum{ -lvHalfExtent.x, -lvHalfExtent.y,
+                                        -lvHalfExtent.z, -lvHalfExtent.w };
+            const Vector3 lvBoxMaximum = lvHalfExtent;
+            lpRender->DrawBox(lvBoxMinimum, lvBoxMaximum, lTargetTransform, 0xFFFFFFFFu);
+
+            const Vector3 lvCurrentPosition = lrCar.GetGraphicsVehicleTransform().wAxis;
+            lpRender->DrawArrow(lvCurrentPosition, lTargetTransform.wAxis, 0xFFFFFFFFu);
+
+            const Vector3 lvWorldUp{ 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lvTextPosition = lTargetTransform.wAxis + lvWorldUp * 1.5f;
+            lpRender->DrawText(lvTextPosition, lrCar.IsFrozen() ? "Frozen" : "Not frozen", 20.0f);
+        }
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::DrawPlayerStuckInCollisionLineTests @0x825C9C78
+    // ========================================================================================
+    void VehicleManagerDebugComponent::DrawPlayerStuckInCollisionLineTests(
+        CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :782
+
+        const VehicleManager& lrManager = *mpVehicleManager;
+        const s32 liPlayerIndex = static_cast<s32>(lrManager.mePlayerActiveRaceCarIndex);
+        if (liPlayerIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            return;
+
+        const u32 luPlayerIndex = static_cast<u32>(liPlayerIndex);
+        CGS_ASSERT(luPlayerIndex < VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "invalid index : "); // CgsBitArray.h:203
+        if (!lrManager.mUsedRaceCars.IsBitSet(luPlayerIndex))
+            return;
+
+        Vector3 lvCacheSphere;
+        std::memcpy(&lvCacheSphere, lrManager.mStuckInCollisionTestCacheSphere, sizeof(lvCacheSphere));
+        const Vector3 lvSphereCentre{ lvCacheSphere.x, lvCacheSphere.y, lvCacheSphere.z, 0.0f };
+        lpRender->DrawHollowSphere(lvSphereCentre, lvCacheSphere.w, 0xFFFFFFFFu);
+
+        for (s32 liLine = 0; liLine < KI_MAX_WORLD_CONTACT_SPIES; ++liLine)
+        {
+            lpRender->DrawLine(maStuckInCollisionLineTestStart[liLine],
+                               maStuckInCollisionLineTestEnd[liLine], 0xFFFFFFFFu);
+            if (mabStuckInCollisionIntersection[liLine])
+            {
+                lpRender->DrawSphere(maStuckInCollisionLineTestPoint[liLine], 0.15f, 0xFFFFFFFFu);
+            }
+        }
+
+        const RaceCarPhysics& lrPlayerCar = lrManager.maRaceCarVehicles[liPlayerIndex];
+        lpRender->DrawAxis(lrPlayerCar.GetGraphicsVehicleTransform());
     }
 
     void VehicleManagerDebugComponent::RenderContact(CgsDev::Debug2DImmediateRender* lpRender) const

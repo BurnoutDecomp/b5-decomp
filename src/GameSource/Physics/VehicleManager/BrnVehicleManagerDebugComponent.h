@@ -46,16 +46,17 @@
 // The layout below did not change; only the reason it is here did. `VehicleManagerDebugComponent::
 // Construct(this + 161968, this)` is now callable as `mDebugComponent.Construct(this)`.
 //
-// INCREMENTAL: this slice lands the full DATA layout plus Construct, GetName and OnActivate. The ~20
-// render/record members declared by the DWARF (RenderWorld, RenderHUD, RecordSlam,
-// RenderCarDiagram, ...) belong to the dev-UI render pass and are deliberately NOT declared here
-// -- declaring a virtual override without a body would put an unresolvable entry in this class's
-// vtable.
+// INCREMENTAL SOURCE PROPOSAL: this class retains the complete DWARF data layout and the
+// existing Construct/GetName/OnActivate/RenderHUD bodies. This packet adds the original
+// RenderWorld override and its recovered helpers without adding data members. The world-spy
+// reader is dispatched under its original user-controlled guard; its producer/reset remains
+// unresolved and the stored count is not normalized or clamped.
 // ============================================================================================
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                  // Vector3, Matrix44Affine
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (real base)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h" // RenderWorld argument
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"    // CgsPhysics::PhysicsSimulationIO::OutContactSpy
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h" // line-test result
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact
@@ -117,6 +118,7 @@ namespace Vehicle
 
         // The slam / shunt read-outs (and, with the slam render gate, the two-car contact
         // diagram) for the last recorded race-car impact.
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
 
     protected:
@@ -136,6 +138,15 @@ namespace Vehicle
         // The two car diagrams (player car red, other car green) top-right of the screen and the
         // other car's contact angle under them.
         void RenderContact(CgsDev::Debug2DImmediateRender* lpRender) const;
+
+        // Original VehicleManager debug render helpers with ARTIST exports or raw image coverage.
+        void RenderGrind() const;
+        void RenderWorldContactSpies(CgsDev::Debug3DImmediateRender* lpRender) const;
+        void RenderResetRays(CgsDev::Debug3DImmediateRender* lpRender) const;
+        void DrawLastRaceCarTrafficContact(CgsDev::Debug3DImmediateRender* lpRender);
+        void DrawLastCrashContact(CgsDev::Debug3DImmediateRender* lpRender);
+        void DrawCatchupTargets(CgsDev::Debug3DImmediateRender* lpRender);
+        void DrawPlayerStuckInCollisionLineTests(CgsDev::Debug3DImmediateRender* lpRender);
 
         // A top-down 40x80 car body with four wheels; optionally the contact point inside it and
         // the closing / car velocity lines ending at its centre (x across, z along the car).
