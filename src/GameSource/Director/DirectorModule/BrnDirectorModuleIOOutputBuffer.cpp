@@ -77,7 +77,14 @@ namespace DirectorIO
         return mDirectorInterface;
     }
 
-    // X360 0x823B3458: return &mDirectorOutputInterface (this+0x4F0), read-lock asserted.
+    // DecFIGS 0x33E0D0 / ARTIST 0x823B3458: typed const read getter; assert the read lock.
+    const BrnDirector::DirectorOutputInterface* OutputBuffer::GetDirectorOutputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mDirectorOutputInterface;
+    }
+
+    // X360 0x823B3458 legacy byte view, retained for existing callers.
     u8* OutputBuffer::GetDirectorOu()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
@@ -107,7 +114,14 @@ namespace DirectorIO
         return &mResourceInterface;
     }
 
-    // X360 0x82207848: return &mDirectorOutputInterface (this+0x4F0). Tests the WRITE lock (bit 3).
+    // ARTIST 0x82207848: typed mutable view of mDirectorOutputInterface under the WRITE lock.
+    BrnDirector::DirectorOutputInterface* OutputBuffer::GetDirectorOutputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mDirectorOutputInterface;
+    }
+
+    // X360 0x82207848 legacy byte view, retained for existing callers.
     u8* OutputBuffer::GetDirectorOutputIn()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
