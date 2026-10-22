@@ -51,6 +51,9 @@ namespace CgsFsm
         // @ 0x82836BA8 -- the script's index for the current state (GetInt "GetCurrentStateIndex").
         s32  GetCurrentStateIndex();
 
+        // @ 0x82836998 -- read the script's comma-separated next-state indices.
+        void GetNextStates(s32 liStateIndex, s32* lpaiNextStates, s32* lpiNumNextStates);
+
         bool IsLuaResourceValid() { return mLuaState.IsLuaResourceValid(); }
         u32  GetSequenceNumber() const { return muSequenceNumber; }
         // BrnBaseFlow::Construct @0x824F1C04 seeds this to 1 (so the owner's first Update

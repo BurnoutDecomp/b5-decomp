@@ -339,8 +339,11 @@ namespace BrnGui
         // 504/508/513 -> MovieManager), and fan every event the flow subscribed to
         // (records 34/35) into the HUD flow's in-queue
         // -- the EventInterpreterModule observer dispatch.
-        void DispatchInboundGuiEvents(bool& rbHasSaveImageEvent,
-                                      CgsGui::ImageFileInfo& lrSaveImageInfo);
+        // Returns the last dispatched record. A non-null cursor consumes only the
+        // appended suffix; the frame owner initializes the image-save flag once.
+        const CgsModule::Event* DispatchInboundGuiEvents(
+            bool& rbHasSaveImageEvent, CgsGui::ImageFileInfo& lrSaveImageInfo,
+            const CgsModule::Event* lpAfterEvent = 0);
         void AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo);
 
         // Drain one flow's StateInterface output queue -- the per-frame dispatch point

@@ -8,6 +8,7 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h" // the live slot-0 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"      // [tut-ticker] the live slot-8 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h"           // [boost-bar] the live slot-4 component
+#include "GameSource/Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.h" // embedded controls + override state
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCreditsTextRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnAboveCarRenderer.h"
@@ -133,6 +134,9 @@ public:
     CustomRendererManager* SetFlaptRenderer(BrnFlapt::FlaptRenderer* lpFlaptRenderer); // 0x82449920
     virtual CustomRendererManager* SetReplaySerialiser(void* lpReplaySerialiser);      // 0x82445648
 
+    // DecFIGS h:259; returns the live embedded boost-bar renderer used by the debug controls.
+    BoostBarRenderer* GetBoostBarRendererInstance() { return &mBoostBarRenderer; }
+
 private:
     // RecvEvent's case-213 sub-routine (the SatNav/MainMap/CrashNav map-toggle path).
     void RecvEvent_Event213(const CgsModule::Event* lpEvent);
@@ -196,18 +200,12 @@ private:
     CreditsTextRenderer mCreditsTextRenderer;
     AboveCarRenderer mAboveCarRenderer; // ARTIST manager+1B930
 
-    // Guest +0x1F498: the master rendering-enable flag SetAllRenderingState() stores.
+    // Guest +0x1F498: the separate master rendering-enable flag written by SetAllRenderingState().
     bool mbRenderingEnable;
 
-    // Per-component renderable-state cache the Update() pass reads, plus TWO separate
-    // gates. ⚠️ The previous model conflated them into one: Update @0x82450908 branches on
-    // byte +0x1F4B1 and then ANDs each component's flag with byte +0x1F4AF -- two distinct
-    // bytes, `if (*(a1+128177)) { ... v2 = a1+128175; ... *v2 && *(a1+128173) ... }`.
-    bool mbSatNavRenderable;          // guest +0x1F4AD (SatNav slot, RecvEvent 213 sub-mode 1)
-    bool mbMainMapRenderable;         // guest +0x1F4AE (MainMap slot, RecvEvent 213 sub-mode 0)
-    bool mbComponentRenderableGate;   // guest +0x1F4AF (ANDed into every Update() enable)
-    bool mbThirdSlotRenderable;       // guest +0x1F4B0 (the +0x1030 / AboveCar slot in Update)
-    bool mbHaveValidMapPosition;      // guest +0x1F4B1 (the outer Update() branch gate)
+    // ARTIST embeds GuiCustRendererDebugComponent at +0x1F49C. Its controls occupy the
+    // bytes consumed by CustomRendererManager::Update and synchronized by event 213.
+    GuiCustRendererDebugComponent mDebugComponent;
 
     // Prepare / Release state-machine markers (guest +0x1F490 / +0x1F494).
     EPrepareStage mePrepareStage;

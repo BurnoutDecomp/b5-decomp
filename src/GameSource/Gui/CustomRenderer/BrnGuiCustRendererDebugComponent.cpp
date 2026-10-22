@@ -5,34 +5,16 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 
 // BrnGui::GuiCustRendererDebugComponent -- the "Gui Custom Renderer" in-game debug-menu component.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. This TU owns the 10 X360-attested bodies; the live
-// boost-bar editing reaches a renderer deep inside the custom-renderer manager, which the X360 does
-// through external (outlined) helpers -- those are declared file-locally below (their bodies live in
-// their own TUs), exactly the way the sibling debug components declare MaybeDrawText.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. This TU owns the registration, HUD, and callback
+// bodies; the renderer is reached through the manager's DecFIGS-named BoostBarRenderer accessor.
 
-namespace BrnGui
-{
-// ------------------------------------------------------------------------------------------------
-// External / outlined helpers this TU calls (declared for the compile gate; bodied in their own TUs).
-// ------------------------------------------------------------------------------------------------
-
-// MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper the HUD draw
-// loop uses; wraps CgsDev::Debug2DImmediateRender::DrawText. Signature recovered from the call sites:
-// (display, text, x, y, scale, colour, centred).
+// X360 0x82824048. This is the global helper defined in CgsDebug2DImmediateRender.cpp.
+// Keep its declaration at global scope so calls bind to the existing provider, not a BrnGui symbol.
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
-// SetBoostBarColoursForBoostType (X360 0x8244B450) -- apply the predefined inner/outer colour pair
-// for the given boost type to the manager's live boost-bar renderer. The X360 reaches the embedded
-// BoostBarRenderer at a fixed offset inside the manager (mpCustRenderManager + the subobject offset)
-// and loads the colour pair from a per-type .rdata table; that resolution lives inside this helper
-// (its own TU), so this TU passes the manager by name and never touches a raw offset.
-void SetBoostBarColoursForBoostType(CustomRendererManager* lpManager, BrnWorld::EBoostType leBoostType);
-
-// ToggleBoostBarRendererDebugScreen -- flip the boost-bar renderer's own debug-screen flag. The X360
-// reaches it as a byte deep inside the manager (the embedded BoostBarRenderer's flag); the subobject
-// resolution lives in this helper's TU, so this TU passes the manager by name (no raw offset here).
-void ToggleBoostBarRendererDebugScreen(CustomRendererManager* lpManager);
+namespace BrnGui
+{
 
 // HUD layout constants (read off the RenderHUD asm: flt_82004000 == 16.0 is the text scale; the
 // X/Y coordinates are the .rdata floats the pseudocode already resolves to these literals).
@@ -116,6 +98,13 @@ const char* GuiCustRendererDebugComponent::GetName() const
     return "Gui Custom Renderer";
 }
 
+// ARTIST's vtable shares the "Gui" path body with the other GUI debug components
+// (GetPath export 0x824ED348); DecFIGS declares this override in the class shape.
+const char* GuiCustRendererDebugComponent::GetPath() const
+{
+    return "Gui";
+}
+
 // ================================================================================================
 // OnActivate  @0x824FCBC8
 // ------------------------------------------------------------------------------------------------
@@ -165,6 +154,12 @@ void GuiCustRendererDebugComponent::OnActivate()
     UpdateBoostColours();
 }
 
+// DecFIGS declares the vtable override. Its PS3 twin is a bare return, while ARTIST
+// has no distinct exported body; preserve the empty world-pass behavior explicitly.
+void GuiCustRendererDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender*)
+{
+}
+
 // ================================================================================================
 // RenderHUD  @0x82505108
 // ------------------------------------------------------------------------------------------------
@@ -183,18 +178,18 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
 
     if (mbBoostBarDebugScreenEnabled)
     {
-        MaybeDrawText(lpDisplay, "Red Channel",               KF_LABEL_X_RED,      KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        MaybeDrawText(lpDisplay, "Green Channel",             KF_LABEL_X_GREEN,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        MaybeDrawText(lpDisplay, "Inner Flame",               KF_LABEL_X_INNER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        MaybeDrawText(lpDisplay, "(Red * Inner Colour)",      KF_LABEL_X_INNER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE, false);
-        MaybeDrawText(lpDisplay, "Outer Flame",               KF_LABEL_X_OUTER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        MaybeDrawText(lpDisplay, "(Green * Outer Colour)",    KF_LABEL_X_OUTER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE, false);
-        MaybeDrawText(lpDisplay, "Outer Flame + Inner Flame", KF_LABEL_X_COMBINED, KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "Red Channel",               KF_LABEL_X_RED,      KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "Green Channel",             KF_LABEL_X_GREEN,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "Inner Flame",               KF_LABEL_X_INNER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "(Red * Inner Colour)",      KF_LABEL_X_INNER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "Outer Flame",               KF_LABEL_X_OUTER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "(Green * Outer Colour)",    KF_LABEL_X_OUTER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE, false);
+        ::MaybeDrawText(lpDisplay, "Outer Flame + Inner Flame", KF_LABEL_X_COMBINED, KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
     }
 
     if (mbShowCustomRenderStatus)
     {
-        MaybeDrawText(lpDisplay, "Currently active renderers (number of textures):",
+        ::MaybeDrawText(lpDisplay, "Currently active renderers (number of textures):",
                       KF_LIST_X, KF_LIST_HEADER_Y, KF_TEXT_SCALE, K_WHITE, false);
 
         s32 liVisibleRow = 0;
@@ -221,7 +216,7 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
             }
 
             const f32 lfRowY = static_cast<f32>(liVisibleRow) * KF_LIST_ROW_STEP;
-            MaybeDrawText(lpDisplay, lpcName, KF_LIST_X, lfRowY, KF_TEXT_SCALE, K_WHITE, false);
+            ::MaybeDrawText(lpDisplay, lpcName, KF_LIST_X, lfRowY, KF_TEXT_SCALE, K_WHITE, false);
 
             const s32 liTextureCount = mpCustRenderManager->GetNumTexturesForComponent(liComponent);
             lpDisplay->DrawValue(static_cast<u32>(liTextureCount),
@@ -240,13 +235,37 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
 // Debug-menu action buttons: apply a predefined boost-type colour pair to the live boost-bar
 // renderer, then refresh the slider cache. The registered user-data is the component.
 // ================================================================================================
+// SetBoostColour (DWARF h:245): select the original boost-type colour pair, then refresh the sliders.
+void GuiCustRendererDebugComponent::SetBoostColour(BrnWorld::EBoostType leBoostType)
+{
+    mpCustRenderManager->GetBoostBarRendererInstance()->ForceSetBoostBarColours(leBoostType);
+    UpdateBoostColours();
+}
+
+// @0x824FC868: write the edited inner/outer RGB triples to all renderer slots, then refresh the sliders.
+void GuiCustRendererDebugComponent::SetBoostColourToCustom()
+{
+    const Vector3 lv3InnerColour = { mfBoostInnerRed, mfBoostInnerGreen, mfBoostInnerBlue };
+    const Vector3 lv3OuterColour = { mfBoostOuterRed, mfBoostOuterGreen, mfBoostOuterBlue };
+    mpCustRenderManager->GetBoostBarRendererInstance()->ForceSetBoostBarColours(
+        lv3InnerColour, lv3OuterColour);
+    UpdateBoostColours();
+}
+
+// Toggle both the renderer's debug grid and this component's HUD-label mirror.
+void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreen()
+{
+    mpCustRenderManager->GetBoostBarRendererInstance()->ToggleDebugScreen();
+    mbBoostBarDebugScreenEnabled = !mbBoostBarDebugScreenEnabled;
+}
+
+// ================= SetBoostColourDangerCallback  @0x824FC900 =================
 void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserData)
 {
     CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
-    SetBoostBarColoursForBoostType(lpComponent->mpCustRenderManager, BrnWorld::E_BOOST_TYPE_DANGER);
-    lpComponent->UpdateBoostColours();
+    lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_DANGER);
 }
 
 void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUserData)
@@ -254,8 +273,7 @@ void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUse
     CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
-    SetBoostBarColoursForBoostType(lpComponent->mpCustRenderManager, BrnWorld::E_BOOST_TYPE_AGGRESSION);
-    lpComponent->UpdateBoostColours();
+    lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_AGGRESSION);
 }
 
 void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserData)
@@ -263,8 +281,7 @@ void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserDat
     CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
-    SetBoostBarColoursForBoostType(lpComponent->mpCustRenderManager, BrnWorld::E_BOOST_TYPE_STUNT);
-    lpComponent->UpdateBoostColours();
+    lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_STUNT);
 }
 
 // ================================================================================================
@@ -294,9 +311,7 @@ void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreenCallback(void* lpUs
 
     // Flip the renderer-side debug flag (the X360 toggles a byte inside the boost-bar renderer reached
     // through the manager), then this component's own mirror flag.
-    ToggleBoostBarRendererDebugScreen(lpComponent->mpCustRenderManager);
-
-    lpComponent->mbBoostBarDebugScreenEnabled = !lpComponent->mbBoostBarDebugScreenEnabled;
+    lpComponent->ToggleBoostBarDebugScreen();
 }
 
 }

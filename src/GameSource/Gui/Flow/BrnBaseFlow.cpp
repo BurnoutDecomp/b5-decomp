@@ -184,24 +184,30 @@ namespace BrnGui
         const_cast<CgsGui::State*>(lpState)->GetResourcesToLoad(&lpResources, &luCount);
         mpGuiCache->EnsureResourcesAreLoaded(lpResources, luCount);
 
-        // 5. @0x824FFE14 -- E_STREAMING_PRELOAD additionally prefetches every state
-        //    reachable from this one: ScriptedFsm::GetNextStates(idx, &outIdx[], &outCount)
-        //    then, per next state, GetStateByIndex (null => the console debug-prints
-        //    "Warning: next state index=%d is present in FSM but state object doesn't
-        //    exist" and continues) + the same GetResourcesToLoad/Ensure pair.
-        // [FLAG] ScriptedFsm::GetNextStates @0x82836998 is not reconstructed yet, so the
-        // prefetch arm is the one part of this body still missing. It only runs in
-        // E_STREAMING_PRELOAD, which nothing sets today.
+        // 5. @0x824FFE14 -- E_STREAMING_PRELOAD additionally prefetches each next state.
         if (meStreamingMode == E_STREAMING_PRELOAD)
         {
-            static bool s_bLoggedNoPrefetch = false;
-            if (!s_bLoggedNoPrefetch)
+            s32 laiNextStateIndices[280]; // X360 stack buffer: 0x460 bytes (1120).
+            s32 liNextStateCount = 0;
+            mStateMachine.GetNextStates(liStateIndex, laiNextStateIndices, &liNextStateCount);
+
+            for (s32 liNextState = 0; liNextState < liNextStateCount; ++liNextState)
             {
-                s_bLoggedNoPrefetch = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                const s32 liNextStateIndex = laiNextStateIndices[liNextState];
+                CgsGui::State* lpNextState = mStateMachine.GetStateByIndex(liNextStateIndex);
+                if (lpNextState != 0)
+                {
+                    const CgsGui::sResourceTuple* lpNextResources = 0;
+                    u32 luNextResourceCount = 0;
+                    lpNextState->GetResourcesToLoad(&lpNextResources, &luNextResourceCount);
+                    mpGuiCache->EnsureResourcesAreLoaded(lpNextResources, luNextResourceCount);
+                }
+                else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                {
                     *CgsDev::Log::gpDebugPrint
-                        << "[flow] streaming PRELOAD requested but ScriptedFsm::GetNextStates "
-                           "is not reconstructed -- next-state prefetch skipped [FLAG]\n";
+                        << "        (Warning: next state index=" << liNextStateIndex
+                        << " is present in FSM but state object does not exist)\n";
+                }
             }
         }
     }
