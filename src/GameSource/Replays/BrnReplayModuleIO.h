@@ -22,6 +22,8 @@
 // game-event queue: VariableEventQueue<1536,16> at +4 (AppendGameEventQueue @0x8265A798
 // write-locks, then Append<1536,16>'s a source <1536,16> queue into this+4). The
 // post-sim sub-buffer occupies +4..+1564 of ReplayIO (1560 bytes).
+// ARTIST 0x823BB478 is ICF-shared: ReplayIO_Buffer::GetOutputBuffer_PostSim and
+// OutputBuffer_PostSim::GetGameEventQueue() const both read-lock and return this+4.
 
 #include "types.hpp"
 
@@ -48,6 +50,10 @@ namespace ReplayIO
     struct OutputBuffer_PostSim : public CgsModule::IOBuffer
     {
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+
+        // X360 0x823BB478, callsite 0x823E93D0 (ICF-shared +4 read accessor):
+        // asserts the buffer is locked for reading, then returns &mGameEventQueue.
+        const GameEventQueue* GetGameEventQueue() const;
 
         // X360 0x8265A798: write-lock (bit 3); asserts the buffer is locked for writing
         // ("Not locked for writing", BrnReplayModuleIO.h:176), then bulk-appends the

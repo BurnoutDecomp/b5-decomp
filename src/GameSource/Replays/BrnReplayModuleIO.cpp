@@ -8,6 +8,7 @@
 // BrnReplays::ReplayIO member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 //   ReplayIO_Buffer::GetOutputBuffer_PostSim  @ 0x823BB478  read-lock (bit 4) -> this+4
+//   OutputBuffer_PostSim::GetGameEventQueue  @ 0x823BB478  ICF-shared read-lock -> queue at this+4
 //   ReplayIO_Buffer::GetOutputBuffer_PreSim   @ 0x823BB128  read-lock (bit 4) -> this+1564
 //   OutputBuffer_PostSim::AppendGameEventQueue@ 0x8265A798  write-lock (bit 3) -> Append into this+4
 //
@@ -44,6 +45,15 @@ namespace ReplayIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return mGameEventQueue.Append(*lpSourceQueue) ? 1 : 0;
+    }
+
+    // X360 0x823BB478, called at 0x823E93D0 from DoUpdate_GameStatePostWorld.
+    // DecFIGS declares OutputBuffer_PostSim::GetGameEventQueue() const; the ARTIST body
+    // is an ICF-shared +4 read accessor, identical to ReplayIO_Buffer::GetOutputBuffer_PostSim.
+    const OutputBuffer_PostSim::GameEventQueue* OutputBuffer_PostSim::GetGameEventQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGameEventQueue;
     }
 
     // X360 0x823BB478: read-lock; returns the embedded post-sim output buffer (this+4).
