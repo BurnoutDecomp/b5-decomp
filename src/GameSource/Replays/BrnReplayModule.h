@@ -108,9 +108,9 @@ namespace BrnReplays
         void Construct() override;
 
         // ARTIST 0x82660E78; the public virtual pre-sim entry owns IO locks and dispatch.
-        void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+        virtual void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
                            ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
-                           BrnUpdateSet lUpdateSet) override;
+                           BrnUpdateSet lUpdateSet);
 
         // ARTIST 8265F618: the complete post-sim update owns the IO buffer locks,
         // request adoption, GUI input events and state-specific post-sim dispatch.

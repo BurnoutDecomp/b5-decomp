@@ -189,20 +189,22 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
     {
     case 1:   // "align" -> mnAlign enum boxed as a string ("left"/"center"/"right")
     {
-        // X360: AptString::Create("") then operator=(StaticStringHelperT&) the
-        // alignment keyword; >=3 is the inherit sentinel -> undefined.
-        // The X360 assigns a precompiled StaticStringHelperT constant
-        // (unk_8324E638/6A4/60C); restored to the equivalent literal assignment.
-        if (mFormat.mnAlign >= 3)
-            return gpUndefinedValue;
-
+        // X360 creates the return AptString before switching on mnAlign.
         AptString* pStr = AptString::Create("");
-        if (mFormat.mnAlign < 1)
-            *pStr->GetInternalString() = EAStringC("left");    // mnAlign == 0
-        else if (mFormat.mnAlign == 1)
-            *pStr->GetInternalString() = EAStringC("center");
-        else /* mnAlign == 2 */
+        switch (static_cast<uint32_t>(mFormat.mnAlign))
+        {
+        case 0:
+            *pStr->GetInternalString() = EAStringC("left");
+            break;
+        case 1:
             *pStr->GetInternalString() = EAStringC("right");
+            break;
+        case 2:
+            *pStr->GetInternalString() = EAStringC("center");
+            break;
+        default:
+            return gpUndefinedValue;
+        }
         return pStr;
     }
 
@@ -262,6 +264,139 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
 
     default:  // miData 2/4/9/12/13/16 (blockIndent/bullet/leading/tabStops/target/url)
         return nullptr;   // X360 loc_82AF1AF0: empty jump-table slots -> return 0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// objectMemberSet @0x82AFB368 (ARTIST) / XB1 vtable slot 7 @0x140854CF0
+//
+// Route the 16 recognised TextFormat property names to the embedded record.
+// The context argument is the console's null gate; fields are written on this
+// AptTextFormat instance. Recognised placeholder properties report success
+// without changing a field, exactly as both original setter bodies do.
+// ---------------------------------------------------------------------------
+bool AptTextFormat::objectMemberSet(AptValue* const pThis,
+                                    const AptNativeString* const pName,
+                                    AptValue* const pValue)
+{
+    const TextFormatMembersIndex::Entry* pEntry =
+        pThis ? TextFormatMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength())
+              : nullptr;
+    if (pEntry == nullptr)
+        return false;
+
+    switch (pEntry->miData)
+    {
+    case 1:   // "align"
+    {
+        EAStringC strValue;
+        pValue->toString(&strValue);
+        const char* const pszValue = strValue.GetBuffer();
+
+        if (std::strcmp(pszValue, "left") == 0 || std::strcmp(pszValue, "true") == 0)
+            mFormat.mnAlign = 0;
+        else if (std::strcmp(pszValue, "center") == 0)
+            mFormat.mnAlign = 2;
+        else if (std::strcmp(pszValue, "right") == 0)
+            mFormat.mnAlign = 1;
+        else if (std::strcmp(pszValue, "false") == 0 || std::strcmp(pszValue, "none") == 0)
+            mFormat.mnAlign = 3;
+        // Unrecognized text leaves mnAlign unchanged in the original setter.
+        return true;
+    }
+
+    case 2:   // "blockIndent" -- recognised no-op
+    case 4:   // "bullet"      -- recognised no-op
+    case 9:   // "leading"     -- recognised no-op
+    case 12:  // "tabStops"    -- recognised no-op
+    case 13:  // "target"      -- recognised no-op
+    case 16:  // "url"         -- recognised no-op
+        return true;
+
+    case 3:   // "bold"
+    {
+        EAStringC strValue;
+        pValue->toString(&strValue);
+        uint32_t uStyleFlags = static_cast<uint32_t>(mFormat.mnStyleFlags);
+        if (std::strcmp(strValue.GetBuffer(), "true") == 0)
+        {
+            uStyleFlags |= TextFormat::KU_BOLD_DEFINED | TextFormat::KU_BOLD_VALUE;
+            mFormat.mnStyleFlags = static_cast<s32>(uStyleFlags);
+        }
+        else if (std::strcmp(strValue.GetBuffer(), "false") == 0)
+        {
+            uStyleFlags |= TextFormat::KU_BOLD_DEFINED;
+            uStyleFlags &= ~static_cast<uint32_t>(TextFormat::KU_BOLD_VALUE);
+            mFormat.mnStyleFlags = static_cast<s32>(uStyleFlags);
+        }
+        return true;
+    }
+
+    case 5:   // "color"
+        mFormat.mnColor = pValue->toInteger() & 0x00FFFFFF;
+        return true;
+
+    case 6:   // "font"
+        pValue->toString(&mFormat.mFontName);
+        return true;
+
+    case 7:   // "indent"
+        mFormat.mnIndent = pValue->toInteger();
+        return true;
+
+    case 8:   // "italic"
+    {
+        EAStringC strValue;
+        pValue->toString(&strValue);
+        uint32_t uStyleFlags = static_cast<uint32_t>(mFormat.mnStyleFlags);
+        if (std::strcmp(strValue.GetBuffer(), "true") == 0)
+            uStyleFlags |= TextFormat::KU_ITALIC_DEFINED | TextFormat::KU_ITALIC_VALUE;
+        else if (std::strcmp(strValue.GetBuffer(), "false") == 0)
+        {
+            uStyleFlags |= TextFormat::KU_ITALIC_DEFINED;
+            uStyleFlags &= ~static_cast<uint32_t>(TextFormat::KU_ITALIC_VALUE);
+        }
+        else
+            uStyleFlags &= ~static_cast<uint32_t>(TextFormat::KU_ITALIC_VALUE);
+        mFormat.mnStyleFlags = static_cast<s32>(uStyleFlags);
+        return true;
+    }
+
+    case 10:  // "leftMargin"
+        mFormat.mnLeftMargin = pValue->toInteger();
+        return true;
+
+    case 11:  // "rightMargin"
+        mFormat.mnRightMargin = pValue->toInteger();
+        return true;
+
+    case 14:  // "size"
+        mFormat.mfSize = pValue->toFloat();
+        return true;
+
+    case 15:  // "underline"
+    {
+        EAStringC strValue;
+        pValue->toString(&strValue);
+        uint32_t uStyleFlags = static_cast<uint32_t>(mFormat.mnStyleFlags);
+        if (std::strcmp(strValue.GetBuffer(), "true") == 0)
+            uStyleFlags |= TextFormat::KU_UNDERLINE_DEFINED | TextFormat::KU_UNDERLINE_VALUE;
+        else if (std::strcmp(strValue.GetBuffer(), "false") == 0)
+        {
+            uStyleFlags |= TextFormat::KU_UNDERLINE_DEFINED;
+            uStyleFlags &= ~static_cast<uint32_t>(TextFormat::KU_UNDERLINE_VALUE);
+        }
+        else
+        {
+            uStyleFlags |= TextFormat::KU_UNDERLINE_DEFINED;
+            uStyleFlags ^= TextFormat::KU_UNDERLINE_VALUE;
+        }
+        mFormat.mnStyleFlags = static_cast<s32>(uStyleFlags);
+        return true;
+    }
+
+    default:
+        return false;
     }
 }
 
