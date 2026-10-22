@@ -701,6 +701,10 @@ namespace BrnGame
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
         mbCarSelectionPublished = false;
+
+        // ARTIST 823CB1C4 / 823CB1D0; DecFIGS BrnGameModule.h:524/525.
+        mDirectorBridgeSerialiser.Construct();
+        mGameModuleSerialiser.Construct();
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -1521,6 +1525,82 @@ namespace BrnGame
         const bool lbDestroyed = lpInputBufferStack->DestroyIOBuffer(&lpSoundInputBuffer);
         CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");  // CgsModuleIOHelper.h:57
         (void)lbDestroyed;
+    }
+
+    // ARTIST 0x823DD2A0. The update thread creates the phase input, merges the game-action
+    // queue and timer snapshot, calls ReplayModule::Update_PreSim through virtual slot +0x44,
+    // then serialises this frame's SIM TimerStatus through GameModuleSerialiser.
+    void BrnGameModule::DoUpdate_ReplaysPreSim(
+        CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+        CgsModule::IOBufferStack* /*lpUpdateOutputBufferStack*/,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+        BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplaysPreSimOutputBuffer,
+        BrnUpdateSet lUpdateSet)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Replay);
+
+        CgsModule::IOHelper<BrnReplays::ReplayIO::InputBuffer_PreSim> lReplayInput(
+            lpUpdateInputBufferStack, "ReplaysPreSim");
+        BrnReplays::ReplayIO::InputBuffer_PreSim* const lpReplayInputBuffer = lReplayInput;
+
+        CgsModule::LockBuffersForIO(lpReplayInputBuffer, lpGameStateOutputBuffer);
+        lpReplayInputBuffer->AppendGameActionQueue(lpGameStateOutputBuffer->GetGameActionQueue());
+        lpReplayInputBuffer->SetTimerStatusInterface(&mTimerStatusInterface);
+        CgsModule::UnlockBuffersForIO(lpReplayInputBuffer, lpGameStateOutputBuffer);
+
+        mReplayModule.Update_PreSim(lpReplayInputBuffer, lpReplaysPreSimOutputBuffer, lUpdateSet);
+
+        mGameModuleSerialiser.Lock();
+        mGameModuleSerialiser.Serialise(
+            mTimerStatusInterface.GetSimTimerStatus(),
+            static_cast<s32>(sizeof(CgsSystem::TimerStatus)));
+        mGameModuleSerialiser.Unlock();
+        mGameModuleSerialiser.SetDataReady(true);
+        mGameModuleSerialiser.SetDataRestored(true);
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Replay);
+    }
+
+    // ARTIST 0x823DD408. Merge the five producer request interfaces and GUI events into a
+    // Replay PostSim input, register the two game-owned serialisers, then call virtual slot +0x48.
+    void BrnGameModule::DoUpdate_ReplaysPostSim(
+        CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+        CgsModule::IOBufferStack* /*lpUpdateOutputBufferStack*/,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+        const BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+        const BrnSound::Module::Io::RootOutputBuffer* lpSoundOutputBuffer,
+        BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+        BrnReplays::ReplayIO::OutputBuffer_PostSim* lpReplaysPostSimOutputBuffer,
+        BrnUpdateSet lUpdateSet)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Replay);
+
+        CgsModule::IOHelper<BrnReplays::ReplayIO::InputBuffer_PostSim> lReplayInput(
+            lpUpdateInputBufferStack, "ReplaysPostSim");
+        BrnReplays::ReplayIO::InputBuffer_PostSim* const lpReplayInputBuffer = lReplayInput;
+
+        CgsModule::LockBuffersForIO(lpReplayInputBuffer, lpWorldOutputBuffer, lpEffectsOutputBuffer,
+                                    lpSoundOutputBuffer, lpDirectorOutputBuffer, lpGuiOutputBuffer);
+        lpReplayInputBuffer->AppendRequestInterface(lpWorldOutputBuffer->GetReplayRequestInterface());
+        lpReplayInputBuffer->AppendRequestInterface(lpEffectsOutputBuffer->GetReplayRequestInterface());
+        lpReplayInputBuffer->AppendRequestInterface(lpSoundOutputBuffer->GetReplayRequestInterface());
+        const BrnReplays::ReplayIO::RequestInterface* const lpcDirectorRequests =
+            reinterpret_cast<const BrnReplays::ReplayIO::RequestInterface*>(
+                lpDirectorOutputBuffer->GetReplayRe());
+        lpReplayInputBuffer->AppendRequestInterface(lpcDirectorRequests);
+        BridgeGuiToReplay_PostSim(lpReplayInputBuffer, lpGuiOutputBuffer);
+
+        BrnReplays::ReplayIO::RequestInterface* const lpRequestInterface =
+            lpReplayInputBuffer->GetRequestInterface();
+        lpRequestInterface->RegisterSerialiser(&mDirectorBridgeSerialiser);
+        lpRequestInterface->RegisterSerialiser(&mGameModuleSerialiser);
+        CgsModule::UnlockBuffersForIO(lpReplayInputBuffer, lpWorldOutputBuffer, lpEffectsOutputBuffer,
+                                      lpSoundOutputBuffer, lpDirectorOutputBuffer, lpGuiOutputBuffer);
+
+        mReplayModule.Update_PostSim(lpReplayInputBuffer, lpReplaysPostSimOutputBuffer, lUpdateSet);
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Replay);
     }
 
     // @ 0x823E8BD0 -- DoUpdate's WORLD leg. Reconstructed against the X360 body; the
@@ -4080,6 +4160,9 @@ namespace BrnGame
         // overlay point -- see the note at the end of DebugManagerRender.)
         renderengine::FrameProfile::CycleScope lDispatchProfile(renderengine::FrameProfile::DISPATCH);
 
+        // ARTIST 823A8B6C: Update_Dispatch runs on the dispatch thread before renderer consumption.
+        mReplayModule.Update_Dispatch();
+
         // The console dispatch thread hands the renderer the manager's READ buffer (the
         // frame the update side just published via OnEndOfUpdateFrame's swap).
         const DispatchThreadInputBuffer* lpRead = mDispatchThreadInputBufferManager.GetReadBuffer();
@@ -5412,6 +5495,108 @@ namespace BrnGame
         if (mbDiskError)
             luUpdateSet |= 0x200;
         return (BrnUpdateSet)luUpdateSet;
+    }
+
+    // ARTIST 0x823CBBB0. Search a GUI-model output event queue for the requested type.
+    bool BrnGameModule::IsEventInGuiQueue(
+        s32 liEventTypeToFind,
+        const CgsGui::ModelIO::OutputBuffer::GuiEventQueue* lpEventQueue)
+    {
+        CGS_ASSERT(lpEventQueue != 0, "lpEventQueue != NULL");
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventType = lpEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+        if (lpEvent == 0)
+            return false;
+
+        while (liEventType != liEventTypeToFind)
+        {
+            liEventType = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+            if (lpEvent == 0)
+                return false;
+        }
+        return true;
+    }
+
+    // ARTIST 0x823CBC48 is unnamed; DecFIGS declares this GuiEventQueueSmall overload.
+    bool BrnGameModule::IsEventInGuiQueue(
+        s32 liEventTypeToFind,
+        const CgsGui::GuiEventQueueSmall* lpEventQueue)
+    {
+        CGS_ASSERT(lpEventQueue != 0, "lpEventQueue != NULL");
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventType = lpEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+        if (lpEvent == 0)
+            return false;
+
+        while (liEventType != liEventTypeToFind)
+        {
+            liEventType = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+            if (lpEvent == 0)
+                return false;
+        }
+        return true;
+    }
+
+    // ARTIST 0x823DCB40. Keep this late, output-derived update set distinct from
+    // ConstructUpdateSetFromFsm(), which is the set captured before the module legs.
+    BrnUpdateSet BrnGameModule::ConstructUpdateSet(
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateModuleOutputBuffer,
+        const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkModuleOutputBuffer,
+        const CgsInput::InputIO::OutputBuffer* lpInputModuleOutputBuffer,
+        const CgsGui::ModelIO::OutputBuffer* lpGuiModuleModelOutputBuffer,
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer)
+    {
+        CGS_ASSERT(lpGameStateModuleOutputBuffer != 0,
+                   "lpGameStateModuleOutputBuffer != NULL");
+        CGS_ASSERT(lpInputModuleOutputBuffer != 0,
+                   "lpInputModuleOutputBuffer != NULL");
+        CGS_ASSERT(lpGuiModuleModelOutputBuffer != 0,
+                   "lpGuiModuleModelOutputBuffer != NULL");
+
+        BrnUpdateSet leUpdateSet = ConstructUpdateSetFromFsm();
+
+        // ARTIST locks the game-state output here without reading from it.
+        lpGameStateModuleOutputBuffer->LockForRead();
+        lpGameStateModuleOutputBuffer->UnlockForRead();
+
+        // Replay status bit 0 selects replay playback and the paired update bits 0x101.
+        lpReplayOutputBuffer->LockForRead();
+        if ((lpReplayOutputBuffer->GetStatusInterface()->mxStatusFlags & 1u) != 0)
+            leUpdateSet |= 0x101;
+        lpReplayOutputBuffer->UnlockForRead();
+
+        // A pending pad-disconnect event contributes update bit 0x4. The typed queue
+        // accessor returns the BaseEventQueue whose GetLength is the asm's +8 word.
+        lpInputModuleOutputBuffer->LockForRead();
+        if (lpInputModuleOutputBuffer->GetPadDisconnectedQueue()->GetLength() != 0)
+            leUpdateSet |= 0x4;
+        lpInputModuleOutputBuffer->UnlockForRead();
+
+        CGS_ASSERT(lpNetworkModuleOutputBuffer != 0,
+                   "lpNetworkModuleOutputBuffer != NULL");
+        lpNetworkModuleOutputBuffer->LockForRead();
+        if (IsEventInGuiQueue(44, lpNetworkModuleOutputBuffer->GetGuiEventQueue()))
+            leUpdateSet |= 0x2;
+        if (lpNetworkModuleOutputBuffer->IsInInvite())
+            leUpdateSet |= 0x10;
+        lpNetworkModuleOutputBuffer->UnlockForRead();
+
+        lpGuiModuleModelOutputBuffer->LockForRead();
+        if (IsEventInGuiQueue(66, lpGuiModuleModelOutputBuffer->GetGuiOutEvents()))
+            leUpdateSet |= 0x40;
+        if (IsEventInGuiQueue(69, lpGuiModuleModelOutputBuffer->GetGuiOutEvents()))
+            leUpdateSet |= 0x20;
+        if (mbDiskError)
+            leUpdateSet |= 0x200;
+        if (mbStreamingStalled)
+            leUpdateSet |= 0x800;
+        lpGuiModuleModelOutputBuffer->UnlockForRead();
+
+        return leUpdateSet;
     }
 
     // @ BrnGameModule.cpp:1146 - the update-thread stage machine: drives GamePrepare (one-time

@@ -164,6 +164,8 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 namespace BrnEffects { namespace EffectsIO { struct InputBuffer; struct DispatchInputBuffer; } }
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
+#include "GameSource/Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h"
+#include "GameSource/Replays/Serialisers/BrnReplayGameModuleSerialiser.h"
 #include "GameSource/Network/BrnNetworkModule.h"
 
 // BrnGameModule.cpp:137 (DecFIGS), byte_82FAE28D (ARTIST). NetworkPreSim publishes
@@ -262,6 +264,26 @@ namespace BrnGame
                             CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
                             BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
                             BrnUpdateSet leUpdateSet);
+
+        // ARTIST 0x823DD2A0: PreSim bridge. The X360 call/callee use five explicit
+        // arguments; the older DecFIGS declaration carries one extra output-pointer parameter.
+        void DoUpdate_ReplaysPreSim(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                    CgsModule::IOBufferStack* /*lpUpdateOutputBufferStack*/,
+                                    const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+                                    BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplaysPreSimOutputBuffer,
+                                    BrnUpdateSet lUpdateSet);
+
+        // ARTIST 0x823DD408: PostSim bridge; assembles the five producer request interfaces,
+        // appends GUI events, then dispatches the typed replay PostSim virtual.
+        void DoUpdate_ReplaysPostSim(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                     CgsModule::IOBufferStack* /*lpUpdateOutputBufferStack*/,
+                                     const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                                     const BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+                                     const BrnSound::Module::Io::RootOutputBuffer* lpSoundOutputBuffer,
+                                     BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+                                     const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                     BrnReplays::ReplayIO::OutputBuffer_PostSim* lpReplaysPostSimOutputBuffer,
+                                     BrnUpdateSet lUpdateSet);
 
         // @ 0x823E8BD0 -- the WORLD leg of the per-frame update cascade: create this
         // frame's BrnWorldIO::UpdateInputBuffer on the update input stack, stage the
@@ -483,6 +505,14 @@ namespace BrnGame
         // the frame's update set from the flow state before deciding whether to drive the
         // world at all (the others are DoDispatch, ConstructUpdateSet and DoUpdate).
         BrnUpdateSet ConstructUpdateSetFromFsm();
+        // @0x823DCB40 -- combine the FSM set with this frame's replay, input,
+        // network, GUI-model, disk-error, and world-streaming state.
+        BrnUpdateSet ConstructUpdateSet(
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateModuleOutputBuffer,
+            const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkModuleOutputBuffer,
+            const CgsInput::InputIO::OutputBuffer* lpInputModuleOutputBuffer,
+            const CgsGui::ModelIO::OutputBuffer* lpGuiModuleModelOutputBuffer,
+            const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer);
 
         // ⭐ ADDITIVE (faithful-audio-engine phase C4; header-only inlines). The console
         // computes RootSoundModule::Update's two f32 time steps inline in each spine --
@@ -496,6 +526,11 @@ namespace BrnGame
         const CgsSystem::Timer& GetSimTimer() const  { return mSimTimer; }
 
     private:
+        bool IsEventInGuiQueue(s32 liEventTypeToFind,
+                               const CgsGui::ModelIO::OutputBuffer::GuiEventQueue* lpEventQueue);
+        bool IsEventInGuiQueue(s32 liEventTypeToFind,
+                               const CgsGui::GuiEventQueueSmall* lpEventQueue);
+
         // @ BrnGameModule.cpp:1845 - the per-frame update spine: latch frame-rate stepping,
         // begin the frame-rate frame, tick the debug manager, then run the active flow
         // state's Update() once per required simulation sub-step (recreating the static IO
@@ -1192,6 +1227,12 @@ namespace BrnGame
         // output across zero-substep render frames after its IO-stack lifetime.
         BrnDirector::Camera::Camera mDispatchCamera;
         bool                        mbDispatchCameraPublished;
+        // DecFIGS BrnGameModule.h:524/525; ARTIST Construct 823CB1C4/1D0.
+        // The PostSim wrapper registers both with ReplayIO; the PreSim wrapper serialises
+        // the SIM TimerStatus through mGameModuleSerialiser.
+        BrnReplays::DirectorBridgeSerialiser mDirectorBridgeSerialiser;
+        BrnReplays::GameModuleSerialiser mGameModuleSerialiser;
+
         // The double-buffered dispatch-thread input pair (X360 module +10097064): the update
         // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
