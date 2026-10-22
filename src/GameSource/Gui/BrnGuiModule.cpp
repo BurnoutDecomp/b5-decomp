@@ -2,6 +2,9 @@
 #include "GameSource/Gui/BrnGuiModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // original movie acquire request
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h" // collision-world event 493
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h" // collision-world swap requests/replies
+#include "GameSource/Resource/BrnResourceAllocator.h" // console-memory markers
 #include "SDKs/EA/GameTalk/GameTalk.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
@@ -897,6 +900,12 @@ namespace BrnGui
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
         mColourCalibrationScreen.Construct();
+        // ARTIST82518028: these values seed the collision-world and car-pool validators.
+        meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
+        mbCollisionWorldInvalid = false;
+        meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_IDLE;
+        mbCollisionWorldInvalidateForNetworking = false;
+        mbCollisionWorldValidateForNetworking = false;
 
         // ---- [profile-save] THE AUTOSAVE LATCH'S OWN INITIALISERS -------------------------
         // X360 GuiModule::Construct @0x82518028, the run that immediately follows
@@ -924,6 +933,8 @@ namespace BrnGui
         // other custom control) had nowhere to resolve to.
         // ARTIST82518BB0..BD0: bind this receiver's own backing with 1024/16, then Clear.
         mEventReceiverQueue.Construct();
+        // ARTIST82518BD4..C0C: the collision validator has its own 1024/16 receiver.
+        mCollisonPoolValidationReceiverQueue.Construct();
         // ARTIST82518BF0..C0C: the real receiver owns its backing storage.
         mGDMReceiverQueue.Construct();
         gbGuiToolStartHookRequested = false; // ARTIST82518C38..82518C44
@@ -1873,6 +1884,352 @@ namespace BrnGui
         lpGuiOutput->UnlockForWrite();
     }
 
+    // ARTIST8251A3D0; original call order and locks are retained. The active PC GameMain
+    // still does not select this virtual phase; that remains a separate frame-wiring increment.
+    void GuiModule::PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                                   CgsModule::IOBufferStack* lpOutputBufferStack,
+                                   CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+                                   CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModulePreWorldUpdate);
+        CGS_ASSERT(lpGuiOutput != 0, "lpGuiOutput != NULL");
+        CGS_ASSERT(lpModelOutputBuffer != 0, "lpModelOutputBuffer != NULL");
+        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
+        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+
+        lpGuiOutput->LockForWrite();
+        UpdateCollisionWorldValidation(lpGuiOutput);
+        UpdateCarPoolValidation(lpGuiOutput);
+        mProfileHost.GetProfileManager().LoadProfileUpgradeData(lpGuiOutput, &mEventReceiverQueue);
+        lpGuiOutput->UnlockForWrite();
+
+        PublishNativeMovieResourceRequest(lpGuiOutput);
+        CgsGui::GuiModule::PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
+                                          lpGuiOutput, lpModelOutputBuffer);
+        CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miGuiModulePreWorldUpdate);
+    }
+
+    // ARTIST82519578. Pending* calls consume their flags/state even when an
+    // assertion is disabled, so keep every call outside its assertion expression.
+    void GuiModule::UpdateCollisionWorldValidation(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        const auto ConsumeNetworkingInvalidate = [this]() {
+            const bool lbPending = mbCollisionWorldInvalidateForNetworking;
+            mbCollisionWorldInvalidateForNetworking = false;
+            return lbPending;
+        };
+        const auto ConsumeNetworkingValidate = [this]() {
+            const bool lbPending = mbCollisionWorldValidateForNetworking;
+            mbCollisionWorldValidateForNetworking = false;
+            return lbPending;
+        };
+        const auto NoNetworkingInvalidate = [&]() {
+            const bool lbPending = ConsumeNetworkingInvalidate();
+            CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+        };
+        const auto NoMovieInvalidate = [this]() {
+            const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
+            CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+        };
+        const auto NoProfileInvalidate = [this]() {
+            const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
+            CGS_ASSERT(!lbPending, "!mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate()");
+        };
+        const auto SwapOut = [this, lpOutput]() {
+            BrnResource::GameDataIO::SwapOutCollisionWorldRequest lRequest;
+            lRequest.miEventId = 0;
+            lRequest.mpReceiverQueue = &mCollisonPoolValidationReceiverQueue;
+            lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 67);
+        };
+        const auto SwapIn = [this, lpOutput]() {
+            BrnResource::GameDataIO::SwapInCollisionWorldRequest lRequest;
+            lRequest.miEventId = 0;
+            lRequest.mpReceiverQueue = &mCollisonPoolValidationReceiverQueue;
+            lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 68);
+        };
+        const auto AskWorld = [lpOutput](GuiEventRequestCollisionWorldEvent::EEventType leType) {
+            GuiEventRequestCollisionWorldEvent lRequest;
+            lRequest.meEventType = leType;
+            lpOutput->AddGuiOutEvent(lRequest);
+        };
+        const auto ReadResponse = [this](s32 liExpectedType) {
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mCollisonPoolValidationReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(mCollisonPoolValidationReceiverQueue.GetLength() == 1,
+                "mCollisonPoolValidationReceiverQueue.GetLength() == 1");
+            if (liExpectedType == 67)
+                CGS_ASSERT(liType == 67, "liEventId == BrnResource::GameDataIO::EVENT_SWAP_OUT_COLLISION_WORLD");
+            else
+                CGS_ASSERT(liType == 68, "liEventId == BrnResource::GameDataIO::EVENT_SWAP_IN_COLLISION_WORLD");
+            return lpEvent;
+        };
+
+        switch (meCollisionWorldStateValidationState)
+        {
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE:
+        {
+            const bool lbMovie = mMovieManager.PendingCollisionWorldInvalidate();
+            const bool lbNetworking = ConsumeNetworkingInvalidate();
+            if (mbBootMovieMode)
+            {
+                const bool lbProfile = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
+                if (lbMovie || lbProfile)
+                {
+                    BrnResource::PrintConsoleMemory(0);
+                    mCollisonPoolValidationReceiverQueue.Clear();
+                    SwapOut();
+                    meCollisionWorldStateValidationState = lbMovie
+                        ? E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_BOOT
+                        : E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_SAVELOAD;
+                }
+            }
+            else if (lbMovie || lbNetworking)
+            {
+                CGS_ASSERT(!mbCollisionWorldInvalid, "!mbCollisionWorldInvalid");
+                CGS_ASSERT((lbMovie && !lbNetworking) || (!lbMovie && lbNetworking),
+                    "( lbMoviePendingInvalidate && !lbNetworkingPendingInvalidate) || (!lbMoviePendingInvalidate && lbNetworkingPendingInvalidate)");
+                AskWorld(GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_INVALIDATE);
+                meCollisionWorldStateValidationState = lbMovie
+                    ? E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE
+                    : E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_NETWORKING;
+            }
+            break;
+        }
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_BOOT:
+            NoNetworkingInvalidate();
+            if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
+            {
+                const auto* lpResponse = static_cast<const BrnResource::GameDataIO::SwapOutCollisionWorldResponse*>(ReadResponse(67));
+                mMovieManager.FreeCollisionPoolMemory(lpResponse);
+                BrnResource::PrintConsoleMemory(0);
+                mbCollisionWorldInvalid = true;
+                mMovieManager.SetCollisionWorldValid(false);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_BOOT;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_BOOT:
+            NoNetworkingInvalidate();
+            CGS_ASSERT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid");
+            if (mMovieManager.PendingCollisionWorldValidate())
+            {
+                SwapIn();
+                mCollisonPoolValidationReceiverQueue.Clear();
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_BOOT;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_BOOT:
+            NoNetworkingInvalidate();
+            if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
+            {
+                ReadResponse(68);
+                BrnResource::PrintConsoleMemory(0);
+                BrnResource::PrintConsoleMemory(0);
+                mbCollisionWorldInvalid = false;
+                mMovieManager.SetCollisionWorldValid(true);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_SAVELOAD:
+            NoMovieInvalidate();
+            NoNetworkingInvalidate();
+            if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
+            {
+                ReadResponse(67);
+                BrnResource::PrintConsoleMemory(0);
+                mbCollisionWorldInvalid = true;
+                mProfileHost.GetProfileManager().SetCollisionWorldValid(false);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_SAVELOAD;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_SAVELOAD:
+            NoMovieInvalidate();
+            NoNetworkingInvalidate();
+            CGS_ASSERT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid");
+            if (mProfileHost.GetProfileManager().PendingCollisionWorldValidate())
+            {
+                SwapIn();
+                mCollisonPoolValidationReceiverQueue.Clear();
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_SAVELOAD;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_SAVELOAD:
+            NoMovieInvalidate();
+            NoNetworkingInvalidate();
+            if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
+            {
+                ReadResponse(68);
+                BrnResource::PrintConsoleMemory(0);
+                mbCollisionWorldInvalid = false;
+                mProfileHost.GetProfileManager().SetCollisionWorldValid(true);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE:
+            NoProfileInvalidate();
+            NoNetworkingInvalidate();
+            if (mbCollisionWorldInvalid)
+            {
+                mMovieManager.SetCollisionWorldValid(false);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE:
+            NoProfileInvalidate();
+            NoNetworkingInvalidate();
+            CGS_ASSERT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid");
+            if (mMovieManager.PendingCollisionWorldValidate())
+            {
+                AskWorld(GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_VALIDATE);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE:
+            NoProfileInvalidate();
+            NoNetworkingInvalidate();
+            if (!mbCollisionWorldInvalid)
+            {
+                mMovieManager.SetCollisionWorldValid(true);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_NETWORKING:
+            NoProfileInvalidate();
+            NoMovieInvalidate();
+            if (mbCollisionWorldInvalid)
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING;
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING:
+            NoProfileInvalidate();
+            NoMovieInvalidate();
+            if (ConsumeNetworkingValidate())
+            {
+                AskWorld(GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_VALIDATE);
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_NETWORKING;
+            }
+            break;
+        case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_NETWORKING:
+            NoProfileInvalidate();
+            NoMovieInvalidate();
+            if (!mbCollisionWorldInvalid)
+                meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
+            break;
+        default:
+            CGS_ASSERT(false, "Unhandled state");
+            break;
+        }
+    }
+
+    // ARTIST82514228. Pool15 is positively attested here. Invalidate IN_USE
+    // retries at WAITING_FOR_POOL_TO_EMPTY; it never fabricates completion.
+    void GuiModule::UpdateCarPoolValidation(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        switch (meCarPoolStateValidationState)
+        {
+        case E_CARPOOLSTATEVALIDATIONSTATE_IDLE:
+            if (mMovieManager.PendingCarPoolInvalidate())
+            {
+                if (mbBootMovieMode)
+                    mbTrafficPoolEmptied = true;
+                else
+                {
+                    const bool lbEmpty = true;
+                    lpOutput->GetGameActionQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lbEmpty), 13, sizeof(lbEmpty));
+                    mbTrafficPoolEmptied = false;
+                }
+                meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_EMPTY;
+            }
+            break;
+        case E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_EMPTY:
+            if (mbTrafficPoolEmptied)
+            {
+                CgsResource::Events::InvalidatePoolRequest lRequest;
+                lRequest.mpUser = &mEventReceiverQueue;
+                lRequest.miEventId = BrnResource::E_POOL_TRAFFIC;
+                lRequest.miPoolId = BrnResource::E_POOL_TRAFFIC;
+                lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 7);
+                meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE;
+            }
+            break;
+        case E_CARPOOLSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE:
+            if (mEventReceiverQueue.GetLength() > 0)
+            {
+                CGS_ASSERT(mEventReceiverQueue.GetLength() == 1, "mEventReceiverQueue.GetLength() == 1");
+                const CgsModule::Event* lpEvent = 0;
+                s32 liSize = 0;
+                const s32 liEventId = mEventReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+                CGS_ASSERT(liEventId == 7, "liEventId == CgsResource::ResourceIO::EVENT_INVALIDATEPOOL");
+                const auto* lpResponse = static_cast<const CgsResource::Events::InvalidatePoolResponse*>(lpEvent);
+                CGS_ASSERT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
+                    "lpInvalidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC");
+                mEventReceiverQueue.Clear(); // Original Clear preserves payload storage.
+                if (lpResponse->GetResult() != CgsResource::Events::InvalidatePoolResponse::E_RESULT_SUCCESS)
+                    meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_EMPTY;
+                else
+                {
+                    mMovieManager.SetCarPoolValid(false, lpResponse->GetResource(), lpResponse->GetDescriptor());
+                    meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE;
+                }
+            }
+            break;
+        case E_CARPOOLSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE:
+            if (mMovieManager.PendingCarPoolValidate())
+            {
+                CgsResource::Events::ValidatePoolRequest lRequest;
+                lRequest.mpUser = &mEventReceiverQueue;
+                lRequest.miEventId = BrnResource::E_POOL_TRAFFIC;
+                lRequest.miPoolId = BrnResource::E_POOL_TRAFFIC;
+                lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 8);
+                meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE;
+            }
+            break;
+        case E_CARPOOLSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE:
+            if (mEventReceiverQueue.GetLength() <= 0)
+                break;
+            {
+                CGS_ASSERT(mEventReceiverQueue.GetLength() == 1, "mEventReceiverQueue.GetLength() == 1");
+                const CgsModule::Event* lpEvent = 0;
+                s32 liSize = 0;
+                const s32 liEventId = mEventReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+                CGS_ASSERT(liEventId == 8, "liEventId == CgsResource::ResourceIO::EVENT_VALIDATEPOOL");
+                const auto* lpResponse = static_cast<const CgsResource::Events::ValidatePoolResponse*>(lpEvent);
+                CGS_ASSERT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
+                    "lpValidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC");
+                mEventReceiverQueue.Clear();
+                if (mbBootMovieMode)
+                    mbTrafficPoolEmptied = false;
+                else
+                {
+                    const bool lbEmpty = false;
+                    lpOutput->GetGameActionQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lbEmpty), 13, sizeof(lbEmpty));
+                    CGS_ASSERT(mbTrafficPoolEmptied, "mbTrafficPoolEmptied");
+                }
+                meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_FILL;
+            }
+            [[fallthrough]];
+        case E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_FILL:
+            if (!mbTrafficPoolEmptied)
+            {
+                CgsResource::SmallResource lResource;
+                CgsResource::Entry::ResourceDescriptor lDescriptor;
+                for (s32 liType = 0; liType < 3; ++liType)
+                {
+                    lResource.m_baseResources[liType] = 0;
+                    lDescriptor.m_baseResourceDescriptors[liType].m_size = 0;
+                    lDescriptor.m_baseResourceDescriptors[liType].m_alignment = 1;
+                }
+                mMovieManager.SetCarPoolValid(true, lResource, lDescriptor);
+                meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_IDLE;
+            }
+            break;
+        default:
+            CGS_ASSERT(false, "Unhandled state");
+            break;
+        }
+    }
+
     // ARTIST GuiModule::Prepare stage 10 (0x82519218..0x82519254): register the four
     // native debug components and clear the event receiver queue at the original stage.
     void GuiModule::PrepareNativeDebugComponents()
@@ -2197,6 +2554,36 @@ void GuiModule::Destruct()
                 case 513:   // (movie family)
                     mMovieManager.RecvEvent(lpEvent, liId);
                     break;
+
+                case 493:   // World collision invalidate/validate completion
+                {
+                    const auto* lpCollisionWorldEvent =
+                        reinterpret_cast<const GuiEventRequestCollisionWorldEvent*>(lpEvent);
+                    if (lpCollisionWorldEvent->meEventType ==
+                        GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_INVALIDATED)
+                        mbCollisionWorldInvalid = true;
+                    else if (lpCollisionWorldEvent->meEventType ==
+                             GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_VALIDATED)
+                        mbCollisionWorldInvalid = false;
+                    break;
+                }
+
+                case 512:   // Traffic-pool emptied/refilled latch
+                {
+                    const bool lbTrafficPoolEmpty =
+                        reinterpret_cast<const GuiEventTrafficPoolEmptied*>(lpEvent)->mbTrafficPoolEmpty;
+                    if (lbTrafficPoolEmpty)
+                    {
+                        CGS_ASSERT(!mbTrafficPoolEmptied, "!mbTrafficPoolEmptied");
+                        mbTrafficPoolEmptied = true;
+                    }
+                    else
+                    {
+                        CGS_ASSERT(mbTrafficPoolEmptied, "mbTrafficPoolEmptied");
+                        mbTrafficPoolEmptied = false;
+                    }
+                    break;
+                }
 
                 case 350:   // GuiEventProgressionProfileData -- the live-profile handoff
                     // ⭐⭐⭐ [one-profile wave 2026-08-28] THE MISSING HALF OF CASE 350, and

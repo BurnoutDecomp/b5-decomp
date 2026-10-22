@@ -26,7 +26,8 @@
 //     mCameraOutput             @0x0180 (384)    SetCameraOutput:  BrnDirector::Camera::Camera::operator= (this+384)
 //     mResourceInterface        @0x02E0 (736)    Get (read) / GetResour (write)
 //                                                 == GameDataIO::RequestInterface<512> (GROWN)
-//     mDirectorOutputInterface  @0x04F0 (1264)   GetDirectorOu (read) / GetDirectorOutputIn (write)
+//     mDirectorOutputInterface  @0x04F0 (1264)   GetDirectorOutputInterface (typed read/write)
+//                                                 GetDirectorOu / GetDirectorOutputIn remain legacy byte views
 //     mTimerRequestInterface    @0x0500 (1280)   GetTimerRequestIn (read) / GetTimerRequestInterfac (write)
 //                                                 + a sub-interface 16 bytes in @0x0510 (see below)
 //
@@ -64,7 +65,8 @@
 // never a raw console-offset span. Only the four-byte director profile remains opaque.
 //
 // NOTE. The read-side accessors assert the READ lock (status bit 4); the write-side accessors
-// (GetResour / GetDirectorOutputIn / GetTimerRequestInterfac / GetReplayRequestI, the +0x510
+// (GetResour / GetDirectorOutputInterface / GetDirectorOutputIn / GetTimerRequestInterfac /
+// GetReplayRequestI, the +0x510
 // GetTimerRequestSubInterfaceW, and both camera setters) assert the WRITE lock (status bit 3). Some
 // Get* deliberately test the write bit -- this mirrors the X360 asm and must not be "fixed".
 
@@ -87,7 +89,10 @@ namespace DirectorIO
         // `const RequestInterface<512>&` -- hence the const return.
         const BrnResource::GameDataIO::RequestInterface<512>* Get();
         u8*       GetDir();                     // -> mDirectorInterface        @0x0720
-        u8*       GetDirectorOu();              // -> mDirectorOutputInterface  @0x04F0
+        // DecFIGS 0x33E0D0: const read getter for the typed DirectorOutputInterface;
+        // ARTIST 0x823B3458 confirms the same member and read-lock contract.
+        const BrnDirector::DirectorOutputInterface* GetDirectorOutputInterface() const;
+        u8*       GetDirectorOu();              // legacy byte view for existing callers
         u8*       GetReplayRe();                // -> mReplayRequestInterface   @0x0724
         CgsSystem::TimerRequestInterface* GetTimerRequestIn();   // -> mTimerRequestInterface @0x0500
         // X360 0x823B24A0 -> &mVaultRequestInterface (this+0x510), READ-lock. DWARF name
@@ -101,7 +106,9 @@ namespace DirectorIO
         // DirectorModule::Prepare hands to WorldMap::LoadData, which stages the trigger /
         // traffic-lane / AI-lane requests onto it.
         BrnResource::GameDataIO::RequestInterface<512>* GetResour();
-        u8*       GetDirectorOutputIn();        // -> mDirectorOutputInterface  @0x04F0
+        // ARTIST 0x82207848: typed mutable view of the same member under the write lock.
+        BrnDirector::DirectorOutputInterface* GetDirectorOutputInterface();
+        u8*       GetDirectorOutputIn();        // legacy byte view for existing callers
         u8*       GetReplayRequestI();          // -> mReplayRequestInterface   @0x0724
         CgsSystem::TimerRequestInterface* GetTimerRequestInterfac();  // -> mTimerRequestInterface @0x0500
         // X360 0x822069B0 -> &mVaultRequestInterface (this+0x510), WRITE-lock. Same DWARF name

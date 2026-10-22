@@ -1131,7 +1131,8 @@ namespace BrnGame
         // [h:389-404: map-file reader, juice, mbHasGameTerminated - omitted]
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
-        // [h:407-410: disk-error/controller/game-start/over flags - omitted]
+        bool mbControllerDisconnected;                              // X360 gm+10094116; event 10 latch
+        // [other h:407-410 game-start/over flags - omitted]
         bool mbPrevStalled;                                          // h:411
         bool mbStalled;                                              // h:412
         bool mbRequestDoStepFrame;                                   // h:413

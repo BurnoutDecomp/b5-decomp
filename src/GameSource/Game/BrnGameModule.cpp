@@ -128,6 +128,7 @@ namespace BrnGame
         , mpUpdateOutputBufferStack(0)
         , mbSimPaused(false)
         , mbDiskError(false)
+        , mbControllerDisconnected(false)
         , mbSkipVideos(false)
         , mpReusableLoadingScreenAllocator(0)
         , mbPrevStalled(false)
@@ -671,6 +672,12 @@ namespace BrnGame
         // stage 2 -> LoadingScriptedState::LoadGUIModule @0x823EF310, which pumps the GUI
         // module's Prepare (vtable+0x58) once per frame and only posts the two id-144 RunFsm
         // records when it finally reports done. That is now where ours runs.
+
+        // ARTIST 0x823C9EA8 clears the disk-error, controller-disconnect, and loading-screen
+        // latches at gm+10094114, +10094116, and +10094125. Use their owned members here.
+        mbDiskError = false;
+        mbControllerDisconnected = false;
+        mbIsLoadingScreenVisible = false;
 
         // FLAG PC-platform leaf: retain the persistent host input buffer and existing
         // GUI-enable policy. Player selection follows the recovered original bind chain.
@@ -1888,19 +1895,11 @@ namespace BrnGame
     //   the helper's DestroyIOBuffer (asserting "mpStack->DestroyIOBuffer( &mpBuffer )",
     //     CgsModuleIOHelper.h:57).
     //
-    // NOT MADE, each with its blocker:
-    //   * game event 43 -- DirectorIO::OutputBuffer's director output interface is an opaque
-    //     16-byte span with a byte-pointer getter, and BrnDirector::DirectorOutputInterface has
-    //     no GetPauseRequest / GetPauseRequestState (its +0x0E / +0x0F bools). Both live under
-    //     GameSource/Director.
-    //   * the active GameMain caller still passes null for the replay post-sim output, so
-    //     this consumer remains dormant until the Replay buffers and Update_PostSim call
-    //     are wired. OutputBuffer_PostSim::GetGameEventQueue now exposes the original queue
-    //     under the existing source read lock, and this function appends it when supplied.
-    //   * game event 10 -- update-set bit 0x4 is set only by ConstructUpdateSet (the input
-    //     module's controller-disconnected byte), which is not reconstructed, and the module has
-    //     no mbControllerDisconnected member; the caller's ConstructUpdateSetFromFsm never sets it.
-    //
+    // The director pause-request and controller-disconnect producers below are source-recovered.
+    // The Replay append remains null-guarded because the active caller still passes null; its
+    // PostSim dispatch and lifetime are a separate prerequisite. The current PC full-cascade
+    // caller also supplies ConstructUpdateSetFromFsm(), whose body never sets bit 0x4, so the
+    // event-10 transition remains dormant until the existing incomplete late-set path is wired.
     // BridgeGuiToGameState takes the GUI module's own out-event queue and the game-state module
     // (its signature is adapted, see its declaration), so its game events reach the module's
     // carry queue directly rather than through this buffer's game-event queue. They land ahead
@@ -1941,13 +1940,39 @@ namespace BrnGame
             BridgeWorldToGameState(lpPostWorldInput, lpWorldUpdateOutputBuffer);
         }
 
-        // ARTIST 0x823E93D0..0x823E93E4: this is the Replay game-event append seat
-        // (after director event 43, before controller event 10). Those two producers
-        // remain separately absent here; the source accessor checks the read lock.
+        // ARTIST 0x823E9390..0x823E93CC: event 43 follows the World bridge and precedes
+        // Replay's queue append. The typed accessor asserts the Director output read lock.
+        const BrnDirector::DirectorOutputInterface* lpDirectorOutputInterface =
+            lpDirectorOutputBuffer->GetDirectorOutputInterface();
+        if (lpDirectorOutputInterface->GetPauseRequest())
+        {
+            BrnGameState::GameStateModuleIO::TrainingPauseStateChangedEvent lPauseEvent;
+            lPauseEvent.mbActivated = lpDirectorOutputInterface->GetPauseRequestState();
+            lpPostWorldInput->GetGameEventQueue()->AddEvent(
+                &lPauseEvent,
+                BrnGameState::GameStateModuleIO::E_EVENT_TRAINING_PAUSE_STATE_CHANGED);
+        }
+
+        // ARTIST 0x823E93D0..0x823E93E4: append Replay events after event 43 and before
+        // event 10. The active PC caller currently passes null for this output.
         if (lpReplaysPostSimOutputBuffer != 0)
         {
             lpPostWorldInput->GetGameEventQueue()->Append(
                 *lpReplaysPostSimOutputBuffer->GetGameEventQueue());
+        }
+
+        // ARTIST 0x823E93F8..0x823E9450: sample update-set bit 0x4 only when neither
+        // loading-screen visibility nor disk error suppresses the controller event.
+        const bool lbControllerDisconnected = (lUpdateSet & 0x4) != 0;
+        if (!mbIsLoadingScreenVisible && !mbDiskError &&
+            lbControllerDisconnected != mbControllerDisconnected)
+        {
+            mbControllerDisconnected = lbControllerDisconnected;
+            BrnGameState::GameStateModuleIO::ControllerDisconnectedEvent lDisconnectEvent;
+            lDisconnectEvent.mbDisconnected = lbControllerDisconnected;
+            lpPostWorldInput->GetGameEventQueue()->AddEvent(
+                &lDisconnectEvent,
+                BrnGameState::GameStateModuleIO::E_EVENT_CONTROLLER_DISCONNECTED);
         }
 
         // The picture-paradise byte is the director camera's own state flag (+0x144 bit 14 on the
