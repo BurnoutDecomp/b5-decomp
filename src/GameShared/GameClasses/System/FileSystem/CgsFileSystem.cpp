@@ -115,6 +115,42 @@ namespace CgsFileSystem
         return maFiles[luFileId].GetStatus();
     }
 
+    // ARTIST @0x828F07F8. The native bounds assertion is non-terminal; execution then indexes maFiles.
+    bool FileSystem::ReadInternal(u32 luFileID, void* lpOutputBuffer,
+                                  u64 luFilePosition, u64 luSizeToRead)
+    {
+        if (luFileID >= KU_MAXNOOFFILES)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Invalid file id\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp",
+                481);
+            CgsDev::Assert::EndAssert();
+        }
+
+        maFiles[luFileID].Read(lpOutputBuffer, luFilePosition, luSizeToRead);
+        return true;
+    }
+
+    // ARTIST @0x828E8B50. As above, keep the assertion non-terminal and return the native constant 1.
+    bool FileSystem::WriteInternal(u32 luFileID, const void* lpInputBuffer,
+                                   u64 luFilePosition, u64 luSizeToWrite)
+    {
+        if (luFileID >= KU_MAXNOOFFILES)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Invalid file id\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp",
+                500);
+            CgsDev::Assert::EndAssert();
+        }
+
+        maFiles[luFileID].Write(lpInputBuffer, luFilePosition, luSizeToWrite);
+        return true;
+    }
+
     // @0x828D6860. The X360 asm computes (stream - &maReadStreams[0]) / sizeof(stream) via the
     // 1440-byte stride; in human C++ that is plain pointer subtraction over the array.
     u32 FileSystem::GetReadStreamIndex(ReadStream lStream) const
