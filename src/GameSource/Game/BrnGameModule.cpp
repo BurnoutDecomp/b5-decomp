@@ -1893,9 +1893,10 @@ namespace BrnGame
     //     16-byte span with a byte-pointer getter, and BrnDirector::DirectorOutputInterface has
     //     no GetPauseRequest / GetPauseRequestState (its +0x0E / +0x0F bools). Both live under
     //     GameSource/Director.
-    //   * the replay post-sim game events -- no replay post-sim output buffer exists per step on
-    //     this build (the caller passes null), and ReplayIO::OutputBuffer_PostSim has no read
-    //     accessor for its game-event queue. The null-guarded lock keeps the console's bracket.
+    //   * the active GameMain caller still passes null for the replay post-sim output, so
+    //     this consumer remains dormant until the Replay buffers and Update_PostSim call
+    //     are wired. OutputBuffer_PostSim::GetGameEventQueue now exposes the original queue
+    //     under the existing source read lock, and this function appends it when supplied.
     //   * game event 10 -- update-set bit 0x4 is set only by ConstructUpdateSet (the input
     //     module's controller-disconnected byte), which is not reconstructed, and the module has
     //     no mbControllerDisconnected member; the caller's ConstructUpdateSetFromFsm never sets it.
@@ -1938,6 +1939,15 @@ namespace BrnGame
         if ((lUpdateSet & 0x20) == 0)
         {
             BridgeWorldToGameState(lpPostWorldInput, lpWorldUpdateOutputBuffer);
+        }
+
+        // ARTIST 0x823E93D0..0x823E93E4: this is the Replay game-event append seat
+        // (after director event 43, before controller event 10). Those two producers
+        // remain separately absent here; the source accessor checks the read lock.
+        if (lpReplaysPostSimOutputBuffer != 0)
+        {
+            lpPostWorldInput->GetGameEventQueue()->Append(
+                *lpReplaysPostSimOutputBuffer->GetGameEventQueue());
         }
 
         // The picture-paradise byte is the director camera's own state flag (+0x144 bit 14 on the
