@@ -6502,36 +6502,29 @@ void TrafficEntityModule::AddVehiclesToTargetList()
     if ( miDEBUGFlowtypeOverride >= 0
          && static_cast<u32>( miDEBUGFlowtypeOverride ) < mpData->muNumFlowTypes )
     {
-        // GATE -- the DEBUG flow-type-override arm body (0x827224A8..0x827225A8). The console
-        // streams one flow type's assets instead of the player's hull and then returns, which
-        // is why this gate returns too:
-        //     const FlowType* lpFlow = mpData->mpapFlowTypes[ miDEBUGFlowtypeOverride ];
-        //     Array<?,16> lAssetIds;  lAssetIds.Clear();
-        //     for (i < lpFlow->muNumVehicleTypes)
-        //         asset = mpData->mpaVehicleTypes[ lpFlow->mpauVehicleTypeIds[i] ].muAssetId;
-        //         if (!lAssetIds.Contains(asset)) lAssetIds.Append(asset);
-        //     mStreamer.AddVehiclesToTargetList( lAssetIds.GetLength(), &lAssetIds[0] );
-        //
-        // BLOCKER: the element type of that local array. The ledger and Array_char_16.cpp say
-        // `Array<char,16>`, but IDA's names for the four bodies are front-truncated
-        // ("char,16>::Append" at 0x8270B970) and no mangled name is exported, so a lost
-        // `unsigned ` cannot be ruled out. Both ends of the path are u8 (VehicleTypeData::
-        // muAssetId, and the sink AddVehiclesToTargetList(u32, const u8*)), so `char` would
-        // need a reinterpret_cast at the sink and a fresh `Array<u8,16>` would mint an
-        // unattested instantiation.
-        // DELETE WHEN: `idc.get_name(0x8270B970)` / `ida_name.get_name(0x8271B6F8)` in the .i64
-        // settles char vs unsigned char. The arm is ~15 lines of modelled types after that.
-        //
-        // Ship default -1 means this arm is never entered; engaging the slider streams nothing
-        // for that frame instead of silently streaming the hull's set.
-        static bool sbLogged = false;
-        LogMissingLeg_T1( sbLogged,
-            "AddVehiclesToTargetList DEBUG flow-type-override arm BODY (the selector, its -1 "
-            "ship default from Construct @0x82740220, FlowType::mpauVehicleTypeIds/"
-            "muNumVehicleTypes and VehicleTypeData::muAssetId are ALL modelled; the only open "
-            "item is whether the console's local Array<...,16> is char or unsigned char, which "
-            "the truncated IDA names at 0x8270B970/0x8271B6F8 do not settle and the sink "
-            "TrafficCarStreamer::AddVehiclesToTargetList(u32, const u8*) makes load-bearing)" );
+        // ARTIST uses this 16-entry local list as a byte set: Contains/FindFirstInstanceOf
+        // load the candidate and entries with lbz/lbzx, and Append copies one byte with
+        // lbz/stbx (0x8270B970, 0x8270D680). Use the existing Array<char,16> instantiation as byte storage;
+        // no signed numeric operation observes the element type, and the streamer consumes
+        // the same storage as u8 bytes.
+        const FlowType* lpFlowType = mpData->mpapFlowTypes[miDEBUGFlowtypeOverride];
+        Array<char, 16> laAssetIds;
+        laAssetIds.Construct();
+
+        for (u32 luIndex = 0; luIndex < lpFlowType->muNumVehicleTypes; ++luIndex)
+        {
+            const u16 luVehicleTypeId = lpFlowType->mpauVehicleTypeIds[luIndex];
+            const u8* lpAssetId = &mpData->mpaVehicleTypes[luVehicleTypeId].muAssetId;
+            const char& lrAssetId = *reinterpret_cast<const char*>(lpAssetId);
+            if (!laAssetIds.Contains(lrAssetId))
+            {
+                laAssetIds.Append(lrAssetId);
+            }
+        }
+
+        mStreamer.AddVehiclesToTargetList(
+            laAssetIds.GetLength(),
+            reinterpret_cast<const u8*>(&laAssetIds.GetItem(0)));
         return;
     }
 
