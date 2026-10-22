@@ -600,8 +600,8 @@ void DeveloperChallengeManager::PreWorldUpdate(const GameStateModuleIO::PreWorld
     //                           == E_ACTION_REQUEST_AUTOSAVE, UNFORCED (payload 0; the forced half is
     //                           OnPursuitWon's payload-1 post)
     //   0x8238D840              `std 0, 0x98(r30)`             ; maCompletedChallenges cleared (always)
-    // Action 298 has no enumerator in BrnGameActions.h yet (its consumer BrnGameModule.cpp:1089 is a
-    // debug placeholder arm); posted by value as the console does.
+    // E_ACTION_DEVELOPER_CHALLENGES_COMPLETED names this raw FastBitArray<15> payload; the GUI
+    // bridge forwards the same eight-byte bitset to its developer-challenge notification.
     if (maCompletedChallenges.GetFirstBitSet() != CgsContainers::FastBitArray<15>::KI_INVALID_BIT_INDEX)
     {
         CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
@@ -612,7 +612,8 @@ void DeveloperChallengeManager::PreWorldUpdate(const GameStateModuleIO::PreWorld
         // externals. [takedown P1 wave 2026-09-03]
         GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
         static_assert(sizeof(maCompletedChallenges) == 8, "FastBitArray<15> is the single u64 the console posts (li r6, 8 @0x8238D810)");
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&maCompletedChallenges), 298, 8);
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&maCompletedChallenges),
+                          GameStateModuleIO::E_ACTION_DEVELOPER_CHALLENGES_COMPLETED, 8);
         const u8 luUnforcedAutosave = 0;
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&luUnforcedAutosave), 55, 1);
     }

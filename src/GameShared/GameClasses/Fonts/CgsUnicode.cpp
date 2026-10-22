@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include <cstdint>
 
 // CgsUnicode -- UTF-8 helpers. Faithful ports of the X360 ARTIST bodies:
 //   ConvertUtf8CharToUtf16Char  0x827E6B08
@@ -25,6 +27,69 @@ namespace CgsUnicode
             if (lu8Lead < 0xF8u) return 3u;    // 11110xxx
             return 255u;                        // invalid
         }
+    }
+
+
+    // ARTIST82835828..5AE8; DecFIGS declares (const CgsUtf8*,CgsUtf16*) -> CgsUtf16*.
+    // The original converter accepts one BMP code unit per UTF8 character; it asserts
+    // above0xffff, then stores the low16 bits if the assertion continues. No surrogate
+    // conversion, replacement, bound or return-on-error is added. The return is the NUL.
+    CgsUtf16* ConvertUtf8ToUtf16(const CgsUtf8* lpUtf8String, CgsUtf16* lpUtf16String)
+    {
+        const char* const lpcFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsUnicode.cpp";
+        if (!IsValidUtf8String(lpUtf8String))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid UTF8 Character " << static_cast<u32>(*lpUtf8String) << " at "
+                    << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<std::uintptr_t>(lpUtf8String));
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 802);
+            CgsDev::Assert::EndAssert();
+        }
+        // ARTIST dword_820DE4C8; trailing-byte classification uses the same
+        // byte values as the existing helper (attested at byte_820DE3C8).
+        const u32 lauUtf8Offsets[4] = { 0, 0x00003080u, 0x000e2080u, 0x03c82080u };
+        while (*lpUtf8String != 0)
+        {
+            u32 luChar = 0;
+            const u32 luExtraBytes = lUtf8TrailingBytes(*lpUtf8String);
+            if (luExtraBytes == 255)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "Character supplied is not a valid start UTF8 character ("
+                        << static_cast<u32>(*lpUtf8String) << ")";
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 808);
+                CgsDev::Assert::EndAssert();
+            }
+            if (luExtraBytes >= 4)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("luExtraBytes < 4", lpcFile, 810);
+                CgsDev::Assert::EndAssert();
+            }
+            switch (luExtraBytes)
+            {
+            case 3: luChar = static_cast<u32>(*lpUtf8String++) << 6; // fall through
+            case 2: luChar = (luChar + *lpUtf8String++) << 6;        // fall through
+            case 1: luChar = (luChar + *lpUtf8String++) << 6;        // fall through
+            case 0: luChar += *lpUtf8String++; break;
+            default: break;
+            }
+            luChar -= lauUtf8Offsets[luExtraBytes];
+            if (luChar > 0xffffu)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lUtf32Char <= KUTF32_MAX_UTF16", lpcFile, 841);
+                CgsDev::Assert::EndAssert();
+            }
+            *lpUtf16String++ = static_cast<CgsUtf16>(luChar);
+        }
+        *lpUtf16String = 0;
+        return lpUtf16String;
     }
 
     // Faithful port of X360 0x827E6A28: advance past one UTF-8 character (lead + trailing bytes).

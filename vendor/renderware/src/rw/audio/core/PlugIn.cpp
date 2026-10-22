@@ -108,16 +108,19 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 {
     System *system = self->mpSystemUseGetSystemAccessor;        // lwz 4(self)
     u32 cursor = system->muDeferredRingCursor;                  // lwz 0x10B8
-    // FLAG PC-platform leaf: diagnostic stop BEFORE the observed writer can
-    // change its cursor, header-adjacent storage, or a command record.
-    const u32 luRecordSize = static_cast<u32>(sizeof(PlugInSetAttributeCommand));
-    const u32 luCapacity = system->muCommandBufferSize;
-    if (!system->mpDeferredRingBase || cursor > luCapacity ||
-        luRecordSize > luCapacity - cursor)
+    // FLAG PC-platform leaf: opt-in first-failure witness, before the observed
+    // writer changes its cursor or touches a command record. No check runs by default.
+    if (CgsSystem::RwacCommandTracePC::Enabled())
     {
-        CgsSystem::RwacCommandTracePC::StopBeforeWrite(system,
-            system->mpDeferredRingBase, cursor, luCapacity, luRecordSize,
-            system->muDeferredRingHighWater, system->muFrameCounter);
+        const u32 luRecordSize = static_cast<u32>(sizeof(PlugInSetAttributeCommand));
+        const u32 luCapacity = system->muCommandBufferSize;
+        if (!system->mpDeferredRingBase || cursor > luCapacity ||
+            luRecordSize > luCapacity - cursor)
+        {
+            CgsSystem::RwacCommandTracePC::StopBeforeWrite(system,
+                system->mpDeferredRingBase, cursor, luCapacity, luRecordSize,
+                system->muDeferredRingHighWater, system->muFrameCounter);
+        }
     }
     PlugInSetAttributeCommand *cmd =                            // *(self+0x20)+cursor
         reinterpret_cast<PlugInSetAttributeCommand *>(system->mpDeferredRingBase + cursor);

@@ -77,6 +77,19 @@ namespace CgsModule { template <s32, s32> class EventReceiverQueue; }   // GuiEv
 namespace BrnGui
 {
 
+class BrnGuiKeyboard;
+
+// DecFIGS BrnGuiEventTypeDefs.h:810-812; ARTIST8250BE54..64 posts id142
+// with one keyboard pointer. This is the stripped payload, naturally pointer-sized
+// on the host, not the former fixed four-byte demangled shell.
+struct GuiEventKeyboardResponse : public CgsModule::Event
+{
+    BrnGuiKeyboard* lpKeyboard;
+    s32 GetEventType() const { return 142; }
+};
+static_assert(sizeof(GuiEventKeyboardResponse) == sizeof(BrnGuiKeyboard*),
+              "keyboard response contains exactly one native pointer");
+
 // The three GUI render/flow layers the cache tracks apt components for (DWARF:
 // BrnGuiEventTypeDefs.h:883 `enum GuiFlow`). Used as the leading selector on the
 // GuiCache apt-component bookkeeping (e.g. AppendExpectedAptComponent) and on the
@@ -195,17 +208,20 @@ static_assert(sizeof(OverheadSignScore) == 0x20,
 // bridge posts and GuiCache::RecEvent consumes (relocated here from the demangled-shell
 // header, which would otherwise ODR-clash for TUs that include both).
 //   GuiEventUpdateHud (147): BridgeWorldVehicleDataToGui @0x823E5768 builds a RAW 12-byte
-//   {(s32)RaceCarState::mfSpeedMPH @972, (s32)mfRPM @984, mi8Gear @1092} local (BE stores
+//   {(s32)RaceCarState::mfSpeedMPH @972, (s32)mfRPM @984, (s32)mi8Gear @1092} local (word stores
 //   +0/+4/+8, no GuiEvent header); AddGuiEvent<GuiEventUpdateHud> @0x823DA5C8 ==
 //   AddEvent(&event, 147, 12). Cache case 147 -> +19208/+19212/+19216.
 struct GuiEventUpdateHud
 {
-    s32 miSpeedMph;   // @0
-    s32 miRPM;        // @4
-    s8  mi8Gear;      // @8
-    u8  mau8Pad[3];   // @9..@11 (the console posts 12 bytes)
+    s32 miPlayerMPH;   // @0, DecFIGS BrnGuiEventTypeDefs.h:961
+    s32 miPlayerRPM;   // @4, :962
+    s32 miPlayerGear;  // @8, :963; producer sign-extends the vehicle's signed byte
     s32 GetEventType() const { return 147; }
 };
+static_assert(sizeof(GuiEventUpdateHud) == 12, "ARTIST event147 has three32-bit words");
+static_assert(offsetof(GuiEventUpdateHud, miPlayerMPH) == 0 &&
+    offsetof(GuiEventUpdateHud, miPlayerRPM) == 4 &&
+    offsetof(GuiEventUpdateHud, miPlayerGear) == 8, "ARTIST event147 field geometry");
 
 //   GuiPlayerRaceCarIdEvent (376): the raw {active, global} index pair
 //   (@0x823DA458 == AddEvent(&event, 376, 8)); GuiCache case 376 asserts both ranges as
@@ -398,6 +414,8 @@ struct GuiEventUpdateSatNav
 
     SatNavIconInfo maIconInfo[KI_MAX_SAT_NAV_ICONS]; // @0x000 .. 0x8FF
     s32            miNumIcons;                        // @0x900
+    // ARTIST BSS 0x82FB508A; written by GuiDebugComponent::UpdateWorstCaseHUD.
+    static inline bool msbForceWorstCase = false;
 
     // ADDITIVE GROW (CgsGui::GuiModule::AddGuiEvent<GuiEventUpdateSatNav> @0x823D93A0):
     // the producer queues this event with the compile-time id 199 (inlined GetEventType()).
@@ -408,8 +426,8 @@ struct GuiEventUpdateSatNav
     // ---- reconstructed out-of-line bodies (X360 ARTIST) ----
     // @0x823B1980 — recompute the "worst case" sat-nav icon set: validate the active
     // icons, compact the located player-position icon to the front, then synthesise a
-    // ring of placeholder icons. Returns `this`.
-    GuiEventUpdateSatNav* DoWorstCase();
+    // ring of placeholder icons. The native member returns void.
+    void DoWorstCase();
 
     // @0x823A6B30 — range-check + return the leading icon's icon-type byte (a static
     // helper the CrashNavMap callers use). Reads maIconInfo[0].mi8IconType.
@@ -1872,15 +1890,15 @@ struct GuiEventCarJoinedEvent
 static_assert(sizeof(GuiEventCarJoinedEvent) == 16, "X360 AddGuiEvent size 16 (id 150)");
 
 // DWARF :1542 typedef GuiEventCarEliminatedFromEvent = GuiEvent<149> (payload-less on
-// PS3). X360 (id 151 = Update dispatch 64+87): HandleEliminatedEvent @0x8251D0E8 reads a
-// SIGNED BYTE at record+0x00 (lbz;extsb) and indexes KAPC_FINISH_POSITION_MESSAGES[1 + it].
-// FLAG: the field name is consumer-inferred (no DWARF member exists for the X360 payload).
+// PS3). ARTIST X360 id 151 is a one-byte event, but neither GuiCache::RecEvent nor
+// HudMessageAnalyzer::HandleEliminatedEvent reads its byte: the cache decrements
+// miOpponentsInEvent and the handler formats that count. Preserve a one-byte raw tag without
+// assigning an unattested payload meaning.
 struct GuiEventCarEliminatedFromEvent
 {
-    s8 mi8FinishPosition;   // +0x00 (0-based position; message id = POSITION_* [pos+1])
-
     s32 GetEventType() const { return 151; }
 };
+static_assert(sizeof(GuiEventCarEliminatedFromEvent) == 1, "ARTIST GUI151 is a one-byte tag");
 
 // DWARF :4528 (PS3 GuiEvent<217>; X360 id 219, record 8 bytes). "All collectibles of
 // this stunt family in this county are done" -- HandleStuntsComplete @0x8251F6E8 fires

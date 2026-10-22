@@ -1,96 +1,227 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"
-
-#include "types.hpp"
-#include <new>   // placement new (construct the owned ModelModule sub-object at its byte offset)
-
-// CgsGui::GuiModule::GuiModule  -- constructor.  Reconstructed from
-// BURNOUT_X360_ARTIST.XEX @ 0x827E54B0.
-//
-// GuiModule is the top-level GUI subsystem module: a CgsModule::ModuleSingleBuffered
-// derivative that owns the GUI ModelModule (the model-side subsystem, +0x228) plus a small
-// trailing byte flag. The X360 ctor is the standard subsystem-module shape (the same one the
-// sibling ctors CgsGui::ModelModule::ModelModule @0x827E4F10 and
-// BrnDirector::DirectorModule::DirectorModule use):
-//
-//   *(this+0x000)   = gpModuleBaseVTable               ; base-most (ModuleSingleBuffered) vtable
-//   RWMutex(this+0x010, 0, 1)                            ; base read/write lock A
-//   RWMutex(this+0x118, 0, 1)                            ; base read/write lock B
-//   *(this+0x000)   = gpGuiModuleVTable                 ; most-derived (GuiModule) vtable
-//   CgsGui::ModelModule::ModelModule(this+0x228)         ; mModelModule (owned sub-object)
-//   *(this+0x1B41C) = (u8)0                              ; trailing byte flag (stbx of 0)
-//   return this
-//
-// The byte store offset 0x1B41C is the X360 `lis r11,1; ori r11,r11,0xB41C; stbx r10,r31,r11`
-// (0x10000 | 0xB41C == 0x1B41C) -- a single-byte field past the embedded ModelModule.
-//
-// Because the surrounding ModuleSingleBuffered layout (and the ~0x18000-byte embedded
-// ModelModule) are not yet modelled as named members, every touched location is addressed by
-// its X360 byte offset through a char* view of `this` -- the same approach CgsModelModule.cpp
-// uses. Only the locations the constructor actually writes are reproduced.
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "rw/rwcore_general_alloc.h"
 
 namespace CgsGui
 {
-    // The owned ModelModule sub-object: declaration-only here (its real home is
-    // CgsModelModule.cpp; the per-TU `cl /c` gate does not link, so the body resolves at link
-    // time). Constructed in place at this+0x228.
-    struct ModelModule { ModelModule(); };
-}
-
-namespace EA
-{
-    namespace Thread
-    {
-        // Engine threading primitive (external; EAThread SDK, not project-owned). The two
-        // arguments are the (lockRecursively, intraProcess)-style construction flags the call
-        // site passes (r4 = 0, r5 = 1). Member-ctor form: r3 = this.
-        struct RWMutex
-        {
-            RWMutex(int liArg0, int liArg1);
-        };
-    }
-}
-
-namespace CgsGui
-{
-    // Vtable symbols installed by the constructor (defined elsewhere -- external data).
-    //   gpModuleBaseVTable -- the ModuleSingleBuffered base-most vtable (off_820CE500),
-    //                         installed first at +0x000 (shared with ModelModule's ctor).
-    //   gpGuiModuleVTable  -- GuiModule's most-derived vtable (off_820D1330).
-    extern void* const gpModuleBaseVTable;
-    extern void* const gpGuiModuleVTable;
-
-    // GuiModule's declaration now lives in the shared home CgsGuiModule.h (grown when
-    // the BridgeFrom* TU landed); this file keeps the ctor body.
-
-    // X360 byte offsets the ctor writes INSIDE the explicit maHead padding member
-    // (authoritative, from the asm). Everything past the head is a named member now
-    // (mpViewModule / mLoadNotifications -- see CgsGuiModule.h).
-    static const int KI_BASE_VTABLE    = 0x00000;
-    static const int KI_BASE_RWMUTEX_A = 0x00010;
-    static const int KI_BASE_RWMUTEX_B = 0x00118;
-    static const int KI_MODEL_MODULE   = 0x00228;   // addi r3, r31, 0x228
-
+    // ARTIST827E54B0 constructs the real base/Model owner and clears only
+    // the stored queue's constructed flag. Lifecycle state belongs to Construct.
     GuiModule::GuiModule()
     {
-        // --- the maHead span: base (CgsModule::ModuleSingleBuffered) sub-object, inlined ---
-        // The head's interior (base vtable slot, the two RW locks, the embedded
-        // ModelModule) is not yet modelled as named members; the writes anchor on the
-        // NAMED explicit-padding member at the attested offsets. Install the base-most
-        // vtable, build the two base read/write locks, then install the most-derived
-        // (GuiModule) vtable -- the standard ctor vtable hand-off.
-        char* lpcHead = reinterpret_cast<char*>(maHead);
-        *reinterpret_cast<void**>(lpcHead + KI_BASE_VTABLE) =
-            const_cast<void*>(gpModuleBaseVTable);
-        new (lpcHead + KI_BASE_RWMUTEX_A) EA::Thread::RWMutex(0, 1);
-        new (lpcHead + KI_BASE_RWMUTEX_B) EA::Thread::RWMutex(0, 1);
-        *reinterpret_cast<void**>(lpcHead + KI_BASE_VTABLE) =
-            const_cast<void*>(gpGuiModuleVTable);
+        mStoredGuiEvents.MarkUnconstructed();
+    }
 
-        // --- mModelModule (CgsGui::ModelModule) at head +0x228 ---
-        new (lpcHead + KI_MODEL_MODULE) ModelModule();
+    // ARTIST82856FA8. The non-null assertion does not gate continuation.
+    void GuiModule::Construct(ViewModule* lpViewModule, bool lbHighDef)
+    {
+        if (!lpViewModule)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpViewModule",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 64);
+            CgsDev::Assert::EndAssert();
+        }
+        CgsModule::ModuleSingleBuffered::Construct();
+        mGuiModel.Construct(lbHighDef);
+        mpGuiView = lpViewModule;
+        mStoredGuiEvents.Construct();
+        mSku.Construct(this);
+        mbCircleButtonMappingChanged = false;
+        mePrepareStage = E_PREPARE_START;
+        meReleaseStage = E_RELEASE_DONE;
+        mbIsNewModule = true;
+    }
 
-        // --- the load-notification queue's constructed flag (the X360 stbx of 0 at
-        //     +0x1B41C == the queue's leading byte; see BridgeFromModelToOutput) ---
-        mLoadNotifications.MarkUnconstructed();
+    // ARTIST82857070. Completed stages fall through in this call; waiting
+    // stages retain their seat. ARTIST joins CHECK_BUTTON_MAPPING at VIEW.
+    bool GuiModule::Prepare(GuiModuleConfig& lrConfig)
+    {
+        switch (mePrepareStage)
+        {
+        case E_PREPARE_START:
+        case E_PREPARE_MANAGER:
+            mePrepareStage = E_PREPARE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                return false;
+            mStoredGuiEvents.Prepare();
+            [[fallthrough]];
+        case E_PREPARE_MODEL:
+            mePrepareStage = E_PREPARE_MODEL;
+            if (!mGuiModel.Prepare(lrConfig.miAptPersistentBunldePoolId,
+                lrConfig.miAptStreamedbundlePoolId, lrConfig.miFontBundlePoolId,
+                lrConfig.miFSMBunldePoolId, lrConfig.miLanguageBundlePoolId,
+                lrConfig.miTexturesBundlePoolId, lrConfig.miGlobalTexturePoolId))
+                return false;
+            [[fallthrough]];
+        case E_PREPARE_SKU:
+            mePrepareStage = E_PREPARE_SKU;
+            mSku.SetLanguage(mSku.FindLanguage());
+            mSku.SetSku(mSku.FindSku());
+            [[fallthrough]];
+        case E_PREPARE_CHECK_BUTTON_MAPPING:
+        case E_PREPARE_VIEW:
+            mePrepareStage = E_PREPARE_VIEW;
+            if (!mpGuiView->Prepare(lrConfig.mpAptAllocator, lrConfig.mpRendererAllocator,
+                lrConfig.mpLanguageAllocator, lrConfig.mpFlaptAllocator))
+                return false;
+            [[fallthrough]];
+        case E_PREPARE_DONE:
+            mePrepareStage = E_PREPARE_DONE;
+            meReleaseStage = E_RELEASE_START;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Unknown prepare state",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 188);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
+    // ARTIST82857200: View, Model/queue, then the base manager.
+    bool GuiModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASE_START:
+        case E_RELEASE_VIEW:
+            meReleaseStage = E_RELEASE_VIEW;
+            if (!mpGuiView->Release())
+                return false;
+            [[fallthrough]];
+        case E_RELEASE_MODEL:
+            meReleaseStage = E_RELEASE_MODEL;
+            if (!mGuiModel.Release())
+                return false;
+            mStoredGuiEvents.Release();
+            [[fallthrough]];
+        case E_RELEASE_MANAGER:
+            meReleaseStage = E_RELEASE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Release())
+                return false;
+            [[fallthrough]];
+        case E_RELEASE_DONE:
+            meReleaseStage = E_RELEASE_DONE;
+            mePrepareStage = E_PREPARE_START;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Unknown release state",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 261);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
+    // ARTIST82857338 has no separate Model.Destruct call.
+    void GuiModule::Destruct()
+    {
+        mStoredGuiEvents.Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
+
+    // ARTIST8285F300: PreWorld has no resource/view input phase of its own.
+    void GuiModule::PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGuiModuleIO::OutputBuffer* lpOutput, ModelIO::OutputBuffer* lpModelOutput)
+    {
+        mGuiModel.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack, lpModelOutput);
+        const ModelIO::OutputBuffer* lpModelRead = lpModelOutput;
+        CgsModule::LockBuffersForIO(lpOutput, lpModelRead);
+        BridgeFromModelToOutput(lpOutput, lpModelRead);
+        CgsModule::UnlockBuffersForIO(lpOutput, lpModelRead);
+    }
+
+    // ARTIST828602C8. lpOutput enters and leaves write-locked by the BrnGui
+    // wrapper. r4/r5 are the IO stacks; the ninth total argument is View output
+    // (caller stack arg_54, loaded at828604BC), not 20 anonymous arguments.
+    void GuiModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGuiModuleIO::InputBuffer* lpInput, CgsGuiModuleIO::OutputBuffer* lpOutput,
+        ModelIO::InputBuffer* lpModelInput, ModelIO::OutputBuffer* lpModelOutput,
+        ViewIO::InputBuffer* lpViewInput, ViewIO::OutputBuffer* lpViewOutput)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miGuiPM);
+        const CgsGuiModuleIO::InputBuffer* lpInputRead = lpInput;
+        CgsModule::LockBuffersForIO(lpModelInput, lpInputRead);
+        BridgeFromInputToModel(lpModelInput, lpInputRead);
+        CgsModule::UnlockBuffersForIO(lpModelInput, lpInputRead);
+        CgsModule::LockBuffersForIO(lpViewInput, lpInputRead);
+        BridgeFromInputToView(lpViewInput, lpInputRead);
+        CgsModule::UnlockBuffersForIO(lpViewInput, lpInputRead);
+
+        if (!lpModelInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+            CgsDev::Assert::EndAssert();
+        }
+        lpModelInput->LockForWrite();
+        mSku.Update(lpModelInput, lpOutput);
+        if (mbCircleButtonMappingChanged == true)
+        {
+            GuiEventSetCircleButtonConfig lEvent;
+            lpOutput->AddGuiOutEvent(lEvent);
+            mbCircleButtonMappingChanged = false;
+        }
+        if (!lpModelInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+            CgsDev::Assert::EndAssert();
+        }
+        lpModelInput->UnlockForWrite();
+
+        CgsDev::PerfMonCpu::StartMonitor(miModelUpdatePM);
+        mGuiModel.Update(lpInputBufferStack, lpOutputBufferStack, lpModelInput, lpModelOutput);
+        CgsDev::PerfMonCpu::StopMonitor(miModelUpdatePM);
+        CgsDev::PerfMonCpu::StartMonitor(miModelViewBridgePM);
+        const ModelIO::OutputBuffer* lpModelRead = lpModelOutput;
+        CgsModule::LockBuffersForIO(lpViewInput, lpModelRead);
+        BridgeFromModelToView(lpViewInput, lpModelRead);
+        CgsModule::UnlockBuffersForIO(lpViewInput, lpModelRead);
+        CgsDev::PerfMonCpu::StopMonitor(miModelViewBridgePM);
+        CgsDev::PerfMonCpu::StartMonitor(miViewUpdatePM);
+        mpGuiView->Update(lpInputBufferStack, lpOutputBufferStack, lpViewInput, lpViewOutput);
+        CgsDev::PerfMonCpu::StopMonitor(miViewUpdatePM);
+
+        lpModelRead->LockForRead();
+        BridgeFromModelToOutput(lpOutput, lpModelRead);
+        lpModelRead->UnlockForRead();
+        lpViewOutput->LockForWrite();
+        AptCommunicator::FlushTriggerEventsTo(lpViewOutput->GetGuiEventQueue());
+        lpViewOutput->UnlockForWrite();
+        const ViewIO::OutputBuffer* lpViewRead = lpViewOutput;
+        lpViewRead->LockForRead();
+        BridgeFromViewToOutput(lpOutput, lpViewRead);
+        lpViewRead->UnlockForRead();
+
+        lpOutput->UnlockForWrite();
+        lpOutput->LockForRead();
+        BridgeFromOutputToGui(lpOutput);
+        lpOutput->UnlockForRead();
+        lpOutput->LockForWrite();
+        CgsDev::PerfMonCpu::StopMonitor(miGuiPM);
+    }
+
+    // ARTIST8285AF38. Publish the caller's renderer set under its read lock,
+    // then let the real View.Render consume its input.
+    void GuiModule::Render(ViewIO::InputBuffer* lpViewInput,
+        CgsGuiModuleIO::InputBuffer* lpInput)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miGuiRenderPM);
+        const CgsGuiModuleIO::InputBuffer* lpInputRead = lpInput;
+        CgsModule::LockBuffersForIO(lpViewInput, lpInputRead);
+        lpViewInput->SetImRenderers(lpInputRead->GetImRenderers());
+        CgsModule::UnlockBuffersForIO(lpViewInput, lpInputRead);
+        mpGuiView->Render(lpViewInput);
+        CgsDev::PerfMonCpu::StopMonitor(miGuiRenderPM);
     }
 }

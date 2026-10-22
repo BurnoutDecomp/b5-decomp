@@ -375,16 +375,16 @@ s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 //   * dispatches by online game mode into SetRaceResults (online race) or SetStuntResults
 //     (online fugitive / free-burn / mode-end) keyed by the post-incremented round-write cursor.
 //
-// The X360 binary takes the game-mode discriminant as a 4th register argument the keystone's
-// 3-parameter signature drops; semantically it is the EGameModeType the results aggregate already
-// records (mOnlineGameResults.miEventType, stamped by OnModeStart -- X360 stw r30,0x4E04), so the
-// switch reads it back from there. The X360 free-build's distinct mNetworkRoundData::SetPosition
-// path (PS3 DWARF) is not present in this 0x8232BC78 body, which writes the results aggregate.
+// ARTIST receives the caller's game-mode discriminant as its fourth argument (r7),
+// independently of the recorded results header, and switches on that live argument.
+// The older DecFIGS signature lacks this target argument. The target writes the online
+// results aggregate rather than the older PS3 NetworkRoundData::SetPosition path.
 //
 // The round-time pointer handed to SetRaceResults follows that method's committed convention: a
 // two-float {seconds-as-f32, fraction} pair (SetRaceResults re-narrows word[0] back to s32 seconds).
 void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSystem::Time lTime,
-                                         EActiveRaceCarIndex leRaceCarIndex)
+                                         EActiveRaceCarIndex leRaceCarIndex,
+                                         GameStateModuleIO::EGameModeType leGameMode)
 {
     CarData* lpCarData = (lID == K_INVALID_PLAYER_ID) ? GetCarData(leRaceCarIndex) : GetCarData(lID);
     CGS_ASSERT(lpCarData != NULL, "lpCarData");
@@ -411,8 +411,8 @@ void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSys
 
         const s32 liRoundIndex = mOnlineGameResults.miReserved0x2C;
 
-        // ---- mode dispatch (discriminant == the recorded online event type) ----
-        switch (mOnlineGameResults.miEventType)
+        // ARTIST 0x8232BC98 preserves the caller's mode in r26, then switches on it.
+        switch (leGameMode)
         {
             case GameStateModuleIO::E_MODE_ONLINE_RACE:
             {

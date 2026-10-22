@@ -17,7 +17,7 @@ namespace CgsDev { namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char*, const char*, int) { ++suAsserts; return 0; }
 void* EndAssert() { return nullptr; }
-} namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+} namespace Log { StrStreamBase* gpDebugPrint = nullptr; }
 namespace Message { u64 gxMessageFilterFlags = 0; } }
 
 #include "gui_interpreter_io.inc"

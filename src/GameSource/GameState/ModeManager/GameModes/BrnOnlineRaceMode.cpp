@@ -23,18 +23,12 @@ namespace
     // `difference > 20.0` test).
     const f32 KF_OUTRO_GRACE_SECONDS = 20.0f;
 
-    // Base outro hold for a finished local player: the returned timeout is this minus how far behind
-    // the winner the player finished. X360 flt_82004FD8 -- a shared .data float whose exact value is
-    // not carried in the IDA exports (referenced symbolically by many functions). Modelled as a named
-    // estimate; INTEGRATOR resolves the literal from the XEX .data section. (Estimate, provably not
-    // 0.0f: the body subtracts the 0..20 s behind-winner delta from it and hands back a positive
-    // outro hold.)
-    const f32 KF_OUTRO_BASE_SECONDS = 30.0f; // .data @0x82004FD8 (value UNRESOLVED; estimate)
+    // Original ARTIST XEX: 0x82004FD8, BE 41c80000 = 25.0f. The finished-player
+    // hold subtracts the player's finish-time delta from this base (GetOutroTimeout 82330FD0).
+    const f32 KF_OUTRO_BASE_SECONDS = 25.0f;
 
-    // Outro hold when the local player did not finish the race. X360 flt_82020F98 -- another shared
-    // .data float not carried in the exports. Modelled as a named estimate; INTEGRATOR resolves the
-    // literal from the XEX .data section.
-    const f32 KF_OUTRO_NOT_FINISHED_SECONDS = 5.0f; // .data @0x82020F98 (value UNRESOLVED; estimate)
+    // Original ARTIST XEX: 0x82020F98, BE 40a00000 = 5.0f.
+    const f32 KF_OUTRO_NOT_FINISHED_SECONDS = 5.0f;
 }
 
 // X360: BrnGameState::OnlineRaceMode::GetName (already owned by the GetName-only sibling TU).

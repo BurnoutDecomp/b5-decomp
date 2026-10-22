@@ -1,5 +1,8 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // original movie acquire request
+#include "SDKs/EA/GameTalk/GameTalk.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
 #include <cstdio>                                                         // std::snprintf (log formatting)
@@ -25,10 +28,17 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::AptCommunicator (the per-frame trigger publish)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                // FLApt live-instance allocator
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "rw/rwcore_general_alloc.h"                                   // actual public allocator derivation
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                      // BrnResource::GameDataIO::Input/OutputBuffer (the colour-calibration screen's IO)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // AllocatorList::GetRWLinearResourceAllocator (mGuiConfig.mpTextureAllocator)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h" // GetScriptedLoadGameData{Input,Output} (the PC stand-in for the scheduler's GameData IO pair)
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h"      // BrnNetwork::LiveRevengeProfile (the PC live-revenge block)
+
+// Existing PC platform providers in System/PC/CgsXboxLivePC.cpp.
+extern "C" void* XNotifyCreateListener(unsigned long long luAreas);
+extern "C" int XNotifyGetNext(void* lhListener, unsigned long luFilter,
+    unsigned long* lpuId, unsigned long* lpuParam);
 
 // DecFIGS types GuiModule::Construct's alternate-text palette as const RGBA*.
 // ARTIST's eight packed words at 0x82F27F84 are the complete table.
@@ -68,6 +78,37 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 namespace
 {
+    // ARTIST file-global Tool.GUI request owners at82FB5060/5088/5089.
+    // The native image starts these bytes at zero. Construct clears only the
+    // start flag; native Update consumes start before stop. Names are host projections.
+    char gacGuiToolHookName[32] = {};
+    bool gbGuiToolStartHookRequested = false;
+    bool gbGuiToolStopHookRequested = false;
+
+    // Host extraction of the callback's duplicated assert/copy block. Keep
+    // assertion continuation and strncpy's original fixed32 behavior.
+    void CopyGuiToolHookName(const char* lpcContent, s32 liOriginalLine)
+    {
+        if (!lpcContent)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpcContent != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", liOriginalLine);
+            CgsDev::Assert::EndAssert();
+        }
+        if (std::strlen(lpcContent) >= 32)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "String too long: " << (lpcContent ? lpcContent : "<NULLSTRING>");
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+            CgsDev::Assert::EndAssert();
+        }
+        std::strncpy(gacGuiToolHookName, lpcContent, 32);
+    }
+
     // [FLAG PC witness] BRN_HUD_VIS gate for the `[hud-vis] cmd` lines in the channel-42
     // drain (lane `hud`, bug-test wave 2026-09-06). NOT IN THE X360 BINARY.
     // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
@@ -173,19 +214,6 @@ namespace
     BrnNetwork::LiveRevengeProfile s_pcLiveRevengeProfile;
     static_assert(sizeof(BrnNetwork::LiveRevengeProfile) == 30016,
                   "the live-revenge block is the 30016-byte segment the profile manager copies");
-
-    // The shared access-pointer bundle the HUD flow's state interface hands its GUI
-    // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
-    // AptAux singleton). The console's view module owns the equivalent module-shared
-    // GuiAccessPointers instance.
-    CgsGui::GuiAccessPointers s_GuiAccessPointers;
-
-    // FLAG PC stand-in: the real CgsGui::ModelModule (the GUI model dispatcher) is not
-    // yet instantiable on PC (its reconstructed ctor initialises X360 byte offsets over
-    // an unmodelled ~0x18000-byte layout). GuiFsmController::Prepare only STORES and
-    // null-checks the pointer (no dereference on any reconstructed path), so a sentinel
-    // non-null stands in until the model module lands.
-    u8 s_ModelModuleSentinel;
 
     // The subscription record the states post through StateInterface::RegisterForEvents
     // (X360 wire records 34/35: { s32 miEventType; EventObserver* } -- only the leading
@@ -847,6 +875,9 @@ namespace BrnGui
         // non-null label the base accepts.
         mViewModule.Construct(this, "BrnGuiView", 7, 1280.0f / 720.0f,
                               KA_ALTERNATE_TEXT_COLOURS, 8);
+        // ARTIST825184E4: construct the actual shared Model and stored-event
+        // owner. Native preparation/update selection remains with its caller.
+        CgsGui::GuiModule::Construct(&mViewModule, lbHighDef);
         mViewModule.GetFlaptManager()->SetSoundTriggerHandler(
             &GuiModule::FlaptSoundTriggerCallback, this);
         // X360 GuiModule::Construct @0x82518B18: EffectsArbitrator::Construct just ahead of
@@ -856,6 +887,10 @@ namespace BrnGui
         mMovieManager.Construct();
         // ARTIST82518B88 initializes the actual boot-movie owner byte.
         mbBootMovieMode = true;
+        // ARTIST82518858: distinct from primary Prepare and release stages.
+        mePrepareStage = E_PREPARE_START;
+        muPrepare2State = 0;
+        meReleaseStage = E_RELEASE_DONE;
         // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
@@ -885,6 +920,12 @@ namespace BrnGui
         // AptRenderHandler::mpCustomRendererManager -- until this leg NOTHING in the PC
         // build instantiated it, so `_type='PlayerImage'` on the licence card (and every
         // other custom control) had nowhere to resolve to.
+        // ARTIST82518BB0..BD0: bind this receiver's own backing with 1024/16, then Clear.
+        mEventReceiverQueue.Construct();
+        // ARTIST82518BF0..C0C: the real receiver owns its backing storage.
+        mGDMReceiverQueue.Construct();
+        gbGuiToolStartHookRequested = false; // ARTIST82518C38..82518C44
+        mhSysListenerHandle = 0; // ARTIST82518C48, before serialiser Construct
         mGuiModuleSerialiser.Construct(); // ARTIST82518C4C, before manager Construct
         mCustomRendererManager.Construct();
 
@@ -909,8 +950,8 @@ namespace BrnGui
         mbRenderInputCompletedPC = false;
         mCompletedRenderInputPC.Construct();
         mpOutputBuffer = 0;
-        mpTextureAllocator = 0;   // filled by Prepare (X360 GuiModule::Prepare @0x82518DE0)
-        mpGuiHeapAllocator = 0;   // [licence-icon] filled by Prepare (mGuiConfig row +311924, bank 31)
+        mGuiConfig.mpTextureAllocator = 0;   // retained selected PC initialization
+        mGuiConfig.mpRendererAllocator = 0;  // retained selected PC initialization
         mbCustomRenderersPrepared = false;   // [licence-icon] the manager staged-prepare latch
 
         // The flow-controller chain (the X360 Construct's flow set): the cache Construct
@@ -1002,43 +1043,44 @@ namespace BrnGui
         // ViewModule::GetFlaptManager, and this GuiCache are the four live owners.
         // AptAux itself is installed during Prepare below because the PC runtime host
         // constructs that singleton there; the other three owners already exist.
-        s_GuiAccessPointers.Construct();
-        s_GuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
-        s_GuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
-        s_GuiAccessPointers.SetGuiCache(&mGuiCache);
+        mGuiAccessPointers.Construct();
+        mGuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
+        mGuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
+        mGuiAccessPointers.SetGuiCache(&mGuiCache);
+        // ARTIST82518CE8/D24: publish the actual contained receiver and serialiser.
+        // The serialiser's static buffer is allocated by the replay owner later.
+        mGuiAccessPointers.SetGDMReceiverQueue(&mGDMReceiverQueue);
+        mGuiAccessPointers.SetSerialiser(&mGuiModuleSerialiser);
 
-        mProfileManager.Construct(mGuiCache, mSystemUserProfile,
+        // ARTIST82518798/A0/A8: the profile watcher owns these three initial stores.
+        mSystemUserProfile.Construct();
+        mProfileHost.GetProfileManager().Construct(mGuiCache, mSystemUserProfile,
                                   mViewModule.GetLanguageManager());
+        // ARTIST825187CC/D0/D4: real contained keyboard and listener host.
+        mGuiKeyboard.Construct();
+        mKeyboardHost.Construct();
         mScreenFlow.Construct(&mGuiCache);
         mHudFlow.Construct(&mGuiCache);
         mOverlayFlow.Construct(&mGuiCache);
+        // ARTIST82518570/580/590/5A0: the four real observer owners, event0.
+        mGuiModel.AddGuiEventObserver(&mHudFlow, 0);
+        mGuiModel.AddGuiEventObserver(&mScreenFlow, 0);
+        mGuiModel.AddGuiEventObserver(&mOverlayFlow, 0);
+        mGuiModel.AddGuiEventObserver(&mAlwaysAvailableComponentsManager, 0);
         mFsmController.Construct();
 
-        // ---- the HUD-message pair (gateui wave, round 2) --------------------------------
-        // X360 GuiModule::Construct @0x82518028, lines 277-278 + 376, verbatim order:
-        //     HudMessageDirector::Construct(gm + 639264, gm + 552, gm + 1005376);
-        //     HudMessageAnalyzer ::Construct(gm + 660992, gm + 639264);
-        //     ... *(gm + 1021876) = gm + 639264;   // GuiCache::SetHudMessageDirector
-        //
-        // ⚠ FLAG PC bring-up (argument sourcing only -- both bodies are real
-        // reconstructions): the console's first Construct argument is its embedded
-        // CgsGui::ModelModule (gm+552 == the CgsGui::GuiModule base's +0x228). This tree's
-        // BrnGui::GuiModule derives straight from CgsModule::ModuleSingleBuffered and there
-        // is no reconstructed CgsGui::ModelModule anywhere, so there is nothing to pass and
-        // NOTHING IS FABRICATED HERE -- the argument is NULL and the console's own
-        // "lpModelModule" assert (BrnGuiHudMessageDirector.cpp:80) fires ONCE per boot as
-        // the honest marker for that gap. It costs no behaviour: mpModelModule is
-        // write-only in the whole recovered surface (the console reaches the model IO
-        // buffer through ModelModule::AddGuiEvents @0x8285DF50, which never touches its own
-        // `this`), and HudMessageDirector::Update takes the buffer as its own argument.
-        // DELETE-WHEN CgsGui::ModelModule is reconstructed (or BrnGui::GuiModule is given
-        // its CgsGui::GuiModule base).
-        mHudMessageDirector.Construct(0, &mGuiCache);
+        // ARTIST82518720 and the inlined overlay Construct: both directors receive the real contained
+        // Model. Their original publishers are restored together (CP16).
+        mHudMessageDirector.Construct(&mGuiModel, &mGuiCache);
         mHudMessageAnalyzer.Construct(&mHudMessageDirector);
-        // The overlays director, constructed inline by the console right after the analyzer.
-        // Its model-module argument is the same missing CgsGui::ModelModule as the HUD
-        // director's above, so it is NULL here too (see BridgeOutEvents).
-        mOverlaysDirector.Construct(0);
+        mOverlaysDirector.Construct(&mGuiModel);
+
+        // ARTIST825187D8..82518818: actual debug subobjects, after their real director owner.
+        // Their C++ constructors installed only vtables/queue flags; this is their data phase.
+        mDebugComponent.Construct(this);
+        mHudMessageDebugComponent.Construct(&mHudMessageDirector);
+        mSatNavDebugComponent.Construct(this);
+        mGuiCacheDebugComponent.Construct(this);
 
         // ⭐ [gateui r4] THE CONTROLLER HAND-OFF -- the missing writer of
         // GuiCache::mpHudMessageController. X360 GuiModule::Construct @0x82518028
@@ -1113,11 +1155,106 @@ namespace BrnGui
         mbPrepared          = false;
     }
 
+    // ARTIST82518E9C..82519024, extracted from the original inline memory
+    // stage. No selected host caller invokes this helper yet.
+    void GuiModule::PopulateNativeGuiConfig(
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
+    {
+        if (!lpGameDataOutput->GetAllocatorList())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid allocator list passed into BrnGui::GuiModule::Prepare";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 367);
+            CgsDev::Assert::EndAssert();
+        }
+        mGuiConfig.miAptPersistentBunldePoolId = 8;
+        mGuiConfig.miAptStreamedbundlePoolId = 9;
+        mGuiConfig.miFontBundlePoolId = 0;
+        mGuiConfig.miGlobalTexturePoolId = 10;
+        mGuiConfig.miFSMBunldePoolId = 11;
+        mGuiConfig.miLanguageBundlePoolId = 11;
+        mGuiConfig.miTexturesBundlePoolId = 12;
+        mGuiConfig.mpAptAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(32);
+        mGuiConfig.mpFSMAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(38);
+        mGuiConfig.mpRendererAllocator =
+            lpGameDataOutput->GetAllocatorList()->GetRWGeneralResourceAllocator(31);
+        mGuiConfig.mpLanguageAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(38);
+        mGuiConfig.mpGuiStateAllocator = lpGameDataOutput->GetAllocatorList()->GetLinearAllocator(44);
+        mGuiConfig.mpTextureAllocator =
+            lpGameDataOutput->GetAllocatorList()->GetRWLinearResourceAllocator(42);
+        mGuiConfig.mpFlaptAllocator = lpGameDataOutput->GetAllocatorList()->GetLinearAllocator(66);
+        mGuiConfig.mpGuiStateAllocator->SetAlignment(16);
+        mGuiConfig.mpFlaptAllocator->SetAlignment(16);
+    }
+
+    // ARTIST825193C8..82519444. Counts and tuple words are recovered
+    // directly from the three original tables; enum ordinals are target values.
+    // This extracted block has no selected host caller.
+    bool GuiModule::EnsureNativeGuiResources()
+    {
+        static const CgsGui::sResourceTuple maEuropeanFontResourcesToLoad[3] =
+        {
+            { 17u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            { 18u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            { 19u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+        };
+        static const CgsGui::sResourceTuple maJapaneseFontResourcesToLoad[2] =
+        {
+            { 20u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            { 21u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+        };
+        static const CgsGui::sResourceTuple maBasicResourcesToLoad[2] =
+        {
+            { 125u, static_cast<CgsGui::ResourceRequestTypes>(7) },
+            { 196u, static_cast<CgsGui::ResourceRequestTypes>(10) },
+        };
+        const CgsGui::sResourceTuple* lpFonts;
+        u32 luFontCount;
+        if (mGuiCache.GetLanguage() == CgsLanguage::E_LANGUAGE_JAPANESE)
+        {
+            lpFonts = maJapaneseFontResourcesToLoad;
+            luFontCount = 2;
+        }
+        else
+        {
+            lpFonts = maEuropeanFontResourcesToLoad;
+            luFontCount = 3;
+        }
+        if (!mGuiCache.EnsureResourcesAreLoaded(lpFonts, luFontCount))
+            return false;
+        return mGuiCache.EnsureResourcesAreLoaded(maBasicResourcesToLoad, 2);
+    }
+
+    // ARTIST824F10D8. GameTalk's actual MessageHandler contract is void.
+    // Registration belongs to native Prepare and remains unselected here.
+    void GuiModule::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
+    {
+        const char* lpcKey = lpMessage->GetKey(0);
+        if (_strnicmp(lpcKey, "StartHook", 9) == 0)
+        {
+            CopyGuiToolHookName(lpMessage->GetKeyContent("StartHook"), 3554);
+            gbGuiToolStartHookRequested = true;
+        }
+        else if (_strnicmp(lpcKey, "StopHook", 8) == 0)
+        {
+            CopyGuiToolHookName(lpMessage->GetKeyContent("StopHook"), 3564);
+            gbGuiToolStopHookRequested = true;
+        }
+        else if (_strnicmp(lpcKey, "StopMenuHook", 12) == 0)
+        {
+            std::strncpy(gacGuiToolHookName, "", 32);
+            gbGuiToolStopHookRequested = true;
+        }
+    }
+
     bool GuiModule::Prepare()
     {
         // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 1 (the mGuiConfig fill) -----------
         // The console's stage 1 reads seven pool ids and seven allocators out of the GameData
-        // OUTPUT buffer's AllocatorList. The ONE row this build needs is
+        // OUTPUT buffer's AllocatorList. The selected PC path keeps its existing two rows:
         //     *(gm + 311932) = AllocatorList::GetRWLinearResourceAllocator(list, 42)
         // (0x82518DE0's `ori r21, r11, 0xC27C`), the allocator ColourCalibrationScreen::Update
         // carves its texture-state resource from. Bank 42 is "Network Image Allocator" and is
@@ -1136,8 +1273,8 @@ namespace BrnGui
         // CgsModule::IOBuffer's lock is a single status BIT (CgsIOBuffer.h:26/:42), not a count --
         // an inner Unlock would clear the caller's lock and its own UnlockForRead would then assert
         // "Not locked for read". GetAllocatorList's read assert is satisfied by the caller's bracket.
-        mpTextureAllocator = 0;
-        mpGuiHeapAllocator = 0;
+        mGuiConfig.mpTextureAllocator = 0;
+        mGuiConfig.mpRendererAllocator = 0;
         {
             BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
                 BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
@@ -1149,15 +1286,9 @@ namespace BrnGui
                     lpGameDataOutput->GetAllocatorList();
                 if (lpAllocators != 0)
                 {
-                    mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
-                    // [licence-icon] the console's sibling stage-1 row:
-                    //   *(gm + 311924) = AllocatorList::GetRWGeneralResourceAllocator(list, 31)
-                    // -- the heap allocator the custom-renderer manager Prepare receives.
-                    // (reinterpret: rw::core::GeneralResourceAllocator is forward-declared
-                    // opaque in this TU; on the rwcore ABI it IS an IResourceAllocator -- the
-                    // console stores the same pointer in the IResourceAllocator config row.)
-                    mpGuiHeapAllocator = reinterpret_cast<rw::IResourceAllocator*>(
-                        lpAllocators->GetRWGeneralResourceAllocator(31));
+                    mGuiConfig.mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
+                    mGuiConfig.mpRendererAllocator =
+                        lpAllocators->GetRWGeneralResourceAllocator(31);
                 }
             }
         }
@@ -1195,7 +1326,7 @@ namespace BrnGui
         // Complete the shared access bundle with the AptAux singleton created by the
         // PC runtime host above.  Construct already installed the language, Flapt, and
         // GuiCache owners exactly as the X360 GuiModule::Construct does.
-        s_GuiAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+        mGuiAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
 
         // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 7 -------------------------------
         //   v27 = (*(*(v3+311952) + 4))(v3+311952, rwGeneralResource, rwLinearResource);
@@ -1211,12 +1342,12 @@ namespace BrnGui
         //
         // ⭐ [licence-icon] 2026-08-24: the allocator FLAG that stood here is PAID -- the call
         // now passes the console's own pair (stage 1 above fills both mGuiConfig rows: slot 31
-        // general -> mpGuiHeapAllocator, slot 42 linear -> mpTextureAllocator; the X360 stage-7
+        // general -> mGuiConfig.mpRendererAllocator, slot 42 linear -> mGuiConfig.mpTextureAllocator; the X360 stage-7
         // call is `Prepare(*(gm+311924), *(gm+311932))` @0x82518D68). One call advances the
         // staged prepare as far as it can this frame; the console re-enters Prepare until every
         // stage passes, so Update owns the PC pump (see the [licence-icon] block there).
         const bool lbCustomRenderersPrepared =
-            mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
+            mCustomRendererManager.Prepare(mGuiConfig.mpRendererAllocator, mGuiConfig.mpTextureAllocator);
         mbCustomRenderersPrepared = lbCustomRenderersPrepared;
         mViewModule.SetCustomRendererManager(&mCustomRendererManager, 10,
                                              &mGuiModuleSerialiser);
@@ -1244,11 +1375,32 @@ namespace BrnGui
         // listener, prepares the embedded save/load system, and carves the mugshot
         // circular buffer (X360 hands the 0x26 game-data heap + a module linear; the
         // PC module owns dedicated backing regions -- see the FLAG at the statics).
-        mSystemUserProfile.Prepare();   // X360: CGS_ASSERT'd @BrnGuiModule.cpp:519
+        // ARTIST82519264..82519300: retain call order and assertion continuation.
+        if (!mSystemUserProfile.Prepare())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mSystemUserProfile.Prepare()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 519);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mGuiKeyboard.Prepare(&mSystemUserProfile))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mGuiKeyboard.Prepare(&mSystemUserProfile )",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 523);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mKeyboardHost.Prepare(&mGuiKeyboard))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mKeyboardHost.Prepare(&mGuiKeyboard)",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 525);
+            CgsDev::Assert::EndAssert();
+        }
         mProfileHeap.Construct(s_profileHeapBacking, static_cast<s32>(sizeof(s_profileHeapBacking)));
         mProfileLinear.Construct();
         mProfileLinear.Create(s_profileLinearBacking, sizeof(s_profileLinearBacking));
-        mProfileManager.Prepare(&mProfileHeap, &mProfileLinear);
+        mProfileHost.GetProfileManager().Prepare(&mProfileHeap, &mProfileLinear);
 
         // Install the PC-boundary blank LIVE-REVENGE block (see the static above): the
         // console's network module does this via SetLiveRevengeProfile (GUI event 351);
@@ -1270,7 +1422,7 @@ namespace BrnGui
         // and never loaded into, so it answered mbIsNewProfile = 1 on every boot, for ever.
         // The case-350 arm now does the console's install and the static is gone.
         s_pcLiveRevengeProfile.Clear();
-        mProfileManager.SetLiveRevengeProfile(&s_pcLiveRevengeProfile);
+        mProfileHost.GetProfileManager().SetLiveRevengeProfile(&s_pcLiveRevengeProfile);
 
         // X360 GuiModule::Prepare @0x82518D68 STAGE 3, line 104: `*(gm + 660992) = gm +
         // 1005332`, i.e. the analyzer adopts the shared GuiAccessPointers block (the same
@@ -1279,7 +1431,7 @@ namespace BrnGui
         // bodied as the de-inlined form in BrnGuiHudMessageAnalyzer.cpp. Without it
         // mpAccessPointers is never written and TriggerChallengeEndedMessage /
         // HandleStuntPerformed dereference it (mpAccessPointers->mpLanguageManager).
-        mHudMessageAnalyzer.SetAccessPointers(&s_GuiAccessPointers);
+        mHudMessageAnalyzer.SetAccessPointers(&mGuiAccessPointers);
 
         // FLAG PC stand-in (main-menu wave, 2026-08-29): the console threads a specific
         // rw resource allocator from the (still-parked) GUI resource slice through
@@ -1294,28 +1446,28 @@ namespace BrnGui
         rw::IResourceAllocator* lpFlowAllocator =
             rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
-        mHudFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mHudStatePool,
-                         &mProfileManager);
+        mHudFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mHudStatePool,
+                         &mProfileHost.GetProfileManager());
         mHudInQueue.Construct();
-        mHudFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mHudInQueue));
+        mHudFlow.SetInEventQueue(&mHudInQueue);
 
         // The overlay flow: the 15-popup-state pool + its own in-queue (the X360 module
         // prepares all three flows here).
         mOverlayStatePool.Construct();
         mOverlayStatePool.Create(s_overlayStatePoolBacking, sizeof(s_overlayStatePoolBacking));
-        mOverlayFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mOverlayStatePool);
+        mOverlayFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mOverlayStatePool);
         mOverlayInQueue.Construct();
-        mOverlayFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mOverlayInQueue));
+        mOverlayFlow.SetInEventQueue(&mOverlayInQueue);
 
         // The SCREEN flow: the 61-state front-end pool + its own in-queue. The X360
         // Prepare threads the module's ProfileManager through BY REFERENCE (the CN_PROFILE
         // state's Construct consumes it; the manager is a shell until reconstructed).
         mScreenStatePool.Construct();
         mScreenStatePool.Create(s_screenStatePoolBacking, sizeof(s_screenStatePoolBacking));
-        mScreenFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
-                            mProfileManager);
+        mScreenFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
+                            mProfileHost.GetProfileManager());
         mScreenInQueue.Construct();
-        mScreenFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mScreenInQueue));
+        mScreenFlow.SetInEventQueue(&mScreenInQueue);
 
         // The always-available components manager (save-icon spinner, EATrax/achievement/
         // showtime overlays): give it its own in-queue and latch it. The manager's Prepare
@@ -1329,7 +1481,7 @@ namespace BrnGui
         // The controller: store the model-module pointer + the FSM allocator, then
         // register the three flow slots.
         mFsmController.Prepare(
-            reinterpret_cast<CgsGui::ModelModule*>(&s_ModelModuleSentinel), &mFsmLuaHeap);
+            &mGuiModel, &mFsmLuaHeap);
         mFsmController.AddFlow(E_GUIFLOW_SCREEN, &mScreenFlow);
         mFsmController.AddFlow(E_GUIFLOW_HUD, &mHudFlow);
         mFsmController.AddFlow(E_GUIFLOW_OVERLAY, &mOverlayFlow);
@@ -1538,6 +1690,27 @@ namespace BrnGui
         return true;
     }
 
+    // ARTIST825194B8: the enclosing second-prepare owner. Keep the unsigned
+    // stage tests and original wait/continuation behavior; no readiness surrogate.
+    bool GuiModule::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+    {
+        if (muPrepare2State < 2)
+        {
+            muPrepare2State = 1;
+            if (!mWorldDataController.Prepare2(lpGameDataInput))
+                return false;
+        }
+        else if (muPrepare2State >= 3)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid prepare state", "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 658);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+        muPrepare2State = 2;
+        return true;
+    }
+
     // X360 GuiModule::Prepare @0x82518D68 STAGE 14, split out to its own entry point because the
     // PC has no module scheduler to hand GuiModule::Prepare the GameData IO pair. See the FLAG on
     // the declaration; the machine itself is the console's, unaltered.
@@ -1567,43 +1740,161 @@ namespace BrnGui
         return mWorldDataController.Prepare2(lpGameDataInput);
     }
 
+    // Original stage12 has no failure return after this assertion.
+    // Selecting the full typed Prepare will own the stage transition/call.
+    void GuiModule::PrepareNativeSystemNotifications()
+    {
+        mhSysListenerHandle = XNotifyCreateListener(1);
+        if (!mhSysListenerHandle)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Failed to create an X360 system listener";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 557);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST82529CA8..82529DD0: dequeue at most one notification,
+    // then publish the actual four-byte event516 to the fresh Model input.
+    void GuiModule::UpdateNativeSystemNotifications(
+        CgsGui::ModelIO::InputBuffer* lpInputBuffer)
+    {
+        unsigned long luNotificationId;
+        unsigned long luNotificationParam;
+        if (mhSysListenerHandle &&
+            XNotifyGetNext(mhSysListenerHandle, 9, &luNotificationId, &luNotificationParam))
+        {
+            if (luNotificationId == 0x02000002)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "Invite notification processed by GuiModule. This could break cross game invites\n";
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2918);
+                CgsDev::Assert::EndAssert();
+            }
+            const u32 luUiVisible = luNotificationParam != 1;
+            if (!lpInputBuffer)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpInputBuffer",
+                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+                CgsDev::Assert::EndAssert();
+            }
+            lpInputBuffer->LockForWrite();
+            lpInputBuffer->GetEventQueueNonConst()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&luUiVisible), 516, sizeof(luUiVisible));
+            if (!lpInputBuffer)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpInputBuffer",
+                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+                CgsDev::Assert::EndAssert();
+            }
+            lpInputBuffer->UnlockForWrite();
+        }
+    }
+
+    // Original Release closes before its stage switch, including failed close.
+    // The assertion continues and clears the original member in either case.
+    void GuiModule::ReleaseNativeSystemNotifications()
+    {
+        if (mhSysListenerHandle)
+        {
+            if (!CloseHandle(mhSysListenerHandle))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CloseHandle( mhSysListenerHandle )",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 681);
+                CgsDev::Assert::EndAssert();
+            }
+            mhSysListenerHandle = 0;
+        }
+    }
+
     bool GuiModule::Release()
     {
         mbRenderInputCompletedPC = false;
-        mProfileManager.Release();   // detach the sign-in listener + release the SLS
         mScreenFlow.Release();       // staged: current state OnLeave + ScriptedFsm release
         mHudFlow.Release();
         mOverlayFlow.Release();
+        // Leave retry-sensitive GUI owners intact until the movie pool releases successfully.
+        if (!mMovieManager.Release())
+            return false;
+        mProfileHost.GetProfileManager().Release();   // detach the sign-in listener + release the SLS
+        // ARTIST824F92A4..824F930C: profile, keyboard, then keyboard listener host.
+        if (!mSystemUserProfile.Release())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mSystemUserProfile.Release()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 710);
+            CgsDev::Assert::EndAssert();
+        }
+        mGuiKeyboard.Release();
+        if (!mKeyboardHost.Release())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mKeyboardHost.Release()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 712);
+            CgsDev::Assert::EndAssert();
+        }
         mFsmLuaHeap.Destruct();
         if (gpActiveGuiModule == this)
             gpActiveGuiModule = 0;
         gpActiveMovieManager = 0;
-        mMovieManager.Release();
         return true;
     }
 
-    // ---------------------------------------------------------------------------
-// [profile-save] GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult
-//   The body of BrnGui::ProfileHost::HandleProfileTaskResult @0x827E21E0 -- a pure
-//   diagnostic; the console does nothing else when a profile task finishes. Hosted on a
-//   module-owned object because this build embeds the ProfileManager directly instead of
-//   through a ProfileHost (see the header note on the member).
-// ---------------------------------------------------------------------------
-void GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult()
-{
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    // Extracted ARTIST8251A4D4..8251A538. Only the future typed PreWorld phase calls this block.
+    void GuiModule::PublishNativeMovieResourceRequest(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
     {
-        *CgsDev::Log::gpDebugPrint << "SaveLoad: Finished\n";
+        const CgsResource::ID lResourceId = mMovieManager.PendingVideoDataResourceRequest();
+        if (lResourceId.GetHash() == 0)
+            return;
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser = mMovieManager.GetRecieverQueue();
+        lRequest.miEventId = MovieManager::KI_VIDEO_DATA_RESOURCE_EVENT_ID;
+        lRequest.miPoolId = 11;
+        lRequest.mResourceId = lResourceId;
+        lpGuiOutput->LockForWrite();
+        lpGuiOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 4);
+        lpGuiOutput->UnlockForWrite();
     }
-}
+
+    // Native primary Prepare82519218..54 only. This original registration block is
+    // deliberately not called by the selected no-arg PC Prepare/Update path.
+    void GuiModule::PrepareNativeDebugComponents()
+    {
+        mDebugComponent.Register();
+        mHudMessageDebugComponent.Register();
+        mSatNavDebugComponent.Register();
+        mGuiCacheDebugComponent.Register();
+        mEventReceiverQueue.Clear();
+    }
 
 void GuiModule::Destruct()
     {
         mbRenderInputCompletedPC = false;
         mMovieManager.Destruct();
+        // ARTIST825076D0..825077A4: four actual derived teardown owners, original order.
+        mDebugComponent.Destruct();
+        mHudMessageDebugComponent.Destruct();
+        mSatNavDebugComponent.Destruct();
+        mGuiCacheDebugComponent.Destruct();
         // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
         // sub-object destruct, immediately before the base CgsGui::GuiModule::Destruct.
+        // ARTIST825077D0/D4: retain the original host/profile pointer teardown.
+        mKeyboardHost.Destruct();
+        mGuiKeyboard.Destruct();
         mColourCalibrationScreen.Destruct();
+        // ARTIST825077F4: the shared queue/base lifecycle follows the final
+        // game subobject. Existing Movie/APT lifetime owners above are retained.
+        CgsGui::GuiModule::Destruct();
     }
 
     // Post one event into each subscribing observer's in-queue (the EventInterpreterModule
@@ -1789,10 +2080,31 @@ void GuiModule::Destruct()
                                      reinterpret_cast<const u8*>(lacQuoted));
     }
 
+    // X360 0x8251A568: preserve an image file when autosave is disabled, otherwise autosave
+    // it as a one-record ImageFileInfo request. The current PC Update keeps its documented
+    // sign-in-gate deviation, but retains the original autosave-enabled and image-copy branches.
+    void GuiModule::AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo)
+    {
+        if (lpImageFileInfo != 0 && !mProfileHost.GetProfileManager().AutosaveIsEnabled())
+        {
+            mProfileHost.GetProfileManager().CopyImageToBuffer(lpImageFileInfo);
+        }
+
+        if (mProfileHost.GetProfileManager().AutosaveIsEnabled())
+        {
+            mProfileHost.GetProfileManager().Autosave(&mProfileHost,
+                                     lpImageFileInfo != 0 ? 1 : 0, lpImageFileInfo);
+            mbProfileAutosavePending  = false;
+            mfLastProfileAutosaveTime = mGuiCache.GetTime();
+        }
+    }
+
     // The real GuiModule::Update event dispatch (X360 0x82527A58's switch): consume the
     // module-level events, forward the load notifications, and fan the rest to the flow.
-    void GuiModule::DispatchInboundGuiEvents()
+    void GuiModule::DispatchInboundGuiEvents(bool& rbHasSaveImageEvent,
+                                              CgsGui::ImageFileInfo& lrSaveImageInfo)
     {
+        rbHasSaveImageEvent = false;
         if (mpGuiEventInputBuffer == 0)
             return;
 
@@ -1807,6 +2119,24 @@ void GuiModule::Destruct()
         {
             switch (liId)
             {
+                case 141:   // ARTIST82528ACC..AE0: reply with this module's actual keyboard.
+                {
+                    // FLAG PC-platform leaf: the existing no-argument GUI pump publishes
+                    // through mGuiOutQueue and its subscription-filtered observer loop-back.
+                    GuiEventKeyboardResponse lResponse;
+                    lResponse.lpKeyboard = &mGuiKeyboard;
+                    if (mGuiOutQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                             lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse))))
+                        RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                         lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse)));
+                    break;
+                }
+
+                case 143:   // ARTIST 82528AE8..AF8: user-index word, then sign-in refresh.
+                    mSystemUserProfile.SetUserIndex(*reinterpret_cast<const u32*>(lpEvent));
+                    mSystemUserProfile.UpdateUserSigninState();
+                    break;
+
                 case 144:   // GuiEventRunFsm -- the flow-change request (BridgeGameToGui)
                     mFsmController.RunFsm(reinterpret_cast<const GuiEventRunFsm*>(lpEvent));
                     break;
@@ -1859,10 +2189,13 @@ void GuiModule::Destruct()
                     {
                         const BrnGui::GuiEventProgressionProfileData* lpProfileData =
                             reinterpret_cast<const BrnGui::GuiEventProgressionProfileData*>(lpEvent);
-                        mProfileManager.SetProgressionProfile(lpProfileData->mpProfile,
+                        mProfileHost.GetProfileManager().SetProgressionProfile(lpProfileData->mpProfile,
                                                               lpProfileData->mpProgressionData);
                     }
                     // fall through -- the record also feeds GuiCache::mpProfile (case 350 below)
+                case 27:    // Actual Sku notification -> the cache enum owner.
+                case 29:    // Actual language notification -> the cache enum owner.
+                case 501:   // Original PFX enumeration -> actual cache owner.
                 case 330:   // GuiEventSetRoadRuleScoreMode -- the road-rule panel mode word
                 case 335:   // GuiEventRoadRuleBegin -- the rule's score type marked active
                 case 336:   // GuiEventRoadRuleEnd   -- the rule's score type marked inactive
@@ -2011,6 +2344,23 @@ void GuiModule::Destruct()
                     break;
                 case 584:
                     mFreeburnChallengeManager.EndNotActiveChallenge();
+                    break;
+
+                case 358:
+                    // X360 copies the four image-save words into a frame-local record, raises
+                    // the force/pending latches, then lets Update call AutosaveProfile. The host
+                    // record is 24 bytes because the buffer pointer widened; the unwritten
+                    // trailing word remains byte-for-byte residue.
+                    std::memcpy(&lrSaveImageInfo, lpEvent, sizeof(lrSaveImageInfo));
+                    rbHasSaveImageEvent = true;
+                    mbForceProfileAutosave = true;
+                    mbProfileAutosavePending = true;
+                    break;
+
+                case 359:   // Image-file records loaded by ProfileManager (ARTIST GuiModule::Update case 359)
+                    mProfileHost.GetProfileManager().LoadImageFiles(
+                        &mProfileHost,
+                        reinterpret_cast<const CgsGui::ImageFileInfo*>(lpEvent));
                     break;
 
                 case 356:   // [profile-save] GuiAutosaveRequestEvent -- THE AUTOSAVE LATCH
@@ -2564,6 +2914,19 @@ void GuiModule::Destruct()
                         lpRawEvent, static_cast<s32>(luEventType),
                         static_cast<s32>(luPayloadSize));
 
+                    if (luEventType == 141u)
+                    {
+                        // FLAG PC-platform leaf: this existing channel-40 drain has no
+                        // module-inbound bus round-trip. Execute the original141 reply
+                        // here, as for144/507 above; the subscribed state reads142 next tick.
+                        GuiEventKeyboardResponse lResponse;
+                        lResponse.lpKeyboard = &mGuiKeyboard;
+                        if (mGuiOutQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                                 lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse))))
+                            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lResponse),
+                                             lResponse.GetEventType(), static_cast<s32>(sizeof(lResponse)));
+                    }
+
                     // ProcessOutEvents also returns the unwrapped event to the interpreter's
                     // observer fan-out.  This is why a state that posts voice-over event 466
                     // observes 466 as "started" on the following GUI update, while sound later
@@ -2870,7 +3233,7 @@ void GuiModule::Destruct()
         if (lpGameDataInput != 0)
         {
             mColourCalibrationScreen.Update(lpGameDataInput, lpGameDataOutput,
-                                            &mGuiOutQueue, mpTextureAllocator);
+                                            &mGuiOutQueue, mGuiConfig.mpTextureAllocator);
         }
     }
 
@@ -2881,7 +3244,9 @@ void GuiModule::Destruct()
     {
         // ---- 1. inbound GUI events (144 -> RunFsm; 14/16/481 -> notifications;
         //          504/508/513 -> MovieManager; subscription fan-out to the flow) -------
-        DispatchInboundGuiEvents();
+        bool lbHasSaveImageEvent = false;
+        CgsGui::ImageFileInfo lSaveImageInfo;
+        DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);
 
         // ---- 2. the per-frame cache event (64): the real Update posts the GuiCache
         //          pointer into the event queue each frame; the states read it as their
@@ -2917,7 +3282,7 @@ void GuiModule::Destruct()
             if (!mbCustomRenderersPrepared)
             {
                 mbCustomRenderersPrepared =
-                    mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
+                    mCustomRendererManager.Prepare(mGuiConfig.mpRendererAllocator, mGuiConfig.mpTextureAllocator);
                 if (mbCustomRenderersPrepared)
                 {
                     CgsDev::Log::WriteToLog("[custrend] manager prepare DONE (pump)\n");
@@ -3031,19 +3396,22 @@ void GuiModule::Destruct()
         //          channel). The world-side pool free/restore around the swap is the
         //          un-reconstructed world collision pool -- FLAG'd absent (no world on
         //          the PC boot path); the manager's own state machine is driven fully. --
-        mProfileManager.Update();
-        if (mProfileManager.PendingCollisionWorldInvalidate())
+        // ARTIST8252A088/A094: system notifications and keyboard completion precede SLS.
+        mSystemUserProfile.Update();
+        mGuiKeyboard.Update();
+        mProfileHost.GetProfileManager().Update();
+        if (mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate())
         {
             // FLAG PC-platform leaf: the console frees the world collision pool here.
-            mProfileManager.SetCollisionWorldValid(false);
+            mProfileHost.GetProfileManager().SetCollisionWorldValid(false);
         }
-        if (mProfileManager.PendingCollisionWorldValidate())
+        if (mProfileHost.GetProfileManager().PendingCollisionWorldValidate())
         {
             // FLAG PC-platform leaf: the console restores the world collision pool here.
-            mProfileManager.SetCollisionWorldValid(true);
+            mProfileHost.GetProfileManager().SetCollisionWorldValid(true);
         }
         {
-            CgsGui::GuiEventQueueSmall& lrProfileOut = mProfileManager.GetOutEventQueue();
+            CgsGui::GuiEventQueueSmall& lrProfileOut = mProfileHost.GetProfileManager().GetOutEventQueue();
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             s32 liId = lrProfileOut.GetFirstEvent(&lpEvent, &liSize);
@@ -3073,23 +3441,22 @@ void GuiModule::Destruct()
         //         if ((v142 | r11) == 1) {                        // v142 == the FORCE flag
         //             if (v143 == 1) GuiModule::AutosaveProfile(v186);   // with an image record
         //             else if (*(module + 949156) == 1 && *(module + 686280)) {
-        //                 ProfileManager::Autosave(&mProfileManager, &host, 0, 0);
+        //                 ProfileManager::Autosave(&mProfileHost.GetProfileManager(), &host, 0, 0);
         //                 *(module + 1628228) = 0;
         //                 *(module + 1628224) = GuiCache::GetTime();
         //             }
         //         }
         //     }
-        // flt_82004C6C == 60.0f. The v143/AutosaveProfile arm is the id-358
-        // (GuiEventSaveImageFileAndAutosave) mugshot path, which nothing in this build posts
-        // yet -- named here, not faked; when a producer lands, GuiModule::AutosaveProfile
-        // @0x8251A568 goes in beside this block.
+        // flt_82004C6C == 60.0f. GUI358 now reaches AutosaveProfile with the complete
+        // host-native ImageFileInfo record; absent that event, this block saves the profile
+        // without image files.
         //
         // The two gates, and what each is on PC:
         //  * module+1024648 == GuiCache+19272 -- GuiCache::Construct @0x82505860 zeroes it
         //    (`*(a1 + 19272) = 0;`) and its ONLY writer is a GuiCache::RecEvent @0x8250DDF0 arm
         //    for an event id this build does not route, so it is 0 for the whole run: no
         //    suppression. Reproduced as the console's initial value rather than as a fake read.
-        //  * module+686280 == mProfileManager.mSaveLoadSystem's autosave-enabled word, which is
+        //  * module+686280 == mProfileHost.GetProfileManager().mSaveLoadSystem's autosave-enabled word, which is
         //    exactly ProfileManager::AutosaveIsEnabled() (the committed accessor over the same
         //    word) -- tested below.
         //  * module+949156 == mSystemUserProfile.miState (1 == E_USERSIGNINSTATE_SIGNEDIN).
@@ -3112,13 +3479,17 @@ void GuiModule::Destruct()
 
             if (mbForceProfileAutosave || lbThrottleElapsed)
             {
-                if (mProfileManager.AutosaveIsEnabled())
+                if (lbHasSaveImageEvent)
+                {
+                    AutosaveProfile(&lSaveImageInfo);
+                }
+                else if (mProfileHost.GetProfileManager().AutosaveIsEnabled())
                 {
                     // The console's 4-arg call with count 0 / records NULL: save the profile
                     // image with no image files attached. The handler is the ProfileHost the
                     // module embeds; this build drives the manager directly, so it is the
                     // manager's own task-result handler that the boot states already use.
-                    mProfileManager.Autosave(&mProfileAutosaveResultHandler, 0, 0);
+                    mProfileHost.GetProfileManager().Autosave(&mProfileHost, 0, 0);
                     mbProfileAutosavePending  = false;
                     mfLastProfileAutosaveTime = mGuiCache.GetTime();
 
@@ -3183,7 +3554,7 @@ void GuiModule::Destruct()
         // console skips the whole overlay tick below until the prepare state machine reaches
         // DONE (`clrlwi r11, r3, 0x18 ; cmplwi 0 ; beq 0x8252A2CC`).
         const bool lbAlwaysAvailReady =
-            mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
+            mAlwaysAvailableComponentsManager.Prepare(&mGuiAccessPointers);
         mAlwaysAvailableComponentsManager.Update();
         if (lbAlwaysAvailReady)
         {
@@ -3481,7 +3852,7 @@ void GuiModule::Destruct()
 
         // ---- 6. the MovieManager pump (receiver -> RecvEvent -> Update -> 510 back) ---
         {
-            CgsModule::VariableEventQueue<1024, 16>* lpRecv = mMovieManager.GetReceiverQueue();
+            CgsModule::BaseEventReceiverQueue* lpRecv = mMovieManager.GetReceiverQueue();
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             s32 liId = lpRecv->GetFirstEvent(&lpEvent, &liSize);

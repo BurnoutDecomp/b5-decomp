@@ -63,7 +63,7 @@ def wiring(tree):
            all(re.search(pattern, actions) is not None for pattern in checks))
 
 
-def numeric(tree, legacy_team_predicate=False):
+def numeric(tree, legacy_team_predicate=False, output_dir=None):
     hud = tree.read(HUD_CPP)
     bodies = []
     for signature in BODIES:
@@ -89,7 +89,7 @@ def numeric(tree, legacy_team_predicate=False):
     shadow = {HUD_H: tree.read(HUD_H), ACTIONS_H: tree.read(ACTIONS_H), SHARED_IO_H: tree.read(SHARED_IO_H)}
     result = compile_and_run(Path(__file__).with_name("FxGsOnlineRoadRageHud.cpp"),
                            "online_roadrage_hud_methods.inc", inc,
-                           "FxGsOnlineRoadRageHud", shadow=shadow, extra_sources=(STRSTREAM_CPP,))
+                           "FxGsOnlineRoadRageHud", shadow=shadow, extra_sources=(STRSTREAM_CPP,), output_dir=output_dir)
     if result is not None and result[0] != NUMERIC_CHECKS:
         print("NUMERIC: unexpected executed check count: " + str(result[0]))
         return None
@@ -101,10 +101,11 @@ def main():
     parser.add_argument("--rev", help="read the b5 sources from this git revision")
     parser.add_argument("--legacy-team-predicate", action="store_true",
                         help="negative control: restore only the old team-selection predicate")
+    parser.add_argument("--output-dir", type=Path, help="retain generated sources, executable and execution receipts")
     args = parser.parse_args()
     tree = Tree(args.rev)
     return report("run_fxgs_online_roadrage_hud", list(wiring(tree)),
-                  numeric(tree, args.legacy_team_predicate), NUMERIC_CHECKS)
+                  numeric(tree, args.legacy_team_predicate, args.output_dir), NUMERIC_CHECKS)
 
 
 if __name__ == "__main__":

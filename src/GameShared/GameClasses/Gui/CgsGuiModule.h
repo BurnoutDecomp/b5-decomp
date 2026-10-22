@@ -1,64 +1,96 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue
-#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"              // CgsGuiModuleIO::InputBuffer (AddGuiEvent target)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (AddGuiEvent inline)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"
+#include "GameShared/GameClasses/Gui/Model/CgsModelModule.h"
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
+#include "GameShared/GameClasses/Language/CgsSku.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
-// ============================================================================
-// b5-decomp/src/GameShared/GameClasses/Gui/CgsGuiModule.h
-//
-// Canonical home for CgsGui::GuiModule -- the top-level GUI subsystem module (a
-// CgsModule::ModuleSingleBuffered derivative owning the GUI ModelModule at +0x228
-// plus the module bridge plumbing).
-//
-// LAYOUT (partial, explicit padding per the layout-recovery rule): the head span
-// (the ModuleSingleBuffered base -- vtable slot + the two RW locks -- plus the
-// ~0x1B1D8-byte embedded ModelModule) is not yet modelled as named members; it is an
-// EXPLICIT padding member (maHead) whose interior the ctor initialises at the
-// X360-attested byte offsets, anchored on that named member (see CgsGuiModule.cpp).
-// The two members past it are asm-attested and named:
-//   +0x1B400  mpViewModule        (BridgeFromInputToView's lwzx target)
-//   +0x1B41C  mLoadNotifications  (BridgeFromModelToOutput's Append target; the ctor
-//             zeroes its leading constructed-flag byte)
-// On the x64 host the pointer widens and the queue shifts -- access is BY NAME.
-//
-// Declared ledger functions:
-//   GuiModule()               X360 0x827E54B0  (ctor; bodied in CgsGuiModule.cpp)
-//   BridgeFromInputToView     X360 0x8285B088  (bodied in CgsGuiModuleBridges.cpp)
-//   BridgeFromModelToOutput   X360 0x8285DD40  (bodied in CgsGuiModuleBridges.cpp)
-// ============================================================================
+namespace CgsModule { struct IOBufferStack; }
+namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
+namespace rw { class IResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 
 namespace CgsGui
 {
     class ViewModule;
-    namespace ViewIO { struct InputBuffer; }
-    namespace CgsGuiModuleIO { struct InputBuffer; struct OutputBuffer; }
-    namespace ModelIO { struct OutputBuffer; }
+    namespace ViewIO { struct InputBuffer; struct OutputBuffer; }
 
-    class GuiModule
+    // DecFIGS CgsGuiModule.h:55..74; all seven bank arguments and the four
+    // View.Prepare allocator seats are attested by ARTIST82857070.
+    struct GuiModuleConfig
+    {
+        s32 miAptPersistentBunldePoolId;
+        s32 miAptStreamedbundlePoolId;
+        s32 miFontBundlePoolId;
+        s32 miFSMBunldePoolId;
+        s32 miLanguageBundlePoolId;
+        s32 miTexturesBundlePoolId;
+        s32 miGlobalTexturePoolId;
+        CgsMemory::HeapMalloc* mpAptAllocator;
+        CgsMemory::HeapMalloc* mpFSMAllocator;
+        CgsMemory::HeapMalloc* mpLanguageAllocator;
+        rw::core::GeneralResourceAllocator* mpRendererAllocator;
+        CgsMemory::LinearMalloc* mpGuiStateAllocator;
+        rw::IResourceAllocator* mpTextureAllocator;
+        CgsMemory::LinearMalloc* mpFlaptAllocator;
+    };
+
+    // ARTIST827E54B0 and DecFIGS h:86/190..235: real base and contained Model,
+    // followed by View, Sku, stored events and lifecycle state. C++ owns host
+    // layout and vptrs; no console-sized owner shell or placement writes.
+    class GuiModule : public CgsModule::ModuleSingleBuffered
     {
     public:
-        // The module's inbound load-notification accumulator queue type (the
-        // BridgeFromModelToOutput Append target: VariableEventQueue<18432,16>).
         typedef CgsModule::VariableEventQueue<18432, 16> GuiNotificationQueue;
 
-        // X360 0x827E54B0. Standard subsystem-module bring-up (see CgsGuiModule.cpp).
+        // Original monitor handles, published by the real registration owner
+        // BrnGui::GuiPerfmons::Initialise (ARTIST824EF050).
+        static s32 miGuiPM;
+        static s32 miModelUpdatePM;
+        static s32 miModelViewBridgePM;
+        static s32 miViewUpdatePM;
+        static s32 miGuiRenderPM;
+
+        enum GuiPrepareStage
+        {
+            E_PREPARE_START = 0,
+            E_PREPARE_MANAGER = 1,
+            E_PREPARE_MODEL = 2,
+            E_PREPARE_SKU = 3,
+            E_PREPARE_CHECK_BUTTON_MAPPING = 4,
+            E_PREPARE_VIEW = 5,
+            E_PREPARE_DONE = 6,
+        };
+        enum GuiReleaseStage
+        {
+            E_RELEASE_START = 0,
+            E_RELEASE_VIEW = 1,
+            E_RELEASE_MODEL = 2,
+            E_RELEASE_MANAGER = 3,
+            E_RELEASE_DONE = 4,
+        };
+
         GuiModule();
+        virtual void Construct(ViewModule* lpViewModule, bool lbHighDef);
+        virtual bool Prepare(GuiModuleConfig& lrConfig);
+        bool Release() override;
+        void Destruct() override;
+        virtual void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            CgsGuiModuleIO::OutputBuffer* lpOutput, ModelIO::OutputBuffer* lpModelOutput);
+        virtual void Update(CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            CgsGuiModuleIO::InputBuffer* lpInput, CgsGuiModuleIO::OutputBuffer* lpOutput,
+            ModelIO::InputBuffer* lpModelInput, ModelIO::OutputBuffer* lpModelOutput,
+            ViewIO::InputBuffer* lpViewInput, ViewIO::OutputBuffer* lpViewOutput);
+        virtual void Render(ViewIO::InputBuffer* lpViewInput,
+            CgsGuiModuleIO::InputBuffer* lpInput);
 
-        // X360 0x8285B088 (CgsGuiModuleBridges.cpp:42) -- hand the frame's inbound GUI
-        // events from the module input buffer to the view module's view-state builder.
-        // Called by GuiModule::Update.
         void BridgeFromInputToView(ViewIO::InputBuffer* lpViewInput,
-                                   const CgsGuiModuleIO::InputBuffer* lpInput);
-
-        // X360 0x8285DD40 (CgsGuiModuleBridges.cpp:94) -- publish the model module's
-        // per-frame outputs: forward its resource-request queue (when non-empty) and its
-        // GUI out-events into the module output buffer, and accumulate its load
-        // notifications into this module's own queue. Called by GuiModule::Update and
-        // GuiModule::PreWorldUpdate.
+            const CgsGuiModuleIO::InputBuffer* lpInput);
         void BridgeFromModelToOutput(CgsGuiModuleIO::OutputBuffer* lpOutput,
-                                     const ModelIO::OutputBuffer* lpModelOutput);
+            const ModelIO::OutputBuffer* lpModelOutput);
 
         // ---- GUI input-event publisher template (270 X360-attested instantiations) -------
         // X360 0x823CEB70..0x823DAE68 -- one out-of-line body per event type T (e.g.
@@ -118,16 +150,24 @@ namespace CgsGui
                 lrEvent.GetEventType(), liPayloadSize);
         }
 
-    private:
-        // EXPLICIT PADDING: the X360 +0x00..+0x1B3FF head span -- the
-        // ModuleSingleBuffered base (vtable slot @+0x00, RW locks @+0x10/+0x118) and
-        // the embedded CgsGui::ModelModule @+0x228 -- none of which are modelled as
-        // named members yet. The ctor initialises its interior at the attested byte
-        // offsets, anchored on this named member (CgsGuiModule.cpp documents each).
-        u8 maHead[0x1B400];
 
-        ViewModule*          mpViewModule;        // X360 +0x1B400 (BridgeFromInputToView)
-        u8                   maPadMid[0x18];      // X360 +0x1B404..+0x1B41B (unattested)
-        GuiNotificationQueue mLoadNotifications;  // X360 +0x1B41C (BridgeFromModelToOutput / ctor)
+    protected:
+        ModelModule mGuiModel;
+        ViewModule* mpGuiView;
+        CgsLanguage::Sku mSku;
+        GuiNotificationQueue mStoredGuiEvents;
+
+    private:
+        void BridgeFromInputToModel(ModelIO::InputBuffer* lpModelInput,
+            const CgsGuiModuleIO::InputBuffer* lpInput);
+        void BridgeFromModelToView(ViewIO::InputBuffer* lpViewInput,
+            const ModelIO::OutputBuffer* lpModelOutput);
+        void BridgeFromViewToOutput(CgsGuiModuleIO::OutputBuffer* lpOutput,
+            const ViewIO::OutputBuffer* lpViewOutput);
+        void BridgeFromOutputToGui(const CgsGuiModuleIO::OutputBuffer* lpOutput);
+
+        GuiPrepareStage mePrepareStage;
+        GuiReleaseStage meReleaseStage;
+        bool mbCircleButtonMappingChanged;
     };
 }

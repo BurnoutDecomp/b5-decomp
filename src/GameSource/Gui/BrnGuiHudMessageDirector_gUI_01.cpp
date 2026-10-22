@@ -20,12 +20,8 @@
 //         -- asserts the WRITE lock, then
 //     mGuiEvents.Append<18432,16>(mHudMessageQueue)   (the instantiation @0x823C80E0,
 //         CgsModule::VariableEventQueue<32768,16>::Append<18432,16>)
-// Neither forwarder has a body in this tree yet, and both live outside this wave's
-// ownership (GameShared/GameClasses/Gui/**), so the call below is the DE-INLINED form:
-// GetEventQueueNonConst() @0x8284F898 carries the identical write-lock assert and returns
-// the identical this+4 queue handle, so the observable sequence (assert write lock ->
-// Append -> Clear) is unchanged. shared_header_request in the report: declare/body
-// ModelIO::InputBuffer::AddGuiEvents and route through it.
+// CP16 supplies both real providers. The caller below uses its actual bound
+// Model owner, preserving the original lock/publish/clear order.
 //
 // ⚠ mfBlackBarSize is deliberately NOT initialised here: the X360 Construct writes
 // +0x54C8, +0x54D0 and +0x54D4 and skips +0x54CC. Reproduced as written.
@@ -34,6 +30,7 @@
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"
 #include "GameSource/Gui/BrnGuiCache.h"                        // GuiCache (friend access: mbGameplayHudActive)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                // GuiHudMessage (mCachedMessage)
+#include "GameShared/GameClasses/Gui/Model/CgsModelModule.h"
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h" // CgsGui::ModelIO::InputBuffer
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT
@@ -60,22 +57,13 @@ namespace BrnGui
 void HudMessageDirector::Construct(CgsGui::ModelModule* lpModelModule,
                                    const GuiCache* lpGuiCache)
 {
-    // ⚠️ [FLAG PC bring-up — PARK-1 marker demoted from a blocking assert]. The console asserts
-    // lpModelModule != 0 (cpp:80); on this build no CgsGui::ModelModule is reconstructed and the
-    // pointer is deliberately NULL (write-only across the whole recovered surface — see the
-    // round-3 fix3hud park). The blocking "press END" dialog stopped every manual boot at the
-    // loading screen, so the marker is now a one-shot log. DELETE-WHEN CgsGui::ModelModule lands
-    // and the real pointer is passed — then restore the console assert.
-    if (lpModelModule == 0)
+    // ARTIST82508FA0: retain the original owner diagnostic and continuation.
+    if (!lpModelModule)
     {
-        static bool gsbWarnedNullModelModule = false;
-        if (!gsbWarnedNullModelModule && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: HudMessageDirector::Construct lpModelModule is null "
-                   "(no CgsGui::ModelModule on this build; console asserts here, cpp:80)\n";
-            gsbWarnedNullModelModule = true;
-        }
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpModelModule",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.cpp", 80);
+        CgsDev::Assert::EndAssert();
     }
     CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");         // cpp:81
 
@@ -127,10 +115,7 @@ void HudMessageDirector::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer
     if (liLength != 0)
     {
         lpModelInputBuffer->LockForWrite();
-        // See the banner: the console reaches this through ModelModule::AddGuiEvents ->
-        // ModelIO::InputBuffer::AddGuiEvents; both are pure forwarders onto this Append,
-        // and GetEventQueueNonConst carries the same write-lock assert.
-        lpModelInputBuffer->GetEventQueueNonConst()->Append(mHudMessageQueue);
+        mpModelModule->AddGuiEvents(&mHudMessageQueue, lpModelInputBuffer);
         lpModelInputBuffer->UnlockForWrite();
 
         // [DIAG] NOT IN THE X360 BINARY. The final rung of the gateui ladder (set

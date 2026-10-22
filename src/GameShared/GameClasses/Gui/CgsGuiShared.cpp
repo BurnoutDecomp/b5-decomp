@@ -34,7 +34,54 @@ namespace CgsGui
 
     void GuiAccessPointers::SetGuiCache(BrnGui::GuiCache* lpGuiCache)
     {
+        // ARTIST82518CB0..CE4: assert and continue to the store.
+        if (lpGuiCache == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpGuiCache", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 209);
+            CgsDev::Assert::EndAssert();
+        }
         mpGuiCache = lpGuiCache;
+    }
+
+    // ARTIST82518CE0..D24 inlines the original serialiser setter. Its
+    // source name is inferred from the adjacent SetGuiCache/receiver pattern.
+    void GuiAccessPointers::SetSerialiser(BrnReplays::GuiModuleSerialiser* lpSerialiser)
+    {
+        if (lpSerialiser == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpSerialiser", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 224);
+            CgsDev::Assert::EndAssert();
+        }
+        mpSerialiser = lpSerialiser;
+    }
+
+    // ARTIST82427AEC..B18: the original assertion is followed by the
+    // load even if the assert handler continues. No readiness fallback.
+    BrnReplays::GuiModuleSerialiser* GuiAccessPointers::GetSerialiser()
+    {
+        if (mpSerialiser == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpSerialiser", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 216);
+            CgsDev::Assert::EndAssert();
+        }
+        return mpSerialiser;
+    }
+
+    // DecFIGS CgsGuiShared.h:102; ARTIST82527BC4 installs the actual
+    // GameData input for the typed Update call. Its epilogue clears it.
+    void GuiAccessPointers::SetGDMInput(BrnResource::GameDataIO::InputBuffer* lpInput)
+    {
+        mpGDMInput = lpInput;
+    }
+
+    // DecFIGS CgsGuiShared.h:106; ARTIST82518CE8 binds the contained
+    // receiver queue. This store has no null assertion.
+    void GuiAccessPointers::SetGDMReceiverQueue(GuiEventReceiverQueue* lpReceiverQueue)
+    {
+        mpGDMReceiverQueue = lpReceiverQueue;
     }
 
     // ---- the GUI camera selector -------------------------------------------------------
@@ -105,6 +152,7 @@ namespace CgsGui
         mpFlaptFile        = nullptr;
         mpFlaptManager     = nullptr;
         mpGuiCache         = nullptr;
+        mpSerialiser       = nullptr;
         mpGDMInput         = nullptr;
         mpGDMReceiverQueue = nullptr;
     }

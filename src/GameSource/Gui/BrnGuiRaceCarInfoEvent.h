@@ -6,12 +6,12 @@
 //
 // The per-frame "race car info" GUI event: a fixed set of E_ACTIVE_RACE_CAR_INDEX_COUNT
 // (8) entries, one per active race car, that BrnGameModule::BridgeWorldVehicleDataToGui
-// fills from the world vehicle data. Each entry carries a screen-space position vector
-// plus an identity qword and three per-entry flag bytes.
+// fills from the world vehicle data. Each entry carries a screen-space position vector,
+// an identity qword, and five per-entry flag bytes.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Construct    @ 0x823A7658 -- zero-init all 8 entries + the count.  [BODIED]
-//   DoWorstCase  @ 0x823A6BB8 -- per-entry VMX position transform.     [BLOCKED, declared-only]
+//   DoWorstCase  @ 0x823A6BB8 -- per-entry VMX position transform.     [body in companion cpp]
 //
 // The X360 lays the event out as parallel per-entry arrays (the Construct zero-init
 // loop / DoWorstCase per-index stores attest the offsets and store widths):
@@ -21,6 +21,8 @@
 //   maFlagA[8]      @0xC4..0xCB  (byte; Construct stb 0, stride 1; DoWorstCase sets 1)
 //   maFlagB[8]      @0xCC..0xD3  (byte; Construct stb 0, stride 1)
 //   maFlagC[8]      @0xD4..0xDB  (byte; Construct stb 0, stride 1)
+//   maFlagD[8]      @0xDC..0xE3  (byte; DoWorstCase stb 1)
+//   maFlagE[8]      @0xE4..0xEB  (byte; DoWorstCase stb 0)
 //
 // DoWorstCase is a per-entry VMX lowering (per-entry vmaddfp128 fused multiply-add of the
 // source position lane against an input vector + a {0,0.1,0.25,0} weighting vector). It is
@@ -38,7 +40,7 @@
 // ===================================================================================
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                 // Vector4
+#include "BrnCommonTypes.h"                 // Vector3 / Vector4
 #include "GameSource/BurnoutConstants.h"    // E_ACTIVE_RACE_CAR_INDEX_COUNT
 
 namespace BrnGui
@@ -48,19 +50,18 @@ namespace BrnGui
     public:
         // Entry count == number of active race cars (BurnoutConstants.h).
         static const s32 KI_NUM_ENTRIES = E_ACTIVE_RACE_CAR_INDEX_COUNT; // 8
+        // ARTIST BSS 0x82FB508B; written by GuiDebugComponent::UpdateWorstCaseHUD.
+        static inline bool msbForceWorstCase = false;
 
         // @ 0x823A7658 -- zero every entry's position, identity and flag bytes, and clear
         // the entry count. Returns `this`.
         GuiRaceCarInfoEvent* Construct();
 
-        // @ 0x823A6BB8 -- recompute every entry's "worst case" screen position. For each
-        // entry index 0..7 (skipping liNumActive, whose entry is the source/template), the
-        // entry position is set to a per-lane fused-multiply-add of the input vector lvInput,
-        // the source position maPosition[liNumActive] and the {0,0.1,0.25,0} weighting; the
-        // identity is copied from entry 0; flag arrays A/D are set to 1, B/C/E to 0. Finally
-        // the entry count is set to 8. Returns `this`. (X360 passes lvInput in a VMX register
-        // and liNumActive in a GPR.)
-        GuiRaceCarInfoEvent* DoWorstCase(Vector4 lvInput, s32 liNumActive);
+        // @ 0x823A6BB8 -- the source signature is DoWorstCase(EActiveRaceCarIndex, Vector3).
+        // ARTIST passes the active index in r4 and the full Vector3 register in v1.
+        // Entries 0..7 except the source index are transformed; identity entry zero is
+        // copied and flag arrays A/D become 1 while B/C/E become 0.
+        void DoWorstCase(EActiveRaceCarIndex leNumActive, Vector3 lvInput);
 
         // AddGuiEvent<GuiRaceCarInfoEvent> @0x823DA738 -> AddEvent(&event, 207, 240).
         s32 GetEventType() const { return 207; }

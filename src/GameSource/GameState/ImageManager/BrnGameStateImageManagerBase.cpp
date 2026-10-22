@@ -14,8 +14,8 @@
 //   290 image-info record (48B)   291 gallery-count reply (8B)   292 load-complete bitfield (16B)
 //   293 single empty/abort byte (1B) 294 image-save request (16B) 295 prepare-render record (48B)
 //   299 show-gamercard (8B)        49  rival-hit / line-up-delete (8B)
-// The DecFIGS DWARF spells these as E_ACTION_IMAGE_GALLERY_* but with PS3-DRIFTED values
-// (275..279, off by 15 from the X360 immediates); the X360 immediates above win. They are named
+// The DecFIGS DWARF spells these as E_ACTION_IMAGE_GALLERY_* at 275..279; the X360 producer and
+// bridge attest 289..293, a +14 shift. The X360 immediates above win. They are named
 // as local constants (not enum members against the wrong values) -- mirrors the BrnMugshotManager
 // precedent (KI_GAME_ACTION_START_MUGSHOT = 213 used directly).
 //
@@ -24,6 +24,8 @@
 
 #include <cstring>   // std::memcpy / std::memset (model the X360 XMemCpy / XMemSet block intrinsics)
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
+#include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // typed image-load records (host-native pointer width)
+#include "GameSource/GameState/BrnGameActions.h" // typed image-gallery/image-save action records 289..294
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsID.h"                     // CgsID, CgsIDCompress
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // CgsSystem::DateAndTime
@@ -77,7 +79,7 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
     // type 290 (48 bytes): one gallery image-info record (built from a MugshotInfo). Field offsets are
     // the X360 stack-store map of ProcessLockRequest (0x82385194..0x823851D8, base var_60) and the
     // populated branch of ProcessScrollImagesEvent (0x82384E04..0x82384E40, base var_100): the three
-    // image words lead at +0x00/+0x04/+0x08, then the 8-byte date (NOT 8-aligned), word2C, the slot
+    // image words lead at +0x00/+0x04/+0x08, then the 8-byte WorldRegion (NOT 8-aligned), word2C, the slot
     // index, and the 16-byte unique-player-id is the TRAILING field (memcpy'd to +0x1C), with the two
     // trailing flag bytes at +0x2C/+0x2D.
     // pack(1): the u64 date sits at the non-8-aligned +0x0C, so natural alignment would insert a
@@ -88,7 +90,7 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         s32 miImageWord0;   // +0x00 (MugshotInfo +0x18; std lwz 0(r31+0x18))
         s32 miImageWord1;   // +0x04 (MugshotInfo +0x1C)
         s32 miImageWord2;   // +0x08 (MugshotInfo +0x20)
-        u64 mu64DateTaken;  // +0x0C (MugshotInfo +0x24, 8B std at var_54; not 8-aligned)
+        u64 mu64WorldRegionRaw; // +0x0C (MugshotInfo +0x24, 8B std at var_54; not 8-aligned)
         s32 miImageWord2C;  // +0x14 (MugshotInfo +0x2C)
         s32 miSlotIndex;    // +0x18 (the on-screen slot the record is for; stw from a2[1])
         BrnProgression::MugshotInfo::UniquePlayerIDImage mUniquePlayerID; // +0x1C (16B, memcpy from MugshotInfo+0)
@@ -96,12 +98,28 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         u8  mbIsDeletePreview; // +0x2D (1 in delete preview, 0 otherwise)
         u8  maPad[0x30 - 0x2E];
     };
-    static_assert(offsetof(ImageInfoEvent, mu64DateTaken) == 0x0C, "date@0x0C");
+    static_assert(offsetof(ImageInfoEvent, mu64WorldRegionRaw) == 0x0C, "world region@0x0C");
     static_assert(offsetof(ImageInfoEvent, miImageWord2C) == 0x14, "word2C@0x14");
     static_assert(offsetof(ImageInfoEvent, miSlotIndex)   == 0x18, "slot@0x18");
     static_assert(offsetof(ImageInfoEvent, mUniquePlayerID) == 0x1C, "uniqueId@0x1C");
     static_assert(offsetof(ImageInfoEvent, mu8LockedFlag) == 0x2C, "locked@0x2C");
     static_assert(sizeof(ImageInfoEvent) == 0x30, "ImageInfoEvent==48");
+    static_assert(sizeof(ImageInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction),
+                  "producer image-info bytes match the typed action record");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mCaptureDate) ==
+                  offsetof(ImageInfoEvent, miImageWord0), "producer date words match action +0x00");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mWorldRegion) ==
+                  offsetof(ImageInfoEvent, mu64WorldRegionRaw), "producer region bytes match action +0x0C");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miNumCaptures) ==
+                  offsetof(ImageInfoEvent, miImageWord2C), "producer capture count matches action +0x14");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miSlotIndex) ==
+                  offsetof(ImageInfoEvent, miSlotIndex), "producer slot matches action +0x18");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mPlayerName) ==
+                  offsetof(ImageInfoEvent, mUniquePlayerID), "producer player id matches action +0x1C");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbLocked) ==
+                  offsetof(ImageInfoEvent, mu8LockedFlag), "producer lock byte matches action +0x2C");
+    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbHasDeleted) ==
+                  offsetof(ImageInfoEvent, mbIsDeletePreview), "producer delete byte matches action +0x2D");
 
     // type 290 (48 bytes): an EMPTY gallery slot record (no mugshot present). Field offsets are the
     // X360 stack-store map of the empty branch of ProcessScrollImagesEvent (0x82384E7C..0x82384EA8,
@@ -130,6 +148,8 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
     static_assert(offsetof(EmptySlotInfoEvent, mu8FlagB)   == 0x2C, "flagB@0x2C");
     static_assert(offsetof(EmptySlotInfoEvent, mu8FlagC)   == 0x2D, "flagC@0x2D");
     static_assert(sizeof(EmptySlotInfoEvent) == 0x30, "EmptySlotInfoEvent==48");
+    static_assert(sizeof(EmptySlotInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction),
+                  "empty-slot record uses the same 48-byte action wire");
 
     // type 292 (16 bytes): the gallery's live-mugshot bitfield (rebuilt after a delete). Field offsets
     // are the X360 stack-store map of ProcessDeleteRequest (0x82385660/0x82385668, base var_E0): the
@@ -141,17 +161,14 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         s32 miPad04;            // +0x04 (never written by the asm)
         u64 mu64LiveBits;       // +0x08 (one bit per live mugshot index; std r21 @var_D8)
     };
+    static_assert(sizeof(LoadCompleteEvent) == sizeof(GameStateModuleIO::ImageGalleryDataAction),
+                  "producer bit-set record matches typed action 292");
+    static_assert(offsetof(LoadCompleteEvent, mu64LiveBits) ==
+                  offsetof(GameStateModuleIO::ImageGalleryDataAction, mActiveBitArray),
+                  "producer occupancy bits start at action +0x08");
 
-    // type 294 (16 bytes): a save request (file id, texture size, texture buffer ptr). The asm
-    // (RequestImageSave 0x82384868) writes only +0x00/+0x04/+0x08; +0x0C is trailing pad it never
-    // stores (size 16 is still passed to AddEvent).
-    struct ImageSaveRequestEvent
-    {
-        s32   miFileID;       // +0x00
-        s32   miTextureSize;  // +0x04
-        char* mpTextureBuffer;// +0x08
-        s32   miPad0C;        // +0x0C (never written by the asm)
-    };
+    // Shared typed action294 payload: its X360 tail word remains unwritten and follows the
+    // native-width buffer pointer at host +0x10 (the host record size is 24 bytes).
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +272,14 @@ void GameStateImageManagerBase::HandleImageGalleryCountRequest(const ImageGaller
     CGS_ASSERT(mpProgression != nullptr, "mpProgression");
 
     struct CountReply { s32 meImageGalleryType; s32 miCount; } lReply;
+    static_assert(sizeof(CountReply) == sizeof(GameStateModuleIO::ImageGalleryCountAction),
+                  "producer count reply matches typed action 291");
+    static_assert(offsetof(CountReply, meImageGalleryType) ==
+                  offsetof(GameStateModuleIO::ImageGalleryCountAction, meImageType),
+                  "producer gallery type matches action +0x00");
+    static_assert(offsetof(CountReply, miCount) ==
+                  offsetof(GameStateModuleIO::ImageGalleryCountAction, miUsedCount),
+                  "producer gallery count matches action +0x04");
     lReply.meImageGalleryType = lpImageGalleryCountReqEvent->meImageGalleryImageType;
     lReply.miCount            = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryCountReqEvent->meImageGalleryImageType);
 
@@ -301,6 +326,12 @@ void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBu
         CgsNetwork::NetworkTexture* mpTexture;     // +0x00 (null when the slot is not rendered)
         s32                         miSlotIndex;   // +0x04
     };
+    static_assert(sizeof(ImageToRenderEvent) ==
+                  sizeof(GameStateModuleIO::ImageGalleryRenderImageAction),
+                  "producer render record matches typed action 289");
+    static_assert(offsetof(ImageToRenderEvent, miSlotIndex) ==
+                  offsetof(GameStateModuleIO::ImageGalleryRenderImageAction, miTextureIndex),
+                  "render slot follows the native-width texture pointer");
 
     for (s32 liSlotIndex = 0; liSlotIndex < KI_NUM_PICTURES; ++liSlotIndex)
     {
@@ -445,11 +476,12 @@ void GameStateImageManagerBase::RequestImageSave(s32 liFileID, CgsNetwork::Netwo
 
     CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
 
-    ImageSaveRequestEvent lSaveRequest;
+    GameStateModuleIO::ImageSaveRequestAction lSaveRequest;
     lSaveRequest.miFileID        = liFileID;
     lSaveRequest.miTextureSize   = lSaveSlot.GetTextureSize();
     lSaveRequest.mpTextureBuffer = lSaveSlot.GetTexture();
-    // +0x0C is left uninitialised: the X360 asm never writes that word.
+    // The X360 +0x0C word is unwritten. Pointer widening moves it to host +0x10, where
+    // GUI358 reads its first byte as ImageFileInfo::mbIsCorrupt; preserve the original residue.
     AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lSaveRequest), KI_EVENT_IMAGE_SAVE, (s32)sizeof(lSaveRequest));
 
@@ -622,7 +654,7 @@ void GameStateImageManagerBase::ProcessLockRequest(const ImageGalleryRequestEven
         lImageInfo.miSlotIndex     = lpImageGalleryReqEvent->miSlotIndex;
         lImageInfo.mu8LockedFlag   = lpMugshotInfo->GetLockedFlag();
         lImageInfo.mbIsDeletePreview = 0;
-        lImageInfo.mu64DateTaken   = lpMugshotInfo->GetDateTaken();
+        lImageInfo.mu64WorldRegionRaw = lpMugshotInfo->GetDateTaken();
         lImageInfo.miImageWord2C   = lpMugshotInfo->GetImageWord2C();
         lImageInfo.miImageWord0    = lpMugshotInfo->GetImageWord0();
         lImageInfo.miImageWord1    = lpMugshotInfo->GetImageWord1();
@@ -653,7 +685,7 @@ namespace
             lImageInfo.miSlotIndex      = liStartSlotIndex;
             lImageInfo.mbIsDeletePreview = lu8IsDeletePreview;
             lImageInfo.mu8LockedFlag    = lpMugshotInfo->GetLockedFlag();
-            lImageInfo.mu64DateTaken    = lpMugshotInfo->GetDateTaken();
+            lImageInfo.mu64WorldRegionRaw = lpMugshotInfo->GetDateTaken();
             lImageInfo.miImageWord2C    = lpMugshotInfo->GetImageWord2C();
             lImageInfo.miImageWord0     = lpMugshotInfo->GetImageWord0();
             lImageInfo.miImageWord1     = lpMugshotInfo->GetImageWord1();
@@ -892,25 +924,24 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     BrnProgression::MugshotInfo* lpUncoverInfo = lpProfile->GetMugshotInfo(leGalleryType, liUncoverImageIndex);
     if (lpUncoverInfo != nullptr)
     {
-        struct PrepareRenderEvent
-        {
-            s32   maClear[3];      // -1, -1, -1
-            s32   miSlotClear[3];  // 0, 0, 0 (interleaved with the above as 3 {id,?,?,size?})
-            s32   miFileID;        // +0x00 (MugshotInfo +0x30)
-            s32   miTextureSize;   // +0x04
-            char* mpTextureBuffer; // +0x08
-        } lPrepareRender;
+        CgsGui::ImageFileInfo laPrepareRender[KI_NUM_PICTURES];
+        static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
+                      "ImageFileInfo carries a native 64-bit buffer pointer");
+        static_assert(sizeof(laPrepareRender) == 72,
+                      "three host-native image-file records widen the X360 48-byte record");
         for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
         {
-            lPrepareRender.maClear[liIndex]     = -1;
-            lPrepareRender.miSlotClear[liIndex] = 0;
+            // ARTIST initializes only id@+0 and corrupt@+0xC in each 16-byte X360 slot.
+            // Size, buffer and the remaining bytes of slots 1/2 stay unwritten.
+            laPrepareRender[liIndex].miId        = -1;
+            laPrepareRender[liIndex].mbIsCorrupt = false;
         }
-        lPrepareRender.miFileID        = lpUncoverInfo->GetFileID();
-        lPrepareRender.mpTextureBuffer = lLastSlot.GetTexture();
-        lPrepareRender.miTextureSize   = lLastSlot.GetTextureSize();
-        miMugshotToSaveIndex           = 2; // X360 a1[33] = 2
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lPrepareRender),
-                          KI_EVENT_PREPARE_RENDER, 48);
+        laPrepareRender[0].miId     = lpUncoverInfo->GetFileID();
+        laPrepareRender[0].mpBuffer = lLastSlot.GetTexture();
+        laPrepareRender[0].miSize   = lLastSlot.GetTextureSize();
+        miMugshotToSaveIndex        = 2; // X360 a1[33] = 2
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laPrepareRender),
+                          KI_EVENT_PREPARE_RENDER, static_cast<s32>(sizeof(laPrepareRender)));
     }
     else
     {
@@ -940,14 +971,19 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
     BrnProgression::Profile* lpProfile = (mpProgression != nullptr) ? mpProgression->GetProfile() : nullptr;
 
-    // Local scratch list of slots whose textures need loading from disk.
-    struct PendingLoad { s32 miFileID; s32 miTextureSize; char* mpTextureBuffer; };
-    PendingLoad laPendingLoads[KI_NUM_PICTURES];
+    // Local scratch list of slots whose textures need loading from disk. The X360 record is
+    // CgsGui::ImageFileInfo[3] (48 bytes); native pointers widen each record to 24 bytes.
+    CgsGui::ImageFileInfo laPendingLoads[KI_NUM_PICTURES];
+    static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
+                  "ImageFileInfo carries a native 64-bit buffer pointer");
+    static_assert(sizeof(laPendingLoads) == 72,
+                  "three host-native image-file records widen the X360 48-byte record");
     for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
     {
-        laPendingLoads[liIndex].miFileID       = -1;
-        laPendingLoads[liIndex].miTextureSize  = 0;
-        laPendingLoads[liIndex].mpTextureBuffer = nullptr;
+        laPendingLoads[liIndex].miId     = -1;
+        laPendingLoads[liIndex].miSize   = 0;
+        laPendingLoads[liIndex].mpBuffer = nullptr;
+        // mbIsCorrupt and record padding remain unwritten, as in ARTIST's init loop.
     }
 
     s32 liNumLoadsQueued  = 0;
@@ -986,9 +1022,9 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
 
                 *lpSlotMapping++ = liSlotIndex;
                 CgsNetwork::NetworkTexture& lSlotTexture = maImageGalleryMugshots[liSlotIndex];
-                laPendingLoads[liNumLoadsQueued - 1].miFileID       = lpMugshotInfo->GetFileID();
-                laPendingLoads[liNumLoadsQueued - 1].miTextureSize  = lSlotTexture.GetTextureSize();
-                laPendingLoads[liNumLoadsQueued - 1].mpTextureBuffer = lSlotTexture.GetTexture();
+                laPendingLoads[liNumLoadsQueued - 1].miId     = lpMugshotInfo->GetFileID();
+                laPendingLoads[liNumLoadsQueued - 1].miSize   = lSlotTexture.GetTextureSize();
+                laPendingLoads[liNumLoadsQueued - 1].mpBuffer = lSlotTexture.GetTexture();
             }
             else
             {
@@ -1007,9 +1043,10 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     {
         if (liNumLoadsQueued > 0)
         {
-            // Kick off the file load (type 295: prepare-render record carrying the pending loads).
+            // Kick off the file load (type 295). ARTIST posts 48 bytes on X360;
+            // native host records widen to 72.
             lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laPendingLoads),
-                              KI_EVENT_PREPARE_RENDER, 48);
+                              KI_EVENT_PREPARE_RENDER, static_cast<s32>(sizeof(laPendingLoads)));
             maImageLoadRequests.Clear();
             mbLoadInProgress = true;
         }

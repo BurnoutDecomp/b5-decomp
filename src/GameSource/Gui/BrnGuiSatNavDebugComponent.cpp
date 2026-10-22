@@ -15,16 +15,35 @@
 
 namespace BrnGui
 {
-    // The three module-scope view-distance / max-speed tuning globals the menu edits by &address.
-    // Owned (defined) by the sat-nav renderer TU (X360 rodata flt_82F259D0 / flt_82F259CC /
-    // flt_82F258E4); declared extern here so OnActivate can register their addresses.
-    extern f32 kfSatNavMaxViewDistance;
-    extern f32 kfSatNavMinViewDistance;
-    extern f32 kfSatNavMaxSpeedMph;
-    // The sat nav's lerp band, the runtime copies of the view band above that Update republishes
-    // every frame (same owner).
-    extern f32 kfSatNavMaxViewLerp;
-    extern f32 kfSatNavMinViewLerp;
+    // Original C++ initialization writes no module/toggle/status/base data.
+    SatNavDebugComponent::SatNavDebugComponent()
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+    {
+        mInputQueue.MarkUnconstructed();
+    }
+
+    // Actual enclosing module Destruct82507720..A4 inlines this derived body.
+    void SatNavDebugComponent::Destruct()
+    {
+        if (!mpGuiModule)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpGuiModule != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp", 84);
+            CgsDev::Assert::EndAssert();
+        }
+        mpGuiModule = 0;
+        mInputQueue.Destruct();
+        // The original following base call is folded to empty8284CB38.
+    }
+
+    // BrnSatNav.cpp:36..40 (DecFIGS); these are the actual shared tuning
+    // words and the separately initialized/runtime-published lerp band.
+    extern f32 KF_CAR_MAX_MPH;
+    extern f32 KF_MIN_VIEW_DIST;
+    extern f32 KF_MAX_VIEW_DIST;
+    extern f32 KF_MIN_VIEW_LERP;
+    extern f32 KF_MAX_VIEW_LERP;
 
     namespace
     {
@@ -47,13 +66,19 @@ namespace BrnGui
         return "Sat Nav";
     }
 
+    // ARTIST vtable 0x820CE830 slot 4 points to the ICF-shared 0x824ED348 body.
+    const char* SatNavDebugComponent::GetPath() const
+    {
+        return "Gui";
+    }
+
     // The base Construct, the module binding, the input queue, every toggle off, alpha 90, and the
     // four rect corners copied out of the live sat-nav viewport rect.
     void SatNavDebugComponent::Construct(GuiModule* lpGuiModule)
     {
         CGS_ASSERT(lpGuiModule != 0, "Invalid Gui module passed to SatNavDebugComponent::Construct");
 
-        CgsDev::DebugComponent::Construct();
+        // Original base Construct resolves to empty8284CB38; no base data reset.
         mpGuiModule = lpGuiModule;
         mInputQueue.Construct();
 
@@ -78,8 +103,8 @@ namespace BrnGui
     // toggle events to the GUI module's input events and clear the local queue.
     void SatNavDebugComponent::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer)
     {
-        kfSatNavMinViewLerp = kfSatNavMinViewDistance;
-        kfSatNavMaxViewLerp = kfSatNavMaxViewDistance;
+        KF_MIN_VIEW_LERP = KF_MIN_VIEW_DIST;
+        KF_MAX_VIEW_LERP = KF_MAX_VIEW_DIST;
 
         const GuiCache& lrGuiCache = mpGuiModule->mGuiCache;
         mfCurrentZoomValue = SatNavComponent::GetViewDistance(
@@ -144,9 +169,9 @@ namespace BrnGui
         SetRange( &mfSatNavBottomRightY, KF_SATNAV_POS_MIN, KF_SATNAV_POS_MAX );
         SetRange( &miSatNavAlpha,        0u, KU_SATNAV_ALPHA_MAX );
 
-        RegisterVariable( &kfSatNavMaxViewDistance, "SatNav: Max View Distance" );
-        RegisterVariable( &kfSatNavMinViewDistance, "SatNav: Min View Distance" );
-        RegisterVariable( &kfSatNavMaxSpeedMph,     "SatNav: Max Speed MPH" );
+        RegisterVariable( &KF_MAX_VIEW_DIST, "SatNav: Max View Distance" );
+        RegisterVariable( &KF_MIN_VIEW_DIST, "SatNav: Min View Distance" );
+        RegisterVariable( &KF_CAR_MAX_MPH,     "SatNav: Max Speed MPH" );
 
         RegisterVariable( &mfCurrentZoomValue, "SatNav: Current Zoom variable (Read Only)" );
         SetReadOnly( &mfCurrentZoomValue, true );

@@ -13,6 +13,8 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // BitArray<64u> (RoadRulesNewRulersAction)
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // FastBitArray<30> (ImageGalleryDataAction)
+#include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // DateAndTime (ImageGalleryImageInfoAction)
 #include "GameSource/GameState/BrnCgsPlayerName.h"          // CgsNetwork::PlayerName (the road-rule score records)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
 #include "SharedClasses/Trigger/BrnRegion.h"                  // BrnTrigger::BoxRegion (BroadcastModeFinishLinesAction::mBoxRegion)
@@ -141,15 +143,11 @@ enum EGameActionType
     // so id and record identity are attested at one site -- the same class of proof that pinned
     // E_ACTION_ONLINE_ROUND_RESULT (230) and E_ACTION_SET_UP_ALL_DRIVE_THRUS (45). DWARF 221 + 8,
     // exactly the shift its neighbour ONLINE_ROUND_RESULT (222 -> 230) carries.
-    // [!] SIZE MISMATCH NOTED, NOT PAPERED OVER: the console posts 264 (0x108) while
-    // `struct OnlineGameResults` below documents sizeof == 260 (65 u32 words, +0xDC + 40 == 0x104).
-    // That 4-byte delta is a TAIL-PAD question for the record's owner (the same shape as
-    // StartModeIntroAction's 603 -> 604), not evidence against the id: 260 is not any other
-    // record's size either. Left as a flagged residue.
-    // 229 was unoccupied in this enum (checked: no duplicate values remain) and NO consumer
-    // anywhere in src/ dispatches on this enumerator -- grep-verified, its only uses are the
-    // record's own GameAction<> tag and BrnGameStateSharedIO.h's re-home note -- so the move is a
-    // pure value correction with no call-site churn.
+    // The defined fields end at +0x104; the leading eight-byte CgsID gives this
+    // record eight-byte alignment and a 264-byte object extent. The producer's
+    // 264-byte queue size includes four trailing alignment bytes (asserted below).
+    // The game-state bridge forwards this tagged action to the existing network
+    // action queue; StateManager::ProcessGameStateActions consumes its typed results.
     E_ACTION_ONLINE_GAME_RESULT         = 229,   // DWARF :231 gives 221 (+8 X360); producer-pinned, size 264
     // ⛔ VALUE CORRECTION 2026-08-26 (stuntrace waveB fix round) -- was the PS3-DWARF 222.
     // X360-attested at BOTH ends: ModeManager::SendModeStopMessages @0x8234BEC0 posts
@@ -978,6 +976,17 @@ enum EGameActionType
     E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT            = 248,  // DWARF 238 (+10 X360); size 24 PINNED (producer + translator)
     E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT       = 249,  // DWARF 239 (+10 X360); size 24 BAND
     E_ACTION_HUD_MESSAGE_X_CRASHES                       = 250,  // DWARF 240 (+10 X360); size 16 PINNED (translator case 250)
+    // X360 HUD band from ARTIST translator cases and the corresponding DecFIGS action names.
+    // The BHR/team and rival-status ids are the DecFIGS 245..253 records shifted by +7; 255
+    // (road-rage extension) is declared below with its producer evidence.
+    E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT                  = 252,  // DWARF 245; X360 producer posts 8 bytes
+    E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED              = 253,  // DWARF 246; X360 producer posts 8 bytes
+    E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE              = 254,  // DWARF 247; X360 producer posts 4 bytes
+    E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT                 = 256,  // DWARF 249; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL                = 257,  // DWARF 250; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET               = 258,  // DWARF 251; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING                = 259,  // DWARF 252; ARTIST translator consumes two CgsIDs
+    E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED                = 260,  // DWARF 253; ARTIST translator consumes two CgsIDs
     // ---- [FX-GS 2026-09-23, crash-parity G11-D4] the online team-takedown trio -----------------
     // BAND (+8, the freeburn-challenge block 153..161 above and NEAR_MISS..TAILGATING 171..176 sit in
     // it). ModeManager::HandleOnlineTeamTakedowns @0x823440B8 posts all three, each with the DWARF
@@ -1066,11 +1075,21 @@ enum EGameActionType
     E_ACTION_START_GAME_THROUGH_PLAYER_JOIN              = 235,
     E_ACTION_RESTART_TRAFFIC                             = 236,
     E_ACTION_REQUEST_GAMERCARD                           = 239,
+    // Image-gallery records: DecFIGS names them at 275..279; ARTIST producers and this
+    // translator attest the X360 action IDs 289..293 (the same 14-seat shift throughout).
+    E_ACTION_IMAGE_GALLERY_RENDER_IMAGE                  = 289,
+    E_ACTION_IMAGE_GALLERY_IMAGE_INFO                    = 290,
+    E_ACTION_IMAGE_GALLERY_COUNT_ACTION                  = 291,
+    E_ACTION_IMAGE_GALLERY_DATA_ACTION                   = 292,
+    E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE                 = 293,
     //   296 band +14: the bridge copies {texture pointer, player name} into event 48.
     E_ACTION_DXT_DECODE_IMAGE                            = 296,
+    // X360-only debug flow: PreWorldUpdate posts maCompletedChallenges as one FastBitArray<15>
+    // word; TranslateGameActionsToGuiEvents forwards that bitset to GUI event 596.
+    E_ACTION_DEVELOPER_CHALLENGES_COMPLETED                = 298,
     //   FLAG -- names unrecovered. Ids 18..21 are the four the console inserted ahead of the
     //   reference's 18 (CHECK_FOR_LOADING_SCREEN sits at 22), and 299 lies past the reference's
-    //   COUNT; no reference enumerator exists for any of them. Each is named after its producer
+    //   COUNT; no reference enumerator exists for those values. Each is named after its producer
     //   and the local name the bridge's assert gives the record (18 is E_ACTION_EVENT_SCORE_TO_UPLOAD
     //   above).
     //   19  GameStateModule::OnProfileLoaded: a pointer to the profile's pending uploads (size 4).
@@ -2158,7 +2177,7 @@ struct SetUpAllDriveThrusAction : public GameAction<E_ACTION_SET_UP_ALL_DRIVE_TH
 // X360 0x8231CA38 (SetPosition) / 0x82558580 (GetPosition). Per-player online-round result action:
 // a position-indexed table of finishing slots plus a list of mid-round disconnects. DWARF
 // BrnGameActions.h:5227 (true owning home). Minimal slice -- only the members the two reconstructed
-// bodies touch are declared; Construct is declared-only (own ledger entry). GameAction<T>
+// bodies touch are declared; Construct is recovered from the inlined ARTIST producer. GameAction<T>
 // is an empty tag base, so instance data starts at +0x00 (matches the X360 a1[0] / (a1+8) access:
 // maPlayerPosition[8] at +0x00, maDisconnectedPlayers Array<NetworkPlayerID,8> at +0x20 with its count
 // word at +0x40 == a1[16]). NetworkPlayerID == s32 (committed BrnNetwork::NetworkPlayerID).
@@ -2167,7 +2186,7 @@ struct OnlineRoundResults : public GameAction<E_ACTION_ONLINE_ROUND_RESULT>
     static const s32 KI_POSITION_DISCONNECTED = -1;   // DWARF :5230 (GetPosition's disconnected sentinel)
     static const s32 KI_MAX_PLAYERS           = 8;    // == BrnWorld::KI_MAX_ACTIVE_RACE_CARS
 
-    void                        Construct();                                                       // declared-only
+    void                        Construct();                                                       // inlined at 0x8234C2F4..0x8234C310
     void                        SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition); // 0x8231CA38
     s32                         GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const;           // 0x82558580
     // The winner is the player in first place (the word at +0x00).
@@ -2181,8 +2200,9 @@ private:
 // X360 online end-of-game results (DWARF home BrnGameActions.h:5153,
 // : public GameAction<E_ACTION_ONLINE_GAME_RESULT>). Re-homed here from the provisional
 // u32 mauWords[65] blob that used to live in BrnGameStateSharedIO.h (kept it there only because
-// GameAction<>/EGameActionType weren't visible -- they are here). sizeof == 260 (65 u32 words),
-// matching the old blob + the X360 operator= word count. LAYOUT IS X360-AUTHORITATIVE (the PS3
+// GameAction<>/EGameActionType weren't visible -- they are here). Defined data spans260 bytes;
+// the eight-byte-aligned object occupies264, matching the ARTIST action229 producer.
+// Its operator= copies the defined data and leaves only tail padding. LAYOUT IS X360-AUTHORITATIVE (the PS3
 // DecFIGS DWARF lists a different/leaner field set past +0x24); the X360 anchors force round-count
 // @0x28 and the EGameModeType discriminant @0x34. Methods Clear/Set*/Get*/operator= are defined in
 // BrnGameActions.cpp.
@@ -2218,6 +2238,8 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     s32             maiRoundStuntScores[KI_MAX_ROUNDS];     // +0xB4 (40) stunt score
     s32             maiRoundStuntMultipliers[KI_MAX_ROUNDS];// +0xDC (40) stunt multiplier
 };
+static_assert(sizeof(OnlineGameResults) == 264, "ARTIST action229 payload extent");
+static_assert(sizeof(OnlineRoundResults) == 68, "ARTIST action230 payload extent");
 
 // X360 0x8232CEB0 (StuntModeScoring::DealWithStunt reads it). The "a world stunt element was
 // performed" action: the 64-bit element key plus a stunt-element discriminant. DWARF home
@@ -3488,6 +3510,78 @@ static_assert(sizeof(HUDMessageXCrashesAction) == 16 &&
               offsetof(HUDMessageXCrashesAction, meRivalRaceCarIndex) == 8,
               "X360 posts action 250 with size 16; the index at +8");
 
+// [CP25] ARTIST-consumed payload shapes and DecFIGS field names for actions 252-260.
+struct HUDMessageBHRCheckpointAction : public GameAction<E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
+    s32                   miNumCheckpointsToGo; // +0x04
+};
+static_assert(sizeof(HUDMessageBHRCheckpointAction) == 8 &&
+              offsetof(HUDMessageBHRCheckpointAction, miNumCheckpointsToGo) == 4,
+              "ARTIST action 252 is two words");
+
+struct HUDMessageBHRRunnerCrashedAction : public GameAction<E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
+    s32                   miNumCrashesToGo;     // +0x04
+};
+static_assert(sizeof(HUDMessageBHRRunnerCrashedAction) == 8 &&
+              offsetof(HUDMessageBHRRunnerCrashedAction, miNumCrashesToGo) == 4,
+              "ARTIST action 253 is two words");
+
+struct HUDMessageOnlineTeamChangeAction : public GameAction<E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
+};
+static_assert(sizeof(HUDMessageOnlineTeamChangeAction) == 4,
+              "ARTIST action 254 is one active-race-car index");
+
+struct HUDMessageFirstHitOnRivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageFirstHitOnRivalAction) == 16 &&
+              offsetof(HUDMessageFirstHitOnRivalAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsARivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsARivalAction) == 16 &&
+              offsetof(HUDMessageRivalIsARivalAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsATargetAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsATargetAction) == 16 &&
+              offsetof(HUDMessageRivalIsATargetAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsFleeingAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsFleeingAction) == 16 &&
+              offsetof(HUDMessageRivalIsFleeingAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+struct HUDMessageRivalIsWreckedAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED>
+{
+    CgsID mRivalID; // +0x00
+    CgsID mCarID;   // +0x08
+};
+static_assert(sizeof(HUDMessageRivalIsWreckedAction) == 16 &&
+              offsetof(HUDMessageRivalIsWreckedAction, mCarID) == 8,
+              "DecFIGS rivalry action carries two CgsIDs");
+
+
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3256-3260. Producer
 // ModeManager::HandleOnlineTeamTakedowns @0x823440B8: `stw victim, var+0` @0x8234439C,
 // `stb (blue players left == 1), var+4` @0x823443A4, `stb (victim == player), var+5` @0x823443C4,
@@ -3925,6 +4019,75 @@ struct RequestGamerCardAction : public GameAction<E_ACTION_REQUEST_GAMERCARD>
 {
     BrnNetwork::PlayerName mPlayerName;                        // +0x00 (16)
 };
+
+// Image-gallery actions 289..293. DecFIGS BrnGameActions.h:5295..5350 names the records;
+// the GameStateImageManagerBase producers and ARTIST bridge pin the X360 values and record
+// offsets. The producer TU still builds its byte-for-byte stack records; these shared types
+// give the bridge the same fields and widths without changing those producer stores.
+struct ImageGalleryRenderImageAction : public GameAction<E_ACTION_IMAGE_GALLERY_RENDER_IMAGE>
+{
+    const CgsNetwork::NetworkTexture* mpTexture;                // +0x00 (4B on X360)
+    s32                               miTextureIndex;           // +0x04 (X360; native pointer width on PC)
+};
+static_assert(offsetof(ImageGalleryRenderImageAction, miTextureIndex) == sizeof(void*),
+              "render-image slot follows the native-width texture pointer");
+static_assert(sizeof(ImageGalleryRenderImageAction) == (sizeof(void*) == 8 ? 16 : 8),
+              "render-image action is pointer plus slot index");
+
+struct ImageGalleryImageInfoAction : public GameAction<E_ACTION_IMAGE_GALLERY_IMAGE_INFO>
+{
+    CgsSystem::DateAndTime mCaptureDate;                        // +0x00 (12)
+    BrnWorld::WorldRegion  mWorldRegion;                        // +0x0C (8)
+    s32                    miNumCaptures;                       // +0x14
+    s32                    miSlotIndex;                         // +0x18
+    CgsNetwork::PlayerName mPlayerName;                         // +0x1C (16)
+    bool                   mbLocked;                            // +0x2C
+    bool                   mbHasDeleted;                        // +0x2D
+};
+static_assert(offsetof(ImageGalleryImageInfoAction, mCaptureDate) == 0x00, "capture date@0x00");
+static_assert(offsetof(ImageGalleryImageInfoAction, mWorldRegion) == 0x0C, "world region@0x0C");
+static_assert(offsetof(ImageGalleryImageInfoAction, miNumCaptures) == 0x14, "capture count@0x14");
+static_assert(offsetof(ImageGalleryImageInfoAction, miSlotIndex) == 0x18, "slot@0x18");
+static_assert(offsetof(ImageGalleryImageInfoAction, mPlayerName) == 0x1C, "player name@0x1C");
+static_assert(offsetof(ImageGalleryImageInfoAction, mbLocked) == 0x2C, "locked@0x2C");
+static_assert(offsetof(ImageGalleryImageInfoAction, mbHasDeleted) == 0x2D, "deleted@0x2D");
+static_assert(sizeof(ImageGalleryImageInfoAction) == 0x30, "image-info action is 48 bytes");
+
+struct ImageGalleryCountAction : public GameAction<E_ACTION_IMAGE_GALLERY_COUNT_ACTION>
+{
+    EImageGalleryType meImageType;                              // +0x00
+    s32               miUsedCount;                              // +0x04
+};
+static_assert(sizeof(ImageGalleryCountAction) == 8, "gallery-count action is 8 bytes");
+
+struct ImageGalleryDataAction : public GameAction<E_ACTION_IMAGE_GALLERY_DATA_ACTION>
+{
+    EImageGalleryType      meImageType;                         // +0x00
+    CgsContainers::FastBitArray<30> mActiveBitArray;             // +0x08 (one u64 field)
+};
+static_assert(offsetof(ImageGalleryDataAction, mActiveBitArray) == 8,
+              "gallery-data bit array follows the four-byte enum and four-byte alignment gap");
+static_assert(sizeof(ImageGalleryDataAction) == 16, "gallery-data action is 16 bytes");
+
+struct ImageGalleryLoadCompleteAction : public GameAction<E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE> {};
+static_assert(sizeof(ImageGalleryLoadCompleteAction) == 1, "gallery-load-complete action is one byte");
+
+// ARTIST action294 is posted by GameStateImageManagerBase::RequestImageSave. The original
+// {file id, size, 32-bit buffer pointer, trailing word} record is 16 bytes; the pointer widens
+// on the PC host, moving the untouched trailing word from X360 +0x0C to host +0x10.
+struct ImageSaveRequestAction
+{
+    s32   miFileID;        // X360 +0x00
+    s32   miTextureSize;   // X360 +0x04
+    char* mpTextureBuffer; // X360 +0x08 (host-native pointer)
+    s32   miPad0C;         // X360 +0x0C; producer leaves it unwritten
+};
+static_assert(offsetof(ImageSaveRequestAction, mpTextureBuffer) == 0x08,
+              "action294 image pointer follows id and size");
+static_assert(offsetof(ImageSaveRequestAction, miPad0C) == (sizeof(void*) == 8 ? 0x10 : 0x0C),
+              "action294 trailing word follows the native-width pointer");
+static_assert(sizeof(ImageSaveRequestAction) == (sizeof(void*) == 8 ? 24 : 16),
+              "action294 image-save record widens with its buffer pointer");
 
 // 296 -- decode a received DXT image. Console 20 bytes; the texture pointer is 8 bytes on the
 // host, so the name lands at +0x08 here.

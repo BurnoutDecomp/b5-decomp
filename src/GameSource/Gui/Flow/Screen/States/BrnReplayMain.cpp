@@ -26,36 +26,6 @@ namespace
     // The in-queue return code that flags an event carrying an id payload (X360 result == 6).
     const s32 KI_EVENT_RESULT_WITH_ID = 6;
 
-    // FLAG boundary helper: the far GuiCache replay flags this state reads. There is no named
-    // accessor on the committed BrnGui::GuiCache API for these, so they are read here through a
-    // file-local boundary against the documented X360 byte offsets (mirrors the committed
-    // ReplayLoadingCacheBoundary / ReplayOutroCacheBoundary). Replace with named GuiCache
-    // accessors when the GuiCache TU homes them.
-    struct ReplayMainCacheBoundary
-    {
-        // X360 *(mpGuiCache + 0x141D0) (float): the replay time remaining; < 1.0 -> advance.
-        static const u32 KU_TIME_REMAINING_OFFSET = 0x141D0;
-        // X360 *(mpGuiCache + 0x13BBC) (word): bit 6 set -> the replay is aborting; advance.
-        static const u32 KU_ABORT_FLAG_WORD_OFFSET = 0x13BBC;
-        // X360 *(mpGuiCache + 0x141D5) (byte): non-zero -> a replay HUD message banner is present.
-        static const u32 KU_HUD_MESSAGE_FLAG_OFFSET = 0x141D5;
-
-        static f32 GetTimeRemaining(const GuiCache* lpGuiCache)
-        {
-            return *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpGuiCache) +
-                                                 KU_TIME_REMAINING_OFFSET);
-        }
-        static bool IsAborting(const GuiCache* lpGuiCache)
-        {
-            const u32 luFlags = *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(lpGuiCache) +
-                                                              KU_ABORT_FLAG_WORD_OFFSET);
-            return ((luFlags >> 6) & 1) == 1;
-        }
-        static u8 GetHudMessageFlag(const GuiCache* lpGuiCache)
-        {
-            return *(reinterpret_cast<const u8*>(lpGuiCache) + KU_HUD_MESSAGE_FLAG_OFFSET);
-        }
-    };
 }   // anonymous namespace
 
 // ---- statics -----------------------------------------------------------------
@@ -78,7 +48,7 @@ void ReplayMain::OnEnter()
     // When the cache flags a replay HUD message banner (X360 *(mpGuiCache+0x141D5) == 1),
     // construct the embedded ReplayHudMessageComponent ("HudMessage_mc"). The X360 caller sets
     // only name + stateInterface (r4/r5); the base component parent-name arg is left unset here.
-    if (ReplayMainCacheBoundary::GetHudMessageFlag(mpGuiCache) == 1)
+    if (mpGuiCache->GetReplayDisplayHud() == 1)
         mHudMessage.Construct("HudMessage_mc", mpStateInterface, 0);   // this+0x40
 
     meState = E_STATE_ENTER;   // this+0x3C = 0
@@ -134,12 +104,12 @@ void ReplayMain::UpdateRunning()
 
     // Tail (also reached directly when the queue was empty): advance when the replay clock has
     // run out or the cache abort bit is set, otherwise tick the HUD banner if one is present.
-    if (ReplayMainCacheBoundary::GetTimeRemaining(mpGuiCache) < 1.0f ||
-        ReplayMainCacheBoundary::IsAborting(mpGuiCache))
+    if (mpGuiCache->GetReplayStatusInterface().GetPlaybackTimeRemaining() < 1.0f ||
+        ((mpGuiCache->GetReplayStatusInterface().GetStatusFlags() >> 6) & 1u) == 1u)
     {
         SendStateEvent("ADVANCE");
     }
-    else if (ReplayMainCacheBoundary::GetHudMessageFlag(mpGuiCache) != 0)
+    else if (mpGuiCache->GetReplayDisplayHud() != 0)
     {
         mHudMessage.Update();   // this+0x40
     }

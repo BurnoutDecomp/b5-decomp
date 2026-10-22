@@ -26,6 +26,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT + BeginAssert/FireAssert/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (AddListResource's streamed overflow message)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint + Message::gxMessageFilterFlags (the two post-load notices)
+#include "GameSource/Resource/BrnDLCManager.h"  // shared owner of ARTIST DLC feature/availability state
 
 namespace BrnResource
 {
@@ -285,56 +286,9 @@ s32 ChallengeList::GetChallengeCount() const
     return miCount;
 }
 
-// ---------------------------------------------------------------------------
-// File-scope DLC entitlement state (FLAG -- foreign home).
-//
-// IsChallengeContentBought reads a small block of downloadable-content state that the
-// X360 binary lays out from base byte_82FFA7F0:
-//   dword_82FFA7F4   -- the owned/entitlement bitmask          (+0x04)
-//   dword_82FFA7F8[] -- per-content required-bit values        (+0x08, indexed)
-//   dword_82FFA80C   -- index into the array for content-type 1 (+0x1C)
-//   dword_82FFA810   -- index into the array for content-type 2 (+0x20)
-//   byte_82FFA870    -- "type-1 content bought" flag            (+0x80)
-//   byte_82FFA871    -- "type-2 content bought" flag            (+0x81)
-// These belong to the DLC subsystem (BrnResource::DLCManager / its translation unit),
-// NOT to ChallengeList.
-//
-// ⭐ [gateui r4] THEY ARE NOW REAL ZERO-INITIALISED DEFINITIONS, NOT `extern` DECLARATIONS.
-// The round-3 form left six UNDEF externals in ChallengeList.obj that NOTHING in the tree
-// defines -- survivable only under `/Gy + /OPT:REF` and only while every caller stayed
-// unmounted, which this wave changes. ChallengeList.cpp takes the HOST SEAT for them until
-// the DLC manager is reconstructed; the moment it lands, it becomes the owner and these
-// definitions move there (they stay non-static precisely so that hand-over is an
-// `extern` away and the linker catches a duplicate).
-//
-// ⛔ FLAG -- THE CONSOLE'S RUNTIME WRITER IS THE DLC MANAGER, AND THERE IS NO DLC MANAGER
-// IN THIS BUILD. Nothing here writes any of these six; on the X360 they are .data that the
-// downloadable-content subsystem fills after the entitlement query. So they hold zero for
-// the whole process.
-//
-// POLARITY SANITY-CHECKED AGAINST THE EXPORT, not assumed. IsChallengeContentBought
-// @0x8267BC08, verbatim:
-//     if ( v2 == 1 ) { if ( (dword_82FFA7F4 & dword_82FFA7F8[dword_82FFA80C])
-//                            != dword_82FFA7F8[dword_82FFA80C] ) return 0;
-//                      v4 = byte_82FFA870; }
-//     else           { if ( v2 != 2 ) return 1; ... v4 = byte_82FFA871; }
-//     return v4 != 0;
-// With every global zero: the required-bits value is 0, so `(0 & 0) != 0` is FALSE and the
-// mask test does NOT early-out; the answer is then `byte_82FFA870/871 != 0` == FALSE.
-// So zero yields "DLC-A and DLC-B challenges are NOT bought", while type 0 (the base-game
-// challenges) still returns true unconditionally. That IS the asm's no-DLC behaviour, and
-// it is the safe direction -- a build with no entitlement data must not unlock paid content.
-//
-// Extents of dword_82FFA7F8[]: the next named global in the block sits at +0x1C
-// (dword_82FFA80C), so the array occupies +0x08..+0x1B == FIVE dwords. It is indexed only
-// by the two index globals, both of which are zero here, so only element 0 is ever read in
-// this build. The size is documentation of the console block, not a load-bearing bound.
-u32  gauChallengeDlcOwnedMask       = 0;        // byte_82FFA7F4  (+0x04)
-u32  gauChallengeDlcRequiredBits[5] = { 0, 0, 0, 0, 0 };  // byte_82FFA7F8[] (+0x08..+0x1B)
-u32  guChallengeDlcIndexTypeA       = 0;        // byte_82FFA80C  (+0x1C)
-u32  guChallengeDlcIndexTypeB       = 0;        // byte_82FFA810  (+0x20)
-u8   gbChallengeContentBoughtTypeA  = 0;        // byte_82FFA870  (+0x80)
-u8   gbChallengeContentBoughtTypeB  = 0;        // byte_82FFA871  (+0x81)
+// The X360 ChallengeList consumer and DLCDebugComponent::OnActivate share the same
+// DLCFeatureAvailability block. Content-bought types 1 and 2 select feature slots 0 and 1.
+// Keep this reader on that owner so the registered enable flags and pack mask stay connected.
 
 // ChallengeList::GetChallengeData(s32) @ 0x82326080
 // X360: range-guard the index against miCount ("Index out of range", ChallengeList.h:162,
@@ -412,34 +366,18 @@ s32 ChallengeList::GetChallengeIndex( CgsID lID ) const
 }
 
 // ChallengeList::IsChallengeContentBought(s32) @ 0x8267BC08
-// X360: read the challenge's content-bought type (entry byte @0xD6). Type 1 / 2 each
-// gate the challenge behind a downloadable-content entitlement: the content counts as
-// "bought" only if (a) the owned-mask has ALL the required bits for that content's index
-// AND (b) the matching per-type bought flag is set. Any other type value (0, ...) means
-// the content is always available (returns true).
+// ARTIST uses feature slots 0 and 1 for content-bought types 1 and 2. The same table is
+// registered by DLCDebugComponent::OnActivate; IsFeatureEnabled performs the original
+// required-pack-mask test followed by the matching +0x80/+0x81 enable-byte read.
 bool ChallengeList::IsChallengeContentBought( s32 liIndex ) const
 {
     const u8 luType = GetChallengeData( liIndex )->GetContentBoughtType();
 
     if ( luType == ChallengeListEntry::E_CONTENT_BOUGHT_DLC_A )
-    {
-        const u32 luRequired = gauChallengeDlcRequiredBits[ guChallengeDlcIndexTypeA ];
-        if ( ( gauChallengeDlcOwnedMask & luRequired ) != luRequired )
-        {
-            return false;
-        }
-        return gbChallengeContentBoughtTypeA != 0;
-    }
+        return g_DLCFeatureAvailability.IsFeatureEnabled( 0 );
 
     if ( luType == ChallengeListEntry::E_CONTENT_BOUGHT_DLC_B )
-    {
-        const u32 luRequired = gauChallengeDlcRequiredBits[ guChallengeDlcIndexTypeB ];
-        if ( ( gauChallengeDlcOwnedMask & luRequired ) != luRequired )
-        {
-            return false;
-        }
-        return gbChallengeContentBoughtTypeB != 0;
-    }
+        return g_DLCFeatureAvailability.IsFeatureEnabled( 1 );
 
     return true;
 }

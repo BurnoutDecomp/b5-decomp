@@ -6,7 +6,8 @@
 // ClearTracker, SetEventData, UpdatePanelData (empty on the console -- see (d) below),
 // and CrashNavMapEventKeyboardListener::FillString.
 //
-// HandleControllerInput and UpdateEventData are DECLARED, NEVER DEFINED -- see (e).
+// HandleControllerInput remains declaration-only: ARTIST input vtable slots are empty.
+// UpdateEventData is recovered from its original inline call pair -- see (e).
 //
 // ⭐⭐ MOUNTED 2026-09-08 (p0 wave). The previous pass reported this TU un-mountable and
 // listed five blockers. FOUR OF THE FIVE WERE NOT BLOCKERS AT ALL -- they were unread
@@ -28,16 +29,9 @@
 //       the icon record's whole 16-byte lane, and mTargetLandmarkIndex at +0x28. That is
 //       the same fill GuiCache::UpdateTrackerInfo already ships; the file-local
 //       placeholder record this TU carried is deleted.
-//   (c) ⛔ REAL, AND PARKED (the one genuine leaf). `BrnGuiKeyboard::Show` forwards to
-//       `CgsGui::GuiKeyboard::Show`, which IS reconstructed -- in
-//       GameShared/GameClasses/Gui/CgsGuiKeyboard.cpp -- but that TU is NOT mounted and
-//       its body bottoms out in the console's system keyboard UI, for which this build
-//       has no PC leaf. Both keyboard call sites are parked EXACTLY as
-//       BrnCrashNavSettings.cpp parks the same leaf, with the console's call spelled out
-//       in a comment and a one-shot log so the gap is visible in the log rather than
-//       silent. The three UTF-16 dialog strings the console passes ARE recovered -- they
-//       are "An Event", "Event Name" and "Create a name to recognize this event" -- and
-//       are recorded at the parked sites.
+//   (c) RECOVERED: the original name-entry and null/empty re-show calls now reach
+//       the real BrnGuiKeyboard wrapper and native PC provider. Their UTF16 strings
+//       come from ARTIST8206AB64/78/90, without substituting accepted default text.
 //   (d) ✅ RETIRED. `UpdatePanelData` needs no recovered body: it is a VTABLE SLOT, and
 //       the vtable is data. This class's vtable is 14 slots; the slot Update dispatches
 //       through (+0x34) holds the address of a function whose entire body is a single
@@ -46,12 +40,10 @@
 //       +0x34 slot at all, which is the cross-check: the slot belongs to the first
 //       virtual CrashNavMapEvent introduces, and the declaration reference says that is
 //       UpdatePanelData.)
-//   (e) ✅ RETIRED as a mount blocker. `HandleControllerInput` and `UpdateEventData` are
-//       declared by the reference outline and have no body in the console image AND no
-//       caller: this screen does not override the HandleCrashNavInputPressed vtable slot
-//       (+0x24 is the empty base slot), so the shipped build never routes input into
-//       them. They stay DECLARATION-ONLY in the header, which is correct for a member
-//       nothing calls.
+//   (e) UpdateEventData's private void shape is in DecFIGS, and ARTIST inlines
+//       its SetTracker + virtual UpdatePanelData pair at824DDBC4..DBD8. Its body
+//       is now recovered below. ARTIST vtable82077044 +0x24/+0x28 target
+//       single-blr8284CB38, so no DecFIGS-only creation-input override is imported.
 //
 // ⚠️ THE SCREEN'S CONSOLE EXIT PATH IS PRESENT BUT INERT IN THIS BUILD -- and that is why
 // a small, clearly-fenced PC bring-up arm survives in Update below. The console's only
@@ -87,6 +79,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // the parked-leaf + bring-up prints
 #include "GameSource/GameState/BrnGameStateTypes.h"                       // BrnGameState::LandmarkIndex
+#include "GameSource/Gui/BrnGuiKeyboard.h"                                // real Show request
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // the custom-event trio (167/172/174)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav / GuiOverlayCompleteEvent / SatNavIconInfo
@@ -94,7 +87,6 @@
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"                          // BrnGui::GuiTracker / GuiEventSetTracker
 #include "SharedClasses/Progression/BrnRace.h"                            // BrnProgression::Race (== GuiCache::PresetRace)
 
-#include <cstdio>    // std::snprintf (the parked-leaf + bring-up prints)
 #include <cstring>   // std::memset (the empty tracker record)
 
 namespace BrnGui
@@ -148,6 +140,24 @@ namespace BrnGui
         // The literal HandleSelect's E_CREATE_EVENT_NONE arm loads.
         const char KAC_STATE_EVENT_GO_BACK[] = "GO_BACK";
 
+        // Original UTF16 literals at ARTIST8206AB64,8206AB78,8206AB90.
+        const CgsGui::CgsUtf16 KAC16_DEFAULT_EVENT_NAME[] =
+        {
+            0x0041, 0x006e, 0x0020, 0x0045, 0x0076, 0x0065, 0x006e, 0x0074, 0x0000
+        };
+        const CgsGui::CgsUtf16 KAC16_DIALOG_TITLE[] =
+        {
+            0x0045, 0x0076, 0x0065, 0x006e, 0x0074, 0x0020, 0x004e, 0x0061, 0x006d, 0x0065,
+            0x0000
+        };
+        const CgsGui::CgsUtf16 KAC16_DIALOG_DESCRIPTION[] =
+        {
+            0x0043, 0x0072, 0x0065, 0x0061, 0x0074, 0x0065, 0x0020, 0x0061, 0x0020, 0x006e,
+            0x0061, 0x006d, 0x0065, 0x0020, 0x0074, 0x006f, 0x0020, 0x0072, 0x0065, 0x0063,
+            0x006f, 0x0067, 0x006e, 0x0069, 0x007a, 0x0065, 0x0020, 0x0074, 0x0068, 0x0069,
+            0x0073, 0x0020, 0x0065, 0x0076, 0x0065, 0x006e, 0x0074, 0x0000
+        };
+
         // The overlay whose OK answer retires a custom event. Update compares the 189
         // record's id against this with a FULL 64-bit compare over the payload's leading
         // doubleword.
@@ -157,10 +167,7 @@ namespace BrnGui
         // HEADER-STRIPPED payload, and the console reads the keyboard pointer straight off
         // its first word. Same idiom as BrnCrashNavEnterOnline_wI_07.cpp's
         // GuiOverlayCompletePayload.
-        struct GuiEventKeyboardResponsePayload : public CgsModule::Event
-        {
-            BrnGuiKeyboard* mpKeyboard;   // +0x00
-        };
+        using GuiEventKeyboardResponsePayload = GuiEventKeyboardResponse;
 
         // Event 189 ("overlay complete") payload view -- the compressed overlay id at
         // +0x00 then how the overlay was left at +0x08, both read off the stripped
@@ -182,17 +189,6 @@ namespace BrnGui
             s32 miAction;   // +0x04
         };
 
-        // ⛔ PARKED-LEAF PRINT, and the fenced bring-up print. Same shape as
-        // BrnCrashNavSettings.cpp's LogParkedPlatformLeaf, for the same reason: a gap that
-        // logs once is visible in BrnGame.log, a gap that is silent is not.
-        void LogParkedPlatformLeaf(const char* lpacSite, const char* lpacMissingLeaf)
-        {
-            char lac[192];
-            std::snprintf(lac, sizeof(lac),
-                          "[CrashNavMapEvent] %s PARKED -- no PC leaf for %s (FLAG).\n",
-                          lpacSite, lpacMissingLeaf);
-            CgsDev::Log::WriteToLog(lac);
-        }
     }
 
     const s32 CrashNavMapEvent::miNumEventsObserved = 10;
@@ -612,26 +608,8 @@ namespace BrnGui
             CGS_ASSERT(mpGuiKeyboard != 0, "mpGuiKeyboard");               // cpp:493
             meCreateEventStage = E_CREATE_EVENT_KEYBOARD;
 
-            // ⛔ PARKED PLATFORM LEAF -- see the file banner (c). The console's tail is,
-            // verbatim, for whoever lands the keyboard:
-            //     mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME,     // "An Event"
-            //                         KAC16_DIALOG_TITLE,           // "Event Name"
-            //                         KAC16_DIALOG_DESCRIPTION,     // "Create a name to
-            //                                                       //  recognize this event"
-            //                         mKeyboardListener);
-            // BrnGuiKeyboard::Show has no declaration and no body in this tree; it
-            // forwards to CgsGui::GuiKeyboard::Show, which IS reconstructed but sits in
-            // the unmounted CgsGuiKeyboard.cpp and bottoms out in the console's system
-            // keyboard UI. Same park, same reason, as BrnCrashNavSettings.cpp's.
-            {
-                static bool sbLoggedKeyboardSelect = false;
-                if (!sbLoggedKeyboardSelect)
-                {
-                    sbLoggedKeyboardSelect = true;
-                    LogParkedPlatformLeaf("HandleSelect[E_CREATE_EVENT_EDIT_MODIFIER]",
-                                          "BrnGuiKeyboard::Show (the system keyboard UI)");
-                }
-            }
+            mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME, KAC16_DIALOG_TITLE,
+                                KAC16_DIALOG_DESCRIPTION, mKeyboardListener);
             break;
 
         default:
@@ -639,6 +617,14 @@ namespace BrnGui
             // the epilogue.
             break;
         }
+    }
+
+    // DecFIGS4D6624 declares this private void helper. ARTIST Update's inlined
+    // 824DDBC4..DBD8 performs the same SetTracker then virtual+0x34 pair.
+    void CrashNavMapEvent::UpdateEventData()
+    {
+        SetTracker();
+        UpdatePanelData();
     }
 
     // =================================================================================
@@ -660,8 +646,7 @@ namespace BrnGui
             meCreateEventStage   = E_CREATE_EVENT_NONE;
             mi8CurrentEventIndex = li8NextEventIndex;
 
-            SetTracker();
-            UpdatePanelData();                     // the vtable +0x34 dispatch
+            UpdateEventData();                     // original inlined SetTracker + virtual +0x34
 
             mbUpdateNewEventInfo = false;
         }
@@ -701,10 +686,10 @@ namespace BrnGui
                 const GuiEventKeyboardResponsePayload* lpKeyboardResponse =        // cpp:169
                     static_cast<const GuiEventKeyboardResponsePayload*>(lpEvent);
 
-                CGS_ASSERT(lpKeyboardResponse->mpKeyboard != 0,
+                CGS_ASSERT(lpKeyboardResponse->lpKeyboard != 0,
                            "lpKeyboardResponse->lpKeyboard");                      // cpp:170
 
-                mpGuiKeyboard = lpKeyboardResponse->mpKeyboard;
+                mpGuiKeyboard = lpKeyboardResponse->lpKeyboard;
             }
             else if (liEventId == KI_EVENT_OVERLAY_COMPLETE)
             {
@@ -773,20 +758,8 @@ namespace BrnGui
             }
             else
             {
-                // ⛔ PARKED PLATFORM LEAF -- see the file banner (c). The console re-raises
-                // the dialog when the player dismissed it without typing anything:
-                //     mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME,    // "An Event"
-                //                         KAC16_DIALOG_TITLE,          // "Event Name"
-                //                         KAC16_DIALOG_DESCRIPTION,    // "Create a name to
-                //                                                      //  recognize this event"
-                //                         mKeyboardListener);
-                static bool sbLoggedKeyboardUpdate = false;
-                if (!sbLoggedKeyboardUpdate)
-                {
-                    sbLoggedKeyboardUpdate = true;
-                    LogParkedPlatformLeaf("Update[keyboard re-show]",
-                                          "BrnGuiKeyboard::Show (the system keyboard UI)");
-                }
+                mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME, KAC16_DIALOG_TITLE,
+                                    KAC16_DIALOG_DESCRIPTION, mKeyboardListener);
             }
         }
 

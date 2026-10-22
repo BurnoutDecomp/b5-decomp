@@ -307,13 +307,10 @@ void ScoringSystem::RemovePlayer(BrnNetwork::NetworkPlayerID lID)
 //     (StuntAttackMode::Start writes it there).
 //   * Online block (game mode >= 10): miEventType <- leGameMode and miReserved0x30 <- (network-player
 //     count + 1) are reconstructed against named mOnlineGameResults members (the same fields
-//     SaveNetworkRoundData reads back). miNumberOfRounds (ASM `stw r28, 0x4DF8` <- r7) is FLAGGED: r7 is
-//     a 4th register argument the recovered DWARF C++ signature (3 params) -- and therefore the keystone
-//     declaration -- drops; there is no in-signature source for it, so the round count is left unwritten
-//     here rather than fabricated. Growing the keystone signature to carry the 4th arg is a separate
-//     additive change in the keystone home, out of scope for this partial.
+//     SaveNetworkRoundData reads back). ARTIST additionally receives the total rounds in r7
+//     and stores that value at +0x4DF8; the target caller and declaration retain this fourth argument.
 void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
-                                const GameModeParams* lpParams, bool lbRestart)
+                                const GameModeParams* lpParams, bool lbRestart, s32 liNumRounds)
 {
     ClearData(lbRestart);
 
@@ -357,8 +354,8 @@ void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
     // Online modes (game mode >= 10 == E_MODE_ONLINE_MODE_START): stamp the online-results event header.
     if (leGameMode >= GameStateModuleIO::E_MODE_ONLINE_MODE_START)
     {
-        // FLAG: miNumberOfRounds <- r7 (4th register arg absent from the keystone's 3-param signature);
-        //       left unwritten -- see this method's header note.
+        // ARTIST 0x8233823C saves r7; 0x82338300 stores that actual total-round count.
+        mOnlineGameResults.miNumberOfRounds = liNumRounds;
         mOnlineGameResults.miEventType    = leGameMode;                       // ASM stw r30,0x4E04
         mOnlineGameResults.miReserved0x30 = lpParams->miNumNetworkPlayers + 1; // ASM lbz 1(params) / extsb / +1 / stw 0x4E00
     }

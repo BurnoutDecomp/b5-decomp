@@ -18,19 +18,13 @@
 // GuiEventQueueSmall (VariableEventQueue<4096,16>) into mOutEvents via the X360
 // VariableEventQueue<18432,16>::Append<4096,16> (CgsVariableEventQueue.h).
 //
-// FLAG (foreign types): GuiResourceRequestQueue (== ResourceRequestQueue<2048>, DWARF
-// CgsGuiResourceModuleIO.h:193) and GameActionQueue (== BaseGameActionQueue<13312>,
-// DWARF CgsGuiModuleIO.h:114) have their own owning homes elsewhere and are NOT
-// reconstructed here. They are modelled as correctly-sized, correctly-placed opaque
-// byte storage so the X360 member offsets (+4, +2068) are exact; when their real
-// homes land this header should adopt the named types additively. mOutEvents uses the
-// committed CgsModule::VariableEventQueue<18432,16> generic by name (the GUI out-event
-// queue type GuiEventQueueBase<18432,16> derives from it; the Append target proves the
-// 18432 size).
+// The resource-request member uses its canonical ResourceIO owner. The
+// game-action queue retains the existing typed-storage boundary below.
 #pragma once
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/System/Resource/CgsResourceRequestQueue.h"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEventQueueBase<N,16>
@@ -55,19 +49,10 @@ namespace CgsGuiModuleIO
         typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
         typedef CgsModule::VariableEventQueue<4096, 16>  GuiEventQueueSmall;
 
-        // GuiResourceRequestQueue == ResourceRequestQueue<2048> (DWARF CgsGuiModuleIO.h:205,
-        // CgsGuiResourceModuleIO.h:193). The X360 SetGuiResourceRequestQueue @0x8285AFB0
-        // bulk-appends a source request queue into this member via
-        // VariableEventQueue<2048,16>::Append<2048,16>, so the member IS a
-        // VariableEventQueue<2048,16> (sizeof == 2064 -- identical to the prior opaque
-        // 2064-byte storage, so the +4 placement and the OutputBuffer sizeof are preserved).
-        // The ~25 typed request-builder methods of the real ResourceRequestQueue<2048> live
-        // in their own home; modelled here as the thin VEQ-derived base it is. The name is
-        // kept as GuiResourceRequestQueueStorage so the committed GetGuiResourceRequestQueue
-        // accessor (CgsGuiModuleIO_OutputBuffer.cpp) is unchanged.
-        struct GuiResourceRequestQueueStorage : public CgsModule::VariableEventQueue<2048, 16>
-        {
-        };
+        // The same original ResourceRequestQueue<2048> as ModelIO and
+        // GuiResourceModuleIO. Preserve the historical spelling as an alias.
+        using GuiResourceRequestQueueStorage = CgsResource::ResourceIO::ResourceRequestQueue<2048>;
+        using GuiEventQueueTiny = CgsGui::GuiEventQueueBase<256, 16>;
 
         // BaseGameActionQueue<13312> is a thin typed wrapper around this same queue image.
         // Its event-builder API belongs to the foreign owning home, but the OutputBuffer
@@ -105,6 +90,10 @@ namespace CgsGuiModuleIO
         // sent to OutputBuffer::AddGuiOutEvents" assert (CgsGuiModuleIO.h:251), then
         // Append<18432,16> into mOutEvents. DECLARATION-ONLY (its own ledger function).
         int AddGuiOutEvents(const GuiEventQueue* lpSourceQueue);
+        // ARTIST8285DC28; DecFIGS h:182. The View-owned tiny output queue.
+        // The original method is void, even though Append leaves r3 residue.
+        void AddGuiOutEvents(const GuiEventQueueTiny* lpSourceQueue);
+
         // X360 0x823B41D8: const overload -- read-lock (bit 4) handle to the trailing game-action
         // queue at this+0x5024 (20516). X360 0x824F7968: non-const overload -- write-lock (bit 3)
         // handle to the same member. Both bodied in CgsGuiModuleIO_OutputBuffer_Getters.cpp.
@@ -122,7 +111,7 @@ namespace CgsGuiModuleIO
         // (this+0x814 == &mOutEvents; SetSku id 27/0x1B, SetLanguageNotification id 29/0x1D;
         // record payload size 4). The assert path/line are
         // "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiModuleIO.h":235. The event-type id and
-        // the 4-byte payload size are carried by the GuiEvent<EventTypeId> base (CgsGuiEvent.h),
+        // the 4-byte payload size come from the canonical enum payload types,
         // so the per-instance constants fall out of T -- a single generic reproduces every X360
         // instance store-for-store.
         //

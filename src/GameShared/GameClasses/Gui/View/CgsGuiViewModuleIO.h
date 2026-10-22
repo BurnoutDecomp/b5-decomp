@@ -31,6 +31,7 @@
 
 namespace CgsGui
 {
+    struct DispatchBuffer;
 namespace ViewIO
 {
     // The view->output GUI event buffer. Derives CgsModule::IOBuffer (the 1-byte status
@@ -83,6 +84,11 @@ namespace ViewIO
         // ViewStateQueue == GuiEventQueueBase<65536,16> (proven by the this+4 .. this+0x10020 span).
         typedef CgsGui::GuiEventQueueBase<65536, 16> ViewStateQueue;
 
+        // ARTIST82858D98/82858E08; the static stack helpers invoke these
+        // real lifecycle bodies, not inherited IOBuffer-only construction.
+        void Construct();
+        void Destruct();
+
         // X360 0x824F7A10: read-lock (bit 4); returns &mRendererSet (this+0x10020).
         const ImRendererSet& GetImRenderers() const;
         // X360 0x824F7AB8: write-lock (bit 3); returns &mViewStateQueue (this+4). A Get* that
@@ -104,6 +110,9 @@ namespace ViewIO
         u8             maStatusPad[3];  // +1..+3 (force +4 placement)
         ViewStateQueue mViewStateQueue; // +0x0004
         ImRendererSet  mRendererSet;    // +0x10020 (16-aligned; embeds the camera at +0x10040)
+        // Original final field, cleared at native+0x101B0. The real dispatch
+        // backend/accessors remain separate; host placement follows the set.
+        CgsGui::DispatchBuffer* mpGuiDispatchBuffer;
     };
 }
 }

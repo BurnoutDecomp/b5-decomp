@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessage.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82846528
 //   (CgsGui::GuiHudMessageResource::FixUp)
@@ -35,6 +36,15 @@
 
 namespace CgsGui
 {
+    // Original target table8206F290, four rows and no sentinel.
+    const CgsDev::DebugUI::StringList KAC_HUD_MESSAGE_GROUP_NAMES[4] =
+    {
+        { 0, "All Messages" },
+        { 1, "Live Revenge" },
+        { 2, "Dirty Tricks" },
+        { 3, "Main Game Mode Messages" },
+    };
+
     GuiHudMessageResource* GuiHudMessageResource::FixUp(uintptr_t luDelta)
     {
         const s32 liCount = miHudMessageCount;

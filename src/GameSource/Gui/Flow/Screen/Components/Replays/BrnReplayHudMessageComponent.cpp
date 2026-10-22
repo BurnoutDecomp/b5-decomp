@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (Update tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint / gxMessageFilterFlags
-#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers (+0x14 serialiser slot)
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::GetAccessPointers
 #include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"          // BrnReplays::GuiModuleStaticLayout
 
@@ -17,19 +17,7 @@
 // The message text is a 3 x 0x80 region at the head of the GUI-module replay static
 // layout (BrnReplays::GuiModuleStaticLayout maMessageSlots[3]); line N == layout + N*0x80.
 
-namespace BrnReplays
-{
-    // Compile-only slice of the GUI-module replay serialiser reached from the GUI
-    // access-pointer block. The full type + its GetStaticLayout body live in
-    // GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.cpp (no shared
-    // header). Update calls BrnReplays::GuiModuleSerialiser::GetStaticLayout(),
-    // which returns the 992-byte static layout behind an internal size tripwire.
-    class GuiModuleSerialiser
-    {
-    public:
-        GuiModuleStaticLayout* GetStaticLayout();
-    };
-}
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 
 namespace BrnGui
 {
@@ -103,16 +91,7 @@ void ReplayHudMessageComponent::HideMessage()
 void ReplayHudMessageComponent::Update()
 {
     CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-    CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");   // CgsGuiStateInterface.h:344
-
-    // The GUI-module replay serialiser lives in the access-pointer block (guest +0x14).
-    // The committed GuiAccessPointers (CgsGuiShared.h) currently labels +0x14 as
-    // mpGDMInput, but the X360 asm + the :216 assert name this slot mpSerialiser. Reached
-    // here by attested offset until GuiAccessPointers' serialiser member is reconciled.
-    // FLAG (consolidator): promote to a named GuiAccessPointers accessor.
-    BrnReplays::GuiModuleSerialiser* lpSerialiser =
-        *reinterpret_cast<BrnReplays::GuiModuleSerialiser**>(reinterpret_cast<u8*>(lpAccessPointers) + 0x14);
-    CGS_ASSERT(lpSerialiser != 0, "mpSerialiser");                  // CgsGuiShared.h:216
+    BrnReplays::GuiModuleSerialiser* lpSerialiser = lpAccessPointers->GetSerialiser();
 
     BrnReplays::GuiModuleStaticLayout* lpLayout = lpSerialiser->GetStaticLayout();
     CGS_ASSERT(lpLayout != 0, "lpLayout != NULL");                  // BrnReplayHudMessageComponent.cpp:66

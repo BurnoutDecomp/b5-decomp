@@ -170,7 +170,7 @@ namespace BrnGui
     }
 
     // @0x824F3920 -- latch the input GUI event queue the manager pumps each frame in Update.
-    void AlwaysAvailableComponentsManager::SetInEventQueue(CgsModule::VariableEventQueue<18432, 16>* lpInGuiEventQueue)
+    void AlwaysAvailableComponentsManager::SetInEventQueue(::InputBuffer::GuiEventQueue* lpInGuiEventQueue)
     {
         mpInGuiEventQueue = lpInGuiEventQueue;
     }

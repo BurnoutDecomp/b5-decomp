@@ -2,11 +2,13 @@
 
 #include <cstddef>   // offsetof (layout pins in _AssertLayout)
 #include "types.hpp"
+#include "GameSource/Gui/Events/BrnGuiPFXEvents.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT (GetCurrentCarSelectType inline)
+#include "GameShared/GameClasses/Language/CgsSku.h" // actual ESku/ELanguage
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 #include "GameSource/Gui/BrnGuiOptionsDataProfileDLC1.h" // BrnGui::OptionsDataProfileDLC1 (live DLC1 options block @+0x12BE8; self-contained header, no clashing slices)
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
@@ -76,6 +78,7 @@ namespace BrnGui
     struct FreeburnChallengeManager;
     struct BurnoutSkillsManager;   // GetBurnoutSkillsManager return (pointer only)
     struct OptionsDataProfile;     // GetOptionsDataProfile return (pointer only; home BrnCrashNavOptions.h family)
+    struct GuiCacheDebugComponent; // original state-loading status reader
     struct HudMessageAnalyzer;     // friend of GuiCache (reads the analyzer-carved snapshot members by name)
     struct HudMessageDirector;
     class  MapIconManager;         // [H3b] `class` is the canonical tag (BrnMapIconManager.h);
@@ -268,6 +271,9 @@ namespace BrnGui
         void AppendResourceInfo(u32 luIndex, CgsDev::StrStream& lStream);
 
     private:
+        // Original debug status helper snapshots and reads these actual rows.
+        friend struct GuiCacheDebugComponent;
+
         // X360 ARTIST value: 237 (the 0xED bound + 237-entry walk in EnsureResourceIsLoaded
         // @0x824FDA28 / EnsureResourcesAreLoaded @0x824FDD20 / IncrementUnloadPending
         // @0x824EC008, and the Array<int,237> dirty-list helpers). The PS3-FIGS DWARF says
@@ -428,6 +434,11 @@ namespace BrnGui
         // branches used by the module bridges.
         void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId);
 
+        // DecFIGS BrnGuiCache.h:1487/1491; ARTIST owns the enum words and
+        // primary Prepare825193D8 reads this language for its font table.
+        const CgsLanguage::ESku GetSku() const { return mSku; }
+        const CgsLanguage::ELanguage GetLanguage() const { return mLanguage; }
+
         // Request the unload of every watched resource of the given type. X360
         // @0x824FEBB0 (`addi r3,r3,8` + tail-branch into the watcher). Bodied in the
         // GuiCache TU.
@@ -526,6 +537,12 @@ namespace BrnGui
         // closest off-screen icon. Exposed by name as the leading 16-byte lane (xyz = camera
         // world position); body links from the GuiCache TU. X360-attested @0x4AE0.
         const Vector4& GetWorldCameraPosition() const;   // X360 far member @0x4AE0
+
+        // DecFIGS h:1149; ARTIST8250CA44 reads this actual contained owner.
+        const GuiPFXHookEnumeration* GetPFXHookEnumeration() const
+        {
+            return &mPFXHookEnumeration;
+        }
 
         // DWARF h:1386/1389 -- the player's profile-event list (offline events). GetProfileEvent
         // indexes it; GetNumProfileEvents is the live count.
@@ -1233,6 +1250,15 @@ namespace BrnGui
         // ARTIST AboveCarRenderer::RenderReplayAboveCar reads the byte at141DC.
         // Name recovered from its role; this extension is absent from DecFIGS.
         bool GetRenderReplayPlayerNames() const { return mbRenderReplayPlayerNames; }
+        // Typed host access to original replay members. Native replay screens
+        // inline these member loads; their guest offsets are not host addresses.
+        const BrnReplays::ReplayIO::StatusInterface& GetReplayStatusInterface() const
+        {
+            return mReplayStatusInterface;
+        }
+        bool GetReplayDisplayHud() const { return mbReplayDisplayHud; }
+        bool GetReplayShowCredits() const { return mbReplayShowCredits; }
+
         // Both names are the console's own: the replay screens' assert texts spell
         // "mpGuiCache->IsReplayInfoVisible()" and "mpGuiCache->GetReplayNumberSlotsUsed()".
         bool IsReplayInfoVisible() const      { return mbReplayInfoVisible; }   // +0x141D4
@@ -1396,6 +1422,7 @@ namespace BrnGui
         // surface -- is the honest exposure. (HudMessageAnalyzer wave-C keystone.)
         friend class MapIconManager; // ARTIST map icon reads of landmark lists.
         friend struct HudMessageAnalyzer;
+        friend struct GuiCacheDebugComponent; // owns typed helper snapshot access
 
         // Same exposure rule for the online game-room screen (wave-H keystone): the
         // X360 inlines its raw loads/stores of the freeburn gate bytes (+0x4B57..5A),
@@ -1429,6 +1456,8 @@ namespace BrnGui
         friend struct OnlineGameOptionsSummary;
         // ARTIST route state inlines the same options mirror and round-count reads.
         friend struct OnlineSelectRoute;
+        // ARTIST POST_ON_IR reads the original round and lobby snapshots inline.
+        friend struct OnlineInstantResultsState;
 
         // [gateui] Same exposure rule for the HUD-message DIRECTOR: its
         // CheckMessageIsAvailable @0x824F2B28 inlines exactly two raw loads off the cache --
@@ -1555,7 +1584,10 @@ namespace BrnGui
         // whole queue is exactly 0x8C8 bytes here as well -- the one place in this header
         // where a console span survives the widening intact. Access stays BY NAME regardless.
         InGameMessagesQueue mInGameMessagesQueue;        // +0x4080 (16512), spans ..+0x4947
-        u8  mPad_4948[0x4AE0 - 0x4948];                  // +0x4948..+0x4ADF
+        // Native+0x4948: count plus100 pointers (404B there). Host width
+        // follows the canonical record; later fields are still reached by name.
+        GuiPFXHookEnumeration mPFXHookEnumeration;
+        u8 mPad_4ADC[4];                                // original trailing gap
         Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
         // ADDITIVE CARVE (BrnCrashNavMap wave J): the leading 8 bytes of the former
         // mPad_4AF0[16] -- the local player's car id. X360-attested as an `ld` (8-byte load)
@@ -2091,7 +2123,9 @@ namespace BrnGui
         // ---- scoring-traffic CgsArray (mTrafficCarInfo.mScoreTargets) ----
         GuiTrafficCarInfoEvent mTrafficCarInfo;         // +0xA150, 656 bytes; count +0xA3D0
         GuiOverheadSignInfoEvent::VisibleOverheadSignArray mVisibleOverheadSignArray; // +0xA3E0, 1040 bytes
-        u8 mPad_A7F0[12];                              // +0xA7F0..+0xA7FB
+        u8 mPad_A7F0[4];                               // +0xA7F0..+0xA7F3
+        CgsLanguage::ESku mSku;                         // ARTIST +0xA7F4, DecFIGS h:1793
+        CgsLanguage::ELanguage mLanguage;               // ARTIST +0xA7F8, DecFIGS h:1794
         // ---- online game-mode-options (round-indexed) ----
         s32 miOnlineRoundIndex;                          // +0xA7FC (43004) GetOnlineRoundIndex (GetOnlineLandmarkIndex @0x8240FB50), < KU_MAX_ONLINE_ROUNDS_IN_MODE
         // The +0xA800 span is the cached GuiEventNetworkGameParams PAYLOAD MIRROR:

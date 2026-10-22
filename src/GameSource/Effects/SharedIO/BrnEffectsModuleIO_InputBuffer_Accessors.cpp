@@ -30,7 +30,7 @@ namespace EffectsIO
 //   mContactSpyInterface.Construct()      [+31632]  mDeformationInterface.Construct() [+31648]
 //   mGameActionQueue.Construct()          [+42640]
 //   mReplayStatusInterface: mxStatusFlags = 0 [+55984]; the six reels' macName[0] = 0
-//     (the 257-byte stride loop from +56244); mfDebugHudAlpha = 0.0 [+57540];
+//     (the 257-byte stride loop from +56244); mfPlaybackTimeRemaining = 0.0 [+57540];
 //     miCurrentRecordReel = miCurrentPlaybackReel = -1 [+57532 / +57536]
 //     (the inlined StatusInterface clear -- there is no out-of-line body for it)
 //   mPropVFXLocatorQueue.Construct()      [+57552]  mVehiclePhysicalStateQueue.Construct() [+14896]
@@ -52,7 +52,7 @@ void InputBuffer::Construct()
     {
         mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
     }
-    mReplayStatusInterface.mfDebugHudAlpha        = 0.0f;
+    mReplayStatusInterface.mfPlaybackTimeRemaining        = 0.0f;
     mReplayStatusInterface.miCurrentRecordReel    = -1;
     mReplayStatusInterface.miCurrentPlaybackReel  = -1;
 

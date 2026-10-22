@@ -7,7 +7,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <intrin.h>
+#include <mutex>
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -33,6 +35,13 @@ struct State
     Counter maEvent[EventCount];
     std::atomic<std::uintptr_t> muEngineSystem{0};
     std::atomic<std::uintptr_t> muProducerSystem{0};
+    std::atomic<std::uintptr_t> muEpochSystem{0};
+    std::atomic<std::uintptr_t> muPassSystem{0};
+    std::atomic<std::uint64_t> muSystemEpoch{0};
+    std::atomic<std::uint64_t> muProducerSystemEpoch{0};
+    std::atomic<std::uint64_t> muPassSystemEpoch{0};
+    std::atomic<std::uint64_t> muEngineSystemEpoch{0};
+    std::atomic<std::uint64_t> muProducerFramesAtEpochStart{0};
     std::atomic<std::uint64_t> muProducerFramesAtLastPass{0};
     std::atomic<unsigned> muPhase{0};
     std::atomic<unsigned> muDeviceOpen{0};
@@ -45,57 +54,178 @@ struct State
 // One shared COMDAT instance across the diagnostic executable's C++17 TUs.
 inline State gState;
 
-inline void Mark(Event leEvent)
+inline std::once_flag gConfigureOnce;
+inline std::atomic<bool> gEnabled{false};
+#if !defined(BRN_RWAC_COMMAND_TRACE_FIXTURE)
+inline std::atomic_flag gFailureRecorded = ATOMIC_FLAG_INIT;
+#endif
+
+// Sample once before System/device startup. The private native witness is opt-in:
+// only the exact value BRN_RWAC_COMMAND_TRACE=1 enables counters and the fatal guard.
+inline void ConfigureFromEnvironment()
+{
+    std::call_once(gConfigureOnce, []()
+    {
+        const char* lpcValue = std::getenv("BRN_RWAC_COMMAND_TRACE");
+        gEnabled.store(lpcValue && lpcValue[0] == '1' && lpcValue[1] == '\0',
+                       std::memory_order_relaxed);
+    });
+}
+
+inline bool Enabled() noexcept
+{
+#if defined(BRN_RWAC_COMMAND_TRACE_FIXTURE)
+    return true;
+#else
+    return gEnabled.load(std::memory_order_relaxed);
+#endif
+}
+
+inline void MarkEnabled(Event leEvent)
 {
     gState.maEvent[leEvent].mTick.store(::GetTickCount64(), std::memory_order_relaxed);
     gState.maEvent[leEvent].mCount.fetch_add(1, std::memory_order_relaxed);
 }
 
-inline void MarkProducerFrame(const void* lpSystem)
+inline void Mark(Event leEvent)
 {
+    if (Enabled())
+        MarkEnabled(leEvent);
+}
+
+inline std::uint64_t Count(Event leEvent);
+
+inline void BeginSystemEpoch(const void* lpSystem)
+{
+    if (!Enabled() || !lpSystem)
+        return;
+
+    const std::uint64_t luEpoch =
+        gState.muSystemEpoch.fetch_add(1, std::memory_order_relaxed) + 1;
+    gState.muEpochSystem.store(reinterpret_cast<std::uintptr_t>(lpSystem),
+                               std::memory_order_relaxed);
     gState.muProducerSystem.store(reinterpret_cast<std::uintptr_t>(lpSystem),
                                   std::memory_order_relaxed);
-    Mark(ProducerFrame);
+    gState.muProducerSystemEpoch.store(luEpoch, std::memory_order_relaxed);
+    gState.muProducerFramesAtEpochStart.store(Count(ProducerFrame),
+                                              std::memory_order_relaxed);
+    gState.muProducerFramesAtLastPass.store(0, std::memory_order_relaxed);
+    gState.muEngineSystem.store(0, std::memory_order_relaxed);
+    gState.muEngineSystemEpoch.store(0, std::memory_order_relaxed);
+    gState.muPassSystem.store(0, std::memory_order_relaxed);
+    gState.muPassSystemEpoch.store(0, std::memory_order_relaxed);
+    gState.muPhase.store(0, std::memory_order_relaxed);
+}
+
+inline void MarkProducerFrame(const void* lpSystem)
+{
+    if (!Enabled())
+        return;
+
+    const std::uintptr_t luSystem = reinterpret_cast<std::uintptr_t>(lpSystem);
+    gState.muProducerSystem.store(luSystem, std::memory_order_relaxed);
+    const std::uintptr_t luEpochSystem =
+        gState.muEpochSystem.load(std::memory_order_relaxed);
+    gState.muProducerSystemEpoch.store(
+        luSystem != 0 && luSystem == luEpochSystem
+            ? gState.muSystemEpoch.load(std::memory_order_relaxed)
+            : 0,
+        std::memory_order_relaxed);
+    MarkEnabled(ProducerFrame);
 }
 
 inline void MarkEngineBegin(const void* lpSystem)
 {
-    gState.muEngineSystem.store(reinterpret_cast<std::uintptr_t>(lpSystem),
-                                std::memory_order_relaxed);
+    if (!Enabled())
+        return;
+
+    const std::uintptr_t luSystem = reinterpret_cast<std::uintptr_t>(lpSystem);
+    gState.muEngineSystem.store(luSystem, std::memory_order_relaxed);
+    const std::uintptr_t luEpochSystem =
+        gState.muEpochSystem.load(std::memory_order_relaxed);
+    gState.muEngineSystemEpoch.store(
+        luSystem != 0 && luSystem == luEpochSystem
+            ? gState.muSystemEpoch.load(std::memory_order_relaxed)
+            : 0,
+        std::memory_order_relaxed);
     gState.muPhase.store(1, std::memory_order_relaxed);
-    Mark(EngineBegin);
+    MarkEnabled(EngineBegin);
 }
 
 inline void MarkConsumerEvent(Event leEvent, unsigned luPhase)
 {
+    if (!Enabled())
+        return;
+
     gState.muPhase.store(luPhase, std::memory_order_relaxed);
     if (leEvent == CommandPassEnd)
-        gState.muProducerFramesAtLastPass.store(
-            gState.maEvent[ProducerFrame].mCount.load(std::memory_order_relaxed),
+    {
+        gState.muPassSystem.store(
+            gState.muEngineSystem.load(std::memory_order_relaxed),
             std::memory_order_relaxed);
-    Mark(leEvent);
+        gState.muPassSystemEpoch.store(
+            gState.muEngineSystemEpoch.load(std::memory_order_relaxed),
+            std::memory_order_relaxed);
+        const std::uint64_t luFrames =
+            Count(ProducerFrame) -
+            gState.muProducerFramesAtEpochStart.load(std::memory_order_relaxed);
+        gState.muProducerFramesAtLastPass.store(luFrames, std::memory_order_relaxed);
+    }
+    MarkEnabled(leEvent);
 }
 
 inline void MarkSubmit(HRESULT lResult)
 {
-    Mark(SubmitCount);
+    if (!Enabled())
+        return;
+
+    MarkEnabled(SubmitCount);
     if (FAILED(lResult))
     {
         gState.muLastSubmitError.store(static_cast<unsigned>(lResult), std::memory_order_relaxed);
-        Mark(SubmitError);
+        MarkEnabled(SubmitError);
     }
 }
 
 inline void MarkVoiceError(HRESULT lResult)
 {
+    if (!Enabled())
+        return;
+
     gState.muLastVoiceError.store(static_cast<unsigned>(lResult), std::memory_order_relaxed);
-    Mark(VoiceError);
+    MarkEnabled(VoiceError);
 }
 
 inline void MarkCriticalError(HRESULT lResult)
 {
+    if (!Enabled())
+        return;
+
     gState.muLastCriticalError.store(static_cast<unsigned>(lResult), std::memory_order_relaxed);
-    Mark(CriticalError);
+    MarkEnabled(CriticalError);
+}
+
+inline void MarkEngineCallbackRegistration(HRESULT lResult)
+{
+    if (Enabled())
+        gState.muEngineCallbackRegistration.store(static_cast<unsigned>(lResult),
+                                                  std::memory_order_relaxed);
+}
+
+inline void MarkDeviceOpened()
+{
+    if (!Enabled())
+        return;
+    gState.muDeviceOpen.store(1, std::memory_order_relaxed);
+    MarkEnabled(DeviceOpened);
+}
+
+inline void MarkDeviceClosed()
+{
+    if (!Enabled())
+        return;
+    gState.muDeviceOpen.store(0, std::memory_order_relaxed);
+    MarkEnabled(DeviceClosed);
 }
 
 inline std::uint64_t Count(Event leEvent)
@@ -119,27 +249,60 @@ inline std::uint64_t Age(Event leEvent, std::uint64_t luNow)
     unsigned luPending, unsigned luCapacity, unsigned luRecordSize,
     unsigned luHighWater, unsigned luSystemFrame)
 {
+#if !defined(BRN_RWAC_COMMAND_TRACE_FIXTURE)
+    if (gFailureRecorded.test_and_set(std::memory_order_relaxed))
+    {
+        ::TerminateProcess(::GetCurrentProcess(), 0xE0420001u);
+        __fastfail(7);
+    }
+#endif
     const std::uint64_t luNow = ::GetTickCount64();
-    const std::uint64_t luFrames = Count(ProducerFrame);
+    const std::uint64_t luFrameTotal = Count(ProducerFrame);
+    const std::uint64_t luEpochFrameStart =
+        gState.muProducerFramesAtEpochStart.load(std::memory_order_relaxed);
+    const std::uint64_t luFrames =
+        luFrameTotal >= luEpochFrameStart ? luFrameTotal - luEpochFrameStart : 0;
     const std::uint64_t luLastPassFrame =
         gState.muProducerFramesAtLastPass.load(std::memory_order_relaxed);
+    const std::uintptr_t luSystem = reinterpret_cast<std::uintptr_t>(lpSystem);
+    const std::uintptr_t luProducerSystem =
+        gState.muProducerSystem.load(std::memory_order_relaxed);
+    const std::uintptr_t luEpochSystem =
+        gState.muEpochSystem.load(std::memory_order_relaxed);
+    const std::uintptr_t luPassSystem =
+        gState.muPassSystem.load(std::memory_order_relaxed);
+    const std::uint64_t luSystemEpoch =
+        gState.muSystemEpoch.load(std::memory_order_relaxed);
+    const std::uint64_t luProducerEpoch =
+        gState.muProducerSystemEpoch.load(std::memory_order_relaxed);
+    const std::uint64_t luPassEpoch =
+        gState.muPassSystemEpoch.load(std::memory_order_relaxed);
+    const bool lbFramesSincePassValid =
+        luSystem != 0 && luSystem == luProducerSystem &&
+        luSystem == luEpochSystem && luSystem == luPassSystem &&
+        luSystemEpoch != 0 && luProducerEpoch == luSystemEpoch &&
+        luPassEpoch == luSystemEpoch && luFrames >= luLastPassFrame;
+    const std::uint64_t luFramesSincePass =
+        lbFramesSincePassValid ? luFrames - luLastPassFrame : 0;
     // Fixed-size, single record, with stable scalar values only. Never print
     // damaged block names or inspect memory beyond the already-owned System.
     char lacLine[2048] = {};
     std::snprintf(lacLine, sizeof(lacLine),
         "[rwac-command-overflow] STOP_BEFORE_WRITE producer=SetAttribute "
         "system=%p ring=%p pending=%u capacity=%u record=%u highwater=%u system_frame=%u "
-        "producer_frames=%llu last_pass_producer_frame=%llu frames_since_pass=%llu "
+        "producer_frames=%llu last_pass_producer_frame=%llu "
         "callback=%llu/%llu callback_age_ms=%llu engine=%llu/%llu engine_age_ms=%llu "
         "command_lock=%llu pass=%llu/%llu pass_age_ms=%llu mix=%llu/%llu phase=%u "
-        "engine_system=%p producer_system=%p device_open=%u opens=%llu closes=%llu "
+        "engine_system=%p producer_system=%p producer_epoch=%llu pass_system=%p "
+        "pass_epoch=%llu epoch_system=%p system_epoch=%llu frames_since_pass_valid=%u "
+        "frames_since_pass=%llu device_open=%u opens=%llu closes=%llu "
         "submits=%llu submit_errors=%llu last_submit_hr=0x%08X "
         "voice_errors=%llu last_voice_hr=0x%08X critical_errors=%llu last_critical_hr=0x%08X "
         "engine_callback_registration=0x%08X tick_ms=%llu exit=0xE0420001\n",
-        lpSystem, lpRing, luPending, luCapacity, luRecordSize, luHighWater, luSystemFrame,
+        const_cast<void*>(lpSystem), const_cast<void*>(lpRing),
+        luPending, luCapacity, luRecordSize, luHighWater, luSystemFrame,
         static_cast<unsigned long long>(luFrames),
         static_cast<unsigned long long>(luLastPassFrame),
-        static_cast<unsigned long long>(luFrames >= luLastPassFrame ? luFrames - luLastPassFrame : 0),
         static_cast<unsigned long long>(Count(DeviceCallbackBegin)),
         static_cast<unsigned long long>(Count(DeviceCallbackEnd)),
         static_cast<unsigned long long>(Age(DeviceCallbackBegin, luNow)),
@@ -153,8 +316,15 @@ inline std::uint64_t Age(Event leEvent, std::uint64_t luNow)
         static_cast<unsigned long long>(Count(MixBegin)),
         static_cast<unsigned long long>(Count(MixEnd)),
         gState.muPhase.load(std::memory_order_relaxed),
-        reinterpret_cast<const void*>(gState.muEngineSystem.load(std::memory_order_relaxed)),
-        reinterpret_cast<const void*>(gState.muProducerSystem.load(std::memory_order_relaxed)),
+        reinterpret_cast<void*>(gState.muEngineSystem.load(std::memory_order_relaxed)),
+        reinterpret_cast<void*>(luProducerSystem),
+        static_cast<unsigned long long>(luProducerEpoch),
+        reinterpret_cast<void*>(luPassSystem),
+        static_cast<unsigned long long>(luPassEpoch),
+        reinterpret_cast<void*>(luEpochSystem),
+        static_cast<unsigned long long>(luSystemEpoch),
+        lbFramesSincePassValid ? 1u : 0u,
+        static_cast<unsigned long long>(luFramesSincePass),
         gState.muDeviceOpen.load(std::memory_order_relaxed),
         static_cast<unsigned long long>(Count(DeviceOpened)),
         static_cast<unsigned long long>(Count(DeviceClosed)),

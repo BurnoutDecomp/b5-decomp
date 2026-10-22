@@ -278,6 +278,10 @@ namespace BrnGui
         mbFriendsListOpen = false;
         mbFriendsListChangePending = false;
 
+        // ARTIST825061D0/D8: retain the real pre-notification defaults.
+        mSku = CgsLanguage::E_SKU_DEFAULT;
+        mLanguage = CgsLanguage::E_LANGUAGE_INVALID;
+
 
         mStateLoadingHelper.Construct();
         // X360 0x82505860 mid-body: BrnGui::OptionsDataProfile::Construct(this + 47224)
@@ -414,6 +418,7 @@ namespace BrnGui
         // ⚠️ Read the header's carve note with this: it records "values observed: -1 / 1 / 3"
         // and calls -1 the invalid one. 1 is what Construct seeds -- so the HUD is meant to be
         // in a message-eligible state from the moment the cache is built.
+        mPFXHookEnumeration.miHookNameCount = -1; // ARTIST82505C60
         miGameFlowState      = 1;   // X360 stw r11(==1), 0x4B30(r31)  @0x82505C68
         mu8GameFlowByte_4B34 = 0;   // X360 stb r30(==0), 0x4B34(r31)  @0x825059E8
 
@@ -1332,11 +1337,33 @@ namespace BrnGui
 
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
+        // Preserve this original case's assert-and-continue before the
+        // older host-wide null guard.501 carries the canonical flat payload.
+        if (liEventId == 501)
+        {
+            if (!lpEvent)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpEnumeration != NULL",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 2694);
+                CgsDev::Assert::EndAssert();
+            }
+            std::memcpy(&mPFXHookEnumeration, lpEvent, sizeof(mPFXHookEnumeration));
+            return;
+        }
         if (lpEvent == 0)
             return;
 
         switch (liEventId)
         {
+        // ARTIST8250F1F8..F220; native jump index is event id minus4.
+        // CP15's canonical notifications are raw enum payloads at+0.
+        case 27:
+            mSku = reinterpret_cast<const CgsGui::GuiEventSetSku*>(lpEvent)->meSku;
+            break;
+        case 29:
+            mLanguage = reinterpret_cast<const CgsGui::GuiEventSetLanguageNotification*>(lpEvent)->meLanguage;
+            break;
         // ARTIST 0x82510E7C..0x82510EC0: player-car change, whole CgsID
         // stores to both cache members consumed by the map and minimap.
         case 415:
@@ -1433,10 +1460,19 @@ namespace BrnGui
             {
                 const BrnGui::GuiEventUpdateHud* lpHudEvent =
                     reinterpret_cast<const BrnGui::GuiEventUpdateHud*>(lpEvent);
-                miPlayerSpeedMph = lpHudEvent->miSpeedMph;   // +19208
-                miPlayerRPM      = lpHudEvent->miRPM;        // +19212
-                miPlayerGear     = lpHudEvent->mi8Gear;      // +19216 (word store of the byte)
+                miPlayerSpeedMph = lpHudEvent->miPlayerMPH;   // +19208
+                miPlayerRPM      = lpHudEvent->miPlayerRPM;   // +19212
+                miPlayerGear     = lpHudEvent->miPlayerGear;  // +19216, full signed word
             }
+            break;
+
+        // ARTIST 0x8250DDF0: these notifications carry no cache payload; they maintain the
+        // event-opponent count consumed by GetOpponentsInEvent and HandleEliminatedEvent.
+        case 150:
+            ++miOpponentsInEvent;
+            break;
+        case 151:
+            --miOpponentsInEvent;
             break;
 
         case 194:

@@ -18,10 +18,8 @@
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h
 // ============================================================================
 // Home for BrnGameState::HUDMessageLogic -- the per-frame HUD message / notification
-// generator for the online stunt-run game modes. It watches the ScoringSystem each
-// frame and pushes typed notification records (team eliminated / new leader / victory /
-// combo-ending / score-milestone / time-warning) into its embedded action queue, which
-// the HUD presentation layer drains.
+// generator for online stunt-run, Burning Home Run, and race modes. It watches the
+// ScoringSystem and mode state, then pushes typed records into its embedded action queue.
 //
 // LAYOUT NOTE: the DecFIGS DWARF carries no dump for this TU, so this layout is
 // semantic-parity (named members, right order/types), NOT byte-exact. The X360 binary
@@ -33,6 +31,8 @@ namespace BrnPhysics { namespace Vehicle { struct VehicleOutputInterface; } }   
 
 namespace BrnGameState
 {
+class ModeManager;
+
 class HUDMessageLogic
 {
 public:
@@ -52,6 +52,8 @@ public:
     // ------------------------------------------------------------------------
     enum EHUDMessageType : s32
     {
+        E_HUD_MESSAGE_BHR_CHECKPOINT        = 252,  // two words -> GUI 454
+        E_HUD_MESSAGE_BHR_RUNNER_CRASHED    = 253,  // two words -> GUI 455
         E_HUD_MESSAGE_STUNT_RUN_ELIMINATION = 266,  // 0x10A  GenerateOnlineStuntRunEliminationMessages
         E_HUD_MESSAGE_STUNT_RUN_LEADING     = 267,  // 0x10B  GenerateOnlineStuntRunLeadingMessages
         E_HUD_MESSAGE_STUNT_RUN_VICTORY     = 268,  // 0x10C  GenerateOnlineStuntRunVictoryMessages
@@ -83,6 +85,21 @@ public:
     // stack and hands to VariableEventQueue::AddEvent (the trailing liSize argument gives
     // the byte count). Named so the generators fill them by member, not raw offset.
     // ------------------------------------------------------------------------
+
+    // Burning Home Run records emitted by the mode-13 PostWorldUpdate branch (ARTIST actions 252/253).
+    struct BurningHomeRunCheckpointMessage : public CgsModule::Event
+    {
+        EActiveRaceCarIndex meActiveRaceCarIndex; // +0
+        s32                 miNumCheckpointsToGo; // +4
+    };
+    static_assert(sizeof(BurningHomeRunCheckpointMessage) == 8, "ARTIST action 252 size 8");
+
+    struct BurningHomeRunRunnerCrashedMessage : public CgsModule::Event
+    {
+        EActiveRaceCarIndex meActiveRaceCarIndex; // +0
+        s32                 miNumCrashesToGo;     // +4
+    };
+    static_assert(sizeof(BurningHomeRunRunnerCrashedMessage) == 8, "ARTIST action 253 size 8");
 
     // 12-byte record for the team-eliminated / new-leader / victory notifications.
     struct StuntRunTeamMessage : public CgsModule::Event
@@ -164,16 +181,14 @@ public:
     // queue and empties the local one. ModeManager::PreWorldUpdate calls it (console 0x82353CF4).
     void PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutputGameActionQueue);
 
-    // X360 0x8239D998. Latches the game mode, ticks the in-mode clock and runs the per-mode
-    // message generators. REDUCED ARGUMENT SET -- see the body for the console's full ten and
-    // for the arms this build does not reproduce. [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3]
-    // the crash queue (console r8), the takedown queue (r10) and the player's active race-car index
-    // (the [sp+0x5C] stack argument) are carried now: the race arm (modes 0/10) and the free-burn
-    // lobby arm (15) read them.
+    // X360 0x8239D998. The source signature carries ModeManager and VehicleOutputInterface for
+    // the Burning Home Run and unconditional team-change paths, plus the current mode-progress byte.
     void PostWorldUpdate(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                          GameStateModuleIO::EGameModeType leGameModeType,
+                         ModeManager* lpModeManager,
                          ScoringSystem* lpScoringSystem,
                          const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+                         const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                          const InputBuffer::TakedownEventQueue* lpTakedownQueue,
                          f32 lfDelta,
                          EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
@@ -263,11 +278,14 @@ public:
     void OnlineTeamChange(EActiveRaceCarIndex leActiveRaceCarIndex);
 
     // Announce every recorded team change (one 4-byte car-index record each) and drop its flag,
-    // while the local player's car is not crashing. The tail of PostWorldUpdate's online arms.
+    // while the local player's car is not crashing. PostWorldUpdate calls it after the mode switch.
     void GenerateOnlineTeamChangeMessages(const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                           EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
 private:
+    void GenerateBurningHomeRunCheckpointMessage(ModeManager* lpModeManager, ScoringSystem* lpScoringSystem);
+    void GenerateBurningHomeRunMessages(ModeManager* lpModeManager, ScoringSystem* lpScoringSystem);
+
     // X360 PostWorldUpdate case 11 calls these three generators in this order.
     void GenerateOnlineBlueTeamEscapingMessage(ScoringSystem* lpScoringSystem,
                                                f32 lfDelta,
@@ -349,7 +367,12 @@ private:
 
     // Per-car "has changed team this round" flags (X360 +0x240). One bit per active race
     // car slot (E_ACTIVE_RACE_CAR_INDEX_COUNT == 8).
-    CgsContainers::BitArray<E_ACTIVE_RACE_CAR_INDEX_COUNT> mTeamChangedBits; // +0x240
+    CgsContainers::BitArray<E_ACTIVE_RACE_CAR_INDEX_COUNT> mTeamChangedBits; // +0x240 (8 bytes)
+
+    // ARTIST GenerateBurningHomeRunMessages reads +0x248/+0x24C, resets only the index, and emits action 253.
+    // Roles are inferred from that payload; this TU has no DecFIGS declaration dump.
+    EActiveRaceCarIndex meBurningHomeRunRunnerCrashRaceCarIndex; // +0x248
+    s32                 miBurningHomeRunCrashesToGo;             // +0x24C
 
     // [FX-FLOW 2026-09-24] The next distance-to-finish mark GenerateDistanceToFinishMessage announces
     // (DWARF :307, X360 +0x250): -1.0 until the first frame of the mode sets it, 0.0 once the last

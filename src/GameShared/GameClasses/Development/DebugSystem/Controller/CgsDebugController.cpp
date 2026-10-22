@@ -7,6 +7,7 @@
 #include <cstdio>
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"
 #include "GameShared/GameClasses/System/Input/PC/CgsDebugKeyboardPC.h"
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
@@ -197,16 +198,32 @@ namespace CgsDev
         // Snapshot high-bit state once. GetAsyncKeyState's low bit is shared with other
         // pollers, so it cannot reliably represent this controller's key-down edges.
         const bool lbHarness = std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr;
+        const bool lbNativeCapture = CgsSystem::KeyboardPC::IsCapturingInput();
         const bool lbPhysical = (!lbHarness || std::getenv("BRN_INPUT_KEEP_KEYBOARD"))
-                                && IsProcessForeground();
+                                && (lbNativeCapture || IsProcessForeground());
         bool lbAnyKeyDown = false;
+        bool lbControlsNeutral = true;
         for (s32 liKey = 0; liKey < 256; ++liKey)
         {
-            const bool lbDown = (lbPhysical && (GetAsyncKeyState(liKey) & 0x8000) != 0)
-                                || (lbHarness && HarnessKeyDown(liKey));
+            const bool lbPhysicalDown = lbPhysical && (GetAsyncKeyState(liKey) & 0x8000) != 0;
+            // While captured, drain harness taps even when a physical key masks the same key.
+            // Outside capture the original physical-first short circuit is unchanged.
+            const bool lbHarnessDown = lbHarness && (lbNativeCapture || !lbPhysicalDown) && HarnessKeyDown(liKey);
+            const bool lbDown = lbPhysicalDown || lbHarnessDown;
             mabPCKeysPressed[liKey] = lbDown && !mabPCKeysDown[liKey];
             mabPCKeysDown[liKey] = lbDown;
             if (liKey >= 8) lbAnyKeyDown = lbAnyKeyDown || lbDown;
+            if (lbDown) lbControlsNeutral = false;
+        }
+
+        // FLAG PC-platform leaf: native keyboard ownership covers this separate input owner.
+        // Keep actual held history, discard pressed edges/repeats, and report manual harness
+        // holds to the same release latch as gameplay. The release sample stays consumed.
+        if (CgsSystem::KeyboardPC::BlockDebugInput(lbControlsNeutral))
+        {
+            for (s32 liKey = 0; liKey < 256; ++liKey) mabPCKeysPressed[liKey] = false;
+            ClearEvent();
+            return; // ClearKeyboard/PC UpdatePad already cleared all public debug output.
         }
 
         mbShiftPressed = IsKeyDown(0x10);

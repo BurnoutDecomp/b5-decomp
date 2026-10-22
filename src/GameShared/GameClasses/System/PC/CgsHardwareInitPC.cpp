@@ -12,6 +12,7 @@
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/WindowPresentation.h"
 #include "pc/input/XInputPolling.h"
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"
@@ -207,7 +208,7 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         break;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        if (wParam == VK_F11)
+        if (wParam == VK_F11 && !CgsSystem::KeyboardPC::IsCapturingInput())
         {
             // FLAG PC-platform leaf: one toggle per press, not keyboard auto-repeat.
             if ((lParam & (1LL << 30)) == 0 &&
@@ -234,6 +235,7 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
                          SWP_NOZORDER | SWP_NOACTIVATE);
         return 0;
     case WM_CLOSE:
+        CgsSystem::KeyboardPC::OwnerClosing(hwnd);
         // User closed the window: raise the shutdown request FIRST, then tear the window down
         // (-> WM_DESTROY). The flag is what actually ends the run -- WM_QUIT alone is not
         // enough, because whichever message pump happens to be running when the close arrives
@@ -250,6 +252,7 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
+        CgsSystem::KeyboardPC::OwnerClosing(hwnd);
         // Also covers a destroy that did not come through WM_CLOSE. Post WM_QUIT as well so a
         // plain `while (message != WM_QUIT)` pump still ends the moment it sees it.
         if (CgsDev::Log::gpDebugPrint != 0)
@@ -565,6 +568,7 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
 
 void CgsSystem::HardwareInit::ReleaseHardware()
 {
+    CgsSystem::KeyboardPC::OwnerClosing(renderengine::hWnd);
     // Join before retiring the arena used by job records and dependency events.
     mJobManager.Destroy();
     mJobManagerAllocator.Destruct();

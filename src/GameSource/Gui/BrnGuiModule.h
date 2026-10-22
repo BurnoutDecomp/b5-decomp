@@ -1,10 +1,13 @@
 #ifndef BRN_GUI_MODULE_H
 #define BRN_GUI_MODULE_H
 
-#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h" // actual shared base and Model owner (CP15/16)
+#include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // GUI358 autosave image record
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"               // BrnGui::ColourCalibrationScreen (embedded; DWARF BrnGuiModule.h:506)
 #include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
 #include "SharedClasses/BrnSharedConstants.h"                 // BrnUpdateSet (the frame update set)                  // BrnGui::EffectsArbitrator (embedded; X360 gm+1546880)
@@ -20,6 +23,13 @@
 #include "GameSource/Gui/Flow/HUD/BrnHudFlow.h"                         // BrnGui::BrnHudFlow (the 14-state HUD flow)
 #include "GameSource/Gui/Flow/Overlay/BrnOverlayFlow.h"                 // BrnGui::BrnOverlayFlow (the 15-popup-state overlay flow)
 #include "GameSource/Gui/Flow/Screen/BrnScreenFlow.h"                   // BrnGui::BrnScreenFlow (the 61-state front-end SCREEN flow)
+#include "GameSource/Gui/BrnGuiKeyboard.h"
+#include "GameSource/Gui/BrnGuiKeyboardHost.h"
+#include "GameSource/Gui/BrnGuiProfileHost.h"
+#include "GameSource/Gui/BrnGuiDebugComponent.h"
+#include "GameSource/Gui/BrnGuiHudMessagesDebugComponent.h"
+#include "GameSource/Gui/BrnGuiSatNavDebugComponent.h"
+#include "GameSource/Gui/BrnGuiGuiCacheDebugComponent.h"
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
@@ -54,9 +64,11 @@
 //     BridgeGuiToGame consumes it and the game main flow requests the next FSM stage.
 // The [PC IO] leaf that remains module-side is the synchronous FSM-bundle load standing
 // in for the GuiResourceModule module dispatch (ServiceFsmBundleRequests).
+namespace EA { namespace GameTalk { class GameTalkMessage; } }
+
 namespace BrnGui
 {
-    class GuiModule : public CgsModule::ModuleSingleBuffered
+    class GuiModule : public CgsGui::GuiModule
     {
     public:
         // [gateui r4] X360 `BrnGui::GuiModule::Construct` @0x82518028 is NOT the module
@@ -92,7 +104,51 @@ namespace BrnGui
         // at CompleteLoading::OnLeave, matching the constructor/validator byte.
         void SetMovieBootMode(bool lbBootMovieMode) { mbBootMovieMode = lbBootMovieMode; }
 
+        // DecFIGS names, with ARTIST82518D68's actual stage order. ARTIST
+        // moved the world-data stage after WF resources.
+        enum GuiPrepareStage
+        {
+            E_PREPARE_START = 0,
+            E_PREPARE_MEMORY = 1,
+            E_PREPARE_PARENT = 2,
+            E_PREPARE_HUD = 3,
+            E_PREPARE_SCREEN = 4,
+            E_PREPARE_OVERLAY = 5,
+            E_PREPARE_FSM_CONTROLLER = 6,
+            E_PREPARE_CUSTOMRENDERER_PREPARE = 7,
+            E_PREPARE_MOVIE_MANAGER = 8,
+            E_PREPARE_COLOUR_CALIBRATION_SCREEN = 9,
+            E_PREPARE_GUI_DEBUG_COMPONENT = 10,
+            E_PREPARE_PROFILE = 11,
+            E_PREPARE_SYSTEM_NOTIFICATIONS = 12,
+            E_PREPARE_WF_RESOURCES = 13,
+            E_PREPARE_WORLD_DATA_CONTROLLER = 14,
+            E_PREPARE_DONE = 15,
+        };
+        enum GuiReleaseStage
+        {
+            E_RELEASE_START = 0,
+            E_RELEASE_MEMORY = 1,
+            E_RELEASE_PARENT = 2,
+            E_RELEASE_HUD = 3,
+            E_RELEASE_SCREEN = 4,
+            E_RELEASE_OVERLAY = 5,
+            E_RELEASE_FSM_CONTROLLER = 6,
+            E_RELEASE_CUSTOMRENDERER_DESTRUCT = 7,
+            E_RELEASE_CUSTOMRENDERER_RELEASE = 8,
+            E_RELEASE_MOVIE_MANAGER = 9,
+            E_RELEASE_COLOUR_CALIBRATION_SCREEN = 10,
+            E_RELEASE_WORLD_DATA_CONTROLLER = 11,
+            E_RELEASE_GUI_DEBUG_COMPONENT = 12,
+            E_RELEASE_PROFILE = 13,
+            E_RELEASE_SYSTEM_NOTIFICATIONS = 14,
+            E_RELEASE_DONE = 15,
+        };
+
         bool Prepare() override;
+        // ARTIST825194B8; original native vtable+0x5C. The selected host
+        // keeps PrepareWorldData2 until the outer phase is migrated as a whole.
+        virtual bool Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
         bool Release() override;
         void Destruct() override;
         void Update() override;
@@ -162,6 +218,8 @@ namespace BrnGui
                                               const char* lpcActionName,
                                               const char* lpcLabel);
 
+        // DecFIGS BrnGuiModule.h:667; ARTIST owns this bundle by value.
+        CgsGui::GuiAccessPointers* GetGuiAccessPointers() { return &mGuiAccessPointers; }
         MovieManager* GetMovieManager() { return &mMovieManager; }
         ViewModule* GetViewModule() { return &mViewModule; }
         AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager()
@@ -207,8 +265,8 @@ namespace BrnGui
         // GameState module publishes as game action 193 -- see the FLAG in
         // BrnGameModule.cpp. The X360 reaches the embedded manager by offset from inside
         // GuiModule::Update itself, so no accessor is emitted there.
-        ProfileManager&       GetProfileManager()       { return mProfileManager; }
-        const ProfileManager& GetProfileManager() const { return mProfileManager; }
+        ProfileManager&       GetProfileManager()       { return mProfileHost.GetProfileManager(); }
+        const ProfileManager& GetProfileManager() const { return mProfileHost.mProfileManager; }
 
         // X360 GuiModule::Prepare @0x82518D68 STAGE 14: `if (!WorldDataController::Prepare(
         // guiModule + 307836, gameDataInputBuffer)) return 0;`. The controller is a GuiModule
@@ -255,13 +313,35 @@ namespace BrnGui
         // The GUI debug components read the cache inline off their module pointer.
         friend struct SatNavDebugComponent;
         friend struct GuiDebugComponent;
+        friend struct GuiCacheDebugComponent; // actual cache status reader
+
+        // ARTIST824F10D8; the real static callback registered by native
+        // Prepare. Its recovered body remains unregistered in the host flow.
+        static void GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage);
+
+        // Extracted ARTIST82519218..54; called only by the future typed Prepare stage10.
+        // Keep current no-arg host Prepare selected until the complete native chain is ready.
+        void PrepareNativeDebugComponents();
+
+        // Extracted ARTIST8251A4D4..8251A538; dormant until the typed PreWorld chain is selected.
+        void PublishNativeMovieResourceRequest(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+
+        // Extracted native blocks: Prepare82519360..C4,
+        // Update82529CA8..DD0 and Release824F917C..B0. These remain
+        // uncalled by the selected host lifecycle until native composition.
+        void PrepareNativeSystemNotifications();
+        void UpdateNativeSystemNotifications(CgsGui::ModelIO::InputBuffer* lpInputBuffer);
+        void ReleaseNativeSystemNotifications();
 
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
-        // 14/16 -> the model-out notification queue, 504/508/513 -> MovieManager), and fan
-        // every event the flow subscribed to (records 34/35) into the HUD flow's in-queue
+        // 14/16 -> the model-out notification queue, 358 -> profile image autosave,
+        // 504/508/513 -> MovieManager), and fan every event the flow subscribed to
+        // (records 34/35) into the HUD flow's in-queue
         // -- the EventInterpreterModule observer dispatch.
-        void DispatchInboundGuiEvents();
+        void DispatchInboundGuiEvents(bool& rbHasSaveImageEvent,
+                                      CgsGui::ImageFileInfo& lrSaveImageInfo);
+        void AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo);
 
         // Drain one flow's StateInterface output queue -- the per-frame dispatch point
         // for everything its states post: subscription records (34/35, keyed into that
@@ -308,6 +388,14 @@ namespace BrnGui
         // CompleteLoading::OnLeave owns the later false transition.
         bool mbBootMovieMode;
 
+        // DecFIGS h:513/514; ARTIST82518850/68. These are the derived
+        // lifecycle owners, separate from the shared GuiModule's own stages.
+        GuiPrepareStage mePrepareStage;
+        // ARTIST-only second-prepare word (Construct82518858). DecFIGS lacks
+        // this addition; the host member name is a projection of that owner.
+        u32 muPrepare2State;
+        GuiReleaseStage meReleaseStage;
+
         // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
         // buffer itself lives on the update IO stack and is re-created per sub-step).
         CgsGui::CgsGuiModuleIO::InputBuffer* mpGuiEventInputBuffer;
@@ -316,6 +404,10 @@ namespace BrnGui
         // output buffer. The PC scheduler exposes that channel as mGuiOutQueue, so retain
         // the same explicit producer pointer instead of bypassing the event route.
         CgsModule::VariableEventQueue<18432, 16>* mpOutputBuffer;
+
+        // ARTIST82518BB0..BD0: this derived receiver owns its inline 1024-byte backing.
+        // Separate owners handle collision validation and GameData replies.
+        CgsGui::GuiAccessPointers::GuiEventReceiverQueue mEventReceiverQueue;
 
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
 
@@ -330,6 +422,9 @@ namespace BrnGui
         // into AptRenderHandler::mpCustomRendererManager, the pointer the Apt custom-control
         // callback reads), and only then gate on the prepare result.
         CustomRendererManager mCustomRendererManager;   // X360 +311952
+        // ARTIST-only handle at gm+0x18DC60. The original Release
+        // assertion names this member; the PC provider returns a kernel HANDLE.
+        void* mhSysListenerHandle;
         BrnReplays::GuiModuleSerialiser mGuiModuleSerialiser; // ARTIST gm+1629284
 
         // The view-module IO pair the per-frame bridge fills (the input buffer carries the
@@ -351,21 +446,19 @@ namespace BrnGui
         // guest displacement is a note, not a layout instruction.
         ColourCalibrationScreen mColourCalibrationScreen;   // X360 +306752
 
-        // X360 +311932 -- one row of the console's mGuiConfig (DWARF BrnGuiModule.h:516 ->
-        // CgsGui::GuiModuleConfig, CgsGuiModule.h:73 `rw::IResourceAllocator*
-        // mpTextureAllocator`). GuiModule::Prepare @0x82518DE0 fills it with
-        // `GetAllocatorList(gameDataOut)->GetRWLinearResourceAllocator(42)` ("Network Image
-        // Allocator") and GuiModule::Update @0x82529B00 hands it to
-        // ColourCalibrationScreen::Update as r7. Only this one row of GuiModuleConfig is
-        // modelled; the rest of the config block is the (unreconstructed) base-module
-        // prepare's business.
-        rw::IResourceAllocator* mpTextureAllocator;   // X360 +311932 (mGuiConfig.mpTextureAllocator)
+        // DecFIGS BrnGuiModule.h:516; ARTIST82518EF4..82519024 fills all
+        // seven pool ids and seven allocator rows. The two selected PC
+        // consumers use these same rows rather than separate projections.
+        CgsGui::GuiModuleConfig mGuiConfig;
 
-        // ⭐ [licence-icon] X360 +311924 -- the sibling mGuiConfig row: Prepare stage 1 fills it
-        // with GetAllocatorList(gameDataOut)->GetRWGeneralResourceAllocator(31) and the console
-        // hands it to CustomRendererManager::Prepare as the heap allocator (`v26 = *(gm+311924)`
-        // at the stage-7 call @0x82518D68). Modelled for the same one consumer.
-        rw::IResourceAllocator* mpGuiHeapAllocator;   // X360 +311924 (mGuiConfig heap row, bank 31)
+        // Host extraction of native Prepare's inline stage-1 block. This
+        // helper stays dormant until the whole typed Prepare chain is ready.
+        void PopulateNativeGuiConfig(
+            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
+
+        // Host extraction of ARTIST825193C8..82519444. Unselected; native
+        // Prepare must wait here before its world-data stage.
+        bool EnsureNativeGuiResources();
 
         // [licence-icon] the manager's staged-prepare latch. The console pumps the manager's
         // Prepare through GuiModule::Prepare's stage re-entry (`if (!v27) goto fail` + the module
@@ -388,6 +481,8 @@ namespace BrnGui
         // Constructs it and binds it into the cache (SetWorldDataController); Prepare stage 14
         // runs its acquire machine. It MUST outlive every flow state that resolves a car.
         WorldDataController mWorldDataController;   // X360 +307836
+        CgsGui::GuiAccessPointers mGuiAccessPointers; // ARTIST gm+1005332
+        CgsGui::GuiAccessPointers::GuiEventReceiverQueue mGDMReceiverQueue; // gm+1628232
         GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
         // [H3b] the shared map-icon manager (X360 +1088304; ctor from GuiModule::GuiModule
         // @0x827E5D7C, Construct + GuiCache::SetMapIconManager from GuiModule::Construct).
@@ -449,7 +544,8 @@ namespace BrnGui
         HudMessageAnalyzer mHudMessageAnalyzer;  // X360 +660992
         GuiOverlaysDirector mOverlaysDirector;   // console +0xA1B10 (662288)
 
-        ProfileManager    mProfileManager;  // X360 +681696 (the REAL save/load manager)
+        KeyboardHost mKeyboardHost; // ARTIST gm+681672
+        ProfileHost mProfileHost; // ARTIST gm+A66D0; actual contained manager is host+10.
         // ---- [profile-save 2026-08-27] the module's AUTOSAVE latch + throttle ------------
         // X360 GuiModule::Update tail @0x825295CC..0x825296A4:
         //   r30 = module + 0x18D844 (1628228) -- the autosave-PENDING byte, raised by the
@@ -469,20 +565,14 @@ namespace BrnGui
         // + Update, so the byte has to survive between them -- it is written by the event
         // walk and consumed (and cleared) by the tail in the same frame.
         bool mbForceProfileAutosave;        // X360 Update stack byte var_430 (v142)
-        // The completion handler the autosave task reports to. On the console the argument is
-        // the BrnGui::ProfileHost the module embeds at +681680 (the ProfileManager sits inside
-        // it at +16), and ProfileHost::HandleProfileTaskResult @0x827E21E0 is a pure diagnostic
-        // ("SaveLoad: Finished" under message-filter bit 0). This build embeds the
-        // ProfileManager directly rather than through a ProfileHost, so the handler is a
-        // module-owned object carrying that same body -- see BrnGuiProfileHost.cpp for the
-        // console original. DELETE-WHEN the module embeds a real ProfileHost.
-        class ProfileAutosaveResultHandler : public ProfileTaskResultHandler
-        {
-        public:
-            virtual void HandleProfileTaskResult();
-        };
-        ProfileAutosaveResultHandler mProfileAutosaveResultHandler;
+        BrnGuiKeyboard mGuiKeyboard; // ARTIST gm+1545808
         CgsGui::SystemUserProfile mSystemUserProfile; // X360 +949152 (sign-in watcher the manager listens to)
+        // Four actual by-value GUI debug owners (ARTIST827E5D38..6C), native relative order.
+        // Existing host field order is retained; host offsets follow these complete types.
+        GuiDebugComponent mDebugComponent;
+        GuiHudMessagesDebugComponent mHudMessageDebugComponent;
+        SatNavDebugComponent mSatNavDebugComponent;
+        GuiCacheDebugComponent mGuiCacheDebugComponent;
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)
         CgsMemory::HeapMalloc   mProfileHeap;   // the manager's heap (mugshot buffer + SLS callbacks)
         CgsMemory::LinearMalloc mProfileLinear; // the manager's linear (SLS Prepare)
@@ -511,9 +601,9 @@ namespace BrnGui
 
         // The per-flow in-queues (every observed event is fanned into the subscribing
         // flow's queue) + the module GUI-OUT queue the game bridge drains.
-        CgsModule::VariableEventQueue<18432, 16> mScreenInQueue;
-        CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
-        CgsModule::VariableEventQueue<18432, 16> mOverlayInQueue;
+        ::InputBuffer::GuiEventQueue mScreenInQueue;
+        ::InputBuffer::GuiEventQueue mHudInQueue;
+        ::InputBuffer::GuiEventQueue mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
         // [FLAG PC seam] the console's GUI out-event loop-back (CgsGui::GuiModule +111644):
         // CgsGui::GuiModule::Update appends the frame's out-events there and the next
@@ -528,7 +618,7 @@ namespace BrnGui
         // pumps AlwaysAvailableComponentsManager::Update against it each frame -- the same
         // observer contract the console's EventInterpreterModule drives (deliver via
         // SetInEventQueue's queue, pump via UpdateObservers).
-        CgsModule::VariableEventQueue<18432, 16> mAlwaysAvailInQueue;
+        ::InputBuffer::GuiEventQueue mAlwaysAvailInQueue;
 
         // The registered event OBSERVERS (the console EventInterpreterModule's observer
         // list): the three flows plus the always-available components manager -- the AAC

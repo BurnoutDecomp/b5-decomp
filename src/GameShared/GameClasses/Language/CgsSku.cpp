@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Language/CgsSku.h"
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                     // GuiEventSetSku / GuiEventSetLanguageNotification
@@ -26,21 +27,6 @@
 // resource-name slots @0x820E5DD0, indexed by ELanguage (unpopulated slots are empty ==
 // unsupported languages). The DWARF (CgsSku.h:176/:177) names them
 // mapcSupportedLanguageFilenames / mapcSupportedLanguageResources -- private statics of Sku.
-
-namespace CgsSystem
-{
-    // CgsSystem::HardwareSku is homed per-platform in CgsHardwareSku{PC,PS3}.cpp with no shared
-    // header; declared minimally here so the FindLanguage / FindSku delegates can call it.
-    // (The X360 build tail-calls FindLanguage / GetSku from the Sku thunks @0x828608C0 /
-    // 0x828608C8.) Modelled as the class-static form attested by the PS3 definition home and the
-    // X360-reconstructed CgsServerInterfaceServerInfo caller.
-    class HardwareSku
-    {
-    public:
-        static s32 GetSku();
-        static s32 FindLanguage();
-    };
-}
 
 namespace CgsLanguage
 {

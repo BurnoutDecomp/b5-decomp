@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"    // CgsSystem::DateAndTime (image capture date)
 #include "GameSource/Input/GameInputActions.h"                            // EGameInputActions (controller actions)
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // flat image-gallery response records 518/520/522
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest / GuiOverlayCompleteEvent / GuiAudioTriggerEvent / GuiEventActivateCrashNav / GuiFlow
 #include "SharedClasses/World/BrnWorldRegion.h"                           // BrnWorld::WorldRegion (image capture district)
 
@@ -129,31 +130,11 @@ namespace BrnGui
             GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
         };
 
-        // Event 518: one gallery slot's image info.
-        struct ImageInfoPayload : public CgsModule::Event
-        {
-            CgsSystem::DateAndTime mCaptureDate;   // +0x00
-            BrnWorld::WorldRegion  mWorldRegion;   // +0x0C (district +0x10)
-            s32                    miNumCaptures;  // +0x14
-            s32                    miSlotIndex;    // +0x18
-            CgsNetwork::PlayerName mPlayerName;    // +0x1C
-            bool                   mbLocked;       // +0x2C
-            bool                   mbHasDeleted;   // +0x2D
-        };
-
-        // Event 520: how many images a gallery type holds.
-        struct CollectedCountPayload : public CgsModule::Event
-        {
-            GameStateModuleIO::EImageGalleryType meImageGalleryImageType;   // +0x00
-            s32                                  miCollectedCount;          // +0x04
-        };
-
-        // Event 522: which of a gallery type's image slots are occupied.
-        struct CollectedDataPayload : public CgsModule::Event
-        {
-            GameStateModuleIO::EImageGalleryType                          meImageGalleryImageType; // +0x00
-            CgsContainers::FastBitArray<ImageGalleryState::KI_MAX_IMAGES> mActiveBitArray;         // +0x08
-        };
+        // The three response views share the canonical flat wire types with the
+        // GameState-to-GUI translator; the queue's type/size header is separate from payload bytes.
+        using ImageInfoPayload      = GuiImageGalleryImageInfoEvent;
+        using CollectedCountPayload = GuiImageGalleryCollectedCountEvent;
+        using CollectedDataPayload  = GuiImageGalleryCollectedDataEvent;
 
         // ---- out-queue payloads (boxed by GuiEventWrapper<T, 40>) ---------------------------
         // Id 517: { image index, on-screen slot, request kind, gallery type } (28-byte record).

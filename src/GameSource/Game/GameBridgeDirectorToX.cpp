@@ -126,7 +126,7 @@ namespace BrnGame
             std::memset(&lStop, 0, sizeof(lStop));
             lStop.muGuid = 0;
             CopyHookName(lStop.macName, lrEffects.GetStopHookNameString().mHookNameString);
-            CgsGui::GuiModule::AddGuiEvent(lStop, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(&lStop, lpGuiInputBuffer);
             if (PfxDirDiag()) *CgsDev::Log::gpDebugPrint << "[pfx-dir] bridge posts 496 stop '" << lStop.macName << "'\n";
         }
 
@@ -144,7 +144,7 @@ namespace BrnGame
             lStart.mfMaximum2DTintWeight       = lfBlend;
             lStart.mfMaximum3DTintWeight       = lfBlend;
             CopyHookName(lStart.macName, lrEffects.GetStartHookNameString().mHookNameString);
-            CgsGui::GuiModule::AddGuiEvent(lStart, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(&lStart, lpGuiInputBuffer);
             if (PfxDirDiag()) *CgsDev::Log::gpDebugPrint << "[pfx-dir] bridge posts 495 start '" << lStart.macName << "' blend " << lfBlend << "\n";
         }
 
@@ -158,7 +158,7 @@ namespace BrnGame
             lStartBackground.muGuid          = 0;
             lStartBackground.mfMaximumWeight = lrBackground.GetBackgroundStartRequestBlendAmount();
             CopyHookName(lStartBackground.macName, lrBackground.mHookName.mHookNameString);
-            CgsGui::GuiModule::AddGuiEvent(lStartBackground, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(&lStartBackground, lpGuiInputBuffer);
         }
         if (lrBackground.mbStartRequested && lrBackground.mbStopRequest)
         {
@@ -166,7 +166,7 @@ namespace BrnGame
             std::memset(&lStopBackground, 0, sizeof(lStopBackground));
             lStopBackground.muGuid = 0;
             CopyHookName(lStopBackground.macName, lrBackground.mHookName.mHookNameString);
-            CgsGui::GuiModule::AddGuiEvent(lStopBackground, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(&lStopBackground, lpGuiInputBuffer);
         }
 
         // pseudocode 231..243: a post-FX id request -> 495 by GUID, maxima 1.0, empty name.
@@ -182,7 +182,7 @@ namespace BrnGame
             lById.mfMaximum2DTintWeight       = 1.0f;
             lById.mfMaximum3DTintWeight       = 1.0f;
             lById.macName[0]                  = 0;
-            CgsGui::GuiModule::AddGuiEvent(lById, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(&lById, lpGuiInputBuffer);
         }
 
         // [FLAG] pseudocode 244..249: out+0x751 -> GuiEventDirectorSettings (GetDir()), then

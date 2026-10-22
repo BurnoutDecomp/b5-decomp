@@ -62,9 +62,9 @@ namespace CgsGui
     //
     // LAYOUT SOURCE: references/DecFIGS/dwarfdump/GameShared/GameClasses/Gui/
     // CgsGuiEventTypeDefs.h names every member and the GuiEvent<N> event-type id (the
-    // template id is the on-queue record type tag). Each event carries the 12-byte
-    // GuiEvent header (muHeader0/muEventType/muHeader2 from CgsGuiEvent.h) followed by the
-    // named payload members below; the enum widths (s32) match the X360 stw/lwz widths.
+    // template id is the on-queue record type tag). The existing controller input
+    // wrappers retain their 12-byte adapter header. SetSku and SetLanguageNotification
+    // below are the original four-byte output payloads (ARTIST82866148/82866200).
     // These are plain payload PODs (no out-of-line bodies in this header's X360 image);
     // they are homed for layout so producers/consumers can reference them BY NAME.
     // ===============================================================================
@@ -116,9 +116,10 @@ namespace CgsGui
     // --- SKU / language events (DWARF :268/:274/:280/:287/:294) ---------------------
     // SKU set request. CgsSku::Update copies meSku (this+0xC) into the payload word and
     // publishes this as event 27. DWARF :268.
-    struct GuiEventSetSku : public GuiEvent<27>
+    struct GuiEventSetSku
     {
-        CgsLanguage::ESku meSku;          // DWARF :270 (Update v12[0] = *(this+0xC))
+        CgsLanguage::ESku meSku;          // DWARF :270; ARTIST payload +0
+        s32 GetEventType() const { return 27; }
     };
 
     // Language set request from the controller/front-end. DWARF :274.
@@ -129,9 +130,10 @@ namespace CgsGui
 
     // Language-changed notification. CgsSku::Update copies meLanguage (this+0x00) into the
     // payload word and publishes this as event 29. DWARF :280.
-    struct GuiEventSetLanguageNotification : public GuiEvent<29>
+    struct GuiEventSetLanguageNotification
     {
-        CgsLanguage::ELanguage meLanguage; // DWARF :282 (Update v12[0] = *this)
+        CgsLanguage::ELanguage meLanguage; // DWARF :282; ARTIST payload +0
+        s32 GetEventType() const { return 29; }
     };
 
     // A request for the GUI to report the current language back. DWARF :287.
@@ -201,15 +203,13 @@ namespace CgsGui
     struct GuiEventNetworkLaunched { u8 maData[4]; s32 GetEventType() const { return 58; } };  // id 58 size 4
     struct GuiEventSetCircleButtonConfig { u8 maData[1]; s32 GetEventType() const { return 32; } };  // id 32 size 1
 
-    // X360-pinned payload offsets. CgsModule::Event is an empty base, so the GuiEvent<N>
-    // header (muHeader0/muEventType/muHeader2 == 3 x u32) occupies +0x00..+0x0B and the
-    // first payload member lands at +0x0C. This matches CgsSku::Update, which reads/writes
-    // the SetSku payload word at this+0xC (meSku) and the SetLanguageNotification payload
-    // word at the language source this+0x00. (The event-type id is the GuiEvent<N> template
-    // argument, self-documenting in each type name above.)
-    static_assert(sizeof(GuiEvent<27>) == 0x0C, "GuiEvent header is 12 bytes (3 x u32)");
-    static_assert(__builtin_offsetof(GuiEventSetSku, meSku)                       == 0x0C, "GuiEventSetSku::meSku @+0x0C (Update this+0xC)");
-    static_assert(__builtin_offsetof(GuiEventSetLanguageNotification, meLanguage) == 0x0C, "GuiEventSetLanguageNotification::meLanguage @+0x0C");
+    // ARTIST output publishers82866148/82866200 copy a four-byte enum
+    // directly from the object start. Sku's own member offsets do not prepend
+    // any event header. Other input wrappers keep their existing adapter seats.
+    static_assert(sizeof(GuiEventSetSku) == 4, "SetSku is a four-byte payload");
+    static_assert(sizeof(GuiEventSetLanguageNotification) == 4, "language notification is a four-byte payload");
+    static_assert(__builtin_offsetof(GuiEventSetSku, meSku) == 0, "SKU enum at payload start");
+    static_assert(__builtin_offsetof(GuiEventSetLanguageNotification, meLanguage) == 0, "language enum at payload start");
     static_assert(__builtin_offsetof(GuiEventSetLanguage, meLanguage)             == 0x0C, "GuiEventSetLanguage::meLanguage @+0x0C");
     static_assert(__builtin_offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x0C, "GuiEventActiveUserIndex::miActiveUserIndex @+0x0C");
     static_assert(__builtin_offsetof(GuiEventControllerInputPressed, miPadId)     == 0x0C, "controller pad id @+0x0C");

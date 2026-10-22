@@ -1,0 +1,99 @@
+{
+  "schema_version": 2,
+  "normalization": "crlf_to_lf_only",
+  "base_head": "bef9346f9dc61f2ae1770bf3c9dbdc89fe4f15a7",
+  "files": {
+    "config.ini.example": {
+      "expected_lf_sha256": "a0219b42ce08d907b263d75d0bafb92345ca5d5ea7dcc02bd98f7b38d72f6886",
+      "expected_lf_bytes": 7416
+    },
+    "src/GameShared/GameClasses/Core/CgsAssert.h": {
+      "expected_lf_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
+      "expected_lf_bytes": 4328
+    },
+    "src/GameShared/GameClasses/Core/CgsStringUtils.cpp": {
+      "expected_lf_sha256": "ca7e654bd6ce0fd7d21d62eb21f06b7291a2bdb169e6ac847830c8c305aca936",
+      "expected_lf_bytes": 2276
+    },
+    "src/GameShared/GameClasses/Core/CgsStringUtils.h": {
+      "expected_lf_sha256": "90d56aac0566feeb993a92545409640d18f6cfe20e7387f2f7a9d486a31b2825",
+      "expected_lf_bytes": 1337
+    },
+    "src/GameShared/GameClasses/Gui/CgsGuideIntegration.cpp": {
+      "expected_lf_sha256": "df3d9bd06c18b166ececd0b169b2da3d0694c2e8a999006f17dd47c99e697ed4",
+      "expected_lf_bytes": 11367
+    },
+    "src/GameShared/GameClasses/Gui/CgsGuideIntegration.h": {
+      "expected_lf_sha256": "3ac91d7639654ad94911d309dee46e69e67dc57c4c2c0b999c196f5b5e975715",
+      "expected_lf_bytes": 5937
+    },
+    "src/GameShared/GameClasses/System/CgsHarnessSlot.h": {
+      "expected_lf_sha256": "baf97ca1d235c4d0bee3f0f4d7e29a452aa240fa40b39c0139d786c0127a611e",
+      "expected_lf_bytes": 3484
+    },
+    "src/GameShared/GameClasses/System/CgsXOverlapped.h": {
+      "expected_lf_sha256": "4f1e549f60c0872b958de55b0bc4e4fec982cf20260c3389c8b7ea8aa2215518",
+      "expected_lf_bytes": 3940
+    },
+    "src/GameShared/GameClasses/System/PC/CgsPcNetIdentity.cpp": {
+      "expected_lf_sha256": "97eecc398ef9bba3094791b4477e695896555063a42c0fbf6358058c28fd26ee",
+      "expected_lf_bytes": 5447
+    },
+    "src/GameShared/GameClasses/System/PC/CgsPcNetIdentity.h": {
+      "expected_lf_sha256": "6fdd08b577e378df7ff10299314af5ed6d23836276d1b45091a7081196de6bb9",
+      "expected_lf_bytes": 1748
+    },
+    "src/GameShared/GameClasses/System/PC/CgsXUserProfileSettings.h": {
+      "expected_lf_sha256": "d4c79f02f1575cdcd6b05f620bf1ffc44b9282e48de259953a28284f33672477",
+      "expected_lf_bytes": 2422
+    },
+    "src/GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp": {
+      "expected_lf_sha256": "72b76aada372ed4b1f0ef2bce5b39a4807e8e18f70593f571d71cd69ee2a2b05",
+      "expected_lf_bytes": 39963
+    },
+    "src/GameShared/GameClasses/System/X360/CgsXOverlappedX360.cpp": {
+      "expected_lf_sha256": "7f08804d3aa8bf82c1d35b8ecb5662c22cc32a01901c3e11a27d24f439c16757",
+      "expected_lf_bytes": 3520
+    },
+    "src/types.hpp": {
+      "expected_lf_sha256": "89b8022b07bab80fb0522f9a57e412761b0b787c6887f45b2653aa897b3aa308",
+      "expected_lf_bytes": 273
+    },
+    "tests/SystemUserProfilePC.cpp": {
+      "expected_lf_sha256": "af04f45a7b42fecab140acfa41c55666770fe457db34492e437ebb872e94ce25",
+      "expected_lf_bytes": 21111
+    },
+    "tests/evidence/system_user_profile_pc/CgsGuideIntegration_bef9346f9.cpp": {
+      "expected_lf_sha256": "04eec59d1eaced243071f5aac98a99da33f0c8a83601ef7c33bd3146d70da371",
+      "expected_lf_bytes": 11603
+    },
+    "tests/evidence/system_user_profile_pc/CgsXboxLivePC_bef9346f9.cpp": {
+      "expected_lf_sha256": "53a7718c1889d1a2b539f25cccff7f5ca0f15774ab3d53810fc48053308362b9",
+      "expected_lf_bytes": 35560
+    },
+    "tests/evidence/system_user_profile_pc/test_plan.json": {
+      "expected_lf_sha256": "b922bc45991763901be63194b7824ae1aae83d309f10dce457988c1a82833686",
+      "expected_lf_bytes": 3468
+    },
+    "tests/fxgs_common.py": {
+      "expected_lf_sha256": "6230372da7ef60e446a165470a61850964b7b7498576eaec93dbb58555ae9033",
+      "expected_lf_bytes": 8364
+    },
+    "tests/run_system_user_profile_pc.py": {
+      "expected_lf_sha256": "2eee426e6e0f540311c15943b77c4f5a5dc4b3defc8d57e6b32e66aa606716a3",
+      "expected_lf_bytes": 29458
+    }
+  },
+  "baseline_evidence": [
+    {
+      "path": "tests/evidence/system_user_profile_pc/CgsGuideIntegration_bef9346f9.cpp",
+      "original_source_path": "src/GameShared/GameClasses/Gui/CgsGuideIntegration.cpp",
+      "original_git_lf_blob_sha1": "dbf6f7a8a47889c3358f30787676ad994e2f9494"
+    },
+    {
+      "path": "tests/evidence/system_user_profile_pc/CgsXboxLivePC_bef9346f9.cpp",
+      "original_source_path": "src/GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp",
+      "original_git_lf_blob_sha1": "46218b2dc5ca92b78668faf71b0318996dbaa3e0"
+    }
+  ]
+}

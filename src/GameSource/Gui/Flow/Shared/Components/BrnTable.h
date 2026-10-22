@@ -231,8 +231,10 @@ namespace BrnGui
         // exactly the console's override.
         void Update();
 
-        // (Other DWARF-declared members -- GetText/GetIconState/SelectRow/Update/Clear/
-        //  AppendExpectedAptComponent/SetEnableShowingAnim/SetRowData -- land in later waves.)
+        // ARTIST824E6E78: register each live row and its cell components.
+        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);
+        // DecFIGS h:436; inlined at OnlineInstantResultsState::OnEnter82494704..740.
+        void SetEnableShowingAnim(bool lbEnable);
 
     private:
         TableRow      maRows[KI_MAX_ROWS_PER_TABLE];  // this+0x238 (by value, 0x308 bytes each)

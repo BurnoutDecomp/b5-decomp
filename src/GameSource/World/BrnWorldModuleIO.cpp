@@ -122,7 +122,7 @@ void UpdateInputBuffer::Construct()
         mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
     mReplayStatusInterface.miCurrentRecordReel   = -1;      // +321824
     mReplayStatusInterface.miCurrentPlaybackReel = -1;      // +321828
-    mReplayStatusInterface.mfDebugHudAlpha       = 0.0f;    // +321832
+    mReplayStatusInterface.mfPlaybackTimeRemaining       = 0.0f;    // +321832
     mAudioCarDataLoadedQueue.Construct();                   // +321840  AudioCarDataLoadedEvent<16>
     mRaceRouteRequestQueue.Construct();                     // +322240  RaceRouteRequest<1>
     mOnlineScoringInterface.Construct();                    // +322384  (+32 block seeded to -1)

@@ -165,6 +165,7 @@ void TraceClassification(bool lbBurst)
     using namespace CgsSystem::RwacCommandTracePC;
     ResetTrace();
     World lWorld(196608);
+    BeginSystemEpoch(&lWorld.mSystem);
     MarkEngineBegin(&lWorld.mSystem);
     MarkConsumerEvent(CommandPassBegin, 3);
     MarkConsumerEvent(CommandPassEnd, 4);

@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 
 namespace CgsGraphics { class Im3dRenderBuffer; }
+namespace BrnGui { struct GuiDebugComponent; }
 
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h
@@ -38,14 +39,14 @@ namespace CgsGraphics { class Im3dRenderBuffer; }
 // their real homes in would force a large transitive header cascade into this skeleton
 // header). Their concrete homes live with the IO/memory/RenderWare TUs that own them.
 struct RGBA;                          // GUI clear/tint colour (passed by const ptr to Construct)
-namespace CgsModule { struct Event; } // base module event record (ProcessIncomingLoadNotification arg)
+namespace CgsModule { struct Event; struct IOBufferStack; } // base module event record (ProcessIncomingLoadNotification arg)
 namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
 namespace rw { class IResourceAllocator; }
 namespace CgsGui
 {
 namespace ViewIO
 {
-    struct IOBufferStack;   // the per-frame module IO buffer stacks Update walks
+    using IOBufferStack = CgsModule::IOBufferStack; // original shared stack owner
     struct InputBuffer;     // the module's input buffer (Update / Render / RenderInternal)
     struct OutputBuffer;    // the module's output buffer (Update)
 }
@@ -61,6 +62,11 @@ namespace CgsGui
     class ViewModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        // DecFIGS CgsGuiViewModule.cpp:30..31; native Update82860708.
+        // The original GuiPerfmons producer publishes the registered handles.
+        static s32 miAptAuxUpdatePM;
+        static s32 miViewProcessIncomingEventsPM;
+
         enum EPrepareStage
         {
             E_PREPARESTAGE_START = 0,
@@ -203,6 +209,8 @@ namespace CgsGui
         void AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lrTypeface);
 
     protected:
+        // ARTIST8252A630..64C registers this actual shared-view bool by address.
+        friend struct BrnGui::GuiDebugComponent;
         bool mbUpdateFlash;
         f32 mfHack_LastValidTimeStep;
         f32 mfCurrentTime;
@@ -221,6 +229,9 @@ namespace CgsGui
         // @0x8285EAE8 posts 33 GuiEventLoadingScreenState into it, and GuiModule::
         // BridgeFromViewToOutput @0x8285DE10 appends it onto the module output every frame.
         const GuiEventQueueBase<256, 16>& GetOutputEventQueue() const { return mOutputEventQueue; }
+        // DecFIGS h:394; ARTIST8285DE58..E60 inlines this original accessor.
+        CustomRendererManager* GetCustomRendererManager() { return mpCustomRendererManager; }
+
 
     private:
         EPrepareStage mePrepareStage;

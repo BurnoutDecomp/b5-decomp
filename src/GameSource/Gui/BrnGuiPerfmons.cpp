@@ -1,4 +1,6 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::AddMonitor
 
@@ -7,6 +9,22 @@
 // Registers the 33 GUI monitors and publishes the shared handle aliases. ARTIST uses
 // r3/r4/r5/f1/r7 for AddMonitor; the apparent r6 parent argument is a decompiler
 // artefact. Indentation belongs to the displayed name, not a separate parent tree.
+
+// The original secondary stores in Initialise824EF5F0..664/670/67C
+// publish into these shared owners. They are not private alias variables.
+namespace CgsGui
+{
+s32 GuiModule::miGuiPM;
+s32 GuiModule::miModelUpdatePM;
+s32 GuiModule::miModelViewBridgePM;
+s32 GuiModule::miViewUpdatePM;
+s32 GuiModule::miGuiRenderPM;
+s32 ModelModule::miUpdateInputPM;
+s32 ModelModule::miUpdateMainPM;
+s32 ModelModule::miUpdateOutputPM;
+s32 ViewModule::miAptAuxUpdatePM;
+s32 ViewModule::miViewProcessIncomingEventsPM;
+}
 
 namespace BrnGui
 {
@@ -46,19 +64,9 @@ int32_t GuiPerfmons::miCgsAptStringRender;
 int32_t GuiPerfmons::miCgsAptDrawRenderingUnit;
 
 // --- Alias handle copies (X360 dword_82F330xx / 82F331xx; addresses decompiler-named) ---
-static int32_t giAliasUpdateTotal;        // dword_82F330A8 = miGuiUpdate
-static int32_t giAliasModelUpdate;        // dword_82F330AC = miModelUpdate
-static int32_t giAliasModelViewBridge;    // dword_82F330B0 = miModelViewBridge
-static int32_t giAliasViewUpdate;         // dword_82F330B4 = miViewUpdate
-static int32_t giAliasGuiRender;          // dword_82F330B8 = miGuiRender
 static int32_t giAliasFlashObjectRender;  // dword_82F33168 = miCgsAptFlashRender
 static int32_t giAliasFlashStringRender;  // dword_82F3316C = miCgsAptStringRender
 static int32_t giAliasFlashDrawRendUnit;  // dword_82F33170 = miCgsAptDrawRenderingUnit
-static int32_t giAliasModelUpdateInput;   // dword_82F330BC = miModelUpdate_Input
-static int32_t giAliasModelUpdateMain;    // dword_82F330C0 = miModelUpdate_Main
-static int32_t giAliasModelUpdateOutput;  // dword_82F330C4 = miModelUpdate_Output
-static int32_t giAliasViewModuleApt;      // dword_82F33128 = miAptAuxUpdate
-static int32_t giAliasProcessIncoming;    // dword_82F3312C = miViewProcessIncomingEvents
 static int32_t giAliasAptAuxRndrTgt;      // dword_82F33130 = miAptAuxRenderTarget
 static int32_t giAliasAptAuxUpdTgt;       // dword_82F33134 = miAptAuxUpdateTarget
 static int32_t giAliasAptAuxUpdComps;     // dword_82F33138 = miAptAuxUpdateComponents
@@ -107,19 +115,19 @@ void GuiPerfmons::Initialise()
     miCgsAptFlashRender = CgsDev::PerfMonCpu::AddMonitor("        Flash Object render", CgsDev::E_PMP_3, false, 0.15000001f, true);
 
     // --- Alias copies (X360 dword_82F330xx / 82F331xx = primary handles) ---
-    giAliasUpdateTotal = miGuiUpdate;
-    giAliasModelUpdate = miModelUpdate;
-    giAliasModelViewBridge = miModelViewBridge;
-    giAliasViewUpdate = miViewUpdate;
-    giAliasGuiRender = miGuiRender;
+    CgsGui::GuiModule::miGuiPM = miGuiUpdate;
+    CgsGui::GuiModule::miModelUpdatePM = miModelUpdate;
+    CgsGui::GuiModule::miModelViewBridgePM = miModelViewBridge;
+    CgsGui::GuiModule::miViewUpdatePM = miViewUpdate;
+    CgsGui::GuiModule::miGuiRenderPM = miGuiRender;
     giAliasFlashObjectRender = miCgsAptFlashRender;
     giAliasFlashStringRender = miCgsAptStringRender;
     giAliasFlashDrawRendUnit = miCgsAptDrawRenderingUnit;
-    giAliasModelUpdateInput = miModelUpdate_Input;
-    giAliasModelUpdateMain = miModelUpdate_Main;
-    giAliasModelUpdateOutput = miModelUpdate_Output;
-    giAliasViewModuleApt = miAptAuxUpdate;
-    giAliasProcessIncoming = miViewProcessIncomingEvents;
+    CgsGui::ModelModule::miUpdateInputPM = miModelUpdate_Input;
+    CgsGui::ModelModule::miUpdateMainPM = miModelUpdate_Main;
+    CgsGui::ModelModule::miUpdateOutputPM = miModelUpdate_Output;
+    CgsGui::ViewModule::miAptAuxUpdatePM = miAptAuxUpdate;
+    CgsGui::ViewModule::miViewProcessIncomingEventsPM = miViewProcessIncomingEvents;
     giAliasAptAuxRndrTgt = miAptAuxRenderTarget;
     giAliasAptAuxUpdTgt = miAptAuxUpdateTarget;
     giAliasAptAuxUpdComps = miAptAuxUpdateComponents;

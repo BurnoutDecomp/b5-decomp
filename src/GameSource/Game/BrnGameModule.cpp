@@ -8,6 +8,7 @@
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Input/GameInputActions.h" // E_GAMEINPUTACTIONS_START (X360 action slot 8)
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
@@ -671,15 +672,14 @@ namespace BrnGame
         // module's Prepare (vtable+0x58) once per frame and only posts the two id-144 RunFsm
         // records when it finally reports done. That is now where ours runs.
 
-        // ---- input bring-up (PC stand-in for the unreconstructed input setup pass) --------
-        // The console input module's Prepare constructs its output buffer, scans the pads and
-        // flips the module state to "ready / player-0 assigned"; none of that pass is
-        // reconstructed, so seed the observable outcome here: the real OutputBuffer::Construct
-        // (@0x828F85E0), port 0 assigned, module ready (==4), and the GUI accepting controller
-        // input (the console sets it from the GUI flow state -- FLAG follow-on).
+        // FLAG PC-platform leaf: retain the persistent host input buffer and existing
+        // GUI-enable policy. Player selection follows the recovered original bind chain.
         mPcInputOutputBuffer.Construct();
-        miInputModuleState        = 4;
-        miPlayer0ControllerPort   = 0;
+        // ARTIST823CAA14/7C/AC: both port words start at4; bind state starts at0.
+        // BootLegal90 arms state1; only a real START selection advances it to2.
+        miPlayer0ControllerPort   = CgsInput::KU_NUMBER_OF_PADS;
+        miSecondaryControllerPort = CgsInput::KU_NUMBER_OF_PADS;
+        miInputModuleState        = 0;
         mbGuiAcceptsControllerInput = true;
 
         // ---- the GUI flow-FSM bridge state ------------------------------------------
@@ -1199,21 +1199,17 @@ namespace BrnGame
                     lpDirectorInput->SetFinishedOnlineEventLoading();
                     break;
 
-                case 501:   // the GUI PFX hook enumeration (a 404-byte publish). The console
-                            // memcpys all 404 bytes off the payload unconditionally; the size
-                            // guard is ours, because a short record here would read past the
-                            // queue entry (the exact class of bug that cost this project the
-                            // intro AV). BrnGui::EffectsArbitrator::EventUpdate posts it (the
-                            // reply to 500) since 2026-09-17; the record is copied WHOLE (header
-                            // included), so the director reads it back as the same struct.
+                case 501:   // Original count plus100 pointers, at native host width.
+                            // Retain the existing host record-bound/legacy-wrapper guard.
                     static_assert(sizeof(BrnGui::GuiPFXHookEnumeration) ==
                                   BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES,
-                                  "the director copies the whole 501 record");
+                                  "the director copies the canonical501 payload");
                     if (liSize >= static_cast<s32>(BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES
                                                    + (reinterpret_cast<const u8*>(lpuPayload)
                                                           - reinterpret_cast<const u8*>(lpEvent))))
                     {
-                        lpDirectorInput->SetHookEnumeration(lpuPayload);
+                        lpDirectorInput->SetHookEnumeration(
+                            reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpuPayload));
                         if (getenv("BRN_PFX_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
                             *CgsDev::Log::gpDebugPrint << "[pfx-dir] 501 record (" << liSize << " bytes) -> director input\n";
                     }
@@ -4292,6 +4288,7 @@ namespace BrnGame
 
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
                 bool lbInputPreWorldFilledPC = false;
+                u32 luStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
 
                 // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] THE INPUT PRE-WORLD LEG -- the first
                 // leg of the console's update step, and the one that carries the game's rumble requests
@@ -4304,12 +4301,19 @@ namespace BrnGame
                 // So it runs in the in-game state and in every loading-scripted state, whatever the load
                 // stage (the network buffer's gate below additionally needs stage 8). Arguments as the
                 // console loads them: the update input/output buffer stacks and the input module's
-                // output buffer (the PC keeps that one as mPcInputOutputBuffer). The START-pressed port
-                // it returns feeds only the flagged pad scan (see the body), so it is not consumed here.
+                // output buffer (the PC keeps that one as mPcInputOutputBuffer). Preserve the
+                // actual selected word for the original post-world bind and GUI143 producer.
                 if (lbRunFullModuleCascade)
                 {
-                    DoUpdate_InputPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                                           &mPcInputOutputBuffer);
+                    // FLAG PC-platform leaf: these results live in a persistent buffer here;
+                    // the original frame-owned OutputBuffer is freshly constructed each step.
+                    // Last-step consumers have finished before this new producer pass.
+                    mPcInputOutputBuffer.LockForWrite();
+                    mPcInputOutputBuffer.GetBindResultQueue()->Clear();
+                    mPcInputOutputBuffer.GetUnbindResultQueue()->Clear();
+                    mPcInputOutputBuffer.UnlockForWrite();
+                    luStartPressedPort = DoUpdate_InputPreWorld(
+                        mpUpdateInputBufferStack, mpUpdateOutputBufferStack, &mPcInputOutputBuffer);
                     lbInputPreWorldFilledPC = !mbDiskError;
                 }
 
@@ -4343,6 +4347,14 @@ namespace BrnGame
                         lpWorldOutput->UnlockForRead();
                     }
                 }
+
+                // ARTIST823F1554..156C: the same selected word feeds InputPostWorld
+                // after the world's producer and before GUI. The existing helper owns the
+                // mapping/bind requests; next PreWorld publishes its actual bind result.
+                if (lbRunFullModuleCascade)
+                    DoUpdate_InputPostWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                           mGameStateModule.GetOutputBuffer(), mpWorldUpdateOutputBuffer,
+                                           luStartPressedPort);
 
                 // ---- the RESOURCE tick (FLAG PC placement: the console's own thread) -------
                 // The X360 runs BrnGameModule::ResourceUpdateThread @0x823BC9B8 concurrently
@@ -4407,6 +4419,12 @@ namespace BrnGame
                     }
 
                     mpGuiInputBuffer->LockForWrite();
+                    // ARTISTDoUpdate_GUI823F0920..0944: publish the actual selection,
+                    // not the no-user sentinel and not a preselected virtual pad index.
+                    if (luStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
+                        mpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&luStartPressedPort),
+                            143, sizeof(luStartPressedPort));
                     // ⭐ [boost-bar 206 wave] the world->GUI vehicle bridge (the console's
                     // DoUpdate_GUI @0x823F0758 calls BridgeWorldToGui under its own GUI-input
                     // write bracket) -- the read bracket mirrors the BridgeWorldToDirector
@@ -4818,6 +4836,15 @@ namespace BrnGame
                     }
                 }
 
+                // ARTIST823F2010..2028: consume actual bind/unbind replies at the
+                // last input-output use. HandleInputBindResult alone advances3->4.
+                if (lbRunFullModuleCascade)
+                {
+                    mPcInputOutputBuffer.LockForRead();
+                    BridgeInputToGame(&mPcInputOutputBuffer);
+                    mPcInputOutputBuffer.UnlockForRead();
+                }
+
                 // Every current-frame GUI consumer has finished. This also drops a
                 // skipped/partial batch at the same boundary as the native IO teardown.
                 if (mGuiModule.IsPrepared())
@@ -4967,6 +4994,29 @@ namespace BrnGame
 
     // @ BrnGameModule.cpp:2497 - allocate this sub-step's static GUI/director IO buffers from
     // the update input/output buffer stacks.
+    // ARTIST823DCD78. The scheduler continues to use its existing host
+    // route; this recovered native caller has no selected invocation yet.
+    void BrnGameModule::DoUpdate_GuiPreWorld(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+        CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI);
+        if (!mbDiskError)
+            mGuiModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
+                lpGuiOutput, lpModelOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI);
+
+        const CgsGui::ModelIO::OutputBuffer* lpModelRead = lpModelOutput;
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiRead = lpGuiOutput;
+        CgsModule::LockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
+            *lpGuiRead->GetGuiResourceRequestQueue());
+        CgsModule::UnlockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
+    }
+
     void BrnGameModule::CreateStaticIOBuffers()
     {
         // CreateIOBuffer<T> runs each buffer's own Construct right after the stack alloc, the
@@ -5043,8 +5093,8 @@ namespace BrnGame
     //               gm+0x9A0B0C == &mTimerStatusInterface) ; UnlockForWrite ; StopMonitor
     //   0x823C5720  mInputModule (gm+0x6E9630) vtable+0x44 == InputModule::PreWorldUpdate(inStack,
     //               outStack, buffer, lpInputModuleOutput, *(gm+0x9A0622) == 0 -- !mbDiskError)
-    //   0x823C5738..0x823C57E8  if (miInputModuleState == 1): the START-pressed port scan (or the invite
-    //               relaunch's port), miInputModuleState = 2   -- [FLAG, below]
+    //   0x823C5738..0x823C57F8  if (miInputModuleState == 1): select the invite user or first
+    //               START-pressed pad, then set miInputModuleState = 2
     //   0x823C5808  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- caller unactivated
     //   0x823C57F8  StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
     // =========================================================================================
@@ -5065,15 +5115,42 @@ namespace BrnGame
         mInputModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
                                     lpInputModulePreWorldInputBuffer, lpInputModuleOutput, !mbDiskError);
 
-        // The console's START-pressed port: KU_NUMBER_OF_PADS (4) unless the scan below finds one.
+        // The selection path keeps the original no-user sentinel until state 1 finds a user.
         u32 liStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
-        // [FLAG, not reconstructed -- dead on this build] 0x823C5738..0x823C57E8: while
-        // miInputModuleState == 1 the console read-locks lpInputModuleOutput and takes the invite
-        // relaunch's port (HasGameBeenRebootedDueToInvite -> the launch data's first word, asserting
-        // "lpLaunchData" at BrnGameModuleUpdateFunctions.cpp:71) or the first of the four pads whose
-        // START action (record +0x5C, maActionInfo[8].muStatus bit 1) was pressed, then sets the state to
-        // 2. This build seeds miInputModuleState = 4 in Construct (the PC input bring-up) and the only
-        // 0 -> 1 edge (BridgeGuiToGame case 90) needs 0, so the block can never run here.
+        if (miInputModuleState == 1)
+        {
+            lpInputModuleOutput->LockForRead();
+            if (mHardware.HasGameBeenRebootedDueToInvite())
+            {
+                BrnHW::System360HW* lpLaunchData = GetSoftRebootData();
+                if (lpLaunchData == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpLaunchData",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModuleUpdateFunctions.cpp", 71);
+                    CgsDev::Assert::EndAssert();
+                }
+                liStartPressedPort = lpLaunchData->mdwUserIndex;
+                miInputModuleState = 2;
+            }
+            else
+            {
+                for (s32 liPort = 0; liPort < CgsInput::KU_NUMBER_OF_PADS; ++liPort)
+                {
+                    const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
+                        lpInputModuleOutput->GetPadInfo(liPort);
+                    if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0)
+                    {
+                        liStartPressedPort = static_cast<u32>(liPort);
+                        miInputModuleState = 2;
+                        break;
+                    }
+                }
+            }
+            lpInputModuleOutput->UnlockForRead();
+        }
+        // This remains an idle/rebind transition: construction starts at state 4; an unbind
+        // completion returns to 0, and BridgeGuiToGame event 90 can arm state 1 again.
         // Original 0x823C5808: query only after the input module has published its pad output.
         QueryRequestDoStepFrame(lpInputModuleOutput);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);

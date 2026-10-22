@@ -122,41 +122,18 @@ namespace CgsGui
         return &mOutEventQueue;
     }
 
-    // The X360 register/unregister emitters build a small fixed 8-byte record
-    // { s32 miEventType; EventObserver* lpEventObserver; } per event id and push it
-    // onto the output queue with the matching type tag. The DWARF declares these as
-    // GuiEvent<N>-derived structs (GuiEventRegisterForEvents=34, UnRegister=35), but
-    // the asm writes only the 8-byte {eventType, observer} payload AddEvent copies,
-    // so the record is reconstructed at that exact width (size 8). The observer the
-    // record carries is mpObserver (the interface's first member, read as field_0).
-    namespace
-    {
-        struct RegisterEventRecord
-        {
-            s32                    miEventType;
-            CgsGui::EventObserver* mpEventObserver;
-        };
-
-        // X360 wire-record byte sizes the asm passes to AddEvent. The on-target
-        // pointer is 32-bit, so the {s32, observer*} record is 8 bytes and the
-        // priority-register record is 4 + 2400 + 4 + 4 = 2412. On a 64-bit host the
-        // C++ struct is wider (the trailing observer pointer); the X360 size is the
-        // authoritative record width, so it is passed explicitly rather than via
-        // host sizeof.
-        const s32 KI_REGISTER_RECORD_SIZE          = 8;
-        const s32 KI_PRIORITY_REGISTER_RECORD_SIZE = 2412;
-    }
-
+    // Registration payloads use the canonical flat types in the header.
+    // sizeof preserves full host pointers; native sizes remain8/2412.
     // @ 0x8285B8A0 - emit one type-34 "register for event" record per event id.
     void StateInterface::RegisterForEvents(const s32* lpiEventIds, s32 liCount)
     {
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
-            RegisterEventRecord lRecord;
+            GuiEventRegisterForEvents lRecord;
             lRecord.miEventType     = lpiEventIds[liIndex];
-            lRecord.mpEventObserver = mpObserver;
+            lRecord.lpEventObserver = mpObserver;
             mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                    34, KI_REGISTER_RECORD_SIZE);
+                                    34, static_cast<s32>(sizeof(lRecord)));
         }
     }
 
@@ -165,11 +142,11 @@ namespace CgsGui
     {
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
-            RegisterEventRecord lRecord;
+            GuiEventUnRegisterForEvents lRecord;
             lRecord.miEventType     = lpiEventIds[liIndex];
-            lRecord.mpEventObserver = mpObserver;
+            lRecord.lpEventObserver = mpObserver;
             mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                    35, KI_REGISTER_RECORD_SIZE);
+                                    35, static_cast<s32>(sizeof(lRecord)));
         }
     }
 
@@ -181,31 +158,23 @@ namespace CgsGui
     // is faithful to the asm (it memcpy's 4*luCount into the slot and sends all 2412).
     void StateInterface::PriorityRegisterForEvent(s32 liPriority, const s32* lpiEventIds, u32 luCount)
     {
-        struct PriorityRegisterRecord
-        {
-            s32                    miEventType;
-            s32                    maiEventTypeOverridden[600];
-            u32                    muOverrideCount;
-            CgsGui::EventObserver* mpEventObserver;
-        };
-
-        PriorityRegisterRecord lRecord;
+        GuiEventPriorityRegisterForEvents lRecord;
         lRecord.miEventType     = liPriority;
         lRecord.muOverrideCount = luCount;
-        lRecord.mpEventObserver = mpObserver;
-        memcpy(lRecord.maiEventTypeOverridden, lpiEventIds, 4u * luCount);
+        lRecord.lpEventObserver = mpObserver;
+        memcpy(lRecord.miEventTypeOverridden, lpiEventIds, 4u * luCount);
         mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                36, KI_PRIORITY_REGISTER_RECORD_SIZE);
+                                36, static_cast<s32>(sizeof(lRecord)));
     }
 
     // @ 0x8285B9C0 - emit a type-37 "priority unregister" record { eventId, observer },
     // size 8.
     void StateInterface::PriorityUnRegisterForEvent(s32 liPriority)
     {
-        RegisterEventRecord lRecord;
+        GuiEventPriorityUnRegisterForEvents lRecord;
         lRecord.miEventType     = liPriority;
-        lRecord.mpEventObserver = mpObserver;
+        lRecord.lpEventObserver = mpObserver;
         mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                37, KI_REGISTER_RECORD_SIZE);
+                                37, static_cast<s32>(sizeof(lRecord)));
     }
 }

@@ -18,12 +18,18 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"       // CgsDev::DebugUI::StringList
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                                    // GuiEventUpdateHud
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                                 // GuiPFXHookEnumeration
+
+#include "GameSource/Gui/Flow/BrnBaseFlow.h"                              // original streaming enum
+
+namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer; } }
 
 namespace BrnGui
 {
@@ -36,17 +42,96 @@ namespace BrnGui
         static const s32 KI_PFX_HOOK_NAME_LENGTH         = 128;
         static const s32 KI_NUM_TOGGLEABLE_RACE_HUD_ITEMS = 22;
 
+        // ARTIST827E5D38/40: real derived vtable and queue-unconstructed flag only.
+        GuiDebugComponent();
+
+        // ARTIST82505488; real two-phase provider, unselected by the
+        // current module which still lacks this contained debug owner.
+        void Construct(GuiModule* lpGuiModule);
+        // ARTIST825076D0..82507710 inlines the original derived teardown.
+        void Destruct();
+
+        bool IsGuiRenderingEnabled() const { return mbRenderGui; }
+        void SetScreenFlowStreamingMode(BrnBaseFlow::EStreamingMode leMode)
+        {
+            miScreenFlowStreamingMode = leMode;
+        }
+        BrnBaseFlow::EStreamingMode GetScreenFlowStreamingMode() const
+        {
+            return static_cast<BrnBaseFlow::EStreamingMode>(miScreenFlowStreamingMode);
+        }
+
+        // ARTIST8250C998; original typed GUI input reader/publisher.
+        void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
+        // ARTIST8250CBC8. Its native GuiModule::Update caller is not selected by this
+        // host build yet; keep the typed input path independently reviewable.
+        void UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
+
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+
         // Return the singleton instance pointer, asserting it is non-null (the assert is
         // non-fatal; the pointer is returned either way).
         static GuiDebugComponent* GetSingletonPtr();
 
     protected:
+        const char* GetName() const override;
+        const char* GetPath() const override;
+        void OnActivate() override;
+
+        void DrawDebugFrame1280(CgsDev::Debug2DImmediateRender* lpRender,
+            Vector4 lvFrame, CgsDev::RGBA lColour, f32 lfBorderSize);
+
+        // Actual nonvirtual members inlined into the original debug callbacks.
+        void TriggerIntro();
+        void RotateThroughFonts();
+        void RotateThroughFontEffects();
+        void ChangeFontSpacing();
+        void ToggleGenericHUDPriorityOverride();
+        void MiniMapSwitch();
+        void PlayMovie();
+        void ToggleShow43Area();
+        void ToggleShowSafeArea();
+        void OpenCrashNav();
+        void OpenCarSelect();
+        void TriggerClosePFX();
+        void TriggerEATraxComponent();
+        void TriggerOnlineInviteComponent();
+        void BootupProfile();
+        void AutosaveProfile();
+        void SaveProfile();
+        void LoadProfile();
+
         // Post the selected post-FX hook (by name, every maximum weight 1.0) to the GUI.
         void TriggerPFX();
         // Post a made-up offline post-event result built from the debug finish settings.
         void TriggerPostEvent();
 
     private:
+        // The second argument is an encoded item index, including valid index0.
+        static void ToggleRaceHudComponentsCallback(void* lpValue, void* lpUserData);
+        static void TriggerEATraxComponentCallback(void* lpUserData);
+        static void TriggerOnlineInviteCallback(void* lpUserData);
+        static void TriggerPaybackComponent(void* lpUserData);
+        static void BootupProfileCallback(void* lpUserData);
+        static void AutosaveProfileCallback(void* lpUserData);
+        static void SaveProfileCallback(void* lpUserData);
+        static void LoadProfileCallback(void* lpUserData);
+        static void ShowKeyboardCallback(void* lpUserData);
+        static void EnterCarSelectCallback(void* lpUserData);
+        static void TriggerIntroCallback(void* lpUserData);
+        static void TriggerPostEventCallback(void* lpUserData);
+        static void OpenCrashNavCallback(void* lpUserData);
+        static void MiniMapSwitchCallback(void* lpUserData);
+        static void ToggleShow43AreaCallback(void* lpUserData);
+        static void ToggleShowSafeAreaCallback(void* lpUserData);
+        static void ChangeFontSpacingCallback(void* lpUserData);
+        static void PlayMovieCallback(void* lpUserData);
+        static void RotateThroughFontsCallback(void* lpUserData);
+        static void RotateThroughFontEffectsCallback(void* lpUserData);
+        static void TriggerPFXCallback(void* lpUserData);
+        static void TriggerClosePFXCallback(void* lpUserData);
+        static void ToggleGenericHUDPriorityOverrideCallback(void* lpUserData);
+
         // The single live GuiDebugComponent instance, set when the debug component is created.
         static GuiDebugComponent* mspSingletonThis;
 

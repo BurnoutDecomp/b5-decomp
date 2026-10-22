@@ -38,6 +38,7 @@ BODIES = [
     "void HUDMessageLogic::DetectCrashes(",
     "void HUDMessageLogic::DetectOnlineCrashes(",
     "void HUDMessageLogic::RemoveCrashingMessagesForTakendownPlayers(",
+    "void HUDMessageLogic::GenerateOnlineTeamChangeMessages(",
 ]
 RCIF_BODIES = [
     "EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetPlayerActiveRaceCarIndex() const",
@@ -45,7 +46,7 @@ RCIF_BODIES = [
     "bool RCEntityActiveRaceCarOutputInterface::IsCarInShowtime(EActiveRaceCarIndex leActiveRaceCarIndex) const",
     "bool RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(EActiveRaceCarIndex leActiveRaceCarIndex) const",
 ]
-NUMERIC_CHECKS = 33
+NUMERIC_CHECKS = 38
 
 
 def switch_arm(body, case_names):
@@ -85,11 +86,17 @@ def wiring(tree):
     call = re.search(r"mHUDMessageLogic\.PostWorldUpdate\((.*?)\);", world, re.S)
     arguments = call.group(1) if call else ""
     yield ("D1 the selected ModeManager post-world caller carries the crash queue, takedown input, "
-           "player index and mode-progress byte in ARTIST order",
-           re.fullmatch(r"\s*lpActiveRaceCarOutput\s*,\s*meCurrentGameModeType\s*,\s*&mScoringSystem\s*,\s*"
-                        r"lpPostWorldInputBuffer->GetRaceCarCrashEventQueue\(\)\s*,\s*lpTakedownQueue\s*,\s*"
+           "mode owner, vehicle output, player index and mode-progress byte in ARTIST order",
+           re.fullmatch(r"\s*lpActiveRaceCarOutput\s*,\s*meCurrentGameModeType\s*,\s*this\s*,\s*&mScoringSystem\s*,\s*"
+                        r"lpPostWorldInputBuffer->GetRaceCarCrashEventQueue\(\)\s*,\s*lpVehicleOutput\s*,\s*lpTakedownQueue\s*,\s*"
                         r"lfDelta\s*,\s*mePlayerActiveRaceCarIndex\s*,\s*lbIsGameModeInProgress\s*",
                         arguments) is not None)
+    bhr = switch_arm(post, ["E_MODE_ONLINE_BURNING_HOME_RUN"])
+    yield ("mode 13 carries the actual mode owner into the BHR generator",
+           "GenerateBurningHomeRunMessages(lpModeManager, lpScoringSystem)" in bhr)
+    yield ("the team-change generator remains after the mode switch",
+           re.search(r"}\s*GenerateOnlineTeamChangeMessages\(lpVehicleOutputInterface,\s*"
+                     r"lePlayerActiveRaceCarIndex\);\s*}\s*$", post) is not None)
     actions = code_only(tree.read(ACTIONS_H))
     yield ("D1 action ids 249 E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT / 250 E_ACTION_HUD_MESSAGE_X_CRASHES "
            "(DWARF 239/240, +10; translator case 250 @0x823EC0CC)",
@@ -97,7 +104,7 @@ def wiring(tree):
            and re.search(r"E_ACTION_HUD_MESSAGE_X_CRASHES\s*=\s*250\s*,", actions) is not None)
 
 
-def numeric(tree):
+def numeric(tree, output_dir=None, omit_team_tail=False):
     hud = tree.read(HUD_CPP)
     texts = []
     for signature in BODIES:
@@ -106,6 +113,11 @@ def numeric(tree):
         except ValueError:
             print("NUMERIC: cannot build -- absent in this revision: " + signature)
             return None
+    if omit_team_tail:
+        call = "GenerateOnlineTeamChangeMessages(lpVehicleOutputInterface, lePlayerActiveRaceCarIndex);"
+        assert texts[2].count(call) == 1, "Cannot isolate the production team-change tail"
+        texts[2] = texts[2].replace(call, "", 1)
+        print("NEGATIVE CONTROL: omit only the extracted PostWorld team-change tail")
     rcif = tree.read(RCIF_CPP)
     rcif_texts = [definition(rcif, signature) for signature in RCIF_BODIES]
     includes = re.findall(r"^#include [^\n]+", hud, re.M)
@@ -114,15 +126,17 @@ def numeric(tree):
                     "namespace BrnWorld { namespace RaceCarEntityModuleIO {"] + rcif_texts + ["} }"])
     shadow = {HUD_H: tree.read(HUD_H), ACTIONS_H: tree.read(ACTIONS_H), MODE_MANAGER_H: tree.read(MODE_MANAGER_H)}
     return compile_and_run(Path(__file__).with_name("FxGsHudCrashes.cpp"), "hud_crashes_methods.inc", inc,
-                           "FxGsHudCrashes", shadow=shadow, extra_sources=(STRSTREAM_CPP,))
+                           "FxGsHudCrashes", shadow=shadow, extra_sources=(STRSTREAM_CPP,), output_dir=output_dir)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rev", help="read the b5 sources from this git revision")
+    parser.add_argument("--output-dir", type=Path, help="retain generated sources, executable and execution receipts")
+    parser.add_argument("--omit-team-tail", action="store_true", help="negative control: omit only the extracted team-change tail")
     args = parser.parse_args()
     tree = Tree(args.rev)
-    return report("run_fxgs_hud_crashes", list(wiring(tree)), numeric(tree), NUMERIC_CHECKS)
+    return report("run_fxgs_hud_crashes", list(wiring(tree)), numeric(tree, args.output_dir, args.omit_team_tail), NUMERIC_CHECKS)
 
 
 if __name__ == "__main__":
