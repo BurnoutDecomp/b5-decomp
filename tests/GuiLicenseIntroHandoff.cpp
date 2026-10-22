@@ -54,6 +54,8 @@ namespace BrnGui { struct GuiCache; }
 namespace CgsGui {
     struct EventObserver {};
     struct GuiEventTimeInfo {};
+    // Layout boundary only: the selected Profile-350 path does not inspect this value.
+    struct ImageFileInfo {};
     enum { E_GUI_PRIORITY_REMOVAL = 2, E_GUI_PRIORITY_BLOCKING = 3 };
     enum ResourceType { E_GUI_RESOURCETYPE_START = 0, E_GUI_RESOURCETYPE_APT = 4 };
     struct sResourceTuple { u32 muId; ResourceType meType; };
@@ -282,7 +284,8 @@ namespace BrnGui {
             mOverlayInQueue.Construct();mAlwaysAvailInQueue.Construct();
         }
         void RouteEventToFlow(const CgsModule::Event*,s32,s32);
-        void DispatchInboundGuiEvents();
+        const CgsModule::Event* DispatchInboundGuiEvents(
+            bool&, CgsGui::ImageFileInfo&, const CgsModule::Event* lpAfterEvent = 0);
         void RecoveredFrameSlice();
         void RecoveredTailControl();
         void FixtureCommitRegistrationOutput(CgsGui::StateInterface*);
@@ -356,11 +359,25 @@ static void RunScenario(bool completed) {
     Check("typed GUI payload retains Profile pointer",g->mpProfile==&profile); // 19
     Check("typed GUI payload retains ProgressionData pointer",g->mpProgressionData==&data); // 20
     Check("typed GUI payload retains availability",g->mbRoadRulesAvailable==completed); // 21
-    module->DispatchInboundGuiEvents();
+    bool lbHasSaveImageEvent = false;
+    CgsGui::ImageFileInfo lSaveImageInfo;
+    const CgsModule::Event* lpLastInboundEvent = module->DispatchInboundGuiEvents(
+        lbHasSaveImageEvent, lSaveImageInfo, nullptr);
     Check("actual dispatch forwards owned profile to manager",module->mProfileManager.mpProfile==&profile); // 22
+    BrnGui::GuiEventCache lCacheCursorEvent{};
+    lCacheCursorEvent.mpGuiCache = &module->mGuiCache;
+    module->mCustomRendererManager.RecvEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lCacheCursorEvent), 64);
+    input.mEvents.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheCursorEvent),
+                           64, static_cast<s32>(sizeof(lCacheCursorEvent)));
+    s32 liCacheCursorSize = 0;
+    input.mEvents.GetNextEvent(lpLastInboundEvent, &lpLastInboundEvent, &liCacheCursorSize);
+    lpLastInboundEvent = module->DispatchInboundGuiEvents(
+        lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);
     Check("actual dispatch forwards owned profile to cache",module->mGuiCache.mpProfile==&profile); // 23
     id=module->mScreenInQueue.GetFirstEvent(&event,&bytes);
-    Check("current observer frame starts with profile 350",id==350); // 24
+    Check("current observer frame starts with profile 350",
+          id==350 && module->mScreenInQueue.GetLength()==1); // 24
     module->RecoveredFrameSlice(); // actual Intro/License call contributes check 25
     module->FixtureCommitRegistrationOutput(&iface);
     module->RecoveredTailControl();
