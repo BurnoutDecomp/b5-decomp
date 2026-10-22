@@ -65,6 +65,55 @@ def identity(path: Path) -> dict:
                 "mixed_crlf_lf" if pairs and bare_lf else "crlf" if pairs else "lf" if bare_lf else "no_newlines"}
 
 
+CONSUMER_WRAPPER_PRELUDE = (
+    "#define WIN32_LEAN_AND_MEAN\n"
+    "#define NOMINMAX\n"
+    "#include <Windows.h>\n"
+    "#include <array>\n"
+    "#include <cstddef>\n"
+    "#include <cstdio>\n"
+    "#include <cstring>\n"
+    "#include <exception>\n"
+    "#include <fstream>\n"
+    "#include <stdexcept>\n"
+    "#include <string>\n"
+    "#include <vector>\n"
+    '#include "types.hpp"\n'
+    '#include "GameShared/GameClasses/Core/CgsAssert.h"\n'
+    "\n"
+    "#define private public\n"
+    '#include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"\n'
+    "#undef private\n"
+    "\n"
+)
+CONSUMER_WRAPPER_RECIPE = "fixture-matched standard/Windows prelude + private-public owning header + exact consumer source include"
+CONSUMER_WRAPPER_MARKER_PREFIX = "// Generated test-only consumer wrapper; exact pinned consumer source is included below: "
+
+
+def wrap_profile_consumer(consumer_source: Path, destination: Path, consumer_relative: str) -> dict:
+    """Create a separate consumer TU with the fixture's owning-header access view.
+
+    The fixture remains its own TU, so its typed profile API declarations never
+    share a TU with the historical baseline consumer's old C declaration. The
+    prelude loads standard/Windows/types/assert dependencies before the narrow
+    private-public owning-header include; it deliberately omits the typed API
+    and overlapped headers. The exact selected consumer file is then included.
+    """
+    include_directive = f'#include "{consumer_source.resolve().as_posix()}"\n'
+    marker = CONSUMER_WRAPPER_MARKER_PREFIX + consumer_relative + "\n"
+    destination.write_text(CONSUMER_WRAPPER_PRELUDE + marker + include_directive,
+                           encoding="utf-8", newline="\n")
+    return {
+        "wrapper_relative_path": destination.name,
+        "recipe": CONSUMER_WRAPPER_RECIPE,
+        "prelude": CONSUMER_WRAPPER_PRELUDE,
+        "marker": marker,
+        "include_directive": include_directive.rstrip("\n"),
+        "consumer_source": {"repository_path": consumer_relative, **identity(consumer_source)},
+        "wrapper": identity(destination),
+    }
+
+
 def source_receipt(b5: Path, workflow: Path) -> dict:
     pins_path = b5 / PIN_PATH
     pins = json.loads(pins_path.read_text("utf-8"))
@@ -403,7 +452,10 @@ def main() -> int:
             sprintf = dest / "SPrintfProvider.cpp"
             sprintf.write_text('#include "GameShared/GameClasses/Core/CgsStringUtils.h"\n'
                 '#include <cstdarg>\n#include <stdio.h>\n#include "SPrintfDefinition.inc"\n', encoding="utf-8", newline="\n")
-            sources = [fixture, b5 / provider, b5 / consumer,
+            consumer_source = b5 / consumer
+            consumer_wrapper_path = dest / "SystemUserProfilePC_consumer_wrapper.cpp"
+            consumer_wrapper = wrap_profile_consumer(consumer_source, consumer_wrapper_path, consumer)
+            sources = [fixture, b5 / provider, consumer_wrapper_path,
                 b5 / "src/GameShared/GameClasses/System/PC/CgsPcNetIdentity.cpp",
                 b5 / "src/GameShared/GameClasses/System/X360/CgsXOverlappedX360.cpp", sprintf]
             exe = dest / "regression.exe"
@@ -411,6 +463,7 @@ def main() -> int:
                        "/D_ALLOW_KEYWORD_MACROS=1", *includes, *map(str, sources),
                        "/Fe:" + str(exe), "/link", "/OPT:REF", "user32.lib", "gdi32.lib"]
             row = {"source_paths": list(map(str, sources)), "compile_command": command,
+                   "consumer_wrapper": consumer_wrapper,
                    "generated_provider": identity(sprintf),
                    "exact_sprintf_definition": identity(dest / "SPrintfDefinition.inc")}
             result["variants"][name] = row
