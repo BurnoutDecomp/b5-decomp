@@ -18,6 +18,20 @@
 
 namespace BrnReplays
 {
+    // Inlined by ARTIST ReplayModule::Construct @0x82656E20. The original
+    // initializer does not store miCurrentWriteIndex or miNumFrunksAllocated here.
+    void WriteStream::Construct()
+    {
+        mHeaderMalloc.Construct();
+        mpStreamHeader = nullptr;
+        miStallCount = 0;
+        miFilePosition = 0;
+        mbEnded = true;
+        mbPaused = false;
+        mpStream = nullptr;
+        miBufferPosition = 0;
+    }
+
     // @ 0x8264D100
     // Reset the write stream to an empty, freshly-allocated header. Frees every
     // allocation the header allocator has made, carves a new StreamHeader out of it,

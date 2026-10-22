@@ -12,6 +12,7 @@
 
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"// CgsResource::BundleLoader ([PC IO] FSM loads)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"// CgsResource::ResolveResourceType
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"    // E_RESOURCETYPE_LUACODE / E_MEMTYPE_*
@@ -75,6 +76,7 @@ extern bool gBrnGuiDrivesLoadingScreen;    // we set this while the HUD flow FSM
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- gates the PC
 // ignition-event stand-in in the per-frame view drive below.
 namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
+extern bool gbLogGuiAudioTriggers; // X360 byte_82FB5098; defined by CgsAptCommunicator.cpp.
 
 namespace
 {
@@ -1465,8 +1467,12 @@ namespace BrnGui
         // state's Construct consumes it; the manager is a shell until reconstructed).
         mScreenStatePool.Construct();
         mScreenStatePool.Create(s_screenStatePoolBacking, sizeof(s_screenStatePoolBacking));
-        mScreenFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
-                            mProfileHost.GetProfileManager());
+        if (mScreenFlow.Prepare(&mGuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
+                                mProfileHost.GetProfileManager()))
+        {
+            // ARTIST true-return path at 0x825190E8 seeds the SCREEN flow to CURRENT.
+            mScreenFlow.SetStreamingMode(BrnBaseFlow::E_STREAMING_CURRENT);
+        }
         mScreenInQueue.Construct();
         mScreenFlow.SetInEventQueue(&mScreenInQueue);
 
@@ -2019,6 +2025,22 @@ void GuiModule::Destruct()
 
         GuiAudioTriggerEvent lAudioEvent;
         lAudioEvent.Construct(liAction, lpcComponentName, lpcLabel, lpcSwfName);
+        // ARTIST sub_824FB9A8 emits this diagnostic after Construct for any action >= 14.
+        if (liAction >= 14 && ::gbLogGuiAudioTriggers &&
+            (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            const char* lpcLogComponent = lpcComponentName != 0 ? lpcComponentName : "<NULLSTRING>";
+            const char* lpcLogAction = lpcActionName != 0 ? lpcActionName : "<NULLSTRING>";
+            const char* lpcLogLabel = lpcLabel != 0 ? lpcLabel : "<NULLSTRING>";
+            const char* lpcLogMovie = lpcSwfName != 0 ? lpcSwfName : "<NULLSTRING>";
+            *CgsDev::Log::gpDebugPrint
+                << "\nGUI AUDIO TRIGGERS: "
+                << "Received invalid sound action. Component: " << lpcLogComponent
+                << " Action: " << lpcLogAction
+                << " Label: " << lpcLogLabel
+                << " Movie: " << lpcLogMovie
+                << "\n";
+        }
         lpThis->mpOutputBuffer->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAudioEvent),
             lAudioEvent.GetEventType(), static_cast<s32>(sizeof(lAudioEvent)));
@@ -3305,6 +3327,8 @@ void GuiModule::Destruct()
                 mDebugComponent.Update(mpGuiEventInputBuffer);
                 mSatNavDebugComponent.Update(mpGuiEventInputBuffer);
                 mGuiCacheDebugComponent.Update(mpGuiEventInputBuffer);
+                // ARTIST 0x82529C40..44 copies the debug-selected mode each frame.
+                mScreenFlow.SetStreamingMode(mDebugComponent.GetScreenFlowStreamingMode());
                 // Fixed queue storage retains the cursor across Append. Skip
                 // all prior input and cache64; retain initial image-save state.
                 DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);
@@ -4239,7 +4263,7 @@ void GuiModule::Destruct()
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleRender);
         CGS_ASSERT(lpInput != nullptr, "lpInput");
         CGS_ASSERT(lpRenderOutput != nullptr, "lpRenderOutput");
-        if (mbPrepared)
+        if (mbPrepared && mDebugComponent.IsGuiRenderingEnabled())
         {
             CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiRender);
             // 0x823B6FE0/7060 carry these non-gating checks around the bridge.

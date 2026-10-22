@@ -6,53 +6,30 @@
 // (the IO buffers are homed in BrnReplayModuleIO.h; the module's own bodies live
 // in this ReplayModule TU).
 //
-// It is a full CgsModule::ModuleSingleBuffered: the X360 ctor @0x827E03D0 stores
-// the base ModuleSingleBuffered vtable (off_820CE500) then the derived ReplayModule
-// vtable (off_820CFEF0), and constructs the two EA::Thread::RWMutex members the base
-// owns at +0x10 / +0x118 -- exactly the base sub-object construction. The ctor body
-// (in the .cpp) reproduces, BY NAMED MEMBER, every store the asm makes past the base:
-// a bool at +0x23C, the embedded EA::Jobs::Job objects, two RtlInitializeCriticalSection
-// locks (the committed EA::Thread::Futex members whose ctors do that init), and a
-// trailing contained-interface vtable stamp at +0x6264.
+// The native C++ constructor is ARTIST 0x827E03D0. It constructs the base locks,
+// marks the variable event queue unconstructed, initializes native locks/jobs, and
+// stamps the embedded DebugComponent vtable. The logical virtual Construct is the
+// separate ARTIST body at 0x82656E20; it initializes ReplayModule state and calls
+// DebugComponent::Construct. Prepare @0x82652768 then calls base Prepare and Register
+// before the original allocator sequence.
 //
-// The DEBUG-OVERLAY accessor slice (the surface BrnReplays::DebugComponent reads
-// through -- it never touches raw layout, only these named accessors) is preserved
-// verbatim. The constructor-touched members are added alongside; both sets sit at
-// their X360-attested absolute offsets, with honest explicit padding between. X360
-// offsets are the 4-byte-pointer console ABI; access is by name, so the bodies are
-// faithful regardless of host pointer width (shape-faithful, not host-byte-exact --
-// same rule as the committed module siblings).
+// The debug overlay uses named accessors. Streams are embedded values in the original
+// declaration: WriteStream begins at ARTIST +0x880 and ReadStream at +0x8E0. Comments
+// below cite console addresses and source names; the host uses native pointer widths.
+// Unnamed dwords/bytes are typed only at widths proven by ARTIST and have no inferred role.
 //
-// X360 offsets the debug overlay touches (from BrnReplayDebugComponent.cpp asm):
-//   +0x230 (560)   meState         -- EStreamState (RenderStatus/RenderMainWindow)
-//   +0x234 (564)   meStreamStage   -- EStreamStage
-//   +0x84C..+0x874 mapSerialisers[11] -- BaseSerialiser* per ESerialiserId
-//   +0x89C (2204)  mpWriteStream   -- WriteStream* (RenderWriteStreamBlocks)
-//   +0x8C0 (2240)  miWriteIndex    -- s32 write cursor / block-start
-//   +0x8C4 (2244)  miWriteStalls   -- s32 stall count
-//   +0x8E0 (2272)  mpReadStream    -- ReadStream* (RenderReadStreamBlocks)
-//   +0x8E4 (2276)  miReadBlockStart-- s32 read block-start
-//   +0x5C3F..+0x5C45 (23615..23621) action-replay control flags (bool)
-//
-// X360 offsets the ctor / Update_Dispatch / WaitForSerialiseJobs touch:
-//   +0x23C  (572)   mbFlag23C        -- bool, ctor stores 0
-//   +0x980  (2432)  mGpuWriteStream  -- BrnReplays::GPUDiskWriteStream (Update_Dispatch
-//                                        calls .Dispatch())
-//   +0x2B10 (11024) job              -- EA::Jobs::Job (placeholder; ctor sub-ctor DEFERRED)
-//   +0x3B00 (15104) mLockA           -- EA::Thread::Futex (RtlInitializeCriticalSection)
-//   +0x3F80 (16256) mLockB           -- EA::Thread::Futex (RtlInitializeCriticalSection)
-//   +0x4940 (18752) maJobs[4]        -- EA::Jobs::Job[4] (placeholders; sub-ctors DEFERRED)
-//   +0x5680 (22144) mSerialiseJob    -- EA::Jobs::Job (WaitForSerialiseJobs WaitOn's it)
-//   +0x59D0 (22992) mbSerialiseActive-- bool (WaitForSerialiseJobs gate)
-//   +0x5A80 (23168) mCommandPoster   -- CgsMemory::DataStreamCommandPoster (WaitForSerialiseJobs
-//                                        calls .End())
-//   +0x5B00 (23296) mbPosterActive   -- bool (WaitForSerialiseJobs clears it)
-//   +0x6264 (25188) mpTailInterfaceVTable -- contained-interface vtable (off_820CE890)
+// ARTIST debug-overlay anchors:
+//   +0x230 meState; +0x234 meStreamStage; +0x84C mapSerialisers[11]
+//   +0x880 WriteStream; +0x8E0 ReadStream; +0x5C3F..+0x5C45 action flags
+//   +0x3F80 DiskReadStream; +0x980 GPUDiskWriteStream; +0x6264 DebugComponent
 
 #include "types.hpp"
 #include "GameSource/Replays/BrnReplayShared.h"
+#include "GameSource/Replays/BrnReplayReels.h"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (base; vtable + the two RWMutexes via its DataBuffers)
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"   // BrnReplays::GPUDiskWriteStream (embedded @ +0x980)
+#include "GameSource/Replays/Stream/BrnReplayReadStream.h"           // BrnReplays::ReadStream
+#include "GameSource/Replays/Stream/BrnReplayWriteStream.h"          // BrnReplays::WriteStream
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h" // CgsMemory::DataStreamCommandPoster (embedded @ +0x5A80)
 #include "eathread/eathread_futex.h"                                 // EA::Thread::Futex (CRITICAL_SECTION-backed; its ctor does RtlInitializeCriticalSection)
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"       // BrnReplays::DiskReadStream (embedded @ +0x3F80)
@@ -71,12 +48,7 @@ namespace BrnReplays
     // The live per-serialiser book-keeping objects the overlay snapshots each frame
     // are BaseSerialiser instances (PreUpdateRecord @0x8264BD08).
     class BaseSerialiser;
-
-    // DWARF home: BrnReplayModuleIO.h:96 et al. The write/read replay streams the
-    // debug overlay's block view reaches by pointer; their block-table layout is
-    // owned by the ReplayModule TU.
-    class WriteStream;
-    class ReadStream;
+    struct MemBuffer; // DecFIGS ReplayModule::mpSecondaryStreamBuffer pointee
 
     // DWARF: BrnReplayShared.h -- the replay stream-state machine the overlay labels.
     enum EStreamState
@@ -84,8 +56,10 @@ namespace BrnReplays
         E_STREAM_STATE_IDLE      = 0,
         E_STREAM_STATE_RECORDING = 1,
         E_STREAM_STATE_PLAYING   = 2,
-        E_STREAM_STATE_COUNT     = 3,
+        E_STREAM_STATE_RESTORING = 3,
+        E_STREAM_STATE_COUNT     = 4,
     };
+
 
     // The per-state stream stage the overlay labels (five named stages).
     enum EStreamStage
@@ -108,7 +82,29 @@ namespace BrnReplays
         // ReplayModule::Prepare @0x82652768: `GetLinearAllocator(list, 48)`.
         static const s32 KI_REPLAY_LINEAR_BANK = 48;
 
+        enum EPrepareStage
+        {
+            E_PREPARE_STAGE_START   = 0,
+            E_PREPARE_STAGE_MANAGER = 1,
+            E_PREPARE_STAGE_DONE    = 2,
+        };
+
+        enum EReleaseStage
+        {
+            E_RELEASE_STAGE_START   = 0,
+            E_RELEASE_STAGE_MANAGER = 1,
+            E_RELEASE_STAGE_DONE    = 2,
+        };
+
+        enum EMode
+        {
+            E_MODE_INGAME    = 0,
+            E_MODE_PAUSEMENU = 1,
+            E_MODE_COUNT     = 2,
+        };
+
         ReplayModule();
+        void Construct() override;
 
         // BrnReplayModule.h.
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
@@ -155,11 +151,11 @@ namespace BrnReplays
         BaseSerialiser* GetSerialiser(s32 liId) const { return mapSerialisers[liId]; }
 
         // --- write/read stream surface (RenderWriteStreamBlocks/...Status) ---
-        WriteStream* GetWriteStream() const    { return mpWriteStream; }
-        ReadStream*  GetReadStream() const     { return mpReadStream; }
-        s32          GetWriteIndex() const      { return miWriteIndex; }
-        s32          GetWriteStalls() const     { return miWriteStalls; }
-        s32          GetReadBlockStart() const  { return miReadBlockStart; }
+        WriteStream* GetWriteStream()          { return &mWriteStream; }
+        ReadStream*  GetReadStream()           { return &mReadStream; }
+        s32          GetWriteIndex() const     { return mWriteStream.miCurrentWriteIndex; }
+        s32          GetWriteStalls() const    { return mWriteStream.miStallCount; }
+        s32          GetReadBlockStart() const { return mReadStream.miCurrentFrunk; }
 
         // --- action-replay control flags driven by the overlay's menu callbacks ---
         void RequestStartPlaying()    { mbStartPlaying = true; }
@@ -178,43 +174,35 @@ namespace BrnReplays
         void LockSerialisers();
         void UnlockSerialisers();
 
-        // X360 sequence markers (offsets in the comments). The host ModuleSingleBuffered
-        // base and the embedded real types host-inflate past their X360 byte spans, so the
-        // members are declared in X360 ORDER (shape-faithful, not byte-exact); the fixed
-        // explicit pads below preserve the relative spacing where the spanned bytes are
-        // pure padding. All access is BY NAME, so the bodies are faithful regardless.
+        // ARTIST and DecFIGS identify these members by name. The host keeps native
+        // pointer widths; no code reaches them through console-offset arithmetic.
+        EPrepareStage        mePrepareStage;
+        EReleaseStage        meReleaseStage;
+        EStreamState         meState;
+        EStreamStage         meStreamStage;
+        EMode                meMode;
+        GameEventQueue       mGameEventCache;
+        BaseSerialiser*      mapSerialisers[KI_NUM_SERIALISERS];
 
-        // meState directly follows the ModuleSingleBuffered base sub-object (@0x230 on X360).
-        // The console keeps its prepare stage in the module base at +0x228 (`v4 = a1[138]`,
-        // `a1[138] = 1`, `a1[139] = 0`). This port's CgsModule base does not expose that
-        // slot, so the same two-state machine is carried here BY NAME. Same meaning, same
-        // guard: run the allocations once, then report ready every call.
-        // The console reads its prepare stage out of the module base at +0x228 (`v4 = a1[138]`),
-        // and the BASE is what advances it past 1 so the allocations never run twice. This port's
-        // base does not expose that slot, so the same "already done" fact is carried by name.
-        bool                 mbPrepared;              // stands in for the base stage at +0x228
-        EStreamState         meState;                 // @0x230
-        EStreamStage         meStreamStage;           // @0x234
-        u8                   maPad238[0x23C - 0x238];  // @0x238
-        GameEventQueue       mGameEventCache;          // @0x23C..@0x84C (; ctor marks it unconstructed)
-        BaseSerialiser*      mapSerialisers[KI_NUM_SERIALISERS]; // @0x84C..@0x874 (11 ptrs)
-        // @0x878 (2168): the module's LINEAR allocator -- ReplayModule::Prepare @0x82652768
-        // takes it from the game-data allocator list (`GetLinearAllocator(list, 48)`, then
-        // `SetAlignment(16)`) and StoreSerialisers @0x8264B600 carves every serialiser's stream
-        // and static buffers out of it (`Malloc(*(a1 + 2168), size)`).
-        CgsMemory::LinearMalloc* mpLinearMalloc;       // @0x878
-        u8                   maPad87C[0x89C - 0x87C];  // @0x87C
-        WriteStream*         mpWriteStream;            // @0x89C
-        u8                   maPad8A0[0x8C0 - 0x8A0];  // @0x8A0
-        s32                  miWriteIndex;             // @0x8C0
-        s32                  miWriteStalls;            // @0x8C4
-        u8                   maPad8C8[0x8E0 - 0x8C8];  // @0x8C8
-        ReadStream*          mpReadStream;             // @0x8E0
-        s32                  miReadBlockStart;         // @0x8E4
-        u8                   maPad8E8[0x930 - 0x8E8];  // @0x8E8
-        CgsFileSystem::FileHandle mHeaderFile;         // @0x930  the replay header file
-        u8                   maPad938[0x980 - 0x938];  // @0x938
+        // ReplayModule::Prepare owns the bank-48 allocator. ARTIST calls WriteStream
+        // at +0x880 and ReadStream at +0x8E0; both are embedded values.
+        CgsMemory::LinearMalloc* mpLinearMalloc;
+        WriteStream          mWriteStream;
+        ReadStream           mReadStream;
 
+        // DecFIGS member names; ARTIST access widths and consumers pin the frame counter.
+        char*                mpcHeaderBuffer;          // +0x8F8, file buffer (0x20000)
+        char*                mpcPrimaryStreamBuffer;   // +0x8FC, linear allocation (0x80000)
+        char*                mpcHeaderStreamBuffer;    // +0x908, linear allocation (0x4000)
+        MemBuffer*           mpSecondaryStreamBuffer;  // +0x910, memory-resource result
+        s32                  miHeaderStreamPos;        // +0x914
+        s64                  miCurrentFrame;           // +0x918, ARTIST loads/stores as a qword
+        f32                  mfCurrentTime;            // +0x920
+        s32                  miKeyFrameInterval;       // +0x924
+        f32                  mfStartTime;              // +0x928
+        f32                  mfEndTime;                // +0x92C
+
+        CgsFileSystem::FileHandle mHeaderFile;
         // ------------------------------------------------------------------------
         // From here on the embedded REAL types (GPUDiskWriteStream / Futex /
         // DataStreamCommandPoster) host-inflate beyond their X360 byte spans (pointer
@@ -258,18 +246,31 @@ namespace BrnReplays
         CgsMemory::DataStreamCommandPoster mCommandPoster; // @0x5A80
         bool                 mbPosterActive;           // @0x5B00
 
-        // @0x5C3F..+0x5C45: the action-replay control flags (in X360 order).
-        bool                 mbStartPlaying;           // @0x5C3F (23615)
-        bool                 mbStopPlaying;            // @0x5C40 (23616)
-        bool                 mbStartRecording;         // @0x5C41 (23617)
-        bool                 mbStopRecording;          // @0x5C42 (23618)
-        bool                 mbMarkActionReplay;       // @0x5C43 (23619)
-        bool                 mbStartActionReplay;      // @0x5C44 (23620)
-        bool                 mbAutoStart;              // @0x5C45 (23621) -- Enable auto-start
+        // ARTIST accesses four byte slots at +0x5C3B..+0x5C3E. Keep unidentified
+        // entries typed by their observed byte width without assigning behavior.
+        bool                 mUnidentified5C3B;
+        bool                 mUnidentified5C3C;
+        bool                 mUnidentified5C3D;
+        bool                 mUnidentified5C3E;
 
-        // @0x6264 (25188): the replay debug component ; the ctor's vtable stamp
-        // here is its inlined construction (its vtable carries DebugComponent::RenderHUD /
-        // GetName / OnActivate).
-        DebugComponent       mDebugComponent;          // @0x6264
+        bool                 mbStartPlaying;            // ARTIST +0x5C3F
+        bool                 mbStopPlaying;             // ARTIST +0x5C40
+        bool                 mbStartRecording;          // ARTIST +0x5C41
+        bool                 mbStopRecording;           // ARTIST +0x5C42
+        bool                 mbMarkActionReplay;        // ARTIST +0x5C43
+        bool                 mbStartActionReplay;       // ARTIST +0x5C44
+        bool                 mbAutoStart;               // ARTIST +0x5C45
+        bool                 mbPlayNext;                // DecFIGS ReplayModule member
+
+        Reel                 maReels[6];                 // ARTIST initializes six 0x101-byte records
+        s32                  miCurrentRecordReel;
+        s32                  miCurrentPlayReel;
+        bool                 mbStopPlayingRequestReceived;
+        f32                  mfDebugHudAlpha;
+
+        // ARTIST Construct stores zero here; Update_PostSim stores an event dword.
+        // This member records only the proven width and ownership, not an inferred role.
+        u32                  mUnidentified6260;
+        DebugComponent       mDebugComponent;            // ARTIST +0x6264
     };
 }

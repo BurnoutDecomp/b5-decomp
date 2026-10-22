@@ -5,11 +5,9 @@
 // a ring of StreamOffset index entries in its StreamHeader.
 // DWARF home: GameSource/Replays/Stream/BrnReplayWriteStream.h:48.
 //
-// MINIMAL SLICE created for the InvalidateFrunksAhead @0x8264D190 leaf. That function
-// touches only the StreamHeader pointer (mpStreamHeader). ResetStream and
-// ResetStartFrame now use the real allocator and index fields below; the
-// AddFrunk/StartNewStream/PauseStream path remains to be recovered. GROW this home
-// additively when that lands; do NOT fork it.
+// This home retains the reconstructed ResetStream/InvalidateFrunksAhead leaves and the
+// exact initializer inlined by ReplayModule::Construct. Other recording operations remain
+// separate source-recovery work.
 //
 // X360 layout note (from InvalidateFrunksAhead asm): mpStreamHeader is read at
 // *(this + 0x1C). The leading mHeaderMalloc uses its canonical LinearMalloc
@@ -25,10 +23,12 @@ namespace BrnReplays
     // reset by the bodied functions in this slice), so an incomplete type suffices; the
     // full WriteStream TU owns its concrete home.
     class DiskWriteStream;
+    class ReplayModule;
 
     class WriteStream
     {
     public:
+        void Construct(); // ARTIST ReplayModule::Construct initializes this embedded stream
         // ResetStream @ 0x8264D100. Free every header allocation, carve a fresh
         // StreamHeader, stamp the "REPLAY " magic, and clear the per-recording
         // bookkeeping (the DiskWriteStream link mpStream is left untouched --
@@ -46,12 +46,11 @@ namespace BrnReplays
         void ResetStartFrame(f32 lfHistorySeconds);
 
     protected:
-        // Construction lives in the full WriteStream TU; until then, derived test
-        // shims set the header pointer this slice's bodied function reads. Reaches
-        // mpStreamHeader BY NAME (no offset cast).
+        // Test shim used by the focused invalidation fixture.
         void SetStreamHeaderForTest(StreamHeader* lpHeader) { mpStreamHeader = lpHeader; }
 
     private:
+        friend class ReplayModule;
         // Members recovered by ResetStream @0x8264D100 / InvalidateFrunksAhead
         // @0x8264D190; reached BY NAME (native layout, X360 byte offsets documentary).
         CgsMemory::LinearMalloc mHeaderMalloc;         // @0x00  header bump allocator (X360: 0x1C bytes)
