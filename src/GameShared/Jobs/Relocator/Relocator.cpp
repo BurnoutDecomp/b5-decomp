@@ -1,7 +1,7 @@
-// RelocatorEntry - the EA::Jobs entry point CgsMemory::Relocator wires its copy job to.
-// Same shape as the sibling job entries in this tree: spill the four params, resolve this job
-// thread's private context out of the six-entry array, and hand it the job data block (the
-// second param).
+// RelocatorEntry - the EAJobs entry point selected by the original copy job.
+// ARTIST uses a six-context global array indexed by its console EAThread ids.
+// The PC identity leaf below preserves one typed context per executing native
+// thread; the canonical array/type declarations remain in their existing owner.
 
 #include "GameShared/Jobs/Relocator/RelocatorJob.h"
 
@@ -18,14 +18,11 @@ void RelocatorEntry(EA::Jobs::Param laParam0,
     (void)laParam2;
     (void)laParam3;
 
-    // ---- FLAG PC-platform leaf: the job-thread index ----
-    // The console derives it from the hardware thread id; there is no such id on this host
-    // and this build runs the job body on one thread, so the index is the first context.
-    // Only that one computation is replaced - the bounds check, the six-entry context array
-    // and the Execute call are the console's. Same precedent as the sibling job entries.
-    const s32 liJobThreadIndex = 0;
-
-    CGS_ASSERT(liJobThreadIndex < KI_NUM_RELOCATOR_JOBS, "SPU Id out of range: ");
-
-    gaRelocatorJobs[liJobThreadIndex].Execute(laParam1.mpValue);
+    // FLAG PC-platform leaf: ARTIST 82AD28D0..29E8 resolves a private
+    // RelocatorJob context from the current EAThread id, using the console's
+    // six-id numbering. Windows thread ids do not have that numbering. Each
+    // native thread owns the same typed context through TLS, so concurrently
+    // submitted jobs never share the former hard-coded context 0.
+    static thread_local RelocatorJob sThreadJob;
+    sThreadJob.Execute(laParam1.mpValue);
 }

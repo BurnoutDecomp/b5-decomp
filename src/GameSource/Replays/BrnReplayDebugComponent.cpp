@@ -53,11 +53,11 @@ namespace BrnReplays
 
     // Block-view per-state colours (RenderWrite/ReadStreamBlocks lazy-init table).
     static const RGBA KU_COL_BLOCK_EMPTY    = 0x64969696u; // dword_82FFA7A0 / 82FFA7BC
-    static const RGBA KU_COL_BLOCK_PENDING  = 0x64009696u; // dword_82FFA79C / 82FFA7B8
-    static const RGBA KU_COL_BLOCK_READY    = 0x64960096u; // dword_82FFA798 / 82FFA7B4
-    static const RGBA KU_COL_BLOCK_LOCKED   = 0x6400C800u; // dword_82FFA794 / 82FFA7B0
-    static const RGBA KU_COL_BLOCK_CURSOR   = 0x64C80000u; // dword_82FFA790 / 82FFA7AC (lis 0x64C8)
-    static const RGBA KU_COL_BLOCK_KEYFRAME = 0x64000096u; // dword_82FFA78C / 82FFA7A8
+    static const RGBA KU_COL_BLOCK_KEYFRAME  = 0x64009696u; // dword_82FFA79C / 82FFA7B8
+    static const RGBA KU_COL_BLOCK_NORMAL    = 0x64960096u; // dword_82FFA798 / 82FFA7B4
+    static const RGBA KU_COL_BLOCK_CURRENT   = 0x6400C800u; // dword_82FFA794 / 82FFA7B0
+    static const RGBA KU_COL_BLOCK_FIRST     = 0x64C80000u; // dword_82FFA790 / 82FFA7AC (lis 0x64C8)
+    static const RGBA KU_COL_BLOCK_VOID      = 0x64000096u; // dword_82FFA78C / 82FFA7A8
 
     // Layout metrics (virtual-screen units). RenderTitle/Status/Serialisers spacing.
     static const f32 KF_TEXT_SCALE      = 12.0f;   // flt_82013FB0 title scale (small text == 5.0f via flt_8200426C below)
@@ -73,30 +73,16 @@ namespace BrnReplays
     static const s32 KI_STREAM_CELL_STRIDE = 24;   // 0x18 byte stride between block records
     static const s32 KI_STREAM_LOOP_BOUND  = 43200;// 0xA8C0 cursor bound (1800 * 24)
 
-    // The grid COLUMN count is read unconditionally from a fixed data global -- write
-    // grid: dword_82F2A684 (0x8264F104), read grid: dword_82F2A69C (0x8264F49C). The
-    // rows = ceil(1800 / columns). That rodata word is NOT in the dump, so it is modelled
-    // here as a named const with a FLAGGED placeholder; see still_open. (Both grids share
-    // the same column count in this build -- the two globals are 0x18 apart in the same
-    // table.) The asm does NOT gate this on the stream pointer being non-null.
-    static const s32 KI_STREAM_COLUMNS  = 60;      // FLAGGED placeholder: dword_82F2A684 /
-                                                   // dword_82F2A69C (rodata not dumped).
-
-    // Cell geometry rodata (also not dumped) -- modelled as FLAGGED named consts.
-    // Cell box stride per axis == (KF_STREAM_CELL_BASE * 2 + KF_STREAM_CELL_GAP):
-    //   write: flt_82F2A680 * flt_82001D9C(==2.0) + flt_82F2A678 (0x8264F178)
-    //   read : flt_82F2A698 * 2.0               + flt_82F2A690 (0x8264F510)
-    // Grid origin offset from the section cursor:
-    //   write: +flt_82F2A674 (x) / +flt_82F2A67C (y); read: +flt_82F2A68C / +flt_82F2A694
-    // Cell box extent: width flt_82F2A678 (write) / flt_82F2A690 (read); height adds
-    //   flt_82F2A670 (write) / flt_82F2A688 (read).
-    static const f32 KF_STREAM_CELL_BASE   = 1.0f; // FLAGGED: flt_82F2A680/698 (not dumped)
-    static const f32 KF_STREAM_CELL_GAP    = 0.0f; // FLAGGED: flt_82F2A678/690 (not dumped)
-    static const f32 KF_STREAM_ORIGIN_X    = 0.0f; // FLAGGED: flt_82F2A674/68C (not dumped)
-    static const f32 KF_STREAM_ORIGIN_Y    = 0.0f; // FLAGGED: flt_82F2A67C/694 (not dumped)
-    static const f32 KF_STREAM_CELL_EXTRA_H= 0.0f; // FLAGGED: flt_82F2A670/688 (not dumped)
-    // Per-axis cell stride == base*2 + gap (the literal 2.0 is flt_82001D9C).
-    static const f32 KF_STREAM_CELL_STEP   = KF_STREAM_CELL_BASE * 2.0f + KF_STREAM_CELL_GAP;
+    // Original ARTIST data: columns at 82F2A684/69C=100; paired geometry words
+    // at 82F2A670..680 and 82F2A688..698 are 4,5,4,5,1 (height,x,width,y,base).
+    // Both grids therefore have 18 rows, 6-unit spacing and 4x4 cells; no stream-null gate.
+    static const s32 KI_STREAM_COLUMNS   = 100;
+    static const f32 KF_STREAM_CELL_BASE = 1.0f;
+    static const f32 KF_STREAM_CELL_GAP  = 4.0f;
+    static const f32 KF_STREAM_ORIGIN_X  = 5.0f;
+    static const f32 KF_STREAM_ORIGIN_Y  = 5.0f;
+    static const f32 KF_STREAM_CELL_EXTRA_H = 4.0f;
+    static const f32 KF_STREAM_CELL_STEP = KF_STREAM_CELL_BASE * 2.0f + KF_STREAM_CELL_GAP;
 
     // ----------------------------------------------------------------------------
     // Construct @0x82652978 -- store the module + allocator, allocate the per-
@@ -473,9 +459,8 @@ namespace BrnReplays
     // count is read UNCONDITIONALLY from a fixed data global (dword_82F2A684); the row
     // count is ceil(1800 / columns). The asm does NOT branch on GetWriteStream() being
     // non-null -- it always lays out 1800 cells (per-cell loop: cursor += 24 until
-    // >= 43200). The per-block colour comes from the WriteStream block table; that
-    // decode belongs to the ReplayModule TU's block type, so the colour here defaults
-    // to EMPTY (honest: no foreign offset poke) while the grid geometry is exact.
+    // >=43200). Colour reads the typed StreamHeader ring and StreamOffset flags,
+    // with current/first cursor precedence before VOID and KEYFRAME bits.
     // ----------------------------------------------------------------------------
     f32 DebugComponent::RenderWriteStreamBlocks(Debug2DImmediateRender* lpRender, const Vector2f& lrv2Pos,
                                                 Vector2f* lpv2Min, Vector2f* lpv2Max)
@@ -492,16 +477,35 @@ namespace BrnReplays
 
         if (lpRender)
         {
-            // Exactly 1800 cells (0xA8C0/0x18). col = n%cols, row = n/cols.
+            const StreamHeader* lpHeader = mpReplayModule->GetWriteStream()->mpStreamHeader;
+            // Exactly 1800 cells; only live ring slots read cursor/flags, as in ARTIST.
             for (s32 liCell = 0; liCell < KI_STREAM_CELLS; ++liCell)
             {
                 const s32 liCol = liCell % liColumns;
                 const s32 liRow = liCell / liColumns;
                 const f32 lfX = static_cast<f32>(liCol) * lfStep + lfOriginX;
                 const f32 lfY = static_cast<f32>(liRow) * lfStep + lfOriginY;
-                // Block-flag colour decode belongs to the WriteStream block type
-                // (ReplayModule TU); paint the default EMPTY slot until it lands.
-                lpRender->DrawBox(lfX, lfY, lfX + lfCellW, lfY + lfCellH, KU_COL_BLOCK_EMPTY);
+                RGBA lColour = KU_COL_BLOCK_EMPTY;
+                if (lpHeader != nullptr && lpHeader->mpFrameOffsets != nullptr)
+                {
+                    s32 liRingCell = liCell;
+                    if (liRingCell < lpHeader->miFirstFrunk)
+                        liRingCell += KI_STREAM_CELLS;
+                    if (liRingCell < lpHeader->miFirstFrunk + lpHeader->miNumFrunks)
+                    {
+                        if (liCell == mpReplayModule->GetWriteIndex())
+                            lColour = KU_COL_BLOCK_CURRENT;
+                        else if (liCell == lpHeader->miFirstFrunk)
+                            lColour = KU_COL_BLOCK_FIRST;
+                        else if (lpHeader->mpFrameOffsets[liCell].mxFlags & KU_FLAG_VOID)
+                            lColour = KU_COL_BLOCK_VOID;
+                        else if (lpHeader->mpFrameOffsets[liCell].mxFlags & KU_FLAG_KEYFRAME)
+                            lColour = KU_COL_BLOCK_KEYFRAME;
+                        else
+                            lColour = KU_COL_BLOCK_NORMAL;
+                    }
+                }
+                lpRender->DrawBox(lfX, lfY, lfX + lfCellW, lfY + lfCellH, lColour);
             }
         }
 
@@ -536,15 +540,34 @@ namespace BrnReplays
 
         if (lpRender)
         {
+            const StreamHeader* lpHeader = mpReplayModule->GetReadStream()->mpStreamHeader;
             for (s32 liCell = 0; liCell < KI_STREAM_CELLS; ++liCell)
             {
                 const s32 liCol = liCell % liColumns;
                 const s32 liRow = liCell / liColumns;
                 const f32 lfX = static_cast<f32>(liCol) * lfStep + lfOriginX;
                 const f32 lfY = static_cast<f32>(liRow) * lfStep + lfOriginY;
-                // Read-stream block-flag decode belongs to the ReadStream block type
-                // (ReplayModule TU); paint the default EMPTY slot until it lands.
-                lpRender->DrawBox(lfX, lfY, lfX + lfCellW, lfY + lfCellH, KU_COL_BLOCK_EMPTY);
+                RGBA lColour = KU_COL_BLOCK_EMPTY;
+                if (lpHeader != nullptr && lpHeader->mpFrameOffsets != nullptr)
+                {
+                    s32 liRingCell = liCell;
+                    if (liRingCell < lpHeader->miFirstFrunk)
+                        liRingCell += KI_STREAM_CELLS;
+                    if (liRingCell < lpHeader->miFirstFrunk + lpHeader->miNumFrunks)
+                    {
+                        if (liCell == mpReplayModule->GetReadBlockStart())
+                            lColour = KU_COL_BLOCK_CURRENT;
+                        else if (liCell == lpHeader->miFirstFrunk)
+                            lColour = KU_COL_BLOCK_FIRST;
+                        else if (lpHeader->mpFrameOffsets[liCell].mxFlags & KU_FLAG_VOID)
+                            lColour = KU_COL_BLOCK_VOID;
+                        else if (lpHeader->mpFrameOffsets[liCell].mxFlags & KU_FLAG_KEYFRAME)
+                            lColour = KU_COL_BLOCK_KEYFRAME;
+                        else
+                            lColour = KU_COL_BLOCK_NORMAL;
+                    }
+                }
+                lpRender->DrawBox(lfX, lfY, lfX + lfCellW, lfY + lfCellH, lColour);
             }
         }
 

@@ -189,6 +189,13 @@ namespace ReplayIO
         return &mRequestInterface;
     }
 
+    // ARTIST 8264E320..E3C0, consumed by ReplayModule::Update_PostSim.
+    const RequestInterface* InputBuffer_PostSim::GetRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mRequestInterface;
+    }
+
     // X360 0x823BB320: write-lock; merge the source request interface's serialiser slots into
     // mRequestInterface (this+4). The X360 body tail-calls RequestInterface::Append and returns
     // its result; Append is void here, so the merge is performed and 0 returned (parity is the

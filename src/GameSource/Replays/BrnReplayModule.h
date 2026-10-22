@@ -26,12 +26,13 @@
 #include "types.hpp"
 #include "GameSource/Replays/BrnReplayShared.h"
 #include "GameSource/Replays/BrnReplayReels.h"
+#include "GameSource/Replays/BrnReplayBaseSerialiser.h" // BaseSerialiser::EMode and module-owned fields
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (base; vtable + the two RWMutexes via its DataBuffers)
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"   // BrnReplays::GPUDiskWriteStream (embedded @ +0x980)
 #include "GameSource/Replays/Stream/BrnReplayReadStream.h"           // BrnReplays::ReadStream
 #include "GameSource/Replays/Stream/BrnReplayWriteStream.h"          // BrnReplays::WriteStream
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h" // CgsMemory::DataStreamCommandPoster (embedded @ +0x5A80)
-#include "eathread/eathread_futex.h"                                 // EA::Thread::Futex (CRITICAL_SECTION-backed; its ctor does RtlInitializeCriticalSection)
+#include "SDKs/EATech/eajobs/job.h"                                // canonical native-width EA::Jobs::Job embeds
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"       // BrnReplays::DiskReadStream (embedded @ +0x3F80)
 #include "GameSource/Replays/BrnReplayDebugComponent.h"              // BrnReplays::DebugComponent (embedded @ +0x6264)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // mGameEventCache
@@ -40,7 +41,7 @@
 #include "SharedClasses/BrnSharedConstants.h"                         // BrnUpdateSet (UpdateRestoring_PostSim)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Prepare's argument
-namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PostSim; struct OutputBuffer_PostSim; } }
+namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PreSim; struct OutputBuffer_PreSim; struct InputBuffer_PostSim; struct OutputBuffer_PostSim; struct StatusInterface; } }
 namespace CgsMemory { class LinearMalloc; }                               // mpLinearMalloc
 
 namespace BrnReplays
@@ -67,8 +68,8 @@ namespace BrnReplays
         E_STREAM_STAGE_CLOSED  = 0,
         E_STREAM_STAGE_OPENING = 1,
         E_STREAM_STAGE_OPEN    = 2,
-        E_STREAM_STAGE_CLOSING = 3,
-        E_STREAM_STAGE_ERROR   = 4,
+        E_STREAM_STAGE_HEADER  = 3,
+        E_STREAM_STAGE_CLOSING = 4,
         E_STREAM_STAGE_COUNT   = 5,
     };
 
@@ -105,6 +106,17 @@ namespace BrnReplays
 
         ReplayModule();
         void Construct() override;
+
+        // ARTIST 0x82660E78; the public virtual pre-sim entry owns IO locks and dispatch.
+        void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                           ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                           BrnUpdateSet lUpdateSet) override;
+
+        // ARTIST 8265F618: the complete post-sim update owns the IO buffer locks,
+        // request adoption, GUI input events and state-specific post-sim dispatch.
+        virtual void Update_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                    ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                    BrnUpdateSet lUpdateSet);
 
         // BrnReplayModule.h.
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
@@ -169,6 +181,39 @@ namespace BrnReplays
         bool* GetAutoStartFlagPtr()   { return &mbAutoStart; }
 
     private:
+        // Narrow declaration-shape repair required by the sealed Replay8 review:
+        // Update_PostSim remains public virtual; its two state helpers are private.
+        void UpdateRecording_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                     ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                     BrnUpdateSet lUpdateSet);
+        void UpdatePlaying_PostSim(const ReplayIO::InputBuffer_PostSim* lpInputBuffer,
+                                   ReplayIO::OutputBuffer_PostSim* lpOutputBuffer,
+                                   BrnUpdateSet lUpdateSet);
+
+        // ARTIST 0x82660430 / 0x826608A8; called only by Update_PreSim.
+        void UpdateRecording_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                                    ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                                    BrnUpdateSet lUpdateSet);
+        void UpdatePlaying_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                                  ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                                  BrnUpdateSet lUpdateSet);
+        void BeginRestoring(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                            ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                            BrnUpdateSet lUpdateSet);
+        void StopRecording(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                          ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                          BrnUpdateSet lUpdateSet);
+        void StopPlaying(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
+                        ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
+                        BrnUpdateSet lUpdateSet);
+        void SetStatusInterface(ReplayIO::StatusInterface* lpStatusInterface);
+        void ClearSerialisers(BaseSerialiser::EMode leMode, bool lbAllowStreaming);
+        void CloseReplayFiles(ReplayIO::OutputBuffer_PreSim* lpOutputBuffer);
+        bool WaitForCloseReplayFiles();
+
+        // ARTIST calls this from Update_PreSim, but its body is absent from retained exports.
+        void RenderDebugHUD();
+
         // ARTIST 0x8264B8B8 / 0x8264B910. Walk all eleven serialiser slots;
         // present entries receive their original BaseSerialiser lock operation.
         void LockSerialisers();
@@ -204,26 +249,22 @@ namespace BrnReplays
 
         CgsFileSystem::FileHandle mHeaderFile;
         // ------------------------------------------------------------------------
-        // From here on the embedded REAL types (GPUDiskWriteStream / Futex /
+        // From here on the embedded REAL types (GPUDiskWriteStream / EA::Jobs::Job /
         // DataStreamCommandPoster) host-inflate beyond their X360 byte spans (pointer
         // widening + a wider CRITICAL_SECTION), so the tail is modelled in X360
         // DECLARATION ORDER without absolute-offset pads: the members exist BY NAME at
         // their proven sequence positions (shape-faithful, not byte-exact -- the same
         // rule the committed module siblings follow once a real heavy embed appears).
-        // The job sub-objects stay asm-sized opaque placeholders (0x350 == the X360
-        // Job stride) so their footprint is documented; their EA::Jobs::Job::Job(.,0)
-        // sub-constructions are DEFERRED (see the .cpp).
+        // Jobs use the existing canonical EA::Jobs::Job type and native pointer widths.
+        // The job at module+0x2B10 and lock at module+0x3B00 already belong to the
+        // embedded GPU stream's Relocator and stream lock; they are not extra module fields.
         // ------------------------------------------------------------------------
 
         // @0x980 (2432): the embedded GPU disk write stream (Update_Dispatch dispatches it).
         GPUDiskWriteStream   mGpuWriteStream;          // @0x980
 
-        // FLAG: PLACEHOLDER. EA::Jobs::Job @ +0x2B10 (X360 stride 0x350). Sub-ctor DEFERRED.
-        u8                   maJob2B10Placeholder[0x350]; // @0x2B10
-
-        // @0x3B00 (15104): an RtlInitializeCriticalSection'd lock (the committed
-        // EA::Thread::Futex ctor performs that init).
-        EA::Thread::Futex    mLockA;                   // @0x3B00
+        // Native constructor 827E0418..0434 reaches GPU stream+0x2190 (Relocator::mJob)
+        // and GPU stream+0x3180 (its lock). GPUDiskWriteStream's native members own both.
 
         // @0x3F80 (16256): the primary disk read stream ; its inlined ctor is the
         // console's second RtlInitializeCriticalSection (the stream's mutex is at offset 0).
@@ -232,24 +273,37 @@ namespace BrnReplays
         // @0x4518: the game-data receiver queue  the file opens reply into.
         GameDataReceiverQueue mGameDataReceiverQueue;  // @0x4518
 
-        // FLAG: PLACEHOLDER. 4 x EA::Jobs::Job @ +0x4940 (stride 0x350; ctor loops
-        // i=3..0 Job::Job(v,0), v += 0x350). Sub-ctors DEFERRED.
+        // Four original Job subobjects: constructor 827E0440..0460 walks slots 0..3.
+        // Their submission roles are not assigned a new policy by this source recovery.
         static const s32     KI_NUM_SERIALISE_JOBS = 4;
-        u8                   maJobs4940Placeholder[KI_NUM_SERIALISE_JOBS * 0x350]; // @0x4940
+        EA::Jobs::Job        maJobs4940[KI_NUM_SERIALISE_JOBS]; // X360 +0x4940, stride0x350
 
-        // FLAG: PLACEHOLDER. EA::Jobs::Job @ +0x5680 (WaitForSerialiseJobs WaitOn's it).
-        // Sub-ctor DEFERRED; the WaitOn on it is FLAGGED in the .cpp.
-        u8                   maSerialiseJobPlaceholder[0x350]; // @0x5680
+        // Original job waited by WaitForSerialiseJobs @8264B4DC (X360 +0x5680).
+        EA::Jobs::Job        mSerialiseJob;
 
         bool                 mbSerialiseActive;        // @0x59D0
         // @0x5A80 (23168): the data-stream command poster (WaitForSerialiseJobs ends it).
         CgsMemory::DataStreamCommandPoster mCommandPoster; // @0x5A80
         bool                 mbPosterActive;           // @0x5B00
 
+        // DecFIGS names the three readiness flags in this order; ARTIST 8264B57C..B598
+        // reads them at+5C32/+5C30/+5C31 and writes the playback-ready result at+5C31.
+        bool                 mbReadyToPlay;             // ARTIST +0x5C30
+        bool                 mbPlaybackDataReady;       // ARTIST +0x5C31
+        bool                 mbStreamDataReady;         // ARTIST +0x5C32
+
+        // ARTIST GUI event 526 copies these payload bytes without masking. Their
+        // widths/owners are proven; no new semantic role is assigned here.
+        u8                   mUnidentified5C38;
+        u8                   mUnidentified5C39;
+
+        // ARTIST also accesses the byte at +0x5C3A. Its width is attested; its role is not.
+        bool                 mUnidentified5C3A;
+
         // ARTIST accesses four byte slots at +0x5C3B..+0x5C3E. Keep unidentified
         // entries typed by their observed byte width without assigning behavior.
         bool                 mUnidentified5C3B;
-        bool                 mUnidentified5C3C;
+        u8                   mUnidentified5C3C;
         bool                 mUnidentified5C3D;
         bool                 mUnidentified5C3E;
 
@@ -266,6 +320,8 @@ namespace BrnReplays
         s32                  miCurrentRecordReel;
         s32                  miCurrentPlayReel;
         bool                 mbStopPlayingRequestReceived;
+        bool                 mUnidentified6259;          // GUI event 531; reset each PostSim
+        bool                 mUnidentified625A;          // GUI event 532; reset each PostSim
         f32                  mfDebugHudAlpha;
 
         // ARTIST Construct stores zero here; Update_PostSim stores an event dword.

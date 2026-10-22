@@ -168,6 +168,8 @@ namespace ReplayIO
         // X360 0x823BB278: write-lock (bit 3, "Not locked for writing", :142); returns
         // &mRequestInterface (this+4).
         RequestInterface* GetRequestInterface();
+        // ARTIST 8264E320: read-lock bit4, then return the same named interface.
+        const RequestInterface* GetRequestInterface() const;
         // X360 0x823BB320: write-lock (bit 3, "Not locked for writing", :143); merges the source
         // request interface's serialiser slots into mRequestInterface (this+4). Returns the
         // Append result.
