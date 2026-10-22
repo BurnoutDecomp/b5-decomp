@@ -1297,6 +1297,7 @@ namespace BrnGui
         // publish the manager so the renderer draws the active movie each frame (interim render
         // bridge; the X360 renders it through the GUI's own ViewIO ImRenderers).
         mMovieManager.Prepare(0);
+        PrepareNativeDebugComponents();
         gpActiveMovieManager = &mMovieManager;
         gpActiveGuiModule = this;
 
@@ -1866,8 +1867,8 @@ namespace BrnGui
         lpGuiOutput->UnlockForWrite();
     }
 
-    // Native primary Prepare82519218..54 only. This original registration block is
-    // deliberately not called by the selected no-arg PC Prepare/Update path.
+    // ARTIST GuiModule::Prepare stage 10 (0x82519218..0x82519254): register the four
+    // native debug components and clear the event receiver queue at the original stage.
     void GuiModule::PrepareNativeDebugComponents()
     {
         mDebugComponent.Register();
@@ -2101,12 +2102,12 @@ void GuiModule::Destruct()
 
     // The real GuiModule::Update event dispatch (X360 0x82527A58's switch): consume the
     // module-level events, forward the load notifications, and fan the rest to the flow.
-    void GuiModule::DispatchInboundGuiEvents(bool& rbHasSaveImageEvent,
-                                              CgsGui::ImageFileInfo& lrSaveImageInfo)
+    const CgsModule::Event* GuiModule::DispatchInboundGuiEvents(
+        bool& rbHasSaveImageEvent, CgsGui::ImageFileInfo& lrSaveImageInfo,
+        const CgsModule::Event* lpAfterEvent)
     {
-        rbHasSaveImageEvent = false;
         if (mpGuiEventInputBuffer == 0)
-            return;
+            return lpAfterEvent;
 
         mpGuiEventInputBuffer->LockForRead();
         const CgsModule::VariableEventQueue<32768, 16>* lpInQueue =
@@ -2114,7 +2115,10 @@ void GuiModule::Destruct()
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        s32 liId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpLastDispatchedEvent = lpAfterEvent;
+        s32 liId = lpAfterEvent != 0
+            ? lpInQueue->GetNextEvent(lpAfterEvent, &lpEvent, &liSize)
+            : lpInQueue->GetFirstEvent(&lpEvent, &liSize);
         while (liId >= 0 && lpEvent != 0)
         {
             switch (liId)
@@ -2425,11 +2429,13 @@ void GuiModule::Destruct()
             // The observer-subscription fan-out (EventInterpreterModule::ProcessInEvents).
             RouteEventToFlow(lpEvent, liId, liSize);
 
+            lpLastDispatchedEvent = lpEvent;
             const CgsModule::Event* lpNext = 0;
             liId = lpInQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
         mpGuiEventInputBuffer->UnlockForRead();
+        return lpLastDispatchedEvent;
     }
 
     // The REAL GuiResourceModule dispatch (replaces ServiceFsmBundleRequests). Runs the
@@ -3246,7 +3252,8 @@ void GuiModule::Destruct()
         //          504/508/513 -> MovieManager; subscription fan-out to the flow) -------
         bool lbHasSaveImageEvent = false;
         CgsGui::ImageFileInfo lSaveImageInfo;
-        DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);
+        const CgsModule::Event* lpLastInboundEvent =
+            DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);
 
         // ---- 2. the per-frame cache event (64): the real Update posts the GuiCache
         //          pointer into the event queue each frame; the states read it as their
@@ -3269,10 +3276,39 @@ void GuiModule::Destruct()
             // ⭐ [licence-icon] the CUSTOM-RENDERER manager is the event's other console
             // consumer (its RecvEvent case 64 fans the GuiCache to every component --
             // NetworkPlayerImageRenderer latches mpGuiCache off it, the pointer its staged
-            // Prepare's resource wait needs). This synthesized post never transits the
-            // module-input queue, so the DispatchInboundGuiEvents feed cannot carry it.
+            // Prepare's resource wait needs). The queue record below is excluded from
+            // suffix dispatch; this direct handoff remains its sole manager delivery.
             mCustomRendererManager.RecvEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64);
+
+            // FLAG PC-platform leaf: ARTIST82529848 publishes cache64 before
+            // GuiDebugComponent::Update reads it (82529C04). Publish the same
+            // native record here so its read pass refreshes the PFX enumeration.
+            // Original callbacks flush before base/model dispatch; this PC pump
+            // dispatches/cache-updates earlier, so flush before those consumers.
+            if (mpGuiEventInputBuffer != 0)
+            {
+                mpGuiEventInputBuffer->LockForWrite();
+                CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpGuiEvents =
+                    mpGuiEventInputBuffer->GetGuiEvents();
+                if (lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),
+                                          64, static_cast<s32>(sizeof(lCacheEvent))))
+                {
+                    s32 liCacheEventSize = 0;
+                    if (lpLastInboundEvent != 0)
+                        lpGuiEvents->GetNextEvent(lpLastInboundEvent, &lpLastInboundEvent, &liCacheEventSize);
+                    else
+                        lpGuiEvents->GetFirstEvent(&lpLastInboundEvent, &liCacheEventSize);
+                }
+                mpGuiEventInputBuffer->UnlockForWrite();
+
+                mDebugComponent.Update(mpGuiEventInputBuffer);
+                mSatNavDebugComponent.Update(mpGuiEventInputBuffer);
+                mGuiCacheDebugComponent.Update(mpGuiEventInputBuffer);
+                // Fixed queue storage retains the cursor across Append. Skip
+                // all prior input and cache64; retain initial image-save state.
+                DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);
+            }
 
             // ⭐ [licence-icon] THE PREPARE PUMP (PC seat of the console's staged-Prepare
             // re-entry -- see the mbCustomRenderersPrepared note in the header). Advances the
@@ -3666,13 +3702,8 @@ void GuiModule::Destruct()
                 CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpGuiEvents =
                     mpGuiEventInputBuffer->GetGuiEvents();
 
-                // console line 910-911 (the X360 size literal is 4 -- its pointer width;
-                // the host record is 8, so the push rides sizeof, as every other event
-                // producer in this TU does).
-                GuiEventCache lCacheEvent;
-                lCacheEvent.mpGuiCache = &mGuiCache;
-                lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),
-                                      64, static_cast<s32>(sizeof(lCacheEvent)));
+                // The native cache64 record is already in this queue, published
+                // before the debug read/flush pass at the PC dispatch boundary.
 
                 // console lines 911-928, and the SHAPE below is the CONSOLE'S OWN, not a
                 // PC gate: it fires a NON-GATING `mpHudMessageController` assert
@@ -3706,6 +3737,9 @@ void GuiModule::Destruct()
                 }
                 else
                 {
+                    // ARTIST82529894..825298A8 lazily binds the debug component too.
+                    if (!mHudMessageDebugComponent.ControllerIsValid())
+                        mHudMessageDebugComponent.SetController(mGuiCache.GetHudMessageController());
                     mHudMessageDirector.SetController(mGuiCache.GetHudMessageController());
                 }
 

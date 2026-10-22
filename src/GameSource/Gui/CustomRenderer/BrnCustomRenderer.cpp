@@ -178,11 +178,6 @@ namespace
 // does not write +0x101C).
 CustomRendererManager::CustomRendererManager()
     : mbRenderingEnable(false)
-    , mbSatNavRenderable(false)
-    , mbMainMapRenderable(false)
-    , mbThirdSlotRenderable(false)
-    , mbComponentRenderableGate(false)
-    , mbHaveValidMapPosition(false)
     , mePrepareStage(E_PREPARESTAGE_START)
     , meReleaseStage(E_RELEASESTAGE_START)
     , miHACK_NumberOfRendersWithoutUpdate(0)
@@ -275,10 +270,8 @@ void CustomRendererManager::Construct()
             mapCustomRenderComponents[liIndex]->Construct();
     }
 
-    // guest BrnGui::GuiCustRendererDebugComponent::Construct(this + 0x1F49C, this).
-    // FLAG: the debug component is a developer-menu leaf with no gameplay effect; it is
-    // not embedded here (its Construct binds itself into the global debug-menu registry,
-    // which this build does not stand up).
+    // ARTIST constructs the embedded debug component after all renderer subobjects.
+    mDebugComponent.Construct(this);
 
     // Guest +0x1F490 / +0x1F494 / +0x1F4CC stores of 0.
     mePrepareStage = E_PREPARESTAGE_START;
@@ -327,8 +320,8 @@ bool CustomRendererManager::Prepare(rw::IResourceAllocator* lpHeapAllocator,
             SetComponentRenderable(E_INGAME_MESSAGE,       true);
 
             mePrepareStage = E_PREPARESTAGE_DONE;
+            mDebugComponent.Register();
             HudVisReport(mapCustomRenderComponents, "prepare");   // [FLAG PC witness]
-            // guest CgsDev::DebugComponent::Register(this + 0x1F49C) -- debug menu only.
             return true;
         }
         return false;
@@ -336,8 +329,9 @@ bool CustomRendererManager::Prepare(rw::IResourceAllocator* lpHeapAllocator,
 
     if (mePrepareStage == E_PREPARESTAGE_DONE)
     {
-        // Already prepared: re-register the debug component and report success.
+        // ARTIST repeats the debug registration on the completed prepare path.
         mePrepareStage = E_PREPARESTAGE_DONE;
+        mDebugComponent.Register();
         return true;
     }
 
@@ -378,7 +372,8 @@ bool CustomRendererManager::Release()
 // ================= Destruct @ 0x82444378 =================
 void CustomRendererManager::Destruct()
 {
-    // guest BrnGui::GuiCustRendererDebugComponent::Destruct(this + 0x1F49C).
+    // ARTIST tears down the embedded debug component before the renderer subobjects.
+    mDebugComponent.Destruct();
 
     for (s32 liIndex = 0; liIndex < E_CUSTOM_RENDER_TYPES_COUNT; ++liIndex)
     {
@@ -619,7 +614,8 @@ void CustomRendererManager::RecvEvent_Event213(const CgsModule::Event* lpEvent)
         if (lpu8[0] == 1)
         {
             SetEnabled(lpSatNav, lbEnableFlag);
-            mbSatNavRenderable = (lpSatNav != 0) && lpSatNav->GetRenderEnabled();
+            mDebugComponent.SetSatNavDisplayActive(
+                (lpSatNav != 0) && lpSatNav->GetRenderEnabled());
             CgsGui::SetGuiCamera(lbEnableFlag ? 0 : 1);
         }
     }
@@ -659,7 +655,8 @@ void CustomRendererManager::RecvEvent_Event213(const CgsModule::Event* lpEvent)
         // Apply the resolved enable to the CrashNavIcon slot (guest v4[1034] == slot 3)
         // and cache the MainMap flag.
         SetEnabled(lpCrashNav, lbEnable);
-        mbMainMapRenderable = (lpMainMap != 0) && lpMainMap->GetRenderEnabled();
+        mDebugComponent.SetMainMapDisplayActive(
+            (lpMainMap != 0) && lpMainMap->GetRenderEnabled());
     }
 }
 
@@ -671,15 +668,17 @@ void CustomRendererManager::Update()
 {
     mEventQueue.Clear();
 
-    if (mbHaveValidMapPosition)   // guest `if (*(a1 + 128177))` == +0x1F4B1
+    if (mDebugComponent.IsOverrideEnabled())
     {
-        // guest: v2 = a1 + 128175 (+0x1F4AF, mbComponentRenderableGate); each component's
-        // enable is `*v2 && <per-component flag>`.
-        const bool lbGate = mbComponentRenderableGate;
+        // ARTIST reads the embedded debug controls at +0x1F4AF..+0x1F4B1.
+        const bool lbGate = mDebugComponent.IsRenderingActive();
 
-        SetEnabled(mapCustomRenderComponents[E_SATNAV],   lbGate && mbSatNavRenderable);   // a1+4128
-        SetEnabled(mapCustomRenderComponents[E_MAINMAP],  lbGate && mbMainMapRenderable);  // a1+4132
-        SetEnabled(mapCustomRenderComponents[E_ABOVECAR], lbGate && mbThirdSlotRenderable);// a1+4144
+        SetEnabled(mapCustomRenderComponents[E_SATNAV],
+                   lbGate && mDebugComponent.IsSatNavDisplayActive());   // a1+4128
+        SetEnabled(mapCustomRenderComponents[E_MAINMAP],
+                   lbGate && mDebugComponent.IsMainMapDisplayActive());  // a1+4132
+        SetEnabled(mapCustomRenderComponents[E_ABOVECAR],
+                   lbGate && mDebugComponent.IsAboveCarDisplayActive()); // a1+4144
     }
 
     // guest `(*(**v6 + 24))(*v6)` == vtable +0x18 == Update.
@@ -712,7 +711,8 @@ void CustomRendererManager::Render(CgsGui::ImRendererSet* lpRendererSet,
 
     // guest `*(a1 + 128174) = *(*(a1 + 4132) + 4)` -- mirror slot 2's enable flag.
     CgsGui::CustomRenderComponentInterface* lpMainMap = mapCustomRenderComponents[E_MAINMAP];
-    mbMainMapRenderable = (lpMainMap != 0) && lpMainMap->GetRenderEnabled();
+    mDebugComponent.SetMainMapDisplayActive(
+        (lpMainMap != 0) && lpMainMap->GetRenderEnabled());
 
     if (++miHACK_NumberOfRendersWithoutUpdate > 10)
         mEventQueue.Clear();

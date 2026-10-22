@@ -68,20 +68,11 @@ namespace BrnTraffic
         return lrActual == std::vector<u8>(lrExpected);
     }
 
-    // The real TrafficCarStreamer declares six BaseStreamer callbacks. This derived fixture
-    // supplies inert callbacks for vtable completeness; AddVehiclesToTargetList is inherited
-    // from the real class and its production body is the method extracted by the runner.
-    struct RecordingTrafficCarStreamer : public TrafficCarStreamer
-    {
-        s32 QueryLoad(const BrnWorld::StreamerTargetEntry*, s32) override { return 0; }
-        s32 QueryUnload(const BrnWorld::StreamerTargetEntry*, s32) override { return 0; }
-        void OnLoadBegin(s32) override {}
-        void OnUnloadBegin(s32) override {}
-        void OnLoadComplete(const BrnResource::GameDataIO::GameDataAssetEvent*, s32) override {}
-        void OnUnloadComplete(const BrnResource::GameDataIO::UnloadGameDataResponse*, s32) override {}
-    };
+    // Use the production streamer class. The runner includes its exact six callback
+    // definitions only to satisfy the class vtable; this fixture does not dispatch
+    // those loading callbacks.
 
-    static void ClearSink(RecordingTrafficCarStreamer& lrStreamer)
+    static void ClearSink(TrafficCarStreamer& lrStreamer)
     {
         lrStreamer.muNumAssets = KU_MAX_VEHICLE_ASSETS;
         std::memset(lrStreamer.maxLoadFlags, 0, sizeof(lrStreamer.maxLoadFlags));
@@ -104,7 +95,7 @@ namespace BrnTraffic
             static_cast<decltype(Module::meLocalPlayerIndex)>(-1);
         decltype(Module::miDEBUGFlowtypeOverride) miDEBUGFlowtypeOverride = -1;
         decltype(Module::maaRaceCarHulls) maaRaceCarHulls{};
-        RecordingTrafficCarStreamer mStreamer{};
+        TrafficCarStreamer mStreamer{};
         Hull mHull{};
         u32 muExpectedHullId = 2;
         mutable u32 muHullLookups = 0;
@@ -167,7 +158,7 @@ namespace BrnTraffic
 
 using namespace BrnTraffic;
 
-static bool IsRequested(const RecordingTrafficCarStreamer& lrStreamer, u8 luAsset)
+static bool IsRequested(const TrafficCarStreamer& lrStreamer, u8 luAsset)
 {
     return (lrStreamer.maxLoadFlags[luAsset]
             & static_cast<u8>(TrafficCarStreamer::E_LOADFLAG_REQUESTED)) != 0;

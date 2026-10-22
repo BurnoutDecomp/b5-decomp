@@ -1,8 +1,10 @@
 """Exercise the recovered Flowtype arm against the exact old-return source control.
 
 The candidate and pinned 8fec93b negative control compile the production
-TrafficEntityModule body, the production TrafficCarStreamer sink body, and the
-existing Array<char,16> implementation into the same small fixture.
+TrafficEntityModule selector and TrafficCarStreamer sink bodies with the real
+Array<char,16>. The six real TrafficCarStreamer virtual definitions are also
+included only to close the production class vtable; this fixture does not call
+or claim coverage for those streaming callbacks.
 """
 from pathlib import Path
 import argparse
@@ -17,7 +19,12 @@ from fxgs_common import REPO, Tree, definition, compile_and_run, report
 
 MODULE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
 STREAMER_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.cpp"
-BASE_RESOURCE_PTR_CPP = REPO / "src/GameShared/GameClasses/System/Resource/CgsBaseResourcePtr.cpp"
+RESOURCE_SUPPORT_CPP = (
+    "src/GameShared/GameClasses/System/Resource/CgsBaseResourcePtr.cpp",
+    "src/GameShared/GameClasses/System/Resource/CgsResourcePtr.cpp",
+    "src/GameShared/GameClasses/System/Resource/CgsResourceHandle.cpp",
+)
+RESOURCE_SUPPORT_SOURCES = tuple(REPO / path for path in RESOURCE_SUPPORT_CPP)
 FIXTURE_CPP = Path(__file__).with_name("TrafficFlowtypeOverride.cpp")
 OLD_RETURN_REV = "8fec93bd4d2806ca9b60fb53dc272fe28081f8b8"
 NUMERIC_CHECKS = 44
@@ -25,6 +32,18 @@ NUMERIC_CHECKS = 44
 FLOW_SIGNATURE = "void TrafficEntityModule::AddVehiclesToTargetList()"
 SINK_SIGNATURE = "void TrafficCarStreamer::AddVehiclesToTargetList("
 SINK_LOOP = "    for( u32 luVehicle = 0; luVehicle < luNumVehicles; luVehicle++ )"
+
+# These real definitions are link providers for TrafficCarStreamer's emitted base vtable.
+# The fixture does not invoke their streaming behavior.
+STREAMER_CALLBACKS = (
+    "s32 TrafficCarStreamer::QueryLoad(",
+    "s32 TrafficCarStreamer::QueryUnload(",
+    "void TrafficCarStreamer::OnLoadBegin(",
+    "void TrafficCarStreamer::OnUnloadBegin(",
+    "void TrafficCarStreamer::OnLoadComplete(",
+    "void TrafficCarStreamer::OnUnloadComplete(",
+)
+
 
 # Test-only observation and range guard. For valid asset indices, the original extracted sink
 # loop remains unchanged and executes. A byte >= 64 is captured at the call boundary and returns
@@ -59,9 +78,16 @@ def extracted_bodies(tree):
         raise ValueError("source does not contain one AddVehiclesToTargetList body")
     if sink.count(SINK_LOOP) != 1:
         raise ValueError("production streamer sink loop shape changed; boundary guard not inserted")
+
+    callback_bodies = []
+    for signature in STREAMER_CALLBACKS:
+        if streamer_source.count(signature) != 1:
+            raise ValueError("source does not contain exactly one real streamer callback: " + signature)
+        callback_bodies.append(definition(streamer_source, signature))
+
     flow = flow.replace("TrafficEntityModule::", "FlowtypeFixture::", 1)
     sink = sink.replace(SINK_LOOP, SINK_CAPTURE + SINK_LOOP, 1)
-    return "\n\n".join(("namespace BrnTraffic {", flow, sink, "}"))
+    return "\n\n".join(("namespace BrnTraffic {", flow, sink, *callback_bodies, "}"))
 
 
 def numeric(revision, output_dir=None):
@@ -75,7 +101,7 @@ def numeric(revision, output_dir=None):
         "traffic_flowtype_override.inc",
         bodies,
         "TrafficFlowtypeOverride",
-        extra_sources=[BASE_RESOURCE_PTR_CPP],
+        extra_sources=RESOURCE_SUPPORT_SOURCES,
         output_dir=output_dir,
     )
     if output_dir is not None:
@@ -84,14 +110,14 @@ def numeric(revision, output_dir=None):
                 ["git", "-C", str(REPO), "rev-parse", f"{revision}:{path}"],
                 text=True,
             ).strip()
-            for path in (MODULE_CPP, STREAMER_CPP)
+            for path in (MODULE_CPP, STREAMER_CPP, *RESOURCE_SUPPORT_CPP)
         }
         extraction = {
             "schema": 1, "source_revision": revision,
             "source_objects": source_objects,
             "include_name": "traffic_flowtype_override.inc",
             "generated_include_lf_sha256": hashlib.sha256(bodies.encode("utf-8")).hexdigest(),
-            "coverage": "Production-body fixture; high bytes stop at capture; native #0081 unverified.",
+            "coverage": "Production selector and sink fixture; six real streamer callbacks included only for vtable link closure, not exercised; high bytes stop at capture; native #0081 unverified.",
         }
         (Path(output_dir) / "extraction.json").write_text(
             json.dumps(extraction, indent=2) + "\n", encoding="utf-8"

@@ -31,11 +31,9 @@
 // methods (RenderWorld, GetPath, SetBoostColour, SetBoostColourToCustom, ToggleBoostBarDebugScreen,
 // UpdateBoostColours, and the inline accessors) are part of the declaration surface: the inline
 // accessors are bodied here (trivial flag get/set, folded inline in the X360 build), and the rest
-// are bodied in their own TUs (SetBoostColourToCustom @0x824FC868 / UpdateBoostColours @0x824F7C48
-// are real symbols this TU calls). FLAG: the live boost-bar renderer is reached through the manager
-// (the X360 indexes mpCustRenderManager + the embedded BoostBarRenderer subobject offset); the
-// SetBoostColour* path forwards that through external helpers (see the .cpp), so this header models
-// no raw offset.
+// are bodied in this component TU or the renderer helper TU (UpdateBoostColours). The manager
+// exposes its live BoostBarRenderer by the DecFIGS GetBoostBarRendererInstance() declaration; this
+// header models no raw subobject offset.
 
 namespace BrnGui
 {

@@ -5,8 +5,10 @@
 #include "GameShared/GameClasses/Fsm/CgsVariable.h"                    // CgsFsm::Variable
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"              // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress / CgsIDUnCompress
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"               // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT (flagged assert substitute)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [DIAG] BRN_SCREEN_DIAG witness
+#include <cstdio>                                                      // std::sscanf
 #include <cstdlib>                                                    // [DIAG] getenv
 
 // ===========================================================================
@@ -151,6 +153,72 @@ void ScriptedFsm::SendEvent(const Event* lpEvent)
 
     mLuaState.NextState(lpEvent->GetId());
     SetState(mLuaState.GetCurrentState());
+}
+
+// @ 0x82836998 -- retrieve the authored next-state list for a Lua FSM state.
+void ScriptedFsm::GetNextStates(s32 liStateIndex,
+                                s32* lpaiNextStates,
+                                s32* lpiNumNextStates)
+{
+    if (!mLuaState.IsLuaResourceValid())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mLuaState.IsLuaResourceValid()",
+            "..\\..\\..\\GameShared\\GameClasses\\FSM/CgsScriptedFsm.cpp", 263);
+        CgsDev::Assert::EndAssert();
+    }
+
+    char lacStateIndex[128];
+    CgsCore::SPrintf(lacStateIndex, 128, "%d", liStateIndex);
+    const CgsID lStateIndexId = CgsIDCompress(lacStateIndex);
+    char lacNextStateIndices[128];
+    mLuaState.GetString("GetNextStates", lStateIndexId, lacNextStateIndices, 128);
+
+    s32 liOverflowScratch; // ARTIST sp+var_140 receives conversion 33, outside the 32-slot output.
+    const s32 liParsedCount = std::sscanf(lacNextStateIndices,
+        "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+        &lpaiNextStates[0],
+        &lpaiNextStates[1],
+        &lpaiNextStates[2],
+        &lpaiNextStates[3],
+        &lpaiNextStates[4],
+        &lpaiNextStates[5],
+        &lpaiNextStates[6],
+        &lpaiNextStates[7],
+        &lpaiNextStates[8],
+        &lpaiNextStates[9],
+        &lpaiNextStates[10],
+        &lpaiNextStates[11],
+        &lpaiNextStates[12],
+        &lpaiNextStates[13],
+        &lpaiNextStates[14],
+        &lpaiNextStates[15],
+        &lpaiNextStates[16],
+        &lpaiNextStates[17],
+        &lpaiNextStates[18],
+        &lpaiNextStates[19],
+        &lpaiNextStates[20],
+        &lpaiNextStates[21],
+        &lpaiNextStates[22],
+        &lpaiNextStates[23],
+        &lpaiNextStates[24],
+        &lpaiNextStates[25],
+        &lpaiNextStates[26],
+        &lpaiNextStates[27],
+        &lpaiNextStates[28],
+        &lpaiNextStates[29],
+        &lpaiNextStates[30],
+        &lpaiNextStates[31],
+        &liOverflowScratch);
+    *lpiNumNextStates = liParsedCount;
+
+    if (liParsedCount > 32)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Too many state transitions in FSM\n",
+            "..\\..\\..\\GameShared\\GameClasses\\FSM/CgsScriptedFsm.cpp", 296);
+        CgsDev::Assert::EndAssert();
+    }
 }
 
 } // namespace CgsFsm
