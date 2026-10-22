@@ -6,6 +6,9 @@ existing Array<char,16> implementation into the same small fixture.
 """
 from pathlib import Path
 import argparse
+import hashlib
+import json
+import subprocess
 import sys
 
 sys.dont_write_bytecode = True
@@ -61,28 +64,57 @@ def extracted_bodies(tree):
     return "\n\n".join(("namespace BrnTraffic {", flow, sink, "}"))
 
 
-def numeric(revision):
+def numeric(revision, output_dir=None):
     try:
         bodies = extracted_bodies(Tree(revision))
     except (ValueError, IndexError) as error:
         print(f"NUMERIC: cannot build from {revision}: {error}")
         return None
-    return compile_and_run(
+    result = compile_and_run(
         FIXTURE_CPP,
         "traffic_flowtype_override.inc",
         bodies,
         "TrafficFlowtypeOverride",
         extra_sources=[BASE_RESOURCE_PTR_CPP],
+        output_dir=output_dir,
     )
+    if output_dir is not None:
+        source_objects = {
+            path: subprocess.check_output(
+                ["git", "-C", str(REPO), "rev-parse", f"{revision}:{path}"],
+                text=True,
+            ).strip()
+            for path in (MODULE_CPP, STREAMER_CPP)
+        }
+        extraction = {
+            "schema": 1, "source_revision": revision,
+            "source_objects": source_objects,
+            "include_name": "traffic_flowtype_override.inc",
+            "generated_include_lf_sha256": hashlib.sha256(bodies.encode("utf-8")).hexdigest(),
+            "coverage": "Production-body fixture; high bytes stop at capture; native #0081 unverified.",
+        }
+        (Path(output_dir) / "extraction.json").write_text(
+            json.dumps(extraction, indent=2) + "\n", encoding="utf-8"
+        )
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rev", default="HEAD", help="candidate B5 revision; default HEAD")
+    parser.add_argument("--output-dir", type=Path,
+                        help="retain both variants in a fresh artifact directory outside B5")
     args = parser.parse_args()
+    output = args.output_dir.resolve() if args.output_dir is not None else None
+    if output is not None:
+        if (output.is_relative_to(REPO) or REPO.parent.is_relative_to(output)):
+            parser.error("--output-dir must be an artifact directory outside B5, not a source ancestor")
+        if output.exists():
+            parser.error("--output-dir must be fresh; existing artifacts are never overwritten")
+        output.mkdir(parents=True)
 
-    candidate = numeric(args.rev)
-    old_return = numeric(OLD_RETURN_REV)
+    candidate = numeric(args.rev, output / "candidate" if output is not None else None)
+    old_return = numeric(OLD_RETURN_REV, output / "baseline" if output is not None else None)
     negative_control_detected = (
         old_return is not None
         and old_return[0] == NUMERIC_CHECKS
