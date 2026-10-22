@@ -16,16 +16,18 @@
 //        +0x14 EImageType; +0x18 bool; +0x19 bool broadcast.
 //   * type 214 (0xD6), 16 bytes -- the "abort mugshot capture" action (the declaration record AbortMugshotCaptureAction):
 //        +0x00 aborted-show-car; +0x04 player-car; +0x08 EImageType; +0x0C bool.
-// PaybackMugshotAction / AbortMugshotCaptureAction have no committed home yet, so each is
-// modelled here as the exact byte image the console builds on the stack and memcpy's into the
-// queue. They are file-local payloads (the queue stores them by byte image); when those
-// GameAction types land in BrnGameActions.h, swap these for the real structs (the layouts match).
+// PaybackMugshotAction / AbortMugshotCaptureAction have their shared declarations in
+// BrnGameActions.h. These file-local payloads remain the X360 store-by-store queue images; the
+// assertions below pin their byte layouts to those shared types without changing producer stores
+// or unwritten padding.
 //
 // ASSERT-PARITY NOTE: the console bakes the verbatim source path "d:\\p4\\b5_main\\...
 // BrnMugshotManager.cpp" and the exact line numbers into every FireAssert. The house CGS_ASSERT
 // macro emits __FILE__/__LINE__ instead; this is the project-wide benign assert-machinery YELLOW.
 
+#include <cstddef> // offsetof (compile-time checks of the producer's byte records)
 #include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"
+#include "GameSource/GameState/BrnGameActions.h"                 // typed payback mugshot action records
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint ([mugshot] witness)
 
@@ -91,6 +93,34 @@ namespace
         bool                          mbZero;               // +0x0C
         u8                            maPad[0x10 - 0x0D];    // +0x0D..0x10
     };
+    static_assert(sizeof(StartMugshotGameAction) ==
+                  sizeof(GameStateModuleIO::PaybackMugshotAction), "start-mugshot payload size");
+    static_assert(offsetof(StartMugshotGameAction, mImageId) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, mRoadRuleBeatenRoadID) &&
+                  offsetof(StartMugshotGameAction, meShowRaceCar) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, meTakedownAggressorIndex) &&
+                  offsetof(StartMugshotGameAction, mePlayerRaceCar) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, meTakedownVictimIndex) &&
+                  offsetof(StartMugshotGameAction, miStageTag) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, meMugshotResponse) &&
+                  offsetof(StartMugshotGameAction, meImageType) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, meImageType) &&
+                  offsetof(StartMugshotGameAction, mbFlagA) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, mbIsTakedownAggressorLocalPlayer) &&
+                  offsetof(StartMugshotGameAction, mbBroadcast) ==
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, mbMugshotRequiresBroadcast),
+                  "start-mugshot producer bytes match the shared action offsets");
+    static_assert(sizeof(AbortMugshotGameAction) ==
+                  sizeof(GameStateModuleIO::AbortMugshotCaptureAction), "abort-mugshot payload size");
+    static_assert(offsetof(AbortMugshotGameAction, meAbortedShowRaceCar) ==
+                  offsetof(GameStateModuleIO::AbortMugshotCaptureAction, meTakedownAggressorIndex) &&
+                  offsetof(AbortMugshotGameAction, mePlayerRaceCar) ==
+                  offsetof(GameStateModuleIO::AbortMugshotCaptureAction, meTakedownVictimIndex) &&
+                  offsetof(AbortMugshotGameAction, meImageType) ==
+                  offsetof(GameStateModuleIO::AbortMugshotCaptureAction, meImageType) &&
+                  offsetof(AbortMugshotGameAction, mbZero) ==
+                  offsetof(GameStateModuleIO::AbortMugshotCaptureAction, mbIsTakedownAggressorLocalPlayer),
+                  "abort-mugshot producer bytes match the shared action offsets");
 
     // The GameActionQueue concrete type (forward-declared in BrnGameStateModuleIO.h) is the variable
     // event queue the GameStateModuleIO TU returns; the console calls VariableEventQueue<13312,16>::AddEvent

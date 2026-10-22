@@ -236,6 +236,17 @@ void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPl
     ++miNumPlayersDisconnected;
 }
 
+// ARTIST SendModeStopMessages 0x8234C2F4..0x8234C310 inlines this constructor:
+// initialise all eight position slots to the invalid player and clear disconnects.
+void OnlineRoundResults::Construct()
+{
+    for (s32 liPosition = 0; liPosition < KI_MAX_PLAYERS; ++liPosition)
+    {
+        maPlayerPosition[liPosition] = CgsNetwork::K_INVALID_PLAYER_ID;
+    }
+    maDisconnectedPlayers.Clear();
+}
+
 // X360 0x8231CA38. Record a player's finishing slot. The valid-id assert rejects the invalid
 // sentinel; position -1 means "disconnected" -> append the id to the disconnected list, else
 // bounds-check the position and store the id at that slot. (X360 return-result artifact dropped.)

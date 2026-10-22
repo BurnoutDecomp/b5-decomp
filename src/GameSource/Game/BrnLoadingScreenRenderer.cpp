@@ -1,4 +1,5 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] bring-up traces
 #include "pc/gcm/renderengine/device.h"   // gDisplayWidth/Height
@@ -20,7 +21,6 @@ namespace CgsSystem
 {
     u32 GetSystemTimerBaseTime();
     u32 GetSystemTimerFrequency();
-    namespace HardwareSku { s32 FindLanguage(); }
 }
 
 namespace

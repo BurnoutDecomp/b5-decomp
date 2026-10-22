@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
 
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
@@ -81,6 +82,33 @@ namespace CgsGuiModuleIO
         CGS_ASSERT(lpSourceQueue != 0,
                    "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents");
         return mOutEvents.Append(*lpSourceQueue) ? 1 : 0;
+    }
+
+    // ARTIST8285DC28..DD38, absent from exports. Both assertions precede
+    // Append<256,16>; no null guard or derived success contract is added.
+    void OutputBuffer::AddGuiOutEvents(const GuiEventQueueTiny* lpSourceQueue)
+    {
+        if (!IsBufferLockedForWriting())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Not locked for writing\n";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 285);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpSourceQueue)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 286);
+            CgsDev::Assert::EndAssert();
+        }
+        mOutEvents.Append<256, 16>(*lpSourceQueue);
     }
 
     // X360 0x8285AE20: the GuiModule publication path uses the full-size source

@@ -96,6 +96,18 @@ namespace
     // GUI event 356 is posted as one byte, id 356 size 1, through its canonical record.
     static_assert(sizeof(BrnGui::GuiAutosaveRequestEvent) == 1, "id 356 size 1");
 
+    // ARTIST case 224 calls the one-byte AddGuiEvent<GuiEvent<152>> instantiation.
+    // Keep this one-byte legacy tag local: the normal GUI 152 header is 12 bytes and
+    // GuiHudMessage uses it, while this translator passes only its untouched stack byte.
+    // No matching source consumer for this one-byte route is claimed.
+    struct GuiEvent152UnwrittenByte
+    {
+        u8 mu8Unwritten;
+        s32 GetEventType() const { return 152; }
+    };
+    static_assert(sizeof(GuiEvent152UnwrittenByte) == 1,
+                  "ARTIST action 224 posts GUI 152 as one unwritten byte");
+
     // =========================================================================
     // [drive-thru wave 2026-08-29] The byte the BODY-SHOP drive-thru action (97) carries its
     // "the repair did something" flag in. The 144-byte shop payload is a serialised action
@@ -719,6 +731,72 @@ namespace
             case 287:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 380, 1);
                 break;
+            // [image-gallery response path] These records are produced by
+            // GameStateImageManagerBase (289..293) and consumed by the image renderer /
+            // ImageGalleryState. The output IDs and record layouts are the X360 translator's
+            // typed AddGuiEvent instantiations; the source producer's raw stack records are
+            // statically compared with the named action types in that producer TU.
+            case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_RENDER_IMAGE:
+            {
+                const auto* lpRenderImageAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryRenderImageAction*>(
+                        lpAction);
+                CGS_ASSERT(lpRenderImageAction != 0, "lpRenderImageAction");
+
+                BrnGui::GuiEventNetworkPlayerImage lEvent;
+                lEvent.mpTexture      = lpRenderImageAction->mpTexture;
+                lEvent.miTextureIndex = lpRenderImageAction->miTextureIndex;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_IMAGE_INFO:
+            {
+                const auto* lpImageInfoAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryImageInfoAction*>(
+                        lpAction);
+                CGS_ASSERT(lpImageInfoAction != 0, "lpImageInfoAction");
+
+                BrnGui::GuiImageGalleryImageInfoEvent lEvent;
+                lEvent.mCaptureDate = lpImageInfoAction->mCaptureDate;
+                lEvent.mWorldRegion = lpImageInfoAction->mWorldRegion;
+                lEvent.miNumCaptures = lpImageInfoAction->miNumCaptures;
+                lEvent.miSlotIndex = lpImageInfoAction->miSlotIndex;
+                lEvent.mPlayerName = lpImageInfoAction->mPlayerName;
+                lEvent.mbLocked = lpImageInfoAction->mbLocked;
+                lEvent.mbHasDeleted = lpImageInfoAction->mbHasDeleted;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_COUNT_ACTION:
+            {
+                const auto* lpCountAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryCountAction*>(
+                        lpAction);
+                BrnGui::GuiImageGalleryCollectedCountEvent lEvent;
+                lEvent.meImageGalleryImageType = lpCountAction->meImageType;
+                lEvent.miCollectedCount = lpCountAction->miUsedCount;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_DATA_ACTION:
+            {
+                const auto* lpDataAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryDataAction*>(
+                        lpAction);
+                BrnGui::GuiImageGalleryCollectedDataEvent lEvent;
+                lEvent.meImageGalleryImageType = lpDataAction->meImageType;
+                lEvent.mActiveBitArray = lpDataAction->mActiveBitArray;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE:
+            {
+                // ARTIST reads no action byte here; the one-byte load marker only advances
+                // ImageGalleryState's pending-load notification.
+                CgsGui::GuiEvent<523> lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
             // ARTIST 0x823EA760 / 0x823EBC50: colour and unlocked-livery replies.
             // These are raw GUI payloads, without a GuiEvent header.
             case 81:
@@ -979,6 +1057,102 @@ namespace
                 break;
             }
 
+            // ARTIST 0x823ECECC..0x823ED01C: Payback mugshot control. Response 0 is an
+            // intentional no-post arm; later capture/show steps copy the road id, response,
+            // image type, selected car index and local-aggressor byte into GUI 325.
+            case BrnGameState::GameStateModuleIO::E_ACTION_PAYBACK_MUGSHOT:
+            {
+                const auto* lpPaybackMugshotAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::PaybackMugshotAction*>(
+                        lpAction);
+                if (lpPaybackMugshotAction->meMugshotResponse ==
+                    BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_PREPARE_CAPTURE)
+                {
+                    break;
+                }
+
+                const bool lbLocalAggressor =
+                    lpPaybackMugshotAction->mbIsTakedownAggressorLocalPlayer;
+                const s32 liAggressorCarIndex =
+                    lbLocalAggressor ? lpPaybackMugshotAction->meTakedownVictimIndex
+                                     : lpPaybackMugshotAction->meTakedownAggressorIndex;
+
+                BrnGui::GuiMugshotControlEvent lEvent;
+                u8* lpEventBytes = reinterpret_cast<u8*>(&lEvent);
+                std::memcpy(lpEventBytes, &lpPaybackMugshotAction->mRoadRuleBeatenRoadID, sizeof(CgsID));
+                std::memcpy(lpEventBytes + 8, &lpPaybackMugshotAction->meMugshotResponse,
+                            sizeof(lpPaybackMugshotAction->meMugshotResponse));
+                std::memcpy(lpEventBytes + 12, &lpPaybackMugshotAction->meImageType,
+                            sizeof(lpPaybackMugshotAction->meImageType));
+                std::memcpy(lpEventBytes + 16, &liAggressorCarIndex, sizeof(liAggressorCarIndex));
+                lpEventBytes[20] = static_cast<u8>(lbLocalAggressor);
+
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "MUGSHOT EVENT : BRIDGE GAME STATE TO X (1)\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "IMAGE TYPE : " << static_cast<s32>(lpPaybackMugshotAction->meImageType) << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "LOCAL AGG  : " << lbLocalAggressor << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "AGG ARCI   : " << liAggressorCarIndex << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "RESPONSE   : "
+                        << static_cast<s32>(lpPaybackMugshotAction->meMugshotResponse) << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "ROAD?      : "
+                        << static_cast<u64>(lpPaybackMugshotAction->mRoadRuleBeatenRoadID) << "\n";
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED020..0x823ED180: abort an in-flight capture. The console's r19
+            // zero register writes the first qword; response 4 and the action fields follow.
+            case BrnGameState::GameStateModuleIO::E_ACTION_ABORT_MUGSHOT_CAPTURE:
+            {
+                const auto* lpAbortCaptureAction =
+                    reinterpret_cast<const
+                        BrnGameState::GameStateModuleIO::AbortMugshotCaptureAction*>(lpAction);
+                CGS_ASSERT(lpAbortCaptureAction != 0, "lpAbortCaptureAction");
+
+                const bool lbLocalAggressor =
+                    lpAbortCaptureAction->mbIsTakedownAggressorLocalPlayer;
+                const s32 liAggressorCarIndex =
+                    lbLocalAggressor ? lpAbortCaptureAction->meTakedownVictimIndex
+                                     : lpAbortCaptureAction->meTakedownAggressorIndex;
+                const s32 liResponse = static_cast<s32>(
+                    BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT);
+
+                BrnGui::GuiMugshotControlEvent lEvent;
+                u8* lpEventBytes = reinterpret_cast<u8*>(&lEvent);
+                std::memset(lpEventBytes, 0, sizeof(CgsID));
+                std::memcpy(lpEventBytes + 8, &liResponse, sizeof(liResponse));
+                std::memcpy(lpEventBytes + 12, &lpAbortCaptureAction->meImageType,
+                            sizeof(lpAbortCaptureAction->meImageType));
+                std::memcpy(lpEventBytes + 16, &liAggressorCarIndex, sizeof(liAggressorCarIndex));
+                lpEventBytes[20] = static_cast<u8>(lbLocalAggressor);
+
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "MUGSHOT EVENT : BRIDGE GAME STATE TO X (2)\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "IMAGE TYPE : " << static_cast<s32>(lpAbortCaptureAction->meImageType) << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "LOCAL AGG  : " << lbLocalAggressor << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "AGG ARCI   : " << liAggressorCarIndex << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "RESPONSE   : " << liResponse << "\n";
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "ROAD?      : " << static_cast<u64>(0) << "\n";
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ARTIST 0x823EB598..0x823EB5AC forwards the activated dirty-trick type as GUI 182 / 4 bytes.
             case BrnGameState::GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED:
             {
@@ -996,6 +1170,26 @@ namespace
             {
                 CgsGui::GuiEvent<183> lEvent;
                 CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED1AC..0x823ED1C4: online player added -> lobby-join chatter.
+            case BrnGameState::GameStateModuleIO::E_ACTION_ONLINE_PLAYER_ADDED:
+            {
+                const auto& lrAction = *reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::OnlinePlayerAddedAction*>(lpAction);
+                BrnGui::GuiEventNetworkPlayerJoinedLobby lEvent;
+                lEvent.mNetworkPlayerID = lrAction.mAddedPlayerNetworkID;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EB7C8..0x823EB7D8: notify the crash HUD that skipping is available.
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_PLAYER_CAN_SKIP_CRASH:
+            {
+                // The console does not write this one-byte payload; the receiver ignores it.
+                BrnGui::GuiEventCanSkipCrash lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
@@ -1369,6 +1563,22 @@ namespace
                 break;
             }
 
+            // ---- 178  AFTERTOUCH (12-byte action) -> GUI 403 (32-byte raw event) ----------------
+            // ARTIST writes {sideways, forward, zero-qword, race-car index} at offsets 0/4/8/16;
+            // the final 12 bytes of the 32-byte event remain stack residue.
+            case BrnGameState::GameStateModuleIO::E_ACTION_AFTERTOUCH:
+            {
+                const BrnGameState::GameStateModuleIO::AftertouchAction* lpAftertouchAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::AftertouchAction*>(lpAction);
+                BrnGui::GuiAftertouchEvent lEvent;
+                lEvent.mfSidewaysAftertouch = lpAftertouchAction->mfSidewaysAftertouch;
+                lEvent.mfForwardAftertouch = lpAftertouchAction->mfForwardAftertouch;
+                lEvent.muZero = 0;
+                lEvent.miRaceCarIndex = lpAftertouchAction->meRaceCarIndex;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 59  E_ACTION_ON_STUNT_ELEMENT_COMPLETE_FOR_COUNTY (8 bytes) --------------
             // @0x823EB98C..0x823EB9B0: { meStuntElementType@+0x00 <- Map(action+0x00),
             //                            meCounty@+0x04 <- action+0x04 }. No autosave request.
@@ -1553,6 +1763,38 @@ namespace
                 break;
             }
 
+            // ---- 222..224  original one-byte leftovers and the joined-car wire ------------------
+            // ARTIST 0x823EC57C..0x823EC5C0. 222 and 224 pass unwritten stack bytes to one-byte
+            // GUI 151 / 152 AddEvent helpers. Preserve that residue. 223 copies only action+0
+            // (qword) and action+0x18 (one byte) into GUI 150; output bytes +9..+15 stay residue.
+            // The upstream action producer and its declared payload size remain unlocated.
+            case 222:
+            {
+                static_assert(sizeof(BrnGui::GuiEventCarEliminatedFromEvent) == 1,
+                              "ARTIST GUI 151 tag is one byte");
+                BrnGui::GuiEventCarEliminatedFromEvent lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case 223:
+            {
+                static_assert(sizeof(bool) == 1,
+                              "ARTIST GUI 150 camera flag is one byte");
+                const u8* lpActionBytes = reinterpret_cast<const u8*>(lpAction);
+                BrnGui::GuiEventCarJoinedEvent lEvent;
+                std::memcpy(&lEvent.mJoiningRivalID, lpActionBytes, sizeof(lEvent.mJoiningRivalID));
+                // Preserve the raw byte as the lbz/stb pair does; do not normalize it through bool.
+                std::memcpy(&lEvent.mbDoCamera, lpActionBytes + 0x18, sizeof(lEvent.mbDoCamera));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case 224:
+            {
+                GuiEvent152UnwrittenByte lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 242 / 245 / 246 / 247 / 248 / 250  THE RACE-MODE HUD MESSAGES -----------------
             // [FX-FLOW 2026-09-24, G11-D1 remainder] HUDMessageLogic's race arm posts these into the
             // game-action queue (242 GenerateFirstOrLastMessage, 245 GenerateLeaderMessages, 247
@@ -1641,6 +1883,158 @@ namespace
                 break;
             }
 
+            // ---- 252..254  Burning Home Run and team-change HUD records -------------------------
+            // ARTIST 0x823EC0F0..0x823EC230: preserve the three source assertions and raw payloads.
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT:
+            {
+                CGS_ASSERT(lpAction != 0, "lpHUDMessageBHRCheckpoint");
+                const auto* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRCheckpointAction*>(lpAction);
+                BrnGui::GuiBHRCheckpointReachedEvent lEvent;
+                std::memcpy(&lEvent, lpBHRAction, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED:
+            {
+                CGS_ASSERT(lpAction != 0, "lpHUDMessageBHRRunnerCrashesEvent");
+                const auto* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRRunnerCrashedAction*>(lpAction);
+                BrnGui::GuiHUDMessageBHRRunnerCrashed lEvent;
+                std::memcpy(&lEvent, lpBHRAction, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpHUDMessageOnlineTeamChangeAction");
+                const auto* lpTeamChangeAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageOnlineTeamChangeAction*>(lpAction);
+                BrnGui::GuiOnlineTeamChangeEvent lEvent;
+                std::memcpy(&lEvent, lpTeamChangeAction, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 256..260  rivalry status records -----------------------------------------------
+            // ARTIST loads two CgsIDs at +0/+8, then appends the status values 0..3 for GUI 439;
+            // the fleeing case forwards the same pair to GUI 440 without an added status word.
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageFirstHitOnRivalAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_NEW;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsARivalAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_RIVAL;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsATargetAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_TARGET;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsFleeingAction*>(lpAction);
+                BrnGui::GuiRivalIsFleeing lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED:
+            {
+                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsWreckedAction*>(lpAction);
+                BrnGui::GuiRivalryStatusChange lEvent;
+                lEvent.mRivalID = lpRivalAction->mRivalID;
+                lEvent.mCarID = lpRivalAction->mCarID;
+                lEvent.meNewStatus = BrnGui::GuiRivalryStatusChange::E_RIVAL_LEVEL_WRECKED;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 266..271  Online Stunt Run HUD records ------------------------------------------
+            // The producer's 12-byte StuntRunTeamMessage maps by offset to the three typed GUI
+            // receiver records; only bytes 0..9 are written by ARTIST and the two tail bytes remain
+            // stack residue. Cases 270/271 build the receiver's score/time triple explicitly.
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_ELIMINATION:
+            {
+                CGS_ASSERT(lpAction != 0, "lpEliminationAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                BrnGui::GuiNetworkStuntRunEliminationEvent lEvent;
+                lEvent.mbIsLocalPlayer = lpMessage->miTeam;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                std::memcpy(&lEvent.mbIsTeammate, &lpMessage->mbLocalPlayerOnTeam, sizeof(bool));
+                std::memcpy(&lEvent.mbIsLastPlayer, &lpMessage->mbLocalPlayerIsSubject, sizeof(bool));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_LEADING:
+            {
+                CGS_ASSERT(lpAction != 0, "lpLeadingAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                BrnGui::GuiNetworkStuntRunLeadingEvent lEvent;
+                lEvent.mbIsLocalPlayer = lpMessage->miTeam;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                std::memcpy(&lEvent.mbIsTeammate, &lpMessage->mbLocalPlayerOnTeam, sizeof(bool));
+                std::memcpy(&lEvent.mbIsLastPlayer, &lpMessage->mbLocalPlayerIsSubject, sizeof(bool));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_VICTORY:
+            {
+                CGS_ASSERT(lpAction != 0, "lpVictoryAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                BrnGui::GuiNetworkStuntRunVictoryEvent lEvent;
+                lEvent.mbIsLocalPlayer = lpMessage->miTeam;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                std::memcpy(&lEvent.mbIsTeammate, &lpMessage->mbLocalPlayerOnTeam, sizeof(bool));
+                std::memcpy(&lEvent.mbIsLastPlayer, &lpMessage->mbLocalPlayerIsSubject, sizeof(bool));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_COMBO_END:
+            {
+                // ARTIST posts one unwritten byte as GUI 490; the GUI receiver is pointer-only.
+                BrnGui::GuiNetworkLastStunRunEvent lEvent;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_SCORE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpMessageAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunScoreMessage*>(lpAction);
+                BrnGui::GuiNetworkSuntRunInfoMessageEvent lEvent;
+                lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
+                lEvent.meMessageType = BrnGui::GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_SCORE;
+                lEvent.miValue = lpMessage->miScore;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+            case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_TIME:
+            {
+                CGS_ASSERT(lpAction != 0, "lpMessageAction");
+                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTimeMessage*>(lpAction);
+                BrnGui::GuiNetworkSuntRunInfoMessageEvent lEvent;
+                lEvent.mPlayerId = -1;
+                lEvent.meMessageType = BrnGui::GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_TIME;
+                lEvent.miValue = static_cast<s32>(lpMessage->mfWarningTimeSeconds); // ARTIST fctiwz (30.0 -> 30)
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
             // ---- 112  the DISTRICT CHANGE (8 bytes: {county, district}) -------------------
             // ⭐ [H1 district wave 2026-08-25] X360 case 112 @0x823EA-range (h1_dump2.txt),
             // verbatim: copy the action's 8-byte {county, district} pair, zero the third
@@ -2246,6 +2640,31 @@ namespace
                 break;
             }
 
+            // ARTIST 0x823ED570..0x823ED5C4: action294 is the image-save request that becomes
+            // GUI358. The action producer widens its pointer to the host width; copy the whole
+            // 24-byte ImageFileInfo-shaped record, including the unwritten trailing X360 word.
+            case 294:
+            {
+                const BrnGameState::GameStateModuleIO::ImageSaveRequestAction* lpSaveImageAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageSaveRequestAction*>(lpAction);
+                CGS_ASSERT(lpSaveImageAction != 0, "lpSaveImageAction");
+                BrnGui::GuiEventSaveImageFileAndAutosave lEvent;
+                std::memcpy(&lEvent.mImageFileInfo, lpSaveImageAction, sizeof(lEvent.mImageFileInfo));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823ED5C8..0x823ED608: assert the action then copy the whole image-file
+            // record array to GUI 359. The X360 3x16-byte record widens to 3x24 bytes here.
+            case 295: // ImageManager::KI_EVENT_PREPARE_RENDER
+            {
+                CGS_ASSERT(lpAction != 0, "lpLoadImagesAction");
+                BrnGui::GuiEventLoadImageFiles lEvent;
+                std::memcpy(lEvent.maImageFileInfo, lpAction, sizeof(lEvent.maImageFileInfo));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             // ---- 152..160  the free-burn challenge family (online free-burn lobby) ------------
             // The online time-out clock: the {seconds, fraction} record becomes GUI 108.
             case BrnGameState::GameStateModuleIO::E_ACTION_MODE_TIME_REMAINING:
@@ -2417,6 +2836,64 @@ namespace
                         << " crash " << lEvent.mfCurrentCrash
                         << " x" << lEvent.miCrashMultiplier << ")\n";
                 }
+                break;
+            }
+
+            // ARTIST 0x823EDC74..0x823EDCA8: publish the pending developer-challenge bitset.
+            case BrnGameState::GameStateModuleIO::E_ACTION_DEVELOPER_CHALLENGES_COMPLETED:
+            {
+                CGS_ASSERT(lpAction != 0, "lpDevCompAction");
+                static_assert(sizeof(BrnGui::GuiDeveloperChallengesCompleted) == 8,
+                              "ARTIST action 298 forwards one FastBitArray<15> word as GUI 596");
+                BrnGui::GuiDeveloperChallengesCompleted lEvent;
+                std::memcpy(&lEvent.mCompletedDeveloperChallenges, lpAction,
+                            sizeof(lEvent.mCompletedDeveloperChallenges));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EDA38..0x823EDA80: action 240 publishes the 16-byte holder name
+            // followed by the removal flag as raw GUI event 122 (17 bytes total).
+            case BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse::KI_GAME_ACTION_TYPE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpTargetScoreAction");
+                const auto* lpResponse = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse*>(lpAction);
+                BrnGui::GuiEventScoreboardResponseEvScoreTarget lEvent;
+                std::memcpy(lEvent.maData, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
+                lEvent.maData[16] = static_cast<u8>(lpResponse->mbRemoved);
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EDA84..0x823EDAC4: action 241's 16 raw name bytes are copied over
+            // the full GUI-event-123 object before AddGuiEvent queues all 16 bytes.
+            case BrnGameState::GameStateModuleIO::DldScoreboardResponse::KI_GAME_ACTION_TYPE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpDldChallengeableAction");
+                const auto* lpResponse = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::DldScoreboardResponse*>(lpAction);
+                BrnGui::GuiEventScoreboardDownloadedChallengeable lEvent;
+                static_assert(sizeof(lEvent) == sizeof(*lpResponse),
+                              "ARTIST case 241 copies the same 16-byte record to GUI event 123");
+                std::memcpy(&lEvent, lpResponse, sizeof(lEvent));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ARTIST 0x823EC84C..0x823EC89C: action 288 answers an event-data request with
+            // {event id, score, player name[16]}. The GUI-332 consumer reads those bytes at
+            // +0/+8/+0xC; the final four bytes of this 32-byte local are never written.
+            case BrnGameState::GameStateModuleIO::TargetEventDataResponse::KI_GAME_ACTION_TYPE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpChallengeEventDataAction");
+                const auto* lpResponse = reinterpret_cast<const
+                    BrnGameState::GameStateModuleIO::TargetEventDataResponse*>(lpAction);
+                BrnGui::GuiEventChallengedEventDataResponse lEvent;
+                std::memcpy(&lEvent, &lpResponse->mEventId, sizeof(lpResponse->mEventId));
+                lEvent.muHeader2 = static_cast<u32>(lpResponse->miScore);
+                std::memcpy(lEvent.maPayload, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 

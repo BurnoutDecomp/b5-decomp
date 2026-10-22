@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/CgsXOverlapped.h"
 
 // CgsGui::GuiKeyboard — the X360 on-screen (virtual) keyboard front end. Recovered from
 // BURNOUT_X360_ARTIST.XEX. The X360 build drives the XDK system keyboard UI
@@ -35,6 +36,10 @@ namespace CgsGui
     class GuiKeyboard
     {
     public:
+        // ARTIST825187D0; do not clear result/overlapped bytes before Show.
+        void Construct();
+        bool IsShown() const;
+
         // @ 0x8284CFD8 — assert no dialog is already shown, store the listener, init the
         // overlapped handle, and call XShowKeyboardUI (flags 0x30000064). Returns the
         // XShowKeyboardUI status.
@@ -46,12 +51,15 @@ namespace CgsGui
         // clear mpListener and call listener->KeyboardClosed(resultText) — passing the
         // result buffer on success or null when the op errored.
         void Update();
+#if defined(_WIN32) && !defined(_XBOX)
+        // FLAG PC-platform leaf: owner teardown drops the native operation and listener.
+        // It does not report an accepted string or call a listener being released.
+        void AbandonPlatformOperation();
+#endif
 
     private:
         CgsUtf16             maResultBuffer[512];  // +0x000
-        // CgsXOverlapped (28-byte XOVERLAPPED wrapper, homed in System/X360). Stored as a
-        // raw 28-byte block so this header does not depend on the X360-only wrapper class.
-        u8                   maOverlapped[28];     // +0x400
+        CgsSystem::CgsXOverlapped mOverlapped;      // +0x400; actual contained XDK wrapper
         GuiKeyboardListener* mpListener;           // +0x41C
     };
 }

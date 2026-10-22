@@ -53,7 +53,7 @@ namespace CgsUnicode
     u16 ConvertUtf8CharToUtf16Char(const u8* lpUtf8Char);
 
     // Convert a whole NUL-terminated UTF-8 string into the caller's UTF-16 buffer (validates
-    // the source with IsValidUtf8String first, asserting on failure), returning the target.
+    // the source with IsValidUtf8String first, asserting on failure), returning the written NUL.
     // X360 ARTIST 0x82835828 (from the register shapes: r3 = source UTF-8, r4 = target
     // UTF-16). Declared here in its canonical home; the body is its own TU
     // (GameShared/GameClasses/Fonts/CgsUnicode.cpp). Used by CgsGui::SaveLoadSystem::

@@ -225,7 +225,7 @@ namespace RaceCarEntityModuleIO
                 mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
             mReplayStatusInterface.miCurrentRecordReel   = -1;
             mReplayStatusInterface.miCurrentPlaybackReel = -1;
-            mReplayStatusInterface.mfDebugHudAlpha       = 0.0f;
+            mReplayStatusInterface.mfPlaybackTimeRemaining       = 0.0f;
             // The range-guarded EActiveRaceCarIndex operator++ is what bakes the
             // "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert (BurnoutConstants.h:39)
             // the X360 body carries -- same shape as the world twin's trailing loop.

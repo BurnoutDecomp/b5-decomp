@@ -36,6 +36,9 @@ namespace BrnGui
     struct GuiHudMessagesDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        // Actual C++ constructor inlined at ARTIST827E5D50.
+        GuiHudMessagesDebugComponent();
+
         void Construct(HudMessageDirector* lpMessageDirector);
         void Destruct();
 
@@ -52,13 +55,13 @@ namespace BrnGui
         const char* GetPath() const override;
         bool        IsSimple() const override;
 
-        void TriggerMessage(bool lbWithTimer);
+        void TriggerMessage(bool lbForce);
         void SelectNextMessage();
         void SelectPreviousMessage();
-        void TriggerMessageCallback(void* lpUserData);
-        void TriggerMessageWithoutTimerCallback(void* lpUserData);
-        void SelectNextMessageCallback(void* lpUserData);
-        void SelectPreviousMessageCallback(void* lpUserData);
+        static void TriggerMessageCallback(void* lpUserData);
+        static void TriggerMessageWithoutTimerCallback(void* lpUserData);
+        static void SelectNextMessageCallback(void* lpUserData);
+        static void SelectPreviousMessageCallback(void* lpUserData);
 
         // BrnGuiHudMessagesDebugComponent.h:76..:79
         HudMessageDirector*         mpMessageDirector;

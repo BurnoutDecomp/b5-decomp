@@ -1,5 +1,9 @@
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <type_traits>
+#if defined(_WIN32) && !defined(_XBOX)
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
+#endif
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   CgsGui::GuiKeyboard::Show   @ 0x8284CFD8
@@ -8,8 +12,7 @@
 // ---- XDK entry points (real prototypes live in the Xbox 360 XDK) -----------------
 extern "C" u32 XShowKeyboardUI(u32 dwUserIndex, u32 dwFlags, const u16* wszDefaultText,
                                const u16* wszTitleText, const u16* wszDescriptionText,
-                               u16* wszResultText, u32 cchResultText, void* pOverlapped);
-extern "C" u32 XGetOverlappedResult(void* lpOverlapped, u32* lpdwResult, u32 bWait);
+                               u16* wszResultText, u32 cchResultText, PXOVERLAPPED pOverlapped);
 
 // Win32/XDK winerror.h literals consumed by Update's pending check.
 #ifndef ERROR_IO_INCOMPLETE
@@ -22,23 +25,34 @@ extern "C" u32 XGetOverlappedResult(void* lpOverlapped, u32* lpdwResult, u32 bWa
 // XShowKeyboardUI flags baked into the X360 call (lis 0x3000 | ori 0x64).
 static const u32 KU_KEYBOARD_FLAGS = 0x30000064u;
 
-namespace CgsSystem
-{
-    // The 28-byte XOVERLAPPED wrapper. Construct() (defined out-of-line in
-    // System/X360/CgsXOverlappedX360.cpp) zero-fills the embedded XOVERLAPPED. Declared
-    // here (matching that TU's local declaration) only so GuiKeyboard can name Construct;
-    // the definition is resolved at link time.
-    class CgsXOverlapped
-    {
-    public:
-        void Construct();
-    private:
-        u8 maOverlapped[28];
-    };
-}
+// CgsXOverlapped is the canonical one-member standard-layout wrapper. The
+// system API receives its pointer-interconvertible first XOVERLAPPED member.
+static_assert(std::is_standard_layout<CgsSystem::CgsXOverlapped>::value,
+              "XDK wrapper and its sole native member are pointer-interconvertible");
+static_assert(sizeof(CgsSystem::CgsXOverlapped) == sizeof(XOVERLAPPED),
+              "keyboard contains the complete canonical overlapped wrapper");
 
 namespace CgsGui
 {
+#if defined(_WIN32) && !defined(_XBOX)
+    void GuiKeyboard::AbandonPlatformOperation()
+    {
+        // FLAG PC-platform policy: no callback after this keyboard owner's release.
+        CgsSystem::KeyboardPC::Forget(reinterpret_cast<PXOVERLAPPED>(&mOverlapped));
+        mpListener = nullptr;
+    }
+#endif
+    void GuiKeyboard::Construct()
+    {
+        mpListener = 0;
+    }
+
+    // Inlined in ARTIST824F5B20..B28, with the DecFIGS const declaration.
+    bool GuiKeyboard::IsShown() const
+    {
+        return mpListener != 0;
+    }
+
     // @ 0x8284CFD8
     u32 GuiKeyboard::Show(u32 luUserIndex, const CgsUtf16* lpDefaultText,
                           const CgsUtf16* lpTitleText, const CgsUtf16* lpDescriptionText,
@@ -49,13 +63,11 @@ namespace CgsGui
 
         mpListener = &lListener;
 
-        CgsSystem::CgsXOverlapped* lpOverlapped =
-            reinterpret_cast<CgsSystem::CgsXOverlapped*>(maOverlapped);
-        lpOverlapped->Construct();
+        mOverlapped.Construct();
 
         return XShowKeyboardUI(luUserIndex, KU_KEYBOARD_FLAGS, lpDefaultText, lpTitleText,
                                lpDescriptionText, maResultBuffer, KU_KEYBOARD_MAX_CHARACTERS,
-                               maOverlapped);
+                               reinterpret_cast<PXOVERLAPPED>(&mOverlapped));
     }
 
     // @ 0x8284D0C0
@@ -67,7 +79,7 @@ namespace CgsGui
         }
 
         // Poll without waiting. While the op is still pending, leave it running.
-        const u32 luResult = XGetOverlappedResult(maOverlapped, nullptr, 0);
+        const u32 luResult = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(&mOverlapped), nullptr, 0);
         const bool lbStillPending =
             (luResult == ERROR_IO_PENDING) || (luResult == ERROR_IO_INCOMPLETE);
         if (lbStillPending)
@@ -81,7 +93,7 @@ namespace CgsGui
         GuiKeyboardListener* lpListener = mpListener;
         mpListener = nullptr;
 
-        const u32 luFinal = XGetOverlappedResult(maOverlapped, nullptr, 0);
+        const u32 luFinal = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(&mOverlapped), nullptr, 0);
         const CgsUtf16* lpResultText = (luFinal != 0) ? nullptr : maResultBuffer;
         lpListener->KeyboardClosed(lpResultText);
     }

@@ -59,8 +59,13 @@ GuiRaceCarInfoEvent* GuiRaceCarInfoEvent::Construct()
 //   maFlagA[li]=1; maFlagD[li]=1; maFlagE[li]=0; maFlagC[li]=0; maFlagB[li]=0  (store order)
 //   maIdentity[li] = maIdentity[0]                      ; ld 0(this+0x80) -> std 0(this+0x80+li*8)
 // Then miNumEntries = 8.
-GuiRaceCarInfoEvent* GuiRaceCarInfoEvent::DoWorstCase(Vector4 lvInput, s32 liNumActive)
+void GuiRaceCarInfoEvent::DoWorstCase(EActiveRaceCarIndex leNumActive, Vector3 lvInput)
 {
+    // Preserve all four raw VMX lanes: the native Vector3 is carried in v1 and its W lane
+    // is consumed by the 16-byte vmr128 before the per-lane transform.
+    const s32 liNumActive = static_cast<s32>(leNumActive);
+    const Vector4 lInput = { lvInput.x, lvInput.y, lvInput.z, lvInput.w };
+
     // X360 float-pool immediates (named for clarity; values from the asm float pool).
     static const f32 KAF_WEIGHT[4] = { 0.0f, 0.1f, 0.25f, 0.0f }; // {flt_82001CC0, flt_82004014, flt_82003F40, flt_82001CC0}
     static const f32 KF_INPUT_SCALE = 2.0f;                       // flt_82001D9C
@@ -86,10 +91,10 @@ GuiRaceCarInfoEvent* GuiRaceCarInfoEvent::DoWorstCase(Vector4 lvInput, s32 liNum
 
         // step = lvInput * (2*li) + source  (vmaddfp128, lane-by-lane)
         Vector4 lStep;
-        lStep.x = lvInput.x * lfScale + lSource.x;
-        lStep.y = lvInput.y * lfScale + lSource.y;
-        lStep.z = lvInput.z * lfScale + lSource.z;
-        lStep.w = lvInput.w * lfScale + lSource.w;
+        lStep.x = lInput.x * lfScale + lSource.x;
+        lStep.y = lInput.y * lfScale + lSource.y;
+        lStep.z = lInput.z * lfScale + lSource.z;
+        lStep.w = lInput.w * lfScale + lSource.w;
 
         // pos = weight * step + li  (vmaddfp, lane-by-lane). Lanes 0/3 weight==0 -> just li.
         Vector4& lPos = maPosition[liIndex];
@@ -108,7 +113,6 @@ GuiRaceCarInfoEvent* GuiRaceCarInfoEvent::DoWorstCase(Vector4 lvInput, s32 liNum
     }
 
     miNumEntries = KI_NUM_ENTRIES; // 8
-    return this;
 }
 
 } // namespace BrnGui

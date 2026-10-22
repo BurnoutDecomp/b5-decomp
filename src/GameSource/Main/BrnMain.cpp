@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
 #include "GameShared/GameClasses/System/PC/CgsCrashHandlerPC.h"
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 
 // ============================================================================================
 // The PC boot shell. Two references govern this TU:
@@ -321,10 +322,15 @@ void EngineUpdate()
     ZeroMemory(&lMsg, sizeof(lMsg));
     while (lMsg.message != WM_QUIT && !CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
     {
-        if (PeekMessageA(&lMsg, nullptr, 0, 0, PM_REMOVE))
+        CgsSystem::KeyboardPC::Pump(renderengine::hWnd);
+        if (PeekMessageW(&lMsg, nullptr, 0, 0, PM_REMOVE))
         {
-            TranslateMessage(&lMsg);
-            DispatchMessageA(&lMsg);
+            // FLAG PC-platform leaf: IsDialogMessage performs its own translation/dispatch.
+            if (!CgsSystem::KeyboardPC::ProcessMessage(&lMsg))
+            {
+                TranslateMessage(&lMsg);
+                DispatchMessageW(&lMsg);
+            }
         }
         else
         {
@@ -351,6 +357,7 @@ void EngineUpdate()
         }
     }
 
+    CgsSystem::KeyboardPC::OwnerClosing(renderengine::hWnd);
     gGameModule.EndFramesPC();
 
     // ⭐ [gateui r7 / defect B] NAME THE EXIT. A run that ends here ended because the game was

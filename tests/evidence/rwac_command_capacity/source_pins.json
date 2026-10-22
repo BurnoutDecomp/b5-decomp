@@ -5,28 +5,28 @@
   "base_head": "b823505348af025a784fc3ac171cfd0e7f0c1f99",
   "files": {
     "src/GameShared/GameClasses/System/PC/CgsAudioOutputPC.cpp": {
-      "expected_lf_sha256": "fe0f2085835d17e3f69037e15666d1f04559e86c2fbcd6c525abe1b49b3b77b7",
-      "expected_lf_bytes": 32804
+      "expected_lf_sha256": "736acfd2eb11baa93bb1e952e2d86f4637642d1e11aee760f2adfd4892511348",
+      "expected_lf_bytes": 32696
     },
     "src/GameShared/GameClasses/System/PC/CgsDacOutputPC.cpp": {
       "expected_lf_sha256": "0043d62c6661ecdf82b405ec6613c9e790c899ca3494bf1802bbc3c0b4c0e70b",
       "expected_lf_bytes": 6148
     },
     "src/GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h": {
-      "expected_lf_sha256": "250633966d40c1117426cb1f4f593921b36a1529f8c0c908af0393ae7ab2dfda",
-      "expected_lf_bytes": 7591
+      "expected_lf_sha256": "53539f57f64a65d9031758881690640594c0b194c9e09a96e99ab95a7e1e3c7f",
+      "expected_lf_bytes": 13898
     },
     "src/GameSource/Sound/Module/BrnRootSoundModule.cpp": {
-      "expected_lf_sha256": "ef0de945d409cd13a0498f1f9cb936642efbef557b0149c6a2b0fbd76d691849",
-      "expected_lf_bytes": 42204
+      "expected_lf_sha256": "872d74214a4fc87daed60a1dc7ce2654a847b07727a737bd183baad7c0ce51e9",
+      "expected_lf_bytes": 42424
     },
     "vendor/renderware/src/rw/audio/core/PlugIn.cpp": {
-      "expected_lf_sha256": "18df3e866fe6f23f4f45011a344124d6b3107766cbabefaa4260c4d12d334243",
-      "expected_lf_bytes": 9637
+      "expected_lf_sha256": "46b1aa0cc1013647e0b0ba48b1a1ccef7a916d3fae9babf82d95983cc08b7ad4",
+      "expected_lf_bytes": 9754
     },
     "tests/RwacCommandCapacity.cpp": {
-      "expected_lf_sha256": "98cbca094e1f00602a6899173c07c38c9990fff60c6ed4a0488b952cf6fbe918",
-      "expected_lf_bytes": 8793
+      "expected_lf_sha256": "e6f62863ab4c56b6fe297ea862fd42f30a5bd6db86e6c9016e71147f573f1808",
+      "expected_lf_bytes": 8832
     },
     "tests/run_rwac_command_capacity.py": {
       "expected_lf_sha256": "217f650696cfee3a6de4428241d98132020bd0c0b770ecc8763f279787d73a44",
@@ -45,5 +45,5 @@
     "original_git_lf_sha256": "e28e6fd1463b76ddc71d5dd51404787f225034014da99b67cdfdd1882a6a27c8",
     "original_git_lf_bytes": 8921
   },
-  "scope": "LF-content pins for the unchanged five-file diagnostic, corrected fixture, runner and retained baseline Git-LF source. Raw checkout hashes, byte counts and EOL variants are retained separately at runtime."
+  "scope": "LF-content pins for the default-off five-source diagnostic, epoch-initialized fixture, unchanged runner and retained baseline Git-LF source. Raw checkout hashes, byte counts and EOL variants are retained separately at runtime."
 }

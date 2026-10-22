@@ -446,10 +446,9 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         else
         {
             BrnGui::GuiEventUpdateHud lHudEvent;
-            lHudEvent.miSpeedMph = static_cast<s32>(lpRaceCarState->mfSpeedMPH);  // @972
-            lHudEvent.miRPM      = static_cast<s32>(lpRaceCarState->mfRPM);       // @984
-            lHudEvent.mi8Gear    = lpRaceCarState->mi8Gear;                       // @1092
-            lHudEvent.mau8Pad[0] = 0; lHudEvent.mau8Pad[1] = 0; lHudEvent.mau8Pad[2] = 0;
+            lHudEvent.miPlayerMPH = static_cast<s32>(lpRaceCarState->mfSpeedMPH);  // @972
+            lHudEvent.miPlayerRPM = static_cast<s32>(lpRaceCarState->mfRPM);       // @984
+            lHudEvent.miPlayerGear = static_cast<s32>(lpRaceCarState->mi8Gear);   // @1092, extsb/stw
             // (direct queue push -- AddGuiEvent<GuiEventUpdateHud> @0x823DA5C8 ==
             // AddEvent(&event, 147, 12))
             lpGuiInputBuffer->GetGuiEvents()->AddEvent(
@@ -475,10 +474,8 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     // county/district, the heading angle vs north off the car's At vector, the active
     // index byte and the type arm (player 0 / rival-AI 3 + model id / network 2 + model
     // id / else the "Unknown car type" assert) -- then post the whole record.
-    // The console's DoWorstCase pre-pass is gated on the GuiDebugComponent's worst-case
-    // HUD toggle (BSS byte @0x82FB508A, default 0, written only by UpdateWorstCaseHUD
-    // @0x8250CBC8); the debug component is not on this build, so the gate is constant
-    // false and the call is FLAG-omitted with it, not paraphrased.
+    // The actual debug gate and producer are recovered below. Their runtime call path
+    // still depends on the separately unmounted typed GuiModule input wrapper.
     {
         using BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface;
 
@@ -626,7 +623,9 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
 
             lSatNavEvent.miNumIcons = liNumIcons;          // @+0x900 (the case-199 count)
 
-            // [FLAG] `if (byte_82FB508A) DoWorstCase()` omitted -- see the banner above.
+            // ARTIST: the debug-menu gate is a BSS byte; run its actual producer before id 199.
+            if (BrnGui::GuiEventUpdateSatNav::msbForceWorstCase)
+                lSatNavEvent.DoWorstCase();
 
             // (direct queue push -- AddGuiEvent<GuiEventUpdateSatNav> @0x823D93A0 ==
             // AddEvent(&event, 199, 2320))
@@ -721,6 +720,9 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
             }
 
             lInfoEvent.SetNumEntries(liNumEntries);
+            // ARTIST: gate the race-info transform with its paired BSS byte before id 207.
+            if (BrnGui::GuiRaceCarInfoEvent::msbForceWorstCase)
+                lInfoEvent.DoWorstCase(lePlayerIndex, lpActiveInterface->GetPlayerDirection());
 
             // (direct queue push -- AddGuiEvent<GuiRaceCarInfoEvent> @0x823DA738 ==
             // AddEvent(&event, 207, 240))

@@ -1,6 +1,9 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/System/CgsXOverlapped.h" // CgsSystem::CgsXOverlapped + XOVERLAPPED slice
+#if defined(_WIN32) && !defined(_XBOX)
+#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
+#endif
 
 // CgsXOverlapped -- thin X360-only wrapper around the XDK XOVERLAPPED async
 // I/O structure. The embedded XOVERLAPPED is exactly 7 DWORDs (28 bytes); the
@@ -36,6 +39,11 @@ static char sacResultString[KU_RESULT_STRING_LENGTH];
 
 void CgsXOverlapped::Construct()
 {
+#if defined(_WIN32) && !defined(_XBOX)
+    // FLAG PC-platform leaf: reset invalidates an old native request at this address.
+    // The UI owns copies and never writes through this pointer; no title callback runs here.
+    CgsSystem::KeyboardPC::Forget(&mOverlapped);
+#endif
     // X360 @ 0x828D72C0: zero-fills 7 DWORDs (the embedded XOVERLAPPED, 28 bytes).
     // Pseudocode was a `do { *result++ = 0; } while (--v1)` loop with v1 = 7,
     // returning the advanced pointer (a memset register artifact). Logically a
@@ -43,10 +51,10 @@ void CgsXOverlapped::Construct()
     mOverlapped.InternalLow         = 0;
     mOverlapped.InternalHigh        = 0;
     mOverlapped.InternalContext     = 0;
-    mOverlapped.dwExtendedError     = 0;
     mOverlapped.hEvent              = 0;
+    mOverlapped.pCompletionRoutine  = 0;
     mOverlapped.dwCompletionContext = 0;
-    mOverlapped.dwReserved          = 0;
+    mOverlapped.dwExtendedError     = 0;
 }
 
 const char* CgsXOverlapped::GetResultString(PXOVERLAPPED lpOverlapped)

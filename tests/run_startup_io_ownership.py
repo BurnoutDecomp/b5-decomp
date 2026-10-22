@@ -56,7 +56,7 @@ def main():
     calibration = calibration_original
     if args.legacy_gui_write_lock:
         start = "mColourCalibrationScreen.Update("
-        end = "&mGuiOutQueue, mpTextureAllocator);"
+        end = "&mGuiOutQueue, mGuiConfig.mpTextureAllocator);"
         if calibration.count(start) != 1 or calibration.count(end) != 1:
             missing.append("unique production calibration call for legacy lock control")
         else:

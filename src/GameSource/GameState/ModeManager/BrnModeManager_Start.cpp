@@ -44,6 +44,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"                   // GetLastActiveRaceCarInterface
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"    // GetProfile, RequestUpdateRivals
 #include "GameSource/GameState/Progression/BrnProfile.h"               // Profile::FindCar
 #include "GameSource/GameState/Progression/BrnProgressionCarData.h"    // CarData::GetUnlockDeformationAmount
@@ -555,6 +556,17 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
     ClearLandmarkAndFinishLineData();
 }
 
+// ARTIST 0x82343E88: copy the scorer's original results and queue action229,264 bytes.
+void ModeManager::SendGameResultsToNetwork(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
+{
+    // Value-initialisation makes the four otherwise unwritten tail alignment bytes
+    // deterministic; original operator= then copies every defined engine field.
+    GameStateModuleIO::OnlineGameResults lResults = {};
+    lResults = mScoringSystem.mOnlineGameResults;
+    lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResults),
+        GameStateModuleIO::E_ACTION_ONLINE_GAME_RESULT, static_cast<s32>(sizeof(lResults)));
+}
+
 // ================================================================================================
 // ModeManager::SendModeStopMessages -- X360 0x8234BEC0
 // ================================================================================================
@@ -562,9 +574,8 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
 // six terminal actions depending on online/offline x quit/stop/last-round, clears the scoring
 // system, tells the GameStateModule the mode ended, and stops the mode clocks.
 //
-// SLICING (hazards H7 -- SendModeStopMessages is on the MAY-SLICE list): TWO online-only blocks
-// carry `ONLINE ARM DEFERRED` banners naming every console call they omit. Everything reachable
-// with mpCurrentGameMode->IsOnline() == false is WHOLE.
+// The online round/results block follows ARTIST 0x8234C210..0x8234C4CC. The target's
+// argument and payload extents are restored with the caller; offline behavior is unchanged.
 // ================================================================================================
 void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                                        bool                                lbTimedOut,
@@ -714,45 +725,72 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
 
     if (lbCurrentModeIsOnline)
     {
-        // ================================================================================
-        // [!] ONLINE ARM DEFERRED -- the network results / round-save block.
-        // ================================================================================
-        // Console @0x8234C210..0x8234C4CC, gated on `mpCurrentGameMode->IsOnline()`:
-        //   v39 = mpGameStateModule->GetLocalPlayerNetworkID();          // gsm + 232296
-        //   if (v39 == -1) { mScoringSystem.ClearCumulativeData(); }     // 0x8231F140 (DEF)
-        //   else {
-        //     if (!lbTimedOut && meCurrentGameModeType == E_MODE_ONLINE_RACE)
-        //       mpProgressionManager->OnOnlineRaceComplete(                // 0x82366B98 (BODIED
-        //           2026-09-06, lane rivals -- BrnProgressionManager_Rivals.cpp; this seat stays
-        //           deferred because the block around it still needs GetLocalPlayerNetworkID)
-        //           mScoringSystem.GetNumberOfNetworkPlayers(),            // 0x82311020
-        //           mScoringSystem.GetLead() == GetCarData(v39)->+0x144);  // 0x82310DA0 / 0x8231DD88
-        //     if (meCurrentGameModeType != E_MODE_ONLINE_SHOWTIME)
-        //       mScoringSystem.SaveNetworkRoundData(v39, &mTimerStatusInterface-sim-time,
-        //           mpGameStateModule->GetPlayerActiveRaceCarIndex(), meCurrentGameModeType);
-        //                                                                 // 0x8232BC78
-        //     if (mode is not the lobby/showtime pair) {
-        //       OnlineRoundResults lResults;  lResults.Construct();        // declared-only
-        //       for (car = 0; car < 8; ++car) { ... GetOnlineFinishPosition / SetPosition
-        //                                       ... Array<int,8>::Append with the
-        //                                       "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID"
-        //                                       assert (BrnGameActions.h:6641) ... }
-        //       AddEvent(lpGameActionQueue, &lResults, 230, 68);
-        //     }
-        //     if (lbTimedOut) GetCarData(v39)->+0x134 = mScoringSystem + 0x4DFC;
-        //     if (mode is the pair || !roundsRemaining || lbTimedOut) {
-        //       SendGameResultsToNetwork(lpGameActionQueue);               // 0x82343E88 (agent 9)
-        //       for (car = 0; car < 8; ++car) { maCarData[car].+0x134 = 0; .+0x138 = -1; }
-        //       mScoringSystem.mOnlineGameResults.Clear();                 // 0x8230F178
-        //     }
-        //   }
-        // STILL DEFERRED. GetLocalPlayerNetworkID, the car-data lookups, GetLead and the action id
-        // (230) are all in the tree now. What remains: ModeManager::SendGameResultsToNetwork has no
-        // body (it copies the scorer's OnlineGameResults into a 264-byte action 229, and the host
-        // record measures 260 -- a size residue its owner has to settle first), CarData's two words
-        // at +0x134 / +0x138 have no member names or accessors, and OnlineRoundResults::Construct
-        // has no body. The online terminal action below does not depend on this block.
-        // OFFLINE IMPACT: none. Every statement above is inside the IsOnline() gate.
+        const BrnNetwork::NetworkPlayerID lLocalPlayerID = mpGameStateModule->GetLocalPlayerNetworkID();
+        if (lLocalPlayerID == CgsNetwork::K_INVALID_PLAYER_ID)
+        {
+            mScoringSystem.ClearCumulativeData();
+        }
+        else
+        {
+            if (!lbTimedOut && meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_RACE)
+            {
+                const EActiveRaceCarIndex leLead = mScoringSystem.GetLead();
+                const CarData* lpLocalCarData = mScoringSystem.GetCarData(lLocalPlayerID);
+                const bool lbWon = leLead == lpLocalCarData->GetActiveRaceCarIndex();
+                const s32 liNumPlayers = mScoringSystem.GetNumberOfNetworkPlayers();
+                mpProgressionManager->OnOnlineRaceComplete(liNumPlayers, lbWon);
+            }
+
+            if (meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+            {
+                const CgsSystem::Time lSimTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
+                const EActiveRaceCarIndex leLocalCar = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+                mScoringSystem.SaveNetworkRoundData(lLocalPlayerID, lSimTime, leLocalCar, meCurrentGameModeType);
+            }
+
+            if (meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
+                meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+            {
+                GameStateModuleIO::OnlineRoundResults lRoundResults;
+                lRoundResults.Construct();
+                for (s32 liCar = E_ACTIVE_RACE_CAR_INDEX_0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+                {
+                    const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
+                    const CarData* lpCarData = mScoringSystem.GetCarData(leCar);
+                    if (lpCarData != NULL)
+                    {
+                        const bool lbDisconnected = mScoringSystem.GetPlayerDisconnected(leCar);
+                        const BrnNetwork::NetworkPlayerID lPlayerID = lpCarData->GetNetworkPlayerID();
+                        const s32 liPosition = lbDisconnected
+                            ? GameStateModuleIO::OnlineRoundResults::KI_POSITION_DISCONNECTED
+                            : mScoringSystem.GetOnlineFinishPosition(leCar);
+                        lRoundResults.SetPosition(lPlayerID, liPosition);
+                    }
+                    CGS_ASSERT(liCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                }
+                lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRoundResults),
+                    GameStateModuleIO::E_ACTION_ONLINE_ROUND_RESULT, static_cast<s32>(sizeof(lRoundResults)));
+            }
+
+            if (lbTimedOut)
+            {
+                CarData* lpLocalCarData = mScoringSystem.GetCarData(lLocalPlayerID);
+                if (lpLocalCarData != NULL)
+                {
+                    lpLocalCarData->SetRoundDisconnected(mScoringSystem.mOnlineGameResults.miReserved0x2C);
+                }
+            }
+
+            if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
+                meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME ||
+                GetNetworkRoundsRemaining(mpNetworkRoundManager) == 0 || lbTimedOut)
+            {
+                SendGameResultsToNetwork(lpGameActionQueue);
+                // The original unrolled eight {0,-1} pairs plus results.Clear are this exact helper.
+                mScoringSystem.ClearCumulativeData();
+            }
+        }
     }
 
     // `if (mode is not the lobby/showtime pair && (regionStart || noRoundsRemaining || timedOut))`

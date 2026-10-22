@@ -99,7 +99,7 @@ namespace BrnGui
     {
         CalibrationBoundary mColourCalibrationScreen;
         int mGuiOutQueue = 0;
-        void* mpTextureAllocator = nullptr;
+        struct { void* mpTextureAllocator = nullptr; } mGuiConfig;
         int coreCalls = 0;
         void Update();
         void Update(BrnResource::GameDataIO::InputBuffer* lpInput,
@@ -256,7 +256,7 @@ int main()
     Check(Idle(gScriptedOutput), "normal GUI output starts idle");
     BrnGui::GuiModule gui;
     int allocatorIdentity = 0;
-    gui.mpTextureAllocator = &allocatorIdentity;
+    gui.mGuiConfig.mpTextureAllocator = &allocatorIdentity;
     int assertionsBefore = gAsserts;
     gui.Update();
     Check(gInputGets == 1, "normal GUI obtains scripted input once");

@@ -345,7 +345,7 @@ namespace BrnGameState
         bool Prepare(CgsMemory::HeapMalloc* lpHeapMalloc);                          // :319 / 0x8232A430
         bool Release();                                                             // :323 / 0x823124A0
         void OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
-                         const GameModeParams* lpParams, bool lbRestart);           // :330 / 0x82338220
+                         const GameModeParams* lpParams, bool lbRestart, s32 liNumRounds);           // :330 / 0x82338220
         void OnModeEnd(bool lbAbort);                                               // :333
         void ClearCumulativeData();                                                 // :337 / 0x8231F140
 
@@ -721,7 +721,8 @@ namespace BrnGameState
 
         // ===== network round data (declare-only + trivial accessor) =====
         void SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSystem::Time lTime,
-                                  EActiveRaceCarIndex leRaceCarIndex);                         // :1025 / 0x8232BC78
+                                  EActiveRaceCarIndex leRaceCarIndex,
+                                  GameStateModuleIO::EGameModeType leGameMode);                         // :1025 / 0x8232BC78
         void ClearNetworkRoundData();                                                         // :1029
         NetworkRoundData* GetNetworkRoundData()       { return &mNetworkRoundData; }          // :1033 (inline)
 

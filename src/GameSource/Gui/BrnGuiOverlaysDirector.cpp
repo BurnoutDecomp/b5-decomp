@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/Model/CgsModelModule.h"
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"
 
 #include <cstring>   // std::memcpy (the buffered -> current overlay promote)
@@ -376,10 +377,7 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput
     mpGuiInputBuffer = NULL;
 }
 
-// Hand the director's output to the model input buffer, then clear it. The console
-// reaches the buffer through ModelModule::AddGuiEvents, a pure forwarder that never touches
-// its own `this` (it asserts the buffer and appends); this build has no CgsGui::ModelModule,
-// so the append is spelled directly, exactly as HudMessageDirector::Update does.
+// ARTIST825011C0: publish through the real bound Model, then clear.
 void GuiOverlaysDirector::BridgeOutEvents(CgsGui::ModelIO::InputBuffer* lpGuiModelInput)
 {
     if (mOutputQueue.GetLength() == 0)
@@ -387,24 +385,10 @@ void GuiOverlaysDirector::BridgeOutEvents(CgsGui::ModelIO::InputBuffer* lpGuiMod
 
     CGS_ASSERT(lpGuiModelInput != NULL, "lpGuiModelInput");
 
-    // [FLAG PC] the console asserts "mpModelModule" here. No CgsGui::ModelModule exists on
-    // PC and GuiModule::Construct passes NULL (the HudMessageDirector::Construct precedent),
-    // so the gap is reported once instead of asserting on every overlay frame.
-    // DELETE-WHEN CgsGui::ModelModule is reconstructed; then restore the assert.
-    if (mpModelModule == NULL)
-    {
-        static bool sbWarnedNullModelModule = false;
-        if (!sbWarnedNullModelModule && CgsDev::Log::gpDebugPrint != NULL)
-        {
-            sbWarnedNullModelModule = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC] GuiOverlaysDirector::BridgeOutEvents: no CgsGui::ModelModule on"
-                   " this build; appending straight to the model input buffer\n";
-        }
-    }
+    CGS_ASSERT(mpModelModule != NULL, "mpModelModule");
 
     lpGuiModelInput->LockForWrite();
-    lpGuiModelInput->GetEventQueueNonConst()->Append(mOutputQueue);
+    mpModelModule->AddGuiEvents(&mOutputQueue, lpGuiModelInput);
     lpGuiModelInput->UnlockForWrite();
 
     mOutputQueue.Clear();

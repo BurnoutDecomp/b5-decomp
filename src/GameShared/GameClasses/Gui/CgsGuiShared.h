@@ -3,11 +3,9 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
 
-// CgsGui::GuiAccessPointers - the bundle of shared resources a GUI state reaches
-// through its StateInterface (apt/flapt data, the language manager, the gui cache,
-// and the game-data-module input/receiver queues). All pointees are forward-declared
-// since GuiAccessPointers only holds pointers to them. Layout from the DecFIGS DWARF
-// (CgsGuiShared.h).
+// CgsGui::GuiAccessPointers is the module-owned state-access bundle. DecFIGS
+// supplies the declaration shape; ARTIST82518C50..82518D24 additionally attests
+// the GUI replay serialiser between the cache and real GameData input pointers.
 namespace CgsModule { template <s32, s32> class EventReceiverQueue; }
 namespace CgsLanguage { class LanguageManager; }
 // struct (not class) to match the defining headers (BrnFlaptFileRef.h /
@@ -15,10 +13,8 @@ namespace CgsLanguage { class LanguageManager; }
 // declaration forks the decorated names of every function taking these types.
 namespace BrnFlapt { struct FileRef; struct FlaptManager; }
 
-// The global event-queue namespace (see CgsGuiState.h): mpGDMInput points at the GUI-event input
-// queue the GameDataModule fills -- the same InputBuffer::GuiEventQueue the GUI state reads. Declared
-// as a namespace (not a global `class`) so it does not clash with the game-state `namespace InputBuffer`.
-namespace InputBuffer { class GuiEventQueue; }
+namespace BrnReplays { class GuiModuleSerialiser; }
+namespace BrnResource { namespace GameDataIO { struct InputBuffer; } }
 
 namespace CgsGui
 {
@@ -49,7 +45,8 @@ namespace CgsGui
         BrnFlapt::FileRef*          mpFlaptFile;
         BrnFlapt::FlaptManager*     mpFlaptManager;
         BrnGui::GuiCache*           mpGuiCache;
-        InputBuffer::GuiEventQueue* mpGDMInput;
+        BrnReplays::GuiModuleSerialiser* mpSerialiser;
+        BrnResource::GameDataIO::InputBuffer* mpGDMInput;
         GuiEventReceiverQueue*      mpGDMReceiverQueue;
 
     public:
@@ -58,13 +55,15 @@ namespace CgsGui
         void SetFlaptFile(const BrnFlapt::FileRef& lFlaptFile);
         void SetFlaptManager(BrnFlapt::FlaptManager* lpFlaptManager);
         void SetGuiCache(BrnGui::GuiCache* lpGuiCache);
-        void SetGDMInput(InputBuffer::GuiEventQueue* lpInput);
+        void SetSerialiser(BrnReplays::GuiModuleSerialiser* lpSerialiser);
+        void SetGDMInput(BrnResource::GameDataIO::InputBuffer* lpInput);
         void SetGDMReceiverQueue(GuiEventReceiverQueue* lpReceiverQueue);
 
         BrnFlapt::FileRef*      GetFlaptFile();
         BrnFlapt::FlaptManager* GetFlaptManager();
         BrnGui::GuiCache*       GetGuiCache();
-        InputBuffer::GuiEventQueue* GetGDMInput();
+        BrnReplays::GuiModuleSerialiser* GetSerialiser();
+        BrnResource::GameDataIO::InputBuffer* GetGDMInput();
         GuiEventReceiverQueue*  GetGDMReceiverQueue();
     };
 

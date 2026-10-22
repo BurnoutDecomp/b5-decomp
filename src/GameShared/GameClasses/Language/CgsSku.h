@@ -31,7 +31,7 @@
 namespace CgsGui
 {
     // The owning GUI subsystem module (CgsGuiModule.cpp). Used only by pointer here.
-    struct GuiModule;
+    class GuiModule;
 
     namespace ModelIO
     {

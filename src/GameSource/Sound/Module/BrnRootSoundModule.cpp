@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"
+#include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
@@ -17,8 +18,6 @@
 #include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h" // private pre-overwrite diagnostic
 
 #include <cstring>
-
-namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (ctor 0x827E4808, Construct 0x826AF350, Prepare 0x826FABF8), cross-checked against the DecFIGS
@@ -392,6 +391,9 @@ namespace Module
         CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");
         CGS_ASSERT(lpSoundModuleOutputBuffer != 0, "lpSoundModuleOutputBuffer != NULL");
 
+        // Sample the optional diagnostic switch before creating the System/device callbacks.
+        CgsSystem::RwacCommandTracePC::ConfigureFromEnvironment();
+
         // Per-call scratch IO buffers -- all three REAL since phase B5:
         //   Io::LogicOutputBuffer                        on the OUTPUT stack ("SoundLogic")
         //   CgsSound::Playback::Module::Io::InputBuffer  on the INPUT stack  ("SoundPlayback")
@@ -455,6 +457,7 @@ namespace Module
             //   byte_82FFBF89 = 1 == the testbed's rwac-locked test toggle.
             mpSystem = rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 196608);
             CGS_ASSERT(mpSystem != 0, "mpSystem");
+            CgsSystem::RwacCommandTracePC::BeginSystemEpoch(mpSystem);
             gRwacTestBedAlloc.EnableRwacLockedTest(true);
 
             // Bring-up trace (host log line; the console has no equivalent print).

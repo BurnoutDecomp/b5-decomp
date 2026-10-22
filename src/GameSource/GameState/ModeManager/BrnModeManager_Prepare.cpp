@@ -282,15 +282,9 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // (mode == 15 || mode == 16) && mbInstantIntroSplash into r11 and passes r6 = !that. That
     // composite is exactly IsOnlineModeWithInstantIntro().
     //
-    // [!] SIGNATURE DIVERGENCE (header_request against BrnScoringSystem.h): the X360 passes a
-    // FOURTH argument -- `lwz r11, 0x6D64(this); lwz r7, 0x12C(r11)` @0x8234B3CC/0x8234B3DC, i.e.
-    // mpNetworkRoundManager->GetTotalRounds(). The committed declaration is the PS3 DWARF's 3-arg
-    // form, so the round count is DROPPED here. Any OnModeStart leg that scales with the number of
-    // rounds is inert until the 4th parameter lands. Console call:
-    //     ScoringSystem::OnModeStart(&mScoringSystem, meCurrentGameModeType, lpGameModeParams,
-    //                                !IsOnlineModeWithInstantIntro(),
-    //                                mpNetworkRoundManager->GetTotalRounds());
-    mScoringSystem.OnModeStart(meCurrentGameModeType, lpGameModeParams, !IsOnlineModeWithInstantIntro());
+    // ARTIST 0x8234B3CC..0x8234B3E0 supplies the total-round count in r7.
+    mScoringSystem.OnModeStart(meCurrentGameModeType, lpGameModeParams,
+                              !IsOnlineModeWithInstantIntro(), mpNetworkRoundManager->GetTotalRounds());
 
     // ------------------------------------------------------------------------------------------
     // THE STREAMING GATE. Console @0x8234B3E4..0x8234B420:

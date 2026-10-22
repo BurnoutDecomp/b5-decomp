@@ -137,7 +137,7 @@ s32 GuiEventUpdateSatNav::SatNavI(const GuiEventUpdateSatNav* lpThis)
 // The X360 used VMX (lvx128/stvx128) to move the 16-byte position lanes; reproduced
 // here as scalar Vector4 lane assignments (semantic parity, endian-independent).
 // ---------------------------------------------------------------------------
-GuiEventUpdateSatNav* GuiEventUpdateSatNav::DoWorstCase()
+void GuiEventUpdateSatNav::DoWorstCase()
 {
     // ---- phase 1: locate the player-car icon (type 0) and compact it to the front ----
     s32 liPlayerIdx = 0;
@@ -200,7 +200,6 @@ GuiEventUpdateSatNav* GuiEventUpdateSatNav::DoWorstCase()
     }
 
     miNumIcons = 8;
-    return this;
 }
 
 // ===================================================================================

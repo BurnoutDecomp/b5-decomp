@@ -9,6 +9,8 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"             // CgsModule::Event, VariableEventQueue
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                                // BrnGui::GuiEventPlayVideo/StopVideo (508/509)
 #include "GameSource/Gui/BrnGuiMovieAllocator.h"
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // original reply receiver
+#include "GameShared/GameClasses/Language/CgsSku.h" // original CgsLanguage::ELanguage
 
 // BrnGui::MovieManager -- the GUI-side movie controller, reconstructed from the X360 ARTIST build:
 //   Construct        0x824F9598   Prepare       0x82514780   Update    0x82507A98
@@ -26,6 +28,9 @@
 // Collision-world/car-pool reclaim and asynchronous bundle acquisition remain
 // separate reconstruction debt. The real movie allocator/arena lifetime is restored;
 // its host backing is explicit and does not simulate reclaimed car-pool memory.
+namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
+namespace BrnResource { namespace GameDataIO { struct SwapOutCollisionWorldResponse; } }
+
 namespace BrnGui
 {
     class MovieManager
@@ -108,6 +113,10 @@ namespace BrnGui
 
         void Construct();
         bool Prepare(s32 leLanguage);                                     // requests VIDEOS\VIDEOLIST.BUNDLE
+        // Original asynchronous overload; selected PC preparation still uses Prepare(s32).
+        bool Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
+            CgsLanguage::ELanguage leLanguage);
         bool Release();
         void Destruct();
 
@@ -136,6 +145,37 @@ namespace BrnGui
         // VALID (true) or INVALID (false). Stashed for the memory-reclaim path.
         void SetCarPoolValid(bool lbValid, const CgsResource::SmallResource& lrResource,
                              const CgsResource::Entry::ResourceDescriptor& lrDescriptor);
+
+        // Original request-to-in-progress handshakes in ARTIST82519578/82514228.
+        bool PendingCollisionWorldInvalidate()
+        {
+            if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALIDATE) return false;
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALIDATING;
+            return true;
+        }
+        bool PendingCollisionWorldValidate()
+        {
+            if (meCollisionWorldState != E_COLLISIONWORLDSTATE_VALIDATE) return false;
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALIDATING;
+            return true;
+        }
+        void SetCollisionWorldValid(bool lbValid)
+        {
+            meCollisionWorldState = lbValid ? E_COLLISIONWORLDSTATE_VALID : E_COLLISIONWORLDSTATE_INVALID;
+        }
+        bool PendingCarPoolInvalidate()
+        {
+            if (meCarPoolState != E_CARPOOLSTATE_INVALIDATE) return false;
+            meCarPoolState = E_CARPOOLSTATE_INVALIDATING;
+            return true;
+        }
+        bool PendingCarPoolValidate()
+        {
+            if (meCarPoolState != E_CARPOOLSTATE_VALIDATE) return false;
+            meCarPoolState = E_CARPOOLSTATE_VALIDATING;
+            return true;
+        }
+        void FreeCollisionPoolMemory(const BrnResource::GameDataIO::SwapOutCollisionWorldResponse* lpResponse);
 
         // The manager parks in REPORTING_FINISHED (12) when a video ends -- Update keeps it there (X360
         // Update case 12 self-loops). The GUI flow that owns the manager acknowledges the finish (sends the
@@ -183,7 +223,9 @@ namespace BrnGui
 
         // The receiver queue the GUI pushes GuiEventPlayVideo/StopVideo (and the GameDataModule its
         // bundle/acquire responses) onto (X360 EventReceiverQueue<1024,16>).
-        CgsModule::VariableEventQueue<1024, 16>* GetReceiverQueue() { return &mReceiverQueue; }
+        // Original DWARF spelling and compatibility spelling share the same receiver.
+        CgsModule::BaseEventReceiverQueue* GetRecieverQueue() { return &mReceiverQueue; }
+        CgsModule::BaseEventReceiverQueue* GetReceiverQueue() { return GetRecieverQueue(); }
 
     private:
         bool QueueNextMovie();                          // VideoDataResource -> GetVideoFile(lang) -> player name
@@ -211,7 +253,7 @@ namespace BrnGui
         rw::Resource             mResourceAllocatorResource;
         uintptr_t                muFirstCollisionBlockAddress;
         u32                      muNumCollisionBlocks;
-        CgsModule::VariableEventQueue<1024, 16> mReceiverQueue;
+        CgsModule::EventReceiverQueue<1024, 16> mReceiverQueue;
         VideoDefinition          mPlayingMovie;
         VideoDefinition          mQueuedMovie;
         bool                     mbUsesXMPMusic;             // X360 +0xD56 [stub: XMP background music]

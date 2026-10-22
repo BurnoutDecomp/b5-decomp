@@ -603,6 +603,7 @@ void TestToneFill(s16* lpOut, int liFrames, void* lpUser)
 
 bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* lpUser)
 {
+    RwacCommandTracePC::ConfigureFromEnvironment();
     if (g_pSource)
         return true; // already open
     if (liSampleRate != 48000 || liChannels != 2)
@@ -632,11 +633,14 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         Close();
         return false;
     }
-    const HRESULT lTraceRegistration =
-        g_pXAudio2->RegisterForCallbacks(&g_engineCallbackTrace);
-    g_engineCallbackTraceRegistered = SUCCEEDED(lTraceRegistration);
-    RwacCommandTracePC::gState.muEngineCallbackRegistration.store(
-        static_cast<unsigned>(lTraceRegistration), std::memory_order_relaxed);
+    g_engineCallbackTraceRegistered = false;
+    if (RwacCommandTracePC::Enabled())
+    {
+        const HRESULT lTraceRegistration =
+            g_pXAudio2->RegisterForCallbacks(&g_engineCallbackTrace);
+        g_engineCallbackTraceRegistered = SUCCEEDED(lTraceRegistration);
+        RwacCommandTracePC::MarkEngineCallbackRegistration(lTraceRegistration);
+    }
     UINT32 luEndpointIndex = UINT32_MAX;
     const HRESULT lMasterResult = CreateMasteringVoiceWithEndpointFallback(
         liChannels, liSampleRate, &luEndpointIndex);
@@ -693,8 +697,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         return false;
     }
 
-    RwacCommandTracePC::gState.muDeviceOpen.store(1, std::memory_order_relaxed);
-    RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceOpened);
+    RwacCommandTracePC::MarkDeviceOpened();
     AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels
               << " ch (float PCM, final saturation)";
     if (luEndpointIndex != UINT32_MAX)
@@ -718,8 +721,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
 void AudioOutputPC::Close()
 {
-    RwacCommandTracePC::gState.muDeviceOpen.store(0, std::memory_order_relaxed);
-    RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceClosed);
+    RwacCommandTracePC::MarkDeviceClosed();
     // DestroyVoice waits for the last callback before buffers, bindings or
     // capture headers are touched. Diagnostic writes have their own drain barrier.
     if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }

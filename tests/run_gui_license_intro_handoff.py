@@ -2,8 +2,9 @@
 
 No game is started. --old-tail-cache restores only the old placement in the current
 source; it must execute the same 64 checks and report the binding-before-use witness.
-The extracted full Intro handler and unguarded License body run against explicit
-profile/calendar/VM/collaborator/FSM boundaries. This is not a full GUI/ABI fixture.
+The exact production Profile-350 dispatch arm and common observer fan-out, full Intro
+handler, and unguarded License body run against explicit profile/calendar/VM/
+collaborator/FSM boundaries. This is not a full GUI/ABI fixture.
 """
 import argparse
 import hashlib
@@ -31,6 +32,7 @@ PUSH_H = "src/GameSource/Game/GameBridgeGameStateToX.h"
 EVENTS_H = "src/GameSource/Gui/BrnGuiEventTypeDefs.h"
 GUI_EVENT_H = "src/GameShared/GameClasses/Gui/CgsGuiEvent.h"
 INTERFACE = "src/GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.cpp"
+INTERFACE_H = "src/GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 QUEUE_H = "src/GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 
 
@@ -125,8 +127,7 @@ def main():
             + body(ACTIONS, "struct ProgressionProfileDataAction") + ";\n}}\n"
             "namespace CgsGui {\ntemplate<s32 EventTypeId>\n"
             + body(GUI_EVENT_H, "struct GuiEvent :") + ";\n"
-            + body(INTERFACE, "struct RegisterEventRecord") + ";\n"
-            + statement(read(INTERFACE), "const s32 KI_REGISTER_RECORD_SIZE ")
+            + body(INTERFACE_H, "struct GuiEventRegisterForEvents") + ";\n"
             + "\n}\nnamespace BrnGui {\n"
             + body(EVENTS_H, "struct GuiEventProgressionProfileData") + ";\n"
             + body(GUI, "struct GuiEventCache :") + ";\n"
@@ -158,7 +159,45 @@ def main():
         # The control relocates the SAME current-source block; no old revision or
         # synthetic dispatch implementation can satisfy the numeric negative gate.
 
-        dispatch = body(GUI, "void GuiModule::DispatchInboundGuiEvents()")
+        dispatch_source = body(GUI, "void GuiModule::DispatchInboundGuiEvents(bool&")
+        profile_case_labels = list(re.finditer(r"(?m)^[ \t]*case 350:", dispatch_source))
+        if len(profile_case_labels) != 1:
+            raise ValueError("native profile-350 dispatch arm is not unique")
+        profile_case_start = profile_case_labels[0].start()
+        profile_cache_call = "mGuiCache.RecEvent(lpEvent, liId);"
+        profile_case_cache_end = dispatch_source.index(
+            profile_cache_call, profile_case_start) + len(profile_cache_call)
+        profile_case_end = dispatch_source.index("break;", profile_case_cache_end) + len("break;")
+        profile_case = dispatch_source[profile_case_start:profile_case_end]
+        dispatch_tail_start = dispatch_source.index(
+            "mCustomRendererManager.RecvEvent(lpEvent, liId);", profile_case_end)
+        dispatch_tail_end = dispatch_source.index(
+            "const CgsModule::Event* lpNext = 0;", dispatch_tail_start)
+        dispatch_tail = dispatch_source[dispatch_tail_start:dispatch_tail_end]
+        # The recovered dispatcher also owns unrelated keyboard/save-image/platform
+        # arms. This fixture compiles its exact Profile-350 arm and common fan-out,
+        # with the one-record queue walk kept as a transparent test boundary.
+        dispatch = (
+            "void GuiModule::DispatchInboundGuiEvents() {\n"
+            "    if (mpGuiEventInputBuffer == nullptr) return;\n"
+            "    mpGuiEventInputBuffer->LockForRead();\n"
+            "    const auto* lpInQueue = mpGuiEventInputBuffer->GetGuiEvents();\n"
+            "    const CgsModule::Event* lpEvent = nullptr;\n"
+            "    s32 liSize = 0;\n"
+            "    s32 liId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);\n"
+            "    while (liId >= 0 && lpEvent != nullptr) {\n"
+            "        switch (liId) {\n"
+            + profile_case
+            + "\n            default: break;\n"
+            + "        }\n"
+            + dispatch_tail
+            + "        const CgsModule::Event* lpNext = nullptr;\n"
+            + "        liId = lpInQueue->GetNextEvent(lpEvent, &lpNext, &liSize);\n"
+            + "        lpEvent = lpNext;\n"
+            + "    }\n"
+            + "    mpGuiEventInputBuffer->UnlockForRead();\n"
+            + "}\n"
+        )
         routing = body(GUI, "void GuiModule::RouteEventToFlow(")
         drain = body(GUI, "void GuiModule::DrainFlowOutputQueue(")
         reg_start = drain.index("case 34:")
@@ -299,8 +338,15 @@ switch(id) {
         profile_branch = code_only(license_body)
         intro_handler = code_only(methods[6])
         wiring = [
+            ("actual Profile-350 dispatch arm binds profile/cache and reaches subscribed flow",
+             in_order(code_only(profile_case),
+                 ["mProfileHost.GetProfileManager().SetProgressionProfile",
+                  "mGuiCache.RecEvent(lpEvent, liId);"])
+             and in_order(code_only(dispatch_tail),
+                 ["mCustomRendererManager.RecvEvent(lpEvent, liId);",
+                  "RouteEventToFlow(lpEvent, liId, liSize);"])),
             ("current-frame inbound profile precedes one cache handoff before flows",
-             in_order(clean_core, ["DispatchInboundGuiEvents();",
+             in_order(clean_core, ["DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);",
                  "RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,",
                  "mScreenFlow.Update();", "mScreenInQueue.Clear();",
                  "DrainFlowOutputQueue(E_GUIFLOW_SCREEN);"])),
@@ -360,8 +406,9 @@ switch(id) {
             "numeric_expected": NUMERIC_TOTAL,
             "intended_negative_witness": WITNESS if args.old_tail_cache else None,
             "boundaries": "Large collaborators/calendar/profile/VM/FSM shell; real queue, "
-                "provider/translation statements, module routing/dispatch, Intro/License bodies; "
-                "test wrapper rejects unbound member calls before delegating to the unguarded body",
+                "provider/translation statements, the exact production Profile-350 dispatch arm "
+                "and common fan-out, module routing, Intro/License bodies; the selected event-loop "
+                "wrapper handles the fixture's one-record queue; "
         })
         receipt_path.write_text(json.dumps(receipt, indent=2)+"\n", encoding="utf-8")
     if numeric is None:

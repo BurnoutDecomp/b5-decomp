@@ -361,6 +361,14 @@ namespace BrnGame
         CgsModule::IOBufferStack* GetUpdateInputBufferStack()  { return mpUpdateInputBufferStack; }
         CgsModule::IOBufferStack* GetUpdateOutputBufferStack() { return mpUpdateOutputBufferStack; }
 
+        // ARTIST823DCD78. Dormant until the complete native GUI PreWorld
+        // override and its validators/Profile/movie dependencies are composed.
+        void DoUpdate_GuiPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+            CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+            BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
+
         // ⭐ THIS SUB-STEP'S WORLD UPDATE OUTPUT BUFFER (2026-08-01, camera wave).
         // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
         // sub-step, near the top, and threads the same pointer through DoUpdate_World,

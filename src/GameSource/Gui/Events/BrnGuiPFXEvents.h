@@ -2,6 +2,7 @@
 #define BRN_GUI_PFX_EVENTS_H
 
 #include "types.hpp"
+#include <cstddef>
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N>
 #include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"        // BrnGui::KI_MAX_PFX_ID_LENGTH
 
@@ -30,8 +31,9 @@ namespace BrnGui
 {
     typedef char HookNameString[KI_MAX_PFX_ID_LENGTH + 1];   // BrnGuiPFXHooks.h:37 -- 33 bytes
 
-    struct GuiPFXHookEvent : public CgsGui::GuiEvent<495>
+    struct GuiPFXHookEvent : public CgsModule::Event
     {
+        s32 GetEventType() const { return 495; }
         u32            muGuid;                        // :5966  +0x00
         f32            mfMaximumBloomWeight;          // :5968  +0x04
         f32            mfMaximumVignetteWeight;       // :5969  +0x08
@@ -43,8 +45,9 @@ namespace BrnGui
         u8             maPad3D[3];
     };
 
-    struct GuiPFXHookStopEvent : public CgsGui::GuiEvent<496>
+    struct GuiPFXHookStopEvent : public CgsModule::Event
     {
+        s32 GetEventType() const { return 496; }
         u32            muGuid;                        // :6012  +0x00
         HookNameString macName;                       // :6013  +0x04
         u8             maPad25[3];
@@ -52,16 +55,18 @@ namespace BrnGui
 
     struct GuiPFXStopMenuHookEvent : public CgsGui::GuiEvent<497> {};
 
-    struct GuiPFXStartBackgroundHookEvent : public CgsGui::GuiEvent<498>
+    struct GuiPFXStartBackgroundHookEvent : public CgsModule::Event
     {
+        s32 GetEventType() const { return 498; }
         u32            muGuid;                        // :5989  +0x00
         HookNameString macName;                       // :5990  +0x04
         u8             maPad25[3];
         f32            mfMaximumWeight;               // :5991  +0x28
     };
 
-    struct GuiPFXStopBackgroundHookEvent : public CgsGui::GuiEvent<499>
+    struct GuiPFXStopBackgroundHookEvent : public CgsModule::Event
     {
+        s32 GetEventType() const { return 499; }
         u32            muGuid;                        // :5997  +0x00
         HookNameString macName;                       // :5998  +0x04
         u8             maPad25[3];
@@ -69,11 +74,33 @@ namespace BrnGui
 
     struct GuiPFXHookEnumerationRequest : public CgsGui::GuiEvent<500> {};
 
-    struct GuiPFXHookEnumeration : public CgsGui::GuiEvent<501>
+    // Original commands are their complete payload objects. Flatten the
+    // original empty GuiEvent base; no synthetic GUI prefix occupies storage.
+    static_assert(sizeof(GuiPFXHookEvent) == 64 &&
+                  offsetof(GuiPFXHookEvent, muGuid) == 0 &&
+                  offsetof(GuiPFXHookEvent, mfMaximumBloomWeight) == 4 &&
+                  offsetof(GuiPFXHookEvent, macName) == 28, "PFX495 native record");
+    static_assert(sizeof(GuiPFXHookStopEvent) == 40 &&
+                  offsetof(GuiPFXHookStopEvent, macName) == 4, "PFX496 native record");
+    static_assert(sizeof(GuiPFXStartBackgroundHookEvent) == 44 &&
+                  offsetof(GuiPFXStartBackgroundHookEvent, mfMaximumWeight) == 40,
+                  "PFX498 native record");
+    static_assert(sizeof(GuiPFXStopBackgroundHookEvent) == 40 &&
+                  offsetof(GuiPFXStopBackgroundHookEvent, macName) == 4,
+                  "PFX499 native record");
+    static_assert(sizeof(GuiPFXStopMenuHookEvent) == 1 &&
+                  sizeof(GuiPFXHookEnumerationRequest) == 1, "PFX command tags");
+
+    // ARTIST8250C4E8 publishes404 bytes: count followed by100 pointers,
+    // with no in-payload GUI header. Host pointer alignment/width is native.
+    struct GuiPFXHookEnumeration : public CgsModule::Event
     {
         s32         miHookNameCount;                  // :6048
-        const char* mapHookNames[100];                // :6049  (widened: real pointers on PC)
+        const char* mapHookNames[100];                // :6049
+        s32 GetEventType() const { return 501; }
     };
+    static_assert(sizeof(GuiPFXHookEnumeration) == 101 * sizeof(const char*),
+                  "PFX enumeration is count plus100 native pointers");
 }
 
 #endif
