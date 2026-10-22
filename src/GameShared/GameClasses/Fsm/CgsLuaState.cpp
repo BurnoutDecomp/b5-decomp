@@ -132,6 +132,7 @@ int LuaState::GetInt(const char* lpcFunctionName, CgsID lVariableId)
 void LuaState::GetString(const char* lpcFunctionName, CgsID lVariableId, char* lpcOut, int liOutSize)
 {
     CGS_ASSERT(mpLuaState != nullptr, "mpLuaState");
+    lpcOut[0] = '\0';  // ARTIST 0x8283628C: retain an empty output if Lua returns no string.
     lua_getfield(mpLuaState, LUA_GLOBALSINDEX, lpcFunctionName);
     LuaPushId(lVariableId);
     lua_pcall(mpLuaState, 1, 1, 0);
