@@ -12,6 +12,8 @@
 #include <cstddef>                                          // offsetof (layout asserts)
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"                   // VehicleManager (RecordCrashContact's two bare reads; friend)
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"            // PhysicalTrafficVehicle lookup
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // traffic body snapshot
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"       // RaceCarPhysics (GetTransform / GetDeformableAABB / GetLinearVelocity)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"        // shared debug-menu tunables
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"         // CgsGeometric::AxisAlignedBox
@@ -525,6 +527,85 @@ namespace Vehicle
             lpRender->DrawLine(MakeVector2(lv2Centre.x - lpCarVelocity->x * KF_VELOCITY_SCALE,
                                            lv2Centre.y - lpCarVelocity->z * KF_VELOCITY_SCALE),
                                lv2Centre, 0xFF00FFFFu);
+        }
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RecordRaceCarTrafficContact @ 0x825B7270 (140 instructions)
+    //
+    // The X360 caller is HandleRaceCarTrafficCarPotentialContact @0x8263FA50, call site
+    // 0x826401E4. It passes the current PotentialContact, race-car slot, and physical traffic slot.
+    // Identical ordered pairs are not recorded twice; a reversed duplicate fires the original
+    // assert and then still refreshes the snapshot. This is debug state only.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RecordRaceCarTrafficContact(
+        const CgsSceneManager::SceneManagerIO::PotentialContact* lpPotentialContact,
+        s32 liRaceCarIndex, s32 liTrafficIndex)
+    {
+
+        const u32 luEntityIdA = static_cast<u32>(lpPotentialContact->muVolumeInstanceIdA.muId >> 32);
+        const u32 luEntityIdB = static_cast<u32>(lpPotentialContact->muVolumeInstanceIdB.muId >> 32);
+        CGS_ASSERT((luEntityIdA >> 24) == static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR),
+                   "lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR"); // :845
+        CGS_ASSERT((luEntityIdB >> 24) == static_cast<u32>(BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE),
+                   "lEntityIdB.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :846
+
+        const u32 luLastEntityIdA =
+            static_cast<u32>(mLastTrafficContact_Contact.muVolumeInstanceIdA.muId >> 32);
+        const u32 luLastEntityIdB =
+            static_cast<u32>(mLastTrafficContact_Contact.muVolumeInstanceIdB.muId >> 32);
+        if (luEntityIdA != luLastEntityIdA || luEntityIdB != luLastEntityIdB)
+        {
+            CGS_ASSERT(luEntityIdB != luLastEntityIdA || luEntityIdA != luLastEntityIdB,
+                       "lEntityIdB != mLastTrafficContact_Contact.muVolumeInstanceIdA.GetEntityId() || "
+                       "lEntityIdA != mLastTrafficContact_Contact.muVolumeInstanceIdB.GetEntityId()"); // :854
+
+            const RaceCarPhysics& lrRaceCar = mpVehicleManager->maRaceCarVehicles[liRaceCarIndex];
+            const PhysicalTrafficVehicle* const lpTrafficVehicle =
+                mpVehicleManager->mPhysicalTrafficManager.GetTrafficVehicle(liTrafficIndex);
+            const SimpleVehiclePhysics* const lpTrafficBody = lpTrafficVehicle->mpVehicleBody;
+
+            mLastTrafficContact_RaceCarTransform = lrRaceCar.GetTransform();
+            mLastTrafficContact_TrafficTransform = lpTrafficBody->GetTransform();
+
+            const CgsGeometric::AxisAlignedBox& lrRaceCarAABB = lrRaceCar.GetDeformableAABB();
+            mLastTrafficContact_RaceCarHalfExt = Vector3{
+                (lrRaceCarAABB.mMax.x - lrRaceCarAABB.mMin.x) * 0.5f,
+                (lrRaceCarAABB.mMax.y - lrRaceCarAABB.mMin.y) * 0.5f,
+                (lrRaceCarAABB.mMax.z - lrRaceCarAABB.mMin.z) * 0.5f,
+                (lrRaceCarAABB.mMax.w - lrRaceCarAABB.mMin.w) * 0.5f };
+            const CgsGeometric::AxisAlignedBox& lrTrafficAABB = lpTrafficBody->GetDeformableAABB();
+            mLastTrafficContact_TrafficHalfExt = Vector3{
+                (lrTrafficAABB.mMax.x - lrTrafficAABB.mMin.x) * 0.5f,
+                (lrTrafficAABB.mMax.y - lrTrafficAABB.mMin.y) * 0.5f,
+                (lrTrafficAABB.mMax.z - lrTrafficAABB.mMin.z) * 0.5f,
+                (lrTrafficAABB.mMax.w - lrTrafficAABB.mMin.w) * 0.5f };
+
+            mLastTrafficContact_RaceCarVelocity = lrRaceCar.GetLinearVelocity();
+            mLastTrafficContact_TrafficVelocity = lpTrafficBody->GetLinearVelocity();
+            mLastTrafficContact_Contact = *lpPotentialContact;
+        }
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RecordStuckInCollisionLineTestResult @0x825B7A48 (34 instructions)
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RecordStuckInCollisionLineTestResult(
+        const CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc::StreamResult* lpResult)
+    {
+        CGS_ASSERT(lpResult != nullptr, "lpResult != NULL"); // :1197
+        for (s32 liLine = 0; liLine < 4; ++liLine) // X360 loop bound 4; the StreamResult has five slots
+        {
+            if (lpResult->mabHit[liLine] != 0)
+            {
+                mabStuckInCollisionIntersection[liLine] = true;
+                const Vector4& lrHit = lpResult->maHitPosition[liLine];
+                Vector3& lrPoint = maStuckInCollisionLineTestPoint[liLine];
+                lrPoint.x = lrHit.x;
+                lrPoint.y = lrHit.y;
+                lrPoint.z = lrHit.z;
+                lrPoint.w = lrHit.w;
+            }
         }
     }
 
