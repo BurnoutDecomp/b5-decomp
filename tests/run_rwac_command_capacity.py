@@ -29,6 +29,7 @@ BASELINE_FAILURES = {
     "record is bounded and complete",
 }
 SUMMARY = re.compile(r"^RWAC_CAPACITY checks=(\d+) failures=(\d+)$", re.MULTILINE)
+FIRST_PASS_SUMMARY = re.compile(r"^RWAC_FIRST_PASS checks=(\d+) failures=(\d+)$", re.MULTILINE)
 SOURCE_PIN_PATH = "tests/evidence/rwac_command_capacity/source_pins.json"
 NORMALIZATION = "crlf_to_lf_only"
 PINNED_SOURCES = {
@@ -355,20 +356,29 @@ def run_owned(command: list[str], cwd: Path, log: Path, timeout_seconds: int) ->
 def classify_run(row: dict, text: str, baseline: bool) -> None:
     summaries = SUMMARY.findall(text)
     failures = re.findall(r"^FAIL (.+)$", text, re.MULTILINE)
+    first_pass_summaries = FIRST_PASS_SUMMARY.findall(text)
+    first_pass_failures = re.findall(r"^FAIL_FIRST_PASS (.+)$", text, re.MULTILINE)
     row["failure_labels"] = failures
     row["checks"] = int(summaries[0][0]) if len(summaries) == 1 else None
     row["failures"] = int(summaries[0][1]) if len(summaries) == 1 else None
+    row["first_pass_failure_labels"] = first_pass_failures
+    row["first_pass_checks"] = int(first_pass_summaries[0][0]) if len(first_pass_summaries) == 1 else 0
+    row["first_pass_failures"] = int(first_pass_summaries[0][1]) if len(first_pass_summaries) == 1 else 0
     numeric = (row["checks"] is not None and row["checks"] > 0 and
                row["failures"] == len(failures))
+    first_pass_numeric = (len(first_pass_summaries) == 1 and
+               row["first_pass_checks"] == 6 and
+               row["first_pass_failures"] == len(first_pass_failures))
     if baseline:
         row["pass"] = (numeric and row["run"]["exit_code"] == 1 and
             not row["run"]["timed_out"] and set(failures) == BASELINE_FAILURES and
-            len(failures) == len(BASELINE_FAILURES))
+            len(failures) == len(BASELINE_FAILURES) and
+            len(first_pass_summaries) == 0 and len(first_pass_failures) == 0)
     else:
         row["pass"] = (numeric and row["run"]["exit_code"] == 0 and
             not row["run"]["timed_out"] and row["failures"] == 0 and
-            "TRACE_BURST " in text and "TRACE_STARVATION " in text)
-
+            "TRACE_BURST " in text and "TRACE_STARVATION " in text and
+            first_pass_numeric and row["first_pass_failures"] == 0)
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -387,6 +397,7 @@ def main() -> int:
     result = {"state": "prepared", "runner": str(Path(__file__).resolve()),
               "source_checkout": str(b5), "workflow_root": str(workflow),
               "fixture_checks": 0, "fixture_failures": 0,
+              "first_pass_checks": 0, "first_pass_failures": 0,
               "intentional_failure_controls": 0, "intentional_failure_checks": 0,
               "runs": []}
     try:
@@ -406,6 +417,7 @@ def main() -> int:
         for name, baseline in (("candidate", False), ("baseline_control", True)):
             exe = out / (name + ".exe")
             command = [str(compiler), *flags, "/D_ALLOW_KEYWORD_MACROS=1"]
+            command += ["/we4473", "/we4477"]
             if baseline:
                 command += ["/DBRN_RWAC_BASELINE_CONTROL=1", "/DBRN_RWAC_BASELINE_PRODUCER=1"]
             command += ["/I" + str(path) for path in includes]
@@ -431,6 +443,8 @@ def main() -> int:
             else:
                 result["fixture_checks"] += row["checks"] or 0
                 result["fixture_failures"] += row["failures"] or 0
+                result["first_pass_checks"] += row["first_pass_checks"] or 0
+                result["first_pass_failures"] += row["first_pass_failures"] or 0
         if args.run:
             result["state"] = "pass" if (len(result["runs"]) == 2 and
                 all(row.get("pass") for row in result["runs"])) else "fail"
@@ -439,8 +453,8 @@ def main() -> int:
         result["error"] = f"{type(error).__name__}: {error}"
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: result[key] for key in
-        ("state", "fixture_checks", "fixture_failures", "intentional_failure_controls",
-         "intentional_failure_checks")} | {"result": str(out / "result.json")}))
+        ("state", "fixture_checks", "fixture_failures", "first_pass_checks", "first_pass_failures",
+         "intentional_failure_controls", "intentional_failure_checks")} | {"result": str(out / "result.json")}))
     return int(result["state"] == "fail")
 
 

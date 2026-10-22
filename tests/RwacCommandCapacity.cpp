@@ -39,6 +39,8 @@ struct StoppedBeforeWrite {};
 std::string gEmergency;
 int gChecks = 0;
 int gFailures = 0;
+int gFirstPassChecks = 0;
+int gFirstPassFailures = 0;
 void Check(bool lbCondition, const char* lpcLabel)
 {
     ++gChecks;
@@ -46,6 +48,16 @@ void Check(bool lbCondition, const char* lpcLabel)
     {
         ++gFailures;
         std::printf("FAIL %s\n", lpcLabel);
+    }
+}
+
+void CheckFirstPass(bool lbCondition, const char* lpcLabel)
+{
+    ++gFirstPassChecks;
+    if (!lbCondition)
+    {
+        ++gFirstPassFailures;
+        std::printf("FAIL_FIRST_PASS %s\n", lpcLabel);
     }
 }
 
@@ -206,6 +218,61 @@ void ErrorState()
     Check(gEmergency.find("critical_errors=1 last_critical_hr=0x80004004") != std::string::npos,
           "critical engine error survives to failure record");
 }
+
+void FirstPassWitness()
+{
+    using namespace CgsSystem::RwacCommandTracePC;
+    ResetTrace();
+    gState.muSystemEpoch.store(0, std::memory_order_relaxed);
+    gState.mbActiveRecordWritten.store(false, std::memory_order_relaxed);
+
+    World lWorld(196608);
+    BeginSystemEpoch(&lWorld.mSystem, lWorld.mSystem.mpDeferredRingBase,
+                     lWorld.mSystem.muCommandBufferSize);
+    MarkProducerFrame(&lWorld.mSystem);
+    MarkEngineBegin(&lWorld.mSystem);
+    MarkConsumerEvent(CommandPassBegin, 3);
+    MarkConsumerEvent(CommandPassEnd, 4);
+
+    MarkDeviceOpened();
+    MarkDeviceClosed();
+    MarkDeviceOpened();
+    MarkDeviceClosed();
+    MarkDeviceOpened();
+    MarkSubmit(S_OK);
+    MarkSubmit(S_OK);
+    MarkSubmit(S_OK);
+    MarkSubmit(E_FAIL);
+    for (int li = 0; li < 5; ++li)
+        MarkVoiceError(E_POINTER);
+    for (int li = 0; li < 6; ++li)
+        MarkCriticalError(E_ABORT);
+    MarkEngineCallbackRegistration(E_ACCESSDENIED);
+
+    EmitFirstActiveOccupancy(&lWorld.mSystem, lWorld.mSystem.mpDeferredRingBase,
+                             0, lWorld.mSystem.muCommandBufferSize,
+                             lWorld.mSystem.muDeferredRingHighWater,
+                             lWorld.mSystem.muFrameCounter);
+    CheckFirstPass(gEmergency.find(
+        "[rwac-occupancy] FIRST_PASS_WITNESS enabled=1 consumer_pass_seen=1") != std::string::npos,
+        "actual matching producer/pass state emits FIRST_PASS_WITNESS");
+    CheckFirstPass(gEmergency.find(
+        "system_frame=41 epoch=1 producer_frames_for_trace_epoch=1 "
+        "pass_producer_frames_for_trace_epoch=1 frames_since_pass=0") != std::string::npos,
+        "witness carries deterministic matching epoch/frame inputs");
+    CheckFirstPass(gEmergency.find(
+        "device_open_process_global=1 device_opens_process_global=3 device_closes_process_global=2") != std::string::npos,
+        "device-open state and process-global open/close counts keep their distinct known values");
+    CheckFirstPass(gEmergency.find(
+        "submits_process_global=4 submit_errors_process_global=1 last_submit_hr=0x80004005") != std::string::npos,
+        "submit count, error count and HRESULT use their own known fields");
+    CheckFirstPass(gEmergency.find(
+        "voice_errors_process_global=5 critical_errors_process_global=6 "
+        "callback_registration_process_global=0x80070005") != std::string::npos,
+        "voice, critical and callback-registration values stay aligned");
+    CheckFirstPass(gEmergency.size() < 2048 && !gEmergency.empty() && gEmergency.back() == '\n',
+        "witness record remains bounded and complete");
+}
 }
 
 namespace CgsDev { namespace Log {
@@ -225,7 +292,11 @@ int main()
     TraceClassification(true);
     TraceClassification(false);
     ErrorState();
+    FirstPassWitness();
 #endif
     std::printf("RWAC_CAPACITY checks=%d failures=%d\n", gChecks, gFailures);
+#if !defined(BRN_RWAC_BASELINE_CONTROL)
+    std::printf("RWAC_FIRST_PASS checks=%d failures=%d\n", gFirstPassChecks, gFirstPassFailures);
+#endif
     return gFailures ? 1 : 0;
 }
