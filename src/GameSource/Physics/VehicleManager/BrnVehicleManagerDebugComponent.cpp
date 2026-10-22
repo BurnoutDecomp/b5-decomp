@@ -542,20 +542,30 @@ namespace Vehicle
     // ARTIST reader for the retained OutContactSpy records. The display toggle gates this call;
     // preserve the stored count while the producer/reset owner remains unresolved.
     // ========================================================================================
+    namespace
+    {
+        rw::RGBA WorldDebugColour(u32 luPackedColour)
+        {
+            rw::RGBA lColour;
+            lColour.m_rgba = luPackedColour;
+            return lColour;
+        }
+    }
+
     void VehicleManagerDebugComponent::RenderWorldContactSpies(
         CgsDev::Debug3DImmediateRender* lpRender) const
     {
         for (s32 liSpy = 0; liSpy < miNumWorldContactSpies; ++liSpy)
         {
             const CgsPhysics::PhysicsSimulationIO::OutContactSpy& lrSpy = maWorldContactSpies[liSpy];
-            lpRender->DrawLine(lrSpy.mPointOnA, lrSpy.mPointOnB, 0xFFFFFFFFu);
+            lpRender->DrawLine(lrSpy.mPointOnA, lrSpy.mPointOnB, WorldDebugColour(0xFFFFFFFFu));
             lpRender->DrawLine(lrSpy.mPointOnA,
                                rw::math::vpu::Add(lrSpy.mPointOnA, lrSpy.mFrictionStress),
-                               0xFF00FF00u);
+                               WorldDebugColour(0xFF00FF00u));
             lpRender->DrawLine(lrSpy.mPointOnA,
                                rw::math::vpu::Add(lrSpy.mPointOnA,
                                                   rw::math::vpu::Mult(lrSpy.mNormalStress, 0.001f)),
-                               0xFFFF0000u);
+                               WorldDebugColour(0xFFFF0000u));
         }
     }
 
@@ -619,8 +629,8 @@ namespace Vehicle
 
         const Vector3 lvFrontEnd = lvFrontStart + lrTransform.zAxis * lrManager.mfFrontRayLength;
         const Vector3 lvRearEnd = lvRearStart - lrTransform.zAxis * lrManager.mfRearRayLength;
-        lpRender->DrawLine(lvFrontStart, lvFrontEnd, 0xFFFFFFFFu);
-        lpRender->DrawLine(lvRearStart, lvRearEnd, 0xFFFFFFFFu);
+        lpRender->DrawLine(lvFrontStart, lvFrontEnd, WorldDebugColour(0xFFFFFFFFu));
+        lpRender->DrawLine(lvRearStart, lvRearEnd, WorldDebugColour(0xFFFFFFFFu));
     }
 
     // ========================================================================================
@@ -635,25 +645,25 @@ namespace Vehicle
         const Vector3 lvTrafficHalfExtent = mLastTrafficContact_TrafficHalfExt;
         lpRender->DrawBox(Vector3{ -lvRaceCarHalfExtent.x, -lvRaceCarHalfExtent.y,
                                    -lvRaceCarHalfExtent.z, -lvRaceCarHalfExtent.w },
-                          lvRaceCarHalfExtent, mLastTrafficContact_RaceCarTransform, 0xFF0000FFu);
+                          lvRaceCarHalfExtent, mLastTrafficContact_RaceCarTransform, WorldDebugColour(0xFF0000FFu));
         lpRender->DrawBox(Vector3{ -lvTrafficHalfExtent.x, -lvTrafficHalfExtent.y,
                                    -lvTrafficHalfExtent.z, -lvTrafficHalfExtent.w },
-                          lvTrafficHalfExtent, mLastTrafficContact_TrafficTransform, 0xFF00FF00u);
+                          lvTrafficHalfExtent, mLastTrafficContact_TrafficTransform, WorldDebugColour(0xFF00FF00u));
 
         const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = mLastTrafficContact_Contact;
         const Vector3 lvContactNormalEnd = lrContact.mPointOnB + lrContact.mNormal;
-        lpRender->DrawArrow(lrContact.mPointOnB, lvContactNormalEnd, 0xFF00FFFFu);
+        lpRender->DrawArrow(lrContact.mPointOnB, lvContactNormalEnd, WorldDebugColour(0xFF00FFFFu));
 
         const Vector3 lvRaceCarVelocityOffset =
             rw::math::vpu::Mult(mLastTrafficContact_RaceCarVelocity, 0.1f);
         lpRender->DrawArrow(mLastTrafficContact_RaceCarTransform.wAxis,
                             mLastTrafficContact_RaceCarTransform.wAxis + lvRaceCarVelocityOffset,
-                            0xFF0000FFu);
+                            WorldDebugColour(0xFF0000FFu));
         const Vector3 lvTrafficVelocityOffset =
             rw::math::vpu::Mult(mLastTrafficContact_TrafficVelocity, 0.1f);
         lpRender->DrawArrow(mLastTrafficContact_TrafficTransform.wAxis,
                             mLastTrafficContact_TrafficTransform.wAxis + lvTrafficVelocityOffset,
-                            0xFF00FF00u);
+                            WorldDebugColour(0xFF00FF00u));
 
         const Vector3 lvWorldUp{ 0.0f, 1.0f, 0.0f, 0.0f };
         const Vector3 lvActualTextPosition = lvContactNormalEnd - lvWorldUp * 0.1f;
@@ -670,15 +680,15 @@ namespace Vehicle
         const Vector3 lvHalfExtent = mLastCrashContact_RaceCarHalfExt;
         lpRender->DrawBox(Vector3{ -lvHalfExtent.x, -lvHalfExtent.y,
                                    -lvHalfExtent.z, -lvHalfExtent.w },
-                          lvHalfExtent, mLastCrashContact_RaceCarTransform, 0xFF0000FFu);
+                          lvHalfExtent, mLastCrashContact_RaceCarTransform, WorldDebugColour(0xFF0000FFu));
 
         const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = mLastCrashContact_Contact;
-        lpRender->DrawArrow(lrContact.mPointOnB, lrContact.mPointOnB + lrContact.mNormal, 0xFF00FFFFu);
+        lpRender->DrawArrow(lrContact.mPointOnB, lrContact.mPointOnB + lrContact.mNormal, WorldDebugColour(0xFF00FFFFu));
 
         const Vector3 lvVelocityOffset = rw::math::vpu::Mult(mLastCrashContact_RaceCarVelocity, 0.1f);
         lpRender->DrawArrow(mLastCrashContact_RaceCarTransform.wAxis,
                             mLastCrashContact_RaceCarTransform.wAxis + lvVelocityOffset,
-                            0xFF0000FFu);
+                            WorldDebugColour(0xFF0000FFu));
     }
 
     // ========================================================================================
@@ -709,10 +719,10 @@ namespace Vehicle
             const Vector3 lvBoxMinimum{ -lvHalfExtent.x, -lvHalfExtent.y,
                                         -lvHalfExtent.z, -lvHalfExtent.w };
             const Vector3 lvBoxMaximum = lvHalfExtent;
-            lpRender->DrawBox(lvBoxMinimum, lvBoxMaximum, lTargetTransform, 0xFFFFFFFFu);
+            lpRender->DrawBox(lvBoxMinimum, lvBoxMaximum, lTargetTransform, WorldDebugColour(0xFFFFFFFFu));
 
             const Vector3 lvCurrentPosition = lrCar.GetGraphicsVehicleTransform().wAxis;
-            lpRender->DrawArrow(lvCurrentPosition, lTargetTransform.wAxis, 0xFFFFFFFFu);
+            lpRender->DrawArrow(lvCurrentPosition, lTargetTransform.wAxis, WorldDebugColour(0xFFFFFFFFu));
 
             const Vector3 lvWorldUp{ 0.0f, 1.0f, 0.0f, 0.0f };
             const Vector3 lvTextPosition = lTargetTransform.wAxis + lvWorldUp * 1.5f;
@@ -741,15 +751,15 @@ namespace Vehicle
         Vector3 lvCacheSphere;
         std::memcpy(&lvCacheSphere, lrManager.mStuckInCollisionTestCacheSphere, sizeof(lvCacheSphere));
         const Vector3 lvSphereCentre{ lvCacheSphere.x, lvCacheSphere.y, lvCacheSphere.z, 0.0f };
-        lpRender->DrawHollowSphere(lvSphereCentre, lvCacheSphere.w, 0xFFFFFFFFu);
+        lpRender->DrawHollowSphere(lvSphereCentre, lvCacheSphere.w, WorldDebugColour(0xFFFFFFFFu));
 
         for (s32 liLine = 0; liLine < KI_MAX_WORLD_CONTACT_SPIES; ++liLine)
         {
             lpRender->DrawLine(maStuckInCollisionLineTestStart[liLine],
-                               maStuckInCollisionLineTestEnd[liLine], 0xFFFFFFFFu);
+                               maStuckInCollisionLineTestEnd[liLine], WorldDebugColour(0xFFFFFFFFu));
             if (mabStuckInCollisionIntersection[liLine])
             {
-                lpRender->DrawSphere(maStuckInCollisionLineTestPoint[liLine], 0.15f, 0xFFFFFFFFu);
+                lpRender->DrawSphere(maStuckInCollisionLineTestPoint[liLine], 0.15f, WorldDebugColour(0xFFFFFFFFu));
             }
         }
 
