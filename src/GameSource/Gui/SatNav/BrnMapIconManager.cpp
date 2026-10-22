@@ -1393,30 +1393,29 @@ void MapIconManager::UpdateSatNavIcons()
           || ((mSelectedLightTriggerID & 0xFFu) == 0xFFu));
     if (mbShowingOnlineRoute && lbLightTriggerValid && miSelectedCheckpoint > 0)
     {
-        // [UI-gate] the event-start lookup by light-trigger id (the cache's +0x5690
-        // CgsArray) is unreconstructed -- online-route screens only. Parked loudly;
-        // liExtraIcons stays 0 (the slot is not reserved).
-        static bool sbLoggedStartPark = false;
-        if (!sbLoggedStartPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedStartPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateSatNavIcons online-route start-point icon "
-                   "(event-start array unreconstructed)\n";
-        }
+        // ARTIST 0x825227F4: route-head marker, resolved by the selected light-trigger id.
+        const SatNavEventDisplayInfo* lpStart =
+            mpGuiCache->GetPresetEventDisplayInfo(mSelectedLightTriggerID);
+        SatNavMapIcon& lrStartIcon = mSatNavMapIcons[0].mIcon;
+        lrStartIcon.SetAlpha(mbIsActive ? 100.0f : KF_INACTIVE_ALPHA);
+        lrStartIcon.SetRotation(0.0f);
+        lrStartIcon.SetPosition(MapTransform::WorldToDevice(lpStart->mv3Position, true));
+        lrStartIcon.SetState(MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_START_POINT);
+        lrStartIcon.Update();
+        liExtraIcons = 1;
     }
     else if ((mbShowingPreRaceRoute || mbShowingCrashNavRoute) && muSelectedJunctionID != 0)
     {
-        // [UI-gate] the junction start-point lookup -- crash-nav/pre-race route screens
-        // only; same parked slice as above.
-        static bool sbLoggedJunctionPark = false;
-        if (!sbLoggedJunctionPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedJunctionPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateSatNavIcons junction start-point icon "
-                   "(junction lookup unreconstructed)\n";
-        }
+        // ARTIST 0x825228D8: the separate junction-backed pre-race / crash-nav start marker.
+        const SatNavEventDisplayInfo* lpStart =
+            mpGuiCache->GetEventStartInfoFromJunctionID(muSelectedJunctionID);
+        SatNavMapIcon& lrStartIcon = mSatNavMapIcons[0].mIcon;
+        lrStartIcon.SetAlpha(mbIsActive ? 100.0f : KF_INACTIVE_ALPHA);
+        lrStartIcon.SetRotation(0.0f);
+        lrStartIcon.SetPosition(MapTransform::WorldToDevice(lpStart->mv3Position, true));
+        lrStartIcon.SetState(MapIconBrnBase::E_ICONSTATE_CRASHNAV_PRERACE_START_POINT);
+        lrStartIcon.Update();
+        liExtraIcons = 1;
     }
 
     // v124: the camera lane the alpha fade measures against (perm {x,z} @0x82CDA450 --
@@ -1749,16 +1748,18 @@ void MapIconManager::UpdateSatNavIcons()
     s32 liUsedComponents = liIcon + liExtraIcons;
     if (mbShowingOnlineRoute && lbLightTriggerValid && miSelectedCheckpoint == 0)
     {
-        // [UI-gate] same parked event-start lookup as the head block; the component
-        // it would drive is left to the invisible tail below.
-        static bool sbLoggedEndStartPark = false;
-        if (!sbLoggedEndStartPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedEndStartPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateSatNavIcons online-route tail start-point icon "
-                   "(event-start array unreconstructed)\n";
-        }
+        // ARTIST 0x82523680: while editing the start, append that same marker after route records.
+        const SatNavEventDisplayInfo* lpStart =
+            mpGuiCache->GetPresetEventDisplayInfo(mSelectedLightTriggerID);
+        CGS_ASSERT(liUsedComponents < miMaxNumberIcons,
+                   "Run out of icons to show the start point");
+        SatNavMapIcon& lrStartIcon = mSatNavMapIcons[liUsedComponents].mIcon;
+        lrStartIcon.SetAlpha(mbIsActive ? 100.0f : KF_INACTIVE_ALPHA);
+        lrStartIcon.SetRotation(0.0f);
+        lrStartIcon.SetPosition(MapTransform::WorldToDevice(lpStart->mv3Position, true));
+        lrStartIcon.SetState(MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_START_POINT);
+        lrStartIcon.Update();
+        ++liUsedComponents;
     }
 
     // ---- hide every unused pool component (X360 LABEL_172 tail) ----
@@ -1823,17 +1824,16 @@ void MapIconManager::UpdateCrashNavIcons()
           || ((mSelectedLightTriggerID & 0xFFu) == 0xFFu));
     if (mbShowingOnlineRoute && lbLightTriggerValid && miSelectedCheckpoint > 0)
     {
-        // [UI-gate] sub_824F8838 -- the event-start position lookup by light-trigger id
-        // over the cache's event array. Unreconstructed; online-route screens only.
-        // liExtraIcons stays 0 (the slot is not reserved), matching the sat-nav park.
-        static bool sbLoggedStartPark = false;
-        if (!sbLoggedStartPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedStartPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateCrashNavIcons online-route start-point icon "
-                   "(event-start lookup unreconstructed)\n";
-        }
+        // ARTIST 0x82521528: route-head marker, resolved by the selected light-trigger id.
+        const SatNavEventDisplayInfo* lpStart =
+            mpGuiCache->GetPresetEventDisplayInfo(mSelectedLightTriggerID);
+        CrashNavMapIcon& lrStartIcon = mCrashNavIcons[0].mIcon;
+        lrStartIcon.SetAlpha(mbIsActive ? 100.0f : KF_INACTIVE_ALPHA);
+        lrStartIcon.SetRotation(0.0f);
+        lrStartIcon.SetPosition(MapTransform::WorldToDevice(lpStart->mv3Position, true));
+        lrStartIcon.SetState(MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_START_POINT);
+        lrStartIcon.Update();
+        liExtraIcons = 1;
     }
     else if ((mbShowingPreRaceRoute || mbShowingCrashNavRoute) && muSelectedJunctionID != 0)
     {
@@ -2154,17 +2154,18 @@ void MapIconManager::UpdateCrashNavIcons()
     s32 liUsedComponents = liIcon + liExtraIcons;
     if (mbShowingOnlineRoute && lbLightTriggerValid && miSelectedCheckpoint == 0)
     {
-        // [UI-gate] the same parked event-start lookup as the head block; on the console
-        // this drives one more pool component to state 46 and bumps the used count. The
-        // component it would drive is left to the invisible tail below.
-        static bool sbLoggedEndStartPark = false;
-        if (!sbLoggedEndStartPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedEndStartPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateCrashNavIcons online-route tail start-point "
-                   "icon (event-start lookup unreconstructed)\n";
-        }
+        // ARTIST 0x82522398: while editing the start, append that marker after route records.
+        const SatNavEventDisplayInfo* lpStart =
+            mpGuiCache->GetPresetEventDisplayInfo(mSelectedLightTriggerID);
+        CGS_ASSERT(liUsedComponents < miMaxNumberIcons,
+                   "Run out of icons to show the start point");
+        CrashNavMapIcon& lrStartIcon = mCrashNavIcons[liUsedComponents].mIcon;
+        lrStartIcon.SetAlpha(mbIsActive ? 100.0f : KF_INACTIVE_ALPHA);
+        lrStartIcon.SetRotation(0.0f);
+        lrStartIcon.SetPosition(MapTransform::WorldToDevice(lpStart->mv3Position, true));
+        lrStartIcon.SetState(MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_START_POINT);
+        lrStartIcon.Update();
+        ++liUsedComponents;
     }
 
     // ---- hide every unused pool component (X360 tail loop) ----

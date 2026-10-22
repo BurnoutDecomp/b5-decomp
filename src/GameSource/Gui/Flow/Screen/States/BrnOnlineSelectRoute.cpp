@@ -331,8 +331,8 @@ namespace
             mMainMapComponent.RecvEvent(lpEvent, liEventId);
         }
 
-        lpInQueue->Clear();
         mv2WorldCenterPoint = mMainMapComponent.Update(mv2WorldCenterPoint);
+        lpInQueue->Clear();
         CheckForCompletedLoads();
         mSelectRoutes.Update();
         mMenuOptions.Update();
@@ -910,6 +910,9 @@ namespace
         const PresetEvent* lpPresetEvent = mpGuiCache->GetPresetEvent(static_cast<s32>(luPresetEventIndex));
         muCurrentPresetEventID = lpPresetEvent->GetEventId();
 
+        const f32 lfInitialZoomFactor = CalculateZoomFactor();
+        mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM,
+                                  lfInitialZoomFactor, false);
         mCursor.SetActive();
         mbEditingNewCheckpoint = false;
         mCheckpointMenuAnimator.AddOutputAptViewState(
@@ -926,13 +929,20 @@ namespace
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END;
         mInfoBackgroundAnimator.AddOutputAptViewState(
             KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[lbSpecialMode ? 2 : 0], false);
+        mMainMapComponent.SetActive(true);
         if (mpIconManager != 0)
             mpIconManager->mbIsActive = true;
-        mMainMapComponent.SetActive(true);
 
-        const f32 lfZoomFactor = CalculateZoomFactor();
-        mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM,
-                                  lfZoomFactor, false);
+        if (mpGuiCache != 0 && meSubState > E_SUBSTATE_LOADING_COMPONENTS)
+        {
+            const f32 lfZoomFactor = CalculateZoomFactor();
+            mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM,
+                                      lfZoomFactor, false);
+        }
+        else
+        {
+            mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_LOW, 0.0f, false);
+        }
         PlaceCursorOnLandmark();
         SetActiveLandmarks();
         SetupHelpBar(true);
