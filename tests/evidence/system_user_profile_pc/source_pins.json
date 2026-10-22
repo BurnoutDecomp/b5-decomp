@@ -60,8 +60,8 @@
       "expected_lf_bytes": 273
     },
     "tests/SystemUserProfilePC.cpp": {
-      "expected_lf_sha256": "53491ef0a400b520b49e66e0f52c59cf77edcd7a3015b151e0f255740a6e3d3c",
-      "expected_lf_bytes": 20859
+      "expected_lf_sha256": "af04f45a7b42fecab140acfa41c55666770fe457db34492e437ebb872e94ce25",
+      "expected_lf_bytes": 21111
     },
     "tests/evidence/system_user_profile_pc/CgsGuideIntegration_bef9346f9.cpp": {
       "expected_lf_sha256": "04eec59d1eaced243071f5aac98a99da33f0c8a83601ef7c33bd3146d70da371",
