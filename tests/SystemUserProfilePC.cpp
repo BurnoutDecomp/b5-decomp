@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <fstream>
@@ -114,8 +115,11 @@ int main(int argc, char** argv)
         gsConfig = lsDirectory + "config.ini";
         if (GetFileAttributesA(gsConfig.c_str()) != INVALID_FILE_ATTRIBUTES)
             throw std::runtime_error("fixture refuses existing sibling config.ini");
-        SetEnvironmentVariableA("BP_LAN", "1");
-        SetEnvironmentVariableA("BP_LAN_NAME", "ProfileFixture");
+        // The real identity provider reads std::getenv's CRT environment table.
+        // Win32 SetEnvironmentVariableA does not update that separate table.
+        if (_putenv_s("BP_LAN", "1") != 0 ||
+            _putenv_s("BP_LAN_NAME", "ProfileFixture") != 0)
+            throw std::runtime_error("fixture persona environment setup failed");
         const bool lbConsumerControl = argc == 2 && std::strcmp(argv[1], "--baseline-consumer") == 0;
         if (lbConsumerControl)
         {
