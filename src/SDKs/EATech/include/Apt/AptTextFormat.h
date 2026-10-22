@@ -140,5 +140,11 @@ struct AptTextFormat : public AptObject
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
                                          const AptNativeString* const pName) const;   // @0x82AF18E0
 
+    // objectMemberSet @0x82AFB368 (ARTIST) / XB1 vtable slot 7 @0x140854CF0.
+    // Apply a recognised TextFormat property to the embedded record.
+    virtual bool objectMemberSet(AptValue* const pThis,
+                                 const AptNativeString* const pName,
+                                 AptValue* const pValue) override;
+
     TextFormat mFormat;   // +0x20 (X360) -- the embedded format record
 };
