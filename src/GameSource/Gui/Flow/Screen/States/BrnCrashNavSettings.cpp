@@ -465,7 +465,11 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lResume);
 
             GuiEventActivateCrashNav lActivate(true);  // <- THE UNPAUSE
-            mpStateInterface->OutputGuiEvent(lActivate);
+            // This object already carries ARTIST's {8,191,12}+payload record.
+            // Keep those bytes and put the record on GuiEventOut for the PC drain.
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lActivate),
+                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lActivate)));
 
             CgsGui::GuiEvent<KI_EVENT_SCREEN_CLOSED_533> lDone(1, 12);
             mpStateInterface->GetOutputEventQueue()->AddEvent(

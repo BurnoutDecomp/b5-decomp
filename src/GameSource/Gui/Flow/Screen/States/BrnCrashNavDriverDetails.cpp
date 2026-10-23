@@ -932,7 +932,11 @@ void CrashNavDriverDetails::HandleControllerInputPressed(const CgsModule::Event*
                 static_cast<s32>(sizeof(lClosed)));
 
             GuiEventActivateCrashNav lActivate(true);
-            mpStateInterface->OutputGuiEvent(lActivate);
+            // This object already carries ARTIST's {8,191,12}+payload record.
+            // Keep those bytes and put the record on GuiEventOut for the PC drain.
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lActivate),
+                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lActivate)));
 
             SendStateEvent("GO_BACK");             // CN_D_DETAIL(111) -> INGAME(4)
         }

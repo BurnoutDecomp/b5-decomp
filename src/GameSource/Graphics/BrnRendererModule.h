@@ -650,7 +650,8 @@ private:
     void ComputeSunCoronaVisibility();
 
     void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer,
-                           CgsGraphics::DispatchObjectContext* lpContext);
+                           CgsGraphics::DispatchObjectContext* lpContext,
+                           f32 lfWhiteLevel);
 
     // [FLAG PC bring-up] Sky-dome bring-up (NOT console functions -- see the bodies).
     // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
