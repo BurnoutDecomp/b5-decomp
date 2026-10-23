@@ -256,9 +256,8 @@ namespace BrnGui
     // FLAGS:
     //  - The rect goes to the live sat-nav viewport rect (MapTransform::SetSatNavRect, one aligned
     //    Vector4 store); BrnGui::SatNavRenderer::UpdateRendererTransform reads it.
-    //  - The sat-nav renderer (X360 mpGuiModule+0x4D2E0) and its map-quad tint colour (mpGuiModule+
-    //    0x4D2E8 == renderer+8) live in a part of the GuiModule layout this slice does not model by
-    //    name; they are reached through the X360-attested byte offsets below.
+    //  - The renderer and tint use the named GuiModule::mCustomRendererManager::mSatNavRenderer
+    //    owner chain; both operations below target that same embedded renderer instance.
     // =============================================================================================
     void SatNavDebugComponent::TriggerSatNavPositionUpdate()
     {
@@ -272,15 +271,16 @@ namespace BrnGui
 
         CGS_ASSERT(miSatNavAlpha <= 100, "miSatNavAlpha <= 100");   // BrnGuiSatNavDebugComponent.cpp:264
 
-        // Reach the sat-nav renderer + its tint colour through the X360-attested GuiModule byte offsets.
-        u8* lpGuiModuleBytes = reinterpret_cast<u8*>(mpGuiModule);
-        SatNavRenderer* lpRenderer =
-            reinterpret_cast<SatNavRenderer*>(lpGuiModuleBytes + KU_OFF_SATNAV_RENDERER);
-        lpRenderer->UpdateRendererTransform();
+        // Follow the named owner chain; declaration friendship preserves these private owners
+        // and fields without using guest-layout arithmetic on the host object.
+        SatNavRenderer& lrRenderer = mpGuiModule->mCustomRendererManager.mSatNavRenderer;
+        lrRenderer.UpdateRendererTransform();
 
-        // Repack the map-quad tint: RGB white, alpha = round-toward-zero(miSatNavAlpha * 2.55).
-        const u8 luAlpha = static_cast<u8>(static_cast<s64>((miSatNavAlpha & 0xFF) * 2.55));
+        // ARTIST flt_820552E0 is 2.55: fmuls then fctidz truncates toward zero.
+        const f32 lfScaledAlpha = static_cast<f32>(miSatNavAlpha & 0xFFu) * 2.55f;
+        const u8 luAlpha = static_cast<u8>(static_cast<s64>(lfScaledAlpha));
+        // The X360 insrwi places this low byte in the packed word's top byte.
         const u32 luColour = (static_cast<u32>(luAlpha) << 24) | 0x00FFFFFFu;
-        *reinterpret_cast<u32*>(lpGuiModuleBytes + KU_OFF_SATNAV_ICON_COLOUR) = luColour;
+        lrRenderer.mMapQuadColour = luColour;
     }
 }
