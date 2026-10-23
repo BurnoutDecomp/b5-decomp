@@ -1,0 +1,43 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnBaseOkCancelOverlayState.cpp
+        BrnBaseOkOverlayState.cpp
+        BrnBaseOverlayState.cpp
+        BrnBaseWaitOverlayState.cpp
+        BrnCrashNavOkCancelOverlayState.cpp
+        BrnCrashNavOkOverlayState.cpp
+        BrnCrashNavOnlineOkCancelOverlayState.cpp
+        BrnCrashNavOnlineOkOverlayState.cpp
+        BrnCrashNavOnlineWaitOverlayState.cpp
+        BrnCrashNavWaitOverlayState.cpp
+        BrnInGameOkCancelOverlayState.cpp
+        BrnInGameOkOverlayState.cpp
+        BrnInGameOnlineEnterFreeBurnOverlayState.cpp
+        BrnInGameOnlineOkCancelOverlayState.cpp
+        BrnInGameOnlineOkOverlayState.cpp
+        BrnInGameOnlineWaitOverlayState.cpp
+        BrnInGameWaitOverlayState.cpp
+        BrnInvisibleOverlayState.cpp
+        BrnPreloadOverlayState.cpp
+
+    PUBLIC
+        BrnBaseOkCancelOverlayState.h
+        BrnBaseOkOverlayState.h
+        BrnBaseOverlayState.h
+        BrnBaseWaitOverlayState.h
+        BrnCrashNavOkCancelOverlayState.h
+        BrnCrashNavOkOverlayState.h
+        BrnCrashNavOnlineOkCancelOverlayState.h
+        BrnCrashNavOnlineOkOverlayState.h
+        BrnCrashNavOnlineWaitOverlayState.h
+        BrnCrashNavWaitOverlayState.h
+        BrnInGameOkCancelOverlayState.h
+        BrnInGameOkOverlayState.h
+        BrnInGameOnlineEnterFreeBurnOverlayState.h
+        BrnInGameOnlineOkCancelOverlayState.h
+        BrnInGameOnlineOkOverlayState.h
+        BrnInGameOnlineWaitOverlayState.h
+        BrnInGameWaitOverlayState.h
+        BrnInvisibleOverlayState.h
+        BrnPreloadOverlayState.h
+)

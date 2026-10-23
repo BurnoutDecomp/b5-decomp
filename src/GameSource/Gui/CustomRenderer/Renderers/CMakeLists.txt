@@ -1,0 +1,32 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        Array_BoostMessage_3.cpp
+        BrnAboveCarRenderer.cpp
+        BrnBlackBarRenderer.cpp
+        BrnBoostBarRenderer.cpp
+        BrnCrashNavIconRenderer.cpp
+        BrnCreditsTextRenderer.cpp
+        BrnGuiCustRendererDebugComponent.cpp
+        BrnInGameMessageRenderer.cpp
+        BrnInterpolator.cpp
+        BrnMainMapRenderer.cpp
+        BrnNetworkPlayerImageRenderer.cpp
+        BrnProgressBarRenderer.cpp
+        BrnRoadSign.cpp
+        BrnSatNavRenderer.cpp
+
+    PUBLIC
+        BrnAboveCarRenderer.h
+        BrnBlackBarRenderer.h
+        BrnBoostBarRenderer.h
+        BrnBoostMessageSlot.h
+        BrnCrashNavIconRenderer.h
+        BrnCreditsTextRenderer.h
+        BrnInGameMessageRenderer.h
+        BrnInterpolator.h
+        BrnMainMapRenderer.h
+        BrnNetworkPlayerImageRenderer.h
+        BrnProgressBarRenderer.h
+        BrnRoadSign.h
+        BrnSatNavRenderer.h
+)
