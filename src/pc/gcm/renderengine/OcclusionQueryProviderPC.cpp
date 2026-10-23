@@ -1,6 +1,9 @@
 #include "pc/gcm/renderengine/OcclusionQueryProviderPC.h"
 
 #include <vector>
+#include <cstdio>
+#include <cstdlib>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 namespace renderengine
 {
@@ -57,6 +60,28 @@ namespace renderengine
         };
 
         OcclusionQueryProviderStatePC sOcclusionQueryProviderPC;
+
+        // FLAG PC-platform leaf: bounded passive visibility evidence, explicitly opted in.
+        // This is called only by the existing render-thread query/conditional path. It adds
+        // no Issue/GetData/draw call and never modifies provider slots, tokens or scopes.
+        void TraceOcclusionQueryPC(const char* lpStage, u32 luIdentifier, u64 luSerial, u32 luDetail)
+        {
+            static const bool sbEnabled = []()
+            {
+                const char* lpValue = std::getenv("BRN_OCCLUSION_DIAG");
+                return lpValue != nullptr && lpValue[0] == '1' && lpValue[1] == '\0';
+            }();
+            static u32 suLines = 0;
+            if (!sbEnabled || suLines >= 512u)
+                return;
+            char lacTrace[192];
+            std::snprintf(lacTrace, sizeof(lacTrace),
+                "[occ-provider] stage=%s id=%u serial=%llu detail=%u\n", lpStage,
+                static_cast<unsigned>(luIdentifier), static_cast<unsigned long long>(luSerial),
+                static_cast<unsigned>(luDetail));
+            CgsDev::Log::WriteToLog(lacTrace);
+            ++suLines;
+        }
 
         void OcclusionQueryProviderPCBumpGeneration()
         {
@@ -215,6 +240,7 @@ namespace renderengine
                 && lFrame.mbSingleSubmissionSucceeded)
             {
                 lrSlot.meState = EOcclusionQueryStatePC::E_ENDED;
+                TraceOcclusionQueryPC("ended", lFrame.muIdentifier, lFrame.muSurveySerial, lFrame.muSubmissionAttempts);
             }
             else if (SUCCEEDED(lResult))
             {
@@ -286,7 +312,10 @@ namespace renderengine
                 sOcclusionQueryProviderPC.maConditionalScopes.back();
             if (!lrScope.mbHasSurvey || lrScope.muIdentifier >= KU_OCCLUSION_QUERY_COUNT
                 || lrScope.muDeviceGeneration != sOcclusionQueryProviderPC.muDeviceGeneration)
+            {
+                TraceOcclusionQueryPC("unavailable", lrScope.muIdentifier, lrScope.muSurveySerial, 1u);
                 return true;
+            }
 
             OcclusionQuerySlotPC& lrSlot = sOcclusionQueryProviderPC.maSlots[lrScope.muIdentifier];
             if (lrSlot.mpQuery == nullptr
@@ -309,6 +338,7 @@ namespace renderengine
                     {
                         lrSlot.muSampleCount = luSampleCount;
                         lrSlot.meState = EOcclusionQueryStatePC::E_READY;
+                        TraceOcclusionQueryPC("result", lrScope.muIdentifier, lrScope.muSurveySerial, static_cast<u32>(luSampleCount));
                         break;
                     }
                     if (lResult == S_FALSE)
@@ -328,6 +358,7 @@ namespace renderengine
             }
 
             // Native D3D9 policy: nonzero passed samples draw. ARTIST does not pin Xenos polarity.
+            TraceOcclusionQueryPC("decision", lrScope.muIdentifier, lrScope.muSurveySerial, lrSlot.muSampleCount != 0 ? 1u : 0u);
             return lrSlot.muSampleCount != 0;
         }
     }

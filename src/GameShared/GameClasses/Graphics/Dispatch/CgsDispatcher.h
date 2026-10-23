@@ -82,7 +82,7 @@ typedef DispatchCommand DispatchPacket;
 
 class DispatchFrame;
 class DispatchBin;
-class DispatchPacketInterpreter;
+struct DispatchPacketInterpreter;
 struct DispatchObjectContext;
 
 // DispatchList — the per-list sort-key/key-block bucket. A list accumulates 64-bit
