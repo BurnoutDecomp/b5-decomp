@@ -467,6 +467,28 @@ namespace CgsDev
     // ARTIST 0x828320F0. A full component starts life as a function row. Its first activation
     // registers the component's real controls, replaces that function row in-place with the new
     // submenu, and retires the one-shot function registration.
+    // ARTIST 82832200 (unnamed); DecFIGS identifies the string overload.
+    void DebugManager::ActivateComponent(const char* lpcName)
+    {
+        DebugComponent* lpComponent = FindComponentByName(lpcName);
+        if (lpComponent)
+            ActivateComponent(lpComponent);
+    }
+
+    // ARTIST 82828E28: clear only the found component's active flag.
+    void DebugManager::DeactivateComponent(const char* lpcName)
+    {
+        if (DebugComponent* lpComponent = FindComponentByName(lpcName))
+            lpComponent->mbActive = false;
+    }
+
+    // ARTIST 8282E308: assert the actual UI pointer, then forward to its function manager.
+    void DebugManager::CallFunction(const char* lpcPath)
+    {
+        CGS_ASSERT(mpUI, "mpUI");
+        GetUI().GetFunctionManager().CallFunction(lpcPath);
+    }
+
     void DebugManager::ActivateComponent(DebugComponent* lpComponent)
     {
         CGS_ASSERT(lpComponent, "lpComponent");

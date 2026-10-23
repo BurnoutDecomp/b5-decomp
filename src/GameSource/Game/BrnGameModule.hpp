@@ -191,6 +191,9 @@ namespace BrnGame
     // byte-exact): real names/types/order, but omitted members mean offsets are not byte-exact.
     class BrnGameModule : public CgsModule::ModuleSingleBuffered, public CgsSystem::IThreadClass
     {
+        // ARTIST AutoTest callbacks address this module's private debug manager
+        // directly. Friendship is not emitted by the DecFIGS declaration dump.
+        friend struct AutoTestManager;
     public:
         AutoTestManager mAutoTestManager; // DecFIGS h:182; ARTIST gm+0x648.
 

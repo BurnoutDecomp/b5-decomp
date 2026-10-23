@@ -1,4 +1,5 @@
 #include "GameSource/Game/BrnAutoTestManager.h"
+#include "GameSource/Game/BrnLUACallbackHelper.h"
 #include "GameSource/Game/BrnGameModule.hpp"                                   // GetMainGameModule / GetGameTimer / GetGameDataModule
 #include "GameSource/Resource/BrnGameDataModule.h"                             // GameDataModule::DebugReportPools
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                        // CgsCore::StrCpy / StrCat
@@ -174,6 +175,83 @@ namespace BrnGame
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << "Registered function " << lpBinding->mpcName << "\n";
         }
+    }
+
+    // ARTIST 823C6010: Lua receives only lua_State*, with no AutoTest this.
+    s32 AutoTestManager::LUACBCallDebugFunction(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        GetMainGameModule()->mDebugManager.CallFunction(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823C60A8: an absent optional name selects DumpGameState's default.
+    s32 AutoTestManager::LUACBRecordLog(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() <= 1, "lHelper.GetNumParams() <= 1");
+        const char* lpcName = lHelper.GetNumParams() != 0 ? lHelper.GetStringParam(0) : 0;
+        GetMainGameModule()->mAutoTestManager.DumpGameState(lpcName);
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823C6150: gm+0x4298 is AutoTest(+0x648).maActions(+0x3C50).
+    s32 AutoTestManager::LUACBPressButton(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "ArgType: "
+                << static_cast<s32>(lHelper.GetParamType(0)) << "\n";
+        }
+        // Preserve lua_isstring evaluation before the second message-filter test.
+        if (lua_isstring(lpLua, 1) && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << lHelper.GetStringParam(0) << "\n";
+        GetMainGameModule()->mAutoTestManager.maActions[lHelper.GetInt32Param(0)] = 1.0f;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823A9920 / 823A98A8: gm+0x438C is the same AutoTest.mbControlPad.
+    s32 AutoTestManager::LUACBAcquirePad(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 0, "lHelper.GetNumParams() == 0");
+        GetMainGameModule()->mAutoTestManager.mbControlPad = true;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBRelinquishPad(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 0, "lHelper.GetNumParams() == 0");
+        GetMainGameModule()->mAutoTestManager.mbControlPad = false;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823C6290 / 823C6328: operate on the actual game's debug manager.
+    s32 AutoTestManager::LUACBActivateDebugComponent(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        GetMainGameModule()->mDebugManager.ActivateComponent(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBDeactivateDebugComponent(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        GetMainGameModule()->mDebugManager.DeactivateComponent(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
     }
 
     AutoTestManager::AutoTestManager()
