@@ -1280,9 +1280,8 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
 // shadow::Device seam; the constant/sampler upload machinery rides the PC leaf
 // in shadow::Device::SetMeshTechniquePC (see shadowingdevice.cpp) -- states and
 // shaders fall back to the flagged bring-up defaults until the converted
-// SHADERS bundle + material states are live. Occlusion-query interleaving
-// (BeginQueries/conditional render) stays with the occlusion reconstruction --
-// the PC occlusion switches default OFF.
+// SHADERS bundle + material states are live. Occlusion-query interleaving is
+// driven by the renderer's recovered per-pass query brackets.
 // =============================================================================
 s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
                                     DispatchObjectContext* /*lpContext*/,
@@ -1390,6 +1389,14 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
 
         // Bind the mesh geometry + draw.
         shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
+        // ARTIST @0x827F59EC-0x827F5A30 enters the manager's per-mesh
+        // conditional bracket after SetMeshBuffers and before either draw path.
+        const bool lbConditionalRender = spOcclusionCullManager != nullptr
+            && spOcclusionCullManager->meOcclusionMode
+                == OcclusionCullManager::OCCLUSIONMODE_RENDER;
+        if (lbConditionalRender)
+            spOcclusionCullManager->BeginMeshConditionalRender();
+
         if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
         {
             const auto* lpInstances = static_cast<const renderengine::WorldInstanceDrawPC*>(
@@ -1403,8 +1410,11 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
         {
             shadow::Device::DrawIndexedMeshPC(lpMesh);
         }
+
+        if (lbConditionalRender)
+            spOcclusionCullManager->EndMeshConditionalRender();
     }
-    return -1;
+    return luEnd != muCount ? static_cast<s32>(luEnd) : -1;
 }
 
 // =============================================================================

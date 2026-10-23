@@ -1799,9 +1799,9 @@ namespace BrnGui
             CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed] != 0,
                        "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:3737 (li r5, 0xE99)
 
-            GuiOverlayWaitFinishRequest lRequest;
-            lRequest.Construct(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
-            mpStateInterface->OutputGuiEvent(lRequest);
+            GuiOverlayWaitFinishWire lWire(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT, 24);
         }
 
         if (mbFriendsList)

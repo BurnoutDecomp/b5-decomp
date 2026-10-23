@@ -85,8 +85,8 @@ namespace CgsGraphics
 
     // CgsGraphics::OcclusionCullManager::Construct @ 0x827F1E00.
     // The vertex/index resources and query-list allocations all use lpAllocator. ARTIST's
-    // 0x2000-entry caller requests 0x80000 bytes (512 KiB) for the matrix array; that exceeds the
-    // current 256 KiB PC caller leaf and remains an integration/capacity dependency.
+    // 0x2000-entry caller requests 0x80000 bytes (512 KiB) for the matrix array; the PC renderer's
+    // deferred caller reserves that exact table in sWorldDispatchAllocator before Construct.
     void OcclusionCullManager::Construct(Im3dUntex* lpOccludeeIm3d,
                                          Im3dZOnly* lpOccludeeIm3dZOnly,
                                          rw::IResourceAllocator* lpAllocator,
