@@ -27,7 +27,12 @@ namespace BundleLoaderIO
         mUnloadBundleRequestQueue.Construct();
     }
 
-    void InputBuffer_Update::Destruct() { IOBuffer::Destruct(); }
+    void InputBuffer_Update::Destruct()
+    {
+        IOBuffer::Destruct();
+        mLoadBundleRequestQueue.Destruct();
+        mUnloadBundleRequestQueue.Destruct();
+    }
 
     const InputBuffer_Update::LoadBundleRequestQueue* InputBuffer_Update::GetLoadBundleRequestQueue() const
     {

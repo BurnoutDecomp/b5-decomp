@@ -26,7 +26,7 @@ namespace BundleLoaderIO
         mPoolReceiveQueue.Construct();
     }
 
-    void InputBuffer_Record::Destruct() { IOBuffer::Destruct(); }
+    void InputBuffer_Record::Destruct() { IOBuffer::Destruct(); mPoolReceiveQueue.Destruct(); }
 
     const InputBuffer_Record::PoolReceiveQueue* InputBuffer_Record::GetPoolReceiveQueue() const
     {

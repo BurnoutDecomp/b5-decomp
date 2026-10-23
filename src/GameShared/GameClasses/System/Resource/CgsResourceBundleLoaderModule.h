@@ -9,6 +9,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsBundleLoaderModuleIO.h"
 #include "GameShared/Jobs/DecompressionJob/DecompressionJobInterface.h"
 
+namespace CgsModule { struct IOBufferStack; }
+
 namespace CgsResource {
 class PoolModule;
 struct CompressedData;
@@ -27,6 +29,7 @@ struct LoadedBundleData {
 class BundleLoaderModule : public CgsModule::ModuleSingleBuffered {
     friend class DebugComponent;
 public:
+    static s32 _miUpdatePerfMon; // DecFIGS cpp32; ARTIST82F33FD4
     enum EStage { E_STAGE_START=0, E_STAGE_RUNNING=1, E_STAGE_DONE=2 };
     enum EStreamStage {
         STREAMSTAGE_IDLE=0, STREAMSTAGE_STREAMHEADER, STREAMSTAGE_STREAMDEBUGDATA,
@@ -53,6 +56,8 @@ public:
     bool Release();
     void Destruct();
     void CancelStreamPC();
+    void Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                const BundleLoaderIO::InputBuffer_Update* lpInput, BundleLoaderIO::OutputBuffer* lpOutput);
     bool Update(void* lpInputBuffer, void* lpOutputBuffer);
     void ProcessReceiverQueue();
     void ProcessPoolResponses();
