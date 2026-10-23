@@ -3405,6 +3405,16 @@ void GuiModule::Destruct()
                     const CgsModule::Event* const lpRawEvent =
                         reinterpret_cast<const CgsModule::Event*>(
                             reinterpret_cast<const u8*>(lpEvent) + luPayloadOffset);
+                    // FLAG PC-platform leaf: the PC drain runs after the autosave
+                    // tail. Mirror ARTIST82529054's next-update latch effects here;
+                    // preserve the original event forwarding below.
+                    if (luEventType == 356u)
+                    {
+                        mbForceProfileAutosave =
+                            mbForceProfileAutosave || (*reinterpret_cast<const u8*>(lpRawEvent) != 0);
+                        mbProfileAutosavePending = true;
+                    }
+
                     mGuiOutQueue.AddEvent(
                         lpRawEvent, static_cast<s32>(luEventType),
                         static_cast<s32>(luPayloadSize));
