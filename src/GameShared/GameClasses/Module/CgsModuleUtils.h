@@ -1,6 +1,8 @@
 #ifndef CGS_MODULE_UTILS_H
 #define CGS_MODULE_UTILS_H
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
 // ============================================================================
 // GameShared/GameClasses/Module/CgsModuleUtils.h  (original-source home: the
 // Feb-2007 tree includes "Module/CgsModuleUtils.h"; the sound-module TU's
@@ -18,6 +20,8 @@ namespace CgsModule
     template <typename TDest, typename TSource>
     inline void LockBuffersForIO( TDest* lpDestBuffer, TSource* lpSourceBuffer )
     {
+        CGS_ASSERT(lpDestBuffer, "lpInputBuffer");
+        CGS_ASSERT(lpSourceBuffer, "lpOutputBuffer0");
         lpDestBuffer->LockForWrite();
         lpSourceBuffer->LockForRead();
     }
@@ -25,6 +29,8 @@ namespace CgsModule
     template <typename TDest, typename TSource>
     inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSource* lpSourceBuffer )
     {
+        CGS_ASSERT(lpDestBuffer, "lpInputBuffer");
+        CGS_ASSERT(lpSourceBuffer, "lpOutputBuffer0");
         lpSourceBuffer->UnlockForRead();
         lpDestBuffer->UnlockForWrite();
     }

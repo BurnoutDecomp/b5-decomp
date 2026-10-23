@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <eathread/eathread_atomic.h>
 // Real instance layout: the 16 file handles, the 8 read-stream engines, the embedded log + lock.
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"
 // Complete CgsFileSystem::File definition — maFiles[16] is embedded by value below.
@@ -103,7 +104,14 @@ namespace CgsFileSystem
         static StreamDeviceDiskRead::EReadStreamStatus
             GetEffectiveStreamStatus(const StreamDeviceDiskRead* lpStream);
 
+    public:
+        bool HasDiskErrorOccured() const; // DecFIGS h246; ARTIST82907948 reads the same static word.
+
+    private:
         // ---- DWARF CgsFileSystem.h:308/317 (private) ----
+        static EA::Thread::AtomicInt32 mDiskErrorOccured; // DecFIGS h262, ARTIST830EA574
+        static bool RWDiskErrorHandler(s32 liError); // ARTIST828E8B20 ignores its argument
+
         // The actual file I/O primitives, called under mFileSystemFutex by FileHandle::Read/Write.
         // DECLARE-ONLY here: bodies are their own TUs (ReadInternal @0x828E8B50-region /
         // WriteInternal @0x828E8B50, homed in CgsFileSystem.cpp).

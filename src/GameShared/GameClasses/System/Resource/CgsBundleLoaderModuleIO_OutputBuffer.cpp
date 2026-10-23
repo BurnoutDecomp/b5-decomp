@@ -32,7 +32,14 @@ namespace BundleLoaderIO
         mStreamRequestQueue.Construct();
     }
 
-    void OutputBuffer::Destruct() { IOBuffer::Destruct(); }
+    void OutputBuffer::Destruct()
+    {
+        IOBuffer::Destruct();
+        mStreamRequestQueue.Destruct();
+        mLoadBundleResponseQueue.Destruct();
+        mUnloadBundleResponseQueue.Destruct();
+        mPoolSendQueue.Destruct();
+    }
 
     const OutputBuffer::PoolSendQueue* OutputBuffer::GetPoolSendQueue() const
     {

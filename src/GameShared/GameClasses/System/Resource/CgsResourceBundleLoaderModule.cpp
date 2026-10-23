@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::GetPool (resolve poolId)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [stream] trace
@@ -9,6 +10,8 @@
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
 namespace CgsResource
 {
+    s32 BundleLoaderModule::_miUpdatePerfMon = -1; // ARTIST raw82F33FD4
+
     // FLAG PC-platform leaf: resource destinations must outlive native workers.
     void BundleLoaderModule::CancelStreamPC()
     {
@@ -165,6 +168,27 @@ namespace CgsResource
         QueryPerformanceCounter(&lTicks);
         muTimerTrace = static_cast<u64>(lTicks.QuadPart);
     }
+    // ARTIST 82907638: stacks belong to the caller; this module consumes the supplied IO.
+    void BundleLoaderModule::Update(CgsModule::IOBufferStack* /*lpInputStack*/,
+                                     CgsModule::IOBufferStack* /*lpOutputStack*/,
+                                     const BundleLoaderIO::InputBuffer_Update* lpInput,
+                                     BundleLoaderIO::OutputBuffer* lpOutput)
+    {
+        if (_miUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(_miUpdatePerfMon);
+        lpOutput->LockForWrite();
+        lpInput->LockForRead();
+        ProcessReceiverQueue();
+        ProcessBundleLoadRequests(lpInput, lpOutput);
+        ProcessPoolResponses();
+        lpInput->UnlockForRead();
+        UpdateStream(lpOutput);
+        lpOutput->UnlockForWrite();
+        if (_miUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(_miUpdatePerfMon);
+    }
+
+
     bool BundleLoaderModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {
         // ARTIST82907638; the legacy native adapter has a bool return, unused

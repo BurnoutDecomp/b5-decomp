@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"
 #include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModule.h"
 #include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
-#include "GameShared/GameClasses/Development/DebugSystem/GameTalk/CgsDebugGameTalkInterface.h
+#include "GameShared/GameClasses/Development/DebugSystem/GameTalk/CgsDebugGameTalkInterface.h"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"          // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"        // mResourceModule (the streaming engine)

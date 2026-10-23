@@ -17,6 +17,8 @@
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"                      // mRelocator / mRelocationParams
 #include "rw/rwcore_structs.h"                                          // rw::Resource / ResourceDescriptor (InitOptions)
 
+namespace CgsModule { struct IOBufferStack; }
+
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
 namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; struct DestroyBankResponse; } }
 namespace CgsResource { namespace PoolIO { struct InputBuffer; struct OutputBuffer; } }
@@ -58,6 +60,8 @@ namespace CgsResource
         static const u16 KU_MAX_POOL_ENTRIES          = 36863;   // :62
         static const u16 KU_MAX_LINEAR_HEAP_LENGTH    = 65535;   // :63
         static const u16 KU_MAX_DISTRIBUTION_COMMANDS = 65535;   // :64
+
+        enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 }; // DecFIGS h101
 
         // PoolModule's own prepare/release stage machine (distinct from the base module's).
         enum EPoolPrepareStage { E_POOLPREPARE_START = 0, E_POOLPREPARE_BASE = 1, E_POOLPREPARE_POOLS = 2, E_POOLPREPARE_DONE = 3 };
@@ -160,6 +164,9 @@ namespace CgsResource
         // (WorldEntityModule::PrepareZoneCollision's "TRK_CLIL<n>" acquires).
         void DoAcquireResourceListRequest(const Events::AcquireResourceListRequest* lpRequest,
                                           PoolIO::OutputBuffer* lpOutput);
+
+        EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                             const PoolIO::InputBuffer* lpInput, PoolIO::OutputBuffer* lpOutput);
 
         // ---- current two-argument native adapter ---------------------------------------
         // The full ARTIST four-argument Update/Construct activation remains a separate boundary.

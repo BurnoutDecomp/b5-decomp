@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/System/PC/CgsResourcePoolBindingsPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original formatted pool assertions
@@ -340,6 +341,97 @@ namespace CgsResource
     }
     // The existing host update transport now drives the original typed request and
     // receiver processors, then the same state machines and owned maPools sweep.
+    // ARTIST 829076D8: original state dispatch and live-pool sweep.
+    PoolModule::EUpdateResult PoolModule::Update(
+        CgsModule::IOBufferStack* /*lpInputStack*/, CgsModule::IOBufferStack* /*lpOutputStack*/,
+        const PoolIO::InputBuffer* lpInput, PoolIO::OutputBuffer* lpOutput)
+    {
+        lpOutput->LockForWrite();
+        lpInput->LockForRead();
+        ProcessInputBuffer(lpInput, lpOutput);
+        lpInput->UnlockForRead();
+        ProcessReceiverQueue(lpOutput);
+        if (Pool::_miPoolModuleStatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(Pool::_miPoolModuleStatePerfMon);
+        if (mProcessState == E_UPDATESTATE_IDLE)
+        {
+            const s32 liMonitor = Pool::_miPoolModuleIdle;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            Events::AllocateResourceListRequest lRequest;
+            if (mPendingAllocationRequests.Pop(&lRequest))
+                DoAllocateResourceListRequest(&lRequest);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        }
+
+        switch (mProcessState)
+        {
+        case E_UPDATESTATE_ALLOCATING_LIST:
+        {
+            const s32 liMonitor = Pool::_miPoolModuleAllocating;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateAllocating(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            break;
+        }
+        case E_UPDATESTATE_DEALLOCATING_LIST:
+        {
+            const s32 liMonitor = Pool::_miPoolModuleDeallocating;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateDeAllocating(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            break;
+        }
+        case E_UPDATESTATE_LIVEUPDATE:
+        {
+            const s32 liMonitor = Pool::_miPoolModuleLiveupdate;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateLiveUpdate(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            break;
+        }
+        }
+
+        if (mProcessState == E_UPDATESTATE_INTELLIFRAG)
+        {
+            const s32 liMonitor = Pool::_miPoolModuleIntellifrag;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateIntelliFrag(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        }
+        if (mProcessState == E_UPDATESTATE_EMERGENCYFRAG)
+        {
+            const s32 liMonitor = Pool::_miPoolModuleEmergencyFrag;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateEmergencyFrag(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        }
+        if (Pool::_miPoolModuleStatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(Pool::_miPoolModuleStatePerfMon);
+        lpOutput->UnlockForWrite();
+
+        if (Pool::_miPoolUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(Pool::_miPoolUpdatePerfMon);
+        for (s32 liPool = 0; liPool < KI_MAX_POOLS; ++liPool)
+            if (maPools[liPool].GetId() != -1)
+                maPools[liPool].Update();
+        if (Pool::_miPoolUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(Pool::_miPoolUpdatePerfMon);
+        return mProcessState == E_UPDATESTATE_EMERGENCYFRAG ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
+    }
+
+
     bool PoolModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {
         PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
