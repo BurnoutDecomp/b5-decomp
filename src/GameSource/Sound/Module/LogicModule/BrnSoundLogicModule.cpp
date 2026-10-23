@@ -480,16 +480,46 @@ void SoundLogicModule::ProcessGuiEvents(
         {
         case 23:
         {
-            // X360 0x826ED6C8 case 23 copies the wire record's three fields into the
-            // message payload at +0x00 / +0x04 / +0x05 -- NOT the wire record itself
-            // (which carries a 12-byte GuiEvent<23> header here). See
-            // BrnSound::MusicOnMenuStreamData.
-            const CgsGui::GuiEventPlayMusicOnMenuStream* lpGuiEvent =
-                reinterpret_cast<const CgsGui::GuiEventPlayMusicOnMenuStream*>(lpEvent);
+            // X360 0x826ED6C8 case 23 copies the stream hash and two flags to the
+            // message at payload offsets +0/+4/+5. GetGuiPayload has already removed a
+            // type-23 GuiEvent header when one is present. The channel-40 drain also
+            // unwraps {8,23,12}+8 to the same 8-byte payload before this queue receives it.
+            //
+            // Keep the separate channel-155 boot compatibility path: BrnGuiModule translates
+            // its full {0,155,12}+8 record directly to type 23, so GetGuiPayload leaves that
+            // 20-byte type-155 record intact and these fields remain at +12/+16/+17.
+            const u8* const lpuEventBytes = reinterpret_cast<const u8*>(lpEvent);
+            const GuiEventWireHeader* lpEventHeader =
+                reinterpret_cast<const GuiEventWireHeader*>(lpEvent);
+            u32 luStreamNameHash;
+            u8 lu8FromVideo;
+            u8 lu8PlayOverCustomSoundtrack;
+            const bool lbFullChannel155Record =
+                lpuPayload == lpuEventBytes &&
+                liSize >= static_cast<s32>(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream)) &&
+                lpEventHeader->muEventType == 155u &&
+                lpEventHeader->muPayloadOffset == sizeof(GuiEventWireHeader);
+            if (lbFullChannel155Record)
+            {
+                luStreamNameHash =
+                    static_cast<u32>(EventS32At(lpEvent, 12));
+                lu8FromVideo = EventU8At(lpEvent, 16);
+                lu8PlayOverCustomSoundtrack = EventU8At(lpEvent, 17);
+            }
+            else
+            {
+                const CgsModule::Event* lpPayloadEvent =
+                    reinterpret_cast<const CgsModule::Event*>(lpuPayload);
+                luStreamNameHash =
+                    static_cast<u32>(EventS32At(lpPayloadEvent, 0));
+                lu8FromVideo = EventU8At(lpPayloadEvent, 4);
+                lu8PlayOverCustomSoundtrack = EventU8At(lpPayloadEvent, 5);
+            }
+
             BrnSound::MusicOnMenuStreamData lData;
-            lData.muStreamNameHash = lpGuiEvent->muStreamNameHash;
-            lData.mbFromVideo = lpGuiEvent->mbFlagA ? 1u : 0u;
-            lData.mbPlayOverCustomSoundtrack = lpGuiEvent->mbFlagB ? 1u : 0u;
+            lData.muStreamNameHash = luStreamNameHash;
+            lData.mbFromVideo = lu8FromVideo ? 1u : 0u;
+            lData.mbPlayOverCustomSoundtrack = lu8PlayOverCustomSoundtrack ? 1u : 0u;
             lData.maReserved[0] = 0;
             lData.maReserved[1] = 0;
             PostSoundMessage(mMessageQueue, 13, 0, 0, 2,
