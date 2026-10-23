@@ -31,7 +31,14 @@ namespace CgsModule { class IOBufferStack; }
 // pass. MemoryBank/MemoryBlock stay forward-declared (used only via pointer members until then).
 namespace CgsMemory
 {
-    namespace MemoryIO { struct InputBuffer; struct OutputBuffer; struct MemoryRequest; }
+    namespace MemoryIO
+    {
+        struct InputBuffer;
+        struct OutputBuffer;
+        struct MemoryRequest;
+        struct CreateLinearAllocatorRequest;
+        struct CreateGeneralAllocatorRequest;
+    }
 
     class MemoryModule : public CgsModule::ModuleSingleBuffered
     {
@@ -135,8 +142,8 @@ namespace CgsMemory
         void ProcessMemoryRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessCreateBankRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessDestroyBankRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
-        void ProcessCreateLinearAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
-        void ProcessCreateGeneralAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
+        void ProcessCreateLinearAllocatorRequest(const MemoryIO::CreateLinearAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
+        void ProcessCreateGeneralAllocatorRequest(const MemoryIO::CreateGeneralAllocatorRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessCreateAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessDestroyAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
         void ProcessCreateResourceRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput);
