@@ -46,6 +46,7 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"                        // CgsNetwork::KI_USERNAME_LENGTH
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // the homed 111/112/113 + 323 wire records
 
+#include <cstddef>                                                        // offsetof
 #include <cstring>                                                        // std::memcpy
 
 // BrnGuiDemangledEventTypes.h is deliberately NOT included: it hard-collides with
@@ -273,6 +274,14 @@ namespace BrnGui
                 // ...and log which board was asked for. The telemetry record's parameter
                 // buffer starts one word past its type, and TelemetryData is the accessor for
                 // that buffer, so the builder addresses the record through it.
+                static_assert(sizeof(CgsGui::GuiEvent<323>) == 12,
+                              "event 323 record header is 12 bytes");
+                static_assert(sizeof(GuiTelemetryEvent) == 32,
+                              "event 323 record is 12-byte header plus 20-byte payload");
+                static_assert(offsetof(GuiTelemetryEvent, miTelemetryType) == 12,
+                              "event 323 payload begins at record offset 12");
+                static_assert(offsetof(GuiTelemetryEvent, macParams) == 16,
+                              "event 323 parameter string follows the payload type word");
                 GuiTelemetryEvent lTelemetry(KI_TELEMETRY_TYPE_SCOREBOARD_TABLE);
                 BrnNetwork::BrnNetworkModuleIO::TelemetryData* lpTelemetry =
                     reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::TelemetryData*>(
@@ -282,7 +291,9 @@ namespace BrnGui
                 AddIntTelemetryParameter(lpTelemetry, miCurrentIndex);
                 AddIntTelemetryParameter(lpTelemetry, liTargetVariation);
 
-                mpStateInterface->OutputGuiEvent(lTelemetry);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lTelemetry), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lTelemetry)));
             }
             // fall through
             case E_LEADERBOARD_REQUEST_STATE_WF_TABLE:

@@ -61,6 +61,7 @@
 #include "GameSource/GameState/Progression/BrnProfile.h"                   // BrnProgression::Profile
 
 #include <cstddef>  // offsetof
+#include <cstddef> // offsetof
 #include <cstdio>   // std::snprintf (the one-shot parked-leaf logs)
 
 // The XDK sign-in query the profile row gates on (X360 `lwz r3, 0x4B38(cache) ; bl
@@ -191,6 +192,13 @@ namespace BrnGui
             {
             }
         };
+        static_assert(KI_EVENT_NETWORK_NEWS_TOS == 266, "ARTIST event id is 266");
+        static_assert(sizeof(CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>) == 12,
+                      "event 266 record header is 12 bytes");
+        static_assert(sizeof(GuiNetworkNewsAndTosWire266) == 16,
+                      "event 266 record is 12-byte header plus 4-byte payload");
+        static_assert(offsetof(GuiNetworkNewsAndTosWire266, muSelector) == 12,
+                      "event 266 selector begins at record offset 12");
 
         // { 288, 184, 16, <GuiOverlayRequest> } -- 304 bytes on channel 40. ARTIST
         // copies the 0x120-byte request to the explicitly measured +0x10 payload offset
@@ -664,7 +672,9 @@ namespace BrnGui
                 meState = E_STATE_MAIN;
 
                 GuiNetworkNewsAndTosWire266 lNews(KU_NEWS_TOS_PAYLOAD_SETTINGS);
-                mpStateInterface->OutputGuiEvent(lNews);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lNews), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lNews)));
             }
         }
 
