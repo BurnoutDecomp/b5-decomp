@@ -146,8 +146,9 @@ namespace BrnResource
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
 
     private:
-        // Exact original helper APIs. Their stack-backed bodies are distinct from
-        // the retained native shortcuts below and remain explicit link dependencies.
+        // Exact original helper APIs, distinct from the retained native shortcuts.
+        // The three allocation helpers are recovered; schema/list helper bodies
+        // remain explicit link dependencies of the original caller.
         bool CreateBanks(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
         bool CreatePools(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
         bool CreateAllocators(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
@@ -510,8 +511,9 @@ namespace BrnResource
         //      point into these; CreateAllocators fills both. -------------------------------
         rw::Resource                        maGeneratedRawResources[2];
         rw::ResourceDescriptor              maGeneratedRawResourceDescriptors[2];
-        CgsMemory::LinearMalloc             maGeneratedLinearAllocators[7];
-        CgsMemory::HeapMalloc               maGeneratedHeapAllocators[8];
+        // ARTIST storage capacities are 8/9; its memory map populates only 7/8.
+        CgsMemory::LinearMalloc             maGeneratedLinearAllocators[8];
+        CgsMemory::HeapMalloc               maGeneratedHeapAllocators[9];
         rw::LinearResourceAllocator*        mapGeneratedRWLinearAllocators[5];
         rw::core::GeneralResourceAllocator* mapGeneratedRWGeneralAllocators[5];
         CgsMemory::LinearMalloc             mAudioStreamAllocator;
