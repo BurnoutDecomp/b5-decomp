@@ -119,5 +119,12 @@ namespace CgsResource
             CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
             return &mFileSystemStatusInterface;
         }
+        // ARTIST DestroyIOBuffer<ResourceIO::OutputBuffer> at826637F8 calls the
+        // ICF-shared822DC3D0 thunk, whose sole instruction branches to IOBuffer::Destruct.
+        void OutputBuffer::Destruct()
+        {
+            CgsModule::IOBuffer::Destruct();
+        }
+
     }
 }

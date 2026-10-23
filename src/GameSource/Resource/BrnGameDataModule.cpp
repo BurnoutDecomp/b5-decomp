@@ -1,4 +1,5 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
 #include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
@@ -137,6 +138,194 @@ namespace BrnResource
         mbIsNewModule = true;
     }
 
+    // ARTIST 826663B0: output scratch is owned by the caller's output stack.
+    CgsResource::ResourceModule::EUpdateResult GameDataModule::UpdateResourceModule(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        const CgsResource::ResourceIO::InputBuffer* lpInputBuffer)
+    {
+        CgsModule::IOHelper<CgsResource::ResourceIO::OutputBuffer> lOutput(
+            lpOutputStack, "ResourceOutput");
+        const CgsResource::ResourceModule::EUpdateResult leResult =
+            mResourceModule.Update(lpInputStack, lpOutputStack, lpInputBuffer, lOutput);
+        const CgsResource::ResourceIO::OutputBuffer* lpOutput = lOutput;
+        lpOutput->LockForRead();
+        mFileSystemStatusInterface = *lpOutput->GetFileSystemStatusInterface();
+        lpOutput->UnlockForRead();
+        return leResult;
+    }
+
+    // ARTIST 82673F38. This is the original four-argument lifecycle, separate
+    // from the retained two-argument host shortcut below. It does not call that shortcut.
+    bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack,
+                                 CgsModule::IOBufferStack* lpOutputStack,
+                                 const GameDataIO::InputBuffer* lpInputBuffer,
+                                 GameDataIO::OutputBuffer* lpOutputBuffer)
+    {
+        (void)lpInputBuffer; // ARTIST does not consume this input pointer in Prepare.
+        mFileSystemStatusInterface.Construct();
+
+        switch (mePrepareStage)
+        {
+        case E_PREPARESTAGE_START:
+        case E_PREPARESTAGE_MANAGER:
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                break;
+            mDebugComponent.Register();
+            mDLCDebugComponent.Register();
+            [[fallthrough]];
+        case E_PREPARESTAGE_RESOURCEMODULE:
+            mePrepareStage = E_PREPARESTAGE_RESOURCEMODULE;
+            if (!mResourceModule.Prepare())
+                break;
+            mReceiverQueue.Clear();
+            [[fallthrough]];
+        case E_PREPARESTAGE_CREATEBANKS:
+            mePrepareStage = E_PREPARESTAGE_CREATEBANKS;
+            if (!CreateBanks(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_CREATEPOOLS:
+            mePrepareStage = E_PREPARESTAGE_CREATEPOOLS;
+            if (!CreatePools(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_CREATEALLOCATORS:
+            mePrepareStage = E_PREPARESTAGE_CREATEALLOCATORS;
+            if (!CreateAllocators(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_DLC:
+            mePrepareStage = E_PREPARESTAGE_DLC;
+            if (!mDLCManager.Prepare(&mAllocatorList))
+                break;
+            miDLCManagerPackageIndex = 0;
+            [[fallthrough]];
+        case E_PREPARESTAGE_DLC_ADD_PATCH:
+        {
+            mePrepareStage = E_PREPARESTAGE_DLC_ADD_PATCH;
+            if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+            {
+                CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
+                    lpInputStack, "Resource");
+                lResourceInput->LockForWrite();
+                const s32 liVersion = mDLCManager.GetPackage(miDLCManagerPackageIndex)->miVersion;
+                const BrnResource::DLCManager::DLCPackage* lpPackage =
+                    mDLCManager.GetPackage(miDLCManagerPackageIndex);
+                CgsResource::Events::AddPatchRequest lRequest;
+                lRequest.Construct(&mReceiverQueue, miDLCManagerPackageIndex,
+                                   lpPackage->mPath, liVersion);
+                lResourceInput->GetResourceQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 25,
+                    static_cast<s32>(sizeof(lRequest)));
+                mReceiverQueue.Clear();
+                lResourceInput->UnlockForWrite();
+                UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
+            }
+            [[fallthrough]];
+        }
+        case E_PREPARESTAGE_DLC_WAIT_PATCH:
+            mePrepareStage = E_PREPARESTAGE_DLC_WAIT_PATCH;
+            if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+            {
+                if (mReceiverQueue.GetCount() == 0)
+                {
+                    CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
+                        lpInputStack, "Resource");
+                    UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
+                    break;
+                }
+                ++miDLCManagerPackageIndex;
+                if (miDLCManagerPackageIndex < mDLCManager.muPackageCount)
+                {
+                    // ARTIST 8267422C..230 yields before submitting another package.
+                    mePrepareStage = E_PREPARESTAGE_DLC_ADD_PATCH;
+                    break;
+                }
+            }
+            [[fallthrough]];
+        case E_PREPARESTAGE_ATTRIBSYS:
+        {
+            mePrepareStage = E_PREPARESTAGE_ATTRIBSYS;
+            CgsMemory::HeapMalloc* lpEastlHeap = mAllocatorList.GetHeapAllocator(21);
+            CgsMemory::HeapMalloc* lpGameTalkHeap = mAllocatorList.GetHeapAllocator(20);
+            CgsMemory::HeapMalloc* lpAttribHeap = mAllocatorList.GetHeapAllocator(19);
+            CgsMemory::LinearMalloc* lpLinear = mAllocatorList.GetLinearAllocator(22);
+            if (!mAttribSysModule.Prepare(lpLinear, lpAttribHeap, lpGameTalkHeap, lpEastlHeap, 80))
+                break;
+            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput = 0;
+            lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib");
+            const bool lbSchemaPrepared =
+                PrepareAttribSysSchemaResource(lpInputStack, lpOutputStack, lpAttribInput);
+            lpInputStack->DestroyIOBuffer(&lpAttribInput);
+            if (!lbSchemaPrepared)
+                break;
+            [[fallthrough]];
+        }
+        case E_PREPARESTAGE_GAMETALK:
+            mePrepareStage = E_PREPARESTAGE_GAMETALK;
+            if (!mGameTalk.Prepare(10.0f, 1.0f / 60.0f))
+                break;
+            if (!mDebugGameTalkInterface.Prepare())
+                CGS_ASSERT(false, "mDebugGameTalkInterface.Prepare()");
+            [[fallthrough]];
+        case E_PREPARESTAGE_LIVEUPDATE:
+            mePrepareStage = E_PREPARESTAGE_LIVEUPDATE;
+            if (!mLiveUpdateModule.Prepare())
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_VEHICLELIST:
+            mePrepareStage = E_PREPARESTAGE_VEHICLELIST;
+            if (!PrepareVehicleList(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_CHALLENGELIST:
+            mePrepareStage = E_PREPARESTAGE_CHALLENGELIST;
+            if (!PrepareFreeburnChallengeList(lpInputStack, lpOutputStack))
+                break;
+            miICEListPrepareStage = 0;
+            [[fallthrough]];
+        case E_PREPARESTAGE_ICELIST:
+            mePrepareStage = E_PREPARESTAGE_ICELIST;
+            if (!PrepareICEList(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_WHEELLIST:
+            mePrepareStage = E_PREPARESTAGE_WHEELLIST;
+            if (!PrepareWheelList(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_HUDMESSAGES:
+            mePrepareStage = E_PREPARESTAGE_HUDMESSAGES;
+            if (!PrepareHudMessages(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_POPUPS:
+            mePrepareStage = E_PREPARESTAGE_POPUPS;
+            if (!PreparePopups(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_DONE:
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            meReleaseStage = E_PREPARE_START;
+            lpOutputBuffer->LockForWrite();
+            lpOutputBuffer->SetAllocatorList(&mAllocatorList);
+            lpOutputBuffer->UnlockForWrite();
+            return true;
+        default: // ARTIST case15 is invalid; DecFIGS's test-stream stage is absent here.
+            CGS_ASSERT(false, "Invalid Stage\n");
+            break;
+        }
+
+        lpOutputBuffer->LockForWrite();
+        lpOutputBuffer->SetFileSystemStatusInterface(&mFileSystemStatusInterface);
+        lpOutputBuffer->UnlockForWrite();
+        return false;
+    }
+
+
+    // Retained native two-argument shortcut; its stage7/DONE behavior is unchanged.
     // @ 0x82673F38 - resumable bring-up: base module, then the ResourceModule (memory/pool/
     // bundle/filesystem), then carve banks/pools/allocators. Re-enters at the current stage if
     // a sub-step is not yet ready. (The X360 then runs DLC stages 16-18+ and the AttribSys/HUD/

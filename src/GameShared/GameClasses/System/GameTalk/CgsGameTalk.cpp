@@ -80,7 +80,7 @@ namespace CgsGameTalk
     }
 
     // X360 @0x828394B8.
-    void GameTalk::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep)
+    bool GameTalk::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep)
     {
         // Create the process-wide GameTalk singleton, then point mpGameTalkManager at it.
         EA::GameTalk::GameTalkManager::CreateInstance(this, KI_GAMETALK_MAX_CHANNELS, 0);
@@ -98,7 +98,8 @@ namespace CgsGameTalk
         // Register the debug component with the debug menu.
         mDebugComponent.Register();
 
-        mbPrepared = true;                  // stb 1, 0x4034
+        mbPrepared = true;                  // ARTIST 82839530
+        return true;                        // ARTIST 8283952C: li r3,1
     }
 
     // X360 @0x828248D0 (header-inline in the original CgsGameTalk.h:143-146).
