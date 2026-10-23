@@ -1,0 +1,42 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        Array_PropLoadedZoneRecord_9_operator_index.cpp
+        Array_ReplayPropRecord_254_pushback.cpp
+        Array_u16_254_operator_index.cpp
+        Array_u32_4_operator_index.cpp
+        BrnGuiModuleAboveCarObjectLayout.cpp
+        BrnReplayArray.cpp
+        BrnReplayBaseSerialiser.cpp
+        BrnReplayBaseSerialiser_embed_check.cpp
+        BrnReplayDebugComponent.cpp
+        BrnReplayDebugComponent_embed_check.cpp
+        BrnReplayGuiModuleStaticLayout.cpp
+        BrnReplayModule.cpp
+        BrnReplayModule_Prepare.cpp
+        BrnReplayModuleIO.cpp
+        BrnReplayQuantisedQuatPos.cpp
+        BrnReplayQuantisedVector4.cpp
+        BrnReplayRequestInterface.cpp
+        BrnReplayRequestInterface_embed_check.cpp
+        BrnReplayStatusInterface.cpp
+        BrnReplayStatusInterface_embed_check.cpp
+        RingBuffer_float.cpp
+
+    PUBLIC
+        BrnGuiModuleAboveCarObjectLayout.h
+        BrnReplayArray.h
+        BrnReplayBaseSerialiser.h
+        BrnReplayDebugComponent.h
+        BrnReplayGuiModuleStaticLayout.h
+        BrnReplayModule.h
+        BrnReplayModuleIO.h
+        BrnReplayQuantisedQuatPos.h
+        BrnReplayQuantisedVector4.h
+        BrnReplayReels.h
+        BrnReplayRequestInterface.h
+        BrnReplayShared.h
+        BrnReplayStatusInterface.h
+)
+
+add_subdirectory(Serialisers)
+add_subdirectory(Stream)
