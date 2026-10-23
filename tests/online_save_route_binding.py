@@ -11,6 +11,8 @@ GETTERS = "src/GameSource/Gui/BrnGuiOptionsDataProfile_wS34_00.cpp"
 PARAMS = "src/GameSource/Gui/Events/BrnGuiEventNetworkGameParams.cpp"
 EVENTS = "src/GameSource/GameState/BrnGameStateSharedIO.cpp"
 CACHE = "src/GameSource/Gui/BrnGuiCache.cpp"
+STRSTREAM = "src/GameShared/GameClasses/Development/CgsStrStream.cpp"
+DIAGNOSTIC_GLOBALS = "tests/OnlineSaveRouteDiagnosticGlobals.cpp"
 EVIDENCE = "tests/evidence/online_save_route"
 BASELINE = EVIDENCE + "/BrnGuiOptionsDataProfile_8b2940d4.cpp"
 BASE = "8b2940d40e76fd6a88a37615f6163a99c2d5e3b8"
@@ -51,7 +53,9 @@ def validate_sources(b5: Path, workflow: Path) -> dict:
         pins.get("base") != BASE or pins.get("baseline_git_blob_sha1") != BASE_BLOB):
         raise ValueError("unsupported source-pin contract")
     expected = {
-        MAIN, HEADER, GETTERS, PARAMS, EVENTS, CACHE,
+        MAIN, HEADER, GETTERS, PARAMS, EVENTS, CACHE, STRSTREAM, DIAGNOSTIC_GLOBALS,
+        "src/GameShared/GameClasses/Development/CgsStrStream.h",
+        "src/GameShared/GameClasses/Development/Log/CgsLog.h",
         "src/GameSource/Gui/BrnGuiCache.h", "src/GameSource/Gui/BrnGuiEventTypeDefs.h",
         "src/GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h",
         "src/GameSource/GameState/BrnGameStateSharedIO.h", "src/GameSource/GameState/BrnGameStateTypes.h",
@@ -108,7 +112,8 @@ def compose_variant(b5: Path, dest: Path, variant: str) -> dict:
         definition_receipt.update({"candidate_replaced_span": [start, end],
             "old_constructor_sha256": hashlib.sha256(old_ctor.encode()).hexdigest(),
             "replaced_candidate_constructor_sha256": hashlib.sha256(current[start:end].encode()).hexdigest()})
-    return {"sources": [b5 / "tests/OnlineSaveRoute.cpp", selected, b5 / GETTERS, b5 / PARAMS, b5 / EVENTS, provider],
+    return {"sources": [b5 / "tests/OnlineSaveRoute.cpp", selected, b5 / GETTERS, b5 / PARAMS, b5 / EVENTS, provider,
+                        b5 / STRSTREAM, b5 / DIAGNOSTIC_GLOBALS],
             "main_source": {"path": str(selected), **identity(selected)},
             "constructor_provider": {"path": str(provider), **identity(provider)},
             "recipe": recipe, "definitions": definition_receipt}
