@@ -4721,15 +4721,59 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         mOcclusionCullManager.mNearClipOffset.z = mfOccludeeNearClipOffset;
     }
 
+    // FLAG PC-platform leaf: opt-in, bounded passive consumer evidence. No draw/query
+    // or engine state is changed; the diagnostic frame counter is independent of game time.
+    static const bool sbOcclusionProbe = []()
+    {
+        const char* lpValue = std::getenv("BRN_OCCLUSION_DIAG");
+        return lpValue != nullptr && lpValue[0] == '1' && lpValue[1] == '\0';
+    }();
+    static u32 suOcclusionProbeFrames = 0;
+    static u32 suOcclusionProbeStates = 0;
+    static u32 suOcclusionProbeBatches = 0;
+    static u32 suLastOcclusionProbeState = ~0u;
+    const u32 luOcclusionProbeFrame = sbOcclusionProbe ? suOcclusionProbeFrames++ : 0u;
+    if (sbOcclusionProbe)
+    {
+        const u32 luState = (mOcclusionCullManager.mbOcclusionEnabled ? 1u : 0u)
+            | (lbOcclusionCullReady ? 2u : 0u) | (mbOcclusionCullWorldOpaque ? 4u : 0u);
+        if (luState != suLastOcclusionProbeState && suOcclusionProbeStates < 24u)
+        {
+            char lacTrace[160];
+            std::snprintf(lacTrace, sizeof(lacTrace),
+                "[occ-state] frame=%u enabled=%u ready=%u world_opaque=%u\n",
+                static_cast<unsigned>(luOcclusionProbeFrame),
+                mOcclusionCullManager.mbOcclusionEnabled ? 1u : 0u,
+                lbOcclusionCullReady ? 1u : 0u, mbOcclusionCullWorldOpaque ? 1u : 0u);
+            CgsDev::Log::WriteToLog(lacTrace);
+            ++suOcclusionProbeStates;
+        }
+        suLastOcclusionProbeState = luState;
+    }
+
     const auto DispatchOcclusionBatch = [&](DispatchList* lpList, s32 liFirst, s32 liCount)
     {
         mOcclusionCullManager.BeginQueries();
-        lpList->DispatchAllMeshOcclusionQueries(mpInterpreter, liFirst, liCount);
+        const s32 liQueryNext = lpList->DispatchAllMeshOcclusionQueries(mpInterpreter, liFirst, liCount);
         mOcclusionCullManager.EndQueries();
         mOcclusionCullManager.BeginConditionalRender();
         const s32 liNext = lpList->DispatchAllMeshes(
             mpInterpreter, &lContext, static_cast<u32>(liFirst), liCount);
         mOcclusionCullManager.EndConditionalRender();
+        if (sbOcclusionProbe && suOcclusionProbeBatches < 192u)
+        {
+            const u32 luList = lpList == GetMeshFrameForReadPC().GetList(11u) ? 11u
+                : lpList == GetMeshFrameForReadPC().GetList(19u) ? 19u
+                : lpList == GetMeshFrameForReadPC().GetList(15u) ? 15u : 20u;
+            char lacTrace[224];
+            std::snprintf(lacTrace, sizeof(lacTrace),
+                "[occ-batch] frame=%u list=%u total=%u first=%d count=%d query_next=%d draw_next=%d\n",
+                static_cast<unsigned>(luOcclusionProbeFrame), static_cast<unsigned>(luList),
+                static_cast<unsigned>(lpList->GetCount()), static_cast<int>(liFirst),
+                static_cast<int>(liCount), static_cast<int>(liQueryNext), static_cast<int>(liNext));
+            CgsDev::Log::WriteToLog(lacTrace);
+            ++suOcclusionProbeBatches;
+        }
         return liNext;
     };
 
