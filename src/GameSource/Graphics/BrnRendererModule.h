@@ -653,6 +653,10 @@ private:
                            CgsGraphics::DispatchObjectContext* lpContext,
                            f32 lfWhiteLevel);
 
+    // FLAG PC-platform leaf: the console constructs these device-backed query
+    // renderers in Construct; the PC waits for its D3D9 device and dispatcher arena.
+    bool EnsureOcclusionCullManagerPC();
+
     // [FLAG PC bring-up] Sky-dome bring-up (NOT console functions -- see the bodies).
     // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
     // BrnRendererModule::Construct/Prepare, deferred to the first world frame because
@@ -811,7 +815,8 @@ private:
     BrnSunCorona                        mSunCorona;
     EFrameStallStage                    meFrameStallStage;
     s32                                 miFrameStallCountdown;
-    // The menu-visible flag defaults are attested; full query GPU-resource construction remains pending.
+    // The menu-visible flags are attested; PC GPU resources are created lazily by
+    // EnsureOcclusionCullManagerPC after the device exists.
     CgsGraphics::OcclusionCullManager   mOcclusionCullManager;
     BrnGame::LoadingScreenRenderer      mLoadingScreenRenderer;
     CgsResource::ResourceHandle         mCalibrationTextureHandle;   // +0xC920
@@ -854,6 +859,11 @@ private:
         return mpMeshProducerInterpreterPC
             ? *maPreparedMeshFramesPC[muMeshReadFramePC].mpFrame : mSingleBufferedDispatchFrame;
     }
+
+    // FLAG PC-platform leaf: deferred construction state for the X360 query manager.
+    // These tail members leave the recovered renderer fields above at their declared offsets.
+    bool mbOcclusionCullManagerReadyPC = false;
+    bool mbOcclusionCullManagerAttemptedPC = false;
 };
 
 inline void BrnRendererModule::ClearDispatchCounters()

@@ -40,6 +40,9 @@ namespace CgsGraphics
         // ARTIST 0x827FCBD0: initialize the inherited transform, build the one
         // untextured program pair, and resolve its worldViewProj handle.
         void Construct(rw::IResourceAllocator* lpAllocator);
+        // FLAG PC-platform leaf: the host may fail to adopt the program image.
+        bool HasProgramsPC() const
+        { return mapVertexProgramBuffer[0] != nullptr && mapPixelProgramBuffer[0] != nullptr; }
     };
 
     // DecFIGS DWARF CgsIm3d.h:226. The position-only renderer has exactly this inherited base
@@ -49,6 +52,9 @@ namespace CgsGraphics
         // ARTIST 0x827FCCB8: initialize the inherited transform, build the one
         // position-only program pair, and resolve its worldViewProj handle.
         void Construct(rw::IResourceAllocator* lpAllocator);
+        // FLAG PC-platform leaf: the host may fail to adopt the program image.
+        bool HasProgramsPC() const
+        { return mapVertexProgramBuffer[0] != nullptr && mapPixelProgramBuffer[0] != nullptr; }
     };
 
     // CgsGraphics::Im3d - the concrete TEXTURED immediate-mode 3D renderer (the smoke / spark /

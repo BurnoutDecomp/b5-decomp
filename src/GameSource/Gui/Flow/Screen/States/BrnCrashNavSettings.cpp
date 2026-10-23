@@ -60,6 +60,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"                                   // gGuiResourceIdentifier (the apt movie name)
 #include "GameSource/GameState/Progression/BrnProfile.h"                   // BrnProgression::Profile
 
+#include <cstddef>  // offsetof
 #include <cstdio>   // std::snprintf (the one-shot parked-leaf logs)
 
 // The XDK sign-in query the profile row gates on (X360 `lwz r3, 0x4B38(cache) ; bl
@@ -191,19 +192,29 @@ namespace BrnGui
             }
         };
 
-        // { 288, 184, 16, <GuiOverlayRequest> } -- 304 bytes on channel 40. The X360 builds
-        // this record on the stack and memcpy's the 0x120-byte request into it; the header's
-        // third word is 16 here, NOT 12, because the payload is 8-aligned (`li r11, 0x10 ;
-        // stw r11, +8`). Verified at 0x824CD59C / 0x824CD638.
+        // { 288, 184, 16, <GuiOverlayRequest> } -- 304 bytes on channel 40. ARTIST
+        // copies the 0x120-byte request to the explicitly measured +0x10 payload offset
+        // (`li r11, 0x10 ; stw r11, +8`). Add the word at +0x0C: the PC request type is
+        // only 4-aligned, so its natural placement after the 12-byte header would be +0x0C.
+        // Verified at 0x824CD59C / 0x824CD638.
         struct GuiOverlayRequestWire184 : public CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>
         {
+            u32 muPad0C;                  // +0x0C, explicit wire padding
             GuiOverlayRequest mRequest;   // +0x10
             GuiOverlayRequestWire184()
                 : CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>(
                       static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
+                , muPad0C(0)
             {
             }
         };
+        static_assert(sizeof(CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>) == 12,
+                      "ARTIST overlay request has a three-word channel-40 header");
+        static_assert(sizeof(GuiOverlayRequest) == 288, "ARTIST overlay request payload size");
+        static_assert(offsetof(GuiOverlayRequestWire184, mRequest) == 16,
+                      "ARTIST overlay request payload begins at +0x10");
+        static_assert(sizeof(GuiOverlayRequestWire184) == 304,
+                      "ARTIST overlay request output record size");
 
         // The one-shot gap log the two PARKED platform sites share: a gap that is invisible
         // at runtime reads exactly like working code.
@@ -514,9 +525,11 @@ namespace BrnGui
                     }
                     else
                     {
-                        GuiOverlayRequest lRequest;
-                        lRequest.Construct("PRONoSaveLd");
-                        mpStateInterface->OutputGuiEvent(lRequest);
+                        GuiOverlayRequestWire184 lWire;
+                        lWire.mRequest.Construct("PRONoSaveLd");
+                        mpStateInterface->GetOutputEventQueue()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
+                            static_cast<s32>(sizeof(lWire)));
                     }
                     break;
 

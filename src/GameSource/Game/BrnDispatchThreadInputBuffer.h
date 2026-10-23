@@ -151,6 +151,12 @@ namespace BrnGame
         bool IsWriteBuffer() const { return mbIsWriteBuffer; }
         // Declaration-only; bodies with this buffer's own TU (the camera block
         // @X360 +39360, the per-face env-map-rendered bytes @+39348).
+        // DecFIGS declares this public const-reference accessor at h:160. The X360 Render
+        // inlines the field load while holding this buffer's read lock (0x8240C1C0..C220).
+        const Matrix44& GetOcclusionViewProjectionMatrix() const
+        {
+            return mOcclusionViewProjectionMatrix;
+        }
         void SetCameraViewProjection( const Matrix44& lrViewProjection );
         // ---- the env-map face-render flags (reflections step 1, seam S2) ------------
         // SetEnvMapFaceRender is BODIED in the .cpp; GetEnvMapFaceRender
