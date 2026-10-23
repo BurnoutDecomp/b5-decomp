@@ -3,6 +3,7 @@
 #include <cmath>                                                       // std::sqrt (the VMX rsqrt chain)
 #include <cstring>                                                     // strncpy / strlen (X360 inlined copies)
 #include <cstdlib>
+#include <cstddef>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -10,7 +11,6 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"        // FormatCurrencyString
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface (OutputGuiEvent / GetLanguageManager)
-#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::GuiEventSoundTrigger (id 22, 100B)
 #include "GameSource/Gui/BrnGuiCache.h"                                // GuiCache (mode / score-mode / in-event gate / player name)
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                  // GuiEventRequestTraining (id 572)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                 // GsmIO::EGameModeType (in-event colouring gate)
@@ -76,6 +76,27 @@ namespace BrnGui
 
 namespace
 {
+    // The native event-22 payload has no GuiEvent<22> header: ARTIST copies these 100 bytes
+    // directly, then wraps them as {100, 22, 12} on channel 40. The host GuiEventSoundTrigger
+    // type includes its 12-byte PC header, so do not pass that type to OutputGuiEvent.
+    struct GuiEventSoundTriggerPayload22
+    {
+        char macTypeName[32];
+        char macActionName[32];
+        char macLabel[32];
+        s32 miLayer;
+
+        s32 GetEventType() const { return 22; }
+    };
+    typedef CgsGui::GuiEventWrapper<GuiEventSoundTriggerPayload22, 40> GuiEventSoundTriggerRecord22;
+    static_assert(sizeof(GuiEventSoundTriggerPayload22) == 100,
+                  "ARTIST event 22 copies three 32-byte strings and the layer word");
+    static_assert(offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96,
+                  "ARTIST GuiModule::Update reads the event-22 layer at payload +96");
+    static_assert(offsetof(GuiEventSoundTriggerRecord22, mOutEvent) == 12 &&
+                  sizeof(GuiEventSoundTriggerRecord22) == 112,
+                  "ARTIST event-22 channel-40 record is {100,22,12}+100");
+
     // BrnRoadRuleComponent.h:277 (KI_MAX_ROAD_INDEX) -- the miRoadIndex bound the
     // X360 asserts against (cmpwi 0x42).
     const s32 KI_MAX_ROAD_INDEX = 66;
@@ -207,12 +228,16 @@ static void SendRoadRuleSoundTrigger(CgsGui::StateInterface* lpStateInterface,
     CGS_ASSERT(liParentAptLayerIndex != -1,
                "Cannot send audio event - no valid flash layer supplied when constructed");   // (non-gating)
 
-    CgsGui::GuiEventSoundTrigger lSound;
+    GuiEventSoundTriggerPayload22 lSound = {};
     CopyFixedString32(lSound.macTypeName,   KPC_SOUND_COMPONENT);
     CopyFixedString32(lSound.macActionName, lpcTrigger);
     CopyFixedString32(lSound.macLabel,      KPC_SOUND_LABEL);
     lSound.miLayer = liParentAptLayerIndex;
-    lpStateInterface->OutputGuiEvent(lSound);
+
+    GuiEventSoundTriggerRecord22 lRecord(lSound);
+    lpStateInterface->GetOutputEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lRecord),
+        lRecord.GetChannel(), static_cast<s32>(sizeof(lRecord)));
 }
 
 // ---------------------------------------------------------------------------
