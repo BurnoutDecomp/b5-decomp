@@ -53,4 +53,8 @@ namespace CgsResource
         // :94 - resource memory-pool count (main / graphics-system / graphics-local).
         static const u32 KI_NUM_TYPES = 3;
     };
+    // DecFIGS CgsResourceBasePool.h:112; ARTIST 828E0A10.
+    CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lrStream,
+                                      const Entry& lrEntry);
+
 }
