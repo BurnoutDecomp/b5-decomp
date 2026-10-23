@@ -1737,12 +1737,13 @@ namespace BrnResource
             // SetAllocatorList(out, &mAllocatorList), then the LiveUpdateIO status copy
             // (SetLiveUpdateStatus from the LiveUpdate output).
             //
-            // [FLAG] we Construct the WHOLE output buffer where the console constructs only
-            // that one member -- wider than the console, and it stays that way until the
-            // OutputBuffer's filesystem-status member is homed. The LiveUpdate module is
-            // deferred (F-P7-4); the allocator-list publish is the live part.
+            // Clear only the original file-status member while this existing output
+            // lifetime is write-locked. Constructing the IO base here would erase the lock.
+            // LiveUpdate's separate producer remains deferred (F-P7-4).
             lpOutput->LockForWrite();
-            lpOutput->Construct();
+            CgsResource::ResourceIO::FileSystemStatusInterface lFileStatus;
+            lFileStatus.Construct();
+            lpOutput->SetFileSystemStatusInterface(&lFileStatus);
             lpOutput->SetAllocatorList(&mAllocatorList);
             lpOutput->UnlockForWrite();
         }

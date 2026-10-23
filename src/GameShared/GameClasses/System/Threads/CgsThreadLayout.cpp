@@ -316,6 +316,18 @@ namespace CgsSystem
         });
     }
 
+    // Inlined in ARTIST BrnGameModule::Prepare 823DBACC/AD4; DecFIGS names the fields.
+    void ThreadLayout::SetFrameRate(EFrameRate leFrameRate)
+    {
+        meFrameRate = leFrameRate;
+    }
+
+    void ThreadLayout::SetResourcePercentageOfFrame(s32 liPercentage)
+    {
+        miResourcePercentageOfFrame = liPercentage;
+    }
+
+
     // @ 0x828D7978 - the default RunnableFunctionUserWrapper EAThread installs for the
     // dispatch thread: just invoke the runnable with its context (tail call, no extra work).
     intptr_t ThreadLayout::GlobalThreadBeginWrapper(EA::Thread::RunnableFunction defaultRunnableFunction,

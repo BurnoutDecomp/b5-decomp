@@ -50,6 +50,12 @@ namespace CgsResource
             mbDiskErrorOccured = false;
         }
 
+        // ARTIST 828EBAA0: read the named disk-error flag.
+        bool FileSystemStatusInterface::GetDiskErrorOccured() const
+        {
+            return mbDiskErrorOccured;
+        }
+
         // -------- OutputBuffer::Construct @ 0x828EC978 --------
         // Construct the IOBuffer base (sets the eStatusConstructed status bit @ +0), then
         // construct the embedded FileSystemStatusInterface @ +1 (clears its disk-error flag).

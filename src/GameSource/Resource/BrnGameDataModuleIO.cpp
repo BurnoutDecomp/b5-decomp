@@ -83,6 +83,29 @@ namespace GameDataIO
         return mpAllocatorList;
     }
 
+    // ARTIST 0x82666908. The base and the disk-error status have independent
+    // construction; there is no store to the live-update byte at console +8.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mFileSystemStatusInterface.Construct();
+        mpAllocatorList = 0;
+    }
+
+    const CgsResource::ResourceIO::FileSystemStatusInterface*
+    OutputBuffer::GetFileSystemStatusInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mFileSystemStatusInterface;
+    }
+
+    void OutputBuffer::SetFileSystemStatusInterface(
+        const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mFileSystemStatusInterface = *lpStatus;
+    }
+
     // @ 0x826640E0 -- write-locked mutator. Tests IOBuffer status bit 3 (write-lock); on failure fires
     // the assert. Stores the list pointer into mpAllocatorList (this+4; asm `stw r27,4(r28)`).
     void OutputBuffer::SetAllocatorList(const AllocatorList* lpAllocatorList)
@@ -93,8 +116,8 @@ namespace GameDataIO
 
     // @ 0x823B1638 -- read-locked accessor. Tests IOBuffer status bit 4 (read-lock); on failure fires
     // the assert. Returns &mbLiveUpdateStatus (this+8; asm `addi r3,r28,8`; IDA return type
-    // unsigned __int8*). X360 symbol GetLive[UpdateStatus]; the PS3 DWARF drifts this slot into
-    // FileSystemStatusInterface (h:189) -- we follow the X360 asm/symbol.
+    // unsigned __int8*). X360 symbol GetLive[UpdateStatus]. The filesystem status is a
+    // separate member at ARTIST +9.
     u8* OutputBuffer::GetLiveUpdateStatus()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");

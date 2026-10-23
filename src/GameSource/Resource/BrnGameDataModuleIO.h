@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT (AppendRequestInterface<N> template body)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
@@ -66,8 +67,8 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 // @ 0x826640E0 emits `stw r27,4(r28)` (STORE a pointer). An embedded member would compile to
 // `addi r3,r28,4` (compute an address). So mpAllocatorList is `const AllocatorList*` @+4, matching the
 // DecFIGS DWARF (h:184). The +8 slot: the X360 symbols are Get/SetLiveUpdateStatus and the asm reads/
-// writes a SINGLE BYTE there; the PS3 DWARF drifted it into FileSystemStatusInterface (h:189) with
-// Get/SetFileSystemStatusInterface -- we follow the X360 asm+symbols (authoritative for the X360 ledger).
+// writes a SINGLE BYTE there. ARTIST also has a separate FileSystemStatusInterface at +9:
+// Construct 82666908, read accessor 823B16E0, and write accessor 82663EE0.
 //
 // FLAG (MINIMAL SLICE / additive header): lifecycle methods (Construct/Prepare/Release/Destruct/Clear) and
 // the Im2d setter-getters beyond what the reconstructed accessors need are DEFERRED. Semantic parity (real
@@ -170,7 +171,7 @@ namespace GameDataIO
     {
         // DWARF h:147 -- clears the pointer/status members (the old embedded-list Construct was the
         // superseded structural approximation).
-        void Construct() { mpAllocatorList = 0; mbLiveUpdateStatus = 0; }
+        void Construct(); // ARTIST 82666908: IO base, file status, allocator pointer.
 
         // Return the module's RW general resource allocator. X360: OutputBuffer::GetAllocator(this)
         // returns the GameData general allocator the module loads construct from; pinned to the single
@@ -191,18 +192,24 @@ namespace GameDataIO
 
         // @ 0x823B1638 -- read-locked accessor; returns the address of the 1-byte live-update status
         // (asm `addi r3,r28,8`; IDA return type unsigned __int8*). X360 symbol GetLive[UpdateStatus];
-        // PS3 DWARF drift = GetFileSystemStatusInterface (h:178).
+        // FileSystemStatusInterface is a distinct member at ARTIST +9.
         u8* GetLiveUpdateStatus();
 
         // @ 0x82663E30 -- write-locked mutator; copies one status byte in
-        // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus; PS3 DWARF drift =
-        // SetFileSystemStatusInterface (h:179).
+        // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus.
+        // The filesystem-status setter writes the distinct member at ARTIST +9.
         void SetLiveUpdateStatus(const u8* lpStatus);
+
+        // ARTIST 823B16E0 / 82663EE0: filesystem status at +9, separate from live +8.
+        const CgsResource::ResourceIO::FileSystemStatusInterface*
+            GetFileSystemStatusInterface() const;
+        void SetFileSystemStatusInterface(
+            const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus);
 
     private:
         const AllocatorList* mpAllocatorList;    // DWARF h:184 -- this+4 (POINTER, not embedded)
         u8                   mbLiveUpdateStatus; // DWARF h:189 storage -- this+8 (X360: 1 status byte)
-        // FileSystemStatusInterface follows in the PS3 DWARF; on X360 the +8 slot is a status byte.
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatusInterface; // ARTIST +9
     };
 }
 }

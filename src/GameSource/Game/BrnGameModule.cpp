@@ -121,6 +121,7 @@ namespace BrnGame
         { { 0, 41, -1, 30 } }, { { 1, 42, -1, 31 } },
         { { -1, 43, -1, 32 } }, { { -1, 44, -1, 33 } }
     };
+    static bool sbDiskErrorThreadStarted = false; // ARTIST byte_82FAE988, process lifetime.
     static bool sbInitialInputMappingPosted = false; // ARTIST byte_82FAE28B, BSS-zeroed.
 
     BrnGameModule::BrnGameModule()
@@ -226,10 +227,13 @@ namespace BrnGame
         // X360 step 1: the module base (resets the prepare/release stages + constructs the two
         // DataBuffers -- flag/pointer init only).
         CgsModule::ModuleSingleBuffered::Construct();
+        // ARTIST 823C9EF0 and 823CB1F0: initialization of the recovered owner state.
+        mePrepareStage = E_PREPARESTAGE_START;
+        mbHasGameTerminated = false;
 
-        // [gated] X360 steps 2-3: CheckClassSizes, then the game-state field seeds at
-        // +10094156..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
-        // flag = 0) -- those words fall in this layout's omitted member ranges.
+        // [gated] CheckClassSizes and the remaining module-count/loaded-state seeds
+        // at +10094156..+10097260. The recovered prepare/termination seeds are above;
+        // the release-stage seed remains in the constructor.
 
         // Per-frame IO buffer stacks the update spine + the scripted module loads allocate their
         // per-frame IO buffers on. [PC stand-in] On the X360 these five stacks are OWNED BY main()
@@ -712,6 +716,117 @@ namespace BrnGame
         // ARTIST 823CB1C4 / 823CB1D0; DecFIGS BrnGameModule.h:524/525.
         mDirectorBridgeSerialiser.Construct();
         mGameModuleSerialiser.Construct();
+    }
+
+    // ARTIST 0x823DB848. Caller-owned stacks; GameData owns the allocator list.
+    bool BrnGameModule::Prepare(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                CgsModule::IOBufferStack* lpResourceInputBufferStack,
+                                CgsModule::IOBufferStack* lpResourceOutputBufferStack,
+                                CgsModule::IOBufferStack* lpDispatchThreadIOBufferStack)
+    {
+        switch (mePrepareStage)
+        {
+        case E_PREPARESTAGE_START:
+            mbHasGameTerminated = false;
+            // fall through
+        case E_PREPARESTAGE_HARDWARE:
+            mePrepareStage = E_PREPARESTAGE_HARDWARE;
+            if (!mHardware.Prepare())
+                return false;
+            mAutoTestManager.Init(this);
+            // fall through
+        case E_PREPARESTAGE_MANAGER:
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                break;
+            mpUpdateInputBufferStack = lpUpdateInputBufferStack;
+            mpUpdateOutputBufferStack = lpUpdateOutputBufferStack;
+            mpResourceInputBufferStack = lpResourceInputBufferStack;
+            mpResourceOutputBufferStack = lpResourceOutputBufferStack;
+            mpResourceInputBufferStack->CreateIOBuffer(&mpGameDataModuleInputBuffer, "GameData");
+            mpResourceOutputBufferStack->CreateIOBuffer(&mpGameDataModuleOutputBuffer, "GameData");
+            mDispatchThreadInputBufferManager.Construct(lpDispatchThreadIOBufferStack);
+            // fall through
+        case E_PREPARESTAGE_GAMEDATAMODULE:
+            mePrepareStage = E_PREPARESTAGE_GAMEDATAMODULE;
+            if (!mGameDataModule.Prepare(mpResourceInputBufferStack, mpResourceOutputBufferStack,
+                                         mpGameDataModuleInputBuffer, mpGameDataModuleOutputBuffer))
+                break;
+            // fall through
+        case E_PREPARESTAGE_RENDERMODULE:
+        {
+            mePrepareStage = E_PREPARESTAGE_RENDERMODULE;
+            mpGameDataModuleOutputBuffer->LockForRead();
+            const bool lbPrepared = mRenderModule.Prepare(
+                mpGameDataModuleOutputBuffer->GetAllocatorList());
+            mpGameDataModuleOutputBuffer->UnlockForRead();
+            if (!lbPrepared)
+                break;
+            // FLAG PC-platform leaf: ARTIST releases X360 D3D thread ownership
+            // here. Native D3D9 has no ReleaseThreadOwnership service; the PC
+            // dispatch thread's device handoff is owned by ThreadLayout.
+            // fall through
+        }
+        case E_PREPARESTAGE_HARDWAREMEMORY:
+        {
+            mePrepareStage = E_PREPARESTAGE_HARDWAREMEMORY;
+            mpGameDataModuleOutputBuffer->LockForRead();
+            const bool lbPrepared = mHardware.PrepareMassiveMemory(
+                mpGameDataModuleOutputBuffer->GetAllocatorList());
+            mpGameDataModuleOutputBuffer->UnlockForRead();
+            if (!lbPrepared)
+                break;
+            // fall through
+        }
+        case E_PREPARESTAGE_THREADS:
+            mePrepareStage = E_PREPARESTAGE_THREADS;
+            mThreadLayout.Begin(this, mCpuMonitors.miUT_Resource,
+                                mCpuMonitors.miUT_ThreadSync, mCpuMonitors.miUT_WaitOnDispatch);
+            mThreadLayout.SetFrameRate(CgsSystem::E_FRAMERATE_60HZ);
+            mThreadLayout.SetResourcePercentageOfFrame(50);
+            mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreen();
+            if (!mFrameRateManager.Prepare())
+                CGS_ASSERT(false, "mFrameRateManager.Prepare()");
+            // fall through
+        case E_PREPARESTAGE_DONE:
+            EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+                EA::GameTalk::GameTalkManager::GetInstance(),
+                &BrnGameModule::RenderMetricsMessageHandler, "Camera", this);
+            mePrepareStage = E_PREPARESTAGE_START;
+            meReleaseStage = E_RELEASESTAGE_START;
+            mbIsSysMenuShowing = false;
+            return true;
+        default:
+            CGS_ASSERT(false, "0");
+            break;
+        }
+        if (mePrepareStage >= E_PREPARESTAGE_GAMEDATAMODULE)
+            CheckDiskError(mpGameDataModuleOutputBuffer);
+        return false;
+    }
+
+    // ARTIST 0x823BC798. The process latch starts one dirty-disc observer.
+    void BrnGameModule::CheckDiskError(
+        const BrnResource::GameDataIO::OutputBuffer* lpOutputBuffer)
+    {
+        lpOutputBuffer->LockForRead();
+        if (lpOutputBuffer->GetFileSystemStatusInterface()->GetDiskErrorOccured())
+        {
+            const u32 luUserIndex = miInputModuleState != 0 ? miPlayer0ControllerPort : 0;
+            if (!sbDiskErrorThreadStarted)
+            {
+                EA::Thread::ThreadParameters lParameters;
+                lParameters.mnPriority = 0;
+                lParameters.mnProcessor = 2;
+                lParameters.mbDisablePriorityBoost = false;
+                lParameters.mpName = "DispatchThread";
+                mErrorThread.Begin(&BrnGameModule::DiskErrorThreadProc,
+                    reinterpret_cast<void*>(static_cast<uintptr_t>(luUserIndex)), &lParameters);
+                sbDiskErrorThreadStarted = true;
+            }
+        }
+        lpOutputBuffer->UnlockForRead();
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -5934,9 +6049,10 @@ namespace BrnGame
     // @ X360 0x823A8B38 - the disk-error worker thread body. Raises the system dirty-disc
     // error UI for the given user and never returns (the console holds on the error UI).
     // Tail-calls straight into the XDK entry point.
-    void BrnGameModule::DiskErrorThreadProc(unsigned long dwUserIndex)
+    // FLAG PC-platform leaf: EAThread carries the original user index as a void* context.
+    intptr_t BrnGameModule::DiskErrorThreadProc(void* lpContext)
     {
-        XShowDirtyDiscErrorUI(dwUserIndex);
+        return XShowDirtyDiscErrorUI(static_cast<unsigned long>(reinterpret_cast<uintptr_t>(lpContext)));
     }
 
     // @ X360 0x823C0268 - return the embedded hardware object (the launch/soft-reboot data
@@ -5966,9 +6082,9 @@ namespace BrnGame
     // BrnDirector::Camera::BehaviourRenderMetrics::GameTalkMessageReceiver: the context
     // module is delivered by pointer-to-pointer (lppModule).
     void BrnGameModule::RenderMetricsMessageHandler(EA::GameTalk::GameTalkMessage* lpMessage,
-                                                    BrnGameModule** lppModule)
+                                                    void* lpContext)
     {
-        BrnGameModule* lpModule = *lppModule;
+        BrnGameModule* lpModule = *static_cast<BrnGameModule**>(lpContext);
         for (s32 liIndex = 0; liIndex < lpMessage->GetNumKeys(); ++liIndex)
         {
             const char* lpcKey = lpMessage->GetKey(liIndex);
