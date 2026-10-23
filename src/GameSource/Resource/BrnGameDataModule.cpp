@@ -1197,6 +1197,113 @@ namespace BrnResource
         return false;
     }
 
+    // ARTIST 0x8266C410: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PrepareVehicleList(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miVehicleListPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            miVehicleListPrepareStage = 1;
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("Vehicles/VehicleList.bundle");
+            lRequest.miPoolId = 5;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = true;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miVehicleListPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:875
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miVehicleListPrepareStage = 3;
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("B5VehicleList"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 5;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miVehicleListPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:907
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == 0, "Invalid event id received\n"); // ARTIST cpp:914
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            CgsResource::ResourcePtr<VehicleListResource> lResource(lHandle);
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << lResource << "\n";
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                // ARTIST 82665E88 retains the real dereference assertion before this line.
+                (void)static_cast<const CgsResource::ResourcePtr<VehicleListResource>&>(lResource).operator*();
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << "[ResourceDatabaseDisabled]" << "\n";
+            }
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << "[ResourceDatabaseDisabled]" << "\n";
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << "[ResourceDatabaseDisabled]" << "\n";
+            mVehicleList.AddListResource(lResource);
+        }
+            [[fallthrough]];
+        case 5:
+            miVehicleListPrepareStage = 5;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            mReceiverQueue.Clear();
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:946
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
     // ARTIST8266DA28. Current GamePrepare has no IO stacks, so only the scratch
     // transport is a PC adaptation; map rows, request identities and waits are original.
     bool GameDataModule::CreateBanks(void*, void*)

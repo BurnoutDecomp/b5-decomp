@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBasePool.h"  // CgsResource::Entry (alias-ring head)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 
@@ -124,4 +125,15 @@ namespace CgsResource
             AddToNewList(lpRingHead);
         }
     }
+    // ARTIST 828E3658; the public getter supplies the actual source Entry owner.
+    CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lrStream,
+                                      const BaseResourcePtr& lrResource)
+    {
+        const ResourceHandle lHandle = lrResource.GetResourceHandle();
+        if (lHandle.mpSourceEntry != 0)
+            return operator<<(lrStream, *lHandle.mpSourceEntry);
+        lrStream << "[NULL]";
+        return lrStream;
+    }
+
 }
