@@ -1,0 +1,34 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnReplayDirectorBridgeSerialiser.cpp
+        BrnReplayDirectorSerialiser.cpp
+        BrnReplayEffectsSerialiser.cpp
+        BrnReplayEffectsSerialiserStaticLayout.cpp
+        BrnReplayGameModuleSerialiser.cpp
+        BrnReplayGuiModuleSerialiser.cpp
+        BrnReplayPropEntitySerialiser.cpp
+        BrnReplayPropSerialiserFrame.cpp
+        BrnReplayPropSerialiserFrame_operator_assign.cpp
+        BrnReplayPropSerialiserFrame_serialise.cpp
+        BrnReplayRaceCarEntitySerialiser.cpp
+        BrnReplaySoundSerialiser.cpp
+        BrnReplaySoundSerialiserFrame.cpp
+        BrnReplaySoundSerialiserStaticLayout.cpp
+        BrnReplayTrafficEntitySerialiser.cpp
+        BrnReplayTrafficSerialiserFrame.cpp
+
+    PUBLIC
+        BrnReplayDirectorBridgeSerialiser.h
+        BrnReplayDirectorSerialiser.h
+        BrnReplayEffectsSerialiser.h
+        BrnReplayGameModuleSerialiser.h
+        BrnReplayGuiModuleSerialiser.h
+        BrnReplayPropEntitySerialiser.h
+        BrnReplayPropSerialiserFrame.h
+        BrnReplayRaceCarSerialiserFrame.h
+        BrnReplaySoundSerialiser.h
+        BrnReplaySoundSerialiserFrame.h
+        BrnReplaySoundSerialiserStaticLayout.h
+        BrnReplayTrafficEntitySerialiserFrame.h
+        BrnReplayTrafficSerialiserFrame.h
+)
