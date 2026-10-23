@@ -45,12 +45,15 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::OutputGuiEvent
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiAudioTriggerEvent
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"           // GuiNetworkRouteInfo::SetInfo arg
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"      // InGamePlayerStatusData::mbMarkedMan
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData::mPlayerID
+
+#include <cstddef>                                                        // offsetof
 
 // The canonical payload homes for the two network GUI events posted below are
 // GameSource/Gui/BrnGuiDemangledEventTypes.h, but that header and BrnGuiEventTypeDefs.h
@@ -64,6 +67,8 @@ namespace BrnGui
 {
     namespace
     {
+        const s32 KI_CHANNEL_GUI_OUT = 40;   // ARTIST OutputGuiEvent AddEvent channel
+
         // ARTIST controller event 6 payload: the pad id, then the action id the two
         // switches below dispatch on (the X360 reads the second word, `*(lpEvent + 4)`).
         struct ControllerInputPressedPayload : public CgsModule::Event
@@ -99,6 +104,18 @@ namespace BrnGui
         };
         static_assert(sizeof(GuiEventNetworkOutputPlayerTexturePayload) == 8,
                       "event 264 payload is 8 bytes");
+        using GuiEventNetworkSelectedPlayerOptionOutputRecord =
+            CgsGui::GuiEventWrapper<GuiEventNetworkSelectedPlayerOptionPayload, KI_CHANNEL_GUI_OUT>;
+        static_assert(sizeof(GuiEventNetworkSelectedPlayerOptionOutputRecord) == 20,
+                      "event 246 channel-40 record is 12-byte header plus 8-byte payload");
+        static_assert(offsetof(GuiEventNetworkSelectedPlayerOptionOutputRecord, mOutEvent) == 12,
+                      "event 246 payload begins at record offset 12");
+        using GuiEventNetworkOutputPlayerTextureOutputRecord =
+            CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexturePayload, KI_CHANNEL_GUI_OUT>;
+        static_assert(sizeof(GuiEventNetworkOutputPlayerTextureOutputRecord) == 20,
+                      "event 264 channel-40 record is 12-byte header plus 8-byte payload");
+        static_assert(offsetof(GuiEventNetworkOutputPlayerTextureOutputRecord, mOutEvent) == 12,
+                      "event 264 payload begins at record offset 12");
 
         // GuiAudioTriggerEvent::Construct's action argument at every site in this TU.
         const s32 KI_AUDIO_TRIGGER_ACTION = 7;
@@ -225,8 +242,10 @@ namespace BrnGui
                     GuiEventNetworkOutputPlayerTexturePayload lPlayerTexture;
                     lPlayerTexture.miField_00 = 0;
                     lPlayerTexture.miField_04 = -1;
-                    mpStateInterface->OutputGuiEvent<GuiEventNetworkOutputPlayerTexturePayload>(
-                        lPlayerTexture);
+                    const GuiEventNetworkOutputPlayerTextureOutputRecord lPlayerTextureRecord(lPlayerTexture);
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lPlayerTextureRecord), KI_CHANNEL_GUI_OUT,
+                        static_cast<s32>(sizeof(lPlayerTextureRecord)));
                 }
                 else
                 {
@@ -318,8 +337,10 @@ namespace BrnGui
                 lSelectedOption.miOptionId =
                     static_cast<s32>(mOptionComponent.GetHighlightedId());
                 lSelectedOption.miPlayerID = mSelectedPlayerID;
-                mpStateInterface->OutputGuiEvent<GuiEventNetworkSelectedPlayerOptionPayload>(
-                    lSelectedOption);
+                const GuiEventNetworkSelectedPlayerOptionOutputRecord lSelectedOptionRecord(lSelectedOption);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lSelectedOptionRecord), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lSelectedOptionRecord)));
 
                 mOptionsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION,
                                                         KAPC_ANIMATION_STATES[1], false);
