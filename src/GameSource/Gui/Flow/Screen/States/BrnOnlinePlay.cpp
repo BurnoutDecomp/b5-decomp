@@ -321,7 +321,11 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
             mpStateInterface->OutputGuiEvent(lSuspend);
 
             GuiEventActivateCrashNav lActivateCrashNav(true);
-            mpStateInterface->OutputGuiEvent(lActivateCrashNav);
+            // This object already carries ARTIST's {8,191,12}+payload record.
+            // Keep those bytes and put the record on GuiEventOut for the PC drain.
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav),
+                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lActivateCrashNav)));
 
             SendStateEvent("GO_BACK");
 

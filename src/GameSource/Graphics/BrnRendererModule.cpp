@@ -4687,11 +4687,12 @@ void BrnRendererLogPostFxEffectState()
 //   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
 //   sky                     -> BrnSkyDomeManager::Render (bring-up gated)
 //   WORLD TRANSPARENT (15)  -> DispatchAllMeshes
-//   CARS TRANSPARENT  (20)  -> DispatchAllMeshes (blobby shadows gated off)
+//   CARS TRANSPARENT  (20)  -> enabled blobby-shadow draw, then DispatchAllMeshes
 // Occlusion-query interleaving is the mbOcclusionCull* path (default false).
 // The context is the one Render built through BuildDispatchLists, on Render's stack.
-void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* /*lpDispatchThreadInputBuffer*/,
-                                          CgsGraphics::DispatchObjectContext* lpContext)
+void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer,
+                                          CgsGraphics::DispatchObjectContext* lpContext,
+                                          f32 lfWhiteLevel)
 {
     using namespace CgsGraphics;
 
@@ -4773,6 +4774,14 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
                            || (mbRenderWorldOpaque && luWorldOpaque != 0);
     const bool lbTransparentWork = (mbRenderWorldTransparent && luWorldTransparent != 0)
                                 || (mbRenderCarsTransparent && luCarTransparent != 0);
+    // ARTIST gates the manager by the renderer switches, not mesh-list counts. These checks only
+    // cover PC availability: native Im3d is deferred until a device exists, and the matrix is in
+    // the dispatch input buffer.
+    const bool lbBlobbyShadowRender = mbRenderCarsTransparent && mbRenderBlobbyShadows
+                                   && mbIm3dRendererConstructedPC
+                                   && lpDispatchThreadInputBuffer != nullptr;
+    const bool lbBlobbyShadowDraw = lbBlobbyShadowRender
+        && mBlobbyShadowManager.maBuffers[mBlobbyShadowManager.mu8Internal].miNumShadows > 0;
 
     // [PC bring-up states] The per-pass render states normally come from the
     // technique state groups the walk binds on each technique change
@@ -4921,33 +4930,46 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
             GetMeshFrameForReadPC().GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
         }
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldTransparent);
-        // X360 @0x8240D338-0x8240D348 / @0x8240D3F4-0x8240D3FC: the car-TRANSPARENT window. The
-        // whole window sits INSIDE the mbRenderCarsTransparent gate: `lbzx r11, r31, 0xC417` /
-        // `cmplwi cr6, r11, 0` / `beq cr6, loc_8240D400` @0x8240D2F4-0x8240D304, and loc_8240D400 is
-        // PAST both the Begin (0x8240D338) and the End (0x8240D3FC). 0xC417 is
-        // mbRenderCarsTransparent (the five sibling flags 0xC413..0xC417 pin the committed member
-        // order in BrnRendererModule.h). What sits between Begin and End is the occlusion-query arm
-        // (0x8240D36C) or the plain arm (0x8240D3D0), both of which dispatch mesh list 0x14 -- the
-        // same shape as the opaque half above. (Step-10 verify finding: the first reading had the
-        // pair outside the gate.)
+    }
+
+    // ARTIST @0x8240D2F4-0x8240D334 calls the manager inside the car-transparent gate, before
+    // BeginForceStencilWrite at 0x8240D348. Do not place it under lbTransparentWork: that PC
+    // optimization depends on mesh counts, while ARTIST calls the manager with empty lists too.
+    if (lbTransparentWork || lbBlobbyShadowRender)
+    {
         CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCarTransparent);
         if (mbRenderCarsTransparent)
         {
-            if (lbForceCarStencil)
-                shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
+            if (lbBlobbyShadowRender)
+            {
+                mBlobbyShadowManager.Render(
+                    lpDispatchThreadInputBuffer->mOcclusionViewProjectionMatrix,
+                    &mIm3dRenderer,
+                    mpBlobbyShadowTexture,
+                    mfBlobbyShadowAlpha,
+                    lfWhiteLevel);
+            }
 
-            WaitForMeshSortPC(20u);
-            GetMeshFrameForReadPC().GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+            // Stencil and list-20 work stay after the manager. Preserve the existing PC
+            // combined transparent-list gate; the manager call is independent of that gate.
+            if (lbTransparentWork)
+            {
+                if (lbForceCarStencil)
+                    shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
 
-            if (lbForceCarStencil)
-                shadow::Device::EndForceStencilWrite();
+                WaitForMeshSortPC(20u);
+                GetMeshFrameForReadPC().GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+
+                if (lbForceCarStencil)
+                    shadow::Device::EndForceStencilWrite();
+            }
         }
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCarTransparent);
     }
 
     // Back to the opaque default before the 2D overlay tail (the Im2d path re-sets
     // its own states, so this only matters for the frames a world pass ran).
-    if (lbPreZWork || lbOpaqueWork || lbTransparentWork)
+    if (lbPreZWork || lbOpaqueWork || lbTransparentWork || lbBlobbyShadowDraw)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
     }
@@ -6008,7 +6030,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         }
 
         lRenderStage.Next(RENDER_WORLD);
-        RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
+        RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext, lfFrameWhiteLevel);
         lRenderStage.Next(RENDER_PARTICLES);
 
         // ==========================================================================================

@@ -6,6 +6,9 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 / Vector3Plus / Vector4 / VecFloat (rw::math::vpu)
 
+namespace CgsGraphics { struct Im3d; }
+namespace renderengine { class Texture; }
+
 // ---------------------------------------------------------------------------
 // BrnBlobbyShadowManager
 //
@@ -14,13 +17,10 @@
 // against the X360 retail XEX pseudocode/asm.
 //
 // Double-buffered collector of per-frame "blobby" (soft, projected-quad) vehicle ground
-// shadows. Game code fills the external buffer each frame via BrnBlobbyShadowBuffer::AddShadow,
-// then the manager swaps buffers and renders the internal one. Only ONE function is attested
-// in the X360 retail XEX ledger for this TU:
-//   BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow @ 0x823F7638
-// The other DWARF-listed methods (Construct / Swap / Render / GetExternalBuffer ...) are
-// declared here from the DWARF as the owning surface but are out of scope (not in this TU's
-// ledger) and are left unbodied.
+// shadows. Game code fills the external buffer via BrnBlobbyShadowBuffer::AddShadow, the manager
+// swaps buffers, then Render draws the internal buffer with the textured immediate-mode renderer.
+// AddShadow @0x823F7638 and Render @0x824071B0 are verified against X360 ARTIST; Render's source
+// declaration follows the DecFIGS DWARF shape.
 //
 // ShadowStruct layout (DWARF, corroborated by the AddShadow slot stride of 64 bytes -- the
 // X360 addresses a record as `buffer + 64 * index`, i.e. slwi r10, count, 6):
@@ -100,7 +100,15 @@ public:
         }
     };
 
-    // ---- Remaining DWARF-declared surface (NOT in this TU's ledger; left unbodied) ----
+    // Render @0x824071B0. Matrix44 is passed by value; register placement and behavior are
+    // verified against ARTIST, while this declaration's named types follow the DecFIGS DWARF.
+    void Render(Matrix44 lViewProjection,
+                CgsGraphics::Im3d* lpIm3d,
+                renderengine::Texture* lpBlobbyShadowTexture,
+                f32 lfAlpha,
+                f32 lfWhiteLevel);
+
+    // ---- Remaining DWARF-declared surface (not recovered in this proposal) ----
     void Construct();
     void Destruct();
     bool Prepare();

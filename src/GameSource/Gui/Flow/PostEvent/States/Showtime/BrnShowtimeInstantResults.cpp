@@ -250,7 +250,12 @@ namespace BrnGui
 
         GuiEventShowHideHud lHideHud;
         lHideHud.maData[0] = 0;
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> lRecord(lHideHud);
+        static_assert(sizeof(lRecord) == 16,
+                      "ARTIST ShowHideHud record is {1,148,12} plus one byte");
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord),
+            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lRecord)));
 
         // ---- the components -----------------------------------------------------------------
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
@@ -367,8 +372,12 @@ namespace BrnGui
 
                 GuiEventShowHideHud lHideHud;
                 lHideHud.maData[0] = 0;
-                mpStateInterface->OutputGuiEvent(lHideHud);
-            }
+                CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> lRecord(lHideHud);
+                static_assert(sizeof(lRecord) == 16,
+                              "ARTIST ShowHideHud record is {1,148,12} plus one byte");
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRecord),
+                    KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lRecord)));            }
             break;
 
         case E_RESULTS_STATE_ACTIVE:
