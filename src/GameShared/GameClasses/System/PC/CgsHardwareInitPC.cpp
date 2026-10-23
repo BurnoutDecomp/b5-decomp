@@ -1,6 +1,7 @@
 #include <cstdio>
 
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h" // exact ARTIST assert sequence
 
 #include <Windows.h>
 #include <Dbt.h>
@@ -564,6 +565,19 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
     // (AtlAxWin80, AtlAxWinLic80) and its module object, resets two licence/telemetry
     // state values, and reads the install's "ergc" registry value under
     // HKLM\Software\Electronic Arts\EA Games\Burnout(TM) Paradise The Ultimate Box.
+}
+
+// ARTIST 0x828D6138. Runtime job-thread enabling is unsupported on X360.
+// FLAG PC-platform leaf: preserve the same support-status assertion if Replay calls this entry;
+// do not create workers or introduce a host scheduler policy.
+void CgsSystem::HardwareInit::EnableJobThread()
+{
+    CgsDev::Assert::BeginAssert();
+    CgsDev::Assert::FireAssert(
+        "Not supported on xbox\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp",
+        247);
+    CgsDev::Assert::EndAssert();
 }
 
 void CgsSystem::HardwareInit::ReleaseHardware()

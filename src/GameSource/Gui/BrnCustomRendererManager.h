@@ -138,6 +138,9 @@ public:
     BoostBarRenderer* GetBoostBarRendererInstance() { return &mBoostBarRenderer; }
 
 private:
+    // SatNav debug controls update this manager's embedded renderer by name.
+    friend struct SatNavDebugComponent;
+
     // RecvEvent's case-213 sub-routine (the SatNav/MainMap/CrashNav map-toggle path).
     void RecvEvent_Event213(const CgsModule::Event* lpEvent);
 

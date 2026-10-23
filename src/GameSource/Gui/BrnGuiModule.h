@@ -153,6 +153,13 @@ namespace BrnGui
         void Destruct() override;
         void Update() override;
 
+        // ARTIST 0x8251A3D0; native owner of GUI pre-world validation, profile-upgrade requests,
+        // movie-data acquire publication, and the shared GUI model's PreWorld update.
+        void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                            CgsModule::IOBufferStack* lpOutputBufferStack,
+                            CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+                            CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer) override;
+
         // FLAG PC-platform leaf: borrow this caller's already write/read-locked
         // GameData pair. This is the selected GUI port's ownership boundary,
         // not the complete original native GuiModule::Update signature.
@@ -325,6 +332,8 @@ namespace BrnGui
 
         // Extracted ARTIST8251A4D4..8251A538; dormant until the typed PreWorld chain is selected.
         void PublishNativeMovieResourceRequest(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+        void UpdateCollisionWorldValidation(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
+        void UpdateCarPoolValidation(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
 
         // Extracted native blocks: Prepare82519360..C4,
         // Update82529CA8..DD0 and Release824F917C..B0. These remain
@@ -336,7 +345,8 @@ namespace BrnGui
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
         // 14/16 -> the model-out notification queue, 358 -> profile image autosave,
-        // 504/508/513 -> MovieManager), and fan every event the flow subscribed to
+        // 493 -> collision-world completion, 504/508/513 -> MovieManager, 512 -> traffic-pool state),
+        // and fan every event the flow subscribed to
         // (records 34/35) into the HUD flow's in-queue
         // -- the EventInterpreterModule observer dispatch.
         // Returns the last dispatched record. A non-null cursor consumes only the
@@ -353,6 +363,10 @@ namespace BrnGui
         // records (-> the view input queue), and the menu-music / audio-trigger events
         // (155/201, the PC sound leaves).
         void DrainFlowOutputQueue(s32 liFlow);
+
+        // ARTIST 0x82507800; reads the base GUI module output queue after its Update.
+        // The selected PC path has no caller for this OutputBuffer-based entry yet.
+        void HandleEventsPostBaseModuleUpdate(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
 
         // @0x824F0D30 -- refresh the two live player-name entries in the language
         // database ("PLAYER_NAME_STRING_ID" / "PLAYER_NAME_STRING_ID_Q"). The X360 asks
@@ -387,9 +401,40 @@ namespace BrnGui
         // (the observer-subscription filter, per flow).
         void RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize);
 
+        enum ECollisionWorldStateValidationState
+        {
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE = 0,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_BOOT = 1,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_BOOT = 2,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_BOOT = 3,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_SAVELOAD = 4,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_SAVELOAD = 5,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_SAVELOAD = 6,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE = 7,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE = 8,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE = 9,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_NETWORKING = 10,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING = 11,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_NETWORKING = 12,
+            E_COLLISIONWORLDSTATEVALIDATIONSTATE_COUNT = 13,
+        };
+        enum ECarPoolValidationState
+        {
+            E_CARPOOLSTATEVALIDATIONSTATE_IDLE = 0,
+            E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_EMPTY = 1,
+            E_CARPOOLSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE = 2,
+            E_CARPOOLSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE = 3,
+            E_CARPOOLSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE = 4,
+            E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_FILL = 5,
+            E_CARPOOLSTATEVALIDATIONSTATE_COUNT = 6,
+        };
+
         // ARTIST82518B88; DecFIGS BrnGuiModule.h:417. The flow's
         // CompleteLoading::OnLeave owns the later false transition.
         bool mbBootMovieMode;
+        ECollisionWorldStateValidationState meCollisionWorldStateValidationState;
+        bool mbCollisionWorldInvalid;
+        ECarPoolValidationState meCarPoolStateValidationState;
 
         // DecFIGS h:513/514; ARTIST82518850/68. These are the derived
         // lifecycle owners, separate from the shared GuiModule's own stages.
@@ -411,6 +456,7 @@ namespace BrnGui
         // ARTIST82518BB0..BD0: this derived receiver owns its inline 1024-byte backing.
         // Separate owners handle collision validation and GameData replies.
         CgsGui::GuiAccessPointers::GuiEventReceiverQueue mEventReceiverQueue;
+        CgsGui::GuiAccessPointers::GuiEventReceiverQueue mCollisonPoolValidationReceiverQueue;
 
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
 
@@ -559,6 +605,11 @@ namespace BrnGui
         //     with flt_82004C6C == 60.0f).
         // GuiModule::AutosaveProfile @0x8251A568 and GuiDebugComponent::AutosaveProfile
         // @0x825238E0 write the same pair after their own Autosave calls.
+        // ARTIST Construct clears the networking request latches; input Update events and the
+        // car-pool validator own the traffic-pool latch transitions.
+        bool mbCollisionWorldInvalidateForNetworking;
+        bool mbCollisionWorldValidateForNetworking;
+        bool mbTrafficPoolEmptied;
         bool mbProfileAutosavePending;      // X360 +1628228
         f32  mfLastProfileAutosaveTime;     // X360 +1628224
         // The per-frame FORCE flag the console keeps in a stack byte across its single

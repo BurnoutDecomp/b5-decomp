@@ -14,13 +14,10 @@
 //   mfSatNavTopLeftX +0x18  mfSatNavTopLeftY +0x1C  mfSatNavBottomRightX +0x20
 //   mfSatNavBottomRightY +0x24  miSatNavAlpha +0x28  mfCurrentZoomValue +0x2C  mInputQueue +0x30
 //
-// LAYOUT POLICY: the compile gate is a per-TU `cl /c` on a 64-bit host, so guest byte offsets are
-// not load-bearing for members reached BY NAME. The two far GuiModule offsets the position-update
-// path writes (the sat-nav renderer at +0x4D2E0 and its tint colour at +0x4D2E8) are NOT in this
-// slice's modelled GuiModule layout; they are reached through the KU_OFF_* constants below (the
-// established GuiModule KU_OFF pattern). FLAG: those two offsets are data-fidelity-limited
-// (uncommitted GuiModule/renderer layout). The live sat-nav viewport rect is
-// BrnGui::MapTransform's smv4SatNavViewRect.
+// LAYOUT POLICY: this host build follows the named owner chain from GuiModule through
+// CustomRendererManager to its embedded SatNavRenderer. Friend declarations provide
+// access to these existing members and renderer fields; no X360 byte offsets are used.
+// The live sat-nav viewport rect remains BrnGui::MapTransform::smv4SatNavViewRect.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                       // Vector4
@@ -99,9 +96,4 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16> mInputQueue;  // +0x30  (DWARF: InputBuffer::GuiEventQueue)
     };
 
-    // X360 byte offsets within GuiModule reached by the position-update path (FLAG: uncommitted
-    // GuiModule/renderer layout -- become real named members once that block is reconstructed).
-    // The renderer sits at +0x4D2E0; its leading mMapQuadColour (packed RGBA) is at +0x4D2E8 (renderer+8).
-    static const u32 KU_OFF_SATNAV_RENDERER    = 0x4D2E0;
-    static const u32 KU_OFF_SATNAV_ICON_COLOUR = 0x4D2E8;
 }

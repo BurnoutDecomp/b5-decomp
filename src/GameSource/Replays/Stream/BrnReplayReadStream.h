@@ -9,6 +9,7 @@ namespace BrnReplays
 {
     class DiskReadStream;
     class ReplayModule;
+    class DebugComponent;
     // ARTIST's serialiser arrays have eleven slots. Their pointers widen on
     // the host; caller/module access is by the canonical named members.
     struct FrunkReadResult
@@ -38,6 +39,7 @@ namespace BrnReplays
 
     private:
         friend class ReplayModule;
+        friend class DebugComponent; // original block overlay reads the named stream-header pointer
         void Read(void* lpDest, s32 liSize);
 
         StreamHeader* mpStreamHeader;

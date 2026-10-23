@@ -640,6 +640,8 @@ namespace
     // is still the accept control, it just carries the right action id now.
     const int KAI_KEYS_ACCEPT[] = { 0x0D /*VK_RETURN*/, 0x20 /*VK_SPACE*/, 0 };
     const int KAI_KEYS_STOP[]   = { 0x1B /*VK_ESCAPE*/, 0x08 /*VK_BACK*/, 0 };
+    // Mirror the console Square action pair: HANDBRAKE (2) and GUI_OPTION0 (51).
+    const int KAI_KEYS_OPTION0[] = { 0xA2 /*VK_LCONTROL*/, 0 };
     // 41 GUI_UP == HighlightPrevious, 42 GUI_DOWN == HighlightNext -- settled against every
     // real consumer (see GameInputActions.h). ⚠️ THESE TWO WERE INVERTED: Down/Right used to
     // emit 41 and Up/Left 42, so pressing Down moved the highlight UP on every screen with
@@ -702,6 +704,7 @@ namespace
         //  id  EGameInputActions              keyboard
         { E_GAMEINPUTACTIONS_GUI_SELECT, KAI_KEYS_ACCEPT }, // 49 accept (Enter/Space; pad A)
         { E_GAMEINPUTACTIONS_GUI_CANCEL, KAI_KEYS_STOP   }, // 50 back   (Esc/Bksp;    pad B + Back)
+        { E_GAMEINPUTACTIONS_GUI_OPTION0, KAI_KEYS_OPTION0 }, // 51 shares LCtrl with HANDBRAKE, like pad Square
         { E_GAMEINPUTACTIONS_GUI_UP,     KAI_KEYS_PREV   }, // 41 HighlightPrevious
         { E_GAMEINPUTACTIONS_GUI_DOWN,   KAI_KEYS_NEXT   }, // 42 HighlightNext
         // 45 GUI_START -- the START button, NOT accept. It SHARES KAI_KEYS_START with driving
@@ -958,7 +961,8 @@ namespace
         //      Start    = "the START button"    -- NEW: 45 GUI_START, which is no longer the
         //                                          accept control and so needs its own channel
         //                                          (BootLegal's press-start path reads 45).
-        //    All six are AUTO-RESET taps, like a menu press.
+        //      Option0  = "saved/recent options" -- 51 GUI_OPTION0, only acted on when available
+        //    All seven are AUTO-RESET taps, like a menu press.
         // The gameplay EasyDrive UI listens to D-pad actions, distinct from GUI arrows.
         case E_GAMEINPUTACTIONS_GUI_DPAD_UP:    lpcEventName = "Local\\BurnoutPC_Input_DPadUp"; break;
         case E_GAMEINPUTACTIONS_GUI_DPAD_DOWN:  lpcEventName = "Local\\BurnoutPC_Input_DPadDown"; break;
@@ -968,6 +972,7 @@ namespace
         case E_GAMEINPUTACTIONS_GUI_EVENT_DETAILS: lpcEventName = "Local\\BurnoutPC_Input_EventDetails"; break;
         case E_GAMEINPUTACTIONS_GUI_SELECT: lpcEventName = "Local\\BurnoutPC_Input_Accept";   break;
         case E_GAMEINPUTACTIONS_GUI_CANCEL: lpcEventName = "Local\\BurnoutPC_Input_Stop";     break;
+        case E_GAMEINPUTACTIONS_GUI_OPTION0: lpcEventName = "Local\\BurnoutPC_Input_Option0"; break;
         case E_GAMEINPUTACTIONS_GUI_DOWN:   lpcEventName = "Local\\BurnoutPC_Input_Next";     break;
         case E_GAMEINPUTACTIONS_GUI_UP:     lpcEventName = "Local\\BurnoutPC_Input_Prev";     break;
         // PC harness: option changes use the same actions as comma/period and pad left/right.
@@ -1043,7 +1048,7 @@ namespace
         // before launching the game, so a successful zero-time wait says the control is down
         // this update (and, for the auto-reset menu channels, consumes the one request).
         // The handle cache is indexed by KA_BINDINGS row, so every id in the switch above must
-        // also be a bound row -- 49/50/41/42/45/46 and 0/1/2 and 54/55 all are. The lookup
+        // also be a bound row -- 49/50/51/41/42/45/46 and 0/1/2 and 54/55 all are. The lookup
         // below is BY ACTION ID, not by a fixed index, so growing or reordering the table
         // grows the cache without disturbing any existing row.
         static void* sapHarnessEvents[KU_NUM_BINDINGS] = {};

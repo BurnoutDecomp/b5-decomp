@@ -83,7 +83,7 @@ struct OptionsDataProfile
     static const s32 KI_MAX_CREATED_ONLINE_GAME_OPTIONS  = 10;
     static const s32 KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS = 10;
 
-    // ---- nested OnlineSaveRoute (declared at DWARF shape; out of scope here) ----
+    // Persistent route records store stable landmark and junction identities.
     struct OnlineSaveRoute
     {
         struct OnlineSaveRouteEvent
@@ -91,9 +91,9 @@ struct OptionsDataProfile
             static const s32 KI_MAX_LANDMARKS_IN_MODE = 16;   // Construct bound: cmpwi r30,0x10
 
             void   Construct(s32 liEventID, u32 luJunctionID, CgsID* lpaLandmarks, s32 liNumLandmarks);
-            s32    GetEventID() const;
-            u32    GetJunctionID() const;
-            s32    GetNumLandmarks() const;
+            s32    GetEventID() const { return miEventID; }
+            u32    GetJunctionID() const { return mJunctionId; }
+            s32    GetNumLandmarks() const { return miNumLandmarks; }
             CgsID  GetLandmark(s32 liIndex) const;
 
         private:
