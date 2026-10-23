@@ -11,6 +11,7 @@
 #include <cstdio>                                                         // std::snprintf (log formatting)
 #include <windows.h>                                                      // [gate] GetEnvironmentVariableA (BRN_FLAPT_AFTER_DISPATCH)
 #include <chrono>   // the PC frame clock for the view time-step event (FLAG: wall clock)
+#include <cstddef>  // offsetof for the native event-22 payload
 #include <cstring>  // std::strcmp (ARTIST GUI-audio action-name table)
 
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
@@ -83,6 +84,20 @@ extern bool gbLogGuiAudioTriggers; // X360 byte_82FB5098; defined by CgsAptCommu
 
 namespace
 {
+    // ARTIST event 22's unwrapped inner body is 100 bytes, with no GuiEvent header.
+    // Keep a payload-only view here because the current CgsGui::GuiEventSoundTrigger
+    // carries a 12-byte host header ahead of these fields.
+    struct GuiEventSoundTriggerPayload22
+    {
+        char macTypeName[32];
+        char macActionName[32];
+        char macLabel[32];
+        s32 miLayer;
+    };
+    static_assert(sizeof(GuiEventSoundTriggerPayload22) == 100 &&
+                  offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96,
+                  "ARTIST event-22 payload reads its layer at byte 96");
+
     // ARTIST file-global Tool.GUI request owners at82FB5060/5088/5089.
     // The native image starts these bytes at zero. Construct clears only the
     // start flag; native Update consumes start before stop. Names are host projections.
@@ -3449,6 +3464,27 @@ void GuiModule::Destruct()
                     RouteEventToFlow(
                         lpRawEvent, static_cast<s32>(luEventType),
                         static_cast<s32>(luPayloadSize));
+
+                    // ARTIST GuiModule::Update @0x82527A58 consumes event 22 after the
+                    // channel-40 wrapper has been unwrapped: the 100-byte payload is
+                    // {type[32], action[32], label[32], layer@96}. It resolves the movie
+                    // from that layer, maps the action, and emits GuiAudioTriggerEvent 457.
+                    // FLAG PC-platform leaf: this output-queue pump has no module-input
+                    // loopback into GuiModule::Update, so run the same handler here. Keep
+                    // event 22 on the existing output/observer path above; the callback
+                    // appends the resulting PC typed event 201 to mpOutputBuffer.
+                    // DELETE-WHEN the channel-40 module-input loopback dispatches event 22.
+                    if (luEventType == 22u && luPayloadSize == 100u &&
+                        luPayloadOffset == 12u && liSize >= 112)
+                    {
+                        const GuiEventSoundTriggerPayload22* const lpSoundPayload =
+                            reinterpret_cast<const GuiEventSoundTriggerPayload22*>(lpRawEvent);
+                        const char* const lpacMovieName =
+                            mViewModule.GetMovieNameByLevel(lpSoundPayload->miLayer);
+                        FlaptSoundTriggerCallback(this, lpSoundPayload->macTypeName,
+                                                  lpacMovieName, lpSoundPayload->macActionName,
+                                                  lpSoundPayload->macLabel);
+                    }
                     break;
                 }
 
