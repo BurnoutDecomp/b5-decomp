@@ -166,7 +166,10 @@ namespace BrnGui
                 // straight into the request.
                 GuiEventScoreboardRequestGamercardEvent lRequestGamerCard;
                 mTable.GetHighlightedGamertag(&lRequestGamerCard.mPlayerName);
-                mpStateInterface->OutputGuiEvent(lRequestGamerCard);
+                // Full {16,120,12}+name[16] record: queue on channel 40 without another wrapper.
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequestGamerCard), 40,
+                    static_cast<s32>(sizeof(lRequestGamerCard)));
                 break;
             }
 

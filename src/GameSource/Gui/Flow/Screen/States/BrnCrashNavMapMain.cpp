@@ -511,7 +511,10 @@ namespace BrnGui
                 // GuiEvent<120> base, so filling its mPlayerName reproduces the record.
                 GuiEventScoreboardRequestGamercardEvent lRequest;
                 lRequest.mPlayerName.Construct(mCrashNavPanel.GetRoadRuleFriendSelectedName());
-                mpStateInterface->OutputGuiEvent<GuiEventScoreboardRequestGamercardEvent>(lRequest);
+                // lRequest already contains {16,120,12}+name[16]; post it on the original channel 40.
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
+                    static_cast<s32>(sizeof(lRequest)));
             }
             break;
 

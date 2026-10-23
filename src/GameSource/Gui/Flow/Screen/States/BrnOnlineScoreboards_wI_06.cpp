@@ -214,7 +214,10 @@ namespace BrnGui
             case E_LEADERBOARD_REQUEST_STATE_GET_INDEX:
             {
                 GuiEventScoreboardRequestIndexEvent lIndexRequest(miCurrentCategory);
-                mpStateInterface->OutputGuiEvent(lIndexRequest);
+                // Full {4,111,12}+4 ARTIST record: queue on channel 40 without another wrapper.
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lIndexRequest), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lIndexRequest)));
 
                 mTable.SetupScoreboard(0);
                 // SetLoading(true) inlined, DWARF cpp:1362
@@ -233,7 +236,10 @@ namespace BrnGui
             case E_LEADERBOARD_REQUEST_STATE_GET_VARIATIONS:
             {
                 GuiEventScoreboardRequestVariationEvent lVariationRequest(miCurrentIndex);
-                mpStateInterface->OutputGuiEvent(lVariationRequest);
+                // Full {4,112,12}+4 ARTIST record: queue on channel 40 without another wrapper.
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lVariationRequest), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lVariationRequest)));
 
                 mTable.SetupScoreboard(0);
                 // SetLoading(true) inlined, DWARF cpp:1362
@@ -259,7 +265,10 @@ namespace BrnGui
                     : miCurrentVariation;
 
                 GuiEventScoreboardRequestTableEvent lTableRequest(liTargetVariation);
-                mpStateInterface->OutputGuiEvent(lTableRequest);
+                // Full {4,113,12}+4 ARTIST record: queue on channel 40 without another wrapper.
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lTableRequest), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lTableRequest)));
 
                 // ...and log which board was asked for. The telemetry record's parameter
                 // buffer starts one word past its type, and TelemetryData is the accessor for
