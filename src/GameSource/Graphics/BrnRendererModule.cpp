@@ -1454,6 +1454,10 @@ void BrnRendererModule::Construct()
                                     "(effects apply, tint blend and composite skipped)\n");
         }
     }
+
+    // ARTIST 8240BF90: classify the constructed renderer as a new-IO module.
+    // This is the original lifetime seed, not Prepare completion or allocator readiness.
+    mbIsNewModule = true;
 }
 
 // @0x82409C20. ARTIST's stage helper increments before checking the terminal state;
