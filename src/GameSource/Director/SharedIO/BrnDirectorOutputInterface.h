@@ -24,6 +24,10 @@ namespace BrnDirector
             mbStartRivalPresentation = false;
         }
 
+        // ARTIST 0x823E9394/0x823E93B0 reads the pause-request bytes at +0x0E/+0x0F.
+        bool GetPauseRequest() const { return mbPauseRequest; }
+        bool GetPauseRequestState() const { return mbPauseRequestState; }
+
         // @0x823A7AB8 (class TU; body in BrnDirectorOutputInterface.cpp, DWARF
         // h:101/:102) -- report whether the intro camera has started its
         // look-at-rival move, with the rivalry number and the seconds remaining.

@@ -1,6 +1,8 @@
 #include "GameSource/Replays/Stream/BrnReplayWriteStream.h"
 
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
+#include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"
+#include <cstring>
 #include "GameSource/Replays/BrnReplayShared.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
@@ -18,6 +20,8 @@
 
 namespace BrnReplays
 {
+    char WriteStream::mpcIntermediateBuffer[KI_INTERMEDIATEBUFFERSIZE];
+
     // Inlined by ARTIST ReplayModule::Construct @0x82656E20. The original
     // initializer does not store miCurrentWriteIndex or miNumFrunksAllocated here.
     void WriteStream::Construct()
@@ -38,7 +42,7 @@ namespace BrnReplays
     // stamps the "REPLAY " magic (through the terminating NUL) and zeroes the header's
     // frunk index, then clears the per-recording bookkeeping (write cursor, stall/alloc
     // counters, ended/paused flags, file + intermediate-buffer positions). The
-    // DiskWriteStream link (mpStream @0x50) is intentionally left untouched --
+    // GPUDiskWriteStream link (mpStream @0x50) is intentionally left untouched --
     // StartNewStream owns it. Returns the freshly allocated StreamHeader (X360 r3).
     StreamHeader* WriteStream::ResetStream()
     {
@@ -170,4 +174,103 @@ namespace BrnReplays
         mpStreamHeader->miNumFrunks = liNewCount;
         mpStreamHeader->miFirstFrunk = liNewFirst;
     }
+    // The original private Write is inlined in AddFrunk. Failure neither copies
+    // partial bytes nor advances the cursor; the enclosing AddFrunk records the stall.
+    s32 WriteStream::Write(void* lpData, s32 liSize)
+    {
+        if (KI_INTERMEDIATEBUFFERSIZE - miBufferPosition < liSize)
+            return 0;
+        std::memcpy(mpcIntermediateBuffer + miBufferPosition, lpData, liSize);
+        miBufferPosition += liSize;
+        return liSize;
+    }
+
+    // ARTIST 8265EB70..F0F0. The GPU sink consumes 64 KiB-rounded byte spans; the
+    // index stores the unrounded payload size. Padding bytes are not zero-filled.
+    void WriteStream::AddFrunk(s64 liFrameNumber, f32 lfFrameTime,
+                               FrunkSerialiserEntry* lpEntries, void** lppBuffers,
+                               s32 liNumSerialisers, bool lbIsKeyFrame)
+    {
+        CGS_ASSERT(!mbEnded, "Stream has ended - need to start it again!\n");
+        CGS_ASSERT(!mbPaused, "Stream is paused - must continue it first\n");
+        CGS_ASSERT(lppBuffers != nullptr, "No blocks passed in\n");
+        CGS_ASSERT(lpEntries != nullptr, "No block sizes in\n");
+
+        StreamOffset* lpOffset;
+        if (miNumFrunksAllocated < KI_MAX_FRUNKS)
+        {
+            lpOffset = static_cast<StreamOffset*>(mHeaderMalloc.Malloc(sizeof(StreamOffset)));
+            CGS_ASSERT(lpOffset != nullptr, "Failed to allocate memory for new offset entry\n");
+            if (mpStreamHeader->mpFrameOffsets == nullptr)
+                mpStreamHeader->mpFrameOffsets = lpOffset;
+            ++miNumFrunksAllocated;
+        }
+        else
+        {
+            CGS_ASSERT(mpStreamHeader->miNumFrunks <= KI_MAX_FRUNKS,
+                       "Should never go past max frames\n");
+            lpOffset = &mpStreamHeader->mpFrameOffsets[miCurrentWriteIndex];
+        }
+
+        const u16 luFlags = lbIsKeyFrame ? KU_FLAG_KEYFRAME : 0;
+        lpOffset->mfFrameTime = lfFrameTime;
+        lpOffset->miFrameNumber = liFrameNumber;
+        lpOffset->mxFlags = luFlags;
+        lpOffset->miFileOffset = miFilePosition;
+
+        static const char KacFrunkMagic[4] = {'f','r','k','\0'};
+        for (s32 liByte = 0; ; ++liByte)
+        {
+            mCurrentFrunk.macMagicNumber[liByte] = KacFrunkMagic[liByte];
+            if (KacFrunkMagic[liByte] == '\0')
+                break;
+        }
+        mCurrentFrunk.miFrameNumber = liFrameNumber;
+        mCurrentFrunk.mfFrameTime = lfFrameTime;
+        mCurrentFrunk.miNumSerialisers = liNumSerialisers;
+        mCurrentFrunk.mxFlags = luFlags;
+
+        const s32 liEntriesSize = liNumSerialisers * static_cast<s32>(sizeof(FrunkSerialiserEntry));
+        s32 liExpectedSize = static_cast<s32>(sizeof(FrunkHeader)) + liEntriesSize;
+        s32 liWritten = Write(&mCurrentFrunk, static_cast<s32>(sizeof(FrunkHeader)));
+        liWritten += Write(lpEntries, liEntriesSize);
+        for (s32 liEntry = 0; liEntry < liNumSerialisers; ++liEntry)
+        {
+            liExpectedSize += lpEntries[liEntry].miSize;
+            liWritten += Write(lppBuffers[liEntry], lpEntries[liEntry].miSize);
+        }
+
+        bool lbSuccess = liWritten == liExpectedSize;
+        const s32 liRoundedSize = (liWritten + 0xFFFF) & ~0xFFFF;
+        if (lbSuccess)
+            lbSuccess = mpStream->AddBlock(lpOffset->miFileOffset,
+                reinterpret_cast<const u8*>(mpcIntermediateBuffer), liRoundedSize);
+        if (lbSuccess)
+        {
+            lpOffset->miFrunkSize = liWritten;
+            miFilePosition += liRoundedSize;
+        }
+        else
+        {
+            lpOffset->miFrunkSize = 0;
+            lpOffset->mxFlags |= KU_FLAG_VOID;
+            ++miStallCount;
+        }
+
+        if (mpStreamHeader->miNumFrunks < KI_MAX_FRUNKS)
+            ++mpStreamHeader->miNumFrunks;
+        else
+            mpStreamHeader->miFirstFrunk = (miCurrentWriteIndex + 1) % KI_MAX_FRUNKS;
+        InvalidateFrunksAhead(miCurrentWriteIndex);
+        ++miCurrentWriteIndex;
+        if (miCurrentWriteIndex >= KI_MAX_FRUNKS)
+        {
+            CGS_ASSERT(miCurrentWriteIndex == KI_MAX_FRUNKS,
+                       "Should never go past max frames for write index\n");
+            miCurrentWriteIndex = 0;
+            miFilePosition = 0;
+        }
+        miBufferPosition = 0;
+    }
+
 }

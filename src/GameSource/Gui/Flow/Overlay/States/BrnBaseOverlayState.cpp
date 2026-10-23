@@ -201,7 +201,13 @@ void BaseOverlayState::Update()
             // OutputGuiEvent<GuiOverlayShowingNotification> instantiation @0x824B2C78).
             GuiOverlayShowingNotification lShowing;
             lShowing.mOverlayId = mCurrentOverlayId;
-            mpStateInterface->OutputGuiEvent(lShowing);
+            // ARTIST824B2938 publishes {8, 190, 16, payload} on channel 40.
+            // The generic publisher queues raw 190, which the PC observer drain
+            // drops before the director can replay an early wait-finish 188.
+            CgsGui::GuiEventWrapper<GuiOverlayShowingNotification, 40> lShowingRecord(lShowing);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lShowingRecord),
+                40, static_cast<s32>(sizeof(lShowingRecord)));
         }
         // fall through
     case E_OVERLAYINTERNALSTATE_RUNNING:

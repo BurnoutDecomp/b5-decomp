@@ -1,4 +1,6 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"
+#include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"
 
 #include <cstddef>
 #include <cstring>   // memmove
@@ -25,10 +27,9 @@ namespace BrnGui
 //   - meTraxPlayOrderMode = 0
 //   - mbSixAxisShowtime = mbTips = mbForceFeedback = true; mbSixAxisSteering = mbIsLocked = false
 //
-// The bulk of this body operates on the large out-of-scope leading region (the
-// OnlineSaveRoute tables and director data), which is reserved opaque in the
-// header. It is reconstructed in the owning OptionsDataProfile-Construct TU; here
-// only the in-scope tail defaults are set so this accessor TU stays coherent.
+// The created and received route tables are initialized with their original
+// empty-event/default-option state, then both saved-route counts are cleared.
+// ARTIST824FF7AC..824FF870 supplies the inlined table constructors and counts.
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::Construct()
 {
@@ -59,12 +60,19 @@ void OptionsDataProfile::Construct()
     miVoipVolume = KI_DEFAULT_VOIP_VOLUME;    // 10
 
     meCameraFeedSetting = BrnNetwork::BrnNetworkModuleIO::CAMERA_USER_ON; // asm: stw r10(1), 0x7364
-    mbDefaultGameCamera = 1;
+    for (s32 liRoute = 0; liRoute < KI_MAX_CREATED_ONLINE_GAME_OPTIONS; ++liRoute)
+        maCreatedOnlineGameOptions[liRoute].Construct();
+    for (s32 liRoute = 0; liRoute < KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS; ++liRoute)
+        maReceivedOnlineGameOptions[liRoute].Construct();
+    miNumCreatedOnlineGameOptions = 0;
+    miNumReceivedOnlineGameOptions = 0;
+
     mbIsNewsUnread      = false;
     mbSixAxisShowtime   = true;
     mbSixAxisSteering   = false;  // asm: stb r31(0), 0x736A
     mbForceFeedback     = true;   // asm: stb r10(1), 0x736B
     mbTips              = true;
+    mbDefaultGameCamera = 1;
     mbIsLocked          = false;
 }
 
@@ -467,18 +475,92 @@ CgsID OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::GetLandmark(s32
     return maLandmarkIndices[liIndex]; // +0x00 + liIndex*8
 }
 
-// ---------------------------------------------------------------------------
-// FLAG trap-stub bodies (link scaffold, 2026-07-12): the two OnlineSaveRoute
-// game-params transfer bodies below are declared (DWARF) and referenced by this
-// TU's own Add/Get*OnlineGameOptions accessors, but their reconstructions
-// (@0x82507448 SetFromGameParams / @0x82507570 SetToGameParams -- the
-// GuiEventNetworkGameParams field-by-field route transfer) have not landed.
-// Trap bodies per the stub scaffold -- reachable only through the online
-// game-options flows, never on the boot path. Replace each with its faithful
-// decompile.
-// ---------------------------------------------------------------------------
-void OptionsDataProfile::OnlineSaveRoute::SetFromGameParams(GuiCache*, const GuiEventNetworkGameParams*)       { __debugbreak(); }   // FLAG trap-stub
-void OptionsDataProfile::OnlineSaveRoute::SetToGameParams(GuiCache*, GuiEventNetworkGameParams*) const         { __debugbreak(); }   // FLAG trap-stub
+// ARTIST824FF7AC..824FF868 inlines this DWARF-declared constructor
+// for each created/received slot. Landmark storage remains untouched.
+void OptionsDataProfile::OnlineSaveRoute::Construct()
+{
+    for (s32 liEvent = 0; liEvent < 10; ++liEvent)
+        maEvents[liEvent].Construct(0, 0, nullptr, 0);
+
+    meGameMode = BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE;
+    miNumRounds = 1;
+    miVehicleClass = 9;
+    miNumRunnerCrashes = 3;
+    meBoostType = BrnNetwork::E_BOOST_TYPE_NORMAL;
+    meVehicleChoice = BrnNetwork::E_VEHICLE_CHOICE_DEFAULT;
+    mbInfiniteBoost = true;
+    mbTrafficOn = true;
+    mbTrafficCheckingOn = true;
+    miTimeLimit = 0;
+}
+
+// ARTIST82507448: persist stable landmark IDs and junction IDs, resolving
+// the live route's landmark indices and traffic-light trigger at save time.
+void OptionsDataProfile::OnlineSaveRoute::SetFromGameParams(
+    GuiCache* lpCache, const GuiEventNetworkGameParams* lpParams)
+{
+    for (s32 liRound = 0; liRound < lpParams->miNumRounds; ++liRound)
+    {
+        const GuiEventNetworkGameParams::Event& lrEvent = lpParams->maEvents[liRound];
+        CgsID laLandmarkIds[OnlineSaveRouteEvent::KI_MAX_LANDMARKS_IN_MODE];
+        for (s32 liLandmark = 0; liLandmark < lrEvent.GetNumLandmarks(); ++liLandmark)
+        {
+            GuiEventUpdateSatNav::SatNavIconInfo lInfo;
+            lpCache->GetLandmarkInfoFromIndex(lrEvent.GetLandmark(liLandmark), &lInfo);
+            laLandmarkIds[liLandmark] = lInfo.GetCgsId();
+        }
+        const s32 liNumLandmarks = lrEvent.GetNumLandmarks();
+        const SatNavEventDisplayInfo* lpStart =
+            lpCache->GetPresetEventDisplayInfo(lrEvent.GetTrafficLightTriggerId());
+        maEvents[liRound].Construct(lrEvent.GetEventID(), lpStart->muJunctionId,
+                                    laLandmarkIds, liNumLandmarks);
+    }
+
+    meGameMode = static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(lpParams->meGameMode);
+    miNumRounds = lpParams->miNumRounds;
+    miVehicleClass = lpParams->miVehicleClass;
+    miNumRunnerCrashes = lpParams->miNumRunnerCrashes;
+    meBoostType = static_cast<BrnNetwork::EBoostType>(lpParams->meBoostType);
+    meVehicleChoice = static_cast<BrnNetwork::EVehicleChoice>(lpParams->meVehicleChoice);
+    mbInfiniteBoost = lpParams->mbInfiniteBoost;
+    mbTrafficOn = lpParams->mbTrafficOn;
+    mbTrafficCheckingOn = lpParams->mbTrafficCheckingOn;
+    miTimeLimit = lpParams->miTimeLimit;
+}
+
+// ARTIST82507570: resolve the persisted identities against the current cache.
+// Previous mode, security and ranked are outside the saved-route record.
+void OptionsDataProfile::OnlineSaveRoute::SetToGameParams(
+    GuiCache* lpCache, GuiEventNetworkGameParams* lpParams) const
+{
+    for (s32 liRound = 0; liRound < miNumRounds; ++liRound)
+    {
+        const OnlineSaveRouteEvent& lrEvent = maEvents[liRound];
+        BrnGameState::LandmarkIndex laLandmarks[OnlineSaveRouteEvent::KI_MAX_LANDMARKS_IN_MODE];
+        for (s32 liLandmark = 0; liLandmark < lrEvent.GetNumLandmarks(); ++liLandmark)
+        {
+            GuiEventUpdateSatNav::SatNavIconInfo lInfo;
+            lpCache->GetLandmarkInfoFromID(lrEvent.GetLandmark(liLandmark), &lInfo);
+            laLandmarks[liLandmark] = BrnGameState::LandmarkIndex(lInfo.GetLandmarkIndexHalf());
+        }
+        const s32 liNumLandmarks = lrEvent.GetNumLandmarks();
+        const SatNavEventDisplayInfo* lpStart =
+            lpCache->GetEventStartInfoFromJunctionID(lrEvent.GetJunctionID());
+        lpParams->maEvents[liRound].Construct(lrEvent.GetEventID(), lpStart->muLightTriggerId,
+                                             laLandmarks, liNumLandmarks);
+    }
+
+    lpParams->meGameMode = meGameMode;
+    lpParams->miNumRounds = miNumRounds;
+    lpParams->miVehicleClass = miVehicleClass;
+    lpParams->miNumRunnerCrashes = miNumRunnerCrashes;
+    lpParams->meBoostType = meBoostType;
+    lpParams->meVehicleChoice = meVehicleChoice;
+    lpParams->mbInfiniteBoost = mbInfiniteBoost;
+    lpParams->mbTrafficOn = mbTrafficOn;
+    lpParams->mbTrafficCheckingOn = mbTrafficCheckingOn;
+    lpParams->miTimeLimit = miTimeLimit;
+}
 
 // ---------------------------------------------------------------------------
 // NotifyOtherModulesLoadComplete  @0x82511098

@@ -46,8 +46,10 @@ namespace CgsSystem
         static void InitializeHardware(s32 lnArgc, char* lapcArgv[]);
 #endif
 
-#if defined(CGS_PLATFORM_X360)
-        static void EnableJobThread();   // @0x828D6138 -- X360 stub, always asserts "Not supported on xbox\n"
+#if defined(CGS_PLATFORM_X360) || defined(WIN32)
+        // ARTIST 0x828D6138: unconditional unsupported assertion on X360; preserve it for PC callers.
+        // This declaration does not enable or start job workers.
+        static void EnableJobThread();
 #endif
 
         static char* GetWorkingDirectory() { return macRootPath; }
