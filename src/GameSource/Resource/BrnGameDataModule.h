@@ -20,6 +20,7 @@
 #include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC manager + debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
+namespace CgsModule { struct IOBufferStack; } // Original Prepare uses caller-owned stacks.
 namespace CgsMemory { struct MemoryMap; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
@@ -57,7 +58,7 @@ namespace CgsModule { struct Event; }                                        // 
 // The many embedded subsystems beyond ResourceModule are added with their own passes.
 namespace BrnResource
 {
-    namespace GameDataIO { struct GameDataAssetEvent; }   // dispatcher/handler param (by pointer)
+    namespace GameDataIO { struct GameDataAssetEvent; struct InputBuffer; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
 
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
@@ -101,6 +102,12 @@ namespace BrnResource
 
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
+        // Original ARTIST 0x82673F38 / DecFIGS h:370. Its complete body is a
+        // separate unresolved source dependency; this is not a two-buffer adapter.
+        virtual bool Prepare(CgsModule::IOBufferStack* lpInputStack,
+                             CgsModule::IOBufferStack* lpOutputStack,
+                             const GameDataIO::InputBuffer* lpInputBuffer,
+                             GameDataIO::OutputBuffer* lpOutputBuffer);
         bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
         bool Release();                               // deferred
         void Destruct();                              // deferred
