@@ -5098,6 +5098,9 @@ namespace BrnGame
                         lpGameStateOutput->SetSetUpAllEventStartsInterfaceIsValid(false);
                         lpGameStateOutput->SetSpecificGameModeEventInterfaceIsValid(false);
                         lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
+                        // FLAG PC-platform leaf: retire this queue after its final frame consumer.
+                        // ARTIST reconstructs the whole OutputBuffer each sub-step, starting this queue empty.
+                        lpGameStateOutput->GetTakedownEventOutputQueue()->Clear();
                         lpGameStateOutput->UnlockForWrite();
                     }
                 }
