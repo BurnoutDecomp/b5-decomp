@@ -1,0 +1,21 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnFlaptFileInstance.cpp
+        BrnFlaptFileRef.cpp
+        BrnFlaptManager.cpp
+        BrnFlaptMovieClipInstance.cpp
+        BrnFlaptMovieClipRef.cpp
+        BrnFlaptRenderer.cpp
+        BrnFlaptTextFieldInstance.cpp
+        BrnFlaptTextFieldRef.cpp
+
+    PUBLIC
+        BrnFlaptFileInstance.h
+        BrnFlaptFileRef.h
+        BrnFlaptManager.h
+        BrnFlaptMovieClipInstance.h
+        BrnFlaptMovieClipRef.h
+        BrnFlaptRenderer.h
+        BrnFlaptTextFieldInstance.h
+        BrnFlaptTextFieldRef.h
+)

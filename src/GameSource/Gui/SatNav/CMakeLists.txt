@@ -1,0 +1,20 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnEventIconManager.cpp
+        BrnGuiTracker.cpp
+        BrnGuiTracker_wY_00.cpp
+        BrnMainMap.cpp
+        BrnMapIconManager.cpp
+        BrnMapManager.cpp
+        BrnSatNavComponent.cpp
+        BrnSatNavIcon.cpp
+
+    PUBLIC
+        BrnEventIconManager.h
+        BrnGuiTracker.h
+        BrnMainMap.h
+        BrnMapIconManager.h
+        BrnMapManager.h
+        BrnSatNavComponent.h
+        BrnSatNavIcon.h
+)

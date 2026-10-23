@@ -1,0 +1,97 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        _embed_check_brngui_misc.cpp
+        Array_OverheadSignScore_32.cpp
+        BrnChallengeListComponent.cpp
+        BrnChallengeListComponent_embed_check.cpp
+        BrnCustomRendererManager.cpp
+        BrnCustomRendererManager_embed_check.cpp
+        BrnGuiAlwaysAvailableComponentsManager.cpp
+        BrnGuiBurnoutSkillsManager.cpp
+        BrnGuiCache.cpp
+        BrnGuiCache_GetOnlinePlayerInfoFromPlayerId.cpp
+        BrnGuiCache_wB_11.cpp
+        BrnGuiCache_wB_12.cpp
+        BrnGuiCache_wB_res.cpp
+        BrnGuiColourCalibrationScreen.cpp
+        BrnGuiDebugComponent.cpp
+        BrnGuiEventDrawEventIcons.cpp
+        BrnGuiEventTypeDefs.cpp
+        BrnGuiFreeburnChallengeManager.cpp
+        BrnGuiFsmController.cpp
+        BrnGuiGuiCacheDebugComponent.cpp
+        BrnGuiHudMessageAnalyzer.cpp
+        BrnGuiHudMessageAnalyzer_gUI_01.cpp
+        BrnGuiHudMessageAnalyzer_gUI_02.cpp
+        BrnGuiHudMessageAnalyzer_gUI_03.cpp
+        BrnGuiHudMessageAnalyzer_gUI_04.cpp
+        BrnGuiHudMessageDirector.cpp
+        BrnGuiHudMessageDirector_gUI_00.cpp
+        BrnGuiHudMessageDirector_gUI_01.cpp
+        BrnGuiHudMessagesDebugComponent.cpp
+        BrnGuiKeyboard.cpp
+        BrnGuiKeyboardHost.cpp
+        BrnGuiModule.cpp
+        BrnGuiMovieAllocator.cpp
+        BrnGuiMovieManager.cpp
+        BrnGuiOptionsDataProfile.cpp
+        BrnGuiOptionsDataProfile_wS34_00.cpp
+        BrnGuiOptionsDataProfile_wS34_01.cpp
+        BrnGuiOptionsDataProfileDLC1.cpp
+        BrnGuiOptionsDataProfileDLC1_embed_check.cpp
+        BrnGuiOverlaysDirector.cpp
+        BrnGuiPerfmons.cpp
+        BrnGuiProfile.cpp
+        BrnGuiProfileHost.cpp
+        BrnGuiRaceCarInfoEvent.cpp
+        BrnGuiSatNavDebugComponent.cpp
+        BrnGuiTextField.cpp
+        BrnGuiViewModule.cpp
+        BrnGuiWorldDataController.cpp
+
+    PUBLIC
+        BrnChallengeListComponent.h
+        BrnCustomRendererManager.h
+        BrnGuiAlwaysAvailableComponentsManager.h
+        BrnGuiBurnoutSkillsManager.h
+        BrnGuiCache.h
+        BrnGuiColourCalibrationScreen.h
+        BrnGuiDebugComponent.h
+        BrnGuiDemangledEventTypes.h
+        BrnGuiEventTypeDefs.h
+        BrnGuiFreeburnChallengeManager.h
+        BrnGuiFsmController.h
+        BrnGuiGuiCacheDebugComponent.h
+        BrnGuiHudMessageAnalyzer.h
+        BrnGuiHudMessageDirector.h
+        BrnGuiHudMessagesDebugComponent.h
+        BrnGuiKeyboard.h
+        BrnGuiKeyboardHost.h
+        BrnGuiModule.h
+        BrnGuiMovieAllocator.h
+        BrnGuiMovieManager.h
+        BrnGuiOptionsDataProfile.h
+        BrnGuiOptionsDataProfileDLC1.h
+        BrnGuiOverlaysDirector.h
+        BrnGuiPerfmons.h
+        BrnGuiProfile.h
+        BrnGuiProfileHost.h
+        BrnGuiRaceCarInfoEvent.h
+        BrnGuiSatNavDebugComponent.h
+        BrnGuiShared.h
+        BrnGuiTextField.h
+        BrnGuiVideoEvents.h
+        BrnGuiViewModule.h
+        BrnGuiWorldDataController.h
+)
+
+add_subdirectory(Components)
+add_subdirectory(CustomRenderer)
+add_subdirectory(Events)
+add_subdirectory(Flapt)
+add_subdirectory(Flow)
+add_subdirectory(PC)
+add_subdirectory(PFX)
+add_subdirectory(SatNav)
+add_subdirectory(SaveLoad)
+add_subdirectory(View)

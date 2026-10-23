@@ -1,0 +1,34 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnBootAttract.cpp
+        BrnBootLegal.cpp
+        BrnBootLegalBoundary.cpp
+        BrnBootLoading.cpp
+        BrnBootPreload.cpp
+        BrnBootProfile.cpp
+        BrnBootStates_embed_check.cpp
+        BrnBootVideos.cpp
+        BrnCrashedHudState.cpp
+        BrnCrashedStuntHudState.cpp
+        BrnFBurnMainHudState.cpp
+        BrnHudStates_embed_check.cpp
+        BrnIdleHudState.cpp
+        BrnPausedHudState.cpp
+        BrnPostTitleScreenLoad.cpp
+        BrnRaceMainHudState.cpp
+
+    PUBLIC
+        BrnBootAttract.h
+        BrnBootLegal.h
+        BrnBootLoading.h
+        BrnBootPreload.h
+        BrnBootProfile.h
+        BrnBootVideos.h
+        BrnCrashedHudState.h
+        BrnCrashedStuntHudState.h
+        BrnFBurnMainHudState.h
+        BrnIdleHudState.h
+        BrnPausedHudState.h
+        BrnPostTitleScreenLoad.h
+        BrnRaceMainHudState.h
+)

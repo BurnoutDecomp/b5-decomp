@@ -1,0 +1,63 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnCarouselSliderBar.cpp
+        BrnCarSelectOnlineCountdown.cpp
+        BrnCarSelectOnlinePlayerList.cpp
+        BrnCrashNavBorough.cpp
+        BrnCrashNavLegend.cpp
+        BrnCrashNavPanel.cpp
+        BrnCursor.cpp
+        BrnDriveThruMapPanel.cpp
+        BrnEATraxMenuComponent.cpp
+        BrnEventPanel.cpp
+        BrnGuiNetworkPlayerStats.cpp
+        BrnGuiNetworkPlayerStats_wL_01.cpp
+        BrnGuiNetworkPlayerStats_wN3_00.cpp
+        BrnGuiNetworkRouteInfo.cpp
+        BrnImageGalleryCarouselItem.cpp
+        BrnImageGalleryCarouselSelectable.cpp
+        BrnImageGallerySelectable.cpp
+        BrnLargeCarComponent.cpp
+        BrnLeaderboardColumnComponent.cpp
+        BrnLeaderboardTableComponent.cpp
+        BrnLicenseComponent.cpp
+        BrnManufacturerIcon.cpp
+        BrnOnlineLoadingPlayer.cpp
+        BrnOnlinePreEventMessages.cpp
+        BrnPhotoBoothComponent.cpp
+        BrnRivalMapPanel.cpp
+        BrnRivalTableCell.cpp
+        BrnRoadPanel.cpp
+        BrnSelectRoutes.cpp
+
+    PUBLIC
+        BrnCarouselSliderBar.h
+        BrnCarSelectOnlineCountdown.h
+        BrnCarSelectOnlinePlayerList.h
+        BrnCrashNavBorough.h
+        BrnCrashNavLegend.h
+        BrnCrashNavPanel.h
+        BrnCursor.h
+        BrnDriveThruMapPanel.h
+        BrnEATraxMenuComponent.h
+        BrnEventPanel.h
+        BrnGuiNetworkPlayerStats.h
+        BrnGuiNetworkRouteInfo.h
+        BrnImageGalleryCarouselItem.h
+        BrnImageGalleryCarouselSelectable.h
+        BrnImageGallerySelectable.h
+        BrnLargeCarComponent.h
+        BrnLeaderboardColumnComponent.h
+        BrnLeaderboardTableComponent.h
+        BrnLicenseComponent.h
+        BrnManufacturerIcon.h
+        BrnOnlineLoadingPlayer.h
+        BrnOnlinePreEventMessages.h
+        BrnPhotoBoothComponent.h
+        BrnRivalMapPanel.h
+        BrnRivalTableCell.h
+        BrnRoadPanel.h
+        BrnSelectRoutes.h
+)
+
+add_subdirectory(Replays)

@@ -1,0 +1,21 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnFlaptButtonIcon.cpp
+        BrnGuiFlaptComponent.cpp
+        BrnGuiFlaptComponentUtils.cpp
+        BrnGuiFlaptHelpItem.cpp
+        BrnGuiFlaptIconComponent.cpp
+        BrnGuiFlaptInterpolatorComponent.cpp
+        BrnGuiFlaptRoadSignIconComponent.cpp
+        BrnGuiFlaptTimerFieldComponent.cpp
+
+    PUBLIC
+        BrnFlaptButtonIcon.h
+        BrnGuiFlaptComponent.h
+        BrnGuiFlaptComponentUtils.h
+        BrnGuiFlaptHelpItem.h
+        BrnGuiFlaptIconComponent.h
+        BrnGuiFlaptInterpolatorComponent.h
+        BrnGuiFlaptRoadSignIconComponent.h
+        BrnGuiFlaptTimerFieldComponent.h
+)

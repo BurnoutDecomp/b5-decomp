@@ -1,0 +1,28 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnGuiEventNetworkCreateGame.cpp
+        BrnGuiEventNetworkGameParams.cpp
+        BrnGuiEventNetworkPlayerStats.cpp
+        BrnGuiEventOnlinePostEvent.cpp
+        BrnGuiEventRankProgressResponse.cpp
+        BrnGuiEventRoadRuleUpcomingRoads.cpp
+
+    PUBLIC
+        BrnGuiChallengeEvents.h
+        BrnGuiCrashEvents.h
+        BrnGuiEventAudioTrax.h
+        BrnGuiEventNetworkCreateGame.h
+        BrnGuiEventNetworkGameParams.h
+        BrnGuiEventNetworkPlayerStats.h
+        BrnGuiEventOnlinePostEvent.h
+        BrnGuiEventOnlineStatsResponse.h
+        BrnGuiEventPreRaceMessages.h
+        BrnGuiEventRacePositionInfo.h
+        BrnGuiEventRankProgressResponse.h
+        BrnGuiEventReplayStatus.h
+        BrnGuiEventRoadRuleData.h
+        BrnGuiEventSetAvailablePresetRaces.h
+        BrnGuiEventSetBlackBars.h
+        BrnGuiEventStatsResponse.h
+        BrnGuiPFXEvents.h
+)
