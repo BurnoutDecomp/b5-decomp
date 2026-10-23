@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "normalization": "crlf_to_lf_only",
+  "base": "8b2940d40e76fd6a88a37615f6163a99c2d5e3b8",
+  "baseline_git_blob_sha1": "9695cfcadd8abd5ba5bdeb319afe09721d3f8251",
+  "b5_files": {
+    "src/GameSource/Gui/BrnGuiOptionsDataProfile.cpp": {
+      "lf_sha256": "24e5c47cdbcf3018ab669a71df5bbafe324adccc4abe5d4b64b32255edcf9e80",
+      "lf_bytes": 29654
+    },
+    "src/GameSource/Gui/BrnGuiOptionsDataProfile.h": {
+      "lf_sha256": "51553ee0e1d4a7a8214c93b7be91c58852441ae3c310e355c6de88f7bd2bc1ce",
+      "lf_bytes": 11405
+    },
+    "src/GameSource/Gui/BrnGuiOptionsDataProfile_wS34_00.cpp": {
+      "lf_sha256": "414f8c8dcd41ed66fca091163873d58f8547343e2a517db43e83cd5d4c923454",
+      "lf_bytes": 1562
+    },
+    "src/GameSource/Gui/Events/BrnGuiEventNetworkGameParams.cpp": {
+      "lf_sha256": "1dc841f621568fb5344f357fd9769802467a460a2b78c106c858fa760892b3bc",
+      "lf_bytes": 1992
+    },
+    "src/GameSource/GameState/BrnGameStateSharedIO.cpp": {
+      "lf_sha256": "29576f68b6027303b3b61f98867ba4a2955f40f87efff71c728a5ca00e147190",
+      "lf_bytes": 20437
+    },
+    "src/GameSource/Gui/BrnGuiCache.cpp": {
+      "lf_sha256": "4fe7737cfedcebd183555fdcbd67f61b979f6e6bf28c7cbe538f1235a1812fd5",
+      "lf_bytes": 289989
+    },
+    "src/GameSource/Gui/BrnGuiCache.h": {
+      "lf_sha256": "85e21d6c4528c9d5bf2b1aab8876751d3b262c8bc26fe3b7b836f1ec5a8603fa",
+      "lf_bytes": 189729
+    },
+    "src/GameSource/Gui/BrnGuiEventTypeDefs.h": {
+      "lf_sha256": "597605770de1b809644be80dd3018024e7ff8ffbb2d45d585162c270a81c7e49",
+      "lf_bytes": 189964
+    },
+    "src/GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h": {
+      "lf_sha256": "81a5d88410c6a0aaa60c56ee9c41e0377b3984af0e895d9fccc41e9af7f465f8",
+      "lf_bytes": 5251
+    },
+    "src/GameSource/GameState/BrnGameStateSharedIO.h": {
+      "lf_sha256": "4d6d929001ed432e720db0c11a5a1d7f71b61fa1a9d191ec4c9afd689007bc5e",
+      "lf_bytes": 91548
+    },
+    "src/GameSource/GameState/BrnGameStateTypes.h": {
+      "lf_sha256": "fcd19d7f542313929558211cbf297e2449fc8d5a0f4342ddffa3edf54283d701",
+      "lf_bytes": 8152
+    },
+    "src/GameShared/GameClasses/Core/CgsAssert.h": {
+      "lf_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
+      "lf_bytes": 4328
+    },
+    "src/GameShared/GameClasses/Core/CgsID.h": {
+      "lf_sha256": "ced57781649d9cbcbd0d2cde59231fa7fff08f7564c4f2e75aac5cd9e2e544ed",
+      "lf_bytes": 1923
+    },
+    "src/types.hpp": {
+      "lf_sha256": "89b8022b07bab80fb0522f9a57e412761b0b787c6887f45b2653aa897b3aa308",
+      "lf_bytes": 273
+    },
+    "tests/OnlineSaveRoute.cpp": {
+      "lf_sha256": "9105e7eeec51378a21136e80409b502ca0d383c80c267a4520384f879577d728",
+      "lf_bytes": 22917
+    },
+    "tests/run_online_save_route.py": {
+      "lf_sha256": "053ae3b9fa21178b1b81fe1b864c991dcdd058fc1d43488fe92e25e44890ac9b",
+      "lf_bytes": 11772
+    },
+    "tests/online_save_route_binding.py": {
+      "lf_sha256": "95c16b1ace9054a0c60b387fa8496db9c462ca779883c4143c6d9c17e7b963f1",
+      "lf_bytes": 7096
+    },
+    "tests/online_save_route_owned.py": {
+      "lf_sha256": "c21a018a37c094eec2c6befcd19b8862f8c33c84b66f84c33c55eac600649179",
+      "lf_bytes": 12783
+    },
+    "tests/evidence/online_save_route/BrnGuiOptionsDataProfile_8b2940d4.cpp": {
+      "lf_sha256": "e36d09bce219ca3125a204bcb34fe95aab2e7784c37d2f247a6eef980124c74d",
+      "lf_bytes": 26153
+    },
+    "tests/evidence/online_save_route/test_plan.json": {
+      "lf_sha256": "1709fa6b36657f903668e72943956566eb1d7ce3e24797fbbda5d270b308bc8e",
+      "lf_bytes": 4435
+    }
+  },
+  "workflow_files": {
+    "tools/build/msvc_env.bat": {
+      "lf_sha256": "64a57b7edcbc7ba793316cdafc19a74b64106ae276f3771d93996e766c76f3b6",
+      "lf_bytes": 3978
+    },
+    "tools/build/msvc_flags.txt": {
+      "lf_sha256": "f409e36fd3bb17cd8ced47f33fb9488c667a260d4dd274a7b6a1a6643356bfc2",
+      "lf_bytes": 2431
+    },
+    "tools/build/msvc_includes.txt": {
+      "lf_sha256": "b3a03d621ff0f8f9d9126c8fdae06a18b92c545e58bb8aff5623621ef522eee0",
+      "lf_bytes": 1370
+    }
+  },
+  "definitions": {
+    "cache_constructor": "466e35c41d05d41edb662c1039dc1c32816f399506cf6ce47d39569b5074dac4",
+    "original_options_constructor": "ebb77d77d26a3733e29b8848d351a24ff7d88b0aeb8fcb2b87072d4f9b675f9b"
+  }
+}

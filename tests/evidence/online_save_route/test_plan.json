@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "scope": "functional in-memory route transfer only; real disk, autosave and native save/reload remain untested",
+  "expected_candidate_checks": 71,
+  "expected_candidate_failures": 0,
+  "modes": {
+    "candidate": {
+      "check_ids": [
+        "default_version",
+        "default_created_count",
+        "default_received_count",
+        "default_all_created_event_triplets",
+        "default_all_received_event_triplets",
+        "default_all_created_scalars",
+        "default_all_received_scalars",
+        "default_created_guids_untouched",
+        "default_received_guids_untouched",
+        "default_standalone_event_triplets",
+        "default_standalone_scalars",
+        "default_standalone_guids_untouched",
+        "input_wide_guid_collision_witness",
+        "max_save_input_unchanged",
+        "max_saved_mode",
+        "max_saved_boost",
+        "max_saved_choice",
+        "max_saved_time",
+        "max_saved_rounds",
+        "max_saved_class",
+        "max_saved_crashes",
+        "max_saved_infinite",
+        "max_saved_traffic",
+        "max_saved_checking",
+        "max_saved_160_full_guids",
+        "max_saved_10_event_ids_counts",
+        "max_saved_triggers_become_junctions",
+        "max_forward_lookup_counts",
+        "max_loaded_mode",
+        "max_loaded_boost",
+        "max_loaded_choice",
+        "max_loaded_time",
+        "max_loaded_rounds",
+        "max_loaded_class",
+        "max_loaded_crashes",
+        "max_loaded_infinite",
+        "max_loaded_traffic",
+        "max_loaded_checking",
+        "max_previous_mode_untouched",
+        "max_security_untouched",
+        "max_ranked_untouched",
+        "max_loaded_160_remapped_indices",
+        "max_loaded_10_event_ids_counts",
+        "max_loaded_junctions_become_current_triggers",
+        "max_reverse_lookup_counts_full_ids",
+        "max_load_saved_route_unchanged",
+        "zero_rounds_save_leaves_events",
+        "zero_rounds_save_no_lookups",
+        "zero_rounds_load_scalars",
+        "zero_rounds_load_leaves_events",
+        "zero_rounds_load_preserves_unsaved_fields",
+        "zero_rounds_load_no_lookups",
+        "zero_landmarks_save_160_guids_untouched",
+        "zero_landmarks_save_only_start_lookups",
+        "zero_landmarks_load_all_event_metadata",
+        "zero_landmarks_load_handles_untouched",
+        "zero_landmarks_load_scalars",
+        "zero_landmarks_load_preserves_unsaved_fields",
+        "zero_landmarks_load_only_start_lookups",
+        "created_partial_overwrite_keeps_count",
+        "created_partial_overwrite_replaces_payload",
+        "created_all_10_append_counts",
+        "created_inputs_unchanged_and_forward_lookup",
+        "created_all_10_slots_roundtrip",
+        "created_full_overwrite_keeps_count",
+        "created_full_overwrite_preserves_other_9",
+        "received_12_insert_counts_saturate_at_10",
+        "received_all_shifted_windows_and_oldest_eviction",
+        "received_inputs_unchanged_and_forward_lookup",
+        "received_shifts_preserve_created_table",
+        "no_unexpected_assertions"
+      ],
+      "failure_ids": [],
+      "exit_code": 0
+    },
+    "omitted_init": {
+      "check_ids": [
+        "default_version",
+        "default_created_count",
+        "default_received_count",
+        "default_all_created_event_triplets",
+        "default_all_received_event_triplets",
+        "default_all_created_scalars",
+        "default_all_received_scalars",
+        "default_created_guids_untouched",
+        "default_received_guids_untouched",
+        "default_standalone_event_triplets",
+        "default_standalone_scalars",
+        "default_standalone_guids_untouched",
+        "no_unexpected_assertions"
+      ],
+      "failure_ids": [
+        "default_created_count",
+        "default_received_count",
+        "default_all_created_event_triplets",
+        "default_all_received_event_triplets",
+        "default_all_created_scalars",
+        "default_all_received_scalars"
+      ],
+      "exit_code": 1
+    },
+    "oldtrap_save": {
+      "check_ids": [
+        "oldtrap_save_completes"
+      ],
+      "failure_ids": [
+        "oldtrap_save_completes"
+      ],
+      "exit_code": 1,
+      "breakpoint_mode": "save"
+    },
+    "oldtrap_load": {
+      "check_ids": [
+        "oldtrap_load_completes"
+      ],
+      "failure_ids": [
+        "oldtrap_load_completes"
+      ],
+      "exit_code": 1,
+      "breakpoint_mode": "load"
+    }
+  }
+}
