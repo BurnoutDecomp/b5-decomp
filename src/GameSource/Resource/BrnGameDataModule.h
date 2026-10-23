@@ -1,6 +1,10 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"
+#include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModule.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
+#include "GameShared/GameClasses/Development/DebugSystem/GameTalk/CgsDebugGameTalkInterface.h
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"          // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"        // mResourceModule (the streaming engine)
@@ -90,7 +94,29 @@ namespace BrnResource
             E_PREPARE_HUD_MESSAGES = 13,
             // Stage 14, PreparePopups -- the overlay popup table ("Popups.pup") the overlays
             // director resolves every overlay request against.
-            E_PREPARE_POPUPS       = 14
+            E_PREPARE_POPUPS       = 14,
+            // Original ARTIST caller states. The retained PC-only DONE alias above
+            // remains 7; it must not be mixed with this original lifecycle.
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_MANAGER = 1,
+            E_PREPARESTAGE_RESOURCEMODULE = 2,
+            E_PREPARESTAGE_CREATEBANKS = 3,
+            E_PREPARESTAGE_CREATEPOOLS = 4,
+            E_PREPARESTAGE_CREATEALLOCATORS = 5,
+            E_PREPARESTAGE_ATTRIBSYS = 6,
+            E_PREPARESTAGE_GAMETALK = 7,
+            E_PREPARESTAGE_LIVEUPDATE = 8,
+            E_PREPARESTAGE_VEHICLELIST = 9,
+            E_PREPARESTAGE_CHALLENGELIST = 10,
+            E_PREPARESTAGE_ICELIST = 11,
+            E_PREPARESTAGE_WHEELLIST = 12,
+            E_PREPARESTAGE_HUDMESSAGES = 13,
+            E_PREPARESTAGE_POPUPS = 14,
+            E_PREPARESTAGE_DLC = 16,
+            E_PREPARESTAGE_DLC_ADD_PATCH = 17,
+            E_PREPARESTAGE_DLC_WAIT_PATCH = 18,
+            E_PREPARESTAGE_DONE = 19
+
         };
 
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
@@ -102,8 +128,8 @@ namespace BrnResource
 
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
-        // Original ARTIST 0x82673F38 / DecFIGS h:370. Its complete body is a
-        // separate unresolved source dependency; this is not a two-buffer adapter.
+        // Original ARTIST 0x82673F38 / DecFIGS h:370. The caller body is recovered
+        // separately from its original stack-backed helper/resource dependencies.
         virtual bool Prepare(CgsModule::IOBufferStack* lpInputStack,
                              CgsModule::IOBufferStack* lpOutputStack,
                              const GameDataIO::InputBuffer* lpInputBuffer,
@@ -120,6 +146,23 @@ namespace BrnResource
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
 
     private:
+        // Exact original helper APIs. Their stack-backed bodies are distinct from
+        // the retained native shortcuts below and remain explicit link dependencies.
+        bool CreateBanks(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool CreatePools(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool CreateAllocators(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool PrepareAttribSysSchemaResource(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
+                                           CgsAttribSys::AttribSysIO::InputBuffer*);
+        bool PrepareVehicleList(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool PrepareFreeburnChallengeList(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool PrepareICEList(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool PrepareWheelList(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool PrepareHudMessages(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        bool PreparePopups(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*);
+        CgsResource::ResourceModule::EUpdateResult UpdateResourceModule(
+            CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
+            const CgsResource::ResourceIO::InputBuffer*);
+
         // rw-allocator-gated bring-up steps (deferred stubs report success).
         bool CreateBanks(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DA28
         bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
@@ -448,6 +491,7 @@ namespace BrnResource
         EPrepareStage                  meReleaseStage;   // +0x22C (a1[139])
         const CgsMemory::MemoryMap*    mpMemoryMap;     // X360 ConstructResourceModule stores a1+0x6599C
         CgsResource::ResourceModule    mResourceModule;  // +0x280 (a1+160) the streaming engine
+        CgsResource::LiveUpdateModule mLiveUpdateModule; // ARTIST +361728, ctor/Prepare attested.
         // X360 a1+363096: the module's internal receiver queue -- every request the world
         // handlers post into the ResourceModule names it as mpUser, and Update drains the
         // ProcessInternal*Response completions from it. The X360 Construct binds a 0x8000-byte
@@ -514,6 +558,8 @@ namespace BrnResource
         // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
         // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
         CgsAttribSys::AttribSysModule  mAttribSysModule;
+        CgsGameTalk::GameTalk mGameTalk; // ARTIST +399624; ctor and Prepare identify the type.
+        CgsDev::DebugGameTalkInterface mDebugGameTalkInterface; // ARTIST +416064.
         // X360 a1+444128: the GameData debug page (Construct initializes +0x0C..+0x20;
         // Prepare registers it after the base module Prepare succeeds).
         BrnResource::DebugComponent    mDebugComponent;
@@ -559,7 +605,9 @@ namespace BrnResource
         s32                            miPopupsPrepareStage;
         // ARTIST Construct calls this typed owner at X360 this+475960 before
         // the DLC debug component; native storage follows the actual member types.
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatusInterface; // ARTIST +475952
         BrnResource::DLCManager         mDLCManager;
+        s32 miDLCManagerPackageIndex; // ARTIST +477584; distinct from DLCManager's own index.
         // (the 9 GeneralAllocators, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
