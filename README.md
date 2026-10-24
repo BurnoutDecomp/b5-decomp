@@ -23,6 +23,12 @@ worker/SIMD mechanisms and the evidence required to finish their reconstruction.
 Previous PC measurements and validation are in
 [PC rendering performance](tests/PCPerformance.md).
 
+## Controllers
+
+The PC build uses SDL3 for Xbox, DualShock 4, DualSense and other SDL gamepads.
+The first connected controller drives player 0; keyboard controls still work.
+SDL3.dll is included with packaged builds. See [controller setup and testing](docs/CONTROLLERS.md).
+
 ## Layout
 
 | Path | Purpose |

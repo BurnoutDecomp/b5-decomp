@@ -48,6 +48,7 @@
 #include "SharedClasses/Progression/BrnTrophyUnlockData.h"           // TrophyUnlockData::UnlockType
 #include "SharedClasses/Progression/BrnTrainingTypes.h"              // BrnProgression::E_TRAINING_TYPE_POWER_PARK
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h" // TrainingManager::RequestTraining
+#include "GameSource/GameState/Offences/BrnStuntManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // CgsDev::Log::gpDebugPrint ([completion] witnesses)
 
 #include <stdlib.h>                                                  // getenv (the [completion] witness gate)
@@ -1001,13 +1002,12 @@ void ProgressionManager::OnPowerParkResult(s32 liResult, bool lbBetweenOtherPlay
 // without a stimulus tools/tests/cases/progression_completion.ps1 could not tell a working drain
 // from a missing one -- and "the queue is empty" is exactly the state the bug also produces.
 //
-// WHAT IT IS NOT: it does not call AddCar, does not touch the profile, and awards no car. The
-// only state it moves is the transient in-memory queue, which SendTrophyUnlockUpdate empties on
-// the next frame. The record it builds is the one the two console asserts demand: a non-null
-// CgsID and a non-NONE unlock type.
+// The default seed changes only the transient queue and awards no car. The explicit
+// "freeroam:jumps", "freeroam:smashes" and "freeroam:billboards" modes instead invoke
+// the original debug completion action, award the real car and update the profile.
+// Run those modes with a pinned test profile (tests/CollectibleRewardResume.ps1).
 //
-// WHEN IT FIRES: any value but "freeroam" seeds on the first PreWorldUpdate (the drain check
-// only needs the queue to move). "freeroam" waits until the player car has been active outside
+// WHEN IT FIRES: the freeroam modes wait until the player car has been active outside
 // the junkyard for KF_FREEROAM_HOLD seconds of sim time: the GUI 375 the drain raises only
 // arms the award countdown if the screen flow's INGAME state is live, and on the first
 // PreWorldUpdate the screen flow has not even loaded yet.
@@ -1019,7 +1019,8 @@ void ProgressionManager::DEBUG_HarnessSeedTrophyQueue(f32 lfSimTimeStep,
     static const char* const spcSeedMode   = getenv("BRN_PROGRESSION_COMPLETION_SEEDTROPHY");
     static const bool        sbSeedEnabled = (spcSeedMode != 0);
     static const bool        sbSeedFreeRoam =
-        sbSeedEnabled && std::strcmp(spcSeedMode, "freeroam") == 0;
+        sbSeedEnabled && (std::strcmp(spcSeedMode, "freeroam") == 0
+                          || std::strncmp(spcSeedMode, "freeroam:", 9) == 0);
     static bool              sbSeeded      = false;
     static f32               sfFreeRoamTime = 0.0f;
     const f32                KF_FREEROAM_HOLD = 8.0f;   // PC harness hold, not a console value
@@ -1042,6 +1043,28 @@ void ProgressionManager::DEBUG_HarnessSeedTrophyQueue(f32 lfSimTimeStep,
         }
     }
     sbSeeded = true;
+
+    // FLAG PC harness stimulus: exercise the original collectible completion path,
+    // including the real car award, rather than only seeding its presentation queue.
+    // The caller's pinned test profile receives the same change as the debug menu.
+    BrnGameState::StuntElementType leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT;
+    if (std::strcmp(spcSeedMode, "freeroam:jumps") == 0)
+        leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_JUMP;
+    else if (std::strcmp(spcSeedMode, "freeroam:billboards") == 0)
+        leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_BILLBOARD;
+    else if (std::strcmp(spcSeedMode, "freeroam:smashes") == 0)
+        leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_SMASH;
+    if (leCompleteType != BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT)
+    {
+        mpStuntManager->SetDebugCompletedUnlockType(leCompleteType);
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "[completion] HARNESS STIMULUS ("
+                << spcSeedMode << "): original debug complete-all type="
+                << static_cast<s32>(leCompleteType) << "\n";
+        }
+        return;
+    }
 
     GsmIO::TrophyUnlockAction lUnlock;
     lUnlock.mCarToUnlock = CgsIDCompress("CARBEAGT");

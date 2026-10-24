@@ -128,11 +128,11 @@ def wiring(tree):
 
     pc = normalised(tree, PADSPC_CPP)
     set_state = body_or_empty(pc, 'extern "C" u32 XInputSetState(u32 dwUserIndex, void* pVibration)')
-    yield ("PC motor leaf: XInputSetState forwards to the system XInput DLL (same API, same XINPUT_VIBRATION)",
-           "ResolveXInputSetState()" in set_state and "lpfSetState(dwUserIndex, pVibration)" in set_state)
+    yield ("PC motor leaf: XInputSetState sends both motor amplitudes to the shared SDL selection",
+           "PCGamepad::SetRumble(lpuSpeeds[0], lpuSpeeds[1])" in set_state)
     scan = body_or_empty(pc, "    void InputPadsPC::UpdatePadDevices(InputPads* lpPads)")
-    yield ("PC pad scan: binds port 0's DeviceX360Pad when XInput user 0 is present, and player 0 to port 0",
-           "BindToPort(KU_PC_PAD_PORT, Device::E_PAD_DEVICE_TYPE)" in scan and "BindPlayerToPort(0," in scan)
+    yield ("PC pad scan: binds the selected SDL device to port 0 and rebinds when the physical selection changes",
+           "BindToPort(KU_PC_PAD_PORT, Device::E_PAD_DEVICE_TYPE)" in scan and "luSelectedId != suSelectedId" in scan)
 
 
 def events_numeric(tree):

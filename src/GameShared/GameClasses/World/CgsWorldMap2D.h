@@ -30,8 +30,8 @@ public:
     // @0x82907FF8 - sample by 2D world position (this TU).
     uint8_t GetValue(Vector2 lPosition) const;
 
-    // Sibling overload from DWARF shape; lives in this TU's class but is a
-    // separate function (not @0x82907FF8) - declared-only here.
+    // Project a 3D world position onto X/Z, then sample the 2D map.
+    // This overload is inlined at ARTIST call sites before @0x82907FF8.
     uint8_t GetValue(Vector3 lPosition) const;
 
 private:
