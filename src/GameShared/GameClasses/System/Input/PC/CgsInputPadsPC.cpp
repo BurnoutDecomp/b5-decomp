@@ -825,11 +825,13 @@ namespace
 
     bool AnyKeyDown(const int* lpiKeys)
     {
-        if (HostKeyboardSuppressed())
+        if (CgsDev::IsDebugKeyboardCapturedPC())
             return false;
+        const bool lbPhysicalAllowed = !HostKeyboardSuppressed();
         for (const int* lpiKey = lpiKeys; *lpiKey != 0; ++lpiKey)
         {
-            if ((GetAsyncKeyState(*lpiKey) & 0x8000) != 0)
+            if (CgsInput::PCGamepad::MappedKeyDown(*lpiKey) ||
+                (lbPhysicalAllowed && (GetAsyncKeyState(*lpiKey) & 0x8000) != 0))
                 return true;
         }
         return false;

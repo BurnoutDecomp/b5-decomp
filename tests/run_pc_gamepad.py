@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from fxgs_common import WORKFLOW, REPO, STRSTREAM_CPP, settings
+from fxgs_common import WORKFLOW, REPO, STRSTREAM_CPP, settings, definition
 
 
 def main():
@@ -12,7 +12,13 @@ def main():
     subprocess.run([os.sys.executable, str(WORKFLOW / "tools/build/fetch_sdl3.py")], check=True)
     with tempfile.TemporaryDirectory(prefix="brn_sdl_gamepad_") as directory:
         output = Path(directory)
-        includes = " ".join('/I"' + str(WORKFLOW / path) + '"' for path in settings("msvc_includes.txt"))
+        assertion = (REPO / "src/GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.cpp").read_text(encoding="utf-8")
+        helper = definition(assertion, "    static bool IsAssertReleaseKeyDownPC()")
+        modal = definition(assertion, "    void Manager::DoAssert()")
+        if modal.count("IsAssertReleaseKeyDownPC()") != 2 or "while (IsAssertReleaseKeyDownPC() &&" not in modal:
+            raise RuntimeError("The assert press and release loops must both poll mapped End")
+        (output / "assert_end_key.inc").write_text(helper, encoding="utf-8")
+        includes = '/I"' + str(output) + '" ' + " ".join('/I"' + str(WORKFLOW / path) + '"' for path in settings("msvc_includes.txt"))
         executable = output / "regression.exe"
         command = ('cl ' + ' '.join(settings("msvc_flags.txt")) +
                    ' /D_ALLOW_KEYWORD_MACROS=1 /Dprivate=public /Dprotected=public ' + includes +

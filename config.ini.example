@@ -24,6 +24,14 @@ AdapterIndex=0
 VSync=1
 DecoupleSimulation=1
 
+[ControllerKeyboard]
+; Optional SDL gamepad buttons/chords = keyboard keys. Restart after editing.
+; R4/L4/R5/L5 name the paddles; mapped buttons replace their normal game actions.
+; Uncomment an example to enable it. End also works while the assert screen is halted.
+; R4=End
+; Back+Start=F11
+; L4=Ctrl+Shift+K
+
 [Settings]
 ; 0 = console default (2x scene MSAA), 1 = off, 2/4/8 = requested samples.
 AntiAliasing=0

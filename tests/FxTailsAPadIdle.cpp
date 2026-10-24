@@ -98,6 +98,7 @@ namespace CgsInput::PCGamepad
     bool Read(State& lrState) { return FakeXInputGetState(0, &lrState) == 0; }
     std::uint32_t SelectedId() { return 1; }
     void SetInputAllowed(bool) {}
+    bool MappedKeyDown(int) { return false; }
     std::uint32_t SetRumble(std::uint16_t, std::uint16_t) { return 0; }
 }
 #endif

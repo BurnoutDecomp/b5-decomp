@@ -31,4 +31,11 @@ namespace CgsInput::PCGamepad
     bool HasRumble();
     void SetInputAllowed(bool lbAllowed);
     std::uint32_t SetRumble(std::uint16_t luLeft, std::uint16_t luRight);
+
+    // config.ini [ControllerKeyboard], loaded once at startup. Invalid entries
+    // are skipped and counted. Keyboard events/state belong to this game window.
+    unsigned LoadKeyboardMappings(const char* lpIniPath);
+    void SetKeyboardWindow(void* lpWindow);
+    void UpdateKeyboardMappings(); // also used by the blocking assert loop
+    bool MappedKeyDown(int liVirtualKey);
 }

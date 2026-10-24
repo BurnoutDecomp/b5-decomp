@@ -25,6 +25,50 @@ when distributing the build. No separate SDL installation is required.
 CMake targets find `vendor/sdl3/cmake` or an explicit `SDL3_DIR` and stage the
 shared runtime and license beside their executable.
 
+## Map controller buttons to keyboard keys
+
+Add a `[ControllerKeyboard]` section to **config.ini beside Burnout_PC.exe**,
+then restart. For example:
+
+```ini
+[ControllerKeyboard]
+R4=End
+Back+Start=F11
+L4=Ctrl+Shift+K
+```
+
+`R4=End` dismisses the assert screen from the right primary paddle, including
+while the normal game input loop is halted. `Back+Start=F11` toggles fullscreen;
+the last example holds a keyboard chord while L4 is held. Targets reach the game's
+keyboard bindings, debug keyboard and window shortcuts. Events belong to the game
+window and mappings release when it loses focus, the controller disconnects, or
+the game shuts down. The physical keyboard remains available.
+
+Button names are case-insensitive. Use SDL button names or these aliases:
+
+- `R4`, `L4`, `R5`, `L5`: right/left primary and secondary paddles.
+- `A/B/X/Y` or `Cross/Circle/Square/Triangle`: the four face positions.
+- `LB/RB` (`L1/R1`), `LS/RS`, `Back` (`Select`), `Start` (`Menu`).
+- `DPadUp/Down/Left/Right`, `Guide`, `Touchpad`, and `Misc1` through `Misc6`.
+
+Join controller buttons with `+` for a combination. Active mappings consume their
+source buttons, replacing their original game actions. A complete longer chord
+takes priority over an overlapping shorter binding; unrelated bindings can run
+together. A shorter binding still activates if it is pressed before the remaining
+buttons of its chord.
+
+Targets accept letters, digits, `F1`–`F24`, `End`, `Home`, `Insert`, `Delete`,
+`Enter`, `Escape`, `Space`, `Tab`, `Backspace`, `PageUp/PageDown`, arrow names,
+`Shift`, `Ctrl`, `Alt`, and hexadecimal Windows virtual-key codes such as `0x23`
+for End. Join target keys with `+` for a keyboard chord. At most 64 mappings are
+loaded; invalid entries are skipped and their count is logged. With no mappings,
+the original controller bindings apply.
+
+Extra buttons must be exposed by the device's SDL driver/mapping. Physical Steam
+controller paddle behavior remains subject to the hardware validation below.
+The Bluetooth Steam Controller HIDAPI driver is enabled by default; an explicit
+`SDL_JOYSTICK_HIDAPI_STEAM` environment override is respected.
+
 ## Automated checks
 
 From the parent workflow:
@@ -39,7 +83,10 @@ python b5-decomp/tests/run_cgs_keyboard_pc_contract.py
 The SDL test runs the production backend, action fill and ManagerX360 with SDL
 virtual devices: face buttons, D-pad, start/back, shoulders, stick clicks, stick
 endpoints/directions, triggers, connection changes, deterministic selection,
-press/release edges, rumble routing, focus muting and shutdown. It checks bounded
+press/release edges, rumble routing, focus muting and shutdown. Keyboard tests use
+SDL virtual paddles and the production assert-key helper, including polling while
+normal gameplay is paused, overlapping chords, consumed buttons, key messages,
+focus/disconnect/shutdown release and config parsing. It checks bounded
 empty-device enumeration and launches a separate native probe from a temporary
 package with only the Windows system directory on PATH.
 
