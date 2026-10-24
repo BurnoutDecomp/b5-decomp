@@ -3465,9 +3465,16 @@ void GuiModule::Destruct()
                     // renderer observer too, as DispatchInboundGuiEvents does.
                     // Without it, screen-posted ticker messages never reach the view.
                     mCustomRendererManager.RecvEvent(lpRawEvent, static_cast<s32>(luEventType));
-                    // The results teardown also belongs to the cache observer. Flow
-                    // output does not pass through DispatchInboundGuiEvents on PC.
-                    if (luEventType == 292u)
+                    // The results teardown (292) and CompletedGame's presentation
+                    // suppress (304, TriggerExitState @0x824D2FE0) also belong to the cache
+                    // observer: on ARTIST the out-buffer loops back as in-events, so
+                    // GuiCache::RecEvent sees both. Flow output does not pass through
+                    // DispatchInboundGuiEvents on PC. Without 304 here the re-entered
+                    // InstantResultsState replays the results + licence + credits forever.
+                    // FLAG PC divergence: ARTIST delivers every out-event to the cache via
+                    // the bus loop-back, on the NEXT update; PC forwards this hand-picked
+                    // set, immediately.
+                    if (luEventType == 292u || luEventType == 304u)
                         mGuiCache.RecEvent(lpRawEvent, static_cast<s32>(luEventType));
                     RouteEventToFlow(
                         lpRawEvent, static_cast<s32>(luEventType),

@@ -1841,7 +1841,10 @@ namespace BrnGui
             // re-confirms that member's +0x30 placement from a SECOND function.
             if (mOfflinePostEventData.maCarsToUnlockFromSpecialEvent.GetLength() > 1)
                 DetermineCarUnlockPending(mpProfile);
-            mOfflinePostEventData = GuiEventOfflinePostEvent::OfflinePostEventData();
+            // ARTIST zero-fills the 192 bytes (`memset(+40552, 0, 192)`); a default-
+            // constructed record would instead leave the arrays' -1 "unconstructed"
+            // sentinels behind, which the console's cleared record never has.
+            std::memset(&mOfflinePostEventData, 0, sizeof(mOfflinePostEventData));
             mbSuppressPostEventPresentation = false;   // stb 0, +19319
             break;
 
