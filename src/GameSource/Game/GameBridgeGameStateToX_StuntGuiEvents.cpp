@@ -1198,7 +1198,7 @@ namespace
             case 87:
             {
                 BrnGui::GuiGamePausedEvent lEvent = {};
-                lEvent.maData[4] = (liActionType == 86) ? 1u : 0u;
+                lEvent.mbGamePaused = (liActionType == 86);
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }

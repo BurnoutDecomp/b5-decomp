@@ -42,6 +42,11 @@ template <> void CgsGui::GuiEventQueueBase<4096, 16>::Clear()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Clear();
 }
+// ARTIST8252A0AC..CC calls the folded 4096-byte base getter (8227CBE8).
+template <> s32 CgsGui::GuiEventQueueBase<4096, 16>::GetLength() const
+{
+    return this->CgsModule::VariableEventQueue<4096, 16>::GetLength();
+}
 template <> void CgsGui::GuiEventQueueBase<4096, 16>::Destruct()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Destruct();
