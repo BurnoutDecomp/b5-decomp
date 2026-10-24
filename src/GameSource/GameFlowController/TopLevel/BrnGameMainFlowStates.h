@@ -137,6 +137,16 @@ protected:
     bool LoadEffectsModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    // ARTIST823EF310; exact6-argument native Prepare/retry owner.
+    // Caller owns these records and already holds the GameData IO locks.
+    // Unselected until the original initial-loading caller/temp lifetime lands.
+    bool LoadGUIModule(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+                       CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                       CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+                       CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+                       CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
+                       const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput);
+
     bool LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 

@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"  // GameStateModuleIO::OutputBuffer (its lock bracket)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"  // CgsGuiModuleIO::Input/OutputBuffer (the C4 sound-leg GUI endpoints)
+#include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h" // genuine LoadGUIModule borrowed Model output
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"   // CgsModule::LockBuffersForIO (the partial spine's network -> GUI bracket)
 #include "GameSource/Network/BrnNetworkModule.h"              // BrnNetwork::BrnNetworkModule::ProcessBeforeSimulation (the partial spine)
@@ -2010,4 +2011,49 @@ void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpS
     }
 
     DriveWorldUpdateFrame(&s_GameDataInput, lUpdateSet, lpSoundPreUpdateOutput);
+}
+
+// ARTIST823EF310; DecFIGS325ABC resolves the actual borrowed buffer types.
+// This original owner is unselected; the current PC loading branch is retained.
+bool LoadingScriptedState::LoadGUIModule(
+    BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+    CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+    CgsGui::ModelIO::OutputBuffer* lpGuiModelOutput,
+    CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
+    const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    if (!lpGameModule->GetGuiModule().Prepare(lpGuiOutput, lpGDMInput, lpGDMOutput))
+    {
+        // ARTIST reloads the same actual global owner after Prepare. The two
+        // stack pointers are this game module's existing borrowed owners.
+        lpGameModule = BrnGame::GetMainGameModule();
+        lpGameModule->GetGuiModule().Update(static_cast<BrnUpdateSet>(0x40),
+            lpGameModule->GetUpdateInputBufferStack(), lpGameModule->GetUpdateOutputBufferStack(),
+            lpGuiInput, lpGuiOutput, lpGuiModelOutput, lpGuiViewInput,
+            lpGDMInput, lpGDMOutput, false);
+        lpGuiModelOutput->LockForRead();
+        lpGuiOutput->LockForRead();
+        BrnGame::GetMainGameModule()->BridgeGuiToResource(lpGDMInput, lpGuiModelOutput, lpGuiOutput);
+        lpGuiOutput->UnlockForRead();
+        lpGuiModelOutput->UnlockForRead();
+        return false;
+    }
+
+    CgsModule::LockBuffersForIO(lpGuiInput);
+    BrnGui::GuiEventRunFsm lRunFsm;
+    lRunFsm.mInitialStateId = 0;
+    lRunFsm.mFsmId = CgsIDCompress("BrnBFPreFsm");
+    lRunFsm.meFlowToUse = BrnGui::E_GUIFLOW_HUD;
+    static_assert(BrnGui::E_GUIFLOW_HUD == 1 && BrnGui::E_GUIFLOW_OVERLAY == 2,
+                  "ARTIST initial GUI FSM flow lanes");
+    // ARTIST writes neither request's meFsmToRun lane; the genuine default
+    // constructor also leaves that storage unwritten. Do not seed it here.
+    lpGuiInput->GetGuiEvents()->AddEvent(&lRunFsm, 144, sizeof(lRunFsm));
+    lRunFsm.mFsmId = CgsIDCompress("BrnOverlay");
+    lRunFsm.meFlowToUse = BrnGui::E_GUIFLOW_OVERLAY;
+    lpGuiInput->GetGuiEvents()->AddEvent(&lRunFsm, 144, sizeof(lRunFsm));
+    CgsModule::UnlockBuffersForIO(lpGuiInput);
+    return true;
 }
