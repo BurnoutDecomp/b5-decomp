@@ -127,3 +127,13 @@ const MemoryMapRWLinearAllocator* MemoryMap::GetRWLinearAllocator(s32 liIndex) c
 const MemoryMapRWGeneralAllocator* MemoryMap::GetRWGeneralAllocator(s32 liIndex) const { return mpRWGeneralAllocators + liIndex; }
 
 }
+
+namespace CgsMemory
+{
+    // ARTIST's two root callers load the first bank pointer at header+0x24;
+    // GetParams has no subobject adjustment. Ordinary GetBank(i) selects i+1.
+    const MemoryMapBank* MemoryMap::GetRootBank() const
+    {
+        return mpBanks;
+    }
+}

@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
+#include "GameShared/GameClasses/Memory/CgsMemoryBank.h" // original root Params argument
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::ResourceDescriptor
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // KX_FILTER_* (memory-check print)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (LinearResourceAllocator queries)
@@ -113,6 +114,7 @@ inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
 HeapResourceAllocator* GetDebugAllocator();
 // Genuine public wrapper; distinct from the retained native allocation helper.
 LinearResourceAllocator* GetGraphicsAllocator();
+LinearResourceAllocator* GetResourceAllocator();
 void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
 
 // The GameData general resource allocator the loading-screen module loads carve from (SoundModule
@@ -147,8 +149,6 @@ public:
 
     // The startup memory-map/initial-default-allocator chain (ARTIST 0x82664728).
     static void InitMemoryMap();
-    // ARTIST82666B70; original global owner, not invoked by native startup.
-    static void ConstructGlobalGraphicsMemory();
 
     // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
     // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
@@ -159,6 +159,14 @@ public:
     static rw::IResourceAllocator* GetGlobalGraphicsAllocator();
 
 private:
+    // Original private construction phases (DecFIGS h327/330), both unactivated.
+    static void ConstructGlobalGraphicsMemory();
+    static void ConstructGlobalResourceMemory(const CgsMemory::MemoryBank::Params* lpRootBankParams);
+    friend LinearResourceAllocator* GetResourceAllocator();
+    static rw::Resource mGlobalResourceMemory;
+    static rw::ResourceDescriptor mGlobalResourceMemoryDescriptor;
+    static rw::LinearResourceAllocator* mpInternalResourceAllocator;
+    static LinearResourceAllocator mGlobalResourceAllocator;
     friend LinearResourceAllocator* GetGraphicsAllocator();
     static rw::Resource mGlobalGraphicsMemory;
     static rw::ResourceDescriptor mGlobalGraphicsMemoryDescriptor;

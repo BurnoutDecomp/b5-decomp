@@ -576,3 +576,42 @@ namespace BrnResource
         CgsDev::Assert::EndAssert();
     }
 }
+
+namespace BrnResource
+{
+    // Primary82F2C820/848 and82FFAA14/82FFA898: descriptor lanes begin{0,1};
+    // all five resource pointers and the internal backing pointer begin zero.
+    rw::Resource Allocators::mGlobalResourceMemory;
+    rw::ResourceDescriptor Allocators::mGlobalResourceMemoryDescriptor;
+    rw::LinearResourceAllocator* Allocators::mpInternalResourceAllocator = nullptr;
+    LinearResourceAllocator Allocators::mGlobalResourceAllocator;
+
+    // DecFIGS h393; ARTIST8266D5AC..5BC obtains this exact wrapper address.
+    // The wrapper's actual allocation entry validates its backing before use.
+    LinearResourceAllocator* GetResourceAllocator()
+    {
+        return &Allocators::mGlobalResourceAllocator;
+    }
+
+    // ARTIST82666C58. The caller supplies Root Bank Params, not a MemoryMap*.
+    void Allocators::ConstructGlobalResourceMemory(
+        const CgsMemory::MemoryBank::Params* lpRootBankParams)
+    {
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_size =
+            lpRootBankParams->mauBankSize[0] + 0xFC0000u;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_size =
+            lpRootBankParams->mauBankSize[2] + 0x200000u;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        rw::ResourceDescriptor lDescriptor;
+        rw::LinearResourceAllocator::GetResourceDescriptor(&lDescriptor, &mGlobalResourceMemoryDescriptor);
+        mGlobalResourceMemory.m_baseResources[0] = XPhysicalAlloc(
+            lDescriptor.m_baseResourceDescriptors[0].m_size, 0xFFFFFFFFUL, 0x20000, 0x20000004UL);
+        mGlobalResourceMemory.m_baseResources[2] = XPhysicalAlloc(
+            lDescriptor.m_baseResourceDescriptors[2].m_size, 0xFFFFFFFFUL, 0x20000, 0x20000004UL);
+        ClearResource(mGlobalResourceMemory, lDescriptor);
+        mpInternalResourceAllocator = rw::LinearResourceAllocator::Initialize(
+            mGlobalResourceMemory, mGlobalResourceMemoryDescriptor);
+        mGlobalResourceAllocator.Construct(mpInternalResourceAllocator, "GlobalResource");
+    }
+}
