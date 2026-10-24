@@ -911,6 +911,14 @@ namespace BrnGui
         // unlike the retained PC SetGameplayHudReady helper's three stores.
         bool IsGamePaused() const { return mbIsGamePaused; }
         bool IsImageExportInProgress() const { return mbImageExportInProgress; }
+        // DecFIGS h1592/1596/1471. ARTIST82416128..170 inlines these reads.
+        bool IsEATraxChyronActive() const { return mbEATraxChyronActive; }
+        bool IsEasyDriveAllowed() const { return mbEasyDriveAllowed; }
+        bool PassedTheJunkyard() const { return mbGameplayHudReadyC; }
+        // Host spelling for ARTIST82416174..180's original inline private-byte
+        // read. This names the existing replay owner; no new field or policy.
+        // No original standalone method name is claimed for this helper.
+        bool IsReplayExporting() const { return mbReplayExporting; }
         bool IsConnectedToNetwork() const { return mbRoadRuleFriendScoresAvailable; }
         void SetConnectedToNetwork(bool lbConnected) { mbRoadRuleFriendScoresAvailable = lbConnected; }
         bool IsInGame() { return mbGameplayUpdateActive; }
@@ -2408,7 +2416,9 @@ namespace BrnGui
         bool mbIsLoadingScreenVisible;                   // +0x13B90 (80784) DWARF h:1895
         u8  mPad_13B91[3];                               // +0x13B91..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
-        u8  mPad_13B98[2];                               // +0x13B98..+0x13B99
+        // DecFIGS h1900/1901; ARTIST Construct/RecEvent and the invite gate.
+        bool mbEATraxChyronActive;                       // X360+13B98
+        bool mbEasyDriveAllowed;                        // X360+13B99
         bool mbAreRoadRulesAvailable;                    // +0x13B9A (RecEvent 350)
         u8  mPad_13B9B[1];                               // +0x13B9B
         // The replay screens' slot cursor: ReplayClips/ReplayClipsOnline store the highlighted
