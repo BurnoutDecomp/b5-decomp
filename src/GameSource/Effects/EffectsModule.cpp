@@ -45,6 +45,9 @@
 #include <cstdio>
 #include <cstdlib>   // getenv (the [skid] probe gate)   // std::snprintf
 
+// FLAG PC-platform leaf: passive present attribution, shared with the existing AirEnd witness.
+namespace renderengine { extern u32 guPresentCount; }
+
 // ============================================================================
 // GameSource/Effects/EffectsModule.cpp
 //
@@ -2064,8 +2067,85 @@ void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
         HandleWheels(lCarState, lHelper);
 
         if (!mbEventIntroActive || leIndex == lePlayerIndex)
+        {
+            // FLAG PC-platform leaf: opt-in, passive attribution for the native jump-control case.
+            // The real player slot and its already-published physics state are observed around
+            // the unchanged jump tick. No state, control, particle, allocator or readiness writes.
+            static const bool sbJumpPlayerDiag = (std::getenv("BRN_JUMP_PLAYER_DIAG") != 0);
+            const bool lbObserveJumpPlayer = sbJumpPlayerDiag && leIndex == lePlayerIndex;
+            const EffectsState leJumpBefore = lbObserveJumpPlayer
+                ? lrData.mJumpMachine.CurrentState() : EffectsStateAllOff;
+
             HandleJumpAndLandingEffects(lCarState, lHelper, lrParams.mDt, lrParams.mTime,
                                         lrData.GetGroundPositionY());
+
+            if (lbObserveJumpPlayer)
+            {
+                // 256 player observations, two short direct-log lines each, plus one explicit
+                // exhaustion line. Legacy all-car 64/32-line counters remain unchanged.
+                static u32 suJumpPlayerObservations = 0u;
+                static u32 suLastJumpPlayerCar = 0xFFFFFFFFu;
+                static EffectsState seLastJumpPlayerState = EffectsStateAllOff;
+                static bool sbLastJumpPlayerAir = false;
+                static bool sbLastJumpPlayerForce = false;
+                static bool sbLastJumpPlayerCrash = false;
+                static bool sbJumpPlayerExhausted = false;
+                static u32 suJumpPlayerQuietCalls = 0u;
+                const EffectsState leJumpAfter = lrData.mJumpMachine.CurrentState();
+                const bool lbPhysicsAir = !lpState->mbCrashing && lpState->mfTimeInAir > 0.0f;
+                const bool lbForceJump = mDebugComponent.JumpParams().IsForceJumping();
+                // A rare real AllOff observation closes a restore image's state window.
+                // Saturate this diagnostic-only interval; it neither schedules nor ticks work.
+                if (suJumpPlayerQuietCalls < 300u) ++suJumpPlayerQuietCalls;
+                const bool lbIdleObservation = suJumpPlayerQuietCalls == 300u
+                    && leJumpAfter == EffectsStateAllOff && !lbForceJump;
+                if (suJumpPlayerObservations == 0u || suLastJumpPlayerCar != luCar
+                    || leJumpBefore != leJumpAfter || seLastJumpPlayerState != leJumpAfter
+                    || sbLastJumpPlayerAir != lbPhysicsAir
+                    || sbLastJumpPlayerForce != lbForceJump
+                    || sbLastJumpPlayerCrash != lpState->mbCrashing || lbIdleObservation)
+                {
+                    if (suJumpPlayerObservations < 256u)
+                    {
+                        ++suJumpPlayerObservations;
+                        suJumpPlayerQuietCalls = 0u;
+                        suLastJumpPlayerCar = luCar;
+                        seLastJumpPlayerState = leJumpAfter;
+                        sbLastJumpPlayerAir = lbPhysicsAir;
+                        sbLastJumpPlayerForce = lbForceJump;
+                        sbLastJumpPlayerCrash = lpState->mbCrashing;
+                        u32 luGroundWheels = 0u;
+                        for (u32 luWheel = 0u; luWheel < 4u; ++luWheel)
+                            if (lpState->maWheels[luWheel].mRoadContact.mbIsOnGround)
+                                ++luGroundWheels;
+                        const u32 luPresent = renderengine::guPresentCount;
+                        char lacJumpPlayer[240];
+                        std::snprintf(lacJumpPlayer, sizeof(lacJumpPlayer),
+                            "[jump-player] n=%u p=%u car=%u phys=%d old=%d new=%d air=%d wheels=%u crash=%d force=%d intro=%d handle=%08X idle=%d\n",
+                            suJumpPlayerObservations, luPresent, luCar, lpState->miRaceCarID,
+                            static_cast<s32>(leJumpBefore), static_cast<s32>(leJumpAfter),
+                            lbPhysicsAir ? 1 : 0, luGroundWheels, lpState->mbCrashing ? 1 : 0,
+                            lbForceJump ? 1 : 0, mbEventIntroActive ? 1 : 0,
+                            lrData.mJumpEffectHandle, lbIdleObservation ? 1 : 0);
+                        CgsDev::Log::WriteToLog(lacJumpPlayer);
+                        std::snprintf(lacJumpPlayer, sizeof(lacJumpPlayer),
+                            "[jump-param] n=%u p=%u car=%u t=%.6g vy=%.6g delay=%.6g ramp=%.6g sparks=%.6g\n",
+                            suJumpPlayerObservations, luPresent, luCar,
+                            static_cast<double>(lpState->mfTimeInAir),
+                            static_cast<double>(lpState->mLinearVelocity.y),
+                            static_cast<double>(mDebugComponent.JumpParams().VapourStartDelay()),
+                            static_cast<double>(mDebugComponent.JumpParams().VapourRampEndTime()),
+                            static_cast<double>(mDebugComponent.JumpParams().LandingSparksTime()));
+                        CgsDev::Log::WriteToLog(lacJumpPlayer);
+                    }
+                    else if (!sbJumpPlayerExhausted)
+                    {
+                        sbJumpPlayerExhausted = true;
+                        CgsDev::Log::WriteToLog("[jump-player] exhausted observations=256\n");
+                    }
+                }
+            }
+        }
 
         const RaceCarState* lpStateAgain = lpActiveRaceCars->GetRaceCarState(leIndex);
         if (lpState->mbCrashing)
