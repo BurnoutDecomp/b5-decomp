@@ -104,6 +104,19 @@ def main():
             "void VariableEventQueue<BUFSIZE, ALIGN>::OutputQueueContents() const",
         ):
             queue_defs.append("template <s32 BUFSIZE, s32 ALIGN>\n" + definition(queue_text, sig))
+        # The retained-inbox route calls the genuine packed-byte Append. Its
+        # const source accessors must be emitted beside the other real queue bodies.
+        for sig in (
+            "s32 VariableEventQueue<BUFSIZE, ALIGN>::GetSizeInBytes() const",
+            "const char* VariableEventQueue<BUFSIZE, ALIGN>::GetFirstWritePointer() const",
+        ):
+            queue_defs.append("template <s32 BUFSIZE, s32 ALIGN>\n" + definition(queue_text, sig))
+        queue_defs.append(
+            "template <s32 BUFSIZE, s32 ALIGN>\n"
+            "template <s32 SRCBUF, s32 SRCALIGN>\n"
+            + definition(queue_text,
+                "bool VariableEventQueue<BUFSIZE, ALIGN>::Append("
+                "const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource)"))
         queue_inc = (
             "namespace CgsModule {\nstruct Event {};\n"
             "template<class T, s32 N> class EventQueue;\n"
@@ -138,6 +151,52 @@ def main():
 
         core = body(GUI, "void GuiModule::Update(BrnResource::GameDataIO::InputBuffer*")
         clean_core = code_only(core)
+
+        # Extract the current retained-inbox append/retirement and the current
+        # Profile-350/cache64 input-cursor handoff from this same Update body.
+        inbox_start = core.index("if (mpGuiEventInputBuffer != 0)")
+        inbox_unlock_end = core.index("mpGuiEventInputBuffer->UnlockForWrite();", inbox_start)
+        inbox_end = core.index("}", inbox_unlock_end) + 1
+        input_inbox = core[inbox_start:inbox_end]
+        input_dispatch_setup = "\n".join(statement(core, signature) for signature in (
+            "bool lbHasSaveImageEvent = false;",
+            "CgsGui::ImageFileInfo lSaveImageInfo;",
+            "const CgsModule::Event* lpLastInboundEvent =",
+        ))
+        cache_decl = statement(core, "GuiEventCache lCacheEvent;")
+        cache_pointer = statement(core, "lCacheEvent.mpGuiCache = &mGuiCache;")
+        cache_pointer_end = core.index("lCacheEvent.mpGuiCache = &mGuiCache;") + len("lCacheEvent.mpGuiCache = &mGuiCache;")
+        cache_manager = statement(core[cache_pointer_end:], "mCustomRendererManager.RecvEvent(")
+        cache_manager_end = core.index("mCustomRendererManager.RecvEvent(", cache_pointer_end)
+        cache_guard_start = core.index("if (mpGuiEventInputBuffer != 0)", cache_manager_end)
+        cache_source = core[cache_guard_start:]
+        cache_lock = statement(cache_source, "mpGuiEventInputBuffer->LockForWrite();")
+        cache_queue = statement(cache_source,
+            "CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpGuiEvents =")
+        cache_add_match = re.search(
+            r"if \(lpGuiEvents->AddEvent\(reinterpret_cast<const CgsModule::Event\*>\(&lCacheEvent\),\s*"
+            r"64,\s*static_cast<s32>\(sizeof\(lCacheEvent\)\)\)\)\s*\{\s*"
+            r"s32 liCacheEventSize = 0;\s*"
+            r"if \(lpLastInboundEvent != 0\)\s*"
+            r"lpGuiEvents->GetNextEvent\(lpLastInboundEvent, &lpLastInboundEvent, &liCacheEventSize\);\s*"
+            r"else\s*lpGuiEvents->GetFirstEvent\(&lpLastInboundEvent, &liCacheEventSize\);\s*\}",
+            cache_source)
+        if cache_add_match is None:
+            raise ValueError("cache64 common-input insertion/cursor source block is missing")
+        cache_unlock = statement(cache_source, "mpGuiEventInputBuffer->UnlockForWrite();")
+        cache_resume = statement(cache_source,
+            "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);")
+        input_route = (
+            "void GuiModule::RecoveredInputCacheRoute() {\n"
+            + input_inbox + "\n"
+            + input_dispatch_setup + "\n"
+            + cache_decl + "\n" + cache_pointer + "\n" + cache_manager + "\n"
+            + "if (mpGuiEventInputBuffer != 0) {\n"
+            + cache_lock + "\n" + cache_queue + "\n" + cache_add_match[0] + "\n"
+            + cache_unlock + "\n"
+            # Unrelated debug-refresh calls between cursor step and resume are fixture boundaries.
+            + cache_resume + "\n}\n}\n"
+        )
         handoff_match = re.search(
             r"\{\s*GuiEventCache lCacheEvent;\s*"
             r"lCacheEvent\.mpGuiCache = &mGuiCache;\s*"
@@ -149,9 +208,11 @@ def main():
         handoff = handoff_match[0]
         if len(re.findall(r"RouteEventToFlow\(reinterpret_cast<const CgsModule::Event\*>\(&lCacheEvent\),", core)) != 1:
             raise ValueError("cache observer handoff is not unique")
-        first = core.index("mBurnoutSkillsManager.Update();")
-        last = core.index("mOverlayInQueue.Clear();", first) + len("mOverlayInQueue.Clear();")
-        frame = core[first:last]
+        # Use the real cache handoff and following flow update as the observation slice.
+        # The current Update's retained inbox, profile dispatch and cache64 cursor now precede it.
+        flow_start = core.index("mHudFlow.Update();", handoff_match.end())
+        flow_end = core.index("mOverlayInQueue.Clear();", flow_start) + len("mOverlayInQueue.Clear();")
+        frame = core[handoff_match.start():flow_end]
         if handoff not in frame:
             raise ValueError("selected frame slice does not contain the actual pre-flow handoff")
         effective_frame = frame.replace(handoff, "", 1) if args.old_tail_cache else frame
@@ -316,6 +377,7 @@ def main():
             + "\n".join(license_constants + intro_constants)
             + "\ntypedef CgsModule::VariableEventQueue<18432,16> InGuiEventQueue;\n"
             + post_record + ";\n" + post + "\n" + "\n\n".join(methods)
+            + "\n" + input_route
             + "\nvoid GuiModule::RecoveredFrameSlice() {\n" + effective_frame + "\n}\n"
             + "void GuiModule::RecoveredTailControl() {\n" + tail + "\n}\n"
             + """void GuiModule::FixtureCommitRegistrationOutput(CgsGui::StateInterface* iface) {
@@ -360,6 +422,29 @@ switch(id) {
         profile_branch = code_only(license_body)
         intro_handler = code_only(methods[6])
         wiring = [
+            ("retained output inbox is drained before Profile-350 and cache64 use the common caller input",
+             in_order(code_only(input_route), [
+                 "lpGuiEvents->Append<18432, 16>(mStoredGuiEvents);",
+                 "mStoredGuiEvents.Clear();",
+                 "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);",
+                 "mCustomRendererManager.RecvEvent(",
+                 "lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),",
+                 "lpGuiEvents->GetNextEvent(lpLastInboundEvent, &lpLastInboundEvent, &liCacheEventSize);",
+                 "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);",
+             ])),
+            ("actual source orders retained batch, profile dispatch, cache64 cursor and observer handoff before the flow tick",
+             in_order(clean_core, [
+                 "lpGuiEvents->Append<18432, 16>(mStoredGuiEvents);",
+                 "mStoredGuiEvents.Clear();",
+                 "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo);",
+                 "lCacheEvent.mpGuiCache = &mGuiCache;",
+                 "mCustomRendererManager.RecvEvent(",
+                 "lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),",
+                 "lpGuiEvents->GetNextEvent(lpLastInboundEvent, &lpLastInboundEvent, &liCacheEventSize);",
+                 "DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, lpLastInboundEvent);",
+                 "RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,",
+                 "mHudFlow.Update();",
+             ])),
             ("actual Profile-350 dispatch arm binds profile/cache and reaches subscribed flow",
              in_order(code_only(profile_case),
                  ["mProfileHost.GetProfileManager().SetProgressionProfile",
@@ -412,8 +497,17 @@ switch(id) {
              "lapQueues[lf]->AddEvent(lpEvent, liId, liSize);" in code_only(routing)
              and "mabObservedEventIds[liFlow][liType] = (liId == 34);" in code_only(registration_arm)),
             ("actual FIFO queue construction, copying and traversal compiled",
-             len(queue_defs) == 9 and "memcpy(" in code_only(queue_defs[7])
-             and "miFirstEventOffset" in code_only(queue_defs[5])),
+             len(queue_defs) == 12 and "memcpy(" in code_only(queue_defs[7])
+             and "miFirstEventOffset" in code_only(queue_defs[5])
+             and "return miBufferWritePos - miFirstEventOffset;" in code_only(queue_defs[9])
+             and "return &macData[miFirstEventOffset];" in code_only(queue_defs[10])
+             and in_order(code_only(queue_defs[11]), [
+                 "lrSource.GetSizeInBytes();",
+                 "lrSource.GetFirstWritePointer();",
+                 "memcpy(&macData[miBufferWritePos], lpSrc, liSizeInBytes);",
+                 "miBufferWritePos += liSizeInBytes;",
+                 "miLength += lrSource.GetLength();",
+             ])),
             ("control relocates current handoff only, keeping the same numeric fixture",
              handoff in frame and (not args.old_tail_cache or
                  handoff not in effective_frame and tail == handoff)),
@@ -446,8 +540,9 @@ switch(id) {
             "intended_negative_witness": WITNESS if args.old_tail_cache else None,
             "boundaries": "Large collaborators/calendar/profile/VM/FSM shell; real queue, "
                 "provider/translation statements, the exact production Profile-350 dispatch arm "
-                "and common fan-out, module routing, Intro/License bodies; the selected event-loop "
-                "wrapper handles the fixture's one-record queue; "
+                "and common fan-out, the retained-inbox/profile350/cache64 input route, module routing, "
+                "Intro/License bodies; debug refresh calls remain fixture boundaries; "
+                "the selected event-loop wrapper handles the fixture's one-record queue; "
         })
         receipt_path.write_text(json.dumps(receipt, indent=2)+"\n", encoding="utf-8")
     if numeric is None:
