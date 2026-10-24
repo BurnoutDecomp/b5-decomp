@@ -2447,7 +2447,7 @@ namespace BrnResource
         // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
         // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
         // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
-        mAllocatorList.Construct();
+        mAllocatorList.ConstructNativePC();
 
         // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the
         // X360 ConstructResourceModule (0x8266D570): it now builds the real CgsResource::ResourceModule::

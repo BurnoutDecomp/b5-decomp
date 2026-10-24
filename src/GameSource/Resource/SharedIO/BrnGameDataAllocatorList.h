@@ -55,6 +55,8 @@ namespace BrnResource
             enum { KI_MAX_BANK_ID = 0x42, KI_NUM_BANKS = 0x43 };
 
             void Construct();
+            // Existing native bring-up seeds types and clears populated pointer rows.
+            void ConstructNativePC();
 
             rw::Resource*                       GetRawResource(s32 liBankId) const;
             rw::ResourceDescriptor*             GetRawResourceDescriptor(s32 liBankId) const;
