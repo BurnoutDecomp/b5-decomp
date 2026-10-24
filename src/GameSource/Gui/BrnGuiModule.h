@@ -659,13 +659,9 @@ namespace BrnGui
         ::InputBuffer::GuiEventQueue mHudInQueue;
         ::InputBuffer::GuiEventQueue mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
-        // [FLAG PC seam] the console's GUI out-event loop-back (CgsGui::GuiModule +111644):
-        // CgsGui::GuiModule::Update appends the frame's out-events there and the next
-        // BrnGui::GuiModule::Update appends them into the GUI input queue, where the overlays
-        // director reads the flows' 184/186/188/189/190. This build fans flow output to the
-        // flows at the drain instead (RouteEventToFlow), so only the director's ids are kept
-        // here and handed to it. DELETE-WHEN the input-queue loop-back is modelled whole.
-        CgsModule::VariableEventQueue<18432, 16> mOverlayLoopBackQueue;
+        // The pending module-output and ViewIO-event batch uses the inherited
+        // CgsGui::GuiModule::mStoredGuiEvents member. It is copied into the caller's next
+        // GUI input before dispatch, matching ARTIST 82527A58/828602C8 ordering.
         // The always-available components manager's in-queue: the subscription filter
         // (RouteEventToObserver) delivers the events the manager registered for (its real
         // 19-id table: save-icon 355, connect 64, showtime, ...) into it, then the module
