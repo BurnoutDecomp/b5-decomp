@@ -135,7 +135,7 @@ namespace BrnGui
     struct ReplayPlayerActive
     {
         CgsNetwork::PlayerName mName;         // +0x00 (16B; char macName[16])
-        s64                    mValue;        // +0x10 (std; seeded from the s32 liValue)
+        u64                    mValue;        // +0x10 (whole 64-bit source word, ld/std)
         u32                    muActiveCount; // +0x18 (stw; qsort key)
         u8                     mPad_1C[4];    // +0x1C..+0x1F (pad to the attested stride 32)
     };
@@ -331,6 +331,26 @@ namespace BrnGui
     class GuiCache
     {
     public:
+        // DecFIGS BrnGuiCache.h:477. Native GuiModule::Update event95
+        // clears this exact wait-reason owner when the HUD transition is pending.
+        enum EFriendsListWaitReason
+        {
+            E_FRIENDS_LIST_WAIT_REASON_NONE = 0,
+            E_FRIENDS_LIST_WAIT_REASON_INVITE_IN_PROGRESS = 1,
+            E_FRIENDS_LIST_WAIT_REASON_REVOKE_IN_PROGRESS = 2,
+            E_FRIENDS_LIST_WAIT_REASON_DECLINE_IN_PROGRESS = 3,
+            E_FRIENDS_LIST_WAIT_INSTANT_FREEBURN = 4,
+        };
+
+        // Genuine header-inline owners (DecFIGS h:1319/1326/1546).
+        // The retained field spellings are earlier consumer projections of these
+        // same owners, rather than separate state.
+        EFriendsListWaitReason GetFriendsListWaitReason() const
+        { return static_cast<EFriendsListWaitReason>(muFriendsPanelBranchMirror); }
+        void SetFriendsListWaitReason(EFriendsListWaitReason leReason)
+        { muFriendsPanelBranchMirror = static_cast<u32>(leReason); }
+        bool IsCameraConnected() { return miCamStatus != 0; }
+
         // @ 0x82505860 -- the cache Construct.
         //
         // ⭐⭐ SIGNATURE RESTORED 2026-09-07 (sat-nav tracker bind). This used to take NO
@@ -1166,6 +1186,9 @@ namespace BrnGui
         // +0xAC80/44160, the committed 312-byte InGamePlayerStatusData stride).
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
              GetOnlinePlayerInfo(s32 liIndex) const;
+        // DecFIGS h:775; ARTIST82529948..82529980 inlines the eight-row lookup.
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+             GetOnlinePlayerInfo(EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
         // ADDITIVE GROW (BrnGuiHudMessageAnalyzer online-stunt-run TU): resolve a network
         // player id to its in-game online-player record (X360 @0x82482738). The analyzer's
@@ -1255,7 +1278,9 @@ namespace BrnGui
         const ReplayPlayerActive*
             GetSortedReplayPlayerActive(u32 luIndex) const;                        // X360 @0x824EEFA0 (maReplayPlayersActive @0x143A0, gated on mbReplayHasBeenSorted @0x143F8)
         void ClearReplayPlayerActive();                                            // X360 @0x824EEE28 (clears maReplayPlayersActive/maReplayARCRendered, mbReplayHasBeenSorted=0)
-        void IncrementReplayPlayerActive(const char* lpcPlayerName, s32 liValue);  // X360 @0x824EEEC0 (maReplayPlayersActive lookup/append)
+        // ARTIST82529A48 loads 64 bits into r5;824EEF88 stores that same full word.
+        // Pseudocode truncated the parameter to s32; its semantic identity is not guessed.
+        void IncrementReplayPlayerActive(const char* lpcPlayerName, u64 luValue);  // X360 @0x824EEEC0 (maReplayPlayersActive lookup/append)
         void SortReplayPlayersActive();                                            // X360 @0x824F8C58 (qsort maReplayPlayersActive; sets mbReplayHasBeenSorted)
         // ARTIST AboveCarRenderer::RenderReplayAboveCar reads the byte at141DC.
         // Name recovered from its role; this extension is absent from DecFIGS.

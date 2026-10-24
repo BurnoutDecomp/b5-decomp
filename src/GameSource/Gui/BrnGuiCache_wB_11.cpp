@@ -40,9 +40,10 @@ namespace BrnGui
     // @ 0x824EEEC0 -- record one hit for lpcPlayerName in the replay-player-active table.
     // Only while the list is still unsorted (mbReplayHasBeenSorted != 1) and the name is
     // non-empty: scan the 16 entries; on a name match bump that entry's count; on the first
-    // empty slot (count == 0) construct the name, seed the +0x10 value slot with liValue
+    // empty slot (count == 0) construct the name, seed the +0x10 value slot with luValue
     // (std) and set the count to 1. Runs off the end of the 16 slots with no change.
-    void GuiCache::IncrementReplayPlayerActive(const char* lpcPlayerName, s32 liValue)
+    // ARTIST caller82529A48 ld r5 and callee824EEF88 stdx prove a whole 64-bit copy.
+    void GuiCache::IncrementReplayPlayerActive(const char* lpcPlayerName, u64 luValue)
     {
         if (mbReplayHasBeenSorted != true && *lpcPlayerName != '\0')
         {
@@ -58,7 +59,7 @@ namespace BrnGui
                 if (lEntry.muActiveCount == 0)
                 {
                     lEntry.mName.Construct(lpcPlayerName);
-                    lEntry.mValue = liValue;
+                    lEntry.mValue = luValue;
                     ++lEntry.muActiveCount;
                     break;
                 }
