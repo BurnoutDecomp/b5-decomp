@@ -12,7 +12,7 @@
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"    // BRN_HARNESS_SLOT name suffix
 #include "pc/gcm/renderengine/device.h"
 #include "pc/gcm/renderengine/WindowPresentation.h"
-#include "pc/input/XInputPolling.h"
+#include "pc/input/Gamepad.h"
 #include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/EATech/eajobs/jobs.h"
@@ -205,7 +205,7 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     case WM_DEVICECHANGE:
         // FLAG PC-platform leaf: allow hot-plug discovery on the next input
         // update. A one-second fallback also covers missed notifications.
-        CgsInput::gPCDisconnectedPadPoll.RequestProbe();
+        CgsInput::PCGamepad::RequestProbe();
         break;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
@@ -546,6 +546,8 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
     hCursor = SetCursor(nullptr);
     ShowCursor(FALSE);
     CoInitialize(nullptr);
+    if (!CgsInput::PCGamepad::Initialize())
+        CgsDev::Log::WriteToLog("[input] SDL3 gamepad initialization failed; keyboard remains available\n");
 
     // ARTIST828E06B8..828E075C: fixed400KiB heap,128 job slots and3 workers.
     // FLAG PC-platform leaf: native EAThread defaults choose Windows priority
@@ -585,6 +587,7 @@ void CgsSystem::HardwareInit::ReleaseHardware()
     CgsSystem::KeyboardPC::OwnerClosing(renderengine::hWnd);
     // Join before retiring the arena used by job records and dependency events.
     mJobManager.Destroy();
+    CgsInput::PCGamepad::Shutdown();
     mJobManagerAllocator.Destruct();
     EA::Jobs::SetAllocator(nullptr);
 

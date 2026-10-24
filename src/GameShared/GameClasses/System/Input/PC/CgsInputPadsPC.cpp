@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"   // CgsInput::InputPads / DeviceX360Pad (UpdatePadDevices)
-#include "pc/input/XInputPolling.h"
+#include "pc/input/Gamepad.h"
 #include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
 
 #include <cstring>   // std::memset
@@ -15,7 +15,7 @@
 // ============================================================================
 // FLAG PC-platform leaf (whole file): the host pad source standing in for the
 // unreconstructed console pad fill (CgsInput::InputPads::Update + the binding
-// tables). See the header for the contract. Win32/XInput imports are declared
+// tables). See the header for the contract. Win32 imports are declared
 // locally (no <Windows.h> -- its NOUSER/NOGDI lean-defines conflict with the
 // game TUs; same pattern as the BrnGuiModule.cpp bring-up helpers this replaces).
 //
@@ -113,92 +113,16 @@ namespace renderengine { extern HWND__* hWnd; }
 
 namespace
 {
-    // ---- XInput pad 0 (dynamic bind -- the exe does not link an XInput import lib) ----
-    // The record layout is the one CgsInput::DeviceX360Pad::Update @0x828E7AB0 reads by
-    // field offset on the console (wButtons @+4, triggers @+6/+7, thumbs @+8..+14).
-    struct XInputGamepad
-    {
-        unsigned short wButtons;
-        unsigned char  bLeftTrigger;
-        unsigned char  bRightTrigger;
-        short          sThumbLX;
-        short          sThumbLY;
-        short          sThumbRX;
-        short          sThumbRY;
-    };
-    struct XInputState
-    {
-        unsigned long dwPacketNumber;
-        XInputGamepad Gamepad;
-    };
-    typedef unsigned long(__stdcall* XInputGetStateFn)(unsigned long dwUserIndex, XInputState* pState);
+    // SDL translates the selected host device into the console's raw record.
+    using XInputGamepad = CgsInput::PCGamepad::Controls;
+    using XInputState = CgsInput::PCGamepad::State;
+    const unsigned long KU_XINPUT_ERROR_SUCCESS = 0;
+    const unsigned long KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED = 1167;
 
-    XInputGetStateFn ResolveXInputGetState()
-    {
-        static XInputGetStateFn spfGetState = 0;
-        static bool sbResolved = false;
-        if (!sbResolved)
-        {
-            sbResolved = true;
-            // The system XInput generations, newest first (9_1_0 ships with the OS).
-            static const char* KAPC_DLLS[] = { "xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll" };
-            for (unsigned i = 0; i < sizeof(KAPC_DLLS) / sizeof(KAPC_DLLS[0]) && !spfGetState; ++i)
-            {
-                HMODULE lpModule = LoadLibraryA(KAPC_DLLS[i]);
-                if (lpModule)
-                    spfGetState = reinterpret_cast<XInputGetStateFn>(GetProcAddress(lpModule, "XInputGetState"));
-            }
-        }
-        return spfGetState;
-    }
-
-    // ---- the MOTOR half (FX-RUMBLE3 2026-09-24): XInputSetState from the same system DLL ----
-    // XINPUT_VIBRATION is {WORD wLeftMotorSpeed; WORD wRightMotorSpeed} -- the record
-    // CgsInput::DeviceX360Pad::SetRumble @0x828E78D0 fills at pad +0xF4 and hands over by address.
-    typedef unsigned long(__stdcall* XInputSetStateFn)(unsigned long dwUserIndex, void* pVibration);
-
-    XInputSetStateFn ResolveXInputSetState()
-    {
-        static XInputSetStateFn spfSetState = 0;
-        static bool sbResolved = false;
-        if (!sbResolved)
-        {
-            sbResolved = true;
-            // The same DLL list, in the same order, as ResolveXInputGetState: the first generation that
-            // loads and exports it is the one the pad is read through.
-            static const char* KAPC_DLLS[] = { "xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll" };
-            for (unsigned i = 0; i < sizeof(KAPC_DLLS) / sizeof(KAPC_DLLS[0]) && !spfSetState; ++i)
-            {
-                HMODULE lpModule = LoadLibraryA(KAPC_DLLS[i]);
-                if (lpModule)
-                    spfSetState = reinterpret_cast<XInputSetStateFn>(GetProcAddress(lpModule, "XInputSetState"));
-            }
-        }
-        return spfSetState;
-    }
-
-    // Win32 codes the PC XDK leaves answer with (the same values the X360 XDK returns).
-    const unsigned long KU_XINPUT_ERROR_SUCCESS              = 0;     // ERROR_SUCCESS
-    const unsigned long KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED = 1167;  // 0x48F ERROR_DEVICE_NOT_CONNECTED
-
-    // FLAG PC-platform leaf: avoid repeated Windows device enumeration while
-    // the host slot is empty. Input values for connected pads are never cached.
     unsigned long ReadHostPad0(XInputState* lpState)
     {
-        const XInputGetStateFn lpfGetState = ResolveXInputGetState();
-        if (!lpfGetState)
-            return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED;
-        static const bool sbBackoff = [] {
-            const char* lpcControl = std::getenv("BRN_XINPUT_POLL_BACKOFF");
-            return !lpcControl || lpcControl[0] != '0';
-        }();
-        if (!sbBackoff)
-            return lpfGetState(0, lpState);
-        if (!CgsInput::gPCDisconnectedPadPoll.ShouldPoll(GetTickCount64()))
-            return KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED;
-        const unsigned long luResult = lpfGetState(0, lpState);
-        CgsInput::gPCDisconnectedPadPoll.RecordResult(luResult, GetTickCount64());
-        return luResult;
+        return CgsInput::PCGamepad::Read(*lpState) ? KU_XINPUT_ERROR_SUCCESS
+                                                : KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED;
     }
 
     // XINPUT_GAMEPAD wButtons bits, with the CgsInput::EPadButton control each one drives
@@ -341,7 +265,7 @@ namespace
     }
 
     // The PAD gate. FLAG PC-platform leaf: BRN_INPUT_ALLOW_BACKGROUND=1 (set only by the scripted
-    // harness at launch) keeps the XInput read alive while the window is in the background, so a
+    // harness at launch) keeps the SDL gamepad read alive while the window is in the background, so a
     // scripted run is not fighting the desktop for foreground. Left as it was, deliberately: a
     // pad is a device in someone's hands, not a window, and gating it on focus would break every
     // unattended run that uses one without answering the complaint above, which is about the
@@ -1230,10 +1154,11 @@ namespace CgsInput
         // Host device reads, through the TWO gates (see their banner at IsGameWindowForeground):
         //   lbForeground  -- the game's own window has the focus. The ONLY gate the keyboard is
         //                    allowed to use, in every build and every run.
-        //   lbPadAllowed  -- the XInput read; a pad is a device, not a window, so a harness run
+        //   lbPadAllowed  -- the SDL gamepad read; a pad is a device, not a window, so a harness run
         //                    keeps it in the background.
         const bool lbForeground  = IsGameWindowForeground();
         const bool lbPadAllowed  = IsPadReadAllowed();
+        CgsInput::PCGamepad::SetInputAllowed(lbPadAllowed);
         XInputState lXState;
         std::memset(&lXState, 0, sizeof(lXState));
         bool lbXPad = false;
@@ -1462,7 +1387,7 @@ namespace CgsInput
             }
         }
 
-        // ---- device 3: the XInput pad, through the CONSOLE's own mapping table -------------
+        // ---- device 3: the SDL gamepad, through the CONSOLE's own mapping table -------------
         // The two nested loops ARE InputPads::Update's mapping walk (@0x828F88C8..0x828F898C):
         // for each raw control, for each of its four action slots, MAX the control's value into
         // that action. -1 slots are skipped exactly as the `cmpwi r10, -1 / beq` arms do.
@@ -1598,8 +1523,8 @@ namespace CgsInput
     //     slot's device type; a bound pad whose slot type no longer matches is UnbindFromPort'ed
     //     (@0x828E7808: pad mbConnected = 0, mePort = -1), then a slot with a device is BindToPort'ed
     //     (@0x828E7718 -> DeviceX360Pad::BindToPort(port, type) @0x828DC8E8).
-    //   * The PC reads XInput user 0 only (UpdatePlayer0 above), so only port 0 is scanned: "a device"
-    //     is XInputGetState(0) == ERROR_SUCCESS, the same test ManagerX360::UpdateConnectedDevices
+    //   * The PC reads one selected SDL gamepad (UpdatePlayer0 above), so only port 0 is scanned: "a device"
+    //     is a successful shared SDL read, the same test ManagerX360::UpdateConnectedDevices
     //     @0x828DC480 makes. Its type is always Device::E_PAD_DEVICE_TYPE: Windows has no XInputFF
     //     wheel API (the XDK leaves below answer "not connected"), so binding a wheel here would only
     //     walk DeviceX360Pad::BindToPort's 2 s force-feedback prime loop for nothing.
@@ -1609,27 +1534,32 @@ namespace CgsInput
     //     InputPostWorld request/result chain owns BindPlayerToPort after a real START.
     //     A pad that is unplugged keeps its player, as on the console (UnBindPlayer is
     //     the bind chain's, not the scan's). Keyboard/scoped input already uses virtual
-    //     port0 in UpdatePlayer0; no physical XInput device is fabricated here.
+    //     port0 in UpdatePlayer0; no physical controller is fabricated here.
     // DELETE-WHEN the native host device scan is owned by InputPads::Update.
     // ============================================================================================
     void InputPadsPC::UpdatePadDevices(InputPads* lpPads)
     {
-        const u32 KU_PC_PAD_PORT = 0;   // XInput user 0 == console port 0 (UpdatePlayer0's slot)
+        const u32 KU_PC_PAD_PORT = 0;   // selected SDL controller == console port 0
 
         XInputState lState;
         const bool lbDevicePresent = ReadHostPad0(&lState) == KU_XINPUT_ERROR_SUCCESS;
 
+        static u32 suSelectedId = 0;
+        const u32 luSelectedId = CgsInput::PCGamepad::SelectedId();
         DeviceX360Pad& lrPad = lpPads->maPads[KU_PC_PAD_PORT];
-        if (lrPad.mePort != -1 && !lbDevicePresent)
+        if (lrPad.mePort != -1 && (!lbDevicePresent || luSelectedId != suSelectedId))
         {
             lrPad.mbConnected = 0;    // ManagerX360::UnbindFromPort's two pad stores
             lrPad.mePort      = -1;
         }
         if (lrPad.mePort == -1 && lbDevicePresent)
         {
+            // A replacement SDL device starts with stopped motors; invalidate
+            // the old physical device's cached amplitudes before rebinding.
+            lrPad.mCachedRumble = {};
             lrPad.BindToPort(KU_PC_PAD_PORT, Device::E_PAD_DEVICE_TYPE);
         }
-
+        suSelectedId = luSelectedId;
     }
 }
 
@@ -1639,15 +1569,12 @@ namespace CgsInput
 // names (one definition serves every `extern "C"` declaration -- the CgsXboxLivePC.cpp precedent).
 // ================================================================================================
 
-// XInputSetState: DeviceX360Pad::SetRumble's pad arm (@0x828E7A88 `bl XInputSetState`). On Windows it is
-// the SAME API taking the SAME XINPUT_VIBRATION record, so this forwards to the system XInput DLL (the
-// exe links no XInput import library -- see ResolveXInputGetState). No DLL -> "not connected", which
-// SetRumble treats like any failed send (it restores its cached speeds).
+// The recovered motor API keeps its XDK name; SDL owns the physical device.
 extern "C" u32 XInputSetState(u32 dwUserIndex, void* pVibration)
 {
-    const XInputSetStateFn lpfSetState = ResolveXInputSetState();
-    const u32 luResult = lpfSetState ? static_cast<u32>(lpfSetState(dwUserIndex, pVibration))
-                                     : static_cast<u32>(KU_XINPUT_ERROR_DEVICE_NOT_CONNECTED);
+    const unsigned short* lpuSpeeds = static_cast<const unsigned short*>(pVibration);
+    const u32 luResult = !lpuSpeeds ? 87u : dwUserIndex != 0 ? 1167u :
+        CgsInput::PCGamepad::SetRumble(lpuSpeeds[0], lpuSpeeds[1]);
 
     // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The motor witness: one line per CHANGE of the
     // speeds sent to a pad (budgeted), with the XInput result -- the last hop of the rumble chain
