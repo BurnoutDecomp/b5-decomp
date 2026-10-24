@@ -7,6 +7,7 @@ import re
 
 MAIN = "src/GameSource/Gui/BrnGuiOptionsDataProfile.cpp"
 HEADER = "src/GameSource/Gui/BrnGuiOptionsDataProfile.h"
+DIRECTOR = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 GETTERS = "src/GameSource/Gui/BrnGuiOptionsDataProfile_wS34_00.cpp"
 PARAMS = "src/GameSource/Gui/Events/BrnGuiEventNetworkGameParams.cpp"
 EVENTS = "src/GameSource/GameState/BrnGameStateSharedIO.cpp"
@@ -53,7 +54,7 @@ def validate_sources(b5: Path, workflow: Path) -> dict:
         pins.get("base") != BASE or pins.get("baseline_git_blob_sha1") != BASE_BLOB):
         raise ValueError("unsupported source-pin contract")
     expected = {
-        MAIN, HEADER, GETTERS, PARAMS, EVENTS, CACHE, STRSTREAM, DIAGNOSTIC_GLOBALS,
+        MAIN, HEADER, DIRECTOR, GETTERS, PARAMS, EVENTS, CACHE, STRSTREAM, DIAGNOSTIC_GLOBALS,
         "src/GameShared/GameClasses/Development/CgsStrStream.h",
         "src/GameShared/GameClasses/Development/Log/CgsLog.h",
         "src/GameSource/Gui/BrnGuiCache.h", "src/GameSource/Gui/BrnGuiEventTypeDefs.h",
@@ -91,6 +92,37 @@ def validate_sources(b5: Path, workflow: Path) -> dict:
     return {"pin_file": {"path": str(pin_path), **identity(pin_path)}, "files": rows,
             "baseline_git_blob_sha1": blob, "definition_sha256": pins["definitions"]}
 
+def bind_historical_camera_owner(b5: Path, historical: str) -> tuple[str, dict]:
+    """Keep the old control's same 0/1 word while naming its actual current owner."""
+    header = read(b5 / HEADER); director = read(b5 / DIRECTOR)
+    current = read(b5 / MAIN)
+    if not (re.search(r"DirectorProfileData\s+mDirectorProfileData\s*;", header) and
+            re.search(r"E_CAMERA_MODE_FIRST_PERSON\s*=\s*0\s*,", director) and
+            re.search(r"E_CAMERA_MODE_THIRD_PERSON\s*=\s*1\s*,", director) and
+            "sizeof(BrnDirector::GameState::DirectorProfileData) == 4" in current and
+            "offsetof(OptionsDataProfile, mDirectorProfileData) == 0x734C" in current):
+        raise ValueError("unverified current four-byte camera owner")
+    replacements = (
+        ("mbDefaultGameCamera = 1;", "mDirectorProfileData.meCameraMode = BrnDirector::GameState::E_CAMERA_MODE_THIRD_PERSON;"),
+        ("mbDefaultGameCamera = lbDefaultGameCamera ? 1 : 0;", "mDirectorProfileData.meCameraMode = lbDefaultGameCamera ? BrnDirector::GameState::E_CAMERA_MODE_THIRD_PERSON : BrnDirector::GameState::E_CAMERA_MODE_FIRST_PERSON;"),
+        ("return mbDefaultGameCamera == 1;", "return mDirectorProfileData.meCameraMode == BrnDirector::GameState::E_CAMERA_MODE_THIRD_PERSON;"),
+        ("offsetof(OptionsDataProfile, mbDefaultGameCamera)", "offsetof(OptionsDataProfile, mDirectorProfileData)"),
+        ("liValue = mbDefaultGameCamera;", "liValue = static_cast<s32>(mDirectorProfileData.meCameraMode);"),
+    )
+    rebound = historical
+    for before, after in replacements:
+        if rebound.count(before) != 1: raise ValueError("historical camera anchor differs: " + before)
+        rebound = rebound.replace(before, after, 1)
+    inverse = rebound
+    for before, after in reversed(replacements): inverse = inverse.replace(after, before, 1)
+    if inverse != historical: raise ValueError("historical control has non-camera changes")
+    return rebound, {"original_source_sha256": hashlib.sha256(historical.encode()).hexdigest(),
+                     "compiled_source_sha256": hashlib.sha256(rebound.encode()).hexdigest(),
+                     "replacement_count": 5, "same_word_offset": 0x734C, "same_word_bytes": 4,
+                     "old_false_value": 0, "old_true_value": 1,
+                     "route_bodies_changed": False, "original_file_changed": False}
+
+
 def compose_variant(b5: Path, dest: Path, variant: str) -> dict:
     """Whole subject TU; one exact cache ctor extraction; one bounded old-ctor graft."""
     if variant not in ("candidate", "oldtrap", "omitted_init"): raise ValueError("unknown variant")
@@ -101,16 +133,25 @@ def compose_variant(b5: Path, dest: Path, variant: str) -> dict:
     selected = b5 / MAIN; recipe = "exact whole production main TU"
     definition_receipt = {"cache_constructor_sha256": hashlib.sha256(constructor.encode()).hexdigest()}
     if variant == "oldtrap":
-        selected = b5 / BASELINE; recipe = "exact original whole 8b main TU, candidate header"
+        historical = read(b5 / BASELINE)
+        rebound, owner_binding = bind_historical_camera_owner(b5, historical)
+        selected = dest / "OptionsDataProfile_oldtrap.cpp"
+        selected.write_text(rebound, encoding="utf-8", newline="\n")
+        recipe = "original whole 8b route control; five same-word camera-owner source bindings"
+        definition_receipt["historical_camera_owner"] = owner_binding
     elif variant == "omitted_init":
-        current = read(b5 / MAIN); previous = read(b5 / BASELINE)
+        current = read(b5 / MAIN); historical = read(b5 / BASELINE)
+        previous, owner_binding = bind_historical_camera_owner(b5, historical)
+        original_ctor = definition(historical, "void OptionsDataProfile::Construct()")
         start, end = definition_span(current, "void OptionsDataProfile::Construct()")
         old_ctor = definition(previous, "void OptionsDataProfile::Construct()")
         selected = dest / "OptionsDataProfile_omitted_init.cpp"
         selected.write_text(current[:start] + old_ctor + current[end:], encoding="utf-8", newline="\n")
-        recipe = "candidate whole TU with only Construct definition replaced by exact original Construct"
+        recipe = "candidate whole TU with original omitted-init Construct; same-word camera-owner binding"
         definition_receipt.update({"candidate_replaced_span": [start, end],
-            "old_constructor_sha256": hashlib.sha256(old_ctor.encode()).hexdigest(),
+            "old_constructor_sha256": hashlib.sha256(original_ctor.encode()).hexdigest(),
+            "compiled_old_constructor_sha256": hashlib.sha256(old_ctor.encode()).hexdigest(),
+            "historical_camera_owner": owner_binding,
             "replaced_candidate_constructor_sha256": hashlib.sha256(current[start:end].encode()).hexdigest()})
     return {"sources": [b5 / "tests/OnlineSaveRoute.cpp", selected, b5 / GETTERS, b5 / PARAMS, b5 / EVENTS, provider,
                         b5 / STRSTREAM, b5 / DIAGNOSTIC_GLOBALS],
