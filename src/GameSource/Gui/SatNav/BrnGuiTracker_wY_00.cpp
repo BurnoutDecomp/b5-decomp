@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h" // original caller-owned output
 // ===================================================================================
 // BrnGui::GuiTracker -- the route request (GUI out 494, CalculateRoute)
 //   class:BrnGui::GuiTracker, partfile of BrnGuiTracker.cpp
@@ -165,6 +166,26 @@ namespace BrnGui
             }
             lpGuiCache->UpdateTrackerInfo(lau16Landmarks, 2);
         }
+    }
+
+    // ARTIST82511BD0; DecFIGS BrnGuiTracker.h:142. Original output owner.
+    // Preserve the unwritten section-index/tail storage of the original record.
+    void GuiTracker::Update(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        if (!mbRouteDataPending)
+            return;
+
+        CalculateRoute lCalculateRoute;
+        const s32 liLeg = miNumRouteInfoReceived;
+        lCalculateRoute.mu16EventID = static_cast<u16>(liLeg);
+        lCalculateRoute.maPositions[0] = maTrackerRecords[liLeg].mv3Position;
+        lCalculateRoute.maPositions[1] = maTrackerRecords[liLeg + 1].mv3Position;
+        ContructRouteNodeFromTrackedItem(&maTrackerRecords[liLeg], &lCalculateRoute, 0);
+        // ARTIST82511C40 reloads the live count after the first helper call.
+        ContructRouteNodeFromTrackedItem(&maTrackerRecords[miNumRouteInfoReceived + 1],
+            &lCalculateRoute, 1);
+        lpOutput->AddGuiOutEvent(lCalculateRoute);
+        mbRouteDataPending = false;
     }
 
     // GuiTracker::Update (45 insns). Only while mbRouteDataPending: the leg number is the
