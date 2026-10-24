@@ -24,6 +24,15 @@
 #include <cstring>   // strlen (the fps stack-string asserts)
 #include <cstdlib>
 
+// [PC] Build provenance for RenderBuildInfo: generated into the exe build's obj\gen by
+// tools/build/compile_exe.py (B5_BUILD_COMMIT = short b5-decomp HEAD, "+dirty" with local edits).
+#if __has_include("BrnBuildVersion.h")
+#include "BrnBuildVersion.h"
+#endif
+#ifndef B5_BUILD_COMMIT
+#define B5_BUILD_COMMIT "unknown"
+#endif
+
 // Forward-declared so RenderMemory can read the available-memory figure without pulling
 // Windows.h into this TU (defined in CgsTimeUtils.cpp).
 namespace CgsSystem { u32 GetAvailablePhysicalMemoryBytes(); }
@@ -618,6 +627,12 @@ namespace CgsDev
         const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
 
         mBufferedRenderer.Draw2DText(macBuildDate, lfX, lfY, 12.0f, 0xFFFFFFFFu);
+
+        // [PC] Not on the console: the b5-decomp commit this exe was built from, one line under
+        // the build date, so a screenshot or recording attached to an issue names the exact
+        // build. B5_BUILD_COMMIT comes from BrnBuildVersion.h, which tools/build/compile_exe.py
+        // generates per build; compile-only gates don't have it and show "unknown".
+        mBufferedRenderer.Draw2DText("Commit: " B5_BUILD_COMMIT, lfX, lfY + 14.0f, 12.0f, 0xFFFFFFFFu);
     }
 
     // X360 0x8282DD28. Queue the available-memory readout "%uMB %uKB %uB" (bottom centre-right). Memory
