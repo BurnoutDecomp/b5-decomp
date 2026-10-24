@@ -1,4 +1,6 @@
 #include "pc/input/Gamepad.h"
+#include "pc/input/KeyboardMapping.h"
+#include "pc/input/KeyboardHost.h"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -25,6 +27,52 @@ namespace CgsInput::PCGamepad
         bool gbRumblePlaying = false;
         bool gbInitialized = false;
         bool gbInputAllowed = true;
+        KeyboardMapping gKeyboardMapping;
+        void* gpKeyboardWindow = nullptr;
+
+        bool IsModifier(unsigned luKey) { return luKey >= 0x10 && luKey <= 0x12; }
+
+        void PostKey(unsigned luKey, bool lbDown, bool lbAlt)
+        {
+            if (!gpKeyboardWindow) return;
+            std::uintptr_t luFlags = 1u | (static_cast<std::uintptr_t>(MapVirtualKeyW(luKey, 0) & 0xff) << 16);
+            if ((luKey >= 0x21 && luKey <= 0x28) || luKey == 0x2d || luKey == 0x2e || luKey == 0x6f)
+                luFlags |= 1u << 24;
+            if (lbAlt) luFlags |= 1u << 29;
+            if (!lbDown) luFlags |= (1u << 30) | (1u << 31);
+            // Post only to our own window. Polling consumers see the same keys
+            // below; no desktop/global keyboard state is changed.
+            PostMessageW(gpKeyboardWindow, lbAlt ? (lbDown ? 0x104 : 0x105) : (lbDown ? 0x100 : 0x101),
+                         luKey, static_cast<std::intptr_t>(luFlags));
+        }
+
+        void PublishKeyboard(std::uint64_t luButtons, bool lbAllowed)
+        {
+            const auto lBefore = gKeyboardMapping.GetKeys();
+            gKeyboardMapping.Update(luButtons, lbAllowed);
+            const auto& lrAfter = gKeyboardMapping.GetKeys();
+            // Release ordinary keys before modifiers; press modifiers first.
+            for (unsigned luPass = 0; luPass < 2; ++luPass)
+                for (unsigned luKey = 1; luKey < 256; ++luKey)
+                    if (IsModifier(luKey) == (luPass != 0) && lBefore[luKey] && !lrAfter[luKey])
+                        PostKey(luKey, false, lBefore[0x12]);
+            for (unsigned luPass = 0; luPass < 2; ++luPass)
+                for (unsigned luKey = 1; luKey < 256; ++luKey)
+                    if (IsModifier(luKey) == (luPass == 0) && !lBefore[luKey] && lrAfter[luKey])
+                        PostKey(luKey, true, lrAfter[0x12]);
+        }
+
+        void UpdateKeyboard()
+        {
+            if (!gKeyboardMapping.HasBindings()) return;
+            std::uint64_t luButtons = 0;
+            if (gpPad)
+                for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
+                    if (SDL_GetGamepadButton(gpPad, static_cast<SDL_GamepadButton>(i)))
+                        luButtons |= std::uint64_t{1} << i;
+            const bool lbFocused = gpKeyboardWindow && GetForegroundWindow() == gpKeyboardWindow;
+            PublishKeyboard(luButtons, lbFocused && gpPad);
+        }
 
         bool SDLCALL DeviceChanged(void*, SDL_Event* lpEvent)
         {
@@ -37,6 +85,7 @@ namespace CgsInput::PCGamepad
 
         void ClosePad()
         {
+            PublishKeyboard(0, false);
             if (gpPad)
             {
                 SDL_RumbleGamepad(gpPad, 0, 0, 0);
@@ -98,6 +147,7 @@ namespace CgsInput::PCGamepad
                     }
                 }
             }
+            UpdateKeyboard();
             // Only our input event ranges; leave the application's other SDL
             // events alone. The watch has already recorded lifecycle changes.
             SDL_FlushEvents(SDL_EVENT_JOYSTICK_AXIS_MOTION, SDL_EVENT_JOYSTICK_UPDATE_COMPLETE);
@@ -127,6 +177,9 @@ namespace CgsInput::PCGamepad
         SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
         SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4, "1");
         SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
+        // SDL disables the Bluetooth Steam Controller driver by default. Enable
+        // its native buttons, including paddles, while respecting explicit hints.
+        SDL_SetHintWithPriority(SDL_HINT_JOYSTICK_HIDAPI_STEAM, "1", SDL_HINT_DEFAULT);
         if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD))
             return false;
         if (!SDL_AddEventWatch(DeviceChanged, nullptr))
@@ -149,6 +202,7 @@ namespace CgsInput::PCGamepad
         SDL_RemoveEventWatch(DeviceChanged, nullptr);
         SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
         gbInitialized = false;
+        gpKeyboardWindow = nullptr;
     }
 
     void RequestProbe()
@@ -179,7 +233,8 @@ namespace CgsInput::PCGamepad
             0x100, 0x200, 0x1000, 0x2000, 0x4000, 0x8000
         };
         for (unsigned i = 0; i < sizeof(KAE_BUTTONS) / sizeof(KAE_BUTTONS[0]); ++i)
-            if (SDL_GetGamepadButton(gpPad, KAE_BUTTONS[i]))
+            if (SDL_GetGamepadButton(gpPad, KAE_BUTTONS[i]) &&
+                !(gKeyboardMapping.GetConsumedButtons() & (std::uint64_t{1} << KAE_BUTTONS[i])))
                 lrState.Gamepad.wButtons |= KAU_MASKS[i];
         Controls& lrControls = lrState.Gamepad;
         lrControls.bLeftTrigger = Trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
@@ -226,6 +281,38 @@ namespace CgsInput::PCGamepad
         guLeft = luLeft;
         guRight = luRight;
         return ApplyRumble() ? 0 : 50; // ERROR_NOT_SUPPORTED; input stays usable
+    }
+
+    unsigned LoadKeyboardMappings(const char* lpIniPath)
+    {
+        char lacSection[32768]{};
+        const unsigned long luSize = lpIniPath ? GetPrivateProfileSectionA(
+            "ControllerKeyboard", lacSection, sizeof(lacSection), lpIniPath) : 0;
+        KeyboardMapping lMapping;
+        const unsigned luInvalid = luSize == sizeof(lacSection) - 2 ? 1 : lMapping.LoadSection(lacSection);
+        const std::lock_guard<std::mutex> lLock(gMutex);
+        PublishKeyboard(0, false);
+        gKeyboardMapping = std::move(lMapping);
+        return luInvalid;
+    }
+
+    void SetKeyboardWindow(void* lpWindow)
+    {
+        const std::lock_guard<std::mutex> lLock(gMutex);
+        PublishKeyboard(0, false);
+        gpKeyboardWindow = lpWindow;
+    }
+
+    void UpdateKeyboardMappings()
+    {
+        const std::lock_guard<std::mutex> lLock(gMutex);
+        if (gbInitialized && gKeyboardMapping.HasBindings()) UpdateDevice();
+    }
+
+    bool MappedKeyDown(int liVirtualKey)
+    {
+        const std::lock_guard<std::mutex> lLock(gMutex);
+        return liVirtualKey > 0 && liVirtualKey < 256 && gKeyboardMapping.GetKeys()[liVirtualKey];
     }
 }
 

@@ -237,6 +237,7 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         return 0;
     case WM_CLOSE:
         CgsSystem::KeyboardPC::OwnerClosing(hwnd);
+        CgsInput::PCGamepad::SetKeyboardWindow(nullptr);
         // User closed the window: raise the shutdown request FIRST, then tear the window down
         // (-> WM_DESTROY). The flag is what actually ends the run -- WM_QUIT alone is not
         // enough, because whichever message pump happens to be running when the close arrives
@@ -254,6 +255,7 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         return 0;
     case WM_DESTROY:
         CgsSystem::KeyboardPC::OwnerClosing(hwnd);
+        CgsInput::PCGamepad::SetKeyboardWindow(nullptr);
         // Also covers a destroy that did not come through WM_CLOSE. Post WM_QUIT as well so a
         // plain `while (message != WM_QUIT)` pump still ends the moment it sees it.
         if (CgsDev::Log::gpDebugPrint != 0)
@@ -546,6 +548,7 @@ void CgsSystem::HardwareInit::InitializeHardware(const char *lpCmdLine)
     hCursor = SetCursor(nullptr);
     ShowCursor(FALSE);
     CoInitialize(nullptr);
+    CgsInput::PCGamepad::SetKeyboardWindow(renderengine::hWnd);
     if (!CgsInput::PCGamepad::Initialize())
         CgsDev::Log::WriteToLog("[input] SDL3 gamepad initialization failed; keyboard remains available\n");
 

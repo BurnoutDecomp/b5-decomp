@@ -4,4 +4,6 @@ target_sources(${PROJECT_NAME}
 
     PUBLIC
         Gamepad.h
+        KeyboardMapping.h
+        KeyboardHost.h
 )

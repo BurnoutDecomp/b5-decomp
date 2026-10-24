@@ -13,6 +13,7 @@
 
 // FLAG PC-platform leaf: host keyboard polling in place of the X360 keystroke API. The resulting
 // DebugController state and its event translation remain the original platform-independent path.
+#include "pc/input/Gamepad.h"
 extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
 extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow(void);
 extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessId(void* hWnd, unsigned long* lpdwProcessId);
@@ -195,6 +196,7 @@ namespace CgsDev
 #if defined(D_PLATFORM_X360)
         ReadKey(lfTimeStep);
 #else
+        CgsInput::PCGamepad::UpdateKeyboardMappings();
         // Snapshot high-bit state once. GetAsyncKeyState's low bit is shared with other
         // pollers, so it cannot reliably represent this controller's key-down edges.
         const bool lbHarness = std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr;
@@ -205,7 +207,8 @@ namespace CgsDev
         bool lbControlsNeutral = true;
         for (s32 liKey = 0; liKey < 256; ++liKey)
         {
-            const bool lbPhysicalDown = lbPhysical && (GetAsyncKeyState(liKey) & 0x8000) != 0;
+            const bool lbPhysicalDown = (lbPhysical && (GetAsyncKeyState(liKey) & 0x8000) != 0)
+                                        || CgsInput::PCGamepad::MappedKeyDown(liKey);
             // While captured, drain harness taps even when a physical key masks the same key.
             // Outside capture the original physical-first short circuit is unchanged.
             const bool lbHarnessDown = lbHarness && (lbNativeCapture || !lbPhysicalDown) && HarnessKeyDown(liKey);

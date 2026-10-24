@@ -1,3 +1,4 @@
+#include "pc/input/Gamepad.h"
 #ifdef WIN32
 #include <Windows.h>
 #include <shlobj.h>   // SHGetSpecialFolderPathA / SHCreateDirectoryExA (getGameSaveDir, TUB 0x53A910)
@@ -130,6 +131,15 @@ void LoadConfig()
     }
 
     getGameSaveDir(lacPath, "config.ini");
+    const unsigned luInvalidMappings = CgsInput::PCGamepad::LoadKeyboardMappings(lacPath);
+    if (luInvalidMappings)
+    {
+        char lacMappingLog[128];
+        std::snprintf(lacMappingLog, sizeof(lacMappingLog),
+            "[input] ControllerKeyboard: skipped %u invalid mapping(s)\n", luInvalidMappings);
+        CgsDev::Log::WriteToLog(lacMappingLog);
+    }
+
     renderengine::gDisplayWidth  = GetPrivateProfileIntA("Display", "Width",  renderengine::gDisplayWidth,  lacPath);
     renderengine::gDisplayHeight = GetPrivateProfileIntA("Display", "Height", renderengine::gDisplayHeight, lacPath);
     renderengine::gAdapterIndex  = GetPrivateProfileIntA("Display", "AdapterIndex", renderengine::gAdapterIndex, lacPath);

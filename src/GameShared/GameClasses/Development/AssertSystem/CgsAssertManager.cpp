@@ -16,6 +16,7 @@
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device (FrameBegin/ShowPixelBuffer) + <Windows.h>
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "pc/gcm/renderengine/AssertFrame.h"
+#include "pc/input/Gamepad.h"
 #undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
 
 #include <cstdio>    // snprintf (the X360 used CgsCore::SPrintf)
@@ -26,6 +27,14 @@ namespace CgsDev
 {
 namespace Assert
 {
+    // FLAG PC-platform leaf: poll the host pad even while the assert halts the
+    // normal input module. A configured R4=End follows the same press/release path.
+    static bool IsAssertReleaseKeyDownPC()
+    {
+        CgsInput::PCGamepad::UpdateKeyboardMappings();
+        return (GetAsyncKeyState(VK_END) & 0x8000) != 0 || CgsInput::PCGamepad::MappedKeyDown(VK_END);
+    }
+
     Manager gAssertManager;
 
     // The call-stack symbol resolver instance (X360: a static MinimalMemoryReader the bring-up wires via
@@ -366,14 +375,14 @@ namespace Assert
                 if (CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
                     break;
                 DisplayAssertScreen();
-                if (GetAsyncKeyState(VK_END) & 0x8000)
+                if (IsAssertReleaseKeyDownPC())
                     break;
                 if (HarnessRelease::Signalled())
                     break;
                 Sleep(1);
             }
             // Wait for END to be released so the keypress doesn't carry into the resumed game.
-            while ((GetAsyncKeyState(VK_END) & 0x8000) &&
+            while (IsAssertReleaseKeyDownPC() &&
                    !CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
                 Sleep(1);
             ClearCurrentAssert();
