@@ -77,6 +77,13 @@ namespace CgsLanguage
         mbSendLanguage = true;
     }
 
+    // DecFIGS CgsSku.h:127; ARTIST 825191E4/F4 inlines the same language
+    // read at GuiModule+mSku. Construct828607F0 and SetLanguage82860F20 name its owner.
+    ELanguage Sku::GetLanguage() const
+    {
+        return meLanguage;
+    }
+
     // X360 0x828608B0. meSku = sku; mbSendSku = 1.
     //   stw r4, 0xC(r3)  -> meSku     (+0x0C)
     //   stb r11(1), 0x17 -> mbSendSku (+0x17)
