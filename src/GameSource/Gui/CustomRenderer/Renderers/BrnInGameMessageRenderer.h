@@ -196,5 +196,9 @@ namespace BrnGui
         bool                        mbShowingBreakingNews;       // +5021
         bool                        mbShownStartEngineTip;       // +5022
         bool                        mbShowAutoSaveMessage;       // +5023
+
+        // FLAG PC divergence (not in the X360 layout): the GUI clock (GuiCache::GetTime) the
+        // last consumed timestep belonged to -- see RenderComponent.
+        f32                         mfLastConsumedGuiTimePC = -1.0f;
     };
 }
