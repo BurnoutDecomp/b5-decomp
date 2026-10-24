@@ -124,6 +124,9 @@ public:
     bool IsInJunkyard() const;
     // Inlined in ProcessStreamingCompleteEvent @0x82390200: manager +0x58.
     bool IsWaitingForStreaming() const { return mbWaitingForStreaming; }
+    // FLAG PC divergence (no console symbol): the streaming-complete edge was released for a
+    // player car whose data is not on disk -- see UpdateChangeCarState.
+    void SetPlayerCarLoadFailed(bool lbFailed) { mbPlayerCarLoadFailedPC = lbFailed; }
 
     // [car-audio] HARNESS-ONLY accessor -- NO console symbol (meState is private and the
     // X360 reads it in-class). True once the junkyard has finished transitioning IN and the
@@ -214,6 +217,7 @@ private:
     CgsID                                          mDesiredCarId;                 // +0x48  :188
     CgsID                                          mCacheDuringChangeCarId;       // +0x50  :189
     bool                                           mbWaitingForStreaming;         // +0x58  :191
+    bool                                           mbPlayerCarLoadFailedPC = false; // FLAG PC divergence, not in the X360 layout
     u32                                            muUnlockCount;                 // +0x5C  :193
     CgsID                                          mCurrentCarToUnlock;           // +0x60  :194
     bool                                           mbCurrentCarTickerVisible;     // +0x68  :195

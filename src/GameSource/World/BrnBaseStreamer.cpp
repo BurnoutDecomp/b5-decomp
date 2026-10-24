@@ -66,6 +66,8 @@ void InternalBaseStreamer::Construct( StreamerTargetEntry*   lpTargetEntryList,
     mbAllowFailure    = lbAllowFailure;
     mbSlotPoolSystem  = lbSlotPoolSystem;
     mbLoadHasFailed   = false;
+    miNumHeldReplies  = 0;   // PC divergence: the held-reply store (UpdateLoading)
+    miNumFailedLoads  = 0;   // PC divergence: the failed-load record (HasEntryLoadFailed)
 
     meCurrentStreamMode  = E_STREAMMODE_IDLE;
     meLoadStreamStage    = E_LOADSTREAM_REQUEST;
@@ -94,6 +96,7 @@ void InternalBaseStreamer::ClearTargetList()
         mpTargetEntryList[liEntry].mResourceId = 0;
         mpTargetEntryList[liEntry].mbSafe      = false;
     }
+    miNumFailedLoads = 0;   // PC divergence: nothing is wanted, so nothing has failed
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +214,7 @@ bool InternalBaseStreamer::RemoveEntry( CgsID lId, u64 luUserId )
     {
         mpTargetEntryList[liEntry].mResourceId = 0;
     }
+    SetEntryLoadFailed( lId, luUserId, false );   // PC divergence: no longer wanted
     return true;
 }
 
@@ -219,9 +223,51 @@ bool InternalBaseStreamer::RemoveEntry( CgsID lId )
     const s32 liEntry = FindInTargetList( lId );
     if ( liEntry >= 0 )
     {
+        SetEntryLoadFailed( lId, mpTargetEntryList[liEntry].muUserId, false );   // PC divergence
         mpTargetEntryList[liEntry].mResourceId = 0;
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// HasEntryLoadFailed / SetEntryLoadFailed -- FLAG PC divergence, not X360 functions.
+// The console resets a failed entry to EMPTY and simply asks for it again (it never
+// fails on the console: the files are on the disc). On PC a failure means the file is
+// absent, so the retry can never land; this record lets a waiter tell "still loading"
+// from "will never load". An entry leaves it when it loads or stops being wanted.
+// ---------------------------------------------------------------------------
+bool InternalBaseStreamer::HasEntryLoadFailed( CgsID lId, u64 luUserId ) const
+{
+    for ( s32 li = 0; li < miNumFailedLoads; li++ )
+    {
+        if ( maFailedLoads[li].mResourceId == lId && maFailedLoads[li].muUserId == luUserId )
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void InternalBaseStreamer::SetEntryLoadFailed( CgsID lId, u64 luUserId, bool lbFailed )
+{
+    for ( s32 li = 0; li < miNumFailedLoads; li++ )
+    {
+        if ( maFailedLoads[li].mResourceId == lId && maFailedLoads[li].muUserId == luUserId )
+        {
+            if ( !lbFailed )
+            {
+                maFailedLoads[li] = maFailedLoads[miNumFailedLoads - 1];
+                miNumFailedLoads--;
+            }
+            return;
+        }
+    }
+    if ( lbFailed && miNumFailedLoads < KI_MAX_FAILED_LOADS )
+    {
+        maFailedLoads[miNumFailedLoads].mResourceId = lId;
+        maFailedLoads[miNumFailedLoads].muUserId    = luUserId;
+        miNumFailedLoads++;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +415,36 @@ void InternalBaseStreamer::PostLoadRequest( s32 liListIndex )
 }
 
 // ---------------------------------------------------------------------------
+// HoldLoadReply -- FLAG PC divergence, not an X360 function (see UpdateLoading's
+// E_LOADSTREAM_WAIT). A reply is kept only when it answers a load still in flight:
+// the current entry, or the pipelined pending one. Anything else is an orphan and is
+// dropped, as the console's Clear() would drop it.
+// ---------------------------------------------------------------------------
+void InternalBaseStreamer::HoldLoadReply( const BrnResource::GameDataIO::GameDataAssetEvent& lrReply )
+{
+    bool lbInFlight = ( lrReply.miEventId == miCurrentEntryIndex );
+    for ( s32 li = 0; !lbInFlight && li < mPendingEntryQueue.GetLength(); li++ )
+    {
+        lbInFlight = ( lrReply.miEventId == mPendingEntryQueue[static_cast<u32>( li )] );
+    }
+    CGS_ASSERT( lbInFlight, "GameData reply for an entry with no load in flight" );
+    CGS_ASSERT( miNumHeldReplies < KI_MAX_HELD_REPLIES, "More GameData replies than loads in flight" );
+    if ( !lbInFlight || miNumHeldReplies >= KI_MAX_HELD_REPLIES )
+    {
+        return;
+    }
+
+    if ( lrReply.miEventId != miCurrentEntryIndex && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "[stream] GameData reply for pending entry " << lrReply.miEventId
+                                   << " arrived before current entry " << miCurrentEntryIndex
+                                   << " (fail=" << ( lrReply.mbFailFlag ? 1 : 0 ) << "); held\n";
+    }
+    maHeldReplies[miNumHeldReplies] = lrReply;
+    miNumHeldReplies++;
+}
+
+// ---------------------------------------------------------------------------
 // UpdateIdle  @ 0x827C4D38 -- nothing in flight: drain every possible unload into
 // the pending queue first, otherwise start one load.
 // ---------------------------------------------------------------------------
@@ -433,94 +509,74 @@ bool InternalBaseStreamer::UpdateLoading()
         {
             mGDRequestInterface.mRequestQueue.Clear();
 
-            const s32 liNumReplies = mGDReceiverQueue.GetLength();
-            if ( liNumReplies == 0 )
-            {
-                return false;
-            }
-
             // The X360 asserts exactly one reply per visit ("Expected only 1 event from
             // game data module", BrnBaseStreamer.cpp:704 in UpdateLoading @0x827D41E8),
-            // then consumes only the FIRST event and Clear()s -- any extra reply is
-            // discarded. The invariant holds on the console because its async bundle
-            // pipeline delivers at most one completion between streamer updates; on PC
-            // the module pump can run more than once between streamer visits, so BOTH
-            // pipelined loads' replies can be queued here. Dropping the second de-syncs
-            // the FIFO pairing (every later slot binds the PREVIOUS unit's resources).
-            // PC divergence: log instead of asserting, and consume every queued reply in
-            // arrival order, running the console's E_LOADSTREAM_DONE leg between replies
-            // -- the same work N consecutive console updates would do.
-            if ( liNumReplies != 1 )
-            {
-                *CgsDev::Log::gpDebugPrint << "[stream] " << liNumReplies
-                    << " GameData replies in one streamer update (X360 invariant is 1,"
-                       " asserts @BrnBaseStreamer.cpp:704 and drops extras); consuming"
-                       " all in order\n";
-            }
-
+            // takes it as the CURRENT entry's reply and Clear()s -- any extra is discarded.
+            // Neither half holds on PC:
+            //   * the module pump can run more than once between streamer visits, so both
+            //     pipelined loads' replies can be queued here at once;
+            //   * replies are not FIFO. GameDataModule::ProcessInternalLoadBundleResponse
+            //     posts a FAILED load's reply at once, while a successful load still has its
+            //     GET/acquire hop to make. A pending entry whose file is missing (a car the
+            //     profile owns but the retail data does not ship, e.g. one added through the
+            //     debug menu) therefore answers BEFORE the current entry, and taking replies
+            //     in arrival order bound each one to the other entry's slot.
+            // FLAG PC divergence: file every queued reply in the held store, then consume
+            // exactly one per visit -- the one whose echoed list index (miEventId, staged by
+            // PostLoadRequest and echoed by GameDataModule::PostGameDataResponse) names the
+            // current entry. A reply for the pending entry waits there until the DONE leg
+            // makes that entry current, so nothing is dropped or bound to the wrong slot.
             const CgsModule::Event* lpEventData = 0;
             s32 liEventSize = 0;
             s32 liEventType = mGDReceiverQueue.GetFirstEvent( &lpEventData, &liEventSize );
-
             while ( lpEventData != 0 )
             {
                 CGS_ASSERT( liEventType >= 26 && liEventType < 69, "Unexpected GameData reply type" );
-
-                const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
-                    static_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>( lpEventData );
-
-                // Replies arrive FIFO in request order, so each must be for the machine's
-                // current entry (the reply echoes the request's list index in miEventId --
-                // PostLoadRequest stages it, GameDataModule::PostGameDataResponse echoes it).
-                CGS_ASSERT( lpReply == 0 || lpReply->miEventId == miCurrentEntryIndex,
-                            "GameData reply out of order" );
-
-                if ( lpReply != 0 && lpReply->mbFailFlag )
-                {
-                    StreamerCurrentEntry& lrEntry = mpCurrentEntryList[miCurrentEntryIndex];
-                    lrEntry.mbSafe      = false;
-                    lrEntry.mResourceId = 0;
-                    lrEntry.meStatus    = StreamerCurrentEntry::E_STATUS_EMPTY;
-                    lrEntry.muUserId    = 0;
-                    OnLoadFail( lpReply, miCurrentEntryIndex );
-                    mbLoadHasFailed = true;
-                }
-                else
-                {
-                    mpCurrentEntryList[miCurrentEntryIndex].meStatus = StreamerCurrentEntry::E_STATUS_READY;
-                    OnLoadComplete( lpReply, miCurrentEntryIndex );
-                }
-
+                HoldLoadReply( *static_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>( lpEventData ) );
                 liEventType = mGDReceiverQueue.GetNextEvent( lpEventData, &lpEventData, &liEventSize );
-                if ( lpEventData == 0 )
+            }
+            mGDReceiverQueue.Clear();
+
+            s32 liHeld = -1;
+            for ( s32 li = 0; li < miNumHeldReplies; li++ )
+            {
+                if ( maHeldReplies[li].miEventId == miCurrentEntryIndex )
                 {
+                    liHeld = li;
                     break;
                 }
-
-                // Another reply is queued: it belongs to the pipelined pending load. Run
-                // the console E_LOADSTREAM_DONE leg (@0x827D41E8 stage 2) now so it is
-                // consumed against the right entry.
-                CGS_ASSERT( mPendingEntryQueue.GetLength() > 0, "GameData reply with no pending load" );
-                if ( mPendingEntryQueue.GetLength() <= 0 )
-                {
-                    break;   // orphan reply -- dropped, as the console's Clear() would
-                }
-
-                mPendingEntryQueue.Pop( &miCurrentEntryIndex );
-                OnLoadBegin( miCurrentEntryIndex );
-
-                if ( !mbLoadHasFailed && CalculatePotentialUnloadList() == 0 )
-                {
-                    const s32 liNext = AttemptLoad();
-                    if ( liNext >= 0 )
-                    {
-                        PostLoadRequest( liNext );
-                        mPendingEntryQueue.Push( &liNext );
-                    }
-                }
+            }
+            if ( liHeld < 0 )
+            {
+                return false;   // the current entry has not answered yet
             }
 
-            mGDReceiverQueue.Clear();
+            const BrnResource::GameDataIO::GameDataAssetEvent lReply = maHeldReplies[liHeld];
+            for ( s32 li = liHeld + 1; li < miNumHeldReplies; li++ )
+            {
+                maHeldReplies[li - 1] = maHeldReplies[li];
+            }
+            miNumHeldReplies--;
+
+            if ( lReply.mbFailFlag )
+            {
+                StreamerCurrentEntry& lrEntry = mpCurrentEntryList[miCurrentEntryIndex];
+                SetEntryLoadFailed( lrEntry.mResourceId, lrEntry.muUserId, true );   // PC divergence
+                lrEntry.mbSafe      = false;
+                lrEntry.mResourceId = 0;
+                lrEntry.meStatus    = StreamerCurrentEntry::E_STATUS_EMPTY;
+                lrEntry.muUserId    = 0;
+                OnLoadFail( &lReply, miCurrentEntryIndex );
+                mbLoadHasFailed = true;
+            }
+            else
+            {
+                StreamerCurrentEntry& lrEntry = mpCurrentEntryList[miCurrentEntryIndex];
+                SetEntryLoadFailed( lrEntry.mResourceId, lrEntry.muUserId, false );  // PC divergence
+                lrEntry.meStatus = StreamerCurrentEntry::E_STATUS_READY;
+                OnLoadComplete( &lReply, miCurrentEntryIndex );
+            }
+
             meLoadStreamStage = E_LOADSTREAM_DONE;
             return false;
         }
@@ -529,6 +585,10 @@ bool InternalBaseStreamer::UpdateLoading()
         {
             if ( mPendingEntryQueue.GetLength() <= 0 )
             {
+                // Every load this leg posted has answered and been consumed, so the held
+                // store must be empty here (PC divergence bookkeeping, see WAIT).
+                CGS_ASSERT( miNumHeldReplies == 0, "GameData reply held with no load in flight" );
+                miNumHeldReplies = 0;
                 return true;
             }
 

@@ -1158,6 +1158,16 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
         RequestChangeCar(mCacheDuringChangeCarId);
         mCacheDuringChangeCarId = 0;   // X360 *(this+10) = 0
     }
+    else if (mbPlayerCarLoadFailedPC)
+    {
+        // FLAG PC divergence: the desired car's data is not on disk, so it never dropped in.
+        // Withholding the drop-in-complete action keeps the GUI's car-change wait up
+        // (CarSelectMain::mbCarChangeInProgress -> IsLoading()): CONTINUE stays hidden and the
+        // accept is swallowed, while the carousel still moves and the next pick clears it.
+        mbPlayerCarLoadFailedPC = false;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: car data missing -- drop-in withheld, CONTINUE stays disabled.\n";
+    }
     else
     {
         // CarSelectionDropInCompleteAction (16B): mDesiredCarId + the spawn-type bit.

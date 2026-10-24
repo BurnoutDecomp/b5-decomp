@@ -462,6 +462,11 @@ struct StreamingCompleteEvent : public GameEvent<E_EVENT_STREAMING_COMPLETE>
     };
 
     EModule meModule;   // :757
+    // FLAG PC divergence (not a DWARF member; sits in the padding before mUserId, so the
+    // record stays 16 bytes): the race-car module sets it when the junkyard's player car
+    // could not be loaded at all -- its data is not on disk. CarSelectManager then keeps
+    // the GUI's car-change wait up (no CONTINUE on a car that will never appear).
+    bool    mbPlayerCarLoadFailed = false;
     CgsID   mUserId;    // :758
 };
 
