@@ -2012,7 +2012,14 @@ namespace BrnGui
                     lModeRequest.maData[2] = 0; lModeRequest.maData[3] = 0;
                     lModeRequest.maData[4] = 0; lModeRequest.maData[5] = 0;
                     lModeRequest.maData[6] = 0; lModeRequest.maData[7] = 0;
-                    mpStateInterface->OutputGuiEvent(lModeRequest);
+                    using RoadRuleModeOutRecord =
+                        CgsGui::GuiEventWrapper<GuiEventRoadRuleModeRequest, 40>;
+                    static_assert(sizeof(RoadRuleModeOutRecord) == 20,
+                                  "ARTIST channel-40 event 326 is {8,326,12}+8");
+                    RoadRuleModeOutRecord lModeRequestOut(lModeRequest);
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lModeRequestOut), 40,
+                        static_cast<s32>(sizeof(lModeRequestOut)));
                 }
                 if (mbFreeburnChallengeButtonStart)
                     mChallengeComponent.HandleButtonPress(lpiPayload[1]);
