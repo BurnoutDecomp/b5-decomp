@@ -8,7 +8,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash
 
-static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20,
+static_assert(sizeof(CgsGui::GuiMenuStreamRecordPC) == 20,
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
 // BrnGui::Credits -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -123,7 +123,7 @@ void Credits::OnLeave()
     static const u32 KU_NO_MUSIC_STREAM_HASH =
         static_cast<u32>(CgsSound::Playback::Name::MakeHash(KPC_NO_MUSIC_STREAM_NAME));
 
-    CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(KU_NO_MUSIC_STREAM_HASH);
+    CgsGui::GuiMenuStreamRecordPC lMusicEvent(KU_NO_MUSIC_STREAM_HASH);
     // This object is already the complete {8,23,12}+8 channel-40 record.
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lMusicEvent), 40,
@@ -191,7 +191,7 @@ bool Credits::UpdateLoadResources()
     // {8, 18, 12, name, level} channel-41 record) and start the credits music stream.
     mpStateInterface->PlayAptMovie(KPC_CREDITS_MOVIE_NAME, KI_CREDITS_MOVIE_LEVEL);
 
-    CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(
+    CgsGui::GuiMenuStreamRecordPC lMusicEvent(
         static_cast<u32>(CgsSound::Playback::Name::MakeHash(KPC_CREDITS_MOVIE_NAME)));
     // This object is already the complete {8,23,12}+8 channel-40 record.
     mpStateInterface->GetOutputEventQueue()->AddEvent(

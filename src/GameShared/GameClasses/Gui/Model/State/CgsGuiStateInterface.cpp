@@ -13,6 +13,18 @@
 
 namespace CgsGui
 {
+    // ARTIST82476C00; the real typed payload is copied once into its
+    // original channel40 wrapper. This does not select any new PC caller.
+    template <>
+    void StateInterface::OutputGuiEvent<GuiEventPlayMusicOnMenuStream>(
+        GuiEventPlayMusicOnMenuStream& lrEvent)
+    {
+        GuiEventWrapper<GuiEventPlayMusicOnMenuStream, 40> lWrapper(lrEvent);
+        static_assert(sizeof(lWrapper) == 20, "original menu-music wrapper size");
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+            40, static_cast<s32>(sizeof(lWrapper)));
+    }
+
     // @ 0x8240E3E0
     GuiAccessPointers* StateInterface::GetAccessPointers()
     {

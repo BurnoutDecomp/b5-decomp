@@ -4595,7 +4595,7 @@ void GuiModule::Destruct()
         {
             const MovieManager::VideoDefinition lFinished = mMovieManager.GetPlayingMovieDefinition();
             mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_IDLE);
-            CgsGui::GuiEventPlayMusicOnMenuStream lStopStream(0u, false, false);
+            CgsGui::GuiMenuStreamRecordPC lStopStream(0u, false, false);
             mpOutputBuffer->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStopStream),
                                      23, static_cast<s32>(sizeof(lStopStream)));
             RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lFinished), 510,
@@ -4606,7 +4606,7 @@ void GuiModule::Destruct()
         {
             const MovieManager::VideoDefinition lPlaying = mMovieManager.GetPlayingMovieDefinition();
             mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO);
-            CgsGui::GuiEventPlayMusicOnMenuStream lVideoStream(
+            CgsGui::GuiMenuStreamRecordPC lVideoStream(
                 lPlaying.mSoundStreamName, false, lPlaying.mbDisableCustomSoundtracks);
             mpOutputBuffer->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lVideoStream),
                                      23, static_cast<s32>(sizeof(lVideoStream)));

@@ -54,7 +54,7 @@
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 #include <cstdlib>   // getenv (the BRN_LOSE_DIAG witness)
 
-static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20,
+static_assert(sizeof(CgsGui::GuiMenuStreamRecordPC) == 20,
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -1628,7 +1628,7 @@ namespace BrnGui
         if (mResults.miPlayerNewRank != liBurnoutLicenseRank && !mResults.mbCompletedLastRank)
             return false;
 
-        CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(
+        CgsGui::GuiMenuStreamRecordPC lMusicEvent(
             static_cast<u32>(CgsSound::Playback::Name::MakeHash(KAC_CREDITS_MUSIC_STREAM)),
             true, false);
         // This object is already the complete {8,23,12}+8 channel-40 record.
@@ -2007,7 +2007,7 @@ namespace BrnGui
             static const u32 KU_NO_MUSIC_STREAM_HASH =
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash(""));
 
-            CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(KU_NO_MUSIC_STREAM_HASH,
+            CgsGui::GuiMenuStreamRecordPC lMusicEvent(KU_NO_MUSIC_STREAM_HASH,
                                                               true, false);
             // This object is already the complete {8,23,12}+8 channel-40 record.
             mpStateInterface->GetOutputEventQueue()->AddEvent(
