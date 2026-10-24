@@ -2,11 +2,35 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include <cstring>
 
 // CgsFileSystem::FileSystem - see the header. The async device engine bring-up lives in
 // EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
 namespace CgsFileSystem
 {
+namespace
+{
+    // Original CgsStringUtils.h:65 copy expansion. Preserve the assert and
+    // terminator-inclusive copy; no truncation or alternate path is introduced.
+    void CopyConstructionString(char* lpcDest, u32 luBytes, const char* lpcSource)
+    {
+        const size_t luLength = std::strlen(lpcSource);
+        if (luLength >= luBytes)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "String " << lpcSource << " is too long. Buffer size = "
+                    << luBytes << ", string length = " << static_cast<u32>(luLength) << "\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            CgsDev::Assert::EndAssert();
+        }
+        std::memcpy(lpcDest, lpcSource, luLength + 1);
+    }
+
+}
     EA::Thread::AtomicInt32 FileSystem::mDiskErrorOccured(0); // primary raw830EA574
 
     bool FileSystem::HasDiskErrorOccured() const
@@ -20,11 +44,13 @@ namespace CgsFileSystem
         return false;
     }
 
-    // Marked PC sentinel allocator. The X360 passed the GameData allocator to
-    // InitializeDeviceManager (which only stores it; DeviceManager::operator new mallocs on PC),
-    // so any non-null value satisfies the "Allocator required" assert. Routing the manager through
-    // the real GameData allocator is deferred.
-    static char gcPcAllocatorSentinel;
+    // ARTIST829035B0..CC binds the same828E8B20 store leaf to the typed device
+    // callback. Keep the RW int32 callback's declaration and full body intact.
+    bool FileSystem::DiskErrorHandler(EDeviceErrors /*leError*/)
+    {
+        mDiskErrorOccured.SetValue(1);
+        return false;
+    }
 
     // The single PC physical device. A process-static (rather than a FileSystem member) so its
     // lifetime spans the whole run and the worker thread that references it never dangles, and so
@@ -35,11 +61,11 @@ namespace CgsFileSystem
     void EnsureDeviceManagerUp()
     {
         if (!DeviceManager::GetIfInitialized())
-            DeviceManager::InitializeDeviceManager(&gcPcAllocatorSentinel);
+            DeviceManager::InitializeDeviceManagerNativePC();
 
         DeviceManager* lpManager = GetDeviceManager();
         if (lpManager && !lpManager->FindDevice("p_dvd"))
-            lpManager->AddPhysicalDevice(&gPhysicalDevice, "p_dvd", 0);
+            lpManager->AddPhysicalDeviceNativePC(&gPhysicalDevice, "p_dvd", 0);
     }
 
     // @0x827DF320 (boot trace). The X360 ctor walks the 16 file handles and 8 read-stream engines
@@ -210,6 +236,34 @@ namespace CgsFileSystem
         const StreamDeviceDiskRead* lpStream = &maReadStreams[liIndex];
         CGS_ASSERT(lpStream != nullptr, "No device found");
         return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
+    }
+
+    // ARTIST829033C0: X360 consumes allocator/debug/path/layout in r4..r7.
+    // DecFIGS's additional cache-drive input is not consumed by this build.
+    void FileSystem::Construct(rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator,
+                               char* lpcFilePrefix, DiskLayout* lpDiskLayout)
+    {
+        for (u32 luFile = 0; luFile < KU_MAXNOOFFILES; ++luFile)
+            maFiles[luFile].Construct(this, &mLog, static_cast<s32>(luFile));
+        for (u32 luStream = 0; luStream < KU_MAX_READ_STREAMS; ++luStream)
+            maReadStreams[luStream].Construct(this, &mLog);
+        mpFileSystemAllocator = lpAllocator;
+        mpDebugAllocator = lpDebugAllocator;
+        mPatchManager.Construct(lpAllocator);
+        DeviceManager::InitializeDeviceManager(mpFileSystemAllocator);
+        mX360DVDDrive.Construct(0);
+        mX360HardDrive.Construct(1);
+        GetDeviceManager()->AddPhysicalDevice(&mX360DVDDrive, "p_dvd", DiskErrorHandler);
+        GetDeviceManager()->AddPhysicalDevice(&mX360HardDrive, "p_hdd", nullptr);
+        mX360RemapDVDDrive.Construct("/d");
+        mX360RemapHardDrive.Construct("/e");
+        GetDeviceManager()->AddVirtualDevice(&mX360RemapDVDDrive, "d", "p_dvd", nullptr);
+        GetDeviceManager()->AddVirtualDevice(&mX360RemapHardDrive, "e", "p_hdd", nullptr);
+        muNumUsedReadStreams = 0;
+        mpDiskLayout = lpDiskLayout;
+        CopyConstructionString(maFilePrefix, KU_MAXPREFIXFILELENGTH, lpcFilePrefix);
+        mDiskCache.Construct();
     }
 
     void FileSystem::Construct()

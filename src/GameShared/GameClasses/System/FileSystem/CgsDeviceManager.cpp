@@ -5,6 +5,9 @@
 // (AddPhysicalDevice 0x828F9320 + PhysicalDeviceThread 0x828F1EA8 land in the worker step.)
 
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include <new>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstdlib>   // malloc / free
@@ -18,10 +21,102 @@ namespace EA { namespace Thread { unsigned int ThreadSleep(const unsigned int* p
 
 namespace CgsFileSystem
 {
+namespace
+{
+    // Original CgsStringUtils.h:65 copy expansion. Preserve the assert and
+    // terminator-inclusive copy; no truncation or alternate path is introduced.
+    void CopyConstructionString(char* lpcDest, u32 luBytes, const char* lpcSource)
+    {
+        const size_t luLength = std::strlen(lpcSource);
+        if (luLength >= luBytes)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "String " << lpcSource << " is too long. Buffer size = "
+                    << luBytes << ", string length = " << static_cast<u32>(luLength) << "\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            CgsDev::Assert::EndAssert();
+        }
+        std::memcpy(lpcDest, lpcSource, luLength + 1);
+    }
+
+    // Common expansion of the original manager's formatted assertions.
+    void AssertDeviceConstruction(bool lbValid, const char* lpcMessage, s32 liLine)
+    {
+        if (!lbValid)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << lpcMessage;
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceManager.cpp",
+                liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+}
+    // ARTIST828F0CF8..11B4. Register the logical device on its actual physical
+    // worker, then queue opcode8 (the existing worker's Connect/Init case).
+    void DeviceManager::AddVirtualDevice(Device* lpDevice, const char* lpcPrefix,
+                                          const char* lpcParent, ErrorCallback lpfErrorCallback)
+    {
+        mDeviceListFutex.Lock();
+        const auto AssertDevice = [](bool lbValid, const char* lpcMessage, s32 liLine)
+        {
+            if (!lbValid)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lBuffer;
+                CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+                lStream << lpcMessage;
+                CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceManager.cpp",
+                    liLine);
+                CgsDev::Assert::EndAssert();
+            }
+        };
+        AssertDevice(FindDevice(lpcPrefix) == nullptr, "Device name already in use\n", 196);
+        Device* const lpParent = FindDevice(lpcParent);
+        AssertDevice(lpParent != nullptr, "Parent device not found\n", 200);
+        s32 liSlot = 0;
+        while (liSlot < KI_MAX_VIRTUAL_DEVICES && maVirtualDevices[liSlot].mpDevice != nullptr)
+            ++liSlot;
+        AssertDevice(liSlot < KI_MAX_VIRTUAL_DEVICES, "No free virtual devices\n", 211);
+        CopyConstructionString(maVirtualDevices[liSlot].macPrefix,
+                               KI_MAX_PREFIX_LENGTH + 1, lpcPrefix);
+        maVirtualDevices[liSlot].mpDevice = lpDevice;
+        lpDevice->SetParent(lpParent);
+        lpDevice->SetErrorCallback(lpfErrorCallback);
+        Device* const lpPhysical = lpParent ? lpParent->GetPhysicalParent() : lpDevice;
+        s32 liPhysical = 0;
+        while (liPhysical < KI_MAX_PHYSICAL_DEVICES
+            && maPhysicalDevices[liPhysical].mpDevice != lpPhysical)
+            ++liPhysical;
+        AssertDevice(liPhysical < KI_MAX_PHYSICAL_DEVICES, "Could not find physical device\n", 232);
+        Operation lOperation;
+        lOperation.miType = E_OP_DISCONNECT; // existing name; ARTIST opcode8 initializes the logical device
+        lOperation.macPath[0] = '\0';
+        lOperation.muFlags = 0;
+        lOperation.mHandle = Handle::Make(lpDevice, nullptr);
+        lOperation.mu64Offset = 0;
+        lOperation.mpReadBuffer = nullptr;
+        lOperation.mpWriteBuffer = nullptr;
+        lOperation.muSize = 0;
+        lOperation.mpfCallback = nullptr;
+        lOperation.mpContext = nullptr;
+        lOperation.miPriority = 0x7FFFFFFF;
+        maPhysicalDevices[liPhysical].mOperations.AddOperation(&lOperation);
+        mDeviceListFutex.Unlock();
+    }
+
     // ---- statics ----
     // X360 globals: dword_830EA400 (singleton), off_830EA404 (allocator).
     DeviceManager* DeviceManager::mpDeviceManager = nullptr;
-    void*          DeviceManager::mpAllocator     = nullptr;
+    rw::IResourceAllocator* DeviceManager::mpAllocator = nullptr;
 
     // CgsFileSystem::GetDeviceManager @ 0x8264AD88
     DeviceManager* GetDeviceManager()
@@ -30,55 +125,65 @@ namespace CgsFileSystem
         return DeviceManager::mpDeviceManager;
     }
 
-    // Allocation. The X360 allocated the (161712-byte) DeviceManager through the GameData
-    // allocator via a custom operator new; on PC this is a marked malloc leaf (single ~160KB
-    // allocation). mpAllocator is captured by InitializeDeviceManager for parity / future use.
-    void* DeviceManager::operator new(size_t luSize) { return malloc(luSize); }      // PC IO leaf
-    void  DeviceManager::operator delete(void* lpBlock) { free(lpBlock); }
-
-    // ctor @ 0x828F0C90.
-    // The X360 ctor, per physical slot, RtlInitializeCriticalSection'd the OperationPool lock,
-    // default-constructed its Semaphore and Thread, then initialised the device-list futex. Here
-    // the slot's Semaphore + Thread and the device-list Futex are constructed by their own C++
-    // member ctors; the remaining per-slot OperationPool bring-up (lock + slot table) is done by
-    // OperationPool::Construct.
-    DeviceManager::DeviceManager()
-        : miInitializationThread(0)
-        , mbInitialized(false)
-        , mbReleasing(false)
+    // ARTIST828EB9C8: lane zero, native object size, alignment16, null name.
+    void* DeviceManager::operator new(size_t luSize)
     {
-        for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
-            maPhysicalDevices[liIndex].mOperations.Construct();
-        macDefaultPath[0] = 0;
+        return mpAllocator->AllocateMemoryResource(static_cast<u32>(luSize), 16, nullptr);
     }
 
-    // InitInternal @ 0x828E9788 — under the device-list lock, mark every physical + virtual slot
-    // free (mpDevice = 0) and flag the manager initialised.
+    // FLAG PC-platform leaf: retain the existing native malloc cleanup only.
+    // The original manager owner is arena-lived; its release/delete chain is not activated here.
+    void DeviceManager::operator delete(void* lpBlock) { free(lpBlock); }
+
+    // ARTIST828F0C90. OperationPool constructs its lock then its deferred semaphore;
+    // the eight Thread subobjects and final device-list Futex construct themselves.
+    DeviceManager::DeviceManager()
+    {
+    }
+
+    // ARTIST828E9788: clear registrations and the first default-path byte under the lock.
     void DeviceManager::InitInternal()
     {
         mDeviceListFutex.Lock();
-
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             maPhysicalDevices[liIndex].mpDevice = nullptr;
         for (s32 liIndex = 0; liIndex < KI_MAX_VIRTUAL_DEVICES; ++liIndex)
             maVirtualDevices[liIndex].mpDevice = nullptr;
-
         mbInitialized = true;
-        mbReleasing   = false;
-
+        macDefaultPath[0] = '\0';
         mDeviceListFutex.Unlock();
     }
 
-    // InitializeDeviceManager @ 0x828F91E0 — create + init the singleton. Asserts it does not
-    // already exist and that an allocator was supplied; stores the allocator, allocates +
-    // constructs the DeviceManager, then runs InitInternal.
-    bool DeviceManager::InitializeDeviceManager(void* lpAllocator)
+    // ARTIST828F91E0; DecFIGS confirms void and the real RW allocator type.
+    void DeviceManager::InitializeDeviceManager(rw::IResourceAllocator* lpAllocator)
+    {
+        AssertDeviceConstruction(mpDeviceManager == nullptr, "Device manager already exists\n", 44);
+        AssertDeviceConstruction(lpAllocator != nullptr, "Allocator required\n", 45);
+        mpAllocator = lpAllocator;
+        void* const lpMemory = DeviceManager::operator new(sizeof(DeviceManager));
+        mpDeviceManager = lpMemory ? ::new(lpMemory) DeviceManager() : nullptr;
+        // The original deliberately proceeds to InitInternal even after failed allocation.
+        mpDeviceManager->InitInternal();
+    }
+
+    // FLAG PC-platform leaf: existing native singleton ownership is malloc/process lifetime.
+    // Keep its actual queue initialization and scalar values before publishing the object;
+    // no fabricated RW allocator is supplied to the original initialization interface.
+    bool DeviceManager::InitializeDeviceManagerNativePC()
     {
         CGS_ASSERT(mpDeviceManager == nullptr, "Device manager already exists\n");
-        CGS_ASSERT(lpAllocator != nullptr, "Allocator required\n");
-
-        mpAllocator     = lpAllocator;
-        mpDeviceManager = new DeviceManager();
+        void* const lpMemory = malloc(sizeof(DeviceManager));
+        DeviceManager* const lpManager = lpMemory ? ::new(lpMemory) DeviceManager() : nullptr;
+        if (lpManager)
+        {
+            lpManager->miInitializationThread = 0;
+            lpManager->mbInitialized = false;
+            lpManager->mbReleasing = false;
+            for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
+                lpManager->maPhysicalDevices[liIndex].mOperations.ConstructNativePC();
+            lpManager->macDefaultPath[0] = '\0';
+        }
+        mpDeviceManager = lpManager;
         if (mpDeviceManager)
             mpDeviceManager->InitInternal();
         return mpDeviceManager != nullptr;
@@ -106,7 +211,38 @@ namespace CgsFileSystem
 
     // AddPhysicalDevice @0x828F9320 — register lpDevice under lpcPrefix (asserting the name is
     // free and a slot is available), install its error callback, then spawn the worker thread.
-    bool DeviceManager::AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback)
+    // ARTIST828F9320..9720. Initialize this physical queue at registration, bind its
+    // actual device, and start its owning worker with the original thread parameters.
+    void DeviceManager::AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix,
+                                          ErrorCallback lpfErrorCallback)
+    {
+        mDeviceListFutex.Lock();
+        AssertDeviceConstruction(FindDevice(lpcPrefix) == nullptr, "Device name already in use\n", 143);
+        s32 liSlot = 0;
+        while (liSlot < KI_MAX_PHYSICAL_DEVICES && maPhysicalDevices[liSlot].mpDevice != nullptr)
+            ++liSlot;
+        AssertDeviceConstruction(liSlot < KI_MAX_PHYSICAL_DEVICES, "No free physical devices\n", 154);
+        PhysicalDeviceSlot& lrSlot = maPhysicalDevices[liSlot];
+        CopyConstructionString(lrSlot.macPrefix, KI_MAX_PREFIX_LENGTH + 1, lpcPrefix);
+        lrSlot.mOperations.Construct();
+        lrSlot.mpDevice = lpDevice;
+        lpDevice->SetErrorCallback(lpfErrorCallback);
+        lpDevice->SetParent(nullptr);
+        mDeviceListFutex.Unlock();
+
+        char lacThreadName[32];
+        CgsCore::SPrintf(lacThreadName, sizeof(lacThreadName), "CgsFileSystem:%s", lpcPrefix);
+        EA::Thread::ThreadParameters lParams;
+        lParams.mnPriority = 350;
+        lParams.mnProcessor = 0;
+        lParams.mbDisablePriorityBoost = false;
+        lParams.mpName = lacThreadName;
+        lrSlot.mWorkerThread.Begin(PhysicalDeviceThread, &lrSlot, &lParams,
+            EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
+    }
+
+    // FLAG PC-platform leaf: preserve the existing guarded native registration.
+    bool DeviceManager::AddPhysicalDeviceNativePC(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback)
     {
         mDeviceListFutex.Lock();
 

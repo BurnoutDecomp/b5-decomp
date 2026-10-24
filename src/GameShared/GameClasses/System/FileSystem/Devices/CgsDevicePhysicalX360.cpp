@@ -17,27 +17,30 @@
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>   // CreateFileA / ReadFile / SetFilePointerEx / FindFirstFileA / CloseHandle
 
-// CgsDev debug-trace facade (Init prints a one-line trace when the message filter allows). Matches
-// the RemapDevice sibling's local declaration; bodies live in Development/Log/CgsLog.cpp.
-namespace CgsDev
-{
-    namespace Message { extern u64 gxMessageFilterFlags; }
-    namespace Log { void DebugPrint(const char* pcText, int liArg); }
-}
+// The original Init message uses the actual engine log stream.
 
 namespace CgsFileSystem
 {
+    // Inlined ARTIST8290350C..5B8; actual pool backing has sixteen records/indices.
+    void PhysicalX360Device::Construct(u32 luPhysicalDeviceId)
+    {
+        muPhysicalDeviceId = luPhysicalDeviceId;
+        mHandlePool.Construct(maHandleRecords, maiHandleFreeIndices,
+                              static_cast<s8>(KI_MAX_OPEN_FILES));
+    }
+
     // Init @0x828DE998, mapped to the worker-start Connect() hook: when the message filter's bit 0
     // is set, print a one-line init trace; always return 0.
-    int DevicePhysicalX360::Connect()
+    int PhysicalX360Device::Connect()
     {
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            CgsDev::Log::DebugPrint("Physical X360 device initialized\n", 0);
+            *CgsDev::Log::gpDebugPrint << "Physical X360 device initialized\n";
         return 0;
     }
 
@@ -46,7 +49,7 @@ namespace CgsFileSystem
     // drive and rebuild "<drive>:\\<rest>". Decode the access + disposition out of liMode and
     // CreateFileA. On success claim a pool slot and fill its FileHandleRecord. On failure run the
     // error callback (5ms yield) and, if it does not absorb the error, block.
-    int DevicePhysicalX360::Open(const char* lpcPath, u32 luMode,
+    int PhysicalX360Device::Open(const char* lpcPath, u32 luMode,
                                  Handle::DeviceHandle* lppOutHandle)
     {
         const char lcFirst = lpcPath[0];
@@ -125,13 +128,13 @@ namespace CgsFileSystem
         }
 
         // Open failed: run the error callback (it yields 5ms); block if it does not absorb it.
-        if (!CallErrorCallback(2))
+        if (!CallErrorCallback(E_DEVICEERROR_OPEN))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
 
     // Close @0x828F9D90. CloseHandle the record's HANDLE; on success return the slot to the pool.
-    int DevicePhysicalX360::Close(Handle::DeviceHandle lpHandle)
+    int PhysicalX360Device::Close(Handle::DeviceHandle lpHandle)
     {
         FileHandleRecord& lRecord = *static_cast<FileHandleRecord*>(lpHandle);
         if (CloseHandle(lRecord.mpHandle))
@@ -141,14 +144,14 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(4))
+        if (!CallErrorCallback(E_DEVICEERROR_CLOSE))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
 
     // Read @0x828DE9F0. ReadFile at the record's HANDLE into lpBuffer; on success advance the
     // record's running position by the byte count and report it.
-    int DevicePhysicalX360::Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
+    int PhysicalX360Device::Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
                                  u32* lpuOutResult)
     {
         FileHandleRecord& lRecord = *static_cast<FileHandleRecord*>(lpHandle);
@@ -161,7 +164,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(0))
+        if (!CallErrorCallback(E_DEVICEERROR_READ))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -170,7 +173,7 @@ namespace CgsFileSystem
     // syscall; otherwise SetFilePointerEx (FILE_BEGIN) and store the new position back into the
     // record. The asm compares against the record's position word at +0 and writes the result to
     // both the record and the out param.
-    int DevicePhysicalX360::Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
+    int PhysicalX360Device::Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
                                  u64* lpu64OutPosition)
     {
         FileHandleRecord& lRecord = *static_cast<FileHandleRecord*>(lpHandle);
@@ -190,7 +193,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(1))
+        if (!CallErrorCallback(E_DEVICEERROR_SEEK))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -200,7 +203,7 @@ namespace CgsFileSystem
     // to liMaxEntries DirectoryEntry records (FindNextFileA for the rest). Claim a pool slot to
     // hold the find HANDLE, hand back the entry count and the slot. The X360 builds the wildcard
     // path with CgsCore::AppendString and walks the results into the caller's entry array.
-    int DevicePhysicalX360::OpenDirectory(const char* lpcPath, void* lpEntryBuffer,
+    int PhysicalX360Device::OpenDirectory(const char* lpcPath, void* lpEntryBuffer,
                                           u32 luMaxEntries, u32* lpuOutCount,
                                           Handle::DeviceHandle* lppOutHandle)
     {
@@ -301,7 +304,7 @@ namespace CgsFileSystem
 
     // CloseDirectory @0x828FA8B0. FindClose the find handle (the X360 calls CloseHandle on it,
     // treating an INVALID handle as already closed) and return the slot to the pool.
-    int DevicePhysicalX360::CloseDirectory(Handle::DeviceHandle lpHandle)
+    int PhysicalX360Device::CloseDirectory(Handle::DeviceHandle lpHandle)
     {
         FileHandleRecord& lRecord = *static_cast<FileHandleRecord*>(lpHandle);
         if (lRecord.mpHandle == INVALID_HANDLE_VALUE || CloseHandle(lRecord.mpHandle))
@@ -311,7 +314,7 @@ namespace CgsFileSystem
             return 0;
         }
 
-        if (!CallErrorCallback(4))
+        if (!CallErrorCallback(E_DEVICEERROR_CLOSE))
             Sleep(static_cast<DWORD>(-1));
         return -2;
     }
@@ -319,7 +322,7 @@ namespace CgsFileSystem
     // ReadDirectory @0x828DEC30. Continue a directory walk started by OpenDirectory: FindNextFileA
     // on the record's find handle, filling up to liMaxEntries DirectoryEntry records, and report
     // how many were written. Stops early when the find handle is exhausted or invalid.
-    int DevicePhysicalX360::ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer,
+    int PhysicalX360Device::ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer,
                                           u32 luMaxEntries, u32* lpuOutCount)
     {
         CGS_ASSERT(lpEntryBuffer && luMaxEntries && lpuOutCount, "Invalid params\n");

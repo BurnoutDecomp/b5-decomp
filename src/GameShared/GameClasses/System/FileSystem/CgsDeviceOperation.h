@@ -19,6 +19,13 @@ namespace CgsFileSystem
 {
     class Device;
 
+    // DecFIGS CgsDeviceOperation.h:57; values attested by ARTIST physical-device callbacks.
+    enum EDeviceErrors
+    {
+        E_DEVICEERROR_READ = 0, E_DEVICEERROR_SEEK = 1, E_DEVICEERROR_OPEN = 2,
+        E_DEVICEERROR_WRITE = 3, E_DEVICEERROR_CLOSE = 4, E_DEVICEERROR_RECOVERED = 5
+    };
+
     // CgsDeviceOperation.h:72 (DecFIGS): the public file handle carries both the logical
     // device and that device's private handle. ARTIST passes the pair in r4/r5 and stores it
     // as the 8-byte Operation field at +0x108. On the x64 target the pointer naturally widens.
