@@ -28,6 +28,7 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"       // [FX-RUMBLE3] CgsModule::IOHelper (DoUpdate_InputPreWorld's "InputPreWorld")
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h" // original borrowed OutputBuffer bridge
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h" // CgsGui::GuiEventTimeInfo (the per-frame GUI timestep)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
@@ -67,6 +68,17 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
 extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long dwUserIndex);
 
+// ARTIST823CBB84..BBA0: original platform launch boundary. The first two
+// declarations match the existing SDK-facing service ABI; their retained PC
+// bodies do not yet complete the original request. XLaunchNewImage has no
+// selected PC provider. These declarations are not replacement completions.
+extern "C"
+{
+    u32 XGetLaunchData(void* lpBuffer, u32 luBufferSize);
+    u32 XSetLaunchData(const void* lpLaunchData, u32 luLaunchDataSize);
+    [[noreturn]] void XLaunchNewImage(const char* lpcImagePath, u32 luFlags);
+}
+
 // The high-resolution frame timer DebugManagerRender's fps ring reads (defined in
 // CgsTimeUtils.cpp; declared locally by convention -- see that TU's note).
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
@@ -98,8 +110,10 @@ namespace BrnGame
     static bool         _lbForceAssert = false;
     static volatile s32 sbSimUpdateComplete = 0;
     bool                sbShowStreamStallMessage = false; // byte_82FAE28A
-    // Mutable UI latch from ARTIST byte_82FAE28C. Its original symbol and startup writer are
-    // unresolved; findinit finds only the BridgeGuiToGame read/clear sites.
+    // The actual ARTIST byte82FAE28C registered by Construct823C9FE4..CA000
+    // and polled/cleared by BridgeGuiToGame823CB7A8/B8. DecFIGS cpp136 names
+    // _gbForceQuitToStartMenu. Retain this PC spelling and the same registered
+    // object; the original XEX attests its initial zero byte.
     static bool         sbForceQuitToStartMenu;
     // ARTIST 0x823BCF40 passes the exact 28-row console table at 0x82CDBEB8 to
     // PostMappingRequest(port=-1). These bytes match the recovered rows in CgsInputPadsPC.cpp;
@@ -458,6 +472,11 @@ namespace BrnGame
         mReplayModule.Construct();       // +0x8BD300  (slot 0; ReplayModule -> base)
         mNetworkModule.Construct(false);      // +0x8C3600  [gated] X360 slot +64 with arg 0; placeholder -> base.
 
+        // ARTIST823CAA2C/30 selects gm+10094118, then823CAACC stores zero.
+        // This original flag init follows the module Construct calls and precedes
+        // the display-rate/page setup. No readiness or return request is seeded.
+        mbGameOver = false;
+
         // ⭐ 2026-08-16 (boot audit F-P1-11 / F-P2-6). The GamePrepare receiver queue is
         // Constructed HERE on the console -- it is part of step 7-9's queue setup
         // (gm+0x9A06BC, capacity 1024, align 16) and it already exists by the time
@@ -774,6 +793,153 @@ namespace BrnGame
         {
             miGuiFsmStage      = 6;
             mbGuiPhaseComplete = false;
+        }
+    }
+
+    // Complete original borrowed-output consumer, ARTIST823CB758.
+    // This overload is unselected; the existing PC queue overload below is retained.
+    void BrnGameModule::BridgeGuiToGame(
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
+    {
+        // The same const sentinel is named by the original DebugFont asserts
+        // that load82FAE900. Read its real two-pointer value on each invocation.
+        CgsResource::ResourceHandle lhCalibrationTextureHandle =
+            CgsResource::NULLResourceHandle;
+        const CgsGui::CgsGuiModuleIO::OutputBuffer::GuiEventQueue* const lpEvents =
+            lpGuiOutputBuffer->GetOutEventQueue();
+
+        // ARTIST823CB790 snapshots the actual write bank once. Only loading
+        // commands138/589/590 reload that manager pointer in the original.
+        DispatchThreadInputBuffer* const lpDispatchInput =
+            mDispatchThreadInputBufferManager.GetWriteBuffer();
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventType = lpEvents->GetFirstEvent(&lpEvent, &liEventSize);
+
+        if (sbForceQuitToStartMenu)
+        {
+            sbForceQuitToStartMenu = false;
+            mbGameOver = true;
+        }
+
+        while (lpEvent != 0)
+        {
+            switch (liEventType)
+            {
+            case 19:
+                lpDispatchInput->ShowLoadingScreen();
+                mbIsLoadingScreenVisible = true;
+                break;
+            case 20:
+                lpDispatchInput->HideLoadingScreen();
+                mbIsLoadingScreenVisible = false;
+                break;
+            case 70:
+                mbGuiPhaseComplete = true;
+                break;
+            case 71:
+                mbGuiPreAccept = true;
+                break;
+            case 86:
+            case 87:
+            case 89:
+                mbGameOver = true;
+                break;
+            case 90:
+                if (miInputModuleState == 0)
+                    miInputModuleState = 1;
+                break;
+            case 138:
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreenSaveLoadBG();
+                break;
+            case 189:
+            {
+                const BrnGui::GuiOverlayCompleteEvent* const lpComplete =
+                    static_cast<const BrnGui::GuiOverlayCompleteEvent*>(lpEvent);
+                if (CgsIDCompress("SignOut") == lpComplete->mOverlayId &&
+                    lpComplete->meLeaveMethod == BrnGui::GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK &&
+                    miInputModuleState == 4)
+                    miInputModuleState = 5;
+                break;
+            }
+            case 362:
+            {
+                const BrnGui::GuiSnapShotRequested* const lpRequested =
+                    static_cast<const BrnGui::GuiSnapShotRequested*>(lpEvent);
+                lpDispatchInput->LockForWrite();
+                SnapShotRequest* const lpRequest = lpDispatchInput->GetSnapShotRequest();
+                lpRequest->mfStartX = lpRequested->mfStartX;
+                lpRequest->mfStartY = lpRequested->mfStartY;
+                lpRequest->mfWidth = lpRequested->mfWidth;
+                const f32 lfHeight = lpRequested->mfHeight;
+                // ARTIST823CBA64 arms the byte before the final height store.
+                // Both stores remain within this actual buffer's write lock.
+                lpRequest->mbTakeSnapShot = true;
+                lpRequest->mfHeight = lfHeight;
+                lpDispatchInput->UnlockForWrite();
+                break;
+            }
+            case 545:
+            {
+                const BrnGui::GuiOptionsBrightnessContrast* const lpBrightnessContrast =
+                    static_cast<const BrnGui::GuiOptionsBrightnessContrast*>(lpEvent);
+                if (lpBrightnessContrast == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("NULL != lpBrightnessContrast",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3194);
+                    CgsDev::Assert::EndAssert();
+                }
+                miBrightness = lpBrightnessContrast->mBrightness;
+                miContrast = lpBrightnessContrast->mContrast;
+                break;
+            }
+            case 546:
+            {
+                const BrnGui::GuiOptionsBrightnessContrastPostFxControl* const lpBrightnessContrastPostFxControl =
+                    static_cast<const BrnGui::GuiOptionsBrightnessContrastPostFxControl*>(lpEvent);
+                if (lpBrightnessContrastPostFxControl == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpBrightnessContrastPostFxControl",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3205);
+                    CgsDev::Assert::EndAssert();
+                }
+                mbEnableCalibrationUnfriendlyPostFx = lpBrightnessContrastPostFxControl->mbEnablePostFx;
+                lhCalibrationTextureHandle = lpBrightnessContrastPostFxControl->mColourCalibrationTextureHandle;
+                break;
+            }
+            case 589:
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeIn();
+                break;
+            case 590:
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeOut();
+                break;
+            default:
+                break;
+            }
+            liEventType = lpEvents->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        }
+
+        lpDispatchInput->LockForWrite();
+        lpDispatchInput->SetBrightness(miBrightness);
+        lpDispatchInput->SetContrast(miContrast);
+        lpDispatchInput->SetCalibrationUnfriendlyEnablePostFx(mbEnableCalibrationUnfriendlyPostFx);
+        lpDispatchInput->SetCalibrationTextureHandle(lhCalibrationTextureHandle);
+        lpDispatchInput->UnlockForWrite();
+
+        if (mbGameOver)
+        {
+            // Only the original152-byte launch-data prefix is transferred.
+            // Host pointer widening moves later members: use the actual typed
+            // command-line owner, never the console's0xAD pointer arithmetic.
+            static_assert(offsetof(BrnHW::System360HW, mPad94) == 148 &&
+                          offsetof(BrnHW::System360HW, mePrepareStage) == 152,
+                          "original fixed launch-data prefix precedes native pointer members");
+            XGetLaunchData(&mHardware, 152);
+            mHardware.mPad94 = 1;
+            XSetLaunchData(&mHardware, 152);
+            XLaunchNewImage(mHardware.macCommandLine, 0);
         }
     }
 
