@@ -81,6 +81,20 @@ namespace BrnGui
 
 class BrnGuiKeyboard;
 
+// DecFIGS BrnGuiEventTypeDefs.h:1040..1043; ARTIST8251052C/30 reads
+// the pause byte at payload+4. This is the existing raw eight-byte event505,
+// now named at its canonical payload home rather than kept as a demangled blob.
+struct GuiGamePausedEvent : public CgsModule::Event
+{
+    s32 mbpad;
+    bool mbGamePaused;
+    s32 GetEventType() const { return 505; }
+};
+static_assert(sizeof(GuiGamePausedEvent) == 8 &&
+              offsetof(GuiGamePausedEvent, mbGamePaused) == 4,
+              "ARTIST game-paused payload is a word then a byte");
+
+
 // DecFIGS BrnGuiEventTypeDefs.h:810-812; ARTIST8250BE54..64 posts id142
 // with one keyboard pointer. This is the stripped payload, naturally pointer-sized
 // on the host, not the former fixed four-byte demangled shell.
@@ -125,6 +139,9 @@ struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<452>
     }
 
     s32 GetEventType() const { return 457; }
+    void Construct(const char* lpComponentName, const char* lpActionName,
+                   const char* lpLabel, const char* lpMovieName);
+    void Construct(const char* lpEvent, const char* lpMovieName);
     void Construct(s32 leAction, const char* lpComponentName,
                    const char* lpLabel, const char* lpMovieName = "");
 };

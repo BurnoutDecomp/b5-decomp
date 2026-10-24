@@ -77,6 +77,72 @@ void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
     }
 }
 
+// ARTIST824FB9A8; DecFIGS BrnGuiAudioEvent.h:58. The action-name
+// vocabulary differs from the diagnostic labels used by the enum overload.
+void GuiAudioTriggerEvent::Construct(const char* lpComponentName,
+    const char* lpActionName, const char* lpLabel, const char* lpMovieName)
+{
+    if (!lpActionName)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpActionName",
+            "..\\..\\..\\GameSource\\Gui/Events/BrnGuiAudioEvent.cpp", 49);
+        CgsDev::Assert::EndAssert();
+    }
+    static const char* const KAPC_ACTION_NAMES[14] = {
+        "ON_ENTER", "ON_LEAVE", "ON_FOCUS", "ON_LOSE_FOCUS",
+        "ON_ACCEPT", "ON_CANCEL", "ON_TICK", "ON_CHANGE",
+        "ON_UP", "ON_DOWN", "ON_LEFT", "ON_LEFT_SWEEP",
+        "ON_RIGHT", "ON_RIGHT_SWEEP"
+    };
+    s32 liAction = 14;
+    for (s32 liIndex = 0; liIndex < 14; ++liIndex)
+    {
+        if (std::strcmp(lpActionName, KAPC_ACTION_NAMES[liIndex]) == 0)
+        {
+            liAction = liIndex;
+            break;
+        }
+    }
+    Construct(liAction, lpComponentName, lpLabel, lpMovieName);
+    if ((liAction < 0 || liAction >= 14) && ::gbLogGuiAudioTriggers &&
+        (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "\nGUI AUDIO TRIGGERS: "
+            << "Received invalid sound action. Component: "
+            << (lpComponentName ? lpComponentName : "<NULLSTRING>")
+            << " Action: " << (lpActionName ? lpActionName : "<NULLSTRING>")
+            << " Label: " << (lpLabel ? lpLabel : "<NULLSTRING>")
+            << " Movie: " << (lpMovieName ? lpMovieName : "<NULLSTRING>")
+            << "\n";
+    }
+}
+
+// ARTIST824F64B0; DecFIGS BrnGuiAudioEvent.h:75. Keep the original
+// format-string calls and 31/31/32 capacities, including only the two explicit
+// terminators emitted by this overload. The enum overload has a different contract.
+void GuiAudioTriggerEvent::Construct(const char* lpEvent, const char* lpMovieName)
+{
+    CgsCore::SPrintf(macComponent, 31, "NULL");
+    macComponent[31] = 0;
+    CgsCore::SPrintf(macLabel, 31, lpEvent);
+    macLabel[31] = 0;
+    meAction = 7;
+    CgsCore::SPrintf(macMovie, 32, lpMovieName);
+    if (::gbLogGuiAudioTriggers && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "\nGUI AUDIO TRIGGERS: "
+            << "Received sound action from state change in code. Sending GuiAudioEvent to Audio guys: "
+            << " Event: " << lpEvent
+            << " Movie: " << lpMovieName
+            << " Mapping" << lpEvent
+            << " Action " << KAPC_GUI_AUDIO_ACTION_NAMES[meAction]
+            << "\n";
+    }
+}
+
 // @ 0x823A6A20 — zero-extended byte; guards leCounty >= 0 (vacuous for an unsigned
 // byte but the X360 still emits it) and leCounty < BrnWorld::E_COUNTY_COUNT.
 BrnWorld::ECounty GuiEventUpdateSatNav::SatNavIconInfo::GetCounty() const

@@ -272,6 +272,8 @@ namespace BrnGui
         // `stw r24, 0x4058(r31)` @0x8250593C.
         mpSystemUserProfile = lpSystemUserProfile;
 
+        mbIsGamePaused = false; // ARTIST82505A00; an original Construct store.
+
         // ARTIST Construct 0x82505A68: freeburn is E_MODE_NONE, not race (zero).
         meGameModeType = -1;
         mbAreRoadRulesAvailable = false; // 0x82505A3C
@@ -1349,6 +1351,20 @@ namespace BrnGui
                 CgsDev::Assert::EndAssert();
             }
             std::memcpy(&mPFXHookEnumeration, lpEvent, sizeof(mPFXHookEnumeration));
+            return;
+        }
+        // ARTIST82510500..8251053C. Preserve the case's original
+        // assert-and-continue before the older PC-wide null guard below.
+        if (liEventId == 505)
+        {
+            if (!lpEvent)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpPausedEvent",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 1554);
+                CgsDev::Assert::EndAssert();
+            }
+            mbIsGamePaused = reinterpret_cast<const GuiGamePausedEvent*>(lpEvent)->mbGamePaused;
             return;
         }
         if (lpEvent == 0)
