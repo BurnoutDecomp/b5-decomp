@@ -10,7 +10,7 @@ namespace MassiveAdClient3 { class CMassiveClientCore; }
 //
 // BrnHW::System360HW is the Xbox 360 hardware-abstraction object owned by
 // BrnGameModule. It owns the platform launch-data block, the command line, the
-// embedded Massive (memory) sub-system, and two single-step prepare/release state
+// embedded Massive advertising sub-system, and two single-step prepare/release state
 // machines.
 //
 // Layout is recovered store-for-store from the X360 asm of Prepare/Release/
@@ -22,7 +22,9 @@ namespace MassiveAdClient3 { class CMassiveClientCore; }
 //   +0x98  prepare-stage enum (Prepare advances it via operator++)
 //   +0x9C  release-stage enum (Release advances it via operator++)
 //   +0xA0  embedded Massive sub-system (System360HWMassive)
-//   +0xA4  9 unknown bytes, then the command-line buffer at +0xAD
+//   +0xA0..+0xAB  complete 12-byte console Massive owner (stages + client pointer)
+//   +0xAC  permission to attempt Massive::Prepare from the outer game Update
+//   +0xAD  command-line storage; no extra nine-byte member exists between them
 // The first 0x98 bytes are the buffer XGetLaunchData fills (dwBufferSize = 0x98).
 
 namespace BrnMassive
@@ -112,6 +114,15 @@ namespace BrnHW
             E_PREPARESTAGE_DONE  = 1
         };
 
+        // DISTINCT from EPrepareStage: ARTIST Release calls823A8A78, whose
+        // assertion names E_RELEASESTAGE_DONE (bound1). DecFIGS SystemPS3HW
+        // corroborates the common declaration shape, not Xbox-only field names.
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START = 0,
+            E_RELEASESTAGE_DONE  = 1
+        };
+
         // Launch-data sized window the platform fills (XGetLaunchData dwBufferSize = 0x98).
         u32  mdwUserIndex;          // +0x00
         char macUserName[16];       // +0x04  signed-in profile name snapshot
@@ -121,14 +132,19 @@ namespace BrnHW
         u8   mPad95[3];             // +0x95..+0x97 (pad to the 0x98 launch-data extent)
 
         EPrepareStage mePrepareStage;   // +0x98
-        EPrepareStage meReleaseStage;   // +0x9C
+        EReleaseStage meReleaseStage;   // +0x9C
 
         BrnMassive::System360HWMassive mMassive;  // +0xA0
 
-        // Command-line storage. The launch command line is copied to +0xAD (index 9
-        // of the +0xA4 byte region); CgsStringUtils caps the copy at 64 bytes.
-        u8   mPadA4[9];                 // +0xA4..+0xAC
-        char macCommandLine[64];        // +0xAD  launch command line text
+        // Semantic name: the original Xbox-only identifier is not available in
+        // DecFIGS. This is the ONE actual owned byte after the complete Massive
+        // object, not a prepared/success flag or a mirror of another state.
+        // Construct823C9F3C clears it; original InitialLoading stage7 sets it;
+        // outer Update823C54B0 reads it before attempting mMassive.Prepare().
+        bool mbAllowMassivePrepare;     // console +0xAC
+        // Native pointer widening is left to C++ member layout. These console
+        // offsets are evidence, never native fixed offsets or packing rules.
+        char macCommandLine[64];        // console +0xAD; same 64-byte text storage
 
         bool Prepare();
         int  Release();
@@ -141,4 +157,6 @@ namespace BrnHW
 
     // Postfix increment for the prepare/release state machine (BrnSystemHWX360.cpp).
     System360HW::EPrepareStage operator++(System360HW::EPrepareStage& reStage, int);
+    // Separate release overload, ARTIST823A8A78 / original h:133.
+    System360HW::EReleaseStage operator++(System360HW::EReleaseStage& reStage, int);
 }

@@ -49,6 +49,10 @@ namespace CgsModule
         void MarkUnconstructed() { mbIsConstructed = false; }
 
     protected:
+        // DecFIGS h51; ARTIST game C++ ctor827E5F64 initializes the actual
+        // legacy output queue's birth flag, without Construct/Clear or readiness.
+        BaseVariableEventQueue() : mbIsConstructed(false) {}
+
         bool mbIsConstructed;
     };
 

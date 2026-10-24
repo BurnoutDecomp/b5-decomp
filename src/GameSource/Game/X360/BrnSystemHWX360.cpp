@@ -13,6 +13,7 @@
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   BrnHW::operator++(System360HW::EPrepareStage&, int)  @ 0x823A8A18
+//   BrnHW::operator++(System360HW::EReleaseStage&, int)  @ 0x823A8A78
 //   BrnHW::System360HW::Prepare                          @ 0x823AAE10
 //   BrnHW::System360HW::Release                          @ 0x823C6C70
 //   BrnHW::System360HW::PrepareMassiveMemory             @ 0x823C1290  (BrnSystemHWX360Massive.cpp)
@@ -66,6 +67,22 @@ namespace BrnHW
         return lePrevious;
     }
 
+    // ARTIST823A8A78: separate postfix release-stage overload. The exact
+    // original assert source/line distinguishes it from the prepare overload.
+    System360HW::EReleaseStage operator++(System360HW::EReleaseStage& reStage, int)
+    {
+        const System360HW::EReleaseStage lePrevious = reStage;
+        reStage = static_cast<System360HW::EReleaseStage>(reStage + 1);
+        if (static_cast<s32>(reStage) > System360HW::E_RELEASESTAGE_DONE)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("leEnumIndex <= System360HW::E_RELEASESTAGE_DONE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\..\\X360\\BrnSystemHWX360.h", 133);
+            CgsDev::Assert::EndAssert();
+        }
+        return lePrevious;
+    }
+
     // ---- BrnHW::System360HW::Prepare @ 0x823AAE10 ----------------------------------
     // First call (stage START): set the FPU control word, snapshot the launch command
     // line into the object, load the launch data, advance the prepare stage and reset
@@ -109,13 +126,13 @@ namespace BrnHW
 
             XGetLaunchData(this, KU_LAUNCHDATA_SIZE);
             mePrepareStage++;
-            meReleaseStage = E_PREPARESTAGE_START;
+            meReleaseStage = E_RELEASESTAGE_START;
             return true;
         }
 
         if (mePrepareStage == E_PREPARESTAGE_DONE)
         {
-            meReleaseStage = E_PREPARESTAGE_START;
+            meReleaseStage = E_RELEASESTAGE_START;
             return true;
         }
 
@@ -128,12 +145,12 @@ namespace BrnHW
     // Stage DONE: no-op. Any other stage: assert.
     int System360HW::Release()
     {
-        if (meReleaseStage == E_PREPARESTAGE_START)
+        if (meReleaseStage == E_RELEASESTAGE_START)
         {
             mMassive.Release();
             meReleaseStage++;
         }
-        else if (meReleaseStage != E_PREPARESTAGE_DONE)
+        else if (meReleaseStage != E_RELEASESTAGE_DONE)
         {
             CGS_ASSERT(false, "false");
         }

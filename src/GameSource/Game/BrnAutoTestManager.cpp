@@ -1,4 +1,5 @@
 #include "GameSource/Game/BrnAutoTestManager.h"
+#include "GameSource/Game/BrnLUACallbackHelper.h"
 #include "GameSource/Game/BrnGameModule.hpp"                                   // GetMainGameModule / GetGameTimer / GetGameDataModule
 #include "GameSource/Resource/BrnGameDataModule.h"                             // GameDataModule::DebugReportPools
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                        // CgsCore::StrCpy / StrCat
@@ -25,8 +26,234 @@
 // slots. No other member is touched by the constructor (Hex-Rays' "BasePriorityQueue::Clear" calls
 // are the misnamed StrStreamBase base ctor at each embedded log object).
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+extern "C"
+{
+#include "lua.h"
+#include "lualib.h"
+}
+
 namespace BrnGame
 {
+    // ARTIST 0x823A9150; the library table at 0x82035274 contains these six
+    // entries in this order, followed by a null pair. Base opens separately.
+    void OpenLUALibs(lua_State* lpLuaHandle)
+    {
+        struct Library
+        {
+            const char* mpcName;
+            lua_CFunction mpfnOpen;
+        };
+        static const Library KAC_LIBRARIES[] =
+        {
+            { "package", luaopen_package },
+            { "table", luaopen_table },
+            { "io", luaopen_io },
+            { "string", luaopen_string },
+            { "math", luaopen_math },
+            { "debug", luaopen_debug },
+            { 0, 0 },
+        };
+
+        luaopen_base(lpLuaHandle);
+        for (const Library* lpLibrary = KAC_LIBRARIES; lpLibrary->mpfnOpen; ++lpLibrary)
+        {
+            lua_pushcclosure(lpLuaHandle, lpLibrary->mpfnOpen, 0);
+            lua_pushstring(lpLuaHandle, lpLibrary->mpcName);
+            lua_call(lpLuaHandle, 1, 0);
+        }
+    }
+
+    // ARTIST 0x823A91D0. Lua's allocator callback has no implicit this.
+    void* AutoTestManager::LuaAllocator(void* /*lpUserData*/, void* lpPtr,
+                                        size_t /*luOldSize*/, size_t luNewSize)
+    {
+        if (luNewSize)
+            return std::realloc(lpPtr, luNewSize);
+        std::free(lpPtr);
+        return 0;
+    }
+
+    // ARTIST 0x823A9218; DecFIGS BrnAutoTestManager.cpp:163 supplies the
+    // void(char*, int32_t, const char*) shape. The root's final character is
+    // the separator used between TESTINGSCRIPTS and the supplied script name.
+    void GetScriptName(char* lpcBuffer, s32 liBufferSize, const char* lpcScriptName)
+    {
+        if (CgsSystem::HardwareInit::HasDetectedAutomaticTestingFile())
+        {
+            const char* lpcFOPENDirectory = CgsSystem::HardwareInit::GetFOPENDirectory();
+            const char lcSeparator = lpcFOPENDirectory[std::strlen(lpcFOPENDirectory) - 1];
+            CgsCore::SPrintf(lpcBuffer, liBufferSize, "%sTESTINGSCRIPTS%c%s",
+                             lpcFOPENDirectory, lcSeparator, lpcScriptName);
+            const size_t luLength = std::strlen(lpcBuffer);
+            for (size_t luIndex = 0; luIndex < luLength; ++luIndex)
+            {
+                if (lpcBuffer[luIndex] == '\r' || lpcBuffer[luIndex] == '\n')
+                    lpcBuffer[luIndex] = '\0';
+            }
+        }
+    }
+
+    // ARTIST 0x823C0438. The current GUI page and load-completion flag are
+    // left for the script state machine; neither is written by Init.
+    void AutoTestManager::Init(BrnGameModule* lpGameModule)
+    {
+        mpGameModule = lpGameModule;
+        miFramesSinceLastGameStateSave = 0;
+        miNumScriptsLoaded = 0;
+        mpLuaHandle = 0;
+        meScriptState = eScriptLoading;
+        mbControlPad = true;
+        mAutoTestLogChannel.SetChannel(static_cast<CgsDev::Log::LogChannelOutput::EUserChannel>(0));
+        mAutoTestLog.AddStream(&mAutoTestLogFile);
+        mAutoTestLog.AddStream(&mAutoTestLogChannel);
+        for (s32 liAction = 0; liAction < 61; ++liAction)
+            maActions[liAction] = 0.0f;
+        LoadScripts();
+    }
+
+    // ARTIST 0x823A9300. The seven callback bindings are the complete table
+    // at 0x820352B0. Their bodies belong to the independent script callbacks.
+    void AutoTestManager::LoadScripts()
+    {
+        if (!CgsSystem::HardwareInit::HasDetectedAutomaticTestingFile())
+            return;
+
+        char lacScriptName[1024];
+        GetScriptName(lacScriptName, sizeof(lacScriptName),
+                      CgsSystem::HardwareInit::GetAutoScriptToRun());
+        FILE* lpFile = std::fopen(lacScriptName, "r");
+        if (lpFile)
+        {
+            std::memset(macScript, 0, sizeof(macScript));
+            char lacLine[1024];
+            while (!std::feof(lpFile))
+            {
+                std::fgets(lacLine, sizeof(lacLine), lpFile);
+                if (!std::feof(lpFile))
+                {
+                    // ARTIST inlines the original asserted append. The current
+                    // shared StrCat truncates, so retain the binary's behavior.
+                    CGS_ASSERT(std::strlen(lacLine) + std::strlen(macScript) < sizeof(macScript) - 1,
+                        "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
+                    std::strcat(macScript, lacLine);
+                }
+            }
+            std::fclose(lpFile);
+            ++miNumScriptsLoaded;
+            mpLuaHandle = lua_newstate(&AutoTestManager::LuaAllocator, 0);
+            OpenLUALibs(mpLuaHandle);
+            CGS_ASSERT(mpLuaHandle, "mpLuaHandle");
+        }
+
+        struct Binding
+        {
+            const char* mpcName;
+            lua_CFunction mpfnCallback;
+        };
+        static const Binding KAC_CALLBACKS[] =
+        {
+            { "CallDebugFunction", &AutoTestManager::LUACBCallDebugFunction },
+            { "RecordLog", &AutoTestManager::LUACBRecordLog },
+            { "PressButton", &AutoTestManager::LUACBPressButton },
+            { "AcquirePad", &AutoTestManager::LUACBAcquirePad },
+            { "RelinquishPad", &AutoTestManager::LUACBRelinquishPad },
+            { "ActivateDebugComponent", &AutoTestManager::LUACBActivateDebugComponent },
+            { "DeactivateDebugComponent", &AutoTestManager::LUACBDeactivateDebugComponent },
+            { 0, 0 },
+        };
+        for (const Binding* lpBinding = KAC_CALLBACKS; lpBinding->mpcName; ++lpBinding)
+        {
+            CGS_ASSERT(mpLuaHandle, "mpLuaHandle");
+            lua_pushcclosure(mpLuaHandle, lpBinding->mpfnCallback, 0);
+            lua_setfield(mpLuaHandle, LUA_GLOBALSINDEX, lpBinding->mpcName);
+            lua_settop(mpLuaHandle, 0);
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Registered function " << lpBinding->mpcName << "\n";
+        }
+    }
+
+    // ARTIST 823C6010: Lua receives only lua_State*, with no AutoTest this.
+    s32 AutoTestManager::LUACBCallDebugFunction(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        GetMainGameModule()->mDebugManager.CallFunction(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823C60A8: an absent optional name selects DumpGameState's default.
+    s32 AutoTestManager::LUACBRecordLog(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() <= 1, "lHelper.GetNumParams() <= 1");
+        const char* lpcName = lHelper.GetNumParams() != 0 ? lHelper.GetStringParam(0) : 0;
+        GetMainGameModule()->mAutoTestManager.DumpGameState(lpcName);
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823C6150: gm+0x4298 is AutoTest(+0x648).maActions(+0x3C50).
+    s32 AutoTestManager::LUACBPressButton(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "ArgType: "
+                << static_cast<s32>(lHelper.GetParamType(0)) << "\n";
+        }
+        // Preserve lua_isstring evaluation before the second message-filter test.
+        if (lua_isstring(lpLua, 1) && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << lHelper.GetStringParam(0) << "\n";
+        GetMainGameModule()->mAutoTestManager.maActions[lHelper.GetInt32Param(0)] = 1.0f;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823A9920 / 823A98A8: gm+0x438C is the same AutoTest.mbControlPad.
+    s32 AutoTestManager::LUACBAcquirePad(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 0, "lHelper.GetNumParams() == 0");
+        GetMainGameModule()->mAutoTestManager.mbControlPad = true;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBRelinquishPad(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 0, "lHelper.GetNumParams() == 0");
+        GetMainGameModule()->mAutoTestManager.mbControlPad = false;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    // ARTIST 823C6290 / 823C6328: operate on the actual game's debug manager.
+    s32 AutoTestManager::LUACBActivateDebugComponent(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        GetMainGameModule()->mDebugManager.ActivateComponent(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBDeactivateDebugComponent(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        GetMainGameModule()->mDebugManager.DeactivateComponent(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
     AutoTestManager::AutoTestManager()
     {
     }

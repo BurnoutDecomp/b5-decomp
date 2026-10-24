@@ -40,6 +40,14 @@
 
 namespace BrnResource
 {
+    // ARTIST82661758: r3 +=0x280, preserving callback r4 and context r5.
+    void GameDataModule::DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfnCallback,
+                                         void* lpUserData)
+    {
+        mResourceModule.DebugReportPools(lpfnCallback, lpUserData);
+    }
+
+
     namespace
     {
         // FLAG PC-platform leaf: this is the existing root allocation granule,
@@ -1742,7 +1750,7 @@ namespace BrnResource
             // OutputBuffer's filesystem-status member is homed. The LiveUpdate module is
             // deferred (F-P7-4); the allocator-list publish is the live part.
             lpOutput->LockForWrite();
-            lpOutput->Construct();
+            lpOutput->ConstructPC();
             lpOutput->SetAllocatorList(&mAllocatorList);
             lpOutput->UnlockForWrite();
         }

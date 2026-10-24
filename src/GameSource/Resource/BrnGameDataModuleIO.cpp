@@ -41,6 +41,46 @@ namespace BrnResource
 {
 namespace GameDataIO
 {
+    // ARTIST8266AE68. Calls follow the emitted order, including the four
+    // explicit queue Clear calls in addition to each queue Construct's own Clear.
+    // The caller allocates the complete typed object; no payload/ready memset.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mRequestInterface.mRequestQueue.Construct();
+        mRequestInterface.mRequestQueue.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Construct();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
+        mRequestInterface.mRequestQueue.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
+        mpDebug2dRenderBuffer = 0;
+    }
+
+    // ARTIST82666908. Filesystem status is separate from the live-update byte;
+    // original construction stores no value to mbLiveUpdateStatus.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mFileSystemStatusInterface.Construct();
+        mpAllocatorList = 0;
+    }
+
+    // ARTIST823B16E0: read-locked reference to the actual filesystem owner.
+    const CgsResource::ResourceIO::FileSystemStatusInterface*
+    OutputBuffer::GetFileSystemStatusInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mFileSystemStatusInterface;
+    }
+
+    // ARTIST82663EE0: write-lock check followed by one byte copy to that owner.
+    void OutputBuffer::SetFileSystemStatusInterface(
+        const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mFileSystemStatusInterface = *lpStatus;
+    }
+
     // @ 0x82663F90 -- read-locked accessor (asserts at DWARF h:211).
     const RequestInterface<InputBuffer::knRequestInterfaceQueueSize>* InputBuffer::GetRequestInterface() const
     {
@@ -93,8 +133,8 @@ namespace GameDataIO
 
     // @ 0x823B1638 -- read-locked accessor. Tests IOBuffer status bit 4 (read-lock); on failure fires
     // the assert. Returns &mbLiveUpdateStatus (this+8; asm `addi r3,r28,8`; IDA return type
-    // unsigned __int8*). X360 symbol GetLive[UpdateStatus]; the PS3 DWARF drifts this slot into
-    // FileSystemStatusInterface (h:189) -- we follow the X360 asm/symbol.
+    // unsigned __int8*). X360 symbol GetLive[UpdateStatus]; the separate filesystem
+    // owner at ARTIST+9 is not an alternative interpretation of this byte.
     u8* OutputBuffer::GetLiveUpdateStatus()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");

@@ -1,4 +1,8 @@
 #include "GameSource/Game/BrnLUACallbackHelper.h"
+extern "C"
+{
+#include "lua.h"
+}
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
@@ -10,6 +14,20 @@
 
 namespace BrnGame
 {
+    // Inlined in ARTIST 823C6024..6038 and the other callback prologues.
+    LUACallbackHelper::LUACallbackHelper(lua_State* lpLUAHandle)
+    {
+        mpLUAHandle = lpLUAHandle;
+        miNumParams = lua_gettop(lpLUAHandle);
+        miNumResults = 0;
+    }
+
+    s32 LUACallbackHelper::GetNumParams() const
+    {
+        return miNumParams;
+    }
+
+
     // @ 0x823C0370
     LUACallbackHelper::EArgType LUACallbackHelper::GetParamType(s32 liParamIndex) const
     {

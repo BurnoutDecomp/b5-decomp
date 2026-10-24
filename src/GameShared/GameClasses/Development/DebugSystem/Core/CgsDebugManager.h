@@ -100,6 +100,9 @@ namespace CgsDev
 
         bool IsComponentRegistered(DebugComponent* lpComponent);
         void ActivateComponent(DebugComponent* lpComponent);
+        void ActivateComponent(const char* lpcName); // ARTIST 82832200 / DecFIGS h:204
+        void DeactivateComponent(const char* lpcName); // ARTIST 82828E28 / h:207
+        void CallFunction(const char* lpcPath); // ARTIST 8282E308 / h:261
 
         // Add a component to the menu tree. RegisterComponent builds the full menu hierarchy;
         // RegisterComponentSimple registers it as a flat ("simple") entry. Both assert the

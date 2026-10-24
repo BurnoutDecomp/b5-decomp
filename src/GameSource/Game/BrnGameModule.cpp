@@ -245,9 +245,12 @@ namespace BrnGame
         // DataBuffers -- flag/pointer init only).
         CgsModule::ModuleSingleBuffered::Construct();
 
-        // [gated] X360 steps 2-3: CheckClassSizes, then the game-state field seeds at
-        // +10094156..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
-        // flag = 0) -- those words fall in this layout's omitted member ranges.
+        // [gated] CheckClassSizes and the separate game-stage/count seeds remain
+        // outside this bounded owner correction. The original hardware stores are
+        // fully typed here: ARTIST823C9F34/38/3C writes0/1/0 to hardware+98/+9C/+AC.
+        mHardware.mePrepareStage = BrnHW::System360HW::E_PREPARESTAGE_START;
+        mHardware.meReleaseStage = BrnHW::System360HW::E_RELEASESTAGE_DONE;
+        mHardware.mbAllowMassivePrepare = false;
 
         // Per-frame IO buffer stacks the update spine + the scripted module loads allocate their
         // per-frame IO buffers on. [PC stand-in] On the X360 these five stacks are OWNED BY main()

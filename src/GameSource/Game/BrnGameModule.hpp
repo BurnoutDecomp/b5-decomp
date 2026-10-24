@@ -1,12 +1,15 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/Game/BrnAutoTestManager.h"
 
 // Real member types (reconstructed). The renderer module owns the loading-screen renderer;
 // the remaining subsystems below are the ones the per-frame update spine (GameMain) drives.
 #include "GameSource/Graphics/BrnRendererModule.h"                       // BrnGraphics::BrnRendererModule
 #include "GameSource/Gui/BrnGuiModule.h"                                 // BrnGui::GuiModule (hosts the MovieManager)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered (real base)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBufferedTemplate.h"
+#include "GameSource/Game/BrnGameModuleIO.h" // actual legacy DataStructure pair; not persistent GameData IO
 #include "GameShared/GameClasses/System/Threads/CgsThreadLayout.h"       // CgsSystem::IThreadClass
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"              // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"// CgsDev::PerfMonCpu
@@ -188,9 +191,17 @@ namespace BrnGame
     // declaration order. Ranges of not-yet-reached members are marked "[... omitted ...]"
     // and are added as the functions that touch them are reconstructed. Semantic parity (not
     // byte-exact): real names/types/order, but omitted members mean offsets are not byte-exact.
-    class BrnGameModule : public CgsModule::ModuleSingleBuffered, public CgsSystem::IThreadClass
+    class BrnGameModule : public CgsModule::ModuleSingleBufferedTemplate<
+                              BrnGameModuleIO::InputBuffer, BrnGameModuleIO::OutputBuffer>,
+                          public CgsSystem::IThreadClass
     {
+        // Narrow access declaration required by the original AutoTest callbacks'
+        // actual private DebugManager owner. DecFIGS does not encode friendship;
+        // this source spelling is an explicit access reconciliation, not a layout.
+        friend struct AutoTestManager;
     public:
+        AutoTestManager mAutoTestManager; // DecFIGS h182; actual ARTIST gm+648 owner.
+
         // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
         // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
