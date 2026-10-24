@@ -41,6 +41,7 @@ namespace renderengine
 
         struct OcclusionSurveyFramePC
         {
+            u32 muFlags = 0; // original BeginConditionalSurvey input
             u32 muIdentifier = KU_NO_OCCLUSION_ID;
             u64 muSurveySerial = 0;
             u32 muDeviceGeneration = 0;
@@ -173,9 +174,10 @@ namespace renderengine
         }
 
         void OcclusionQueryProviderPCBeginSurveyInternal(IDirect3DDevice9* lpDevice,
-                                                          u32 luIdentifier)
+                                                          u32 luIdentifier, u32 luFlags)
         {
             OcclusionSurveyFramePC lFrame;
+            lFrame.muFlags = luFlags;
             if (luIdentifier >= KU_OCCLUSION_QUERY_COUNT
                 || !OcclusionQueryProviderPCBindDevice(lpDevice))
             {
@@ -363,9 +365,15 @@ namespace renderengine
         }
     }
 
-    void OcclusionQueryProviderPCBeginSurvey(IDirect3DDevice9* lpDevice, u32 luIdentifier)
+    void OcclusionQueryProviderPCBeginSurvey(IDirect3DDevice9* lpDevice, u32 luIdentifier, u32 luFlags)
     {
-        OcclusionQueryProviderPCBeginSurveyInternal(lpDevice, luIdentifier);
+        OcclusionQueryProviderPCBeginSurveyInternal(lpDevice, luIdentifier, luFlags);
+    }
+
+    u32 OcclusionQueryProviderPCGetSurveyFlags()
+    {
+        return sOcclusionQueryProviderPC.maSurveys.empty() ? 0u
+            : sOcclusionQueryProviderPC.maSurveys.back().muFlags;
     }
 
     void OcclusionQueryProviderPCEndSurvey()

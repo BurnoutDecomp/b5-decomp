@@ -9,7 +9,9 @@ namespace renderengine
 
     // FLAG PC-platform leaf: D3D9 query provider for the currently inactive
     // renderer path. The original Xenos conditional polarity is unresolved.
-    void OcclusionQueryProviderPCBeginSurvey(IDirect3DDevice9* lpDevice, u32 luIdentifier);
+    void OcclusionQueryProviderPCBeginSurvey(IDirect3DDevice9* lpDevice, u32 luIdentifier, u32 luFlags = 0);
+    // Actual active XDK survey flags, including unavailable native-query scopes.
+    u32 OcclusionQueryProviderPCGetSurveyFlags();
     void OcclusionQueryProviderPCEndSurvey();
     void OcclusionQueryProviderPCBeginConditional(IDirect3DDevice9* lpDevice, u32 luIdentifier);
     void OcclusionQueryProviderPCEndConditional();
