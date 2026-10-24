@@ -56,6 +56,8 @@ STRING_UTILS_CPP = "src/GameShared/GameClasses/Core/CgsStringUtils.cpp"
 STRSTREAM_CPP = "src/GameShared/GameClasses/Development/CgsStrStream.cpp"
 GUI_EVENT_QUEUE_CPP = "src/GameShared/GameClasses/Gui/CgsGuiEventQueue.cpp"
 QUEUE_BASE_65536_CPP = "src/GameShared/GameClasses/Module/VariableEventQueue_65536_16.cpp"
+GUI_MODULE_IO_CPP = "src/GameShared/GameClasses/Gui/CgsGuiModuleIO_OutputBuffer.cpp"
+IO_BUFFER_CPP = "src/GameShared/GameClasses/Module/CgsIOBuffer.cpp"
 
 HEADER_ROOTS = (
     "src/types.hpp",
@@ -64,6 +66,7 @@ HEADER_ROOTS = (
     "src/GameShared/GameClasses/Development/CgsStrStream.h",
     "src/GameShared/GameClasses/Development/Log/CgsLog.h",
     "src/GameShared/GameClasses/Gui/CgsGuiEvent.h",
+    "src/GameShared/GameClasses/Gui/CgsGuiModuleIO.h",
     "src/GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h",
     "src/GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h",
     "src/GameShared/GameClasses/Module/CgsVariableEventQueue.h",
@@ -167,7 +170,12 @@ static_assert(sizeof(LegacyGuiAudioTriggerEventIdOnly) == 112 &&
             raise ValueError("cannot rename the exact baseline callback body")
         legacy_callback = legacy_callback.replace(
             "void GuiModule::FlaptSoundTriggerCallback(",
-            "void GuiModule::FlaptSoundTriggerCallbackIdOnly(", 1)
+            "void LegacyGuiModule::FlaptSoundTriggerCallbackIdOnly(", 1)
+        legacy_cast = "GuiModule* lpThis = static_cast<GuiModule*>(lpUserData);"
+        if legacy_callback.count(legacy_cast) != 1:
+            raise ValueError("cannot isolate the baseline callback receiver type")
+        legacy_callback = legacy_callback.replace(legacy_cast,
+            "LegacyGuiModule* lpThis = static_cast<LegacyGuiModule*>(lpUserData);", 1)
         legacy_callback = legacy_callback.replace(
             "GuiAudioTriggerEvent", "LegacyGuiAudioTriggerEventIdOnly")
         legacy_hashes = {
@@ -267,6 +275,11 @@ static_assert(sizeof(LegacyGuiAudioTriggerEventIdOnly) == 112 &&
     legacy_callback_declaration = (
         "    static void FlaptSoundTriggerCallbackIdOnly(void*, const char*, const char*, const char*, const char*);\n"
         if mode == "id_only" else "")
+    legacy_module_projection = f'''struct LegacyGuiModule {{
+    CgsModule::VariableEventQueue<18432,16>* mpOutputBuffer;
+{legacy_callback_declaration}
+}};
+''' if mode == "id_only" else ""
     projection = f'''namespace CgsGui {{
 {state_construct}
 {get_output_queue}
@@ -277,10 +290,14 @@ namespace BrnGui {{
 {action_match.group(0)}
 {legacy_projection}
 struct GuiModule {{
+#if defined(AUDIO_MODE_BASELINE)
     CgsModule::VariableEventQueue<18432,16>* mpOutputBuffer;
+#else
+    CgsGui::CgsGuiModuleIO::OutputBuffer* mpOutputBuffer;
+#endif
     static void FlaptSoundTriggerCallback(void*, const char*, const char*, const char*, const char*);
-{legacy_callback_declaration}
 }};
+{legacy_module_projection}
 {construct}
 {callback}
 {legacy_callback}
@@ -374,21 +391,32 @@ def run_mode(tree, mode: str, out: Path, legacy_tree=None):
     strstream=tree.read(STRSTREAM_CPP)
     gui_event_queue=tree.read(GUI_EVENT_QUEUE_CPP)
     queue_base_65536=tree.read(QUEUE_BASE_65536_CPP)
-    if not strings or not strstream or not gui_event_queue or not queue_base_65536:
-        raise ValueError("missing source formatting/logging or GUI event-queue provider")
+    gui_module_io_output_buffer=tree.read(GUI_MODULE_IO_CPP) if mode == "candidate" else ""
+    io_buffer=tree.read(IO_BUFFER_CPP) if mode == "candidate" else ""
+    if not strings or not strstream or not gui_event_queue or not queue_base_65536 or \
+       (mode == "candidate" and (not gui_module_io_output_buffer or not io_buffer)):
+        raise ValueError("missing source formatting, GUI event-queue, or OutputBuffer lock provider")
     hashes[GUI_EVENT_QUEUE_CPP]=source_hash(gui_event_queue)
     hashes[QUEUE_BASE_65536_CPP]=source_hash(queue_base_65536)
+    if mode == "candidate":
+        hashes[GUI_MODULE_IO_CPP]=source_hash(gui_module_io_output_buffer)
+        hashes[IO_BUFFER_CPP]=source_hash(io_buffer)
     extra_files={"audio_extracted.inc":generated,"CgsStringUtils.cpp":strings,
         "CgsStrStream.cpp":strstream,"CgsGuiEventQueue.cpp":gui_event_queue,
         "VariableEventQueue_65536_16.cpp":queue_base_65536}
+    extra_sources=(out/"CgsStringUtils.cpp",out/"CgsStrStream.cpp",
+        out/"CgsGuiEventQueue.cpp",out/"VariableEventQueue_65536_16.cpp")
+    if mode == "candidate":
+        extra_files["CgsGuiModuleIO_OutputBuffer.cpp"]=gui_module_io_output_buffer
+        extra_files["CgsIOBuffer.cpp"]=io_buffer
+        extra_sources+=(out/"CgsGuiModuleIO_OutputBuffer.cpp",out/"CgsIOBuffer.cpp")
     tag={"candidate":"AUDIO_CANDIDATE","baseline":"AUDIO_BASELINE","id_only":"AUDIO_ID_ONLY"}[mode]
     flags={"candidate":"/DAUDIO_MODE_CANDIDATE=1","baseline":"/DAUDIO_MODE_BASELINE=1","id_only":"/DAUDIO_MODE_ID_ONLY=1"}[mode]
     # The copied support TU has a quoted local include; resolve it through this mode's
     # revision-shadow Core directory rather than the physical checkout or shadow root.
     core_shadow_include=out/"shadow"/"GameShared"/"GameClasses"/"Core"
     result=compile_and_run(HERE/"GuiAudioTriggerWire.cpp","audio_extracted.inc",generated,tag,
-        extra_flags=flags + f' /I"{core_shadow_include}"',shadow=shadow,extra_sources=(out/"CgsStringUtils.cpp",out/"CgsStrStream.cpp",
-            out/"CgsGuiEventQueue.cpp",out/"VariableEventQueue_65536_16.cpp"),
+            extra_flags=flags + f' /I"{core_shadow_include}"',shadow=shadow,extra_sources=extra_sources,
         extra_files=extra_files,output_dir=out)
     receipt=read_receipt(out)
     receipt["source_text_sha256"]=hashes
