@@ -72,8 +72,17 @@ void OptionsDataProfile::Construct()
     mbSixAxisSteering   = false;  // asm: stb r31(0), 0x736A
     mbForceFeedback     = true;   // asm: stb r10(1), 0x736B
     mbTips              = true;
-    mbDefaultGameCamera = 1;
+    mDirectorProfileData.Construct(); // original one-word third-person default
     mbIsLocked          = false;
+}
+
+// DecFIGS BrnGuiOptionsDataProfile.h:290. ARTIST GuiModule::Update
+// event475 inlines this complete one-word assignment at825293DC. The caller
+// asserts the event pointer; the original assignment adds no lock guard.
+void OptionsDataProfile::SetDirectorProfileData(
+    const BrnDirector::GameState::DirectorProfileData* lpData)
+{
+    mDirectorProfileData = *lpData;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,13 +201,15 @@ BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions OptionsDataProfile::GetCamera
 void OptionsDataProfile::SetDefaultGameCamera(bool lbDefaultGameCamera)
 {
     CGS_ASSERT(false == mbIsLocked, "false == mbIsLocked");
-    mbDefaultGameCamera = lbDefaultGameCamera ? 1 : 0;
+    mDirectorProfileData.meCameraMode = lbDefaultGameCamera
+        ? BrnDirector::GameState::E_CAMERA_MODE_THIRD_PERSON
+        : BrnDirector::GameState::E_CAMERA_MODE_FIRST_PERSON;
 }
 
 bool OptionsDataProfile::GetDefaultGameCamera()
 {
     CGS_ASSERT(false == mbIsLocked, "false == mbIsLocked");
-    return mbDefaultGameCamera == 1;
+    return mDirectorProfileData.meCameraMode == BrnDirector::GameState::E_CAMERA_MODE_THIRD_PERSON;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +439,8 @@ void OptionsDataProfile::_AssertLayout()
     static_assert(offsetof(OptionsDataProfile, mTraxAvailableInEvents)   == 0x7320, "mTraxAvailableInEvents @ 0x7320");
     static_assert(offsetof(OptionsDataProfile, mTraxFullyPlayed)         == 0x7330, "mTraxFullyPlayed @ 0x7330");
     static_assert(offsetof(OptionsDataProfile, meTraxPlayOrderMode)      == 0x7340, "meTraxPlayOrderMode @ 0x7340");
-    static_assert(offsetof(OptionsDataProfile, mbDefaultGameCamera)      == 0x734C, "mbDefaultGameCamera @ 0x734C");
+    static_assert(sizeof(BrnDirector::GameState::DirectorProfileData) == 4, "original one-word director profile");
+    static_assert(offsetof(OptionsDataProfile, mDirectorProfileData) == 0x734C, "mDirectorProfileData @0x734C");
     static_assert(offsetof(OptionsDataProfile, mBrightness)              == 0x7350, "mBrightness @ 0x7350");
     static_assert(offsetof(OptionsDataProfile, mContrast)                == 0x7354, "mContrast @ 0x7354");
     static_assert(offsetof(OptionsDataProfile, miVoipVolume)             == 0x7358, "miVoipVolume @ 0x7358");
@@ -575,7 +587,7 @@ void OptionsDataProfile::OnlineSaveRoute::SetToGameParams(
 //   -- assert "false == mbIsLocked" (cpp:640) --
 //   474 (0x1DA,  4B) : miVoipVolume
 //   462 (0x1CE,  4B) : meTraxPlayOrderMode
-//   475 (0x1DB,  4B) : mbDefaultGameCamera (the 4-byte flag word)
+//   475 (0x1DB,  4B) : mDirectorProfileData (the original camera-mode word)
 //   472 (0x1D8,  3B) : { mbSixAxisShowtime, mbSixAxisSteering, mbForceFeedback }
 //   473 (0x1D9,  1B) : mbTips
 //   278 (0x116,  4B) : meCameraFeedSetting
@@ -635,7 +647,7 @@ void OptionsDataProfile::NotifyOtherModulesLoadComplete(GuiEventQueueSmall* lpQu
         liValue = static_cast<s32>(meTraxPlayOrderMode);
         lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 462, 4);
 
-        liValue = mbDefaultGameCamera;
+        liValue = static_cast<s32>(mDirectorProfileData.meCameraMode);
         lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 475, 4);
     }
 

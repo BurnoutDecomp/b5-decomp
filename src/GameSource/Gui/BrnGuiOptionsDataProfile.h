@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // actual one-word profile owner
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"   // GuiEventAudioTraxUpdate / GuiEventAudioTraxPlayOrder (single home)
@@ -15,11 +16,9 @@
 //
 // LAYOUT NOTE (offsets are X360-asm-authoritative, NOT DWARF declaration order):
 // every member touched by this TU's accessors was pinned from the X360 stores/loads in
-// BrnGuiOptionsDataProfile.cpp (see _AssertLayout below). The object's leading region
-// (the created/received OnlineSaveRoute tables, the trax-array prefix, num counters and
-// the DirectorProfileData) is large and out of scope for this TU; it is reserved with a
-// single explicit padding buffer up to the first member this TU names (0x7310). The
-// named tail starting at 0x7310 is fully grounded.
+// BrnGuiOptionsDataProfile.cpp (see _AssertLayout below). The route tables,
+// counts and trax sets retain their existing owners. DirectorProfileData is
+// the actual camera-mode word in the named tail, not the old opaque type fork.
 // ---------------------------------------------------------------------------
 
 namespace BrnGui
@@ -64,15 +63,6 @@ namespace BrnNetwork
 
 // (BrnGameState::GameStateModuleIO::EGameModeType arrives from the REAL
 //  BrnGameStateSharedIO.h included above.)
-
-namespace BrnDirector
-{
-    struct GameState
-    {
-        // 12-byte opaque block (matches BrnDirectorGameState.h's reconstruction).
-        struct DirectorProfileData { u8 maOpaque[0x0C]; };
-    };
-}
 
 namespace BrnGui
 {
@@ -194,9 +184,8 @@ private:
     // Leading version/director prefix. The X360 lays miVersionNumber at +0x0
     // (ValidateProfile @0x824EFF58: `lwz r29, 0(r3)`, compared to KI_VERSION_NUMBER);
     // the first OnlineSaveRoute table starts at +0x8 (asm: SetFromGameParams(this+8,..)),
-    // so exactly 4 reserved bytes follow the version word. The DirectorProfileData (out
-    // of scope for this TU) is reached through a separate accessor; it is not modelled
-    // member-by-member here. Reserved so the created table lands at +0x8.
+    // so exactly 4 reserved bytes follow the version word. The actual director
+    // profile member is at0x734C below; this prefix only preserves the route-table base.
     s32 miVersionNumber;                              // +0x0 (compared to 12 on load)
     u8  maOpaquePrefixPad[0x4];                       // +0x4
 
@@ -221,7 +210,8 @@ private:
     GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode meTraxPlayOrderMode; // +0x7340
     s32  miLastPlayedSongIndex;                      // +0x7344
     s32  miLastPictureParadiseMusicIndex;            // +0x7348
-    s32  mbDefaultGameCamera;                        // +0x734C (4-byte flag; Get == 1)
+    // DecFIGS h:390; ARTIST825293DC stores this actual camera-mode word.
+    BrnDirector::GameState::DirectorProfileData mDirectorProfileData; // +0x734C
     s32  mBrightness;                                // +0x7350
     s32  mContrast;                                  // +0x7354
     s32  miVoipVolume;                               // +0x7358
