@@ -1364,6 +1364,27 @@ namespace renderengine
         return 1;   // arena memory stays mapped; nothing to release
     }
 
+    // FLAG PC-platform leaf: Initialize owns persistent mapped CPU bytes in the
+    // existing low-4GB arena. Map that actual header-backed span through the
+    // canonical typed API; never narrow the header or LockInfo pointer.
+    int VertexBuffer::Lock(VertexBufferHeader* lpBuffer, int liFlags, LockInfo* lpLockInfoOut,
+                           int liOffset, int liSize)
+    {
+        if (!lpBuffer || !lpLockInfoOut || liOffset < 0 || liSize < 0
+            || (lpBuffer->muBaseAddress & ~3u) == 0u)
+            return 0;
+        const u32 luOffset = static_cast<u32>(liOffset);
+        const u32 luSize = liSize == 0 ? lpBuffer->muSize : static_cast<u32>(liSize);
+        if (luOffset > lpBuffer->muSize || luSize > lpBuffer->muSize - luOffset)
+            return 0;
+        const uintptr_t luBase = static_cast<uintptr_t>(lpBuffer->muBaseAddress & ~3u);
+        lpLockInfoOut->muSize = luSize;
+        lpLockInfoOut->muFlags = static_cast<u32>(liFlags);
+        lpLockInfoOut->mpBuffer = lpBuffer;
+        lpLockInfoOut->mpBits = reinterpret_cast<void*>(luBase + luOffset);
+        return 1;
+    }
+
     int D3DVertexBuffer_Lock(VertexBufferHeader* lpThis, int /*liOffsetToLock*/,
                              int /*liSizeToLock*/, int /*liFlags*/)
     {
