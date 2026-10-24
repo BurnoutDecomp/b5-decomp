@@ -311,8 +311,9 @@ void ProgressionManager::PreWorldUpdate(
     // a test case's DiagEnv sets BRN_PROGRESSION_COMPLETION_SEEDTROPHY=1 (flow_run.ps1 clears
     // every BRN_* first). It Appends ONE record to the queue below so
     // tools/tests/cases/progression_completion.ps1 can watch the drain actually drain -- nothing
-    // a 60 s scenario can do earns a trophy car. It touches no profile state and awards no car.
-    // See BrnProgressionManager_Completion.cpp. DELETE-WHEN a scenario can complete a category.
+    // a 60 s scenario can do earns a trophy car. The default seed changes only the queue;
+    // explicit freeroam:<category> modes exercise the real award on a pinned test profile.
+    // See BrnProgressionManager_Completion.cpp.
     DEBUG_HarnessSeedTrophyQueue(lfSimTimeStep,
                                  lpActiveRaceCarInterface->IsPlayerCarActive() && !lbIsInJunkyard);
 

@@ -560,6 +560,10 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
     if (mbInterpolateOutNow && !mOutInterpolator.IsAllocated())
     {
         lrBehaviourManager.NewBehaviourInterpolate(mOutInterpolator, 0, 0, 1);
+        // ARTIST 0x82267108..0x82267110: the blend back to gameplay must tick
+        // during pause as requested, just like the blend into the movie.
+        lrBehaviourManager.SetBehaviourUpdatesDuringPause(
+            mOutInterpolator, mbInterpolateOutUpdatesDuringPause);
 
         Camera::BehaviourInterpolate* lpOut = mOutInterpolator.GetBehaviour();
         lpOut->SetInterpolationMode(mbInterpolateOutUpdatesDuringPause ? 2 : 0);
