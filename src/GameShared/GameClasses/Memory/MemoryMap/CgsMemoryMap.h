@@ -134,6 +134,7 @@ namespace CgsMemory
         // index rules; native pointer arithmetic uses the canonical record sizes above.
         s32 GetVersion() const;
         s32 GetPlatform() const;
+        const MemoryMapBank* GetRootBank() const; // DecFIGS h72; ARTIST8266AF08/8266D5B4
         const MemoryMapBank* GetBank(s32 liIndex) const;
         s32 GetNumBanks() const;
         const MemoryMapPool* GetPool(s32 liIndex) const;
