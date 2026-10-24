@@ -1,11 +1,10 @@
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface_OutputGuiEvent_Inst.cpp
 //
-// The 65 X360-attested generic instantiations plus one audio-specific specialization of
-// CgsGui::StateInterface::OutputGuiEvent<T>. The generic body remains the shared header body;
-// the audio specialization also boxes its payload as GuiEventWrapper<T,40> on channel 40,
-// because ARTIST 0x82436890 writes {100,457,12}+payload. All 66 exports return void (QAAX).
-// The homed event types are included below; payload IDs/sizes come from ARTIST.
+// The 65 X360-attested generic instantiations of CgsGui::StateInterface::OutputGuiEvent<T>.
+// The audio-specific channel-40 specialization is defined beside its payload in the mounted
+// BrnGuiEventTypeDefs.cpp owner (ARTIST 0x82436890 writes {100,457,12}+payload). All generic
+// exports return void (QAAX); the homed event types are included below.
 // ============================================================================
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
@@ -20,14 +19,6 @@
 namespace CgsGui
 {
     template void StateInterface::OutputGuiEvent<BrnGui::GuiAudioEvent>(BrnGui::GuiAudioEvent&);  // 0x824367D8
-    template <>
-    void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(
-        BrnGui::GuiAudioTriggerEvent& lrEvent)
-    {
-        GuiEventWrapper<BrnGui::GuiAudioTriggerEvent, 40> lWrapper(lrEvent);
-        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
-                                40, static_cast<s32>(sizeof(lWrapper)));
-    }
     template void StateInterface::OutputGuiEvent<BrnGui::GuiAutosaveRequestEvent>(BrnGui::GuiAutosaveRequestEvent&);  // 0x824937E0
     template void StateInterface::OutputGuiEvent<BrnGui::GuiChallengeSelectedEvent>(BrnGui::GuiChallengeSelectedEvent&);  // 0x82436778
     template void StateInterface::OutputGuiEvent<BrnGui::GuiChangeCarEvent>(BrnGui::GuiChangeCarEvent&);  // 0x82493B98
