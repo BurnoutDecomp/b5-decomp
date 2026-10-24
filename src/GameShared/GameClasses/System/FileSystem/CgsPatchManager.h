@@ -41,7 +41,7 @@ namespace CgsFileSystem
     // CgsPatchManager.h - the patch overlay manager. Instance layout is the faithful X360 member
     // ORDER (members reached BY NAME, never by raw offset); the X360 asm of the methods below is the
     // authority for behaviour. Embedded by value inside the file system; Construct stashes the
-    // owning FileSystem so the background search thread can allocate its scratch through it.
+    // owning resource allocator so the background search thread can allocate/free its scratch.
     class PatchManager
     {
     public:
@@ -73,7 +73,7 @@ namespace CgsFileSystem
         // @0x828DCF40. Resolve `lpcLogical` to a host physical path in `lpcDest` (capacity
         // `luDestSize`): slash->back-slash, and if the path is "<drive>\..." emit "<drive>:\<rest>",
         // else "<path>:".
-        void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
+        static void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
 
     private:
         // @0x828F0B88. The background thread entry: scan the just-added patch folder, mark the scan
@@ -96,7 +96,8 @@ namespace CgsFileSystem
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
         CgsContainers::LinearSOAHashTable<s32, u32> mPatchFileMap;             // +0x888 (2184)
         bool                                 mbPatching;                    // +0x898 (2200)
-        s32                                  miSearchHandleCount;           // +0x89C (2204) scan result
+        // Descriptive X360-only name:828F0C1C/30 store/read an allocator pointer, not a count.
+        void*                                mpDirectorySearchScratch;       // target+0x89C
         EA::Thread::Thread                   mDirSearchThread;              // +0x8A0 (2208)
     };
 }
