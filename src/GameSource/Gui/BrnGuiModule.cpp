@@ -4033,16 +4033,11 @@ void GuiModule::Destruct()
         //    exactly ProfileManager::AutosaveIsEnabled() (the committed accessor over the same
         //    word) -- tested below.
         //  * module+949156 == mSystemUserProfile.miState (1 == E_USERSIGNINSTATE_SIGNEDIN).
-        //    ⚠️ FLAG PC bring-up DEVIATION, deliberate and named: that state machine is driven
-        //    by Xbox XNotify sign-in notifications (SystemUserProfile::Update ->
-        //    UpdateUserSigninState -> XUserGetSigninState), none of which fires on PC, so
-        //    miState stays 0 for the entire run and gating on it would make the console's own
-        //    autosave permanently unreachable here. The rest of this build already answers the
-        //    same "is a user signed in" question the other way (BrnGuiProfile.cpp's
-        //    SaveLoadSystem_GetSignedInUserIndex PC leaf reports slot 0, and BF_PROFILE drives
-        //    ProfileManager::Bootup through the same gate unguarded), so the gate is dropped
-        //    HERE for the same reason and in the same place -- not silently widened.
-        //    DELETE-WHEN a PC sign-in path drives mSystemUserProfile.miState.
+        //    Restored: PC now drives miState -- binding player 0 (a START press) hands its
+        //    port to SystemUserProfile as the user index and UpdateUserSigninState signs that
+        //    user in ("Signin state changed: signed-in" in the log) -- so the console's gate
+        //    is back. Passing the title with A binds no controller,
+        //    no user signs in and, as on ARTIST, the session does not autosave.
         if (mbProfileAutosavePending)
         {
             // flt_82004C6C == 60.0f (the throttle window, X360 `fadds f0,f13,f0`).
@@ -4056,7 +4051,8 @@ void GuiModule::Destruct()
                 {
                     AutosaveProfile(&lSaveImageInfo);
                 }
-                else if (mProfileHost.GetProfileManager().AutosaveIsEnabled())
+                else if (mSystemUserProfile.miState == 1 &&
+                         mProfileHost.GetProfileManager().AutosaveIsEnabled())
                 {
                     // The console's 4-arg call with count 0 / records NULL: save the profile
                     // image with no image files attached. The handler is the ProfileHost the

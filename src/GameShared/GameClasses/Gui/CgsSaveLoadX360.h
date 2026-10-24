@@ -187,8 +187,17 @@ namespace CgsGui
 
         // X360 0x8284C210. Cache the signed-in user index (miField210); >= 0 forwards
         // UserSignedIn() to the memory-card interface, < 0 clears mbField183.
-        // (Caller: BrnGui::ProfileManager::SigninStateChanged.) Body: CgsSaveLoadX360_wB_02.cpp.
+        // (Caller: BrnGui::ProfileManager::SigninStateChanged.) Body: CgsSaveLoadX360.cpp.
         void SetSignedInUserIndex(s32 liUserIndex);
+
+        // The signed-in user index (-1 == none). The X360 ProfileManager reads system+0x210
+        // inline (SigninStateChanged @0x827E2F40); this is that read, not a new behaviour.
+        s32 GetSignedInUserIndex() const { return miField210; }
+
+        // X360 ProfileManager::UIClosed @0x827E0F70, inlined there over system+0x128: run and
+        // clear the continuation WaitForUIClosed parked while a system UI was up. Body:
+        // CgsSaveLoadX360.cpp.
+        void RunPendingUIClosed();
 
         // X360 0x828522D0. Copy ONE image record's bytes INTO the mugshot-buffer slot its
         // miId maps to -- the inbound direction of the same CgsGui::ImageFileInfo record
@@ -401,18 +410,18 @@ namespace CgsGui
 
         // X360 0x8285D9E8. Pop the Xbox sign-in UI (XShowSigninUI(1, 0)); on immediate
         // success mark mpSystemUserProfile's mbSignedIn (+0x1C flag byte), then
-        // WaitForUIClosed(&SignInUIClosed). Body: CgsSaveLoadX360_wB_06.cpp.
+        // WaitForUIClosed(&SignInUIClosed). Body: CgsSaveLoadX360.cpp.
         void SignIn();
 
         // X360 0x82859D48. Sign-in UI closed: a signed-in user (miField210 >= 0) continues
         // to BootupShowAutosaveWarning(); otherwise reports failure. Body:
-        // CgsSaveLoadX360_wB_06.cpp.
+        // CgsSaveLoadX360.cpp.
         void SignInUIClosed();
 
-        // DECLARATION ONLY (body is NOT in this TU's fan-out; do not define): park a
-        // pending member-function to run when the current system UI closes. Callers:
-        // BootupHandleNotSignedInOption (&SignIn), SignIn (&SignInUIClosed). The X360
-        // passes the 8-byte { func, this-delta } pair by value in r4.
+        // X360 0x8284C570. Run lpfnUIClosedFunc now when no system UI is up (the profile's
+        // +0x1C byte is clear), else park it at +0x128 for ProfileManager::UIClosed. Callers:
+        // Bootup (&BootupShowAutosaveWarning), BootupHandleNotSignedInOption (&SignIn),
+        // SignIn (&SignInUIClosed). Body: CgsSaveLoadX360.cpp.
         void WaitForUIClosed(void (SaveLoadSystem::*lpfnUIClosedFunc)());
 
     public:
@@ -448,7 +457,7 @@ namespace CgsGui
 
         // X360 0x8285F200. The not-signed-in prompt handler: option 1 ==
         // WaitForUIClosed(&SignIn); otherwise report failure. Body:
-        // CgsSaveLoadX360_wB_06.cpp.
+        // CgsSaveLoadX360.cpp.
         void BootupHandleNotSignedInOption(u32 luOption);
 
         // ADDITIVE GROW (BrnGuiProfile wave): the inherited ContentInformationFileInterface
@@ -474,6 +483,11 @@ namespace CgsGui
         char macSaveInfoDescription[256];         // +0x28  SaveInfo description (strncpy, 256)
 
         u64  mField128;                           // +0x128 (Construct zeroes, 8 bytes)
+        // X360 +0x128 holds the pending UI-closed member-function pointer WaitForUIClosed
+        // parks ({func, delta}, 8 bytes on the console). An MSVC x64 pointer to a member of
+        // this multiply-inherited class does not fit in mField128, so the host keeps it here
+        // and mField128 only keeps the console's layout slot.
+        void (SaveLoadSystem::*mpfnPendingUIClosed)() = nullptr;
 
         MessageDisplay* mpActiveMessageDisplay;   // +0x130 the display driving the live operation
         MessageDisplay* mpMessageDisplay;         // +0x134 the display passed to Construct
@@ -551,6 +565,14 @@ namespace CgsGui
         // (Load / the 3-arg Save / Autosave) capture the same view here full-width via
         // CaptureStoredDataView; the storage edge reads/writes through it.
         OpaqueBuffer mStoredDataView;
+
+        // FLAG PC-platform leaf (storage edge): true once the boot-up's storage stage ran
+        // (BootupStart). On the console that stage is where the Realmc memory-card layer picks
+        // the signed-in user's storage device; without it a write has nowhere to go and fails.
+        // A boot-up that took the not-signed-in "continue without saving" exit never reaches
+        // it, so the PC container must refuse writes the same way -- a later mid-game sign-in
+        // must not let an autosave of that session replace the player's real profile.
+        bool mbStorageReadyPC = false;
 
         // Capture lrMetadata.mStoredData into mStoredDataView (the host-width form of
         // the X360 SetMetadata +0x30/+0x34 capture -- see mStoredDataView).

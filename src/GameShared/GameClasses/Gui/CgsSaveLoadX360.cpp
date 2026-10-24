@@ -10,6 +10,9 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include <cstring>   // std::memcpy
 
+// Xbox 360 XDK sign-in blade; the PC leaf is CgsXboxLivePC.cpp. SignIn uses (cPanes=1, dwFlags=0).
+extern "C" u32 XShowSigninUI(u32 luPanes, u32 luFlags);
+
 // CgsGui::XenonFileInputStream member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU (class:CgsGui::XenonFileInputStream) bodies the two
 // X360-emitted stream methods:
@@ -110,5 +113,96 @@ namespace CgsGui
                                             * miNumberOfMugshotTypes);
 
         return RealmcIface::LoadEntryInfo("Mugshots", &lZeroPair, &lDataPair);
+    }
+
+    // ---- folded from CgsSaveLoadX360_wB_02.cpp (wave B, spec group G3 -- the state setters) ----
+
+    // X360 0x8284C210. Cache the signed-in user index. A valid index (>= 0) tail-forwards
+    // UserSignedIn() to the memory-card interface; a negative index clears the bootup-check flag.
+    void SaveLoadSystem::SetSignedInUserIndex(s32 liUserIndex)
+    {
+        miField210 = liUserIndex;                            // stw r4,0x210
+        if (liUserIndex >= 0)                                // bge -> tail call
+            mpMemcardInterface->UserSignedIn();              // slot 4 +0x10
+        else
+            mbField183 = false;                              // stb 0,0x183
+    }
+
+    // X360 0x8284CC00. Realmc set-autosave result callback (the +4 interface sub-object; raw
+    // displacement 0x17C == real member +0x180). Autosave is considered armed only when the SDK
+    // reported success (liResult == 0) AND the enable flag was set (liEnabled == 1). liArg2 (r5) is
+    // never read.
+    void SaveLoadSystem::SetAutosaveDone(s32 liResult, s32 liArg2, s32 liEnabled)
+    {
+        mbField180 = (liResult == 0 && liEnabled == 1);      // stb r11,0x17C (real +0x180)
+    }
+
+    // ---- folded from CgsSaveLoadX360_wB_06.cpp (wave B, the sign-in lane), plus the two
+    //      UI-closed helpers that lane calls ----
+
+    // X360 0x8284C570. Run lpfnUIClosedFunc at once when no system UI is up, else park it in the
+    // +0x128 pair until ProfileManager::UIClosed. The flag is the SystemUserProfile's +0x1C byte
+    // (`lwz r11,0x194; lbz r11,0x1C(r11)`), the same byte SignIn sets when XShowSigninUI opened.
+    void SaveLoadSystem::WaitForUIClosed(void (SaveLoadSystem::*lpfnUIClosedFunc)())
+    {
+        CGS_ASSERT(mpSystemUserProfile != nullptr, "SaveLoadSystem: uninitialised");   // :382
+
+        if (!reinterpret_cast<CgsGui::SystemUserProfile*>(mpSystemUserProfile)->mbSignedIn)
+        {
+            (this->*lpfnUIClosedFunc)();
+            return;
+        }
+        mpfnPendingUIClosed = lpfnUIClosedFunc;              // std r27,0x128
+    }
+
+    // X360 ProfileManager::UIClosed @0x827E0F70, inlined there over system+0x128: if a
+    // continuation is parked, clear the pair first, then call it.
+    void SaveLoadSystem::RunPendingUIClosed()
+    {
+        if (mpfnPendingUIClosed == nullptr)
+            return;
+        void (SaveLoadSystem::*lpfnUIClosedFunc)() = mpfnPendingUIClosed;
+        mpfnPendingUIClosed = nullptr;
+        (this->*lpfnUIClosedFunc)();
+    }
+
+    // X360 0x8285F200. Bootup "not signed in" prompt choice. Option 1 pops the sign-in UI
+    // once the message box closes; any other option reports failure to the live handler.
+    void SaveLoadSystem::BootupHandleNotSignedInOption(u32 luOption)
+    {
+        if (luOption == 1)
+        {
+            WaitForUIClosed(&SaveLoadSystem::SignIn);   // 0x194 pair -> &SignIn
+            return;
+        }
+
+        // 0x130 is the RESULT HANDLER (committed idiom): report failure (1).
+        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+            ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(1));
+    }
+
+    // X360 0x8285D9E8. Pop the Xbox sign-in UI (XShowSigninUI(1, 0)). When the UI really opened
+    // (return 0) the profile's +0x1C "system UI up" byte is set directly through the wave-B
+    // friendship, mirroring `stb r11,0x1C(profile)`; then wait for the UI to close.
+    void SaveLoadSystem::SignIn()
+    {
+        auto* lpProfile = mpSystemUserProfile;          // r30 = lwz 0x194(this)
+        if (XShowSigninUI(1, 0) == 0)
+            reinterpret_cast<CgsGui::SystemUserProfile*>(lpProfile)->mbSignedIn = true;
+        WaitForUIClosed(&SaveLoadSystem::SignInUIClosed);
+    }
+
+    // X360 0x82859D48. Sign-in UI closed: a signed-in user (miField210 >= 0) continues to the
+    // autosave warning; otherwise reports failure to the live handler.
+    void SaveLoadSystem::SignInUIClosed()
+    {
+        if (miField210 >= 0)
+        {
+            BootupShowAutosaveWarning();
+            return;
+        }
+
+        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+            ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(1));
     }
 }
