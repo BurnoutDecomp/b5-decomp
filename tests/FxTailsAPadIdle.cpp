@@ -62,11 +62,16 @@ namespace CgsDev
     }
     namespace Log
     {
-        DebugPrint* gpDebugPrint = nullptr;          // every [DIAG] line stays silent
+        decltype(CgsDev::Log::gpDebugPrint) gpDebugPrint = nullptr; // match the selected revision
         void WriteToLog(const char*) {}
     }
 }
 namespace renderengine { HWND__* hWnd = nullptr; }
+namespace CgsSystem::KeyboardPC
+{
+    bool IsCapturingInput() { return false; }
+    bool BlockGameInput(bool) { return false; }
+}
 namespace CgsInput
 {
     EBindResult InputPads::BindPlayerToPort(s32, s32) { return E_BINDRESULTOK; }
@@ -84,6 +89,18 @@ static unsigned long __stdcall FakeXInputGetState(unsigned long luUser, XInputSt
     lpState->Gamepad = gPad;
     return 0;                                         // ERROR_SUCCESS: a pad on user 0
 }
+
+#ifdef BRN_TEST_SDL_GAMEPAD
+// This fixture tests the recovered idle/edge logic independently of host I/O.
+// The SDL backend itself is exercised with real virtual devices by PCGamepad.cpp.
+namespace CgsInput::PCGamepad
+{
+    bool Read(State& lrState) { return FakeXInputGetState(0, &lrState) == 0; }
+    std::uint32_t SelectedId() { return 1; }
+    void SetInputAllowed(bool) {}
+    std::uint32_t SetRumble(std::uint16_t, std::uint16_t) { return 0; }
+}
+#endif
 
 static FARPROC FxaGetProcAddress(HMODULE, LPCSTR lpcName)
 {

@@ -46,7 +46,7 @@ namespace Assert
     }
     void* EndAssert() { return nullptr; }
 }
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }   // the [DIAG] lines stay silent
+namespace Log { decltype(CgsDev::Log::gpDebugPrint) gpDebugPrint = nullptr; } // match the production stream type
 }
 
 bool CgsSystem::HardwareInit::mbHasDetectedAutomaticTestingFile = false;
@@ -91,6 +91,9 @@ extern "C" u32 XInputFFUpdateEffect(u32, const void*, u32, void*)         { retu
 // ---- the recording PC pad scan (the console's InputPads::Update seat) ---------------------------------
 static s32 gPadScans = 0;
 void CgsInput::InputPadsPC::UpdatePadDevices(InputPads*) { ++gPadScans; }
+// The current module also runs its action fill at this seat. This fixture
+// isolates the rumble/event chain; PCGamepad.cpp exercises the real action fill.
+void CgsInput::InputPadsPC::UpdatePlayer0(InputIO::OutputBuffer*) {}
 
 // The production InputModule bodies under test, extracted verbatim (see the runner).
 #include "fxrumble3_pad_chain.inc"

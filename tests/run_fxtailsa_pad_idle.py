@@ -55,6 +55,8 @@ def wiring(tree):
 
 def numeric(tree):
     source = tree.read(PADSPC_CPP)
+    if 'pc/input/Gamepad.h' in source:
+        source = '#define BRN_TEST_SDL_GAMEPAD 1\n' + source
     if UPDATE not in source.replace("\r\n", "\n"):
         print("NUMERIC: cannot build -- InputPadsPC::UpdatePlayer0 absent")
         return None
