@@ -149,7 +149,7 @@ namespace CgsResource
         // Drain the pool module's output queue (acquire/etc. responses) and route each to its requester
         // (response->mpUser). The pool-response slice of the X360 ProcessResourceResponses shuttle. Caller
         // holds the pool output buffer read-locked.
-        void ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut);
+        void ProcessPoolOutputResponses(const PoolIO::OutputBuffer* lpPoolOut);
 
         // Accessor so the GameDataModule's CreatePools/CreateBanks can drive the embedded PoolModule
         // (the X360 reaches it through the resource-module vtable; here a by-name accessor).

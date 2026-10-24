@@ -67,12 +67,12 @@ struct Shuttle {
     bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest*){++assertions;return false;}
     bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest*){++assertions;return false;}
     void ProcessPendingFileSystemResponses();
-    void ProcessResourceRequests(ResourceIO::InputBuffer*,CgsMemory::MemoryIO::InputBuffer*,BundleLoaderIO::InputBuffer_Update*,PoolIO::InputBuffer*);
+    void ProcessResourceRequests(const ResourceIO::InputBuffer*,CgsMemory::MemoryIO::InputBuffer*,BundleLoaderIO::InputBuffer_Update*,PoolIO::InputBuffer*);
     void ProcessBundleLoaderStreamRequests(const BundleLoaderIO::OutputBuffer*);
-    void ProcessPoolOutputResponses(PoolIO::OutputBuffer*);
-    void ProcessResourceResponses(const BundleLoaderIO::OutputBuffer*,PoolIO::OutputBuffer*);
-    void ProcessPoolResourceRequests(CgsMemory::MemoryIO::InputBuffer*,PoolIO::OutputBuffer*);
-    void ProcessMemoryResponses(CgsMemory::MemoryIO::OutputBuffer*);
+    void ProcessPoolOutputResponses(const PoolIO::OutputBuffer*);
+    void ProcessResourceResponses(const BundleLoaderIO::OutputBuffer*,const PoolIO::OutputBuffer*);
+    void ProcessPoolResourceRequests(CgsMemory::MemoryIO::InputBuffer*,const PoolIO::OutputBuffer*);
+    void ProcessMemoryResponses(const CgsMemory::MemoryIO::OutputBuffer*);
     bool Update(void*,void*);
 };
 }
