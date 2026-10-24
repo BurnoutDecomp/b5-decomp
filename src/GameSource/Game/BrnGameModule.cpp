@@ -5404,17 +5404,11 @@ namespace BrnGame
             }
             else
             {
-                // FLAG PC divergence: the console binds player 0 only to the pad that presses
-                // START (action 8). BootLegal accepts the title with START *or* A (GUI_SELECT,
-                // 49), so a player who passes the title with A reaches the junkyard with no
-                // controller bound and cannot drive until a later START binds one. Also
-                // accept the A press here, so the pad that accepted the title is the one bound.
                 for (s32 liPort = 0; liPort < CgsInput::KU_NUMBER_OF_PADS; ++liPort)
                 {
                     const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
                         lpInputModuleOutput->GetPadInfo(liPort);
-                    if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0 ||
-                        ((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_GUI_SELECT].muStatus >> 1) & 1) != 0)
+                    if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0)
                     {
                         liStartPressedPort = static_cast<u32>(liPort);
                         miInputModuleState = 2;
