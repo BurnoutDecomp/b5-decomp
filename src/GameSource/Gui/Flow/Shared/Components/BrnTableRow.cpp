@@ -56,6 +56,60 @@ namespace BrnGui
     // The component "needs re-output" bit OR'd into the base flag byte (X360 `ori 0x10`).
     static const u8 KU_FLAG_DIRTY = 0x10;
 
+    // FLAG PC divergence -- the row's live Selectable vptr.
+    // Table::SetupTable registers each row in the table's own group as a Selectable*
+    // (`Add(reinterpret_cast<Selectable*>(&lrRow))`; on the console the group head IS a
+    // Selectable). From then on the base SelectableGroup dispatches the Selectable virtuals
+    // on the row through that pointer: HighlightIndex slot 3 (`lwz r11,0(item) ;
+    // lwz r11,0xC(r11) ; bctrl`, ARTIST 0x824E3CE0), Clear slots 0/3/1/5, Enable/Disable
+    // slots 0..2, Select slot 4, Update slot 5. On the X360 those land in the row's vtable
+    // off_82073140. The PC SelectableGroup is non-polymorphic and models the vptr as the
+    // mppVTable data member, which nothing wrote, so the first such call (SetupTable ->
+    // HighlightIndex(0), opening the online Custom Match screen) jumped through a null vptr.
+    //
+    // The table below is that vtable's Selectable prefix, laid out like the PC Selectable's
+    // own vtable (BrnSelectable.h: six virtuals, no destructor; the x64 HighlightIndex reads
+    // SetHighlighted at +0x18 == slot 3). Each entry is the X360 slot target, called BY NAME:
+    //   slots 0..3  Selectable::SetActive/SetHighlightable/SetSelectable/SetHighlighted
+    //               (0x824E56E0/5730/5780/57D0, not overridden; SelectableGroup's inline
+    //               setters reproduce them store for store on the same flag byte)
+    //   slot  4     SelectableGroup::Select (0x824E3EC8; TableRow has no override in ARTIST)
+    //   slot  5     TableRow::Update (0x824E99C8; its xrefs_to is empty, so vtable-only)
+    // A free function taking the object pointer first has the same x64 calling convention as
+    // a member call (`this` in rcx), which is what makes the hand-built table callable.
+    namespace
+    {
+        bool RowSetActive(TableRow* lpRow, bool lbActive)               { return lpRow->SetActive(lbActive); }
+        bool RowSetHighlightable(TableRow* lpRow, bool lbHighlightable) { return lpRow->SetHighlightable(lbHighlightable); }
+        bool RowSetSelectable(TableRow* lpRow, bool lbSelectable)       { return lpRow->SetSelectable(lbSelectable); }
+        bool RowSetHighlighted(TableRow* lpRow, bool lbHighlighted)     { return lpRow->SetHighlighted(lbHighlighted); }
+        void RowSelect(TableRow* lpRow)                                 { lpRow->SelectableGroup::Select(); }
+        void RowUpdate(TableRow* lpRow)                                 { lpRow->Update(); }
+
+        struct RowSelectableVTable
+        {
+            bool (*mpSetActive)(TableRow*, bool);
+            bool (*mpSetHighlightable)(TableRow*, bool);
+            bool (*mpSetSelectable)(TableRow*, bool);
+            bool (*mpSetHighlighted)(TableRow*, bool);
+            void (*mpSelect)(TableRow*);
+            void (*mpUpdate)(TableRow*);
+        };
+
+        const RowSelectableVTable KS_ROW_SELECTABLE_VTABLE =
+        {
+            &RowSetActive, &RowSetHighlightable, &RowSetSelectable, &RowSetHighlighted,
+            &RowSelect, &RowUpdate,
+        };
+    }
+
+    // Inlined into Table::Table @0x82500F40 (`stw r26, 0(r31)`, r26 = off_82073140); the
+    // GuiComponent vptr and the cell vector construction are the compiler's own.
+    TableRow::TableRow()
+    {
+        mppVTable = reinterpret_cast<void**>(const_cast<RowSelectableVTable*>(&KS_ROW_SELECTABLE_VTABLE));
+    }
+
     // @0x824E6F00 -----------------------------------------------------------------------
     void TableRow::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                              const char* lpacCellName, CgsGui::GuiComponent** lppComponents,
