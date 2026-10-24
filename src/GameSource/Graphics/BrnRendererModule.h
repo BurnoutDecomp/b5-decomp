@@ -495,6 +495,8 @@ private:
     void ClearDispatchCounters();
     void ClearScreenshotState();
     void MemoryUsage();
+    // FLAG PC-platform leaf: preserve and validate native Construct allocations.
+    bool PrepareNativeOwnedResourcesPC(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
     void ConstructRenderSwitches();
 
     // The three per-thread monitor squares (bottom-centre): each is green when its

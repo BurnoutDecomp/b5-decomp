@@ -15,6 +15,8 @@
 #include "GameSource/World/BrnWorldModule.h"
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Resource/BrnGameDataModuleIO.h"
+#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 #include "GameSource/Resource/BrnResourceAllocator.h"  // Allocators::InitMemoryMap
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
@@ -291,10 +293,70 @@ void EnginePrepare()
     rw::ResourceAllocatorRegistry::SetDefaultAllocator(lpSystemAllocatorPC);
 
     gGameModule.Construct();
+
+    // FLAG PC-platform leaf: ARTIST main827E60D8 completes the game Prepare owner
+    // (GameData, then renderer) before its frame/thread loop. Retain the native
+    // two-argument GameData implementation and its one existing scripted IO pair.
+    BrnResource::GameDataModule& lrGameData = gGameModule.GetGameDataModule();
+    BrnResource::GameDataIO::InputBuffer* const lpInput =
+        BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+    BrnResource::GameDataIO::OutputBuffer* const lpOutput =
+        BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+    while (!CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
+    {
+        // Use the existing main-thread presentation owner before any sky GPU work,
+        // including recovery after a resize/flip-output reset during this loop.
+        if (lrGameData.Prepare(nullptr, nullptr) && renderengine::Device::PreparePresentationPC())
+        {
+            // Update owns its input/output lock brackets and publishes &mAllocatorList.
+            // Hold no caller lock across it. Read only after that real publication.
+            lrGameData.Update(lpInput, lpOutput);
+            lpOutput->LockForRead();
+            const BrnResource::GameDataIO::AllocatorList* const lpAllocators =
+                lrGameData.GetPreparedRendererAllocatorsPC(lpOutput);
+            const bool lbPrepared = lpAllocators
+                && gGameModule.GetRenderModule().Prepare(lpAllocators);
+            lpOutput->UnlockForRead();
+            if (!lpAllocators)
+            {
+                CgsDev::Log::WriteToLog(
+                    "[renderer-prepare] GameData allocator publication/bank31 incomplete; shutting down.\n");
+                CgsSystem::HardwareInit::RequestShutdown();
+                break;
+            }
+            if (lbPrepared)
+            {
+                CgsDev::Log::WriteToLog(
+                    "[renderer-prepare] canonical Prepare completed before BeginFramesPC.\n");
+                break;
+            }
+        }
+        // Keep the existing window responsive while the real resumable resource
+        // prepares progress. Frame/update/dispatch owners have not started yet.
+        MSG lPrepareMessage{};
+        while (PeekMessageW(&lPrepareMessage, nullptr, 0, 0, PM_REMOVE))
+        {
+            if (lPrepareMessage.message == WM_QUIT)
+            {
+                CgsSystem::HardwareInit::RequestShutdown();
+                break;
+            }
+            if (!CgsSystem::KeyboardPC::ProcessMessage(&lPrepareMessage))
+            {
+                TranslateMessage(&lPrepareMessage);
+                DispatchMessageW(&lPrepareMessage);
+            }
+        }
+        Sleep(1);
+    }
 }
 
 void EngineUpdate()
 {
+    // FLAG PC-platform leaf: a failed/closed startup must not start frame owners.
+    if (CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
+        return;
+
     // Main loop: pump the window messages and, when idle, drive the real per-frame spine -
     // OnCompletionOfVsyncWait (decide this frame's sim-step count) -> UpdateThread (GamePrepare
     // once, then GameMain, which runs the active flow state's per-substep Update -> the loading

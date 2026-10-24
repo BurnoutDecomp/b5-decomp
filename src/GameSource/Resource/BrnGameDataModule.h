@@ -57,7 +57,7 @@ namespace CgsModule { struct Event; }                                        // 
 // The many embedded subsystems beyond ResourceModule are added with their own passes.
 namespace BrnResource
 {
-    namespace GameDataIO { struct GameDataAssetEvent; }   // dispatcher/handler param (by pointer)
+    namespace GameDataIO { struct GameDataAssetEvent; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
 
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
@@ -102,6 +102,9 @@ namespace BrnResource
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
         bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
+        // FLAG PC-platform leaf: caller holds the actual published output's read lock.
+        const GameDataIO::AllocatorList* GetPreparedRendererAllocatorsPC(
+            const GameDataIO::OutputBuffer* lpOutput) const;
         bool Release();                               // deferred
         void Destruct();                              // deferred
 
