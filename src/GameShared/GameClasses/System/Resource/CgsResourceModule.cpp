@@ -16,6 +16,8 @@
 // Update preserves the loader -> pool -> memory order and delayed pool replies.
 namespace CgsResource
 {
+    // Original initial monitor words are -1; trace IDs are reset to zero by Construct.
+    s32 ResourceModule::_miUpdateTrace = 0; // target82F34040
     // ARTIST 82F34004..1C raw initial words are all -1.
     s32 ResourceModule::_miResourceUpdatePerfMon = -1;
     s32 ResourceModule::_miProcessResourceRequestsPerfMon = -1;
@@ -126,7 +128,152 @@ namespace CgsResource
         }
     }
 
-    // ARTIST829055B0: construct the modules over the supplied resource allocator.
+    // ARTIST829055B0..6568; all allocations use the actual supplied owner.
+    void ResourceModule::Construct(InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
+                                   rw::IResourceAllocator* lpDebugAllocator)
+    {
+        CgsModule::ModuleSingleBuffered::Construct();
+        meReleaseStage = E_RELEASE_DONE;
+        mePrepareStage = E_PREPARE_START;
+        mMemoryModule.Construct(&lpOptions->mMemoryInitOptions, lpAllocator);
+        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpAllocator, lpDebugAllocator);
+        mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator, lpDebugAllocator);
+        mDebugComponent.Construct(this, &lpOptions->mDebugParams);
+
+        rw::ResourceDescriptor lCapacity;
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            lCapacity.m_baseResourceDescriptors[luLane].m_size = 0;
+            lCapacity.m_baseResourceDescriptors[luLane].m_alignment = 1;
+        }
+        lCapacity.m_baseResourceDescriptors[0].m_size = 0x160000;
+        lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+        rw::ResourceDescriptor lDescriptor;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lDescriptor, &lCapacity);
+        const rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
+        mpFileSystemAllocator = rw::core::GeneralResourceAllocator::Initialize(lResource, lCapacity);
+        mFileSystem.Construct(mpFileSystemAllocator, lpDebugAllocator,
+                              lpOptions->macFileSearchPath, lpOptions->mpDiskLayout);
+        mPendingFileResponses.Construct(maPendingFileResponses, maiPendingFileResponseFreeIndices,
+                                       static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
+
+        const auto RegisterMonitor = [](s32& liMonitor, const char* lpcName,
+                                        const char* lpcAssertion, s32 liLine)
+        {
+            if (liMonitor == -1)
+            {
+                liMonitor = CgsDev::PerfMonCpu::AddMonitor(lpcName, CgsDev::E_PMP_1, false, 5.0f, false);
+                if (liMonitor < 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(lpcAssertion,
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp",
+                        liLine);
+                    CgsDev::Assert::EndAssert();
+                }
+            }
+        };
+        RegisterMonitor(ResourceModule::_miResourceUpdatePerfMon, "Resource update",
+            "CgsResource::ResourceModule::_miResourceUpdatePerfMon >= 0", 100);
+        RegisterMonitor(ResourceModule::_miProcessResourceRequestsPerfMon, "  Process requests",
+            "CgsResource::ResourceModule::_miProcessResourceRequestsPerfMon >= 0", 101);
+        RegisterMonitor(ResourceModule::_miUpdateBundleLoaderPerfMon, "  Bundle loader",
+            "CgsResource::ResourceModule::_miUpdateBundleLoaderPerfMon >= 0", 102);
+        RegisterMonitor(ResourceModule::_miUpdatePoolPerfMon, "  Pool",
+            "CgsResource::ResourceModule::_miUpdatePoolPerfMon >= 0", 103);
+        RegisterMonitor(ResourceModule::_miUpdateMemoryPerfMon, "  Memory",
+            "CgsResource::ResourceModule::_miUpdateMemoryPerfMon >= 0", 104);
+        RegisterMonitor(ResourceModule::_miUpdateFileSystemPerfMon, "  File system",
+            "CgsResource::ResourceModule::_miUpdateFileSystemPerfMon >= 0", 105);
+        RegisterMonitor(ResourceModule::_miUpdateOutputPerfMon, "  Output",
+            "CgsResource::ResourceModule::_miUpdateOutputPerfMon >= 0", 106);
+        RegisterMonitor(Pool::_miPoolModuleStatePerfMon, "Pool state update",
+            "CgsResource::Pool::_miPoolModuleStatePerfMon >= 0", 108);
+        RegisterMonitor(Pool::_miPoolModuleIdle, "  PS Idle",
+            "CgsResource::Pool::_miPoolModuleIdle >= 0", 109);
+        RegisterMonitor(Pool::_miPoolModuleAllocating, "  PS Alloc",
+            "CgsResource::Pool::_miPoolModuleAllocating >= 0", 110);
+        RegisterMonitor(Pool::_miPoolModuleDeallocating, "  PS DeAlloc",
+            "CgsResource::Pool::_miPoolModuleDeallocating >= 0", 111);
+        RegisterMonitor(Pool::_miPoolModuleLiveupdate, "  PS LiveUpd",
+            "CgsResource::Pool::_miPoolModuleLiveupdate >= 0", 112);
+        RegisterMonitor(Pool::_miPoolModuleIntellifrag, "  PS Intellifrag",
+            "CgsResource::Pool::_miPoolModuleIntellifrag >= 0", 113);
+        RegisterMonitor(Pool::_miPoolModuleEmergencyFrag, "  PS Emergencyfrag",
+            "CgsResource::Pool::_miPoolModuleEmergencyFrag >= 0", 114);
+        RegisterMonitor(CgsMemory::Relocator::_miExecutePerfMon, "    Relocator Exec",
+            "CgsMemory::Relocator::_miExecutePerfMon >= 0", 115);
+        RegisterMonitor(CgsMemory::Relocator::_miGPUCopyPerfMon, "      Relocator GPU",
+            "CgsMemory::Relocator::_miGPUCopyPerfMon >= 0", 116);
+        RegisterMonitor(CgsMemory::Relocator::_miUpdatePerfMon, "    Relocator Update",
+            "CgsMemory::Relocator::_miUpdatePerfMon >= 0", 117);
+        RegisterMonitor(Pool::_miPoolUpdatePerfMon, "Pool update",
+            "CgsResource::Pool::_miPoolUpdatePerfMon >= 0", 119);
+        RegisterMonitor(Pool::_miPoolDeleteHashEntryPerfMon, "  Delete hash entry",
+            "CgsResource::Pool::_miPoolDeleteHashEntryPerfMon >= 0", 120);
+        RegisterMonitor(Pool::_miPoolDeleteMemoryPerfMon, "  Delete memory",
+            "CgsResource::Pool::_miPoolDeleteMemoryPerfMon >= 0", 121);
+        RegisterMonitor(Pool::_miPoolDeleteResourcePerfMon, "  Delete resource",
+            "CgsResource::Pool::_miPoolDeleteResourcePerfMon >= 0", 122);
+        RegisterMonitor(Pool::_miPoolAllocateResourceListPerfMon, "Pool alloc list",
+            "CgsResource::Pool::_miPoolAllocateResourceListPerfMon >= 0", 124);
+        RegisterMonitor(Pool::_miPoolFixupPerfMon, "Pool fixup",
+            "CgsResource::Pool::_miPoolFixupPerfMon >= 0", 138);
+        RegisterMonitor(Pool::_miPoolFindByIndexPerfMon, "Pool search by index",
+            "CgsResource::Pool::_miPoolFindByIndexPerfMon >= 0", 139);
+        RegisterMonitor(Pool::_miPoolFixupResourcePerfMon, "Pool fixup resource",
+            "CgsResource::Pool::_miPoolFixupResourcePerfMon >= 0", 140);
+        RegisterMonitor(Pool::_miPoolFindTypePerfMon, "Pool find resource type",
+            "CgsResource::Pool::_miPoolFindTypePerfMon >= 0", 141);
+        RegisterMonitor(Pool::_miPoolDefragPerfMon, "Pool defrag",
+            "CgsResource::Pool::_miPoolDefragPerfMon >= 0", 143);
+        RegisterMonitor(Pool::_miPoolDefragWFInitialDeathsPerfMon, "  Pool WF Initial Deaths",
+            "CgsResource::Pool::_miPoolDefragWFInitialDeathsPerfMon >= 0", 144);
+        RegisterMonitor(Pool::_miPoolDefragMakeTempPerfMon, "  Pool defrag make temp",
+            "CgsResource::Pool::_miPoolDefragMakeTempPerfMon >= 0", 145);
+        RegisterMonitor(Pool::_miPoolDefragMoveToTempPerfMon, "    Move temp",
+            "CgsResource::Pool::_miPoolDefragMoveToTempPerfMon >= 0", 146);
+        RegisterMonitor(Pool::_miPoolDefragResolveTempPerfMon, "    Temp resolve",
+            "CgsResource::Pool::_miPoolDefragResolveTempPerfMon >= 0", 147);
+        RegisterMonitor(Pool::_miPoolDefragWFSourceDeathsPerfMon, "  Pool WF Source Deaths",
+            "CgsResource::Pool::_miPoolDefragWFSourceDeathsPerfMon >= 0", 148);
+        RegisterMonitor(Pool::_miPoolDefragMakeDestPerfMon, "  Pool defrag make dest",
+            "CgsResource::Pool::_miPoolDefragMakeDestPerfMon >= 0", 149);
+        RegisterMonitor(Pool::_miPoolDefragMoveToDestPerfMon, "    Move dest",
+            "CgsResource::Pool::_miPoolDefragMoveToDestPerfMon >= 0", 150);
+        RegisterMonitor(Pool::_miPoolDefragMoveDestRebasePerfMon, "      Dest rebase",
+            "CgsResource::Pool::_miPoolDefragMoveDestRebasePerfMon >= 0", 151);
+        RegisterMonitor(Pool::_miPoolDefragResolveDestPerfMon, "    Dest resolve",
+            "CgsResource::Pool::_miPoolDefragResolveDestPerfMon >= 0", 152);
+        RegisterMonitor(Pool::_miPoolDefragWFTempDeathsPerfMon, "  Pool WF Temp Deaths",
+            "CgsResource::Pool::_miPoolDefragWFTempDeathsPerfMon >= 0", 153);
+        RegisterMonitor(Pool::_miPoolDefragWFDonePerfMon, "  Pool Done",
+            "CgsResource::Pool::_miPoolDefragWFDonePerfMon >= 0", 154);
+        RegisterMonitor(BundleLoaderModule::_miUpdatePerfMon, "Loader update",
+            "CgsResource::BundleLoaderModule::_miUpdatePerfMon >= 0", 156);
+        RegisterMonitor(BundleLoaderModule::_miStreamUpdate, "  Stream update",
+            "CgsResource::BundleLoaderModule::_miStreamUpdate >= 0", 157);
+        RegisterMonitor(BundleLoaderModule::_miStreamEntryCopy, "    Entry MemCpy",
+            "CgsResource::BundleLoaderModule::_miStreamEntryCopy >= 0", 158);
+        RegisterMonitor(BundleLoaderModule::_miStreamDataCopy, "    Data MemCpy",
+            "CgsResource::BundleLoaderModule::_miStreamDataCopy >= 0", 159);
+
+        ResourceModule::_miUpdateTrace = 0;
+        PoolModule::_miAllocateListTraceId = 0;
+        PoolModule::_miFixupListTraceId = 0;
+        PoolModule::_miAllocateStateTraceId = 0;
+        PoolModule::_miIntellifragStateTraceId = 0;
+        Pool::_miPoolAddTempTrace = 0;
+        Pool::_miResolveAllTrace = 0;
+        Pool::_miFixupTrace = 0;
+        BundleLoaderModule::_miTraceStreamUpdate_StreamHeader = 0;
+        BundleLoaderModule::_miTraceStreamUpdate_StreamEntries = 0;
+        BundleLoaderModule::_miTraceStreamUpdate_StreamData = 0;
+        mbIsNewModule = true;
+        mbPendingPatch = false;
+    }
+
+    // Retained native two-input construction path.
     // FileSystem uses its existing native device-manager adapter.
     void ResourceModule::Construct(const void* lpInitOptions, void* lpAllocator)
     {

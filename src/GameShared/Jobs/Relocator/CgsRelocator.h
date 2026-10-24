@@ -53,6 +53,10 @@ namespace CgsMemory
     class Relocator
     {
     public:
+        // Original resource-construction monitor/trace owners; ARTIST829055B0.
+        static s32 _miExecutePerfMon; // target82F3344C
+        static s32 _miGPUCopyPerfMon; // target82F33454
+        static s32 _miUpdatePerfMon; // target82F33450
         // The implicit constructor forwards null to the contained Job in both
         // ARTIST callers: ReplayModule 827E041C..042C and PoolModule
         // 827E08AC..08BC. Execute supplies "Relocator" when the job is submitted.

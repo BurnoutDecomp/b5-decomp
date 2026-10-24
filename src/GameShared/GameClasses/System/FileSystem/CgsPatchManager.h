@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsLinearHashTable.h"   // CgsContainers::LinearHashTable
+#include "GameShared/GameClasses/Containers/CgsLinearSOAHashTable.h" // separate original key/value arrays
 #include "eathread/eathread_thread.h"                               // EA::Thread::Thread
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator (entry storage)
 
@@ -21,7 +21,7 @@
 // letter + back-slashes) for the FindFirstFile scan.
 //
 // LATER patches do NOT automatically win: when two patches both contain the same file, the map keeps
-// whichever patch has the SMALLER miValue (the integer passed to AddPatch as the patch's priority
+// whichever patch has the LARGER miValue (the integer passed to AddPatch as the patch's priority
 // key) - see AddFileToCurrentPatch.
 //
 // SOURCES (X360 ARTIST): Construct 0x828F0980, AddPatch 0x828F8F80, DirSearchThreadProc 0x828F0B88,
@@ -53,7 +53,7 @@ namespace CgsFileSystem
         static const u32 KU_PATCH_FILE_MAP_SIZE = 4096;
 
         // @0x828F0980 (boot trace). Stash the resource allocator, zero the current-patch index, bring
-        // up the path-hash map (length 0x1000) over allocator-supplied entry storage, clear the
+        // up the path-hash map (length0x1000) over separate allocator-owned keys/values, clear the
         // "patching" flag and publish the singleton instance pointer. `lpAllocator` is the object the
         // X360 stores at +0 and whose virtual Alloc carves the map's entry array (and, later, the
         // directory-search thread's scratch).
@@ -94,7 +94,7 @@ namespace CgsFileSystem
         rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    entry storage
         PatchEntry                           maPatches[KU_MAX_PATCHES];     // +4    (4)    32 * 68
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
-        CgsContainers::LinearHashTable<s32, s32> mPatchFileMap;             // +0x888 (2184)
+        CgsContainers::LinearSOAHashTable<s32, u32> mPatchFileMap;             // +0x888 (2184)
         bool                                 mbPatching;                    // +0x898 (2200)
         s32                                  miSearchHandleCount;           // +0x89C (2204) scan result
         EA::Thread::Thread                   mDirSearchThread;              // +0x8A0 (2208)
