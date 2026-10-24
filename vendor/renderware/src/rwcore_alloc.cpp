@@ -531,3 +531,17 @@ namespace core
     }
 }
 }
+
+namespace rw
+{
+    // ARTIST82BBC840 calls descriptor subtraction82B63E50: copy capacity,
+    // subtract the five unsigned size words, and preserve each alignment.
+    ResourceDescriptor LinearResourceAllocator::GetAvailable() const
+    {
+        ResourceDescriptor lAvailable = m_heapCapacity;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            lAvailable.m_baseResourceDescriptors[luLane].m_size -=
+                m_currentUsage.m_baseResourceDescriptors[luLane].m_size;
+        return lAvailable;
+    }
+}

@@ -228,6 +228,7 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     const Resource& GetLinearHeapBase() const;
     ResourceDescriptor GetCapacity() const;
     ResourceDescriptor GetCurrentUsage() const;
+    ResourceDescriptor GetAvailable() const; // ARTIST82BBC840, capacity minus usage.
 
     // The vtable's DoAllocate slot ([6] +48, ?DoAllocate@LinearResourceAllocator@rw@@MEAA...
     // -- the override the PDB vtable dump above proves): carve one Resource matching the
