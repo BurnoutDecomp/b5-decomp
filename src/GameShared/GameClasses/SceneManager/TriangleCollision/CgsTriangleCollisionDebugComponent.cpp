@@ -22,8 +22,10 @@
 #include "SDKs/XboxMath/XMVectorACos.h"
 #include "SDKs/XboxMath/XMVectorSinCos.h"
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // [case witness] bounded RenderWorld readbacks
 #include <cmath>
 #include <cstring>
+#include <cstdlib> // [case witness] opt-in read-only geometry owner diagnostics
 
 namespace
 {
@@ -253,6 +255,85 @@ namespace CgsSceneManager
 
         if (mbTestSweptSphere)
             TestPolySoupSweptSphereCollision(lpRenderer, nullptr);
+
+        // [case witness] Read-only owner/dispatch evidence. Inert unless the launched
+        // process has BRN_DEBUG_GEOMETRY_WITNESS. Log the first owner row, stored
+        // control-tuple changes, and soup empty/nonempty transitions only. The one-game
+        // schedule needs at most37 control transitions + 1 initial row + 2 readiness rows;
+        // the 40-row cap is exact and does not sample frames or growing soup counts.
+        static const bool sbGeometryWitnessEnabled =
+            std::getenv("BRN_DEBUG_GEOMETRY_WITNESS") != nullptr;
+        static bool sbGeometryWitnessHasPrevious = false;
+        static u32 suGeometryWitnessRows = 0;
+        static bool sbPreviousSoupReady = false;
+        static s32 siPreviousRequestedLevels = -1;
+        static f32 sfPreviousSoupDistance = 0.0f;
+        static bool sbPreviousDrawWorld = false;
+        static bool sbPreviousDrawAabbs = false;
+        static bool sbPreviousDrawEdges = false;
+        static bool sbPreviousSweepTest = false;
+        static f32 sfPreviousPosX = 0.0f;
+        static f32 sfPreviousPosY = 0.0f;
+        static f32 sfPreviousPosZ = 0.0f;
+        static f32 sfPreviousRadius = 0.0f;
+        static f32 sfPreviousVelX = 0.0f;
+        static f32 sfPreviousVelY = 0.0f;
+        static f32 sfPreviousVelZ = 0.0f;
+        if (sbGeometryWitnessEnabled && mpTriCollisionManager != nullptr)
+        {
+            const CgsGeometric::PolygonSoupListSpatialMap* lpMap =
+                mpTriCollisionManager->GetPolySoupListSpacialMap();
+            const s32 liSoupLists = lpMap->GetNumPolySoupLists();
+            const s32 liMapLevels = lpMap->GetNumLevels();
+            const bool lbSoupReady = liSoupLists > 0;
+            const f32 lfSoupDistance = mfSoupDrawDistance;
+            const f32 lfPosX = mSweptSpherePos.X();
+            const f32 lfPosY = mSweptSpherePos.Y();
+            const f32 lfPosZ = mSweptSpherePos.Z();
+            const f32 lfRadius = mSweptSphereSize;
+            const f32 lfVelX = mSweptSphereVelocity.X();
+            const f32 lfVelY = mSweptSphereVelocity.Y();
+            const f32 lfVelZ = mSweptSphereVelocity.Z();
+            const bool lbChanged = !sbGeometryWitnessHasPrevious ||
+                lbSoupReady != sbPreviousSoupReady || miNumLevels != siPreviousRequestedLevels ||
+                lfSoupDistance != sfPreviousSoupDistance ||
+                mbDrawPolySoups != sbPreviousDrawWorld ||
+                mbDrawSoupAabbs != sbPreviousDrawAabbs ||
+                mbDrawEdgeCosines != sbPreviousDrawEdges ||
+                mbTestSweptSphere != sbPreviousSweepTest ||
+                lfPosX != sfPreviousPosX || lfPosY != sfPreviousPosY ||
+                lfPosZ != sfPreviousPosZ || lfRadius != sfPreviousRadius ||
+                lfVelX != sfPreviousVelX || lfVelY != sfPreviousVelY ||
+                lfVelZ != sfPreviousVelZ;
+            if (lbChanged && suGeometryWitnessRows < 40u &&
+                CgsDev::Log::gpDebugPrint != nullptr)
+            {
+                sbGeometryWitnessHasPrevious = true;
+                sbPreviousSoupReady = lbSoupReady;
+                siPreviousRequestedLevels = miNumLevels;
+                sfPreviousSoupDistance = lfSoupDistance;
+                sbPreviousDrawWorld = mbDrawPolySoups;
+                sbPreviousDrawAabbs = mbDrawSoupAabbs;
+                sbPreviousDrawEdges = mbDrawEdgeCosines;
+                sbPreviousSweepTest = mbTestSweptSphere;
+                sfPreviousPosX = lfPosX;
+                sfPreviousPosY = lfPosY;
+                sfPreviousPosZ = lfPosZ;
+                sfPreviousRadius = lfRadius;
+                sfPreviousVelX = lfVelX;
+                sfPreviousVelY = lfVelY;
+                sfPreviousVelZ = lfVelZ;
+                ++suGeometryWitnessRows;
+                CgsDev::Log::gpDebugPrint->AppendFormat(
+                    "[geometry-witness] owner=triangle sample=%u soup_lists=%d map_levels=%d requested_levels=%d memory_bytes=%d soup_distance=%.6f draw_world=%u draw_aabbs=%u draw_edges=%u sweep_test=%u pos_x=%.6f pos_y=%.6f pos_z=%.6f radius=%.6f vel_x=%.6f vel_y=%.6f vel_z=%.6f\n",
+                    suGeometryWitnessRows, liSoupLists, liMapLevels, miNumLevels, miMemUse, lfSoupDistance,
+                    static_cast<unsigned>(mbDrawPolySoups),
+                    static_cast<unsigned>(mbDrawSoupAabbs),
+                    static_cast<unsigned>(mbDrawEdgeCosines),
+                    static_cast<unsigned>(mbTestSweptSphere),
+                    lfPosX, lfPosY, lfPosZ, lfRadius, lfVelX, lfVelY, lfVelZ);
+            }
+        }
     }
 
     // ARTIST 0x828BF8C0. The world pass supplies a null 2D renderer; this
