@@ -23,6 +23,12 @@ RESOURCE_SUPPORT_CPP = (
     "src/GameShared/GameClasses/System/Resource/CgsBaseResourcePtr.cpp",
     "src/GameShared/GameClasses/System/Resource/CgsResourcePtr.cpp",
     "src/GameShared/GameClasses/System/Resource/CgsResourceHandle.cpp",
+    "src/GameShared/GameClasses/System/Resource/CgsResourceBasePool.cpp",
+    "src/GameShared/GameClasses/System/Resource/CgsResourceTypeBase.cpp",
+    "src/GameShared/GameClasses/System/Resource/CgsResourceID.cpp",
+    "src/GameShared/GameClasses/Core/CgsStringUtils.cpp",
+    "src/GameShared/GameClasses/Development/CgsStrStream.cpp",
+    "vendor/renderware/src/rw/BaseResourceDescriptor.cpp",
 )
 RESOURCE_SUPPORT_SOURCES = tuple(REPO / path for path in RESOURCE_SUPPORT_CPP)
 FIXTURE_CPP = Path(__file__).with_name("TrafficFlowtypeOverride.cpp")
