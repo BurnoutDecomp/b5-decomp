@@ -584,7 +584,7 @@ namespace CgsResource
     // requester as receiver id 4, which is the id GameDataModule's internal drain (and every X360
     // receiver-side consumer) switches on. Only the tags the PC pool module emits are mapped; unmapped
     // tags pass through unchanged (their producers land with their own passes).
-    void ResourceModule::ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut)
+    void ResourceModule::ProcessPoolOutputResponses(const PoolIO::OutputBuffer* lpPoolOut)
     {
         const PoolIO::OutputBuffer::PoolOutputQueue* lpQ =
             static_cast<const PoolIO::OutputBuffer&>(*lpPoolOut).GetPoolOutputQueue();
