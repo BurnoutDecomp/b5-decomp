@@ -360,12 +360,24 @@ namespace CgsGui
                 break;
 
             case 61:
-            case 62:
-                // FLAG (deferred stores): the guest cycles a 0..4 counter (61, module
-                // +166996) and stores the asserted spacing value (62, +167000) -- both
-                // land in the un-modelled tail of mAptAux (past the render handler).
-                // Reproduce them when those AptAux members gain named homes.
+                // The original text-effect cycle still needs its canonical owner method.
+                // Event 62 below uses the adjacent existing spacing owner.
                 break;
+
+            case 62:
+            {
+                // ARTIST 0x8285FF18..3C: flat f32 payload, original assert-and-continue.
+                const f32* lpSpacingEvent = reinterpret_cast<const f32*>(lpEvent);
+                if (!lpSpacingEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpSpacingEvent",
+                        "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.cpp", 545);
+                    CgsDev::Assert::EndAssert();
+                }
+                mAptAux.DebugChangeFontSpacing(*lpSpacingEvent);
+                break;
+            }
 
             // ⭐ [hud F4 2026-09-06] the 204/212/213/214/215/223 case block that stood here
             // is GONE, and its absence is the console's shape: ProcessIncomingViewEvents

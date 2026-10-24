@@ -117,6 +117,9 @@ namespace CgsGui
         // CgsAptAux.cpp; DWARF: LoadFlashAnimation(const char*, int32_t).
         void LoadFlashAnimation(const char* lpacFileName, s32 liTargetLevel);
 
+        // DecFIGS CgsAptAux.h:398; ARTIST 0x8285FF38..3C inlines the handler's store.
+        void DebugChangeFontSpacing(f32 lfSpacingMultiplier);
+
         // X360 0x82848E50 (CgsGui::AptAux::InitializeApt) -- the keystone Apt runtime
         // bring-up AptAux::Prepare runs after AptAux::Construct: build the AptUpdate /
         // AptCreateTarget param blocks, then in order AptAllocatorInitialize ->
