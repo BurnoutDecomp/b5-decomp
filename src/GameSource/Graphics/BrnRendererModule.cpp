@@ -1218,6 +1218,10 @@ namespace
 
 void BrnRendererModule::Construct()
 {
+    // ARTIST8240A7C0: bind the actual typed GlobalGraphics wrapper.
+    // Its original backing owner remains separate from the retained native arenas.
+    mpGraphicsAllocator = BrnResource::GetGraphicsAllocator();
+
     // ARTIST8240B43C..8240B710: preserve registration order, white RGBA,
     // and the original refresh-budget percentages (WorldOpaque is raw23.0).
     // This belongs here, after DebugManager::Construct, not in the C++ ctor.
