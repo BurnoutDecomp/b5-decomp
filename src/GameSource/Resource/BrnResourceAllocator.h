@@ -73,9 +73,17 @@ private:
 class LinearResourceAllocator : public rw::IResourceAllocator
 {
 public:
+    // ARTIST82666C48/4C inlines these two original member stores.
+    void Construct(rw::LinearResourceAllocator* lpAllocator, const char* lpcName);
+
     rw::ResourceDescriptor GetCapacity() const;
     rw::ResourceDescriptor GetCurrentUsage() const;
     const rw::Resource&    GetLinearHeapBase() const;
+
+protected:
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
+    void DoFree(const rw::Resource& lrResource) override;
+    void DoFreeDisposable(rw::Resource& lrResource) override;
 
 private:
     rw::LinearResourceAllocator* mpLinearAllocator;
@@ -103,6 +111,9 @@ inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
 // Accessor for the global debug allocator (asserts the backing allocator exists).
 // X360: returns &Allocators::mGlobalDebugAllocator. DECLARATION-ONLY here.
 HeapResourceAllocator* GetDebugAllocator();
+// Genuine public wrapper; distinct from the retained native allocation helper.
+LinearResourceAllocator* GetGraphicsAllocator();
+void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
 
 // The GameData general resource allocator the loading-screen module loads carve from (SoundModule
 // etc.). [PC-LEAF / allocator gate] The X360 builds one allocator per bank in GameDataModule::
@@ -136,6 +147,8 @@ public:
 
     // The startup memory-map/initial-default-allocator chain (ARTIST 0x82664728).
     static void InitMemoryMap();
+    // ARTIST82666B70; original global owner, not invoked by native startup.
+    static void ConstructGlobalGraphicsMemory();
 
     // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
     // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
@@ -146,6 +159,11 @@ public:
     static rw::IResourceAllocator* GetGlobalGraphicsAllocator();
 
 private:
+    friend LinearResourceAllocator* GetGraphicsAllocator();
+    static rw::Resource mGlobalGraphicsMemory;
+    static rw::ResourceDescriptor mGlobalGraphicsMemoryDescriptor;
+    static rw::LinearResourceAllocator* mpInternalGraphicsAllocator;
+    static LinearResourceAllocator mGlobalGraphicsAllocator;
     static DefaultLinearAllocator mInitialDefaultAllocator;
 };
 
