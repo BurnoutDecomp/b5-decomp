@@ -1,3 +1,4 @@
+#include <cstddef> // original pointer-free snapshot layout
 #pragma once
 
 #include "types.hpp"
@@ -27,7 +28,7 @@ namespace CgsModule { struct IOBufferStack; }            // the manager Construc
 //
 // FLAG (semantic parity, NOT byte-exact full object): the render-payload member TYPES that have no
 // committed home yet (DispatchThreadUpdateData, ParticleRenderData, BrnCrashTriangleCache,
-// CappedInterThreadEventQueue, SnapShotRequest) are modelled here as opaque/minimal complete types
+// CappedInterThreadEventQueue) are modelled here as opaque/minimal complete types
 // -- their true internal size/layout is UNKNOWN. They are embedded BY VALUE so that &member yields
 // the correct pointer type for the accessor return (the accessor bodies return &member / forward to
 // a member method). The X360 32-bit byte offsets (this+16 mParticleData, this+0x38A0
@@ -54,6 +55,24 @@ namespace CgsModule { struct IOBufferStack; }            // the manager Construc
 
 namespace BrnGame
 {
+    // DecFIGS BrnDispatchThreadInputBuffer.h:49..56; ARTIST823CBA40..68.
+    // Actual namespace-owned request, not a nested one-byte placeholder.
+    struct SnapShotRequest
+    {
+        f32 mfStartX;
+        f32 mfStartY;
+        f32 mfWidth;
+        f32 mfHeight;
+        bool mbTakeSnapShot;
+    };
+    static_assert(sizeof(SnapShotRequest) == 20, "original four-float/byte snapshot request");
+    static_assert(offsetof(SnapShotRequest, mfStartX) == 0 &&
+                  offsetof(SnapShotRequest, mfStartY) == 4 &&
+                  offsetof(SnapShotRequest, mfWidth) == 8 &&
+                  offsetof(SnapShotRequest, mfHeight) == 12 &&
+                  offsetof(SnapShotRequest, mbTakeSnapShot) == 16,
+                  "original scalar snapshot lanes and request byte");
+
     // DWARF h:68 -- struct BrnGame::DispatchThreadInputBuffer : public IOBuffer (IOBuffer here is
     // CgsModule::IOBuffer, the committed shared base).
     struct DispatchThreadInputBuffer : public CgsModule::IOBuffer
@@ -63,14 +82,6 @@ namespace BrnGame
         // CgsModule::VariableEventQueue<16384,16>::Append<16384,16>(source). Reused by name; the
         // template's Append<SRCBUF,SRCALIGN> deduces <16384,16> from the source type.
         typedef CgsModule::VariableEventQueue<16384, 16> CappedInterThreadEventQueue;
-
-        // FLAG (ad-hoc opaque): SnapShotRequest has no committed home yet. Modelled as a by-value
-        // opaque so &mSnapShotRequest yields the correct pointer type for GetSnapShotRequest. True
-        // size/layout UNKNOWN; replaced when its canonical home lands.
-        struct SnapShotRequest
-        {
-            u8 maStorage[1];   // FLAG: opaque, true size unknown
-        };
 
         // ---- particle data ---------------------------------------------------------------
         // GetParticleData @ 0x8227F4F0 / DWARF h:97 (const) -- assert read-lock, hand back the

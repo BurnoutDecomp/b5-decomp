@@ -192,7 +192,7 @@ namespace BrnGame
 
     // GetSnapShotRequest() @ 0x823B4690 (DWARF h:134, NON-const). Write-lock, return
     // &mSnapShotRequest (+0x999C).
-    DispatchThreadInputBuffer::SnapShotRequest* DispatchThreadInputBuffer::GetSnapShotRequest()
+    SnapShotRequest* DispatchThreadInputBuffer::GetSnapShotRequest()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mSnapShotRequest;
@@ -284,7 +284,9 @@ namespace BrnGame
         {
             mabEnvMapFaceRender[ liFace ] = false;
         }
-        std::memset(&mSnapShotRequest, 0, sizeof(mSnapShotRequest));  // the take flag (+0x99AC) = 0
+        // ARTIST823C5C28 clears only the actual take byte. The four float
+        // values are owned by the request writer before it arms this flag.
+        mSnapShotRequest.mbTakeSnapShot = false;
         mbCalibrationUnfriendlyEnablePostFx = true;       // +0x99BB = 1
         mhCalibrationTextureHandle.Clear();               // +0x9994/+0x9998 = 0 (ResourceHandle::Clear)
         mbIsDiskError = false;                            // +0x99BD = 0
