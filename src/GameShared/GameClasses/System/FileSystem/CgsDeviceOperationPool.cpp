@@ -19,16 +19,38 @@ extern "C" long RtlDeleteCriticalSection(void* lpCriticalSection);
 
 namespace CgsFileSystem
 {
-    // Construct/Destruct — the X360 split this pool's bring-up between the DeviceManager ctor
-    // (RtlInitializeCriticalSection on mFutex + the Semaphore subobject ctor) and Add-
-    // PhysicalDevice (zero the used-flags + Semaphore::Init count 0). Here it is consolidated:
-    // init the lock, clear the slot table + sequence counter. mOperationCount (the vendor
-    // EA::Thread::Semaphore subobject) is created count-0 by its own member ctor.
+    // FLAG PC-platform leaf: retain the existing host critical-section storage/API.
+    // Its constructor keeps the original lock-before-semaphore birth order.
+    OperationFutex::OperationFutex()
+    {
+        RtlInitializeCriticalSection(this);
+    }
+
+    // Inlined in ARTIST828F0C90: this does not create an OS semaphore yet.
+    OperationPool::OperationPool()
+        : mOperationCount(nullptr, false)
+    {
+    }
+
+    // Inlined in ARTIST828F9650..96AC: no lock reconstruction or FIFO reset.
     void OperationPool::Construct()
     {
-        RtlInitializeCriticalSection(&mFutex);
+        RtlEnterCriticalSection(&mFutex);
         for (s32 liIndex = 0; liIndex < KI_MAX_OPERATIONS; ++liIndex)
             mabUsedOperations[liIndex] = false;
+        EA::Thread::SemaphoreParameters lParams(0, true, nullptr);
+        lParams.mInitialCount = 0;
+        lParams.mbIntraProcess = true;
+        lParams.mName[0] = '\0';
+        mOperationCount.Init(&lParams);
+        RtlLeaveCriticalSection(&mFutex);
+    }
+
+    // FLAG PC-platform leaf: retain the native manager's eight ready queues and zero
+    // sequence counters before its singleton is published. Called once at native birth.
+    void OperationPool::ConstructNativePC()
+    {
+        Construct();
         muNextOperationNumber = 0;
     }
 

@@ -45,12 +45,15 @@ namespace CgsFileSystem
     // matches the X360's RtlEnterCriticalSection(poolBase).
     struct OperationFutex
     {
+        OperationFutex(); // initializes the existing host critical section
         u8 maCriticalSection[64];
     };
 
     struct OperationPool
     {
-        void Construct();
+        OperationPool(); // original deferred-semaphore subobject construction
+        void Construct(); // original registration-time flags/semaphore initialization
+        void ConstructNativePC(); // retained native sequence-counter initialization
         void Destruct();
 
         // @ 0x828E9828 — under the lock, claim the first free slot, copy the operation
