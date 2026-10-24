@@ -4,6 +4,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsIntervalList.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsSceneSweeper.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // [case witness] bounded RenderWorld readbacks
+
+#include <cstdlib> // [case witness] opt-in read-only interval owner diagnostics
 
 namespace CgsSceneManager
 {
@@ -83,6 +86,56 @@ namespace CgsSceneManager
     // ARTIST 0x828B6708.
     void SceneSweeperDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
     {
+        // [case witness] Read-only typed interval counts and actual component dispatch.
+        // Inert unless BRN_DEBUG_GEOMETRY_WITNESS is set; log first observation,
+        // stored control changes and first owner/list eligibility observations. The
+        // full16 schedule is bounded by 7 changed tuples + 1 initial row + 3 readiness
+        // observations (owner plus two lists); the11-row cap is exact.
+        static const bool sbGeometryWitnessEnabled =
+            std::getenv("BRN_DEBUG_GEOMETRY_WITNESS") != nullptr;
+        static bool sbGeometryWitnessHasPrevious = false;
+        static u32 suGeometryWitnessRows = 0;
+        static bool sbLoggedOwnerReady = false;
+        static bool sbLoggedDynamicReady = false;
+        static bool sbLoggedInactiveReady = false;
+        static bool sbPreviousDrawDynamic = false;
+        static bool sbPreviousDrawInactive = false;
+        static f32 sfPreviousDrawDistance = 0.0f;
+        if (sbGeometryWitnessEnabled)
+        {
+            const bool lbOwnerReady = mpSceneSweeper != nullptr;
+            const u32 luDynamicIntervals = lbOwnerReady
+                ? mpSceneSweeper->GetDynamicIntervalList().GetNumIntervals() : 0u;
+            const u32 luInactiveIntervals = lbOwnerReady
+                ? mpSceneSweeper->GetInactiveIntervalList().GetNumIntervals() : 0u;
+            const bool lbDynamicNonEmpty = luDynamicIntervals != 0u;
+            const bool lbInactiveNonEmpty = luInactiveIntervals != 0u;
+            const bool lbReadinessChanged = (lbOwnerReady && !sbLoggedOwnerReady) ||
+                (lbDynamicNonEmpty && !sbLoggedDynamicReady) ||
+                (lbInactiveNonEmpty && !sbLoggedInactiveReady);
+            const bool lbChanged = !sbGeometryWitnessHasPrevious || lbReadinessChanged ||
+                mbRenderDynamicBoxes != sbPreviousDrawDynamic ||
+                mbRenderInactiveBoxes != sbPreviousDrawInactive ||
+                mfDrawDistance != sfPreviousDrawDistance;
+            if (lbChanged && suGeometryWitnessRows < 11u &&
+                CgsDev::Log::gpDebugPrint != nullptr)
+            {
+                sbGeometryWitnessHasPrevious = true;
+                sbLoggedOwnerReady = sbLoggedOwnerReady || lbOwnerReady;
+                sbLoggedDynamicReady = sbLoggedDynamicReady || lbDynamicNonEmpty;
+                sbLoggedInactiveReady = sbLoggedInactiveReady || lbInactiveNonEmpty;
+                sbPreviousDrawDynamic = mbRenderDynamicBoxes;
+                sbPreviousDrawInactive = mbRenderInactiveBoxes;
+                sfPreviousDrawDistance = mfDrawDistance;
+                ++suGeometryWitnessRows;
+                CgsDev::Log::gpDebugPrint->AppendFormat(
+                    "[geometry-witness] owner=sweeper sample=%u owner_ready=%u dynamic_intervals=%u inactive_intervals=%u draw_dynamic=%u draw_frozen=%u draw_distance=%.6f\n",
+                    suGeometryWitnessRows, static_cast<unsigned>(lbOwnerReady),
+                    luDynamicIntervals, luInactiveIntervals,
+                    static_cast<unsigned>(mbRenderDynamicBoxes),
+                    static_cast<unsigned>(mbRenderInactiveBoxes), mfDrawDistance);
+            }
+        }
         if (mbRenderDynamicBoxes)
         {
             RenderIntervalList(lpDisplay, &mpSceneSweeper->GetDynamicIntervalList(),
