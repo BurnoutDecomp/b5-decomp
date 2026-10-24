@@ -141,6 +141,39 @@ namespace BrnResource
     // bundle/filesystem), then carve banks/pools/allocators. Re-enters at the current stage if
     // a sub-step is not yet ready. (The X360 then runs DLC stages 16-18+ and the AttribSys/HUD/
     // popup prepares - DEFERRED here; the machine completes after the allocator stage.)
+    // FLAG PC-platform leaf: validate the existing native prepare/publication owner.
+    // The caller holds this output's read lock. No allocator is created or substituted.
+    const GameDataIO::AllocatorList* GameDataModule::GetPreparedRendererAllocatorsPC(
+        const GameDataIO::OutputBuffer* lpOutput) const
+    {
+        if (!lpOutput)
+            return nullptr;
+        const GameDataIO::AllocatorList* const lpPublished = lpOutput->GetAllocatorList();
+        const s32 liSlot = mAllocatorList.maiAllocatorMap[31];
+        const s32 liSlotCount = static_cast<s32>(
+            sizeof(mAllocatorList.mapRWGeneralAllocators) /
+            sizeof(mAllocatorList.mapRWGeneralAllocators[0]));
+        const bool lbValid = mePrepareStage == E_PREPARE_DONE
+            && lpPublished == &mAllocatorList
+            && liSlot >= 0 && liSlot < liSlotCount
+            && mAllocatorList.maeAllocatorType[31] == CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP
+            && mAllocatorList.mapRWGeneralAllocators[liSlot] != nullptr
+            && mAllocatorList.mapRWGeneralAllocators[liSlot] == mapGeneratedRWGeneralAllocators[liSlot];
+        if (std::getenv("BRN_RENDER_PREPARE_DIAG"))
+        {
+            char lacLine[384];
+            std::snprintf(lacLine, sizeof(lacLine),
+                "[renderer-prepare] GameData=%p output=%p memberList=%p publishedList=%p stage=%d bank31Slot=%d allocator=%p valid=%d\n",
+                static_cast<const void*>(this), static_cast<const void*>(lpOutput),
+                static_cast<const void*>(&mAllocatorList), static_cast<const void*>(lpPublished),
+                static_cast<int>(mePrepareStage), liSlot,
+                lbValid ? static_cast<const void*>(mAllocatorList.mapRWGeneralAllocators[liSlot]) : nullptr,
+                lbValid ? 1 : 0);
+            CgsDev::Log::WriteToLog(lacLine);
+        }
+        return lbValid ? lpPublished : nullptr;
+    }
+
     bool GameDataModule::Prepare(void* lpInputBuffer, void* lpOutputBuffer)
     {
         mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare

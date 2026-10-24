@@ -38,6 +38,23 @@ public:
                                 const renderengine::Texture*, const renderengine::Texture*,
                                 const BrnShaderConstantsFrame*);                                // :71
 
+    // FLAG PC-platform leaf: inspect completed geometry without changing its ownership.
+    // Only call after the renderer's existing one-shot sky owner reports completion.
+    struct PreparedGeometryPC
+    {
+        const void* mpMainVertexHeader;
+        const void* mpMainIndexHeader;
+        const void* mpCubeVertexHeader;
+        const void* mpCubeIndexHeader;
+        DrawIndexedParameters mMainDraw;
+        DrawIndexedParameters mCubeDraw;
+    };
+    PreparedGeometryPC GetPreparedGeometryPC() const
+    {
+        return {mpMainVertexBuffer, mpMainIndexBuffer, mpCubeVertexBuffer, mpCubeIndexBuffer,
+                mMainDrawParameters, mCubeDrawParameters};
+    }
+
 private:
     // BrnSkyDomeManager.h:78
     float RaySphereDistance(const rw::math::fpu::Vector3Template<float>& lDirection,
