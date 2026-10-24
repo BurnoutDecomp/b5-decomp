@@ -4645,7 +4645,7 @@ void GuiModule::Destruct()
     void GuiModule::BridgeFromViewToOutput()
     {
         CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
-        mpOutputBuffer->Append(mCustomRendererManager.GetOutputEventQueue());
+        mpOutputBuffer->Append(*mCustomRendererManager.GetOutputEventQueue());
         mpOutputBuffer->Append(mViewModule.GetOutputEventQueue());
     }
 
