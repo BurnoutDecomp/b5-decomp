@@ -625,7 +625,24 @@ namespace BrnGui
     // { EActiveRaceCarIndex, f32 metres } (DWARF :6136 / :6126).
     struct GuiLeaptVehicleEvent { u8 maData[1]; s32 GetEventType() const { return 393; } };  // id 393 size 1 (raw; size not GuiEvent-shaped)
     struct GuiLocalPlayerEliminatedEvent { u8 maData[1]; s32 GetEventType() const { return 451; } };  // id 451 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiMugshotControlEvent : public CgsGui::GuiEvent<325> { u8 maPayload[12]; };  // id 325 size 24 (12B GuiEvent header + opaque payload)
+    // DecFIGS BrnGuiEventTypeDefs.h:1052..1056. The target publishes the
+    // field-only 24-byte object (ARTIST823D0984/88). Existing producers already
+    // fill these offsets from the event's own address; no wrapper is prepended.
+    struct GuiMugshotControlEvent : public CgsModule::Event
+    {
+        CgsID mRoadId;
+        BrnGameState::GameStateModuleIO::EMugshotResponse meMugshotResponse;
+        BrnGameState::GameStateModuleIO::EImageType meImageType;
+        EActiveRaceCarIndex meOpponentARCI;
+        bool mbLocalPlayerIsAggressor;
+        s32 GetEventType() const { return 325; }
+    };
+    static_assert(sizeof(GuiMugshotControlEvent) == 24 &&
+                  offsetof(GuiMugshotControlEvent, meMugshotResponse) == 8 &&
+                  offsetof(GuiMugshotControlEvent, meImageType) == 12 &&
+                  offsetof(GuiMugshotControlEvent, meOpponentARCI) == 16 &&
+                  offsetof(GuiMugshotControlEvent, mbLocalPlayerIsAggressor) == 20,
+                  "original mugshot payload fields");
     // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4392 {miCount,
     // meNearMissType}. The manager's RecvEvent case 384 reads both words and treats
     // NEAR_MISS_TYPE 2/3 (the two crash-escape flavours) as "crash escape" (@0x82420BF0).
@@ -1231,7 +1248,18 @@ namespace BrnGui
                   "GUI replay registration carries one full native pointer");
     struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4
     struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
-    struct GuiResponseTimeDateString : public CgsGui::GuiEvent<594> { u8 maPayload[24]; };  // id 594 size 36
+    // ARTIST82529428..82529538 constructs a request word followed by a
+    // formatted 32-byte string.8250C1EC/F0 publishes 36 bytes on id594. The two
+    // member spellings are host projections; no DecFIGS declaration is bound here.
+    struct GuiResponseTimeDateString : public CgsModule::Event
+    {
+        u32 muRequestID;
+        char macString[32];
+        s32 GetEventType() const { return 594; }
+    };
+    static_assert(sizeof(GuiResponseTimeDateString) == 36 &&
+                  offsetof(GuiResponseTimeDateString, macString) == 4,
+                  "original request-word/date-string reply");
     struct GuiSaveLoadImageExportRequested { u8 maData[17]; s32 GetEventType() const { return 361; } };  // id 361 size 17
     // X360 instantiation @0x824940E8: record { 20, 323, 12, type, params[16] }, ch40,
     // 32 bytes (GameBridgeGUIToX case 323 memcpy's 20 -- the old maPayload[8] was short).
