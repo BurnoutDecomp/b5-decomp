@@ -1042,6 +1042,10 @@ static bool IsCrashSweepStartReleasedPC()
         char lacSlot[32];
         const DWORD luLength = GetEnvironmentVariableA("BRN_HARNESS_SLOT", lacSlot, sizeof(lacSlot));
         if (luLength == 0u || luLength >= sizeof(lacSlot)) return 0u;
+        for (const char* lpDigit = lacSlot; *lpDigit != '\0'; ++lpDigit)
+        {
+            if (*lpDigit < '0' || *lpDigit > '9') return 0u;
+        }
         char* lpEnd = nullptr;
         const unsigned long luSlot = std::strtoul(lacSlot, &lpEnd, 10);
         if (lpEnd == lacSlot || *lpEnd != '\0' || luSlot == 0u || luSlot > 65535u) return 0u;
