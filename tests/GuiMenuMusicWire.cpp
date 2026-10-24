@@ -37,8 +37,8 @@ namespace
     using SoundQueue = CgsModule::VariableEventQueue<8192, 16>;
     using MusicMessage = CgsSound::Io::Message<BrnSound::MusicOnMenuStreamData>;
 
-    static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20,
-                  "the actual GUI-23 record is a 20-byte header plus 8-byte payload");
+    static_assert(sizeof(Menu23Fixture::PcMenuStreamRecord) == 20,
+                  "the retained PC GUI-23 record is a 12-byte header plus 8-byte payload");
     static_assert(sizeof(Menu23Fixture::MusicOnMenuStreamEvent) == 20,
                   "BootLegal's actual GUI-155 compatibility record is 20 bytes");
     static_assert(sizeof(BrnSound::MusicOnMenuStreamData) == 8,
@@ -182,7 +182,7 @@ namespace
         }
         else if (std::strcmp(lpacShape, "full23") == 0)
         {
-            CgsGui::GuiEventPlayMusicOnMenuStream lRecord(luHash, luFlagA != 0, luFlagB != 0);
+            Menu23Fixture::PcMenuStreamRecord lRecord(luHash, luFlagA != 0, luFlagB != 0);
             lbQueued = QueueGuiBody(arGuiQueue, arSoundQueue,
                 static_cast<const CgsModule::Event*>(&lRecord), 23,
                 static_cast<s32>(sizeof(lRecord)), lScenario);
@@ -214,7 +214,7 @@ namespace
         // The logical event is 8 bytes. Keep the old consumer's legacy +12/+16/+17
         // reads inside a real type-23 object and use valid bool representations there.
         // The declared size remains 8, so GetGuiPayload follows the raw-body path.
-        CgsGui::GuiEventPlayMusicOnMenuStream lPaddedCarrier(luHash, false, false);
+        Menu23Fixture::PcMenuStreamRecord lPaddedCarrier(luHash, false, false);
         u8 lau8Raw[8] = {};
         std::memcpy(lau8Raw, &luHash, sizeof(luHash));
         lau8Raw[4] = luFlagA;
