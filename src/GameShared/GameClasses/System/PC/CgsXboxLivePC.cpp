@@ -411,6 +411,7 @@ namespace
 {
     const u32 KU_ERROR_SUCCESS           = 0u;
     const u32 KU_ERROR_NO_MORE_FILES     = 18u;
+    const u32 KU_ERROR_NOT_SUPPORTED     = 50u;
     const u32 KU_ERROR_INVALID_PARAMETER = 87u;
     const u32 KU_ERROR_IO_INCOMPLETE     = 996u;
     const u32 KU_ERROR_IO_PENDING        = 997u;
@@ -805,10 +806,14 @@ extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long /*dwUserIndex*/)
     return KU_ERROR_SUCCESS;
 }
 
-// [PC platform leaf] Opens the guide's sign-in panes; 0, nothing shown.
+// [PC platform leaf] Opens the guide's sign-in panes. There is no guide on PC, so nothing is
+// shown and the call fails (ERROR_NOT_SUPPORTED). Returning success claimed a UI was up:
+// SaveLoadSystem::SignIn would then latch "system UI open" and WaitForUIClosed would park the
+// boot-up for a close notification PC never sends. The other caller (BrnOnlinePlay) ignores
+// the result.
 extern "C" u32 XShowSigninUI(u32 /*luPanes*/, u32 /*luFlags*/)
 {
-    return KU_ERROR_SUCCESS;
+    return KU_ERROR_NOT_SUPPORTED;
 }
 
 // [PC platform leaf] Opens a player's gamer card in the guide; 0, nothing shown.
