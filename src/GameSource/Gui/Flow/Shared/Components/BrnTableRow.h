@@ -90,6 +90,12 @@ namespace BrnGui
             E_TABLEROWSTATES_COUNT                 = 7,
         };
 
+        // The default constructor the X360 inlines into Table::Table @0x82500F40: it writes
+        // the row's vptr (off_82073140, row+0x00) and its GuiComponent vptr (row+0x18), then
+        // vector-constructs the 16 cells. FLAG PC divergence: the row+0x00 store is
+        // reproduced by hand into the modelled mppVTable (see BrnTableRow.cpp).
+        TableRow();
+
         // @0x824E6F00 -- build the row: validate its arguments, run the base Construct, clear
         // the cell array, then build miNumColumns cells (names formatted "<cellname>_<idx>").
         // PARAM ORDER/ROLES are taken from the X360 ASM (the DWARF labels positions 3 and 7

@@ -235,7 +235,8 @@ namespace BrnGui
                 // slot 7 on the table == SelectableGroup::Add. The row IS the group's item on
                 // the console (TableRow derives from SelectableGroup, whose head is a
                 // Selectable) -- the same reinterpret the committed Table::GetSelectable uses
-                // on the way back out.
+                // on the way back out. The base group then dispatches Selectable virtuals on
+                // the row through its vptr, which TableRow::TableRow makes live on PC.
                 Add(reinterpret_cast<Selectable*>(&lrRow));
             }
         }
