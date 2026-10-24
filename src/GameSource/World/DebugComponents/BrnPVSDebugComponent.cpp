@@ -6,6 +6,13 @@
 //   PVSDebugComponent::RenderPVS               @ 0x827C6E58
 //   PVSDebugComponent::RenderPvsCentrePosition @ 0x827BFB08
 
+#if defined(_WIN32)
+// FLAG PC-platform leaf: load winuser first, then preserve the original DrawText method name.
+// Same Windows macro exclusion already used by CgsAssertManager.cpp; no renderer alias/body change.
+#include <Windows.h>
+#undef DrawText
+#endif
+
 #include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"
 
 #include "GameSource/Game/BrnGameModule.hpp"                                                   // BrnGame::sbShowStreamStallMessage
