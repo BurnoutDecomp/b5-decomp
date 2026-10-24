@@ -47,6 +47,7 @@ from fxgs_common import Tree, definition, compile_and_run  # noqa: E402
 
 SOUND_CPP = "src/GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.cpp"
 BOOT_CPP = "src/GameSource/Gui/Flow/HUD/States/BrnBootLegal.cpp"
+STATE_HEADER = "src/GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 STRSTREAM_CPP = "src/GameShared/GameClasses/Development/CgsStrStream.cpp"
 CONTROL_REV = "b595d61d2440ca94d61aa8fa610ab0bf6048cc66"
 
@@ -119,9 +120,20 @@ def extract_branch(tree) -> tuple[str, dict[str, str]]:
     """Return generated C++ using exact production declarations, helpers and case 23 arm."""
     sound = read_required(tree, SOUND_CPP)
     boot = read_required(tree, BOOT_CPP)
+    state_header = read_required(tree, STATE_HEADER)
+    # Select the actual retained record declaration in this source revision.
+    # The newer original payload has reclaimed the old name and is only 8 bytes.
+    carrier_names = ("GuiMenuStreamRecordPC", "GuiEventPlayMusicOnMenuStream")
+    carriers = [name for name in carrier_names
+                if len(re.findall(r"(?m)^\s*struct " + re.escape(name) +
+                                  r"\s*:\s*public GuiEvent<23>(?=\s*\{)", state_header)) == 1]
+    if len(carriers) != 1:
+        raise ValueError("requires one actual 20-byte PC GUI-23 record declaration")
+    pc_carrier_alias = "using PcMenuStreamRecord = CgsGui::" + carriers[0] + ";"
     process = definition(sound, "void SoundLogicModule::ProcessGuiEvents(")
     case23 = definition(process, "case 23:")
     snippets = {
+        "pc_carrier_alias": pc_carrier_alias,
         "wire_header": definition(sound, "struct GuiEventWireHeader") + ";",
         "get_gui_payload": definition(sound, "const u8* GetGuiPayload("),
         "event_s32_at": definition(sound, "s32 EventS32At("),
@@ -135,7 +147,7 @@ def extract_branch(tree) -> tuple[str, dict[str, str]]:
     }
     generated = [
         "// Generated from the selected production revision by run_gui_menu_music_wire.py.",
-        "namespace Menu23Fixture {", snippets["channel155_record"], "}",
+        "namespace Menu23Fixture {", snippets["pc_carrier_alias"], snippets["channel155_record"], "}",
         "namespace BrnSound { namespace Module { namespace {",
         snippets["wire_header"], snippets["get_gui_payload"],
         snippets["event_s32_at"], snippets["event_u8_at"],
@@ -148,7 +160,8 @@ def extract_branch(tree) -> tuple[str, dict[str, str]]:
         "    switch (liType) {", snippets["case23"], "    }",
         "}", "}} // namespace BrnSound::Module",
     ]
-    source_hashes = {SOUND_CPP: sha256_text(sound), BOOT_CPP: sha256_text(boot)}
+    source_hashes = {SOUND_CPP: sha256_text(sound), BOOT_CPP: sha256_text(boot),
+                     STATE_HEADER: sha256_text(state_header)}
     source_hashes.update({"extracted." + name: sha256_text(text)
                           for name, text in snippets.items()})
     return "\n\n".join(generated) + "\n", source_hashes
