@@ -22,7 +22,28 @@ namespace CgsResource
     }
 
     // Inlined in PoolModule::Construct, ARTIST 828FC0B8.
+    // Inlined at ARTIST828FC4D8..828FC530 before ScratchPool::InitPool.
+    // InitPool owns the later working cursor/hash/distribution state.
     void ScratchPool::Construct()
+    {
+        mpEntries = nullptr;
+        mpEntryIds = nullptr;
+        muNumEntries = 0;
+        muMaxEntries = 0;
+        mePrepareStage = E_PREPARESTAGE_START;
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        miBankId = -1;
+        mAllocator.Construct();
+        mGatherStream.Construct();
+        mScatterStream.Construct();
+        mGatherStream.SetBytesPerUpdate(10485760);
+        mScatterStream.SetBytesPerUpdate(10485760);
+        for (s32 li = 0; li < KI_NUM_TYPES; ++li)
+            maResourceAllocators[li].Construct();
+    }
+
+    // FLAG PC-platform leaf: previous native body retained after its explicit rename.
+    void ScratchPool::ConstructNativePC()
     {
         mAllocator.Construct();
         for (s32 li = 0; li < KI_NUM_TYPES; ++li)
