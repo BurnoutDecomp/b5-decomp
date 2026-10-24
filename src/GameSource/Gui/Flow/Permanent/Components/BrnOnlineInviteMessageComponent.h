@@ -14,17 +14,18 @@ namespace BrnFlapt { struct FileRef; }
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   BrnGui::OnlineInviteMessageComponent::DoTransitionComplete @ 0x824162E0
 //
-// MINIMAL-SLICE class: only DoTransitionComplete is in scope, so this models ONLY the
-// three members it touches (the showing-state at +0x30, a secondary state at +0x34, and
-// a bool flag at +0x68). The full component (its GuiComponent base, the message text /
-// timers, the rest of the state machine) is uncommitted and OMITTED. FLAG: minimal-slice
-// class. Offsets are not load-bearing on the 64-bit host; members are declared by name.
+// Complete original state/timer/queue owner. The three original data arrays and
+// unnamed argument storage remain genuine unresolved definitions; this recovery
+// is unactivated and not link-ready. Members use native host placement by name.
 
 namespace BrnGui
 {
     class GuiCache;
 
-    class OnlineInviteMessageComponent : public BrnFlaptComponent
+    // DecFIGS h48: transparent original intermediate base, no extra data.
+    struct BaseOnlineInviteMessageComponent : public BrnFlaptComponent {};
+
+    class OnlineInviteMessageComponent : public BaseOnlineInviteMessageComponent
     {
     public:
         // The component's showing-state machine. The transition-complete callback asserts
@@ -60,9 +61,9 @@ namespace BrnGui
 
         // 0x824162E0 -- called when the transition-out animation finishes: assert we were
         // transitioning out, drop to HIDDEN, and (if the secondary state indicates a
-        // pending dismiss, value 4) latch the dismissed flag. Returns the X360 r3 result
-        // (`this` on the non-assert path); kept as void* to mirror the guest _DWORD* return.
-        void* DoTransitionComplete();
+        // pending dismiss, value4) latch the finish event. The original logical
+        // return type is void; r3 is ignored residue, not an output object.
+        void DoTransitionComplete();
 
         // --- Construct / Prepare exercised by the AlwaysAvailableComponentsManager ----
         // Declared here (additive) so the manager TU compiles against the real home
@@ -76,13 +77,33 @@ namespace BrnGui
         // PrepareFlapt site: r4="OnlineInvite_mc", r5=FileRef.
         void Prepare(const char* lpcMovieClipName, const BrnFlapt::FileRef& lFile);
 
-        // ARTIST82439FF0; DecFIGS BrnOnlineInviteMessageComponent.cpp:158.
-        // Genuine provider is not yet recovered: no replacement/trap definition.
+        // ARTIST82439FF0; DecFIGS cpp158. Complete original provider.
         void Update();
+        void ShowMessage(const char* lpcName, EOnlineNotificationChyronType leType);
+        void ShowMessage(s32 liCount, EOnlineNotificationChyronType leType);
 
         static void TransitionCompleteCallback(void* lpUserData, u16 luFrame);
 
     private:
+        bool IsMessageAllowed() const;
+        void AllowMessages();
+        void DisallowMessages();
+        void RemoveMessage();
+
+        enum EOnlineNotificationChyronSize
+        {
+            E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL = 0,
+            E_ONLINE_NOTIFICATION_CHYRON_SIZE_BIG = 1,
+        };
+        static const s32 KI_MAX_NAME_LENGTH = 32;
+        static const f32 KF_MESSAGE_DURATION;
+        static const f32 KF_TIME_DELAY_BEFORE_ALLOWING_MESSAGES;
+        // Genuine ARTIST data owners; declarations only until actual values and
+        // pointed strings are recovered. Never initialize from notification names.
+        static EOnlineNotificationChyronSize KAE_TYPE_SIZE_CONVERSION[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT]; // 8204C594
+        static const char* KAPC_TEXT_FIELDS_STINGS_0[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT]; // 82F24F8C
+        static const char* KAPC_TEXT_FIELDS_STINGS_1[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT]; // 82F24FA4
+
         GuiCache* mpGuiCache;
         BrnFlapt::TextFieldRef maTextFields[2];
         f32 mfTimeToRemoveCurrentMessage;
