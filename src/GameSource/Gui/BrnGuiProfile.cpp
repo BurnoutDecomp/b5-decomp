@@ -87,17 +87,20 @@ namespace
         return true;
     }
 
-    // FLAG PC-platform leaf: SaveLoadSystem's signed-in-user word (X360 system+0x210;
-    // -1 == none). The PC build has one implicit local user; report "signed in" slot 0.
-    s32 SaveLoadSystem_GetSignedInUserIndex(const CgsGui::SaveLoadSystem& /*lrSystem*/)
+    // SaveLoadSystem's signed-in-user word (X360 system+0x210; -1 == none), read inline by
+    // SigninStateChanged @0x827E2F40. It used to report a permanent "signed in" slot 0, which
+    // made every boot-up load and save the profile even when no controller (so no user) was
+    // bound -- not what the console does when the title is passed with A.
+    s32 SaveLoadSystem_GetSignedInUserIndex(const CgsGui::SaveLoadSystem& lrSystem)
     {
-        return 0;
+        return lrSystem.GetSignedInUserIndex();
     }
 
-    // FLAG PC-platform leaf: CgsGui::SaveLoadSystem::SetSignedInUserIndex (X360-attested
-    // via SigninStateChanged @0x827E2F40) is not in the committed recon; no-op.
-    void SaveLoadSystem_SetSignedInUserIndex(CgsGui::SaveLoadSystem& /*lrSystem*/, s32 /*liUserIndex*/)
+    // CgsGui::SaveLoadSystem::SetSignedInUserIndex (X360 0x8284C210), called by
+    // SigninStateChanged @0x827E2F40.
+    void SaveLoadSystem_SetSignedInUserIndex(CgsGui::SaveLoadSystem& lrSystem, s32 liUserIndex)
     {
+        lrSystem.SetSignedInUserIndex(liUserIndex);
     }
 
     // (CgsGui::SaveLoadSystem::Bootup -- the profile boot-up task -- is now reconstructed in
@@ -141,12 +144,11 @@ namespace
         return 0;
     }
 
-    // UIClosed's forward into the save/load system (X360 consumes the pending
-    // member-callback pair at system+0x128) targets private un-accessored state of the
-    // committed recon; no-op until the memcard prompts land.
-    // FLAG PC-platform leaf: save/load-system internal continuation (see above).
-    void SaveLoadSystem_NotifyUIClosed(CgsGui::SaveLoadSystem& /*lrSystem*/)
+    // UIClosed's forward into the save/load system: the X360 (@0x827E0F70) consumes the
+    // pending member-callback pair at system+0x128 that WaitForUIClosed parked.
+    void SaveLoadSystem_NotifyUIClosed(CgsGui::SaveLoadSystem& lrSystem)
     {
+        lrSystem.RunPendingUIClosed();
     }
 
     // ---- CgsGui::SystemUserProfile boundary (private members the X360 pokes) -------
