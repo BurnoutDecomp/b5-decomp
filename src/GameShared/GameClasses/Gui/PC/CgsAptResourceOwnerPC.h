@@ -11,4 +11,6 @@ namespace CgsResource::PCAptOwnership
     bool Release(const void* lpFile);
     bool IsBundleLoaded(Pool* lpPool, const char* lpacPath);
     Entry* FindBundleLead(Pool* lpPool, const char* lpacPath);
+    void VisitBundleEntries(Pool* lpPool, const char* lpacPath,
+                            void (*lpVisitor)(Entry*, void*), void* lpContext);
 }

@@ -2904,15 +2904,15 @@ void GuiModule::Destruct()
         mResourceInputBuffer.GetLoadRequestsNonConst()->Clear();
         mResourceInputBuffer.UnlockForWrite();
 
-        // 4. Bridge every notification to ModelIO, where both the FSM controller and
-        //    GuiCache observe it. Apt movie load notifications (request types 4..7) also
+        // 4. Bridge request completions to ModelIO, where both the FSM controller and
+        //    GuiCache observe them. Apt movie load notifications (request types 4..7) also
         //    go to the VIEW input buffer as
         //      view event 14, where the REAL CgsGui::ViewModule::ProcessIncomingLoadNotification
         //      @0x8285BD30 registers each header (AddAptData). Phase 2 routes the movie-slot
         //      bundle IO through the module, so these replace the AptRuntimeHost's
         //      PopPendingLoadNotification ring for the flow movie.
-        //    The dual delivery is the ARTIST contract: the cache owns resource state while
-        //    ViewModule owns Apt registration.
+        //    The dual delivery is the ARTIST contract for actual request completions.
+        //    PC-only id-zero bundled-clip registrations belong to the view alone.
         mResourceOutputBuffer.LockForRead();
         mModelOutputBuffer.LockForWrite();
         mViewInputBuffer.LockForWrite();
@@ -2949,8 +2949,16 @@ void GuiModule::Destruct()
                             lpEvent)->meRequestType);
                     lbAptUnload = (liReqType >= 4 && liReqType <= 7);
                 }
-                mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(
-                    lpEvent, liId, liSize);
+                // FLAG PC-platform leaf: id-zero Apt records register bundled clips
+                // with the view. They are not completions of a model resource request.
+                // Copying every registration here overflows ModelIO's 4KB queue after
+                // 85 native-width records when several bundles complete together.
+                const bool lbViewOnlyRegistration = lbAptMovie &&
+                    reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent)
+                        ->muLoadRequestId == 0;
+                if (!lbViewOnlyRegistration)
+                    mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(
+                        lpEvent, liId, liSize);
                 // Dynamic components observe completion directly (ARTIST
                 // LargeCarComponent 0x8241B7A8/0x8241B868). These local module
                 // notifications bypass DispatchInboundGuiEvents, so fan them

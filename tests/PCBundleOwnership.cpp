@@ -168,6 +168,37 @@ int main() {
     BundleLoader loader;
     {
         FixturePool pool;
+        File("notify_a.bundle", {901, 902}, 30);
+        File("notify_b.bundle", {903}, 30);
+        loader.LoadBundle("notify_a.bundle", &pool, Resolve);
+        loader.LoadBundle("notify_b.bundle", &pool, Resolve);
+        std::vector<u64> visited;
+        const auto visit = [](Entry* entry, void* context) {
+            static_cast<std::vector<u64>*>(context)->push_back(entry->mID.GetHash());
+        };
+        PCAptOwnership::VisitBundleEntries(&pool, "notify_a.bundle", visit, &visited);
+        Check(visited == std::vector<u64>{901, 902}, "bundle enumeration excludes unrelated resident entries");
+        const s32 shared = loader.LoadBundle("notify_a.bundle", &pool, Resolve);
+        visited.clear();
+        PCAptOwnership::VisitBundleEntries(&pool, "NOTIFY_A.BUNDLE", visit, &visited);
+        Check(shared == 0 && visited == std::vector<u64>{901, 902},
+              "zero-new-resource reload enumerates the same shared entries");
+        visited.clear();
+        PCAptOwnership::VisitBundleEntries(&pool, "missing.bundle", visit, &visited);
+        Check(visited.empty(), "missing bundle produces no registrations");
+        loader.UnloadBundle("notify_a.bundle", &pool);
+        PCAptOwnership::VisitBundleEntries(&pool, "notify_a.bundle", visit, &visited);
+        Check(visited == std::vector<u64>{901, 902}, "remaining logical load keeps its entry list visible");
+        visited.clear();
+        loader.UnloadBundle("notify_a.bundle", &pool);
+        PCAptOwnership::VisitBundleEntries(&pool, "notify_a.bundle", visit, &visited);
+        Check(visited.empty(), "final logical unload retires the entry list");
+        PCAptOwnership::VisitBundleEntries(&pool, "notify_b.bundle", visit, &visited);
+        Check(visited == std::vector<u64>{903}, "unloading one bundle preserves another bundle's enumeration");
+        loader.UnloadBundle("notify_b.bundle", &pool);
+    }
+    {
+        FixturePool pool;
         File("a.bundle", {101, 102}); fixups.clear();
         Check(loader.LoadBundle("a.bundle", &pool, Resolve) == 2, "load two members");
         Check(pool.Used() == 3 && pool.Refs(ListId("a.bundle")) == 1, "pool owns a type-29 list");

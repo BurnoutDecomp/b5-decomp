@@ -260,6 +260,23 @@ namespace CgsResource
             }
             return nullptr;
         }
+        // FLAG PC-platform leaf: enumerate the synchronous loader's resident bundle
+        // list, including shared entries, without walking unrelated resources in its pool.
+        void VisitBundleEntries(Pool* lpPool, const char* lpacPath,
+                                void (*lpVisitor)(Entry*, void*), void* lpContext)
+        {
+            Bundle* lpBundle = Find(lpPool, lpacPath);
+            if (!lpBundle || !lpBundle->muLoads || !lpVisitor) return;
+            s32 liSlot = -1;
+            const EntryListResource* lpList = List(*lpBundle, &liSlot);
+            if (!lpList) return;
+            for (u32 i = 0; i < lpList->muNumEntries; ++i)
+            {
+                Pool* lpMemberPool = nullptr;
+                Entry* lpEntry = Member(lpPool, lpList->mIds[i], &lpMemberPool, &liSlot);
+                if (lpEntry) lpVisitor(lpEntry, lpContext);
+            }
+        }
         RetainResult Retain(const void* lpHeader, const void* lpFile)
         {
             if (!lpHeader || !lpFile) return RetainResult::Failed;
