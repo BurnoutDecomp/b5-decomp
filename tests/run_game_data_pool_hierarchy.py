@@ -47,7 +47,8 @@ def production():
     start = game.index('    namespace\n', game.index('namespace BrnResource\n'))
     end = game.index('    // "New module"', start)
     code += 'namespace BrnResource {\n' + game[start:end]
-    for signature in ('bool GameDataModule::CreateBanks(', 'bool GameDataModule::CreatePools('):
+    for signature in ('bool GameDataModule::CreateBanks(void*, void*)',
+                      'bool GameDataModule::CreatePools(void*, void*)'):
         # Only the owning class qualification changes; every production statement,
         # canonical row, counter, queue operation and host sizing call stays intact.
         code += definition(game, signature).replace('GameDataModule::', 'GameDataPoolFixture::') + '\n'
