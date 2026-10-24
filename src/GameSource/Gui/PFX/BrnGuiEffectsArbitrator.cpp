@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // native diagnostics
 #include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                    // the 495..501 events
 #include "GameSource/Gui/BrnGuiCache.h"                               // BrnGui::GuiCache::GetTime
@@ -617,6 +618,150 @@ namespace BrnGui
         default:
             return;
         }
+    }
+
+    // ARTIST825125C0; genuine caller-owned OutputBuffer overload. The selected
+    // PC queue overload below remains independent and byte-identical.
+    void EffectsArbitrator::EventUpdate(BrnUpdateSet leUpdateSet,
+        const CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
+    {
+        if (!lpGuiInputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpGuiInputBuffer != NULL",
+                "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 256);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpGuiOutputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpGuiOutputBuffer != NULL",
+                "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 257);
+            CgsDev::Assert::EndAssert();
+        }
+        const CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue =
+            lpGuiInputBuffer->GetGuiEvents();
+        if (!lpEventQueue)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEventQueue != NULL",
+                "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 265);
+            CgsDev::Assert::EndAssert();
+        }
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 liId = lpEventQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            switch (liId)
+            {
+            case 64:
+                if (!mpGuiCache)
+                {
+                    mpGuiCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+                    if (!mpGuiCache)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert("mpGuiCache",
+                            "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 280);
+                        CgsDev::Assert::EndAssert();
+                    }
+                }
+                break;
+            case 495:
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Invalid hook event message",
+                        "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 288);
+                    CgsDev::Assert::EndAssert();
+                }
+                StartHook(static_cast<const GuiPFXHookEvent*>(lpEvent));
+                break;
+            case 496:
+            {
+                const GuiPFXHookStopEvent* lpStop = static_cast<const GuiPFXHookStopEvent*>(lpEvent);
+                if (!lpStop)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpGuiPFXHookEvent != NULL",
+                        "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 297);
+                    CgsDev::Assert::EndAssert();
+                }
+                const PFXHook* lpHook = GetHookFromGUID(lpStop->muGuid);
+                if (!lpHook)
+                {
+                    lpHook = GetHookFromName(lpStop->macName);
+                    if (!lpHook)
+                    {
+                        lpHook = GetHookFromName("2dflash");
+                        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "EffectsArbitrator::EventUpdate: Effect name: \""
+                                << lpStop->macName << "\" or ID \"" << lpStop->muGuid
+                                << "\" not found in bundle\n";
+                        }
+                        if (!lpHook)
+                        {
+                            CgsDev::Assert::BeginAssert();
+                            CgsDev::Assert::FireAssert("2dflash effect is missing!",
+                                "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 313);
+                            CgsDev::Assert::EndAssert();
+                        }
+                    }
+                }
+                if (lpHook->IsMenu())
+                    StopMenuHook(); // ARTIST82512820: first menu-stop call.
+                else
+                    StopHook(lpHook);
+                StopMenuHook();     // ARTIST82512828/83C: original shared tail.
+                break;
+            }
+            case 497:
+                StopMenuHook();
+                break;
+            case 498:
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Invalid start background hook event.",
+                        "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 334);
+                    CgsDev::Assert::EndAssert();
+                }
+                StartBackgroundHook(static_cast<const GuiPFXStartBackgroundHookEvent*>(lpEvent));
+                break;
+            case 499:
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Invalid stop background hook event.",
+                        "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 343);
+                    CgsDev::Assert::EndAssert();
+                }
+                StopBackgroundHook(static_cast<const GuiPFXStopBackgroundHookEvent*>(lpEvent));
+                break;
+            case 500:
+            {
+                GuiPFXHookEnumeration lEnumeration;
+                lEnumeration.miHookNameCount = -1;
+                if (!CgsResource::NULLResourcePtr.IsEqual(&mpHookInfo))
+                {
+                    lEnumeration.miHookNameCount = mpHookInfo->miHookCount;
+                    for (s32 liHook = 0; liHook < mpHookInfo->miHookCount && liHook < 100; ++liHook)
+                        lEnumeration.mapHookNames[liHook] = mpHookInfo->GetHook(liHook)->macName;
+                }
+                lpGuiOutputBuffer->AddGuiOutEvent(lEnumeration);
+                break;
+            }
+            default:
+                break;
+            }
+            liId = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        }
+        if (mpGuiCache && (leUpdateSet & 8) != 0)
+            UpdateHooks();
     }
 
     // ------------------------------------------------------------------------------------
