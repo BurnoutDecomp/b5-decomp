@@ -1,6 +1,7 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // original player-name formatter
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // original movie acquire request
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h" // collision-world event 493
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h" // collision-world swap requests/replies
@@ -42,6 +43,7 @@
 
 // Existing PC platform providers in System/PC/CgsXboxLivePC.cpp.
 extern "C" void* XNotifyCreateListener(unsigned long long luAreas);
+extern "C" u32 XUserGetName(u32 luUserIndex, char* lpcUserName, u32 luNameSize);
 extern "C" int XNotifyGetNext(void* lhListener, unsigned long luFilter,
     unsigned long* lpuId, unsigned long* lpuParam);
 
@@ -1069,9 +1071,10 @@ namespace BrnGui
         // X360 GuiModule::Construct wires the shared state-access bundle here, before
         // any flow is allowed to run: ViewModule::GetAptAux/GetLanguageManager,
         // ViewModule::GetFlaptManager, and this GuiCache are the four live owners.
-        // AptAux itself is installed during Prepare below because the PC runtime host
-        // constructs that singleton there; the other three owners already exist.
+        // ARTIST 82518C5C..82518C9C binds the actual contained AptAux after the
+        // View was constructed; this pointer does not imply that Apt is prepared.
         mGuiAccessPointers.Construct();
+        mGuiAccessPointers.mpAptAux = mViewModule.GetAptAux();
         mGuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
         mGuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
         mGuiAccessPointers.SetGuiCache(&mGuiCache);
@@ -1275,6 +1278,168 @@ namespace BrnGui
         {
             std::strncpy(gacGuiToolHookName, "", 32);
             gbGuiToolStopHookRequested = true;
+        }
+    }
+
+    // ARTIST 0x82518D68. The target adds GUI output before the GameData pair:
+    // r4 publishes serialiser event 595; r5/r6 remain the actual GameData input/output.
+    // This original retry owner is unselected by the existing no-argument PC entry.
+    bool GuiModule::Prepare(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+        BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput)
+    {
+        switch (mePrepareStage)
+        {
+        case E_PREPARE_START:
+        {
+            EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+                EA::GameTalk::GameTalkManager::GetInstance(),
+                &GuiModule::GameTalkMsgHandler, "Tool.GUI");
+            CgsModule::LockBuffersForIO(lpOutput);
+            GuiReplayRegisterSerialiser lRegisterSerialiser;
+            lRegisterSerialiser.mpSerialiser = &mGuiModuleSerialiser;
+            lpOutput->AddGuiOutEvent(lRegisterSerialiser);
+            CgsModule::UnlockBuffersForIO(lpOutput);
+            [[fallthrough]];
+        }
+
+        case E_PREPARE_MEMORY:
+            mePrepareStage = E_PREPARE_MEMORY;
+            meReleaseStage = E_RELEASE_MEMORY;
+            PopulateNativeGuiConfig(lpGDMOutput);
+            [[fallthrough]];
+
+        case E_PREPARE_PARENT:
+            mePrepareStage = E_PREPARE_PARENT;
+            meReleaseStage = E_RELEASE_PARENT;
+            if (!CgsGui::GuiModule::Prepare(mGuiConfig))
+                return false;
+            [[fallthrough]];
+
+        case E_PREPARE_HUD:
+            mePrepareStage = E_PREPARE_HUD;
+            meReleaseStage = E_RELEASE_HUD;
+            if (!mHudFlow.Prepare(&mGuiAccessPointers, mGuiConfig.mpRendererAllocator,
+                    mGuiConfig.mpGuiStateAllocator, &mProfileHost.GetProfileManager()))
+                return false;
+            mHudMessageAnalyzer.SetAccessPointers(&mGuiAccessPointers);
+            [[fallthrough]];
+
+        case E_PREPARE_SCREEN:
+            mePrepareStage = E_PREPARE_SCREEN;
+            meReleaseStage = E_RELEASE_SCREEN;
+            if (!mScreenFlow.Prepare(&mGuiAccessPointers, mGuiConfig.mpRendererAllocator,
+                    mGuiConfig.mpGuiStateAllocator, mProfileHost.GetProfileManager()))
+                return false;
+            mScreenFlow.SetStreamingMode(BrnBaseFlow::E_STREAMING_CURRENT);
+            [[fallthrough]];
+
+        case E_PREPARE_OVERLAY:
+            mePrepareStage = E_PREPARE_OVERLAY;
+            meReleaseStage = E_RELEASE_OVERLAY;
+            if (!mOverlayFlow.Prepare(&mGuiAccessPointers, mGuiConfig.mpRendererAllocator,
+                    mGuiConfig.mpGuiStateAllocator))
+                return false;
+            [[fallthrough]];
+
+        case E_PREPARE_FSM_CONTROLLER:
+            mePrepareStage = E_PREPARE_FSM_CONTROLLER;
+            meReleaseStage = E_RELEASE_FSM_CONTROLLER;
+            // ARTIST stage 6 inlines this complete original provider.
+            mFsmController.Prepare(&mGuiModel, mGuiConfig.mpFSMAllocator);
+            [[fallthrough]];
+
+        case E_PREPARE_CUSTOMRENDERER_PREPARE:
+        {
+            mePrepareStage = E_PREPARE_CUSTOMRENDERER_PREPARE;
+            meReleaseStage = E_RELEASE_CUSTOMRENDERER_RELEASE;
+            const bool lbPrepared = mCustomRendererManager.Prepare(
+                mGuiConfig.mpRendererAllocator, mGuiConfig.mpTextureAllocator);
+            mViewModule.SetCustomRendererManager(
+                &mCustomRendererManager, 10, &mGuiModuleSerialiser);
+            if (!lbPrepared)
+                return false;
+            [[fallthrough]];
+        }
+
+        case E_PREPARE_MOVIE_MANAGER:
+            mePrepareStage = E_PREPARE_MOVIE_MANAGER;
+            meReleaseStage = E_RELEASE_MOVIE_MANAGER;
+            if (!mMovieManager.Prepare(lpGDMInput, lpGDMOutput, mSku.GetLanguage()))
+                return false;
+            [[fallthrough]];
+
+        case E_PREPARE_COLOUR_CALIBRATION_SCREEN:
+            mePrepareStage = E_PREPARE_COLOUR_CALIBRATION_SCREEN;
+            meReleaseStage = E_RELEASE_COLOUR_CALIBRATION_SCREEN;
+            [[fallthrough]];
+
+        case E_PREPARE_GUI_DEBUG_COMPONENT:
+            mePrepareStage = E_PREPARE_GUI_DEBUG_COMPONENT;
+            meReleaseStage = E_RELEASE_GUI_DEBUG_COMPONENT;
+            PrepareNativeDebugComponents();
+            if (!mSystemUserProfile.Prepare())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mSystemUserProfile.Prepare()",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 519);
+                CgsDev::Assert::EndAssert();
+            }
+            if (!mGuiKeyboard.Prepare(&mSystemUserProfile))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mGuiKeyboard.Prepare(&mSystemUserProfile )",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 523);
+                CgsDev::Assert::EndAssert();
+            }
+            if (!mKeyboardHost.Prepare(&mGuiKeyboard))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mKeyboardHost.Prepare(&mGuiKeyboard)",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 525);
+                CgsDev::Assert::EndAssert();
+            }
+            mbCollisionWorldInvalidateForNetworking = false;
+            mbCollisionWorldValidateForNetworking = false;
+            [[fallthrough]];
+
+        case E_PREPARE_PROFILE:
+            mePrepareStage = E_PREPARE_PROFILE;
+            meReleaseStage = E_RELEASE_PROFILE;
+            if (!mProfileHost.GetProfileManager().Prepare(mGuiConfig.mpFSMAllocator,
+                    lpGDMOutput->GetAllocatorList()->GetLinearAllocator(65)))
+                return false;
+            [[fallthrough]];
+
+        case E_PREPARE_SYSTEM_NOTIFICATIONS:
+            mePrepareStage = E_PREPARE_SYSTEM_NOTIFICATIONS;
+            meReleaseStage = E_RELEASE_SYSTEM_NOTIFICATIONS;
+            PrepareNativeSystemNotifications();
+            [[fallthrough]];
+
+        case E_PREPARE_WF_RESOURCES:
+            mePrepareStage = E_PREPARE_WF_RESOURCES;
+            if (!EnsureNativeGuiResources())
+                return false;
+            [[fallthrough]];
+
+        case E_PREPARE_WORLD_DATA_CONTROLLER:
+            mePrepareStage = E_PREPARE_WORLD_DATA_CONTROLLER;
+            if (!mWorldDataController.Prepare(lpGDMInput))
+                return false;
+            [[fallthrough]];
+
+        case E_PREPARE_DONE:
+            mePrepareStage = E_PREPARE_DONE;
+            meReleaseStage = E_RELEASE_START;
+            return true;
+
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid prepare state",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 608);
+            CgsDev::Assert::EndAssert();
+            return false;
         }
     }
 
@@ -2427,6 +2592,74 @@ void GuiModule::Destruct()
         const char* const KAPC_UPN_PLAYER_NAME_QUOTED_ID = "PLAYER_NAME_STRING_ID_Q";    // @0x8206E7C4
         const char* const KAPC_UPN_DEFAULT_NAME_ID       = "DEFAULTPLAYERNAME";          // off_82F278B4
         const char* const KAPC_UPN_DEFAULT_QUOTED_ID     = "DEFAULTPLAYERNAMEQUOTED";    // off_82F278B8
+    }
+
+    // ARTIST 824F0D30; DecFIGS keeps the caller's queue parameter. The target
+    // body does not read it; Update case 507 still obtains/passes that actual queue.
+    void GuiModule::UpdatePlayerName(
+        CgsGui::ViewIO::InputBuffer::ViewStateQueue* lpViewStateQueue)
+    {
+        (void)lpViewStateQueue;
+        char lacName[32];
+        char lacQuoted[32];
+        if (XUserGetName(mSystemUserProfile.GetUserIndex(), lacName, 16) == 0)
+        {
+            mGuiAccessPointers.mpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_ID,
+                reinterpret_cast<const u8*>(lacName));
+            CgsCore::SPrintf(lacQuoted, 32, "''%s''", lacName);
+            lacQuoted[31] = 0;
+            mGuiAccessPointers.mpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_QUOTED_ID,
+                reinterpret_cast<const u8*>(lacQuoted));
+        }
+        else
+        {
+            const u8* lpcDefaultName = mGuiAccessPointers.mpLanguageManager->FindString(KAPC_UPN_DEFAULT_NAME_ID);
+            if (!lpcDefaultName)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Couldn't find default player name in string database.",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1216);
+                CgsDev::Assert::EndAssert();
+            }
+            if (static_cast<u32>(std::strlen(reinterpret_cast<const char*>(lpcDefaultName))) >= 27)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "String too long: "
+                        << (lpcDefaultName ? reinterpret_cast<const char*>(lpcDefaultName) : "<NULLSTRING>");
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+                CgsDev::Assert::EndAssert();
+            }
+            std::strncpy(lacName, reinterpret_cast<const char*>(lpcDefaultName), 27);
+            mGuiAccessPointers.mpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_ID,
+                reinterpret_cast<const u8*>(lacName));
+
+            const u8* lpcDefaultQuoted = mGuiAccessPointers.mpLanguageManager->FindString(KAPC_UPN_DEFAULT_QUOTED_ID);
+            if (!lpcDefaultQuoted)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Couldn't find default player name quoted in string database.",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1222);
+                CgsDev::Assert::EndAssert();
+            }
+            if (static_cast<u32>(std::strlen(reinterpret_cast<const char*>(lpcDefaultQuoted))) >= 31)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "String too long: "
+                        << (lpcDefaultQuoted ? reinterpret_cast<const char*>(lpcDefaultQuoted) : "<NULLSTRING>");
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+                CgsDev::Assert::EndAssert();
+            }
+            std::strncpy(lacQuoted, reinterpret_cast<const char*>(lpcDefaultQuoted), 31);
+            lacQuoted[31] = 0;
+            mGuiAccessPointers.mpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_QUOTED_ID,
+                reinterpret_cast<const u8*>(lacQuoted));
+        }
     }
 
     // @ 0x824F0D30 -- publish the live player name into the language database (see the

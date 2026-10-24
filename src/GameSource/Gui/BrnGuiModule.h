@@ -316,6 +316,13 @@ namespace BrnGui
                 && mabObservedEventIds[E_GUIFLOW_SCREEN][liEventId];
         }
 
+        // ARTIST 82518D74..88 and loading caller 823EF348..60 add GUI output
+        // before the GameData pair. This is a distinct original virtual signature;
+        // append it after existing host virtual declarations without selecting it.
+        virtual bool Prepare(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+            BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput);
+
     private:
         // The GUI debug components read the cache inline off their module pointer.
         friend struct SatNavDebugComponent;
@@ -377,6 +384,8 @@ namespace BrnGui
         // (The console passes the view-state queue as a second argument; the body never
         // reads it, so it is dropped here.)
         void UpdatePlayerName();
+        // Original queue-taking owner; no current PC caller selects it.
+        void UpdatePlayerName(CgsGui::ViewIO::InputBuffer::ViewStateQueue* lpViewStateQueue);
 
         // Selected PC GUI port: preserve the original calibration call with the
         // GameData locks owned by the frame caller.
