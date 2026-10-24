@@ -402,8 +402,8 @@ namespace BrnNetwork
             // that has no home in this tree; the log line is not reproduced.
 
             CgsGui::GuiEventNetworkConnected lConnectedEvent;
-            lConnectedEvent.maData[0] = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsFirstLogin();
-            lConnectedEvent.maData[1] = mpNetworkManager->GetServerInterface()->GetServerInfoComponent()->IsNewsUpdated();
+            lConnectedEvent.mbIsFirstLogin = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsFirstLogin();
+            lConnectedEvent.mbIsNewsUpdated = mpNetworkManager->GetServerInterface()->GetServerInfoComponent()->IsNewsUpdated();
             mpNetworkModule->AddOutputGuiEvent(lConnectedEvent);
 
             mpNetworkManager->GetNetworkInviteManager()->LogInComplete(true);
@@ -1313,8 +1313,8 @@ namespace BrnNetwork
                 BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
 
                 CgsGui::GuiEventNetworkConnected lConnectedEvent;
-                lConnectedEvent.maData[0] = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsFirstLogin();
-                lConnectedEvent.maData[1] = mpNetworkManager->GetServerInterface()->GetServerInfoComponent()->IsNewsUpdated();
+                lConnectedEvent.mbIsFirstLogin = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsFirstLogin();
+                lConnectedEvent.mbIsNewsUpdated = mpNetworkManager->GetServerInterface()->GetServerInfoComponent()->IsNewsUpdated();
                 mpNetworkModule->AddOutputGuiEvent(lConnectedEvent);
                 BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
 

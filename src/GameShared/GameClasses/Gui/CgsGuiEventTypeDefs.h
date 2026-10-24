@@ -137,10 +137,13 @@ namespace CgsGui
     };
 
     // A request for the GUI to report the current language back. DWARF :287.
-    struct GuiEventGetLanguage : public GuiEvent<31>
+    // ARTIST8250C134/138 publishes the field-only enum:4 bytes, id31.
+    struct GuiEventGetLanguage : public CgsModule::Event
     {
         CgsLanguage::ELanguage mLanguage;  // DWARF :289 (filled in by the responder)
+        s32 GetEventType() const { return 31; }
     };
+    static_assert(sizeof(GuiEventGetLanguage) == 4, "original language reply payload");
 
     // A bare request-for-language event (no payload beyond the header). DWARF :294/:652.
     struct GuiEventRequestLanguage : public GuiEvent<30>
@@ -170,7 +173,14 @@ namespace CgsGui
     // placeholder recipe: (id,size) are the two X360 AddEvent literals; size>=12&4-aligned derives
     // from GuiEvent<id>, else a raw byte struct carrying its own GetEventType()==id.
     // ============================================================================
-    struct GuiEventNetworkConnected { u8 maData[2]; s32 GetEventType() const { return 43; } };  // id 43 size 2
+    // DecFIGS h:353/354; ARTIST82566098/9C publishes2 bytes on id43.
+    struct GuiEventNetworkConnected : public CgsModule::Event
+    {
+        bool mbIsFirstLogin;
+        bool mbIsNewsUpdated;
+        s32 GetEventType() const { return 43; }
+    };
+    static_assert(sizeof(GuiEventNetworkConnected) == 2, "original connected payload");
 
     // GuiEventNetworkDisconnected -- REAL shape, measured; no longer the byte-blob
     // placeholder. It is NOT an OutputGuiEvent wrapper record: the publisher
