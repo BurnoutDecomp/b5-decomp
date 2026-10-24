@@ -865,12 +865,11 @@ namespace BrnGui
 {
     GuiModule*      gpActiveGuiModule      = 0;
 
-    // ARTIST82FB5924/25: original Update consumes and clears these two
-    // UI latches. Their genuine definitions/initial values/writers remain
-    // unresolved. Keep this source on an unactivated WIP branch; no defaults
-    // or fallback definitions are supplied by this recovery.
-    extern u8 guNativeGuiSystemUIOpened;
-    extern u8 guNativeGuiSystemUIClosed;
+    // ARTIST82FB5924/25: the XEX loader declares this span as zero-fill.
+    // Original Update consumes/clears these bytes. Runtime writers still need
+    // audit; initial-image values do not prove notification or frame readiness.
+    u8 guNativeGuiSystemUIOpened = 0;
+    u8 guNativeGuiSystemUIClosed = 0;
 
 
     // The exact eight packed colours passed to ViewModule::Construct by ARTIST

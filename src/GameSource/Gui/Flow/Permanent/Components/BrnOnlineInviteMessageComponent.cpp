@@ -64,9 +64,55 @@ void OnlineInviteMessageComponent::Prepare(
         KAC_PLAYER_NAME_COMPONENT_NAME, lpcMovieClipName, lFile);
 }
 
-// ARTIST data820046A7. Genuine argument storage remains unresolved; no
-// guessed empty-string value or null argument is supplied by this recovery.
+// ARTIST820046A7 is the file-backed NUL byte. Both table index-zero
+// entries and AllowMessages retain the same actual native character object.
 extern const char gacOnlineInviteArgument820046A7[];
+const char gacOnlineInviteArgument820046A7[] = { '\0' };
+
+namespace
+{
+    // One native object per distinct original string target. Repeated table
+    // pointers share these objects instead of relying on compiler pooling.
+    const char KAC_INVITE_GAMERTAG[] = "GAMERTAG";                       // 820298FC
+    const char KAC_INVITE_NEWS_DESC[] = "NEW_NEWS_DESC";                  // 82049D3C
+    const char KAC_INVITE_FRIENDS_COUNT[] = "ONLINE_FRIENDS_COUNT";        // 82049D4C
+    const char KAC_INVITE_START_EVENT_TEXT[] = "EZDRIVE_TO_START_EVENT_1"; // 82049D64
+    const char KAC_INVITE_NEWS_TITLE[] = "NEW_NEWS_TITLE";                // 82049D80
+    const char KAC_INVITE_FROM[] = "ONLINE_INVITE_FROM";                  // 82049D90
+    const char KAC_INVITE_PLAYING_B5[] = "ONLINE_PLAYING_B5";              // 82049DA4
+    const char KAC_INVITE_START_EVENT_TITLE[] = "EZDRIVE_TO_START_EVENT_0";// 82049DB8
+}
+
+OnlineInviteMessageComponent::EOnlineNotificationChyronSize
+OnlineInviteMessageComponent::KAE_TYPE_SIZE_CONVERSION[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT] =
+{
+    E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL,
+    E_ONLINE_NOTIFICATION_CHYRON_SIZE_BIG,
+    E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL,
+    E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL,
+    E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL,
+    E_ONLINE_NOTIFICATION_CHYRON_SIZE_BIG,
+};
+
+const char* OnlineInviteMessageComponent::KAPC_TEXT_FIELDS_STINGS_0[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT] =
+{
+    gacOnlineInviteArgument820046A7,
+    KAC_INVITE_START_EVENT_TITLE,
+    KAC_INVITE_PLAYING_B5,
+    KAC_INVITE_PLAYING_B5,
+    KAC_INVITE_FROM,
+    KAC_INVITE_NEWS_TITLE,
+};
+
+const char* OnlineInviteMessageComponent::KAPC_TEXT_FIELDS_STINGS_1[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT] =
+{
+    gacOnlineInviteArgument820046A7,
+    KAC_INVITE_START_EVENT_TEXT,
+    KAC_INVITE_GAMERTAG,
+    KAC_INVITE_FRIENDS_COUNT,
+    KAC_INVITE_GAMERTAG,
+    KAC_INVITE_NEWS_DESC,
+};
 
 const f32 OnlineInviteMessageComponent::KF_MESSAGE_DURATION = 5.0f;
 const f32 OnlineInviteMessageComponent::KF_TIME_DELAY_BEFORE_ALLOWING_MESSAGES = 1.0f;
