@@ -260,7 +260,7 @@ namespace
         mX360RemapHardDrive.Construct("/e");
         GetDeviceManager()->AddVirtualDevice(&mX360RemapDVDDrive, "d", "p_dvd", nullptr);
         GetDeviceManager()->AddVirtualDevice(&mX360RemapHardDrive, "e", "p_hdd", nullptr);
-        muNumUsedReadStreams = 0;
+        mbPrepared = false;
         mpDiskLayout = lpDiskLayout;
         CopyConstructionString(maFilePrefix, KU_MAXPREFIXFILELENGTH, lpcFilePrefix);
         mDiskCache.Construct();
