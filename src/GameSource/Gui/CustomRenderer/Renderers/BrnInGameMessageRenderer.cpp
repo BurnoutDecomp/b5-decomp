@@ -1430,7 +1430,23 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
 
     // The frame's timestep comes off the cache head (GuiEventTimeInfo's delta -- the
     // console reads *(cache + 0) here and decrements the state clock by it).
-    const f32 lfTimeStep = mpGuiCache->GetTimeStep();
+    f32 lfTimeStep = mpGuiCache->GetTimeStep();
+
+    // FLAG PC divergence: the console renders once per GUI update, so this step is the time
+    // since the last render. With DecoupleSimulation the PC renders every display frame
+    // while the GUI (and its time info) still updates once per 60 Hz simulation step, so the
+    // same step was applied several times between two updates: at 300 Hz the ticker
+    // scrolled -- and every state clock ran -- five times too fast (issue #39). Consume each
+    // GUI update's step once: a render with no new GUI time advances nothing.
+    if (lfTimeStep > 0.0f)   // a step means a time info has arrived, so GetTime is valid
+    {
+        const f32 lfGuiTime = mpGuiCache->GetTime();
+        if (lfGuiTime == mfLastConsumedGuiTimePC)
+            lfTimeStep = 0.0f;
+        else
+            mfLastConsumedGuiTimePC = lfGuiTime;
+    }
+
     mfTimeRemainingInState -= lfTimeStep;
 
     // The 2D command buffer (set slot 0 -- the console v15 = *a2).
