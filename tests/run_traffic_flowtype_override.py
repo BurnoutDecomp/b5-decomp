@@ -90,7 +90,7 @@ def extracted_bodies(tree):
     return "\n\n".join(("namespace BrnTraffic {", flow, sink, *callback_bodies, "}"))
 
 
-def numeric(revision, output_dir=None):
+def numeric(revision, output_dir=None, shared_provider_revision=None):
     try:
         bodies = extracted_bodies(Tree(revision))
     except (ValueError, IndexError) as error:
@@ -107,13 +107,15 @@ def numeric(revision, output_dir=None):
     if output_dir is not None:
         source_objects = {
             path: subprocess.check_output(
-                ["git", "-C", str(REPO), "rev-parse", f"{revision}:{path}"],
+                ["git", "-C", str(REPO), "rev-parse",
+                 f"{shared_provider_revision if path in RESOURCE_SUPPORT_CPP else revision}:{path}"],
                 text=True,
             ).strip()
             for path in (MODULE_CPP, STREAMER_CPP, *RESOURCE_SUPPORT_CPP)
         }
         extraction = {
-            "schema": 1, "source_revision": revision,
+            "schema": 2, "source_revision": revision,
+            "shared_provider_revision": shared_provider_revision,
             "source_objects": source_objects,
             "include_name": "traffic_flowtype_override.inc",
             "generated_include_lf_sha256": hashlib.sha256(bodies.encode("utf-8")).hexdigest(),
@@ -139,8 +141,19 @@ def main():
             parser.error("--output-dir must be fresh; existing artifacts are never overwritten")
         output.mkdir(parents=True)
 
-    candidate = numeric(args.rev, output / "candidate" if output is not None else None)
-    old_return = numeric(OLD_RETURN_REV, output / "baseline" if output is not None else None)
+    # Both variants compile the same actual checkout providers. Only the extracted
+    # selector/sink bodies vary; record that distinction instead of attributing
+    # baseline provider objects to files that were never compiled.
+    shared_provider_revision = subprocess.check_output(
+        ["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True).strip()
+    candidate_revision = subprocess.check_output(
+        ["git", "-C", str(REPO), "rev-parse", args.rev], text=True).strip()
+    if candidate_revision != shared_provider_revision:
+        parser.error("candidate revision must match the checkout supplying the real shared providers")
+    candidate = numeric(candidate_revision, output / "candidate" if output is not None else None,
+                        shared_provider_revision)
+    old_return = numeric(OLD_RETURN_REV, output / "baseline" if output is not None else None,
+                         shared_provider_revision)
     negative_control_detected = (
         old_return is not None
         and old_return[0] == NUMERIC_CHECKS
