@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib> // [case witness] opt-in read-only geometry owner diagnostics
+#include <cstdio> // [case witness] full bounded row, outside the engine256-byte formatter
 
 namespace
 {
@@ -324,7 +325,8 @@ namespace CgsSceneManager
                 sfPreviousVelY = lfVelY;
                 sfPreviousVelZ = lfVelZ;
                 ++suGeometryWitnessRows;
-                CgsDev::Log::gpDebugPrint->AppendFormat(
+                char lacGeometryLine[1024];
+                const int liGeometryLineLength = std::snprintf(lacGeometryLine, sizeof(lacGeometryLine),
                     "[geometry-witness] owner=triangle sample=%u soup_lists=%d map_levels=%d requested_levels=%d memory_bytes=%d soup_distance=%.6f draw_world=%u draw_aabbs=%u draw_edges=%u sweep_test=%u pos_x=%.6f pos_y=%.6f pos_z=%.6f radius=%.6f vel_x=%.6f vel_y=%.6f vel_z=%.6f\n",
                     suGeometryWitnessRows, liSoupLists, liMapLevels, miNumLevels, miMemUse, lfSoupDistance,
                     static_cast<unsigned>(mbDrawPolySoups),
@@ -332,6 +334,10 @@ namespace CgsSceneManager
                     static_cast<unsigned>(mbDrawEdgeCosines),
                     static_cast<unsigned>(mbTestSweptSphere),
                     lfPosX, lfPosY, lfPosZ, lfRadius, lfVelX, lfVelY, lfVelZ);
+                if (liGeometryLineLength > 0 && liGeometryLineLength < static_cast<int>(sizeof(lacGeometryLine)))
+                    CgsDev::Log::WriteToLog(lacGeometryLine);
+                else
+                    CgsDev::Log::WriteToLog("[geometry-witness-error] owner=triangle format_error=1\n");
             }
         }
     }
