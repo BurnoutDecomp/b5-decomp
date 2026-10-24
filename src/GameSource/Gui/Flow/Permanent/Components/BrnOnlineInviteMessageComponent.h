@@ -98,8 +98,8 @@ namespace BrnGui
         static const s32 KI_MAX_NAME_LENGTH = 32;
         static const f32 KF_MESSAGE_DURATION;
         static const f32 KF_TIME_DELAY_BEFORE_ALLOWING_MESSAGES;
-        // Genuine ARTIST data owners; declarations only until actual values and
-        // pointed strings are recovered. Never initialize from notification names.
+        // Genuine ARTIST data owners. Definitions in this component's TU are
+        // bound to original XEX array bytes and exact pointed strings.
         static EOnlineNotificationChyronSize KAE_TYPE_SIZE_CONVERSION[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT]; // 8204C594
         static const char* KAPC_TEXT_FIELDS_STINGS_0[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT]; // 82F24F8C
         static const char* KAPC_TEXT_FIELDS_STINGS_1[E_ONLINENOTIFICATIONCHYRONTYPE_COUNT]; // 82F24FA4
