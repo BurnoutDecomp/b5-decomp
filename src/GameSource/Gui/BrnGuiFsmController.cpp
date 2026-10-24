@@ -1,3 +1,4 @@
+#include <cstring> // original fixed-size FSM record transfers
 // BrnGuiFsmController.cpp
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 
@@ -71,8 +72,11 @@ void GuiFsmController::Construct()
         mbFsmTransitionPending[luFlow] = false;
         mbModeManagerWaitingForResponse[luFlow] = false;
 
-        mFsmToChangeTo[luFlow] = GuiEventRunFsm();
-        mCurrentFsm[luFlow] = mFsmToChangeTo[luFlow];
+        // ARTIST824F19A0/A4/B4: these stores belong to this owner.
+        mFsmToChangeTo[luFlow].mFsmId = CgsIDCompress(KAC_BLANK_FSM_ID);
+        mFsmToChangeTo[luFlow].meFlowToUse = E_GUIFLOW_COUNT;
+        mFsmToChangeTo[luFlow].meFsmToRun = E_GUI_HUD_NUMSFSMS;
+        std::memcpy(&mCurrentFsm[luFlow], &mFsmToChangeTo[luFlow], sizeof(GuiEventRunFsm));
         macNameToUnload[luFlow][0] = 0;
     }
 
@@ -148,7 +152,8 @@ void GuiFsmController::RunFsm(const GuiEventRunFsm* lpEvent)
     const GuiFlow leFlow = static_cast<GuiFlow>(liFlow);
     mbFsmTransitionPending[leFlow] = true;
     mbModeManagerWaitingForResponse[leFlow] = true;
-    mFsmToChangeTo[leFlow] = *lpEvent;
+    // Original three-qword transfer also carries any unwritten legacy selector.
+    std::memcpy(&mFsmToChangeTo[leFlow], lpEvent, sizeof(GuiEventRunFsm));
 
     if (maeFlowLoadState[leFlow] == E_FLOWLOADSTAGE_UNLOADED)
     {
@@ -179,7 +184,7 @@ void GuiFsmController::RunQueuedFsm(GuiFlow leFlowToUse)
     maeFlowLoadState[leFlowToUse] = E_FLOWLOADSTAGE_TRIGGERLOAD;
     mbFsmTransitionPending[leFlowToUse] = false;
 
-    mCurrentFsm[leFlowToUse] = mFsmToChangeTo[leFlowToUse];
+    std::memcpy(&mCurrentFsm[leFlowToUse], &mFsmToChangeTo[leFlowToUse], sizeof(GuiEventRunFsm));
     mFsmToChangeTo[leFlowToUse].mFsmId = CgsIDCompress(KAC_BLANK_FSM_ID);
     mFsmToChangeTo[leFlowToUse].mInitialStateId = CgsIDCompress(KAC_BLANK_FSM_ID);
     mFsmToChangeTo[leFlowToUse].meFsmToRun = E_GUI_HUD_NUMSFSMS;

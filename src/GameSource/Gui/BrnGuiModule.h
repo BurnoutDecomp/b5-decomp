@@ -153,6 +153,21 @@ namespace BrnGui
         void Destruct() override;
         void Update() override;
 
+        // ARTIST82527A58: ten explicit arguments. Replay is true for the
+        // regular owner and false during the loading Prepare retry. Unselected;
+        // never combine this base/model/view seat with the retained PC update.
+        virtual void Update(BrnUpdateSet lUpdateSet,
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+            CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer,
+            CgsGui::ViewIO::InputBuffer* lpViewInputBuffer,
+            BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+            bool lbUpdateReplay);
+
+
         // ARTIST 0x8251A3D0; native owner of GUI pre-world validation, profile-upgrade requests,
         // movie-data acquire publication, and the shared GUI model's PreWorld update.
         void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
@@ -219,7 +234,14 @@ namespace BrnGui
         // own out-event queue (33 GuiEventLoadingScreenState lives there) onto the module out.
         void BridgeFromViewToOutput();
 
+        // Original callback; valid only while native Update borrows its output.
         static void FlaptSoundTriggerCallback(void* lpUserData,
+                                              const char* lpcComponentName,
+                                              const char* lpcSwfName,
+                                              const char* lpcActionName,
+                                              const char* lpcLabel);
+
+        static void FlaptSoundTriggerCallbackPC(void* lpUserData,
                                               const char* lpcComponentName,
                                               const char* lpcSwfName,
                                               const char* lpcActionName,
@@ -383,6 +405,9 @@ namespace BrnGui
         // record BrnGui::BootProfile::OnLeave posts when the profile boot completes).
         // (The console passes the view-state queue as a second argument; the body never
         // reads it, so it is dropped here.)
+        void PerformInvite(CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+                           CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
+        void HandleControllerPressed(const CgsModule::Event* lpEvent);
         void UpdatePlayerName();
         // Original queue-taking owner; no current PC caller selects it.
         void UpdatePlayerName(CgsGui::ViewIO::InputBuffer::ViewStateQueue* lpViewStateQueue);
@@ -457,10 +482,12 @@ namespace BrnGui
         // buffer itself lives on the update IO stack and is re-created per sub-step).
         CgsGui::CgsGuiModuleIO::InputBuffer* mpGuiEventInputBuffer;
 
-        // ARTIST's callback publishes GuiAudioTriggerEvent through GuiModule's current
-        // output buffer. The PC scheduler exposes that channel as mGuiOutQueue, so retain
-        // the same explicit producer pointer instead of bypassing the event route.
-        CgsModule::VariableEventQueue<18432, 16>* mpOutputBuffer;
+        // Actual native borrowed output (DecFIGS h:539; ARTIST949188).
+        CgsGui::CgsGuiModuleIO::OutputBuffer* mpOutputBuffer;
+
+        // FLAG PC-platform leaf: existing persistent queue/callback owner.
+        // This pointer still names mGuiOutQueue; no second queue is introduced.
+        CgsModule::VariableEventQueue<18432, 16>* mpHostOutputQueue;
 
         // ARTIST82518BB0..BD0: this derived receiver owns its inline 1024-byte backing.
         // Separate owners handle collision validation and GameData replies.
@@ -616,6 +643,10 @@ namespace BrnGui
         // @0x825238E0 write the same pair after their own Autosave calls.
         // ARTIST Construct clears the networking request latches; input Update events and the
         // car-pool validator own the traffic-pool latch transitions.
+        // DecFIGS BrnGuiModule.h:563/564/565; native invite/lobby owners.
+        bool mbPerformingInvite;
+        bool mbInviteRequiresLogin;
+        bool mbStartLobbyDueToPlayerJoin;
         bool mbCollisionWorldInvalidateForNetworking;
         bool mbCollisionWorldValidateForNetworking;
         bool mbTrafficPoolEmptied;

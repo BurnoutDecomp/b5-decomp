@@ -45,6 +45,15 @@ namespace CgsGui
         s32 GetEventType() const { return EventTypeId; }
     };
 
+    // ARTIST8250C35C/360 publishes this empty tag as one unwritten byte.
+    // PerformInvite82511428/30 selects this actual payload, not a12-byte header.
+    template <>
+    struct GuiEvent<89> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 89; }
+    };
+    static_assert(sizeof(GuiEvent<89>) == 1, "original invite/login tag89");
+
     // ARTIST AddGuiEvent<GuiEvent<91>> posts one unwritten byte (0x823D2660: AddEvent id 91,
     // size 1), so this tag is the empty event representation rather than the generic 12-byte
     // header above. The local object remains uninitialized, matching the original payload.

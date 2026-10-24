@@ -76,6 +76,10 @@ namespace BrnGui
         // PrepareFlapt site: r4="OnlineInvite_mc", r5=FileRef.
         void Prepare(const char* lpcMovieClipName, const BrnFlapt::FileRef& lFile);
 
+        // ARTIST82439FF0; DecFIGS BrnOnlineInviteMessageComponent.cpp:158.
+        // Genuine provider is not yet recovered: no replacement/trap definition.
+        void Update();
+
         static void TransitionCompleteCallback(void* lpUserData, u16 luFrame);
 
     private:

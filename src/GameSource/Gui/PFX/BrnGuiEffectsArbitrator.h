@@ -84,6 +84,11 @@ namespace BrnGui
         void EventUpdate(BrnUpdateSet leUpdateSet,
                          const CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                          CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+        // Original ARTIST825125C0: actual caller-owned OutputBuffer.
+        // Genuine EventUpdate/UpdateHooks publisher closure remains separate.
+        void EventUpdate(BrnUpdateSet leUpdateSet,
+                         const CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+                         CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
         // :81 @0x82503060 -- fill the renderer's two FX-events effects frames.
         void GenerateEffectFrameEvents(RendererIO::OutputBuffer* lpRenderOutput);
         // [FLAG PC bring-up] the same body on the two FX-events frames themselves. The console
