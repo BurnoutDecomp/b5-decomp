@@ -1102,18 +1102,14 @@ struct GuiOverlayFullInfoRequest : public CgsGui::GuiEvent<186>
 };
 
 // ===================================================================================
-// BrnGui::GuiOverlayCompleteEvent -- "this overlay finished" (posted by the running
-// overlay state on leave; consumed by the overlays director). DWARF home
-// BrnGuiEventTypeDefs.h:5833. EVENT-ID DIVERGENCE: the PS3 DWARF bases it on
-// GuiEvent<187>, but on X360 the overlay wire ids are shifted by two -- the full-info
-// response rides id 187 and this complete event rides id 189 (BaseOverlayState::OnLeave
-// @0x824B2DC8 posts {muHeader0=16, muEventType=189, muHeader2=16} + a 16-byte payload
-// on channel 40, 32 bytes total; GuiOverlaysDirector::Update @0x82520668 dispatches the
-// hidden notification on 189). X360 wins.
+// BrnGui::GuiOverlayCompleteEvent is the original payload, not its channel40
+// transport envelope. ARTIST824B2DF4..2E14 constructs/copies this16-byte object;
+// BridgeGuiToGame823CBA7C/88 reads CgsID@0 and LeaveMethod@8 after unboxing.
+// DecFIGS BrnGuiEventTypeDefs.h:5833/5846/5847 names the members and enum.
+// Its tag changed from PS3 187 to ARTIST189, as the actual producer attests.
 // ===================================================================================
 struct GuiOverlayCompleteEvent : public CgsGui::GuiEvent<189>
 {
-    // DWARF BrnGuiEventTypeDefs.h:5837 -- how the overlay was left.
     enum LeaveMethod
     {
         E_LEAVEMETHOD_NONE   = 0,
@@ -1122,21 +1118,38 @@ struct GuiOverlayCompleteEvent : public CgsGui::GuiEvent<189>
         E_LEAVEMETHOD_COUNT  = 3,
     };
 
-    CgsID       mOverlayId;     // +0x10 (DWARF h:5846; 8-aligned past the 12-byte header,
-                                //        matching the X360 record: payload offset 16)
-    LeaveMethod meLeaveMethod;  // +0x18 (DWARF h:5847)
+    CgsID       mOverlayId;
+    LeaveMethod meLeaveMethod;
 
-    // Headers per the OnLeave record: payload size 16, payload offset 16.
-    GuiOverlayCompleteEvent() : CgsGui::GuiEvent<189>(16, 16) {}
-
-    // DWARF h:5859 Construct(CgsID, LeaveMethod) -- fill the payload (the string-keyed
-    // h:5853 overload is its own ledger function; not attested in this slice).
+    // The original OnLeave inlines this exact two-member construction. Its
+    // remaining alignment bytes are deliberately not initialized.
     void Construct(CgsID lOverlayId, LeaveMethod leLeaveMethod)
     {
         mOverlayId    = lOverlayId;
         meLeaveMethod = leLeaveMethod;
     }
 };
+static_assert(sizeof(GuiOverlayCompleteEvent) == 16 &&
+              offsetof(GuiOverlayCompleteEvent, mOverlayId) == 0 &&
+              offsetof(GuiOverlayCompleteEvent, meLeaveMethod) == 8,
+              "original overlay-complete payload, independent of its wrapper");
+
+// DecFIGS BrnGuiEventTypeDefs.h:3556..3562; ARTIST823CBA44..68.
+// The original GUI output queue contains these four floats with no in-payload
+// queue header. DispatchThreadInputBuffer owns the separate SnapShotRequest.
+struct GuiSnapShotRequested : public CgsGui::GuiEvent<362>
+{
+    f32 mfStartX;
+    f32 mfStartY;
+    f32 mfWidth;
+    f32 mfHeight;
+};
+static_assert(sizeof(GuiSnapShotRequested) == 16 &&
+              offsetof(GuiSnapShotRequested, mfStartX) == 0 &&
+              offsetof(GuiSnapShotRequested, mfStartY) == 4 &&
+              offsetof(GuiSnapShotRequested, mfWidth) == 8 &&
+              offsetof(GuiSnapShotRequested, mfHeight) == 12,
+              "original four scalar snapshot-request payload");
 
 // ===================================================================================
 // BrnGui::GuiOverlayFullInfoResponse -- the full overlay description record the
