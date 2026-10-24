@@ -7,7 +7,8 @@
 // the remaining subsystems below are the ones the per-frame update spine (GameMain) drives.
 #include "GameSource/Graphics/BrnRendererModule.h"                       // BrnGraphics::BrnRendererModule
 #include "GameSource/Gui/BrnGuiModule.h"                                 // BrnGui::GuiModule (hosts the MovieManager)
-#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered (real base)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBufferedTemplate.h" // typed legacy IO owner
+#include "GameSource/Game/BrnGameModuleIO.h"
 #include "GameShared/GameClasses/System/Threads/CgsThreadLayout.h"       // CgsSystem::IThreadClass
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"              // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"// CgsDev::PerfMonCpu
@@ -189,7 +190,9 @@ namespace BrnGame
     // declaration order. Ranges of not-yet-reached members are marked "[... omitted ...]"
     // and are added as the functions that touch them are reconstructed. Semantic parity (not
     // byte-exact): real names/types/order, but omitted members mean offsets are not byte-exact.
-    class BrnGameModule : public CgsModule::ModuleSingleBuffered, public CgsSystem::IThreadClass
+    class BrnGameModule : public CgsModule::ModuleSingleBufferedTemplate<
+                             BrnGameModuleIO::InputBuffer, BrnGameModuleIO::OutputBuffer>,
+                         public CgsSystem::IThreadClass
     {
         // ARTIST AutoTest callbacks address this module's private debug manager
         // directly. Friendship is not emitted by the DecFIGS declaration dump.

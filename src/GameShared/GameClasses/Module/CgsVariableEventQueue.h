@@ -49,6 +49,10 @@ namespace CgsModule
         void MarkUnconstructed() { mbIsConstructed = false; }
 
     protected:
+        // DecFIGS h51; ARTIST game C++ ctor @0x827E5F64 initializes the owned
+        // output request queue's leading flag. This does not construct its payload.
+        BaseVariableEventQueue() : mbIsConstructed(false) {}
+
         bool mbIsConstructed;
     };
 
