@@ -13,6 +13,7 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // mounted specialization owner
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // CgsDev::Message::gxMessageFilterFlags
@@ -578,3 +579,16 @@ void GuiNetworkRemotePlayerDisconnectEvent::SetNetworkPlayerID(s32 lPlayerID)
 }
 
 } // namespace BrnGui
+
+namespace CgsGui
+{
+    // ARTIST 0x82436890. Keep the specialization with the payload type in this mounted TU.
+    template <>
+    void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(
+        BrnGui::GuiAudioTriggerEvent& lrEvent)
+    {
+        GuiEventWrapper<BrnGui::GuiAudioTriggerEvent, 40> lWrapper(lrEvent);
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                                40, static_cast<s32>(sizeof(lWrapper)));
+    }
+}
