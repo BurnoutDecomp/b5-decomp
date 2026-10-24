@@ -111,8 +111,8 @@
       "lf_bytes": 2431
     },
     "tools/build/msvc_includes.txt": {
-      "lf_sha256": "b3a03d621ff0f8f9d9126c8fdae06a18b92c545e58bb8aff5623621ef522eee0",
-      "lf_bytes": 1370
+      "lf_sha256": "e08ea1f7a1243ec960cc41d4d2137796e86a13e949cd6e59fe5baf6c82e80acc",
+      "lf_bytes": 1453
     }
   },
   "definitions": {
