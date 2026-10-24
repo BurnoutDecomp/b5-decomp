@@ -58,6 +58,7 @@ GUI_EVENT_QUEUE_CPP = "src/GameShared/GameClasses/Gui/CgsGuiEventQueue.cpp"
 QUEUE_BASE_65536_CPP = "src/GameShared/GameClasses/Module/VariableEventQueue_65536_16.cpp"
 GUI_MODULE_IO_CPP = "src/GameShared/GameClasses/Gui/CgsGuiModuleIO_OutputBuffer.cpp"
 IO_BUFFER_CPP = "src/GameShared/GameClasses/Module/CgsIOBuffer.cpp"
+ASSERT_CPP = "src/GameShared/GameClasses/Core/CgsAssert.cpp"
 
 HEADER_ROOTS = (
     "src/types.hpp",
@@ -110,9 +111,13 @@ def extract_case(tree, mode: str, legacy_tree=None) -> tuple[str, dict[str, str]
     cache_cpp = tree.read(CACHE_CPP)
     state_cpp = tree.read(STATE_CPP)
     interpreter_cpp = tree.read(INTERPRETER_CPP)
-    for path, text in ((EVENTS_CPP, events_cpp), (GUI_CPP, gui_cpp), (SOUND_CPP, sound_cpp),
-                       (CACHE_CPP, cache_cpp), (STATE_CPP, state_cpp),
-                       (INTERPRETER_CPP, interpreter_cpp)):
+    assert_cpp = tree.read(ASSERT_CPP) if mode == "candidate" else ""
+    source_pairs = [(EVENTS_CPP, events_cpp), (GUI_CPP, gui_cpp), (SOUND_CPP, sound_cpp),
+                    (CACHE_CPP, cache_cpp), (STATE_CPP, state_cpp),
+                    (INTERPRETER_CPP, interpreter_cpp)]
+    if mode == "candidate":
+        source_pairs.append((ASSERT_CPP, assert_cpp))
+    for path, text in source_pairs:
         if not text:
             raise ValueError("missing production source: " + path)
 
@@ -122,6 +127,12 @@ def extract_case(tree, mode: str, legacy_tree=None) -> tuple[str, dict[str, str]
     if not action_match:
         raise ValueError("missing production audio action-name table")
     construct = definition(events_cpp, "void GuiAudioTriggerEvent::Construct(")
+    construct_string_action = ""
+    if mode in ("candidate", "id_only"):
+        construct_string_action = definition(
+            events_cpp, "void GuiAudioTriggerEvent::Construct(const char* lpComponentName,")
+        if construct_string_action.count("GuiAudioTriggerEvent::Construct") != 1:
+            raise ValueError("cannot isolate exact four-string GUI audio constructor")
     callback = definition(gui_cpp, "void GuiModule::FlaptSoundTriggerCallback(")
     legacy_type = legacy_construct = legacy_callback = ""
     legacy_hashes = {}
@@ -188,6 +199,33 @@ static_assert(sizeof(LegacyGuiAudioTriggerEventIdOnly) == 112 &&
             "control.legacy_constructor_renamed_only": source_hash(legacy_construct),
             "control.legacy_callback_renamed_and_type_substituted": source_hash(legacy_callback),
         }
+    assert_provider = ""
+    if mode == "candidate":
+        if not assert_cpp:
+            raise ValueError("missing actual CgsAssert.cpp provider")
+        message_buffer_storage = re.search(
+            r"namespace\s*\{\s*(char gacMessageBuffer\[KI_MESSAGEBUFFERSIZE\] = \{\};)\s*\}",
+            assert_cpp)
+        deferred_assert_flag = re.search(
+            r"thread_local bool gbDeferredAssertPC = false;", assert_cpp)
+        message_buffer_globals = re.search(
+            r"char\* gpcMessageBuffer = gacMessageBuffer;\s*s32 giMessageBufferSize = KI_MESSAGEBUFFERSIZE;",
+            assert_cpp)
+        if not message_buffer_storage or not deferred_assert_flag or not message_buffer_globals:
+            raise ValueError("cannot bind MessageBufferPC backing state from CgsAssert.cpp")
+        message_buffer_constructor = definition(assert_cpp, "MessageBufferPC::MessageBufferPC()")
+        assert_provider = f'''namespace CgsDev {{
+namespace Assert {{
+namespace {{
+{message_buffer_storage.group(1)}
+{deferred_assert_flag.group(0)}
+}}
+{message_buffer_globals.group(0)}
+{message_buffer_constructor}
+}}
+}}
+'''
+
     state_construct = definition(state_cpp, "void StateInterface::Construct()")
     get_output_queue = definition(state_cpp, "GuiStackEventQueue::GuiEventQueueLarge* StateInterface::GetOutputEventQueue()")
 
@@ -299,6 +337,7 @@ struct GuiModule {{
 }};
 {legacy_module_projection}
 {construct}
+{construct_string_action}
 {callback}
 {legacy_callback}
 }}
@@ -348,12 +387,16 @@ struct SoundDecoderProjection {{
     }}
 }};
 }} }} // BrnSound::Module
+{assert_provider}
 '''
     hashes = {
         EVENTS_CPP: source_hash(events_cpp), GUI_CPP: source_hash(gui_cpp),
         SOUND_CPP: source_hash(sound_cpp), CACHE_CPP: source_hash(cache_cpp),
         STATE_CPP: source_hash(state_cpp), INTERPRETER_CPP: source_hash(interpreter_cpp),
         "extracted.construct": source_hash(construct),
+        "extracted.construct_string_action": source_hash(construct_string_action) if construct_string_action else "not-present",
+        "extracted.message_buffer_provider": source_hash(assert_provider) if assert_provider else "not-present",
+        "source.cgs_assert_cpp": source_hash(assert_cpp) if assert_cpp else "not-present",
         "extracted.callback": source_hash(callback),
         "extracted.state_construct": source_hash(state_construct),
         "extracted.get_output_queue": source_hash(get_output_queue),
