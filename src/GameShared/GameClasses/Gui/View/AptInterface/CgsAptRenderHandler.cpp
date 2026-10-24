@@ -93,7 +93,7 @@ namespace CgsGui
         // / size scale from its construction arguments).
         mpFontCollection      = nullptr;
         miTextEffect          = 0;
-        mfFontSizeScale       = 1.0f;
+        mfCharSpacingMultiplier = 1.0f;
         mpLanguageManager     = nullptr;
         mpAlternateTextColours = nullptr;
         miNumAlternateColours  = 0;
@@ -174,7 +174,7 @@ namespace CgsGui
 
         // ---- the text-layout scalar inputs (guest stores 1.0 @ +0x1A828, 0 @ +0x1A824) -------
         miTextEffect    = 0;       // CgsAptString::E_EFFECT_NONE
-        mfFontSizeScale = 1.0f;
+        mfCharSpacingMultiplier = 1.0f;
 
         // ---- the per-shape texture-state caches start empty ---------------------------------
         mWrapTextureCache.Init();
@@ -207,6 +207,13 @@ namespace CgsGui
         // FLAG: white-texture seed deferred to SetWhiteTexture (the state-library global is out of
         // this slice's scope).
         mpWhiteTexture = nullptr;
+    }
+
+    // DecFIGS CgsAptRender.h:216/285. The complete original inline setter is
+    // the single f32 store at ARTIST 0x8285FF3C. No value guard or invalidation call.
+    void AptRenderHandler::DebugChangeFontSpacing(f32 lfSpacingMultiplier)
+    {
+        mfCharSpacingMultiplier = lfSpacingMultiplier;
     }
 
     // -------------------------------------------------------------------------

@@ -404,6 +404,13 @@ namespace CgsGui
         CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxRenderTarget);
     }
 
+    // DecFIGS CgsAptAux.h:398. The view event's original inlined chain writes
+    // the existing render handler spacing owner; no Apt engine layout is involved.
+    void AptAux::DebugChangeFontSpacing(f32 lfSpacingMultiplier)
+    {
+        mRenderHandler.DebugChangeFontSpacing(lfSpacingMultiplier);
+    }
+
     // -------------------------------------------------------------------------
     // AptAux::UpdateComponents - X360 0x82850570. The per-frame component flush
     // AptAux::Update @0x82853B20 runs FIRST (perfmon "AptAux - Upd Comps"), BEFORE

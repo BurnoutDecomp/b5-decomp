@@ -81,7 +81,7 @@ namespace CgsGui
         //                       display aspect ratio (the guest's SIMD aspect-fold of the constant
         //                       0x44A0000044340000 == {1280.0, 720.0}); the two read lanes (.x/.y)
         //                       are seeded so GetStageHeight/GetStageWidth return the right values.
-        //   * mfFontSizeScale = 1.0  / miTextEffect = 0     (guest stores 1.0 @ +0x1A828, 0 @ +0x1A824)
+        //   * mfCharSpacingMultiplier = 1.0  / miTextEffect = 0     (guest stores 1.0 @ +0x1A828, 0 @ +0x1A824)
         //   * the 256-slot AptString pool is constructed against the alt-colour table
         //     (lpAlternateTextColours / liNumAlternateColours); every slot starts FREE.
         //   * the two per-shape texture-state caches start empty.
@@ -100,6 +100,10 @@ namespace CgsGui
         // Asserts the incoming pointer is non-null ("Invalid texture pointer sent to
         // AptRenderHandler::SetWhiteTexture").
         void SetWhiteTexture(void* lpWhiteTexture);
+
+        // DecFIGS CgsAptRender.h:216/285; ARTIST 0x8285FF38..3C inlines this store.
+        // Applies when a string is next prepared; it does not invalidate existing slots.
+        void DebugChangeFontSpacing(f32 lfSpacingMultiplier);
 
         // X360 0x82846780. Despite the name (the verbatim EA symbol), this does NOT return a type
         // word: it asserts the renderer-set pointer (mpImRenderers, guest +108588) is non-null
@@ -202,13 +206,14 @@ namespace CgsGui
         CgsGraphics::TextRenderer* GetTextRenderer() const { return mpTextRenderer; }
 
         // The text-layout inputs AllocateString @0x5C7260 hands to CgsAptString::Prepare: the font
-        // collection (guest RenderHandler +0x00), the text effect (guest +0x1A824), and the size
-        // scale (guest +0x1A828). Exposed by name so the AllocateString TU -- which includes the
+        // collection (guest RenderHandler +0x00), the text effect (guest +0x1A824), and the character-spacing
+        // multiplier (guest +0x1A828). Exposed by name so the AllocateString TU -- which includes the
         // REAL CgsGui::CgsAptString (text object) and so CANNOT include this header's opaque pool
         // CgsAptString -- can read them without pulling this layout in. Returned as raw words.
         const void* GetFontCollection() const { return mpFontCollection; }
         s32         GetTextEffect()     const { return miTextEffect; }
-        f32         GetFontSizeScale()  const { return mfFontSizeScale; }
+        // Existing PC callback bridge name retained; this reads character spacing, not font height.
+        f32         GetFontSizeScale()  const { return mfCharSpacingMultiplier; }
 
         // The language manager Construct held (guest RenderHandler +99776). CgsAptString::Prepare
         // resolves a $LANGID / ~ key through it (guest reads *(v14+99776) off &mRenderHandler and
@@ -318,7 +323,7 @@ namespace CgsGui
         // forwards them to CgsAptString::Prepare. Seeded by AptAux::Construct @0x5C4B6C.
         const void* mpFontCollection;   // guest +0x00 (a CgsGui::FontCollection*)
         s32         miTextEffect;       // guest +0x1A824 (CgsAptString::ETextEffects)
-        f32         mfFontSizeScale;    // guest +0x1A828
+        f32         mfCharSpacingMultiplier;    // guest +0x1A828
 
         // The language manager Construct holds (guest _R27[24944] == +99776). Carried as an
         // opaque word -- this slice's in-scope methods do not dereference it; AllocateString /
