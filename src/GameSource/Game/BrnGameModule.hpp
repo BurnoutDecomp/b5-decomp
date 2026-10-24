@@ -738,6 +738,11 @@ namespace BrnGame
         // via BrnGui::GuiModule::GetGuiOutQueue().
         void BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
 
+        // ARTIST823CB758 / DecFIGS h850: genuine borrowed OutputBuffer route.
+        // Caller owns its read lock and lifetime. The native platform launch
+        // services still require real providers before this overload is selected.
+        void BridgeGuiToGame(const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+
         // GUI/world -> GameData and GUI -> world staging bridges (source homes
         // GameBridgeGUIToX.cpp and GameBridgeWorldToX.cpp); bodied in the
         // _wBT_01 partfiles beside those homes.
@@ -1132,7 +1137,8 @@ namespace BrnGame
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
         bool mbControllerDisconnected;                              // X360 gm+10094116; event 10 latch
-        // [other h:407-410 game-start/over flags - omitted]
+        // [h:407/409: other pause/game-start flags remain omitted]
+        bool mbGameOver;                                            // h:410; ARTIST gm+10094118
         bool mbPrevStalled;                                          // h:411
         bool mbStalled;                                              // h:412
         bool mbRequestDoStepFrame;                                   // h:413
