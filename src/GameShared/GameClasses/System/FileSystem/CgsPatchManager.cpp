@@ -68,22 +68,20 @@ namespace CgsFileSystem
         return true;
     }
 
-    // @0x828F0B88. Background worker; `lpContext` is the PatchManager.
+    // ARTIST828F0B88..0C8C. The actual worker owns this main-memory scratch
+    // through the same retained allocator; its five-lane free record carries only lane0.
     intptr_t PatchManager::DirSearchThreadProc(void* lpContext)
     {
-        PatchManager* lpThis = static_cast<PatchManager*>(lpContext);
-
-        // FLAGGED: the X360 grabs a 26000-byte scratch from the allocator (vtable+16 Alloc), stores
-        // the handle into miSearchHandleCount (+0x89C), runs the walk, then frees it (vtable+20). That
-        // alloc/free pair is NOT reproduced here (the allocator interface for this manager is not yet
-        // modelled, and SearchFolder uses its own fixed stack buffers, so the overlay result is
-        // unaffected) -- left as a documented gap rather than fabricating the vtable calls. As a
-        // consequence miSearchHandleCount stays unwritten until the allocator is modelled.
+        PatchManager* const lpThis = static_cast<PatchManager*>(lpContext);
+        lpThis->mpDirectorySearchScratch = lpThis->mpAllocator->AllocateMemoryResource(
+            0x6590u, 16, nullptr);
         lpThis->SearchFolder(lpThis->maPatches[lpThis->muCurrentPatchIndex].miacFolder, "");
-
-        // Scan finished: advance to the next patch slot and clear the patching flag.
+        rw::Resource lScratchResource;
+        lScratchResource.m_baseResources[0] = lpThis->mpDirectorySearchScratch;
+        lpThis->mpAllocator->DoFree(lScratchResource);
+        const s32 liPatchIndex = lpThis->muCurrentPatchIndex;
         lpThis->mbPatching = false;
-        ++lpThis->muCurrentPatchIndex;
+        lpThis->muCurrentPatchIndex = liPatchIndex + 1;
         return 0;
     }
 
