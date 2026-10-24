@@ -2,6 +2,8 @@
 #define BRN_PROGRESS_BAR_RENDERER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
+#include <cstddef>
 #include "BrnCommonTypes.h"                                                  // Vector4, CgsID
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h" // CgsGui::CustomRenderComponentInterface (real base)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"            // CgsGraphics::Im3dRenderBufferUntex
@@ -32,22 +34,16 @@ namespace rw        { struct IResourceAllocator; }    // Prepare's cached alloca
 
 namespace BrnGui
 {
-    // The cached "render progress bar" GUI event payload. The X360 ARTIST DWARF
-    // (BrnGuiEventTypeDefs.h:2566) attests `GuiEventRenderProgressBar : GuiEvent<223>` with a
-    // single `float32_t mProgressPercent`, and in the ARTIST build the GuiEvent<N> base carries
-    // NO leading data words (DWARF: `struct GuiEvent<N> : Event {}` -- empty), so the payload's
-    // mProgressPercent sits at offset 0 of the event. This is provable from the ARTIST asm:
-    //   - Construct stores -1.0f directly at the member base (the cached "no value yet" sentinel);
-    //   - RecvEvent copies the incoming event's FIRST dword into the member's leading float.
-    // FLAG: build-version layout. The committed shared CgsGui::GuiEvent<N> (CgsGuiEvent.h) models
-    // a 12-byte {muHeader0/muEventType/muHeader2} header from a different interpretation; that
-    // would place mProgressPercent at +0x0C and contradict the ARTIST asm's offset-0 copy. To
-    // stay faithful to the ARTIST build without disturbing that shared type, the in-scope cached
-    // event is modelled here as the single float the asm actually touches.
-    struct GuiEventRenderProgressBar
+    // The existing canonical progress payload owner. ARTIST823F0914..1C
+    // queues4 bytes at225;82446DA0 reads its first float into the cached member.
+    // DecFIGS BrnGuiEventTypeDefs.h2566/2568 names mProgressPercent (PS3 tag223).
+    struct GuiEventRenderProgressBar : public CgsGui::GuiEvent<225>
     {
-        f32 mfProgressPercent;  // DWARF BrnGuiEventTypeDefs.h:2568 (ARTIST: at event offset 0)
+        f32 mProgressPercent;
     };
+    static_assert(sizeof(GuiEventRenderProgressBar) == 4 &&
+                  offsetof(GuiEventRenderProgressBar, mProgressPercent) == 0,
+                  "original four-byte progress-bar payload");
 
     class ProgressBarRenderer : public CgsGui::CustomRenderComponentInterface
     {

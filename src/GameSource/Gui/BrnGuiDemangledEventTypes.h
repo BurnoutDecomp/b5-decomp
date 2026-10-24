@@ -1229,7 +1229,14 @@ namespace BrnGui
         explicit GuiEventScoreboardRequestVariationEvent(s32 liIndex)
             : CgsGui::GuiEvent<112>(4, 12), miIndex(liIndex) {}
     };
-    struct GuiEventSetPlayer0ControllerPort { u8 maData[4]; s32 GetEventType() const { return 143; } };  // id 143 size 4
+    // Actual canonical owner: ARTIST823F0920..944 and DecFIGS817/819.
+    struct GuiEventSetPlayer0ControllerPort : public CgsGui::GuiEvent<143>
+    {
+        u32 miPort;
+    };
+    static_assert(sizeof(GuiEventSetPlayer0ControllerPort) == 4 &&
+                  offsetof(GuiEventSetPlayer0ControllerPort, miPort) == 0,
+                  "original four-byte selected controller port payload");
     struct GuiEventVoipSettings { u8 maData[4]; s32 GetEventType() const { return 474; } };  // id 474 size 4
     struct GuiImageGalleryRequestCollectedDataEvent { u8 maData[4]; s32 GetEventType() const { return 521; } };  // id 521 size 4
     struct GuiImageGalleryRequestEvent : public CgsGui::GuiEvent<517> { u8 maPayload[4]; };  // id 517 size 16

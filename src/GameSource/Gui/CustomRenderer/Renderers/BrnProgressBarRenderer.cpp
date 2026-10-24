@@ -54,7 +54,7 @@ void ProgressBarRenderer::Construct()
 {
     CgsGui::CustomRenderComponentInterface::Construct();
 
-    mRenderProgressBarEvent.mfProgressPercent = KF_NO_PROGRESS;  // guest *(this+0x14) = -1.0f
+    mRenderProgressBarEvent.mProgressPercent = KF_NO_PROGRESS;  // guest *(this+0x14) = -1.0f
     mePrepareStage  = E_PREPARESTAGE_START;                      // guest *(this+0x08) = 0
     meReleaseStage  = E_RELEASESTAGE_START;                      // guest *(this+0x0C) = 0
     mpHeapAllocator = nullptr;                                   // guest *(this+0x10) = 0
@@ -118,11 +118,11 @@ void ProgressBarRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
 
     if (liEventType == KI_EVENT_RENDER_PROGRESS_BAR)
     {
-        // asm: this->mRenderProgressBarEvent.mfProgressPercent = *(const float*)event
+        // asm: this->mRenderProgressBarEvent.mProgressPercent = *(const float*)event
         // (the incoming GuiEventRenderProgressBar's leading mProgressPercent, at event offset 0).
         const GuiEventRenderProgressBar* lpProgressEvent =
             static_cast<const GuiEventRenderProgressBar*>(lpEvent);
-        mRenderProgressBarEvent.mfProgressPercent = lpProgressEvent->mfProgressPercent;
+        mRenderProgressBarEvent.mProgressPercent = lpProgressEvent->mProgressPercent;
     }
 }
 
