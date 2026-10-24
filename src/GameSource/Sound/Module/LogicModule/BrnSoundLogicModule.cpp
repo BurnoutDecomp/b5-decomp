@@ -496,7 +496,7 @@ void SoundLogicModule::ProcessGuiEvents(
             u8 lu8PlayOverCustomSoundtrack;
             const bool lbFullChannel155Record =
                 lpuPayload == lpuEventBytes &&
-                liSize >= static_cast<s32>(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream)) &&
+                liSize >= static_cast<s32>(sizeof(CgsGui::GuiMenuStreamRecordPC)) &&
                 lpEventHeader->muEventType == 155u &&
                 lpEventHeader->muPayloadOffset == sizeof(GuiEventWireHeader);
             if (lbFullChannel155Record)

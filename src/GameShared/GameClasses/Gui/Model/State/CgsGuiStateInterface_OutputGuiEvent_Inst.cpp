@@ -81,6 +81,6 @@ namespace CgsGui
     template void StateInterface::OutputGuiEvent<BrnGui::GuiSaveLoadImageExportRequested>(BrnGui::GuiSaveLoadImageExportRequested&);  // 0x82493A28
     template void StateInterface::OutputGuiEvent<BrnGui::GuiTelemetryEvent>(BrnGui::GuiTelemetryEvent&);  // 0x824940E8
     template void StateInterface::OutputGuiEvent<CgsGui::GuiEventNetworkSuspension>(CgsGui::GuiEventNetworkSuspension&);  // 0x82493A88
-    template void StateInterface::OutputGuiEvent<CgsGui::GuiEventPlayMusicOnMenuStream>(CgsGui::GuiEventPlayMusicOnMenuStream&);  // 0x82476C00
+    // Original menu-music specialization82476C00 is defined by CgsGuiStateInterface.cpp.
     template void StateInterface::OutputGuiEvent<CgsGui::GuiEventSoundTrigger>(CgsGui::GuiEventSoundTrigger&);  // 0x824368F0
 }

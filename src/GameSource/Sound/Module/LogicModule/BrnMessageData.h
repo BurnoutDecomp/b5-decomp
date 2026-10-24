@@ -67,7 +67,7 @@ enum ESoundMessages
 //     lwz r9,  0x10(msg)   -> the stream ContentSpec / Name  (payload +0x00)
 //     lbz r11, 0x14(msg)   -> "this stream came from a video" (payload +0x04)
 //     lbz r11, 0x15(msg)   -> "play over a custom soundtrack" (payload +0x05)
-// ⚠️ This is NOT CgsGui::GuiEventPlayMusicOnMenuStream: that type is the GUI WIRE
+// The retained CgsGui::GuiMenuStreamRecordPC is the GUI WIRE
 // record and carries a 12-byte GuiEvent<23> header in front of the same three fields.
 // Posting the wire record as the payload (what this tree did) puts the name 12 bytes
 // too deep, so every message-13 producer that is not a GUI-23 forward -- ProcessGuiEvents

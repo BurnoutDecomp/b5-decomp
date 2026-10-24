@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h" // original Name value owner
 #include <cstddef>
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
@@ -76,17 +77,37 @@ namespace CgsGui
     // { muHeader0 = 8, muEventType = 23, muHeader2 = 12 } + { the sound-name hash,
     // two flag bytes }, channel 40, 20 bytes. (BrnGui::Credits posts it with
     // CgsSound::Playback::Name::MakeHash("Credits") and both flags clear.)
-    struct GuiEventPlayMusicOnMenuStream : public GuiEvent<23>
+    // FLAG PC-platform leaf: retain the selected port's existing record-shaped
+    // menu-music seat. Its 20-byte layout and current PC callers stay intact.
+    struct GuiMenuStreamRecordPC : public GuiEvent<23>
     {
         u32  muStreamNameHash;   // +0x0C  (CgsSound::Playback::Name::MakeHash result)
         bool mbFlagA;            // +0x10  (roles not recovered; Credits passes false/false)
         bool mbFlagB;            // +0x11
 
-        explicit GuiEventPlayMusicOnMenuStream(u32 luStreamNameHash,
+        explicit GuiMenuStreamRecordPC(u32 luStreamNameHash,
                                                bool lbFlagA = false, bool lbFlagB = false)
             : GuiEvent<23>(8, 12)
             , muStreamNameHash(luStreamNameHash), mbFlagA(lbFlagA), mbFlagB(lbFlagB) {}
     };
+
+    // DecFIGS CgsGuiStateInterface.h:193..198; ARTIST82476C20..34
+    // reads the actual fields at0/4/5, and8250C2A4/A8 publishes8/id23.
+    // The common empty wire root supplies no transport prefix.
+    struct GuiEventPlayMusicOnMenuStream : public CgsModule::Event
+    {
+        CgsSound::Playback::Name mName;
+        bool mbRewardsScreenCredits;
+        bool mbOverrideCustomSoundtracks;
+        s32 GetEventType() const { return 23; }
+    };
+    static_assert(sizeof(CgsSound::Playback::Name) == 4 &&
+                  sizeof(GuiEventPlayMusicOnMenuStream) == 8 &&
+                  offsetof(GuiEventPlayMusicOnMenuStream, mbRewardsScreenCredits) == 4 &&
+                  offsetof(GuiEventPlayMusicOnMenuStream, mbOverrideCustomSoundtracks) == 5,
+                  "original menu-music payload fields");
+    static_assert(sizeof(GuiMenuStreamRecordPC) == 20,
+                  "retained PC menu-music record bytes");
 
     // The "suspend / resume network processing" GUI event. X360-attested by the
     // OutputGuiEvent<CgsGui::GuiEventNetworkSuspension> instantiation @0x82493A88: the
@@ -182,7 +203,7 @@ namespace CgsGui
         // 40, 20). This body instead passes the event directly with lrEvent.GetEventType() as the
         // channel. It is kept as-is deliberately, because the payload-type population is SPLIT
         // between two encodings (BrnGuiDemangledEventTypes.h alone: 94 GuiEvent<N>-derived vs 152
-        // raw). The GuiEvent<N>-derived ones -- this header's GuiEventPlayMusicOnMenuStream(8,12) /
+        // raw). The GuiEvent<N>-derived ones -- this header's GuiMenuStreamRecordPC(8,12) /
         // GuiEventNetworkSuspension(4,12) / GuiEventPlayAptMovie(8,12) included -- set
         // muHeader0/muHeader2 to the wrapper's own size/offset words, i.e. they bake the wrapper
         // header INTO the type, so direct-pass reproduces the right record bytes for them and
@@ -296,4 +317,10 @@ namespace CgsGui
     template <>
     void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(
         BrnGui::GuiAudioTriggerEvent& lrEvent);
+
+    // ARTIST82476C00: the canonical 8-byte payload receives the original
+    // {8,23,12} wrapper on channel40; current PC record callers stay separate.
+    template <>
+    void StateInterface::OutputGuiEvent<GuiEventPlayMusicOnMenuStream>(
+        GuiEventPlayMusicOnMenuStream& lrEvent);
 }
