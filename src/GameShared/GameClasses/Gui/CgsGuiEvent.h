@@ -45,6 +45,24 @@ namespace CgsGui
         s32 GetEventType() const { return EventTypeId; }
     };
 
+    // ARTIST824B2DF4..2E2C boxes the actual16-byte overlay payload as
+    // {16,189,16,payload} on channel40. The tag itself stores no queue header.
+    template <>
+    struct GuiEvent<189> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 189; }
+    };
+    static_assert(sizeof(GuiEvent<189>) == 1, "original overlay-complete tag189");
+
+    // ARTIST823CBA44..68 reads the snapshot's four scalar payload lanes.
+    // Its queue type is362; DecFIGS names the corresponding GuiEvent<357> tag.
+    template <>
+    struct GuiEvent<362> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 362; }
+    };
+    static_assert(sizeof(GuiEvent<362>) == 1, "original snapshot-request tag362");
+
     // ARTIST8250C35C/360 publishes this empty tag as one unwritten byte.
     // PerformInvite82511428/30 selects this actual payload, not a12-byte header.
     template <>

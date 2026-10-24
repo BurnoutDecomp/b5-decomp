@@ -134,9 +134,13 @@ void BaseOverlayState::OnLeave()
     // meLeaveMethod} -- 32 bytes on channel 40 of the state's output queue.
     GuiOverlayCompleteEvent lCompleteEvent;
     lCompleteEvent.Construct(mCurrentOverlayId, meLeaveMethod);
+    CgsGui::GuiEventWrapper<GuiOverlayCompleteEvent, 40> lOutEvent(lCompleteEvent);
+    static_assert(sizeof(lOutEvent) == 32 &&
+                  offsetof(decltype(lOutEvent), mOutEvent) == 16,
+                  "original channel40 overlay wrapper:16/189/16 plus16-byte payload");
     mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lCompleteEvent), 40,
-        static_cast<s32>(sizeof(GuiOverlayCompleteEvent)));
+        reinterpret_cast<const CgsModule::Event*>(&lOutEvent), lOutEvent.GetChannel(),
+        static_cast<s32>(sizeof(lOutEvent)));
 
     // Release the priority claim on the full-info event and the observed set.
     mpStateInterface->PriorityUnRegisterForEvent(KI_EVENT_OVERLAY_FULL_INFO);
