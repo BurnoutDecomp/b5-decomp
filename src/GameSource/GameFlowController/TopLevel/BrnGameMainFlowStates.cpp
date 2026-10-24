@@ -856,7 +856,7 @@ namespace
         s_GameDataInput.UnlockForWrite();
         s_GameDataOutput.CgsModule::IOBuffer::Construct();
         s_GameDataOutput.LockForWrite();
-        s_GameDataOutput.Construct();   // the member-clearing OutputBuffer::Construct
+        s_GameDataOutput.ConstructPC(); // retained native member initializer; original Construct remains unselected
         s_GameDataOutput.UnlockForWrite();
     }
 }

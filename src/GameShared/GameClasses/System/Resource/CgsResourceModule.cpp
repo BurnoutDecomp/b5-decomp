@@ -13,6 +13,14 @@
 // Update preserves the loader -> pool -> memory order and delayed pool replies.
 namespace CgsResource
 {
+    // ARTIST828F4558: r3 +=0x2C380, preserving callback r4 and context r5.
+    void ResourceModule::DebugReportPools(PoolModule::FPoolReportCallback lpfnCallback,
+                                         void* lpUserData)
+    {
+        mPoolModule.DebugReport(lpfnCallback, lpUserData);
+    }
+
+
     // ResourceModule::InitOptions ctor - zero-init. The X360 ConstructResourceModule constructs this
     // then memset(0)s the whole 1216B block before filling fields, so a zero-init is the faithful net
     // state. (memset over the already-constructed members matches that ctor-then-memset sequence.)

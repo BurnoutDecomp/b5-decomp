@@ -128,6 +128,9 @@ namespace CgsResource
 
         // Accessor so the GameDataModule's CreatePools/CreateBanks can drive the embedded PoolModule
         // (the X360 reaches it through the resource-module vtable; here a by-name accessor).
+        // ARTIST828F4558: argument-preserving tail-forward to the actual pool owner.
+        void DebugReportPools(PoolModule::FPoolReportCallback lpfnCallback, void* lpUserData);
+
         PoolModule&             GetPoolModule()   { return mPoolModule; }
         CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
 

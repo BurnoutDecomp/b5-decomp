@@ -292,6 +292,25 @@ namespace CgsDev
             giNumIterations = liNumIterations;
         }
 
+        // ARTIST82825148..51CC; original DumpGameState823C04B8 is a positive
+        // caller. PageMAX(24) reports all records. Preserve the original count
+        // load points: reload after the callback, never on a skipped-page arm.
+        void ReportMonitors(FPerfMonCpuReportCallback* lpfReportCallback,
+                            void* lpUserData, PerfMonCpuPage lePage)
+        {
+            s32 liCount = giMonitorCount;
+            for (s32 liMonitor = 0; liMonitor < liCount; ++liMonitor)
+            {
+                if (lePage == E_PMP_MAX || gpMonitorsArray[liMonitor].mePage == lePage)
+                {
+                    PerfMonCpuMonitorData lData;
+                    GetMonitorData(liMonitor, &lData);
+                    lpfReportCallback(lData, lpUserData);
+                    liCount = giMonitorCount;
+                }
+            }
+        }
+
         s32 GetMonitorCount()    { return giMonitorCount; }
         s32 GetMaxMonitorCount() { return giMaxMonitorCount; }
 
