@@ -273,10 +273,14 @@ namespace BrnGui
         mpSystemUserProfile = lpSystemUserProfile;
 
         mbIsGamePaused = false; // ARTIST82505A00; an original Construct store.
+        mbEasyDriveAllowed = false; // ARTIST82505A24
 
         // ARTIST Construct 0x82505A68: freeburn is E_MODE_NONE, not race (zero).
         meGameModeType = -1;
         mbAreRoadRulesAvailable = false; // 0x82505A3C
+        mbEATraxChyronActive = false; // ARTIST82505A54
+        mbGameplayHudReadyC = false;  // ARTIST82505AD8, original passed-junkyard byte
+        mbReplayExporting = false;    // ARTIST82505B3C
         mbFriendsListOpen = false;
         mbFriendsListChangePending = false;
 
@@ -1365,6 +1369,19 @@ namespace BrnGui
                 CgsDev::Assert::EndAssert();
             }
             mbIsGamePaused = reinterpret_cast<const GuiGamePausedEvent*>(lpEvent)->mbGamePaused;
+            return;
+        }
+        // ARTIST8250ED1C..28 (GUI96) and82510B2C..38 (GUI471).
+        // Dispatch indexes are not event IDs: the latter table subtracts380.
+        // Original byte stores continue directly into return, with no new guard.
+        if (liEventId == 96)
+        {
+            mbEasyDriveAllowed = *reinterpret_cast<const bool*>(lpEvent);
+            return;
+        }
+        if (liEventId == 471)
+        {
+            mbEATraxChyronActive = *reinterpret_cast<const bool*>(lpEvent);
             return;
         }
         if (lpEvent == 0)
