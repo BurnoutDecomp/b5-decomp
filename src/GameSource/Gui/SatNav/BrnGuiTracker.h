@@ -48,6 +48,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // GuiTracker::Update's out queue
 
 namespace CgsModule { struct Event; }   // GuiTracker::RecEvent payload base (pointer-only)
+namespace CgsGui { namespace CgsGuiModuleIO { struct OutputBuffer; } }
 
 namespace BrnGui
 {
@@ -261,6 +262,10 @@ namespace BrnGui
         // GuiModule::mGuiOutQueue, handed here directly as ColourCalibrationScreen::Update is.
         // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
         void Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents);
+
+        // Original ARTIST82511BD0: actual GUI OutputBuffer, not the PC queue.
+        // Complete publisher provider remains a separate prerequisite.
+        void Update(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
 
         // Inlined by EventInfoComponent::UpdateDestinationText, ARTIST0x82412F78.
         s32 GetCurrentlyTrackedIndex() const { return miCurrentlyTrackedIndex; }

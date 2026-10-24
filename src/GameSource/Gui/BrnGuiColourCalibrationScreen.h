@@ -8,6 +8,7 @@
 
 namespace renderengine { class TextureState; }
 namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
+namespace CgsGui { namespace CgsGuiModuleIO { struct OutputBuffer; } }
 
 // BrnGui::ColourCalibrationScreen - the full-screen colour/brightness calibration test
 // card: a small state machine that acquires the calibration texture resource, builds a
@@ -63,6 +64,13 @@ namespace BrnGui
         void Update(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
                     const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
                     CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents,
+                    rw::IResourceAllocator* lpAllocator);
+
+        // Original ARTIST8246AA28 ABI: r6 is the actual GUI output buffer.
+        // Complete provider remains separate; the queue overload above stays PC-owned.
+        void Update(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+                    const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+                    CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
                     rw::IResourceAllocator* lpAllocator);
 
         // @0x824471D0 (this TU, DWARF h:82) -- show/hide requests routed from

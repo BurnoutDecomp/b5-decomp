@@ -1,6 +1,8 @@
 #ifndef CGS_MODULE_UTILS_H
 #define CGS_MODULE_UTILS_H
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
 // ============================================================================
 // GameShared/GameClasses/Module/CgsModuleUtils.h  (original-source home: the
 // Feb-2007 tree includes "Module/CgsModuleUtils.h"; the sound-module TU's
@@ -18,6 +20,20 @@ namespace CgsModule
     template <typename TDest, typename TSource>
     inline void LockBuffersForIO( TDest* lpDestBuffer, TSource* lpSourceBuffer )
     {
+        if (!lpDestBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 259);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpSourceBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer0",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 260);
+            CgsDev::Assert::EndAssert();
+        }
         lpDestBuffer->LockForWrite();
         lpSourceBuffer->LockForRead();
     }
@@ -25,6 +41,20 @@ namespace CgsModule
     template <typename TDest, typename TSource>
     inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSource* lpSourceBuffer )
     {
+        if (!lpDestBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 272);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpSourceBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer0",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 273);
+            CgsDev::Assert::EndAssert();
+        }
         lpSourceBuffer->UnlockForRead();
         lpDestBuffer->UnlockForWrite();
     }
@@ -132,12 +162,26 @@ namespace CgsModule
     template <typename TBuffer>
     inline void LockBuffersForIO( TBuffer* lpBuffer )
     {
+        if (!lpBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+            CgsDev::Assert::EndAssert();
+        }
         lpBuffer->LockForWrite();
     }
 
     template <typename TBuffer>
     inline void UnlockBuffersForIO( TBuffer* lpBuffer )
     {
+        if (!lpBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+            CgsDev::Assert::EndAssert();
+        }
         lpBuffer->UnlockForWrite();
     }
 }

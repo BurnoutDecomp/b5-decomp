@@ -185,10 +185,10 @@ struct GuiEventRunFsm : public CgsModule::Event
     EHUDFSMs meFsmToRun;      // +0x10
     GuiFlow  meFlowToUse;     // +0x14 -- RunFsm validates this against [0, E_GUIFLOW_COUNT)
 
+    // ARTIST native request sites leave initial/selector storage unwritten
+    // until their caller fills it; Controller Construct owns its selector4.
     GuiEventRunFsm()
         : mFsmId(CgsIDCompress(" "))
-        , mInitialStateId(CgsIDCompress(" "))
-        , meFsmToRun(E_GUI_HUD_NUMSFSMS)
         , meFlowToUse(E_GUIFLOW_COUNT)
     {
     }

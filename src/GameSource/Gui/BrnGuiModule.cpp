@@ -1,3 +1,8 @@
+#include "GameSource/Gui/Events/BrnGuiChallengeEvents.h"
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
+#include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"
+#include "GameSource/Gui/BrnGuiOptionsDataProfile.h"
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -860,6 +865,14 @@ namespace BrnGui
 {
     GuiModule*      gpActiveGuiModule      = 0;
 
+    // ARTIST82FB5924/25: original Update consumes and clears these two
+    // UI latches. Their genuine definitions/initial values/writers remain
+    // unresolved. Keep this source on an unactivated WIP branch; no defaults
+    // or fallback definitions are supplied by this recovery.
+    extern u8 guNativeGuiSystemUIOpened;
+    extern u8 guNativeGuiSystemUIClosed;
+
+
     // The exact eight packed colours passed to ViewModule::Construct by ARTIST
     // (0x82F27F84, count 8).
     const RGBA KA_ALTERNATE_TEXT_COLOURS[8] =
@@ -895,6 +908,7 @@ namespace BrnGui
         // alternate-text-colours table + count 8 (see the static above). The
         // X360 passes a null debug name here; the descriptive "BrnGuiView" is a harmless
         // non-null label the base accepts.
+        mpOutputBuffer = nullptr; // ARTIST825184C0, the native borrowed-output owner.
         mViewModule.Construct(this, "BrnGuiView", 7, 1280.0f / 720.0f,
                               KA_ALTERNATE_TEXT_COLOURS, 8);
         // ARTIST825184E4: construct the actual shared Model and stored-event
@@ -917,6 +931,10 @@ namespace BrnGui
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
         mColourCalibrationScreen.Construct();
+        // ARTIST82518B44/54/58, immediately after ColourCalibration Construct.
+        mbPerformingInvite = false;
+        mbInviteRequiresLogin = false;
+        mbStartLobbyDueToPlayerJoin = false;
         // ARTIST82518028: these values seed the collision-world and car-pool validators.
         meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
         mbCollisionWorldInvalid = false;
@@ -979,7 +997,7 @@ namespace BrnGui
         mpGuiEventInputBuffer = 0;
         mbRenderInputCompletedPC = false;
         mCompletedRenderInputPC.Construct();
-        mpOutputBuffer = 0;
+        mpHostOutputQueue = 0;
         mGuiConfig.mpTextureAllocator = 0;   // retained selected PC initialization
         mGuiConfig.mpRendererAllocator = 0;  // retained selected PC initialization
         mbCustomRenderersPrepared = false;   // [licence-icon] the manager staged-prepare latch
@@ -1445,6 +1463,11 @@ namespace BrnGui
 
     bool GuiModule::Prepare()
     {
+        // FLAG PC-platform leaf: this existing entry uses the persistent
+        // module queue. Choose its retained callback before any View prepare;
+        // the original argument-taking entry keeps the borrowed-output callback.
+        mViewModule.GetFlaptManager()->SetSoundTriggerHandler(
+            &GuiModule::FlaptSoundTriggerCallbackPC, this);
         // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 1 (the mGuiConfig fill) -----------
         // The console's stage 1 reads seven pool ids and seven allocators out of the GameData
         // OUTPUT buffer's AllocatorList. The selected PC path keeps its existing two rows:
@@ -1711,7 +1734,7 @@ namespace BrnGui
                                    /*globalTexture*/ 7);
 
         mGuiOutQueue.Construct();
-        mpOutputBuffer = &mGuiOutQueue;
+        mpHostOutputQueue = &mGuiOutQueue;
 
         // The view-module IO pair the per-frame bridge fills.
         mViewInputBuffer.Construct();
@@ -2523,9 +2546,113 @@ void GuiModule::Destruct()
         }
     }
 
-    // ARTIST @0x825112B0 converts the FLApt action string to a
-    // GuiAudioTriggerEvent and publishes it through the module output buffer.
+    // ARTIST825113E8; DecFIGS BrnGuiModule.cpp:3301. The input argument
+    // is part of the original ABI but is not used by this complete body.
+    void GuiModule::PerformInvite(CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        (void)lpInput;
+        if (!mbPerformingInvite)
+        {
+            mbPerformingInvite = true;
+            if (mbInviteRequiresLogin)
+            {
+                CgsGui::GuiEvent<89> lInvite;
+                lpOutput->AddGuiOutEvent(lInvite);
+            }
+            else
+            {
+                GuiEventRunFsm lRun;
+                lRun.mFsmId = CgsIDCompress("BrnScreenFsm");
+                lRun.mInitialStateId = CgsIDCompress("LOADING");
+                lRun.meFlowToUse = E_GUIFLOW_SCREEN;
+                mStoredGuiEvents.AddEvent(&lRun, 144, sizeof(lRun));
+                lRun.mFsmId = CgsIDCompress("BrnFBFsm");
+                lRun.mInitialStateId = CgsID(0);
+                lRun.meFlowToUse = E_GUIFLOW_HUD;
+                mStoredGuiEvents.AddEvent(&lRun, 144, sizeof(lRun));
+            }
+        }
+    }
+
+    // ARTIST824F1018; DecFIGS BrnGuiModule.cpp:3148. The event is the original
+    // flat {padId,buttonId} payload. The current PC controller wrapper remains
+    // an activation boundary, not a reason to reinterpret the native word position.
+    void GuiModule::HandleControllerPressed(const CgsModule::Event* lpEvent)
+    {
+        if (!lpEvent)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEvent",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3344);
+            CgsDev::Assert::EndAssert();
+        }
+        const s32 liButton = reinterpret_cast<const s32*>(lpEvent)[1];
+        if (liButton == 49 || liButton == 50)
+        {
+            // module949004 is manager+267308, its task-result handler;
+            // it is not the adjacent message-display pointer at949000.
+            if (mProfileHost.GetProfileManager().GetTaskResultHandler() == &mProfileHost)
+                mProfileHost.GetProfileManager().HandleMessageChoice(liButton == 49 ? 0 : 1);
+        }
+    }
+
+    // ARTIST825112B0. This callback borrows the actual caller output only
+    // inside native Update. The retained PC callback has its own explicit name.
     void GuiModule::FlaptSoundTriggerCallback(void* lpUserData,
+        const char* lpcComponentName, const char* lpcSwfName,
+        const char* lpcActionName, const char* lpcLabel)
+    {
+        if (!lpUserData)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpUserData",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3184);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpcComponentName)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpcComponentName",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3185);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpcSwfName)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpcSwfName",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3186);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpcActionName)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpcActionName",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3187);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpcLabel)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpcLabel",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3188);
+            CgsDev::Assert::EndAssert();
+        }
+        GuiModule* lpThis = static_cast<GuiModule*>(lpUserData);
+        if (!lpThis->mpOutputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpThis->mpOutputBuffer",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3192);
+            CgsDev::Assert::EndAssert();
+        }
+        GuiAudioTriggerEvent lAudio;
+        lAudio.Construct(lpcComponentName, lpcActionName, lpcLabel, lpcSwfName);
+        lpThis->mpOutputBuffer->AddGuiOutEvent(lAudio);
+    }
+
+    // FLAG PC-platform leaf: retained callback for the existing persistent queue.
+    void GuiModule::FlaptSoundTriggerCallbackPC(void* lpUserData,
                                               const char* lpcComponentName,
                                               const char* lpcSwfName,
                                               const char* lpcActionName,
@@ -2538,7 +2665,7 @@ void GuiModule::Destruct()
         CGS_ASSERT(lpcLabel != 0, "lpcLabel");
 
         GuiModule* lpThis = static_cast<GuiModule*>(lpUserData);
-        CGS_ASSERT(lpThis->mpOutputBuffer != 0, "mpOutputBuffer");
+        CGS_ASSERT(lpThis->mpHostOutputQueue != 0, "mpOutputBuffer");
 
         // off_82F277A8..off_82F277E0: the fourteen authored presentation actions.
         static const char* const KAPC_ACTION_NAMES[14] = {
@@ -2576,7 +2703,7 @@ void GuiModule::Destruct()
                 << " Movie: " << lpcLogMovie
                 << "\n";
         }
-        lpThis->mpOutputBuffer->AddEvent(
+        lpThis->mpHostOutputQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAudioEvent),
             lAudioEvent.GetEventType(), static_cast<s32>(sizeof(lAudioEvent)));
     }
@@ -2774,7 +2901,7 @@ void GuiModule::Destruct()
                         reinterpret_cast<const GuiEventSoundTriggerPayload22*>(lpEvent);
                     const char* const lpacMovieName =
                         mViewModule.GetMovieNameByLevel(lpSoundPayload->miLayer);
-                    FlaptSoundTriggerCallback(this, lpSoundPayload->macTypeName,
+                    FlaptSoundTriggerCallbackPC(this, lpSoundPayload->macTypeName,
                                               lpacMovieName, lpSoundPayload->macActionName,
                                               lpSoundPayload->macLabel);
                     break;
@@ -3782,13 +3909,13 @@ void GuiModule::Destruct()
                     // The model channel is 155, while the typed sound event carried
                     // by it is GuiEventPlayMusicOnMenuStream (23). Publish the typed
                     // id so BridgeGuiToSound reaches MusicEffect::Notify.
-                    CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
-                    mpOutputBuffer->AddEvent(lpEvent, 23, liSize);
+                    CGS_ASSERT(mpHostOutputQueue != 0, "mpOutputBuffer");
+                    mpHostOutputQueue->AddEvent(lpEvent, 23, liSize);
                     break;
 
                 case 201:  // Preserve event-201 module-output forwarding; audio triggers use id 457.
-                    CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
-                    mpOutputBuffer->AddEvent(lpEvent, liId, liSize);
+                    CGS_ASSERT(mpHostOutputQueue != 0, "mpOutputBuffer");
+                    mpHostOutputQueue->AddEvent(lpEvent, liId, liSize);
                     break;
 
                 case 42:
@@ -3882,6 +4009,819 @@ void GuiModule::Destruct()
 
     // Selected no-argument PC entry for the GUI port. Original GuiModule::Update
     // (0x82527A58) receives its IO set from its frame caller.
+    // ARTIST 82527A58. The final replay gate is a target-only argument at
+    // caller stack+0x67; loading passes false and regular DoUpdate_GUI true.
+    void GuiModule::Update(BrnUpdateSet lUpdateSet,
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+        CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer,
+        CgsGui::ViewIO::InputBuffer* lpViewInputBuffer,
+        BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+        bool lbUpdateReplay)
+    {
+        if (!lpInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInput != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1801);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutput != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1802);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpInputBufferStack)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBufferStack != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1803);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBufferStack)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBufferStack != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1804);
+            CgsDev::Assert::EndAssert();
+        }
+
+        u8 luForceAutosave = 0;
+        bool lbHasSaveImageEvent = false;
+        CgsGui::ImageFileInfo lSaveImageInfo;
+        lSaveImageInfo.Construct();
+        lpInput->LockForWrite();
+        lpOutput->LockForWrite();
+        if (mpOutputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpOutputBuffer == NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1858);
+            CgsDev::Assert::EndAssert();
+        }
+        mpOutputBuffer = lpOutput;
+        mGuiCache.SetInGame((lUpdateSet & 8) != 0);
+        mGuiAccessPointers.SetGDMInput(lpGDMInput);
+
+        if (lbUpdateReplay)
+        {
+            if (mGuiModuleSerialiser.IsPlaying())
+                mGuiModuleSerialiser.Read();
+            else if (mGuiModuleSerialiser.IsRecording())
+                mGuiModuleSerialiser.GetStaticLayout()->SetupStartOfFrame();
+            if (mGuiModuleSerialiser.IsRecording() && mGuiModuleSerialiser.GetBufferUsed() != 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "( mReplayGuiModuleSerialiser.IsRecording() == false ) || ( mReplayGuiModuleSerialiser.GetBufferUsed() == 0 )",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1879);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+
+        CgsGui::ViewIO::OutputBuffer* lpViewOutputBuffer = nullptr;
+        lpOutputBufferStack->CreateIOBuffer(&lpViewOutputBuffer, "GUIView");
+        CgsGui::ModelIO::InputBuffer* lpModelInputBuffer = nullptr;
+        lpInputBufferStack->CreateIOBuffer(&lpModelInputBuffer, "GUIModel");
+
+        if (mSystemUserProfile.miState == 1 && mGuiCache.IsPerformInviteReceived())
+            PerformInvite(lpInput, lpOutput);
+
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleEventPump);
+        CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue = lpInput->GetGuiEvents();
+        if (!lpEventQueue)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEventQueue != NULL",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1900);
+            CgsDev::Assert::EndAssert();
+        }
+        lpEventQueue->Append(mStoredGuiEvents);
+        mStoredGuiEvents.Clear();
+        if (mGDMReceiverQueue.GetLength() > 0)
+            mGDMReceiverQueue.Clear();
+        if (gbGuiToolStartHookRequested)
+        {
+            GuiPFXHookEvent lHook;
+            lHook.mfMaximumBloomWeight = 1.0f;
+            lHook.mfMaximumVignetteWeight = 1.0f;
+            lHook.mfMaximumBlurWeight = 1.0f;
+            lHook.mfMaximumDepthOfFieldWeight = 1.0f;
+            lHook.mfMaximum2DTintWeight = 1.0f;
+            lHook.mfMaximum3DTintWeight = 1.0f;
+            if (std::strlen(gacGuiToolHookName) >= 32)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lMessage;
+                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                lStream << "String too long: " << gacGuiToolHookName;
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+                CgsDev::Assert::EndAssert();
+            }
+            std::strncpy(lHook.macName, gacGuiToolHookName, 32);
+            lpEventQueue->AddEvent(&lHook, 495, sizeof(lHook));
+            gbGuiToolStartHookRequested = false;
+        }
+        else if (gbGuiToolStopHookRequested)
+        {
+            if (gacGuiToolHookName[0])
+            {
+                GuiPFXHookStopEvent lHook;
+                if (std::strlen(gacGuiToolHookName) >= 32)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::MessageBufferPC lMessage;
+                    CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                    lStream << "String too long: " << gacGuiToolHookName;
+                    CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+                    CgsDev::Assert::EndAssert();
+                }
+                std::strncpy(lHook.macName, gacGuiToolHookName, 32);
+                lpEventQueue->AddEvent(&lHook, 496, sizeof(lHook));
+            }
+            else
+            {
+                GuiPFXStopMenuHookEvent lHook;
+                lpEventQueue->AddEvent(&lHook, 497, sizeof(lHook));
+            }
+            gbGuiToolStopHookRequested = false;
+        }
+
+        mDebugComponent.UpdateWorstCaseHUD(lpInput);
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liEventSize = 0;
+        s32 liEventId = lpEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+        while (lpEvent)
+        {
+            switch (liEventId)
+            {
+            case 1:
+            {
+                GuiAudioTriggerEvent lSound;
+                lSound.Construct(reinterpret_cast<const char*>(lpEvent),
+                    mViewModule.GetMovieNameByLevel(3));
+                lpOutput->AddGuiOutEvent(lSound);
+                break;
+            }
+            case 6:
+                HandleControllerPressed(lpEvent);
+                break;
+            case 7:
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpEvent",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 3399);
+                    CgsDev::Assert::EndAssert();
+                }
+                break;
+            case 481:
+                mFsmController.HandleHudStateLoadComplete();
+                // The native notification also reaches the caller's Model output.
+            case 14:
+            case 16:
+                CgsModule::LockBuffersForIO(lpModelOutputBuffer);
+                lpModelOutputBuffer->GetLoadNotificationsNonConst()->AddEvent(lpEvent, liEventId, liEventSize);
+                CgsModule::UnlockBuffersForIO(lpModelOutputBuffer);
+                break;
+            case 22:
+            {
+                const GuiEventSoundTriggerPayload22* lpSound =
+                    reinterpret_cast<const GuiEventSoundTriggerPayload22*>(lpEvent);
+                GuiAudioTriggerEvent lSound;
+                lSound.Construct(lpSound->macTypeName, lpSound->macActionName,
+                    lpSound->macLabel, mViewModule.GetMovieNameByLevel(lpSound->miLayer));
+                lpOutput->AddGuiOutEvent(lSound);
+                break;
+            }
+            case 28:
+                mSku.SetLanguage(*reinterpret_cast<const CgsLanguage::ELanguage*>(lpEvent));
+                mViewModule.GetLanguageManager()->UnloadStringTable();
+                break;
+            case 30:
+            {
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("NULL != lpEvent",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2592);
+                    CgsDev::Assert::EndAssert();
+                }
+                if (mGuiCache.GetLanguage() == CgsLanguage::E_LANGUAGE_INVALID)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::MessageBufferPC lMessage;
+                    CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                    lStream << "Language NOT set yet.Test later in exectution";
+                    CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2593);
+                    CgsDev::Assert::EndAssert();
+                }
+                CgsGui::GuiEventGetLanguage lLanguage;
+                lLanguage.mLanguage = mGuiCache.GetLanguage();
+                lpOutput->AddGuiOutEvent(lLanguage);
+                break;
+            }
+            case 43:
+            {
+                const CgsGui::GuiEventNetworkConnected* lpConnectedEvent =
+                    reinterpret_cast<const CgsGui::GuiEventNetworkConnected*>(lpEvent);
+                if (!lpConnectedEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpConnectedEvent",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2549);
+                    CgsDev::Assert::EndAssert();
+                }
+                if (lpConnectedEvent->mbIsNewsUpdated && !mGuiCache.IsConnectedToNetwork())
+                {
+                    mGuiCache.GetOptionsDataProfile()->SetUnreadNews(true);
+                    mbProfileAutosavePending = true;
+                }
+                mGuiCache.SetConnectedToNetwork(true);
+                break;
+            }
+            case 51:
+            {
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpInGameFailedEvent",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2238);
+                    CgsDev::Assert::EndAssert();
+                }
+                GuiOverlayWaitFinishRequest lWait;
+                lWait.Construct("CNOnlEntGame");
+                lpOutput->AddGuiOutEvent(lWait);
+                const char* lpcOverlay;
+                switch (*reinterpret_cast<const s32*>(lpEvent))
+                {
+                case 0: lpcOverlay = "CNGameFull"; break;
+                case 1: lpcOverlay = "CNGameStrted"; break;
+                case 2: lpcOverlay = "OnJoinNoGame"; break;
+                case 3: lpcOverlay = "CNInvGmFail"; break;
+                default: lpcOverlay = "OnJoinFail"; break;
+                }
+                GuiOverlayRequest lRequest;
+                lRequest.Construct(lpcOverlay);
+                lpOutput->AddGuiOutEvent(lRequest);
+                break;
+            }
+            case 93:
+            {
+                const GuiEventPrepareForModeStart* lpPrepareEvent =
+                    reinterpret_cast<const GuiEventPrepareForModeStart*>(lpEvent);
+                if (lpPrepareEvent->meGameModeType == 15)
+                {
+                    const s32 liCurrentMode = mGuiCache.GetCurrentGameModeType();
+                    if (liCurrentMode != 3 && liCurrentMode != 4)
+                        mBurnoutSkillsManager.ResetSkillsData();
+                }
+                mGuiTracker.GenerateRouteData();
+                break;
+            }
+            case 95:
+                if (mFsmController.IsTransitionPending(1))
+                    mGuiCache.SetFriendsListWaitReason(GuiCache::E_FRIENDS_LIST_WAIT_REASON_NONE);
+                break;
+            case 109:
+                mbStartLobbyDueToPlayerJoin = true;
+                break;
+            case 128:
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpInviteEvent != NULL",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2136);
+                    CgsDev::Assert::EndAssert();
+                }
+                mbPerformingInvite = false;
+                mbInviteRequiresLogin = *reinterpret_cast<const bool*>(lpEvent);
+                break;
+            case 133:
+            {
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpInviteFailedEvent",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2297);
+                    CgsDev::Assert::EndAssert();
+                }
+                const s32 liFailure = *reinterpret_cast<const s32*>(lpEvent);
+                if (liFailure == 3 || liFailure == 4)
+                {
+                    GuiOverlayRequest lRequest;
+                    lRequest.Construct(liFailure == 3 ? "OnJoinNoGame" : "OnReqHDD");
+                    lpOutput->AddGuiOutEvent(lRequest);
+                }
+                break;
+            }
+            case 141:
+            {
+                GuiEventKeyboardResponse lResponse;
+                lResponse.lpKeyboard = &mGuiKeyboard;
+                lpOutput->AddGuiOutEvent(lResponse);
+                break;
+            }
+            case 143:
+                mSystemUserProfile.SetUserIndex(*reinterpret_cast<const u32*>(lpEvent));
+                mSystemUserProfile.UpdateUserSigninState();
+                break;
+            case 144:
+                mFsmController.RunFsm(reinterpret_cast<const GuiEventRunFsm*>(lpEvent));
+                break;
+            case 177:
+                mHudMessageDirector.StartPaybackAggressor();
+                break;
+            case 179:
+            case 370:
+                if (mHudMessageDirector.meStopFlagPaybackSequence == HudMessageDirector::E_PAYBACK_AGGRESSOR)
+                    mHudMessageDirector.meStopFlagPaybackSequence = HudMessageDirector::E_PAYBACK_NONE;
+                break;
+            case 221:
+                mHudMessageDirector.SetBlackBarSize(*reinterpret_cast<const f32*>(lpEvent));
+                break;
+            case 267:
+                mBurnoutSkillsManager.ResetPlayerData(
+                    *reinterpret_cast<const EActiveRaceCarIndex*>(lpEvent));
+                break;
+            case 275:
+            {
+                GuiOverlayWaitFinishRequest lWait;
+                lWait.Construct("CNOnlLvgGame");
+                lpOutput->AddGuiOutEvent(lWait);
+                break;
+            }
+            case 291:
+            case 320:
+            {
+                InGameMessagesQueue* lpMessages = mGuiCache.GetInGameMessagesQueue();
+                lpMessages->muCurrentEventEndTime = 0;
+                if (lpMessages->maeMessageState[0] == E_MESSAGESTATE_WAITING)
+                    lpMessages->maeMessageState[0] = E_MESSAGESTATE_NOMESSAGE;
+                if (lpMessages->maeMessageState[1] == E_MESSAGESTATE_WAITING)
+                    lpMessages->maeMessageState[1] = E_MESSAGESTATE_NOMESSAGE;
+                break;
+            }
+            case 325:
+            {
+                const GuiMugshotControlEvent* lpMugshot =
+                    reinterpret_cast<const GuiMugshotControlEvent*>(lpEvent);
+                switch (lpMugshot->meMugshotResponse)
+                {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    mHudMessageDirector.SetCameraSequenceFilter(true);
+                    break;
+                case 4:
+                case 5:
+                    mHudMessageDirector.SetCameraSequenceFilter(false);
+                    mHudMessageDirector.meStopFlagPaybackSequence = HudMessageDirector::E_PAYBACK_NONE;
+                    break;
+                default:
+                    break;
+                }
+                break;
+            }
+            case 343:
+                mBurnoutSkillsManager.SetRoadRuleMode(
+                    reinterpret_cast<const GuiEventRoadRuleChangeMode*>(lpEvent)->meScoreType);
+                break;
+            case 350:
+            {
+                const GuiEventProgressionProfileData* lpProfile =
+                    reinterpret_cast<const GuiEventProgressionProfileData*>(lpEvent);
+                mProfileHost.GetProfileManager().SetProgressionProfile(lpProfile->mpProfile,
+                    lpProfile->mpProgressionData);
+                break;
+            }
+            case 351:
+                mProfileHost.GetProfileManager().SetLiveRevengeProfile(
+                    reinterpret_cast<const GuiEventLiveRevengeProfileData*>(lpEvent)->mpLiveRevengeProfile);
+                break;
+            case 356:
+                luForceAutosave |= *reinterpret_cast<const u8*>(lpEvent);
+                mbProfileAutosavePending = true;
+                break;
+            case 358:
+                lSaveImageInfo =
+                    reinterpret_cast<const GuiEventSaveImageFileAndAutosave*>(lpEvent)->mImageFileInfo;
+                luForceAutosave = 1;
+                lbHasSaveImageEvent = true;
+                mbProfileAutosavePending = true;
+                break;
+            case 359:
+                mProfileHost.GetProfileManager().LoadImageFiles(&mProfileHost,
+                    reinterpret_cast<const GuiEventLoadImageFiles*>(lpEvent)->maImageFileInfo);
+                break;
+            case 363:
+            {
+                const GuiTakedownEvent* lpTakedown = reinterpret_cast<const GuiTakedownEvent*>(lpEvent);
+                const EActiveRaceCarIndex leLocalARCI =
+                    static_cast<EActiveRaceCarIndex>(mGuiCache.GetPlayerActiveRaceCarIndex());
+                if (lpTakedown->meAggressorIndex == leLocalARCI)
+                {
+                    if (lpTakedown->mbMarkedManTakeDown)
+                        mHudMessageDirector.StartPaybackAggressor();
+                }
+                else if (lpTakedown->meVictimIndex == leLocalARCI)
+                {
+                    if (lpTakedown->mbMarkedManTakeDown)
+                        mHudMessageDirector.StartPaybackVictim();
+                    else if (mHudMessageDirector.meStopFlagPaybackSequence == HudMessageDirector::E_PAYBACK_AGGRESSOR)
+                        mHudMessageDirector.meStopFlagPaybackSequence = HudMessageDirector::E_PAYBACK_NONE;
+                }
+                if ((lpTakedown->meAggressorIndex == leLocalARCI ||
+                     lpTakedown->meVictimIndex == leLocalARCI) && mGuiCache.IsOnline())
+                {
+                    GuiEventRequestTraining lTraining;
+                    lTraining.meTrainingType = mGuiCache.IsCameraConnected() ? 60 : 69;
+                    lpOutput->AddGuiOutEvent(lTraining);
+                }
+                break;
+            }
+            case 377:
+                if (*reinterpret_cast<const s32*>(lpEvent) == 0 &&
+                    mHudMessageDirector.meStopFlagPaybackSequence == HudMessageDirector::E_PAYBACK_AGGRESSOR)
+                    mHudMessageDirector.meStopFlagPaybackSequence = HudMessageDirector::E_PAYBACK_NONE;
+                break;
+            case 475:
+                if (!lpEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpEvent != NULL",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2584);
+                    CgsDev::Assert::EndAssert();
+                }
+                mGuiCache.GetOptionsDataProfile()->SetDirectorProfileData(
+                    reinterpret_cast<const BrnDirector::GameState::DirectorProfileData*>(lpEvent));
+                break;
+            case 493:
+            {
+                const GuiEventRequestCollisionWorldEvent* lpCollision =
+                    reinterpret_cast<const GuiEventRequestCollisionWorldEvent*>(lpEvent);
+                if (lpCollision->meEventType == GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_INVALIDATED)
+                    mbCollisionWorldInvalid = true;
+                else if (lpCollision->meEventType == GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_VALIDATED)
+                    mbCollisionWorldInvalid = false;
+                break;
+            }
+            case 504:
+            case 508:
+            case 513:
+                mMovieManager.RecvEvent(lpEvent, liEventId);
+                break;
+            case 505:
+            {
+                const GuiGamePausedEvent* lpPausedEvent = reinterpret_cast<const GuiGamePausedEvent*>(lpEvent);
+                if (!lpPausedEvent)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpPausedEvent",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2607);
+                    CgsDev::Assert::EndAssert();
+                }
+                if (lpPausedEvent->mbGamePaused && mbProfileAutosavePending)
+                    luForceAutosave = 1;
+                break;
+            }
+            case 507:
+                CgsModule::LockBuffersForIO(lpViewInputBuffer);
+                if (!&lpViewInputBuffer->GetViewStateQueue())
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lpViewInputBuffer->GetViewStateQueue()",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2348);
+                    CgsDev::Assert::EndAssert();
+                }
+                UpdatePlayerName(&lpViewInputBuffer->GetViewStateQueue());
+                CgsModule::UnlockBuffersForIO(lpViewInputBuffer);
+                break;
+            case 512:
+            {
+                const bool lbEmptied = reinterpret_cast<const GuiEventTrafficPoolEmptied*>(lpEvent)->mbTrafficPoolEmpty;
+                if (lbEmptied ? mbTrafficPoolEmptied : !mbTrafficPoolEmptied)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(lbEmptied ? "!mbTrafficPoolEmptied" : "mbTrafficPoolEmptied",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", lbEmptied ? 2322 : 2328);
+                    CgsDev::Assert::EndAssert();
+                }
+                mbTrafficPoolEmptied = lbEmptied;
+                break;
+            }
+            case 541:
+            {
+                const GuiNewBurnoutSkillzEvent* lpSkills = reinterpret_cast<const GuiNewBurnoutSkillzEvent*>(lpEvent);
+                mBurnoutSkillsManager.SetSkillsData(lpSkills->meActiveRaceCarIndex, lpSkills, lpOutput);
+                break;
+            }
+            case 543:
+                mBurnoutSkillsManager.SelectNext();
+                break;
+            case 544:
+                mFreeburnChallengeManager.SelectNext();
+                break;
+            case 574:
+                mFreeburnChallengeManager.StartChallenge(reinterpret_cast<const GuiChallengeStartEvent*>(lpEvent));
+                break;
+            case 576:
+                mFreeburnChallengeManager.TriggerChallenge(reinterpret_cast<const GuiChallengeTriggerResponse*>(lpEvent));
+                break;
+            case 577:
+                mFreeburnChallengeManager.HandleNewData(reinterpret_cast<const GuiChallengeUpdateEvent*>(lpEvent));
+                break;
+            case 578:
+                mFreeburnChallengeManager.StartResults();
+                break;
+            case 579:
+                mFreeburnChallengeManager.FinishChallenge();
+                break;
+            case 581:
+                mFreeburnChallengeManager.HandleCompletionStatus(
+                    reinterpret_cast<const GuiEventFburnChallengeEveryPlayerStatus*>(lpEvent));
+                break;
+            case 583:
+                mFreeburnChallengeManager.StartNotActiveChallenge(
+                    reinterpret_cast<const GuiChallengeNotActiveStartEvent*>(lpEvent));
+                break;
+            case 584:
+                mFreeburnChallengeManager.EndNotActiveChallenge();
+                break;
+            case 593:
+            {
+                GuiResponseTimeDateString lResponse;
+                lResponse.muRequestID = *reinterpret_cast<const u32*>(lpEvent);
+                CgsSystem::DateAndTime lNow;
+                lNow.SetLocal(true);
+                lNow.Update();
+                char lacDate[32];
+                char lacTime[32];
+                mViewModule.GetLanguageManager()->FormatDateString(lacDate,
+                    lNow.GetDay(), lNow.GetMonth(), lNow.GetYear(), 32);
+                mViewModule.GetLanguageManager()->FormatHoursAndMinutesAndSecondsString(lacTime,
+                    lNow.GetHour(), lNow.GetMinute(), lNow.GetSecond(), 32);
+                if (!CgsUnicode::IsSingleByteOnlyUtf8String(
+                    reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacDate)))
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("CgsUnicode::IsSingleByteOnlyUtf8String( lacDate )",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2660);
+                    CgsDev::Assert::EndAssert();
+                }
+                if (!CgsUnicode::IsSingleByteOnlyUtf8String(
+                    reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacTime)))
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("CgsUnicode::IsSingleByteOnlyUtf8String( lacTime )",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2661);
+                    CgsDev::Assert::EndAssert();
+                }
+                CgsCore::SnPrintf(lResponse.macString, 32, "%s %s", lacDate, lacTime);
+                lpOutput->AddGuiOutEvent(lResponse);
+                break;
+            }
+            default:
+                break;
+            }
+
+            mGuiCache.RecEvent(lpEvent, liEventId);
+            if (liEventId == 232 || liEventId == 165 || liEventId == 211 ||
+                liEventId == 64 || liEventId == 233)
+                mGuiTracker.RecEvent(lpEvent, liEventId, liEventSize);
+            liEventId = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        }
+        CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miGuiModuleEventPump);
+
+        if (mbProfileAutosavePending == true)
+        {
+            const u8 luTimerAllowsSave = !mGuiCache.IsGamePaused() &&
+                !(mGuiCache.GetTime() <= mfLastProfileAutosaveTime + 60.0f) ? 1 : 0;
+            if ((luForceAutosave | luTimerAllowsSave) == 1)
+            {
+                if (lbHasSaveImageEvent)
+                    AutosaveProfile(&lSaveImageInfo);
+                else if (mSystemUserProfile.miState == 1 &&
+                    mProfileHost.GetProfileManager().AutosaveIsEnabled())
+                {
+                    mProfileHost.GetProfileManager().Autosave(&mProfileHost, 0, nullptr);
+                    mbProfileAutosavePending = false;
+                    mfLastProfileAutosaveTime = mGuiCache.GetTime();
+                }
+            }
+        }
+        else
+        {
+            const BrnProgression::Profile* lpProfile = mGuiCache.GetProfile();
+            if (lpProfile && lpProfile->GetGoldCarsUnlocked() &&
+                mGuiCache.GetTime() > mfLastProfileAutosaveTime + 300.0f)
+                mbProfileAutosavePending = true;
+        }
+
+        CgsGui::State* lpScreenState = mScreenFlow.GetStateMachine().GetCurrentState();
+        if (lpScreenState && !mGuiCache.IsImageExportInProgress() &&
+            meCollisionWorldStateValidationState == E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE &&
+            mbStartLobbyDueToPlayerJoin)
+        {
+            if (!lpScreenState)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mScreenFlow.GetStateMachine().GetCurrentState()",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2737);
+                CgsDev::Assert::EndAssert();
+            }
+            if (lpScreenState->GetId() != CgsIDCompress("ON_GAME_ROOM"))
+            {
+                GuiEventRunFsm lRun;
+                lRun.mFsmId = CgsIDCompress("BrnScreenFsm");
+                lRun.mInitialStateId = CgsIDCompress("LOADING");
+                lRun.meFlowToUse = static_cast<GuiFlow>(0);
+                mStoredGuiEvents.AddEvent(&lRun, 144, sizeof(lRun));
+                lRun.mFsmId = CgsIDCompress("BRNEVENTFSM");
+                lRun.mInitialStateId = CgsID(0);
+                lRun.meFlowToUse = static_cast<GuiFlow>(1);
+                mStoredGuiEvents.AddEvent(&lRun, 144, sizeof(lRun));
+            }
+            mbStartLobbyDueToPlayerJoin = false;
+        }
+
+        GuiCache* lpCache = &mGuiCache;
+        lpEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lpCache),
+            64, static_cast<s32>(sizeof(lpCache)));
+        const BrnResource::HudMessageController* lpHudController = mGuiCache.GetHudMessageController();
+        if (lpHudController)
+        {
+            if (!mHudMessageDebugComponent.ControllerIsValid())
+                mHudMessageDebugComponent.SetController(mGuiCache.GetHudMessageController());
+            mHudMessageDirector.SetController(mGuiCache.GetHudMessageController());
+        }
+
+        // The original name recording/playback block is outside lbUpdateReplay.
+        if (mGuiModuleSerialiser.IsRecording())
+        {
+            BrnReplays::GuiModuleStaticLayout* lpLayout = mGuiModuleSerialiser.GetStaticLayout();
+            for (EActiveRaceCarIndex leARC = E_ACTIVE_RACE_CAR_INDEX_0;
+                 leARC < E_ACTIVE_RACE_CAR_INDEX_COUNT; leARC++)
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
+                    mGuiCache.GetOnlinePlayerInfo(leARC);
+                if (lpInfo)
+                    lpLayout->maaGamertags[lpLayout->mbFrameParity][leARC].Construct(lpInfo->mPlayerName.macName);
+            }
+        }
+        else if (mGuiModuleSerialiser.IsPlaying())
+        {
+            BrnReplays::GuiModuleStaticLayout* lpLayout = mGuiModuleSerialiser.GetStaticLayout();
+            for (EActiveRaceCarIndex leARC = E_ACTIVE_RACE_CAR_INDEX_0;
+                 leARC < E_ACTIVE_RACE_CAR_INDEX_COUNT; leARC++)
+            {
+                if (mGuiCache.IsReplayARCRendered(leARC))
+                    mGuiCache.IncrementReplayPlayerActive(
+                        lpLayout->maaGamertags[lpLayout->mbFrameParity][leARC].GetPlayerName(),
+                        lpLayout->mauCarRecordsC[leARC]);
+            }
+        }
+
+        if (mGuiCache.GetPopupController())
+            mOverlaysDirector.SetController(mGuiCache.GetPopupController());
+        mColourCalibrationScreen.Update(lpGDMInput, lpGDMOutput, lpOutput,
+            mGuiConfig.mpTextureAllocator);
+        mGuiTracker.Update(lpOutput);
+        CgsModule::LockBuffersForIO(lpViewInputBuffer);
+        if (!&lpViewInputBuffer->GetViewStateQueue())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpViewInputBuffer->GetViewStateQueue()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2885);
+            CgsDev::Assert::EndAssert();
+        }
+        mHudMessageAnalyzer.Update(lpInput->GetGuiEvents(), &lpViewInputBuffer->GetViewStateQueue());
+        CgsModule::UnlockBuffersForIO(lpViewInputBuffer);
+        mOverlaysDirector.Update(lpInput);
+        lpInput->UnlockForWrite();
+
+        mHudMessageDirector.Update(lpModelInputBuffer);
+        mDebugComponent.Update(lpInput);
+        mSatNavDebugComponent.Update(lpInput);
+        mGuiCacheDebugComponent.Update(lpInput);
+        mScreenFlow.SetStreamingMode(mDebugComponent.GetScreenFlowStreamingMode());
+        mOverlaysDirector.BridgeOutEvents(lpModelInputBuffer);
+        CgsModule::LockBuffersForIO(lpModelInputBuffer);
+        mGuiCache.Update(lpModelInputBuffer);
+        CgsModule::UnlockBuffersForIO(lpModelInputBuffer);
+
+        UpdateNativeSystemNotifications(lpModelInputBuffer);
+        // Definitions/initial values of these original latches remain unresolved.
+        // Do not select this entry until their genuine provider is recovered.
+        if (guNativeGuiSystemUIClosed || guNativeGuiSystemUIOpened)
+        {
+            const u32 luSystemUI = guNativeGuiSystemUIClosed ? 0 : 1;
+            CgsModule::LockBuffersForIO(lpModelInputBuffer);
+            lpModelInputBuffer->GetEventQueueNonConst()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&luSystemUI), 516, sizeof(luSystemUI));
+            CgsModule::UnlockBuffersForIO(lpModelInputBuffer);
+            guNativeGuiSystemUIClosed = 0;
+            guNativeGuiSystemUIOpened = 0;
+        }
+
+        CgsModule::LockBuffersForIO(lpModelInputBuffer, lpModelOutputBuffer);
+        mFsmController.Update(lpModelInputBuffer, lpModelOutputBuffer);
+        CgsModule::UnlockBuffersForIO(lpModelInputBuffer, lpModelOutputBuffer);
+        CgsModule::LockBuffersForIO(lpModelInputBuffer, lpModelOutputBuffer);
+        mEffectsArbitrator.ResourceUpdate(lpModelInputBuffer, lpModelOutputBuffer);
+        CgsModule::UnlockBuffersForIO(lpModelInputBuffer, lpModelOutputBuffer);
+        lpInput->LockForRead();
+        mEffectsArbitrator.EventUpdate(lUpdateSet, lpInput, lpOutput);
+        lpInput->UnlockForRead();
+        CgsModule::LockBuffersForIO(lpModelOutputBuffer);
+        lpModelOutputBuffer->GetLoadNotificationsNonConst()->Clear();
+        CgsModule::UnlockBuffersForIO(lpModelOutputBuffer);
+        mSystemUserProfile.Update();
+        mGuiKeyboard.Update();
+        mProfileHost.GetProfileManager().Update();
+        CgsGui::GuiEventQueueSmall& lrProfileEvents = mProfileHost.GetProfileManager().GetOutEventQueue();
+        if (lrProfileEvents.GetLength())
+        {
+            lpOutput->AddGuiOutEvents(&lrProfileEvents);
+            lrProfileEvents.Clear();
+        }
+
+        GuiReplayRegisterSerialiser lRegister;
+        lRegister.mpSerialiser = &mGuiModuleSerialiser;
+        lpOutput->AddGuiOutEvent(lRegister);
+        if (lbUpdateReplay)
+        {
+            if (mGuiModuleSerialiser.GetMode() == BrnReplays::BaseSerialiser::E_MODE_RESTORING)
+                mGuiModuleSerialiser.SetDataRestored(true);
+            else if (mGuiModuleSerialiser.IsPlaying() ||
+                mGuiModuleSerialiser.GetMode() == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+                mGuiModuleSerialiser.GetMode() == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING)
+                mGuiModuleSerialiser.SetDataReady(true);
+        }
+
+        if (mMovieManager.GetState() == MovieManager::E_MOVIEMANAGERSTATE_REPORTING_FINISHED)
+        {
+            MovieManager::VideoDefinition lFinished;
+            lFinished.Copy(&mMovieManager.GetPlayingMovieDefinition());
+            mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_IDLE);
+            MovieManager::VideoDefinition lDefinition;
+            lDefinition.Prepare();
+            const u32 luNullStreamName = lDefinition.mSoundStreamName;
+            lDefinition.Copy(&lFinished);
+            lpModelInputBuffer->LockForRead();
+            const CgsGui::ModelIO::InputBuffer::GuiEventInputQueue* lpModelEvents = lpModelInputBuffer->GetEventQueue();
+            lpModelInputBuffer->UnlockForRead();
+            CgsGui::GuiEventPlayMusicOnMenuStream lStopStream;
+            lStopStream.mName = CgsSound::Playback::Name(static_cast<uintptr_t>(luNullStreamName));
+            lStopStream.mbRewardsScreenCredits = false;
+            lStopStream.mbOverrideCustomSoundtracks = false;
+            lpOutput->AddGuiOutEvent(lStopStream);
+            // ARTIST obtains the read accessor, unlocks, then mutates this same
+            // owned queue. Remove only that accessor's const qualification here.
+            const_cast<CgsGui::ModelIO::InputBuffer::GuiEventInputQueue*>(lpModelEvents)->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lDefinition),
+                510, sizeof(lDefinition));
+        }
+        if (mMovieManager.GetState() == MovieManager::E_MOVIEMANAGERSTATE_REQUESTING_AUDIO)
+        {
+            MovieManager::VideoDefinition lPlaying;
+            lPlaying.Copy(&mMovieManager.GetPlayingMovieDefinition());
+            mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO);
+            CgsGui::GuiEventPlayMusicOnMenuStream lPlayStream;
+            lPlayStream.mName = CgsSound::Playback::Name(static_cast<uintptr_t>(lPlaying.mSoundStreamName));
+            lPlayStream.mbRewardsScreenCredits = false;
+            lPlayStream.mbOverrideCustomSoundtracks = lPlaying.mbDisableCustomSoundtracks;
+            lpOutput->AddGuiOutEvent(lPlayStream);
+        }
+
+        if (mAlwaysAvailableComponentsManager.Prepare(&mGuiAccessPointers))
+            mAlwaysAvailableComponentsManager.UpdateTimedComponents();
+        mBurnoutSkillsManager.Update();
+        mFreeburnChallengeManager.Update();
+
+        CgsGui::GuiModule::Update(lpInputBufferStack, lpOutputBufferStack,
+            lpInput, lpOutput, lpModelInputBuffer, lpModelOutputBuffer,
+            lpViewInputBuffer, lpViewOutputBuffer);
+        mpOutputBuffer = nullptr;
+        lpOutput->UnlockForWrite();
+        HandleEventsPostBaseModuleUpdate(lpOutput);
+        mCustomRendererManager.Update();
+        if (lbUpdateReplay && mGuiModuleSerialiser.IsRecording())
+            mGuiModuleSerialiser.Write();
+        mGuiAccessPointers.SetGDMInput(nullptr);
+        lpInputBufferStack->DestroyIOBuffer(&lpModelInputBuffer);
+        lpOutputBufferStack->DestroyIOBuffer(&lpViewOutputBuffer);
+    }
+
     void GuiModule::Update()
     {
         // FLAG PC-platform leaf: the no-argument host entry owns its scripted
@@ -4277,7 +5217,7 @@ void GuiModule::Destruct()
             // Runs AFTER the queue pump above so a notification raised this frame is ticked
             // with this frame's clock; the console reaches the manager's own Update from
             // UpdateObservers instead, so Prepare -> overlays stays adjacent either way.
-            mAlwaysAvailableComponentsManager.UpdateTimedComponents();
+            mAlwaysAvailableComponentsManager.UpdateTimedComponentsPC();
         }
         mAlwaysAvailInQueue.Clear();
 
@@ -4596,7 +5536,7 @@ void GuiModule::Destruct()
             const MovieManager::VideoDefinition lFinished = mMovieManager.GetPlayingMovieDefinition();
             mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_IDLE);
             CgsGui::GuiMenuStreamRecordPC lStopStream(0u, false, false);
-            mpOutputBuffer->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStopStream),
+            mpHostOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStopStream),
                                      23, static_cast<s32>(sizeof(lStopStream)));
             RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lFinished), 510,
                              static_cast<s32>(sizeof(lFinished)));
@@ -4608,7 +5548,7 @@ void GuiModule::Destruct()
             mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO);
             CgsGui::GuiMenuStreamRecordPC lVideoStream(
                 lPlaying.mSoundStreamName, false, lPlaying.mbDisableCustomSoundtracks);
-            mpOutputBuffer->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lVideoStream),
+            mpHostOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lVideoStream),
                                      23, static_cast<s32>(sizeof(lVideoStream)));
             char lac[160];
             std::snprintf(lac, sizeof(lac),
@@ -4877,9 +5817,9 @@ void GuiModule::Destruct()
     // loading screen was up, and HUDEffect::Notify's loading-screen test never tripped.
     void GuiModule::BridgeFromViewToOutput()
     {
-        CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
-        mpOutputBuffer->Append(*mCustomRendererManager.GetOutputEventQueue());
-        mpOutputBuffer->Append(mViewModule.GetOutputEventQueue());
+        CGS_ASSERT(mpHostOutputQueue != 0, "mpOutputBuffer");
+        mpHostOutputQueue->Append(*mCustomRendererManager.GetOutputEventQueue());
+        mpHostOutputQueue->Append(mViewModule.GetOutputEventQueue());
     }
 
     // @ 0x82511240 -- pump the movie manager (the movie pass of the GUI render).

@@ -85,6 +85,10 @@ namespace BrnGui
         //   0x8252A290  lbzx r11, r31, 0x101BA ; cmplwi 1 ; bne -> mbContainerMovieClipPlaying
         // Expressed as ONE named manager method because the components are private members
         // (this tree's convention: a named setter, not N pokes from GuiModule).
+        void UpdateTimedComponentsPC();
+
+        // ARTIST8252A27C..2CC inline owner, with the complete native tick.
+        // Its OnlineInvite Update provider remains a separate recovery prerequisite.
         void UpdateTimedComponents();
 
     private:

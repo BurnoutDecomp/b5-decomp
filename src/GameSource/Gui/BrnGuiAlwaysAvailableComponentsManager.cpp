@@ -383,7 +383,20 @@ namespace BrnGui
     // HUD. `bl 0x82439E70` has exactly ONE caller in the image -- GuiModule::Update -- and
     // this is that call site. The omission was mine, in the commit that landed the chyron.
     // =======================================================================================
+    // ARTIST8252A27C..2CC is inline in GuiModule::Update. This owner
+    // method expresses the complete block through the actual private members.
+    // Prepare's true result is checked by the caller before entering this gate.
     void AlwaysAvailableComponentsManager::UpdateTimedComponents()
+    {
+        if (mbContainerMovieClipPlaying != true)
+            return;
+        mEATraxInGameComponent.Update();       // ARTIST8252A2A4
+        mAchievementPopupComponent.Update();   // ARTIST8252A2B0
+        // ARTIST8252A2BC calls 8284CB38, an ICF-folded bare blr: no side effect.
+        mOnlineNotificationMessageComponent.Update(); // ARTIST8252A2C8
+    }
+
+    void AlwaysAvailableComponentsManager::UpdateTimedComponentsPC()
     {
         // 0x8252A288..0x8252A298. The console compares against 1 exactly, not "non-zero".
         if (mbContainerMovieClipPlaying != true)
