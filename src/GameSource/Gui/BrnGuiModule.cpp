@@ -4605,7 +4605,7 @@ void GuiModule::Destruct()
         if (mbProfileAutosavePending == true)
         {
             const u8 luTimerAllowsSave = !mGuiCache.IsGamePaused() &&
-                !(mGuiCache.GetTime() <= mfLastProfileAutosaveTime + 60.0f) ? 1 : 0;
+                mGuiCache.GetTime() > mfLastProfileAutosaveTime + 60.0f ? 1 : 0;
             if ((luForceAutosave | luTimerAllowsSave) == 1)
             {
                 if (lbHasSaveImageEvent)
