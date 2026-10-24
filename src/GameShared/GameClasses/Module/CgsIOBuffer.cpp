@@ -14,10 +14,17 @@ namespace CgsModule
         mxStatusFlags.SetBit(eStatusConstructed);
     }
 
-    // @ CgsIOBuffer.h:65
+    // ARTIST82216E60 / original CgsIOBuffer.h157: destruction requires no
+    // outstanding read/write lock. The original does not test the constructed bit.
     void IOBuffer::Destruct()
     {
-        CGS_ASSERT(mxStatusFlags.IsBitSet(eStatusConstructed), "mxStatusFlags.IsBitSet( eStatusConstructed )");
+        if (IsBufferLocked())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("!IsBufferLocked()",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h", 157);
+            CgsDev::Assert::EndAssert();
+        }
         mxStatusFlags.Clear();
     }
 

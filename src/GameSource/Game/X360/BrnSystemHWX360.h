@@ -148,10 +148,9 @@ namespace BrnHW
 
         bool Prepare();
         int  Release();
-        // The first argument is ignored by the X360 body (r3 is overwritten by the
-        // AllocatorList passed in r4); kept in the signature to match the call site.
-        static int PrepareMassiveMemory(int liUnused,
-                                        BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+        // ARTIST823C1290: caller passes this in r3 and borrowed const list in r4.
+        // This body need not dereference this; its success is consumed as a bool.
+        bool PrepareMassiveMemory(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
         bool HasGameBeenRebootedDueToInvite();
     };
 

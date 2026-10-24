@@ -425,6 +425,19 @@ namespace BrnGame
         // GetWorldUpdateOutputBuffer above serves the same caller.
         CgsInput::InputIO::OutputBuffer* GetPcInputOutputBuffer() { return &mPcInputOutputBuffer; }
 
+        // ARTIST823DB848's retry states; DecFIGS BrnGameModule.h198.
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_HARDWARE = 1,
+            E_PREPARESTAGE_MANAGER = 2,
+            E_PREPARESTAGE_GAMEDATAMODULE = 3,
+            E_PREPARESTAGE_RENDERMODULE = 4,
+            E_PREPARESTAGE_HARDWAREMEMORY = 5,
+            E_PREPARESTAGE_THREADS = 6,
+            E_PREPARESTAGE_DONE = 7
+        };
+
         enum EGameUpdateStage   // h:248
         {
             E_GAMEUPDATESTAGE_PREPARE = 0,
@@ -460,6 +473,15 @@ namespace BrnGame
 
         BrnGameModule();
         ~BrnGameModule();
+
+        // Full original caller-owned-stack overload823DB848; not selected by
+        // the current PC startup. Its genuine four-argument GameData core remains
+        // an explicit source/link prerequisite, never a two-buffer forwarding body.
+        virtual bool Prepare(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                             CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                             CgsModule::IOBufferStack* lpResourceInputBufferStack,
+                             CgsModule::IOBufferStack* lpResourceOutputBufferStack,
+                             CgsModule::IOBufferStack* lpDispatchThreadIOBufferStack);
 
         void Construct() override;   // @ BrnGameModule.cpp:155 - construct the owned modules
 
@@ -1111,7 +1133,7 @@ namespace BrnGame
         // ---- X360 hardware / boot-legal query helpers (BrnGameModule.cpp) ----------------
         // X360 0x823A8B38 -- disk-error worker thread body: raise the system dirty-disc
         // error UI for dwUserIndex; never returns. Static (a thread proc; no `this`).
-        static void DiskErrorThreadProc(unsigned long dwUserIndex);
+        static intptr_t DiskErrorThreadProc(void* lpContext);
 
         // X360 0x823C0268 -- return the embedded hardware object (the launch/soft-reboot
         // data block). The X360 forms this + 0x9A11C0 == &mHardware.
@@ -1137,8 +1159,9 @@ namespace BrnGame
         // context module is delivered by pointer-to-pointer). Same receiver shape as
         // BrnDirector::Camera::BehaviourRenderMetrics::GameTalkMessageReceiver.
         static void RenderMetricsMessageHandler(EA::GameTalk::GameTalkMessage* lpMessage,
-                                                BrnGameModule** lppModule);
+                                                void* lpContext);
     private:
+        void CheckDiskError(const BrnResource::GameDataIO::OutputBuffer* lpOutputBuffer);
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
         // ---- the 11 engine modules (real names/types/order; all derive from the module base) --
@@ -1156,7 +1179,12 @@ namespace BrnGame
         BrnNetwork::BrnNetworkModule  mNetworkModule;                // h:368
         CgsModule::IOBufferStack* mpUpdateInputBufferStack;          // h:373
         CgsModule::IOBufferStack* mpUpdateOutputBufferStack;         // h:374
-        // [h:375-379: resource buffer stacks + gamedata module buffers - omitted]
+        // Genuine pointer owner: written/allocated once by Prepare case2 and
+        // retained across all resource/outer frames. No PC backing or mirror pair.
+        CgsModule::IOBufferStack* mpResourceInputBufferStack;          // h375
+        CgsModule::IOBufferStack* mpResourceOutputBufferStack;         // h376
+        BrnResource::GameDataIO::InputBuffer* mpGameDataModuleInputBuffer;   // h378
+        BrnResource::GameDataIO::OutputBuffer* mpGameDataModuleOutputBuffer; // h379
         BrnGame::BrnCpuMonitors mCpuMonitors;                        // h:384
         CgsDev::DebugManager    mDebugManager;                       // h:387
         // h:388 -- the DEBUG FONT handle, X360 gm+0x99F150 (10482000). GamePrepare's id-5
@@ -1164,7 +1192,8 @@ namespace BrnGame
         // and then hands THIS OBJECT to DebugManager::SetDebugFont, so it has to outlive the
         // pass -- it is the module's member on the console for exactly that reason.
         CgsResource::SafeResourceHandle<CgsResource::Font> mDebugFont;   // h:388 (gm+0x99F150)
-        // [h:389-404: map-file reader, juice, mbHasGameTerminated - omitted]
+        // [h:389-403: map-file reader and juice - omitted]
+        bool mbHasGameTerminated; // h404; original late Construct823CB1F0 seed.
         bool mbSimPaused;                                            // h:405
         bool mbDiskError;                                            // h:406
         bool mbControllerDisconnected;                              // X360 gm+10094116; event 10 latch
@@ -1178,6 +1207,7 @@ namespace BrnGame
         bool mbStreamingStalled;                                     // h:416
         bool mbIsLoadingScreenVisible;                               // h:417
         // [h:418-453: loading allocator, input-bind state, gui-flow, prepare stages - omitted]
+        EPrepareStage    mePrepareStage;                             // h454; full owner retry state
         EReleaseStage    meReleaseStage;                             // h:455 (Release() stage machine)
         EGamePrepareStage meGamePrepareStage;                        // h:456 (X360 gm+10094164)
         // [h:457: meGameReleaseStage - omitted]
@@ -1277,6 +1307,7 @@ namespace BrnGame
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
         CgsSystem::ThreadLayout mThreadLayout;                        // h:530
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
+        EA::Thread::Thread mErrorThread;                              // h532; original real error worker owner
         // FLAG PC-platform leaf: native initialization and reply pacing while
         // simulation is decoupled from the render rate.
         bool mbFrameLayoutInitializedPC = false;

@@ -244,6 +244,8 @@ enum { KU_DLC_PACKAGE_CAPACITY = 16 };
 
 class DLCManager
 {
+    // ARTIST GameData Prepare reads this owned manager's package count directly.
+    friend class GameDataModule;
 public:
     enum EPrepareStage
     {

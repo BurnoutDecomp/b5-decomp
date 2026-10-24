@@ -28,11 +28,13 @@
 // are rw-INDEPENDENT (they only chain the embedded modules' own Prepare/Release). Construct
 // (allocates everything through the rw allocator), Update and the request shuttles are DEFERRED
 // (rw allocator middleware) as inert marked stubs.
+namespace CgsModule { struct IOBufferStack; }
+
 namespace CgsResource
 {
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
-    namespace ResourceIO { struct InputBuffer; }                    // the module's request input
+    namespace ResourceIO { struct InputBuffer; struct OutputBuffer; }                    // the module's request input
     // The write-stream request event types (deprecated adders take these by pointer only).
     namespace Events
     {
@@ -46,6 +48,8 @@ namespace CgsResource
     {
         friend class DebugComponent;
     public:
+        // Original enum result retained by the real scoped-output helper.
+        enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 };
         static const s32 KI_MAX_PENDING_FILE_SYSTEM_RESPONSES = 16;
 
         // DecFIGS CgsResourceModule.h:209-213. A pending asynchronous file
@@ -99,6 +103,11 @@ namespace CgsResource
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
+        // Genuine four-argument82907948 core; definition remains separately pending.
+        EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack,
+                             CgsModule::IOBufferStack* lpOutputStack,
+                             const ResourceIO::InputBuffer* lpInputBuffer,
+                             ResourceIO::OutputBuffer* lpOutputBuffer);
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);        // deferred
 
         // ---- request/response shuttle steps (the pool-create slice of ResourceModule::Update) ---------

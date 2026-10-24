@@ -1,4 +1,5 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
 #include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
@@ -145,6 +146,201 @@ namespace BrnResource
         mbIsNewModule = true;
     }
 
+    // ARTIST 826663B0: output scratch is owned by the caller's output stack.
+    CgsResource::ResourceModule::EUpdateResult GameDataModule::UpdateResourceModule(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        const CgsResource::ResourceIO::InputBuffer* lpInputBuffer)
+    {
+        CgsModule::IOHelper<CgsResource::ResourceIO::OutputBuffer> lOutput(
+            lpOutputStack, "ResourceOutput");
+        const CgsResource::ResourceModule::EUpdateResult leResult =
+            mResourceModule.Update(lpInputStack, lpOutputStack, lpInputBuffer, lOutput);
+        const CgsResource::ResourceIO::OutputBuffer* lpOutput = lOutput;
+        lpOutput->LockForRead();
+        mFileSystemStatusInterface = *lpOutput->GetFileSystemStatusInterface();
+        lpOutput->UnlockForRead();
+        return leResult;
+    }
+
+    // ARTIST 82673F38. This is the original four-argument lifecycle, separate
+    // from the retained two-argument host shortcut below. It does not call that shortcut.
+    bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack,
+                                 CgsModule::IOBufferStack* lpOutputStack,
+                                 const GameDataIO::InputBuffer* lpInputBuffer,
+                                 GameDataIO::OutputBuffer* lpOutputBuffer)
+    {
+        (void)lpInputBuffer; // ARTIST does not consume this input pointer in Prepare.
+        mFileSystemStatusInterface.Construct();
+
+        switch (mePrepareStage)
+        {
+        case E_PREPARESTAGE_START:
+        case E_PREPARESTAGE_MANAGER:
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                break;
+            mDebugComponent.Register();
+            mDLCDebugComponent.Register();
+            [[fallthrough]];
+        case E_PREPARESTAGE_RESOURCEMODULE:
+            mePrepareStage = E_PREPARESTAGE_RESOURCEMODULE;
+            if (!mResourceModule.Prepare())
+                break;
+            mReceiverQueue.Clear();
+            [[fallthrough]];
+        case E_PREPARESTAGE_CREATEBANKS:
+            mePrepareStage = E_PREPARESTAGE_CREATEBANKS;
+            if (!CreateBanks(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_CREATEPOOLS:
+            mePrepareStage = E_PREPARESTAGE_CREATEPOOLS;
+            if (!CreatePools(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_CREATEALLOCATORS:
+            mePrepareStage = E_PREPARESTAGE_CREATEALLOCATORS;
+            if (!CreateAllocators(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_DLC:
+            mePrepareStage = E_PREPARESTAGE_DLC;
+            if (!mDLCManager.Prepare(&mAllocatorList))
+                break;
+            miDLCManagerPackageIndex = 0;
+            [[fallthrough]];
+        case E_PREPARESTAGE_DLC_ADD_PATCH:
+        {
+            mePrepareStage = E_PREPARESTAGE_DLC_ADD_PATCH;
+            if (miDLCManagerPackageIndex < static_cast<s32>(mDLCManager.muPackageCount))
+            {
+                CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
+                    lpInputStack, "Resource");
+                lResourceInput->LockForWrite();
+                const s32 liVersion = mDLCManager.GetPackage(miDLCManagerPackageIndex)->miVersion;
+                const BrnResource::DLCManager::DLCPackage* lpPackage =
+                    mDLCManager.GetPackage(miDLCManagerPackageIndex);
+                CgsResource::Events::AddPatchRequest lRequest;
+                lRequest.Construct(&mReceiverQueue, miDLCManagerPackageIndex,
+                                   lpPackage->mPath, liVersion);
+                lResourceInput->GetResourceQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 25,
+                    static_cast<s32>(sizeof(lRequest)));
+                mReceiverQueue.Clear();
+                lResourceInput->UnlockForWrite();
+                UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
+            }
+            [[fallthrough]];
+        }
+        case E_PREPARESTAGE_DLC_WAIT_PATCH:
+            mePrepareStage = E_PREPARESTAGE_DLC_WAIT_PATCH;
+            if (miDLCManagerPackageIndex < static_cast<s32>(mDLCManager.muPackageCount))
+            {
+                if (mReceiverQueue.GetCount() == 0)
+                {
+                    CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResourceInput(
+                        lpInputStack, "Resource");
+                    UpdateResourceModule(lpInputStack, lpOutputStack, lResourceInput);
+                    break;
+                }
+                ++miDLCManagerPackageIndex;
+                if (miDLCManagerPackageIndex < static_cast<s32>(mDLCManager.muPackageCount))
+                {
+                    // ARTIST 8267422C..230 yields before submitting another package.
+                    mePrepareStage = E_PREPARESTAGE_DLC_ADD_PATCH;
+                    break;
+                }
+            }
+            [[fallthrough]];
+        case E_PREPARESTAGE_ATTRIBSYS:
+        {
+            mePrepareStage = E_PREPARESTAGE_ATTRIBSYS;
+            CgsMemory::HeapMalloc* lpEastlHeap = mAllocatorList.GetHeapAllocator(21);
+            CgsMemory::HeapMalloc* lpGameTalkHeap = mAllocatorList.GetHeapAllocator(20);
+            CgsMemory::HeapMalloc* lpAttribHeap = mAllocatorList.GetHeapAllocator(19);
+            CgsMemory::LinearMalloc* lpLinear = mAllocatorList.GetLinearAllocator(22);
+            if (!mAttribSysModule.Prepare(lpLinear, lpAttribHeap, lpGameTalkHeap, lpEastlHeap, 80))
+                break;
+            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput = 0;
+            lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib");
+            const bool lbSchemaPrepared =
+                PrepareAttribSysSchemaResource(lpInputStack, lpOutputStack, lpAttribInput);
+            lpInputStack->DestroyIOBuffer(&lpAttribInput);
+            if (!lbSchemaPrepared)
+                break;
+            [[fallthrough]];
+        }
+        case E_PREPARESTAGE_GAMETALK:
+            mePrepareStage = E_PREPARESTAGE_GAMETALK;
+            if (!mGameTalk.Prepare(10.0f, 1.0f / 60.0f))
+                break;
+            if (!mDebugGameTalkInterface.Prepare())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mDebugGameTalkInterface.Prepare()",
+                    "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 519);
+                CgsDev::Assert::EndAssert();
+            }
+            [[fallthrough]];
+        case E_PREPARESTAGE_LIVEUPDATE:
+            mePrepareStage = E_PREPARESTAGE_LIVEUPDATE;
+            if (!mLiveUpdateModule.Prepare())
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_VEHICLELIST:
+            mePrepareStage = E_PREPARESTAGE_VEHICLELIST;
+            if (!PrepareVehicleList(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_CHALLENGELIST:
+            mePrepareStage = E_PREPARESTAGE_CHALLENGELIST;
+            if (!PrepareFreeburnChallengeList(lpInputStack, lpOutputStack))
+                break;
+            miICEListPrepareStage = 0;
+            [[fallthrough]];
+        case E_PREPARESTAGE_ICELIST:
+            mePrepareStage = E_PREPARESTAGE_ICELIST;
+            if (!PrepareICEList(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_WHEELLIST:
+            mePrepareStage = E_PREPARESTAGE_WHEELLIST;
+            if (!PrepareWheelList(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_HUDMESSAGES:
+            mePrepareStage = E_PREPARESTAGE_HUDMESSAGES;
+            if (!PrepareHudMessages(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_POPUPS:
+            mePrepareStage = E_PREPARESTAGE_POPUPS;
+            if (!PreparePopups(lpInputStack, lpOutputStack))
+                break;
+            [[fallthrough]];
+        case E_PREPARESTAGE_DONE:
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            meReleaseStage = E_RELEASESTAGE_START;
+            lpOutputBuffer->LockForWrite();
+            lpOutputBuffer->SetAllocatorList(&mAllocatorList);
+            lpOutputBuffer->UnlockForWrite();
+            return true;
+        default: // ARTIST case15 is invalid; DecFIGS's test-stream stage is absent here.
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n",
+                "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 637);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+
+        lpOutputBuffer->LockForWrite();
+        lpOutputBuffer->SetFileSystemStatusInterface(&mFileSystemStatusInterface);
+        lpOutputBuffer->UnlockForWrite();
+        return false;
+    }
+
+
     // @ 0x82673F38 - resumable bring-up: base module, then the ResourceModule (memory/pool/
     // bundle/filesystem), then carve banks/pools/allocators. Re-enters at the current stage if
     // a sub-step is not yet ready. (The X360 then runs DLC stages 16-18+ and the AttribSys/HUD/
@@ -271,7 +467,7 @@ namespace BrnResource
                 return false;
             // fall through
         case E_PREPARE_DONE:
-            meReleaseStage = E_PREPARE_START;
+            meReleaseStage = E_RELEASESTAGE_START;
             mePrepareStage = E_PREPARE_DONE;
             return true;
         default:
@@ -279,6 +475,230 @@ namespace BrnResource
             return false;
         }
     }
+
+    // ARTIST 8266DA28: the original stack-backed bank request owner.
+    bool GameDataModule::CreateBanks(CgsModule::IOBufferStack* lpInputStack,
+                                     CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+
+        if (miNumBankCreationRequests == 0)
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            lRequests.MarkUnconstructed();
+            lRequests.Construct();
+            // The canonical getter already subtracts the reserved root row.
+            const s32 liNumBanks = mpMemoryMap->GetNumBanks();
+            for (s32 liBank = 0; liBank < liNumBanks; ++liBank)
+            {
+                const CgsMemory::MemoryMapBank* lpBank = mpMemoryMap->GetBank(liBank);
+                const s32 liEventId = miNumBankCreationRequests++;
+                CgsMemory::MemoryIO::CreateBankRequest lRequest;
+                lRequest.Construct(&mReceiverQueue, liEventId);
+                lRequest.SetParams(lpBank->GetParams());
+                lRequests.AddEvent(&lRequest, 9);
+            }
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequests);
+            lpResourceInput->UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetLength() == miNumBankCreationRequests)
+        {
+            miNumBankCreationRequests = 0;
+            mReceiverQueue.Clear();
+            // ARTIST 8266DB68..80 returns here without DestroyIOBuffer.
+            return true;
+        }
+
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 8266DB88: publish the original map pool records and wait for replies.
+    bool GameDataModule::CreatePools(CgsModule::IOBufferStack* lpInputStack,
+                                     CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+
+        if (miNumPoolCreationRequests == 0)
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            lRequests.MarkUnconstructed();
+            lRequests.Construct();
+            const s32 liNumPools = mpMemoryMap->GetNumPools();
+            for (s32 liPool = 0; liPool < liNumPools; ++liPool)
+            {
+                CgsResource::Events::CreatePoolRequest lRequest =
+                    *mpMemoryMap->GetPool(liPool)->GetRequest();
+                if (lRequest.miPoolId == 3 || lRequest.miPoolId == 4 || lRequest.miPoolId == 15)
+                    lRequest.mbAllowDefragmentation = true;
+                lRequest.mpUser = &mReceiverQueue;
+                lRequest.miEventId = miNumPoolCreationRequests++;
+                lRequests.AddEvent(&lRequest, 0);
+            }
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequests);
+            lpResourceInput->UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetLength() == miNumPoolCreationRequests)
+        {
+            miNumPoolCreationRequests = 0;
+            mReceiverQueue.Clear();
+            // ARTIST 8266DCE0..F8 returns here without DestroyIOBuffer.
+            return true;
+        }
+
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 8266DD00: submit all five allocator families, then store their replies.
+    bool GameDataModule::CreateAllocators(CgsModule::IOBufferStack* lpInputStack,
+                                          CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        mAllocatorList.mpAudioStreamAllocator = &mAudioStreamAllocator;
+
+        if (miNumAllocatorCreationRequests == 0)
+        {
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            lRequests.MarkUnconstructed();
+            lRequests.Construct();
+
+            for (s32 li = 0; li < mpMemoryMap->GetNumRawResources(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateResourceRequest lRequest =
+                    *mpMemoryMap->GetRawResource(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequests.AddEvent(&lRequest, 10);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
+                mAllocatorList.mapRawResources[li] = &maGeneratedRawResources[li];
+                mAllocatorList.mapRawResourceDescriptors[li] = &maGeneratedRawResourceDescriptors[li];
+            }
+
+            for (s32 li = 0; li < mpMemoryMap->GetNumLinearAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest lRequest =
+                    *mpMemoryMap->GetLinearAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequest.SetHeapAllocator(0);
+                lRequest.SetLinearAllocator(&maGeneratedLinearAllocators[li]);
+                lRequests.AddEvent(&lRequest, 14);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
+                mAllocatorList.mapLinearAllocators[li] = &maGeneratedLinearAllocators[li];
+            }
+
+            for (s32 li = 0; li < mpMemoryMap->GetNumHeapAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest lRequest =
+                    *mpMemoryMap->GetHeapAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequest.SetHeapAllocator(&maGeneratedHeapAllocators[li]);
+                lRequest.SetLinearAllocator(0);
+                lRequests.AddEvent(&lRequest, 14);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
+                mAllocatorList.mapHeapAllocators[li] = &maGeneratedHeapAllocators[li];
+            }
+
+            for (s32 li = 0; li < mpMemoryMap->GetNumRWLinearAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest lRequest =
+                    *mpMemoryMap->GetRWLinearAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequests.AddEvent(&lRequest, 11);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
+            }
+
+            for (s32 li = 0; li < mpMemoryMap->GetNumRWGeneralAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest lRequest =
+                    *mpMemoryMap->GetRWGeneralAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequests.AddEvent(&lRequest, 12);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;
+            }
+
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequests);
+            lpResourceInput->UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetLength() == miNumAllocatorCreationRequests)
+        {
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (liSize > 0)
+            {
+                switch (liType)
+                {
+                case 10:
+                {
+                    const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse =
+                        static_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent);
+                    const s32 li = lpResponse->GetEventId();
+                    lpResponse->GetResource(&maGeneratedRawResources[li], &maGeneratedRawResourceDescriptors[li]);
+                    break;
+                }
+                case 11:
+                {
+                    const CgsMemory::MemoryIO::CreateLinearAllocatorResponse* lpResponse =
+                        static_cast<const CgsMemory::MemoryIO::CreateLinearAllocatorResponse*>(lpEvent);
+                    const s32 li = lpResponse->GetEventId();
+                    lpResponse->GetAllocator(&mapGeneratedRWLinearAllocators[li]);
+                    mAllocatorList.mapRWLinearAllocators[li] = mapGeneratedRWLinearAllocators[li];
+                    break;
+                }
+                case 12:
+                {
+                    const CgsMemory::MemoryIO::CreateGeneralAllocatorResponse* lpResponse =
+                        static_cast<const CgsMemory::MemoryIO::CreateGeneralAllocatorResponse*>(lpEvent);
+                    const s32 li = lpResponse->GetEventId();
+                    lpResponse->GetAllocator(&mapGeneratedRWGeneralAllocators[li]);
+                    mAllocatorList.mapRWGeneralAllocators[li] = mapGeneratedRWGeneralAllocators[li];
+                    break;
+                }
+                case 14:
+                    break;
+                default:
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Invalid event type\n",
+                        "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 2560);
+                    CgsDev::Assert::EndAssert();
+                    break;
+                }
+                liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
+            }
+            miNumAllocatorCreationRequests = 0;
+            mReceiverQueue.Clear();
+            // ARTIST 8266E3D4..E8 returns here without DestroyIOBuffer.
+            return true;
+        }
+
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
 
     // ARTIST8266DA28. Current GamePrepare has no IO stacks, so only the scratch
     // transport is a PC adaptation; map rows, request identities and waits are original.

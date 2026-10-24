@@ -62,15 +62,12 @@ namespace Events
     // DWARF/caller signature.
     struct AddPatchRequest : public Event
     {
-        s32  miField0;            // +0    (arg a2)
-        s32  miField4;            // +4    (arg a3)
-        char macFileName[256];    // +8    NUL-terminated patch bundle path
-        s32  miField264;          // +264  (arg a5)
-
-        // X360 0x82661200. Initialise the request in place: store the two leading fields, copy the
-        // NUL-terminated path into macFileName (bounded by the 256-byte buffer), then store the
-        // trailing field. Returns this (the X360 ctor-style Construct returns its `result`).
-        AddPatchRequest* Construct(s32 liField0, s32 liField4, const char* lpcFileName, s32 liField264);
+        CgsModule::BaseEventReceiverQueue* mpUser; // ARTIST +0; native pointer width.
+        s32 miEventId; // ARTIST +4
+        char macFileName[256]; // ARTIST +8
+        s32 miVersion; // ARTIST +264, package field passed by GameData Prepare.
+        AddPatchRequest* Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId,
+                                   const char* lpcFileName, s32 liVersion);
     };
 
     struct LoadBundleResponse : public BundleLoaderEvent

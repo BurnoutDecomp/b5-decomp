@@ -43,6 +43,27 @@ namespace CgsResource
         meReleaseStage = 1;
     }
 
+    // ARTIST 828E65D8: LiveUpdate owns this Prepare, rather than the base IO allocator.
+    bool LiveUpdateModule::Prepare()
+    {
+        switch (miField273)
+        {
+        case 0:
+            miField273 = 0;
+            mpGameTalk->RegisterMessageHandler(&LiveUpdateModule::GameTalkMsgHandler, "LiveUpdate");
+            mReceiverQueue.Clear();
+            [[fallthrough]];
+        case 1:
+            meReleaseStage = 0;
+            miUpdateState = 0;
+            miField273 = 1;
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid stage\n"); // ARTIST CgsLiveUpdateModule.cpp:102
+            return false;
+        }
+    }
+
     // ---- Destruct @ 0x828E6708 -------------------------------------------------
     void LiveUpdateModule::Destruct()
     {
