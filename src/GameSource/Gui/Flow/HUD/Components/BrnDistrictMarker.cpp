@@ -196,7 +196,7 @@ namespace BrnGui
             mbCountyChangePending = false;
             meCurrentCounty       = mePendingCounty;
             mCountyIcon.SetState(KAPC_COUNTY_ICON_NAMES[meCurrentCounty]);
-            meCurrentCountyState  = E_MARKERSTATE_TRANSITIONING;
+            meCurrentCountyState  = E_MARKERSTATE_SHOWING;
             break;
 
         case E_MARKERSTATE_SHOWING:
@@ -244,7 +244,7 @@ namespace BrnGui
             mbDistrictChangePending = false;
             meCurrentDistrict       = mePendingDistrict;
             mDistrictIcon.SetState(KAPC_DISTRICT_ICON_NAMES[meCurrentDistrict]);
-            meCurrentDistrictState  = E_MARKERSTATE_TRANSITIONING;
+            meCurrentDistrictState  = E_MARKERSTATE_SHOWING;
             break;
 
         case E_MARKERSTATE_SHOWING:
@@ -253,6 +253,7 @@ namespace BrnGui
             break;
 
         default:
+            CGS_ASSERT(false, "Invalid marker state in DistrictMarkerComponent::SetDistrict");
             break;
         }
     }
