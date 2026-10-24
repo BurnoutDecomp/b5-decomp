@@ -3142,6 +3142,22 @@ namespace BrnGui
             maPlayerInfo[liIndex]);
     }
 
+    // DecFIGS GetOnlinePlayerInfo(EActiveRaceCarIndex) const; the native
+    // GuiModule::Update recorder inlines this exact row scan before PlayerName::Construct.
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+        GuiCache::GetOnlinePlayerInfo(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        for (s32 liSlot = 0; liSlot < 8; ++liSlot)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
+                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+                    maPlayerInfo[liSlot]);
+            if (lpInfo->meActiveRaceCarIndex == leActiveRaceCarIndex)
+                return lpInfo;
+        }
+        return nullptr;
+    }
+
     // @ 0x8240F910  ( maCurrentPlayerTeam @+0xB808, 4*(idx+11778)+this )
     s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {

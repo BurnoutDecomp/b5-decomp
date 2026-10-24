@@ -496,8 +496,8 @@ void AboveCarRenderer::RenderReplayAboveCar(CgsGui::ImRendererSet* lpRendererSet
             mpTextRenderer->RenderString(lpBuffer, mTextObject);
             lfBottom -= lfHeight;
         }
-        const auto* lpNames = lpLayout->mbFrameParity ? lpLayout->maCarFlagsBuffer0 : lpLayout->maCarFlagsBuffer1;
-        const auto* lpName = reinterpret_cast<const CgsResource::CgsUtf8*>(lpNames[liIndex]);
+        const auto* lpNames = lpLayout->mbFrameParity ? lpLayout->maaGamertags[0] : lpLayout->maaGamertags[1];
+        const auto* lpName = reinterpret_cast<const CgsResource::CgsUtf8*>(lpNames[liIndex].GetPlayerName());
         CGS_ASSERT(lpName, "lpStaticLayout->maaGamertags[lpStaticLayout->GetGamertagBufferIndexLastFrame()][leActiveRaceCarIndex].GetPlayerName()");
         SetAboveCarText(mTextObject, lpName, lfHeight, lfBottom, lrRecord.mColour,
             mTextObject.mpFont->GetStringWidth(lpName));

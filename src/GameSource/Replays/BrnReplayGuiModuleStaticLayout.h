@@ -11,34 +11,16 @@
 //   StartMessage      @ 0x8264CF70  raise the in-game-message active/start flags
 //   EndMessage        @ 0x8264CF80  drop the message flags + clear the 3 message slots
 //
-// LAYOUT (X360 asm authoritative; no DWARF for this type). Derived store-for-store from the
-// four bodies; field semantics beyond the asm-attested strides/offsets are NOT recoverable,
-// so the regions are modelled as named arrays sized to the asm-proven strides and FLAGGED:
-//
-//   +0x000  MessageSlot maMessageSlots[3]      3 slots, 128-byte stride (XMemSet 0..0x180;
-//                                               EndMessage zeroes byte +0 of each)
-//   +0x180  u8          mbMessageStart          StartMessage=1 / EndMessage(no) / Reset=0 /
-//                                               SetupStartOfFrame=0
-//   +0x181  u8          mbMessageActive         StartMessage=1 / EndMessage=0 / Reset=0
-//   +0x182  u8          maReserved0x182[0x0E]   untouched gap up to the per-car block
-//   +0x190  CarRecordA  maCarRecordsA[8]        32-byte stride; Reset/SetupStartOfFrame zero
-//                                               each (16B vector @+0, word @+0x14, byte @+0x18)
-//   +0x290  u64         mauCarRecordsC[8]        8-byte stride; zeroed by Reset/SetupStartOfFrame
-//   +0x2D0  u8          maCarFlagsBuffer0[8][16] 16-byte stride; double-buffer 0 (zeroed when the
-//                                               frame-parity flag selects it)
-//   +0x350  u8          maCarFlagsBuffer1[8][16] 16-byte stride; double-buffer 1
-//   +0x3D0  u8          mbFrameParity            SetupStartOfFrame toggles (1 - prev); Reset=0;
-//                                               selects which CarFlags buffer is current
-//   +0x3D1  u8          maReserved0x3D1[0x0F]   pad the record to 992 bytes (0x3E0)
-//
-// FLAG (X360-asm-proven, DWARF-silent): every region/field name above is inferred from its
-// asm usage, not from DWARF or any recovered source. The 8-element arrays are per active race
-// car (the loops assert leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT == 8). The CarRecordA
-// element's interior (the 16-byte vector + word + byte the zeroing touches) is modelled as
-// opaque storage at the asm offsets; the CarFlags double-buffer is two parallel 8x16 blocks the
-// frame-parity flag selects between. Promote names when a reader of these fields is reconstructed.
+// LAYOUT (ARTIST assembly; fields without a recovered source name remain projections).
+// Message slots0..17F, start/active bytes180/181, partial per-car records190..28F,
+// and the eight whole 64-bit values290..2CF retain their existing owners and widths.
+// Native Update82529984..825299A0 writes actual CgsNetwork::PlayerName objects
+// into the two 16-byte-stride name buffers2D0..3CF. The existing AboveCar assertion
+// attests the original field name maaGamertags. Frame parity remains one byte3D0.
+// The record stays pointer-free and 992 bytes; no Apt or host-pointer layout is inferred.
 
 #include "types.hpp"
+#include "GameSource/GameState/BrnCgsPlayerName.h" // actual 16-byte name owner
 
 namespace BrnReplays
 {
@@ -79,8 +61,7 @@ namespace BrnReplays
         u8                   maReserved0x182[0x190 - 0x182];         // +0x182 (gap)
         GuiModuleCarRecordA  maCarRecordsA[KI_MAX_ACTIVE_RACE_CARS]; // +0x190 (8 * 0x20 = 0x100)
         u64                  mauCarRecordsC[KI_MAX_ACTIVE_RACE_CARS];// +0x290 (8 * 0x08 = 0x40)
-        u8                   maCarFlagsBuffer0[KI_MAX_ACTIVE_RACE_CARS][16]; // +0x2D0 (8 * 0x10)
-        u8                   maCarFlagsBuffer1[KI_MAX_ACTIVE_RACE_CARS][16]; // +0x350 (8 * 0x10)
+        CgsNetwork::PlayerName maaGamertags[2][KI_MAX_ACTIVE_RACE_CARS]; // +0x2D0/+0x350
         u8                   mbFrameParity;                          // +0x3D0
         u8                   maReserved0x3D1[0x3E0 - 0x3D1];         // +0x3D1 (pad to 992)
     };

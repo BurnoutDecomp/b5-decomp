@@ -30,10 +30,11 @@ namespace BrnReplays
                       "maCarRecordsA @0x0190 (Reset/SetupStartOfFrame loop base)");
         static_assert(offsetof(GuiModuleStaticLayout, mauCarRecordsC) == 0x0290,
                       "mauCarRecordsC @0x0290 (std qword loop base)");
-        static_assert(offsetof(GuiModuleStaticLayout, maCarFlagsBuffer0) == 0x02D0,
-                      "maCarFlagsBuffer0 @0x02D0 (parity==0 buffer)");
-        static_assert(offsetof(GuiModuleStaticLayout, maCarFlagsBuffer1) == 0x0350,
-                      "maCarFlagsBuffer1 @0x0350 (parity==1 buffer)");
+        static_assert(sizeof(CgsNetwork::PlayerName) == 16, "original 16-byte gamertag");
+        static_assert(offsetof(GuiModuleStaticLayout, maaGamertags) == 0x02D0,
+                      "maaGamertags @0x02D0");
+        static_assert(sizeof(((GuiModuleStaticLayout*)nullptr)->maaGamertags[0]) == 0x80,
+                      "second gamertag buffer starts at0x350");
         static_assert(offsetof(GuiModuleStaticLayout, mbFrameParity) == 0x03D0,
                       "mbFrameParity @0x03D0 (SetupStartOfFrame toggle)");
         static_assert(sizeof(GuiModuleStaticLayout) == 0x03E0,
@@ -63,9 +64,9 @@ namespace BrnReplays
 
             mauCarRecordsC[liIndex] = 0;       // std qword @+0x290 (full 8 bytes)
 
-            // The X360 clears ONLY the leading byte of each 16-byte CarFlags element.
-            maCarFlagsBuffer0[liIndex][0] = 0; // stb buffer0[i]+0
-            maCarFlagsBuffer1[liIndex][0] = 0; // stb buffer1[i]+0
+            // Original Reset clears only each PlayerName leading byte.
+            maaGamertags[0][liIndex].macName[0] = 0;
+            maaGamertags[1][liIndex].macName[0] = 0;
 
             CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                        "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
@@ -93,13 +94,9 @@ namespace BrnReplays
 
             mauCarRecordsC[liIndex] = 0;
 
-            // X360: byte at base + 16*(index + 8*parity + 45). 16*45 == 0x2D0 (CarFlags base),
-            // so parity==0 selects buffer0[index], parity==1 selects buffer1[index]; the X360
-            // clears ONLY the leading byte (stbx) of the selected 16-byte element.
-            if (mbFrameParity == 0)
-                maCarFlagsBuffer0[liIndex][0] = 0;
-            else
-                maCarFlagsBuffer1[liIndex][0] = 0;
+            // Original parity indexes the current 16-byte PlayerName directly.
+            // Do not clamp or clear the rest of the name.
+            maaGamertags[mbFrameParity][liIndex].macName[0] = 0;
 
             CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                        "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
