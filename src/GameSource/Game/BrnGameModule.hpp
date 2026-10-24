@@ -691,6 +691,26 @@ namespace BrnGame
         //   4 -> BrnBFProFsm (HUD)      5 -> BrnScreenFsm@LOADING (SCREEN) + BrnFBFsm (HUD)
         void BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
 
+        // Complete original ARTIST823F0758 caller;17 explicit arguments.
+        // All IO records/stacks are borrowed from the outer frame owner.
+        // Unselected until the original/PC tick seats transfer together.
+        void DoUpdate_GUI(CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+            CgsGui::ViewIO::InputBuffer* lpGuiViewInputBuffer,
+            const CgsInput::InputIO::OutputBuffer* lpInputModuleOutputBuffer,
+            const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutputBuffer,
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+            const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+            const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+            CgsGui::ModelIO::OutputBuffer* lpGuiModelOutputBuffer,
+            BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+            BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+            BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+            BrnUpdateSet lUpdateSet, u32 liStartPressedPort);
+
         // X360 BridgeDirectorToGui @0x823DD5C0 (home GameBridgeDirectorToX.cpp): the director
         // output's camera post-FX requests -> GUI events 495/496/498/499, the director's
         // enumeration request byte -> 500. Called under the GUI-input write lock with the

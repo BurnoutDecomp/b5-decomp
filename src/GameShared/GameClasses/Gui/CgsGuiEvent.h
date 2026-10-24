@@ -45,6 +45,21 @@ namespace CgsGui
         s32 GetEventType() const { return EventTypeId; }
     };
 
+    // ARTIST823F0914..1C and923..944 queue true four-byte payloads.
+    // The original tags do not contain the PC channel-wrapper header.
+    template <>
+    struct GuiEvent<225> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 225; }
+    };
+    template <>
+    struct GuiEvent<143> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 143; }
+    };
+    static_assert(sizeof(GuiEvent<225>) == 1 && sizeof(GuiEvent<143>) == 1,
+                  "original progress/player-controller event tags");
+
     // ARTIST824B2DF4..2E2C boxes the actual16-byte overlay payload as
     // {16,189,16,payload} on channel40. The tag itself stores no queue header.
     template <>

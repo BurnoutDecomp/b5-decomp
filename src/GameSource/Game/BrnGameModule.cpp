@@ -29,6 +29,10 @@
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"       // [FX-RUMBLE3] CgsModule::IOHelper (DoUpdate_InputPreWorld's "InputPreWorld")
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h" // original borrowed OutputBuffer bridge
+#include "GameSource/Gui/BrnGuiPerfmons.h" // original DoUpdate_GUI monitor owner
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h" // actual canonical selected-controller event owner
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnProgressBarRenderer.h" // actual progress payload owner
+#include <cmath> // scalar lowering of the private VMX half-step counter
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h" // CgsGui::GuiEventTimeInfo (the per-frame GUI timestep)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
@@ -794,6 +798,95 @@ namespace BrnGame
             miGuiFsmStage      = 6;
             mbGuiPhaseComplete = false;
         }
+    }
+
+    // ARTIST823F0758; DecFIGS32E47C resolves the17-argument caller ABI.
+    // This is the original unselected frame leg, not a second tick added to the
+    // existing PC update path. Its caller owns every record and both IO stacks.
+    void BrnGameModule::DoUpdate_GUI(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+        CgsGui::ViewIO::InputBuffer* lpGuiViewInputBuffer,
+        const CgsInput::InputIO::OutputBuffer* lpInputModuleOutputBuffer,
+        const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutputBuffer,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+        CgsGui::ModelIO::OutputBuffer* lpGuiModelOutputBuffer,
+        BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+        BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+        BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+        BrnUpdateSet lUpdateSet, u32 liStartPressedPort)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI);
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miGuiModuleUpdate);
+        lpGuiOutputBuffer->Clear();
+        lpGuiModelOutputBuffer->Clear();
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI_Bridge);
+
+        CgsModule::LockBuffersForIO(lpGuiInputBuffer, lpInputModuleOutputBuffer,
+            lpGameStateOutputBuffer, lpWorldOutputBuffer, lpReplayOutputBuffer,
+            lpDirectorOutputBuffer);
+        BridgeWorldToGui(lpGuiInputBuffer, lpWorldOutputBuffer);
+        BridgeControllerToGui(lpGuiInputBuffer, lpInputModuleOutputBuffer);
+        BridgeGameStateToGui(lpGuiInputBuffer, lpGameStateOutputBuffer);
+        BridgeDirectorToGui(lpGuiInputBuffer, lpDirectorOutputBuffer);
+        BridgeReplayToGui(lpGuiInputBuffer, lpReplayOutputBuffer);
+        lpNetworkOutputBuffer->LockForRead();
+        BridgeNetworkToGui(lpGuiInputBuffer, lpNetworkOutputBuffer);
+        lpNetworkOutputBuffer->UnlockForRead();
+
+        // Original function-local static sfProgressCounter, file-backed initial0
+        // at82FAEBC4. ARTIST adds0.5 only outside update bit0x80, then applies
+        // the VPU divide/truncate/subtract remainder with modulus100.
+        static f32 sfProgressCounter = 0.0f;
+        BrnGui::GuiEventRenderProgressBar lProgress;
+        if ((lUpdateSet & 0x80) != 0)
+        {
+            lProgress.mProgressPercent = -1.0f;
+        }
+        else
+        {
+            // FLAG PC-platform leaf: scalar lowering of the original VMX
+            // modulo for this private half-step counter. Its reachable values
+            // are0..99.5; this does not define a general VMX reciprocal API.
+            const f32 lfNext = sfProgressCounter + 0.5f;
+            // vnmsubfp negates after rounding; keep the original negative zero
+            // at the100 wrap instead of rewriting this as next-product.
+            sfProgressCounter = -(std::trunc(lfNext / 100.0f) * 100.0f - lfNext);
+            lProgress.mProgressPercent = sfProgressCounter;
+        }
+        lpGuiInputBuffer->GetGuiEvents()->AddEvent(&lProgress, 225, sizeof(lProgress));
+        static_assert(CgsInput::KU_NUMBER_OF_PADS == 4, "ARTIST no-controller sentinel");
+        if (liStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
+        {
+            BrnGui::GuiEventSetPlayer0ControllerPort lPlayer0Port;
+            lPlayer0Port.miPort = liStartPressedPort;
+            lpGuiInputBuffer->GetGuiEvents()->AddEvent(&lPlayer0Port, 143, sizeof(lPlayer0Port));
+        }
+        BridgeGameToGui(lpGuiInputBuffer);
+        CgsModule::UnlockBuffersForIO(lpGuiInputBuffer, lpInputModuleOutputBuffer,
+            lpGameStateOutputBuffer, lpWorldOutputBuffer, lpReplayOutputBuffer,
+            lpDirectorOutputBuffer);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI_Bridge);
+
+        lpGDMInput->LockForWrite();
+        lpGDMOutput->LockForRead();
+        if (!mbDiskError)
+            mGuiModule.Update(lUpdateSet, lpInputBufferStack, lpOutputBufferStack,
+                lpGuiInputBuffer, lpGuiOutputBuffer, lpGuiModelOutputBuffer,
+                lpGuiViewInputBuffer, lpGDMInput, lpGDMOutput, true);
+        lpGDMOutput->UnlockForRead();
+        lpGDMInput->UnlockForWrite();
+
+        lpGuiOutputBuffer->LockForRead();
+        BridgeGuiToGame(lpGuiOutputBuffer);
+        lpGuiOutputBuffer->UnlockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miGuiModuleUpdate);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI);
     }
 
     // Complete original borrowed-output consumer, ARTIST823CB758.
