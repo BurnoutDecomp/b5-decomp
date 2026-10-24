@@ -886,6 +886,16 @@ namespace BrnGui
         s32  GetPaybackVictimRaceCarIndex() const { return mePaybackVictimRaceCarIndex; } // +0x4B60
         // ================================================================================
 
+        // DecFIGS BrnGuiCache.h:877/922/930/1444/1453/1458. These bind the
+        // existing native owners; SetInGame writes only the update-set byte,
+        // unlike the retained PC SetGameplayHudReady helper's three stores.
+        bool IsGamePaused() const { return mbIsGamePaused; }
+        bool IsImageExportInProgress() const { return mbImageExportInProgress; }
+        bool IsConnectedToNetwork() const { return mbRoadRuleFriendScoresAvailable; }
+        void SetConnectedToNetwork(bool lbConnected) { mbRoadRuleFriendScoresAvailable = lbConnected; }
+        bool IsInGame() { return mbGameplayUpdateActive; }
+        void SetInGame(bool lbInGame) { mbGameplayUpdateActive = lbInGame; }
+
         bool IsOnlineStartInProgress() const  { return mbOnlineStartInProgress; }  // +0x4B4C
         bool IsInviteInProgress() const       { return mbInviteInProgress; }       // +0x4B4D
         bool IsPerformingInvite() const       { return mbPerformingInvite; }       // +0x4B4F
@@ -1697,7 +1707,9 @@ namespace BrnGui
         // SetDoDisconnectPopup(0)). Raw s32 per
         // this boundary header's enum convention (see GetCurrentGameModeType).
         s32  meLastDisconnectedError;                     // +0x4B40 (19264) 0 == none
-        u8   mPad_4B44[5];                                // +0x4B44..+0x4B48
+        u8   mPad_4B44[4];                                // +0x4B44..+0x4B47
+        // DecFIGS h:1659; Construct82505A00 and RecEvent82510530 own this byte.
+        bool mbIsGamePaused;                             // +0x4B48 (19272)
         // ADDITIVE CARVE (pause wave, 2026-08-28) from the TAIL of the former
         // mPad_4B44[6] -- the cache's HIGH-DEFINITION byte. Five consumers read it, all
         // with the far-member `lbz +0x4B49` idiom, and all of them pick between an HD and
@@ -1707,7 +1719,7 @@ namespace BrnGui
         // CrashNavMapMain::HandleCrashNavInputPressed @0x824CCC74 and
         // RoadSignIconManager::Update @0x82517014. BrnMainMap.cpp:168 asked for exactly
         // this carve by name; it is made here so that its FLAG boundary can retire.
-        // No member is shifted (5 + 1 == 6). Consumer-named. The WRITER is GuiModule::Construct
+        // No member is shifted (4 padding + pause + HD == 6). The WRITER is GuiModule::Construct
         // @0x82518A24 (`*(gm + 1024649) = a6`, a gm-relative store the +0x4B49 grep could not
         // see): the video-mode HD bool. Written on this build since 2026-09-07 (issue #11);
         // before that it read 0 == SD everywhere.
@@ -1738,7 +1750,10 @@ namespace BrnGui
         // ADDITIVE CARVE (BrnCrashNavMap wave J): the friend-selected road-rule score gate.
         // X360-attested as an `lbz` at BOTH read sites in CrashNavMap::UpdateButtonPrompts
         // (@0x824B6A50 / @0x824B6B3C) -- a BYTE, so this carve stops short of
-        // mbOnlineMatchRanked @+0x4B51. FLAG: consumer-named (producer side unrecovered).
+        // mbOnlineMatchRanked @+0x4B51. The native connected producer is identified below.
+        // DecFIGS h:1668 names this same byte mbIsConnectedToNetwork. The
+        // retained consumer-named field is shared by both accessor families;
+        // native Update event43 sets it and RecEvent event44 clears it.
         bool mbRoadRuleFriendScoresAvailable;             // +0x4B50 (19280)
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption

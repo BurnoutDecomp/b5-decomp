@@ -514,7 +514,7 @@ namespace BrnGui
     // 8 bytes). The opaque u8[8] placeholder that stood here was DELETED rather than left to
     // shadow it.
     struct GuiGameModeStarted : public CgsGui::GuiEvent<237> { u8 maPayload[4]; };  // id 237 size 16 (12B GuiEvent header + opaque payload)
-    struct GuiGamePausedEvent { u8 maData[8]; s32 GetEventType() const { return 505; } };  // id 505 size 8 (raw; size not GuiEvent-shaped)
+    // GuiGamePausedEvent is named at its canonical BrnGuiEventTypeDefs.h home.
     // [gateui r3] GuiHUDMessageBHRRunnerCrashed (id 455) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :6218, sizeof 8).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
