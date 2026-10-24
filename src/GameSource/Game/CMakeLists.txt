@@ -1,7 +1,6 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
         BrnAutoTestManager.cpp
-        BrnAutoTestManagerLUACallbacks.cpp
         BrnDispatchThreadInputBuffer.cpp
         BrnGame.cpp
         BrnGameModule.cpp
