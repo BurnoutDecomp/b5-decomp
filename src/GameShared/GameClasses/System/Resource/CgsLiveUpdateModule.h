@@ -34,8 +34,8 @@
 //                            capacity 512, alignment 16; ends at +0x440)
 //   +0x440  mpGameTalk       the CgsGameTalk::GameTalk this module replies through
 //                            (Construct arg a2)
-//   +0x444  miField273       reset to 0 by Construct and Release (purpose not attested
-//                            by these 5 functions; named by its X360 word index)
+//   +0x444  miField273       own Prepare stage0/1 (attested by 828E65D8);
+//                            existing spelling retained without an unattested DWARF name
 //   +0x448  meReleaseStage   release-stage guard (Construct = 1; Release asserts it is
 //                            0 or 1, "Invalid stage")
 //   +0x44C  miUpdateState    the per-frame state machine field (0 idle / 1 armed /
@@ -59,6 +59,9 @@ namespace CgsResource
         // spInstance, store the GameTalk channel, and init the state fields.
         // (lpGameTalk is the Construct arg a2 -- the reply channel.)
         void Construct(CgsGameTalk::GameTalk* lpGameTalk);
+
+        // ARTIST 828E65D8; actual slot1 override. This lifecycle does not call base Prepare.
+        bool Prepare() override;
 
         // X360 0x828E6708. Clear the receiver queue and chain the base Destruct.
         void Destruct();
@@ -89,7 +92,7 @@ namespace CgsResource
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; offsets documentary) ----
         CgsModule::EventReceiverQueue<512, 16> mReceiverQueue;  // +0x228
         CgsGameTalk::GameTalk* mpGameTalk;                      // +0x440
-        s32  miField273;                                        // +0x444 (reset 0)
+        s32  miField273;                                        // +0x444 own Prepare stage0/1
         s32  meReleaseStage;                                    // +0x448 (Construct = 1)
         s32  miUpdateState;                                     // +0x44C
         s8   mcUpdateCounter;                                   // +0x450

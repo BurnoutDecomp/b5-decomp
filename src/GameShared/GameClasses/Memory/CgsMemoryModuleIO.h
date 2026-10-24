@@ -267,24 +267,28 @@ namespace MemoryIO
         }
     };
 
-    // Reply to a CreateResourceRequest (DWARF :685): the created resource + its allocator.
+    // ARTIST 8286D11C / DecFIGS :594: response base, resource and descriptor only.
     struct CreateResourceResponse : public MemoryResponse
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         {
             MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RESOURCE);
             for (s32 lt = 0; lt < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lt) mResource.m_baseResources[lt] = 0;   // null on failure paths
-            mpAllocator = 0;
         }
-        void SetAllocator(rw::LinearResourceAllocator* lpA) { mpAllocator = lpA; }
         void SetDescriptor(const rw::ResourceDescriptor* lpD) { mDescriptor = *lpD; }
         void SetResourceData(s32 liType, void* lpData)    { mResource.m_baseResources[liType] = lpData; }
+        // DecFIGS CgsMemoryModuleIO.h:602; ARTIST 8266E284..EC copies all five
+        // resource lanes and five size/alignment pairs into the caller-owned pair.
+        void GetResource(rw::Resource* lpResource, rw::ResourceDescriptor* lpDescriptor) const
+        {
+            *lpResource = mResource;
+            *lpDescriptor = mDescriptor;
+        }
         const rw::Resource&           GetResource() const   { return mResource; }
         const rw::ResourceDescriptor& GetDescriptor() const { return mDescriptor; }
     private:
         rw::Resource                 mResource;
         rw::ResourceDescriptor       mDescriptor;
-        rw::LinearResourceAllocator* mpAllocator;
     };
 
     // Reply to a CreateLinearAllocatorRequest (DWARF :706): the created rw allocator.
@@ -292,11 +296,11 @@ namespace MemoryIO
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RW_LINEAR_ALLOCATOR); }
-        void SetLinearAllocator(rw::LinearResourceAllocator* lpA)        { mpLinearAllocator = lpA; }
-        void SetGeneralAllocator(rw::core::GeneralResourceAllocator* lpA) { mpGeneralAllocator = lpA; }
+        // DecFIGS :633; ARTIST 8266E2F4..304 reads the returned allocator pointer.
+        void GetAllocator(rw::LinearResourceAllocator** lppAllocator) const { *lppAllocator = mpAllocator; }
+        void SetAllocator(rw::LinearResourceAllocator* lpAllocator) { mpAllocator = lpAllocator; }
     private:
-        rw::LinearResourceAllocator*        mpLinearAllocator;
-        rw::core::GeneralResourceAllocator* mpGeneralAllocator;
+        rw::LinearResourceAllocator* mpAllocator;
     };
 
     // Reply to a CreateGeneralAllocatorRequest (DWARF :724).
@@ -304,6 +308,8 @@ namespace MemoryIO
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RW_GENERAL_ALLOCATOR); }
+        // DecFIGS :665; ARTIST 8266E328..338 reads the returned allocator pointer.
+        void GetAllocator(rw::core::GeneralResourceAllocator** lppAllocator) const { *lppAllocator = mpAllocator; }
         void SetAllocator(rw::core::GeneralResourceAllocator* lpA) { mpAllocator = lpA; }
     private:
         rw::core::GeneralResourceAllocator* mpAllocator;

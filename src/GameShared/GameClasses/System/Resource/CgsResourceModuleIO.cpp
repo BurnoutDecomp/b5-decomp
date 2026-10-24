@@ -50,6 +50,13 @@ namespace CgsResource
             mbDiskErrorOccured = false;
         }
 
+        // Inlined in original CheckDiskError823BC7BC: one byte load from the
+        // actual filesystem status. No standalone address is invented for it.
+        bool FileSystemStatusInterface::GetDiskErrorOccured() const
+        {
+            return mbDiskErrorOccured;
+        }
+
         // -------- OutputBuffer::Construct @ 0x828EC978 --------
         // Construct the IOBuffer base (sets the eStatusConstructed status bit @ +0), then
         // construct the embedded FileSystemStatusInterface @ +1 (clears its disk-error flag).
@@ -67,7 +74,13 @@ namespace CgsResource
             CgsModule::IOBuffer::Construct();
             mResourceQueue.Construct();
         }
-        void InputBuffer::Destruct() { mResourceQueue.Clear(); }
+        // Original destroy-inst82663580 calls828EC940: retire IO status first,
+        // then the actual16384 queue lifecycle (its own assert followed by Clear).
+        void InputBuffer::Destruct()
+        {
+            CgsModule::IOBuffer::Destruct();
+            mResourceQueue.Destruct();
+        }
 
         // -------- InputBuffer::GetResourceQueue() const @ 0x828E1190 (THIS TU) --------
         // Read-lock gate, then return the embedded request queue (X360 this+4).
@@ -113,5 +126,12 @@ namespace CgsResource
             CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
             return &mFileSystemStatusInterface;
         }
+        // Original DestroyIOBuffer<ResourceOutput>826637F8 uses the shared
+        // 822DC3D0 thunk -> IOBuffer::Destruct. No extra payload lifecycle exists.
+        void OutputBuffer::Destruct()
+        {
+            CgsModule::IOBuffer::Destruct();
+        }
+
     }
 }
