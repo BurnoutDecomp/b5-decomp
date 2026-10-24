@@ -14,8 +14,7 @@
 // the image on 2026-09-06 (ppcdis of 0x828F8690; the 112 bytes at 0x82CDBEB8),
 // and the pad half of this leaf now IS that table. See the banner at the top of
 // the .cpp. This leaf stands in for the rest on PC: it reads the host keyboard
-// (focus-gated GetAsyncKeyState) and, when present, the XInput pad 0
-// (XInputGetState via the dynamically loaded system XInput DLL), and publishes
+// (focus-gated GetAsyncKeyState) and, when present, the selected SDL3 gamepad, and publishes
 // the player-0 pad record with the same observable contract the console fill
 // produces:
 //   - maActionInfo[k].mfValue / .muStatus (bit0 held / bit1 pressed / bit2
@@ -44,20 +43,19 @@ namespace CgsInput
     class InputPadsPC
     {
     public:
-        // Fill the player-0 pad record in lpOutput from the host keyboard + XInput pad 0.
+        // Fill the player-0 pad record in lpOutput from the host keyboard + the selected SDL3 gamepad.
         // Must be called with lpOutput write-locked (it writes the pad record the way the
         // console module fill does). Edge state is kept across calls (file-static).
         static void UpdatePlayer0(InputIO::OutputBuffer* lpOutput);
 
         // FLAG PC-platform leaf (FX-RUMBLE3 2026-09-24): the DEVICE half of the console's
-        // InputPads::Update @0x828F8690 for the one host pad this build reads (XInput user 0 ==
+        // InputPads::Update @0x828F8690 for the one host pad this build reads (the selected SDL controller ==
         // console port 0). Called by InputModule::PreWorldUpdate @0x82903328 at the console's
         // `mControllers.Update(lpOutputBuffer)` seat. Binds / unbinds port 0's DeviceX360Pad as the
         // ManagerX360 scan would (0x828F86C8..0x828F8744: an unbound pad with a device present is
-        // bound, a bound pad whose device went away is unbound), and holds the PC's standing
-        // player-0-on-port-0 assignment in the pads' bind table (InputPads::BindPlayerToPort -- the
-        // console reaches it through the InputPostWorld bind chain, which this build does not run;
-        // BrnGameModule seeds the same assignment as miPlayer0ControllerPort = 0).
+        // bound, a bound pad whose device went away is unbound). Replacing the selected
+        // SDL device also invalidates its motor cache. Player assignment remains owned
+        // by the recovered InputPostWorld request/result chain.
         static void UpdatePadDevices(InputPads* lpPads);
     };
 }

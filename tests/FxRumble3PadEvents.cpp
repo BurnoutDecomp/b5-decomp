@@ -33,7 +33,7 @@ namespace Assert
     int   FireAssert(const char*, const char*, int) { ++gAsserts; return 0; }
     void* EndAssert() { return nullptr; }
 }
-namespace Log { DebugPrint* gpDebugPrint = nullptr; }   // UpdatePadRumble's [DIAG] line stays silent
+namespace Log { decltype(CgsDev::Log::gpDebugPrint) gpDebugPrint = nullptr; } // match the production stream type
 }
 
 // The automated-testing byte (X360 byte_83085F80). Its home is CgsHardwareInitPC.cpp, not under test.
