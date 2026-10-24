@@ -207,12 +207,20 @@ namespace
         static_cast<CgsGui::SaveLoadSystem*>(lpSystem)->LoadHandleConfirmLoad(luOption);
     }
 
+    void SaveLoadSystem_BootupHandleNotSignedInOption(void* lpSystem, u32 luOption)
+    {
+        static_cast<CgsGui::SaveLoadSystem*>(lpSystem)->BootupHandleNotSignedInOption(luOption);
+    }
+
     // Localisation string-table entries (X360 rodata pointers).
     const char* const KSTR_AUTOSAVE_WARNING = "SAVELOAD_AUTOSAVE_WARNING"; // off_82F3319C
     const char* const KSTR_CONTINUE         = "SAVELOAD_CONTINUE";         // off_82F331BC
     const char* const KSTR_CONFIRM_LOAD     = "SAVELOAD_CONFIRM_LOAD";     // off_82F331A4
     const char* const KSTR_OPTION_YES       = "GENERAL_OPTION_YES";        // off_82F331C8
     const char* const KSTR_OPTION_NO        = "GENERAL_OPTION_NO";         // off_82F331CC
+    const char* const KSTR_NOT_SIGNED_IN    = "SAVELOAD_NOT_SIGNED_IN";    // off_82F3320C
+    const char* const KSTR_SIGN_IN          = "SAVELOAD_SIGN_IN";          // off_82F331A8
+    const char* const KSTR_CONTINUE_WITHOUT_SAVING = "SAVELOAD_CONTINUE_WITHOUT_SAVING"; // off_82F331C0
 }
 
 namespace CgsGui
@@ -477,7 +485,29 @@ namespace CgsGui
         // destination.
         CaptureStoredDataView(*static_cast<const SaveLoadMetadata*>(lpMetadata));
 
-        BootupShowAutosaveWarning();
+        // X360 0x82860234..0x828602B8 (Bootup decompiled from the ARTIST database): branch on the
+        // signed-in user index (`lwz r11,0x210; cmpwi 0; bge`).
+        //   signed in  -> WaitForUIClosed(&BootupShowAutosaveWarning), the normal boot-up;
+        //   no user    -> the SAVELOAD_NOT_SIGNED_IN prompt, options { SAVELOAD_SIGN_IN,
+        //                 SAVELOAD_CONTINUE_WITHOUT_SAVING }, answered by
+        //                 BootupHandleNotSignedInOption. "Continue without saving" reports
+        //                 failure: the profile is neither loaded nor saved -- what passing the
+        //                 title with A (no controller bound, so no user signed in) does on ARTIST.
+        if (miField210 >= 0)
+        {
+            WaitForUIClosed(&SaveLoadSystem::BootupShowAutosaveWarning);
+            return;
+        }
+
+        mMessageDisplayOptionFunc.muFunc =
+            reinterpret_cast<uintptr_t>(&SaveLoadSystem_BootupHandleNotSignedInOption);
+        mMessageDisplayOptionFunc.muDelta = 0;                                         // std r9,0x198
+
+        const char* lapcOptions[2];
+        lapcOptions[0] = KSTR_SIGN_IN;
+        lapcOptions[1] = KSTR_CONTINUE_WITHOUT_SAVING;
+        mpMessageDisplay->ShowMessage(static_cast<MessageDisplay::OptionHandler*>(this),  // lwz r3,0x134
+                                      KSTR_NOT_SIGNED_IN, lapcOptions, 2);
     }
 
     // X360 0x82856040. Write the save: build two load-entry records (the title save + the mugshot
@@ -535,6 +565,20 @@ namespace CgsGui
         auto* lpHandler = reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay);
         CGS_ASSERT(lpHandler, "Save task requires a result handler");
         if (!lpHandler) return;
+        // FLAG PC-platform leaf: no storage without the boot-up's storage stage (see
+        // mbStorageReadyPC). The console's WriteSave fails there; so does the container.
+        if (!mbStorageReadyPC)
+        {
+            SaveLoadPC::WriteReport lReport;
+            std::strncpy(lReport.macName, macTitle, sizeof(lReport.macName) - 1);
+            lReport.muImageSize = mStoredDataView.miSize;
+            lReport.muMugshotsSize = GetMugshotBufferSizeBytes();
+            if (CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[SaveLoadPC] no storage selected (boot-up continued "
+                                              "without saving) -- write refused\n";
+            ReportSavePC(lpHandler, SaveLoadPC::E_WRITE_FAILED, lReport);
+            return;
+        }
         bool lbQueued = false;
         try
         {
@@ -887,6 +931,9 @@ namespace CgsGui
         {
             CgsDev::Log::WriteToLog("[SaveLoadPC] bootup: auto-load off, no read\n");
         }
+
+        // The storage stage ran: from here the container stands for the selected device.
+        mbStorageReadyPC = true;
 
         Update();
         reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
