@@ -126,14 +126,18 @@ namespace
     const s32 KI_ACTION_SELECT = 49;
     const s32 KI_ACTION_BACK   = 50;
 
-    // TriggerExitState posts the post-event TEARDOWN, {1, 292, 12} on channel 40 -- the
-    // same record the offline results screen posts on its way out. GuiCache::RecEvent
-    // case 292 clears the cached post-event data.
-    struct GuiEventPostEventTeardown : public CgsGui::GuiEvent<292>
+    // TriggerExitState posts {1, 304, 12} on channel 40 (ARTIST @0x824D3018: `li r11, 0x130`).
+    // GuiCache::RecEvent case 304 only RAISES the presentation-suppressed byte (+19319); it
+    // does NOT clear the cached post-event record. That matters: the FSM's ADVANCE out of
+    // PE_COMPLETED re-enters InstantResultsState, which copies the record out of the cache
+    // again and runs SelectSubstates/SetupComponents on it -- so the record must still be the
+    // finished event's, with only the already-shown pages suppressed. (This used to post 292,
+    // the teardown, which emptied the record and crashed the re-entry on finish position -1.)
+    struct GuiEventSuppressPostEventPresentation : public CgsGui::GuiEvent<304>
     {
         u8 mucPad;   // +0x0C (the 1-byte empty payload; the console leaves it unwritten)
 
-        GuiEventPostEventTeardown() : CgsGui::GuiEvent<292>(1, 12), mucPad(0) {}
+        GuiEventSuppressPostEventPresentation() : CgsGui::GuiEvent<304>(1, 12), mucPad(0) {}
     };
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
@@ -1065,14 +1069,14 @@ void CompletedGame::HandleControllerInput(const CgsModule::Event* lpEvent, s32 l
 }
 
 // ---- TriggerExitState ---------------------------------------------------------------
-// cpp:1203 -- Post the post-event teardown, then leave: the 100%-part-one
-// completion is the one that rolls the credits, everything else goes back to the front
-// end.
+// cpp:1203 -- Suppress the post-event presentation (event 304), then leave: the
+// 100%-part-one completion is the one that rolls the credits, everything else ADVANCEs
+// back into the results flow.
 void CompletedGame::TriggerExitState()
 {
-    GuiEventPostEventTeardown lTeardownEvent;
+    GuiEventSuppressPostEventPresentation lSuppressEvent;
     mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lTeardownEvent), KI_CHANNEL_GUI_OUT, 16);
+        reinterpret_cast<const CgsModule::Event*>(&lSuppressEvent), KI_CHANNEL_GUI_OUT, 16);
 
     SendStateEvent(meCompletionType == E_COMPLETION_JUST_HIT_100_PERCENT ? "TO_CREDITS"
                                                                         : "ADVANCE");
