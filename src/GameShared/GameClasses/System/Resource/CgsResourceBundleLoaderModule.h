@@ -50,8 +50,11 @@ public:
     BundleLoaderModule() = default;
     static const u32 KU_SECONDARY_STREAM_BUFFER_SIZE = 0x80000;
     void Construct();
-    void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
-                   rw::IResourceAllocator* lpDebugAllocator);
+    virtual void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
+                           rw::IResourceAllocator* lpDebugAllocator);
+    // FLAG PC-platform leaf: preserve the existing native allocation/initialization owner.
+    void ConstructNativePC(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
+                           rw::IResourceAllocator* lpDebugAllocator);
     bool Prepare();
     bool Release();
     void Destruct();

@@ -140,7 +140,7 @@ namespace CgsResource
             lpRwAllocator);
         mFileSystem.Construct();
         mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
-        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpRwAllocator,
+        mBundleLoaderModule.ConstructNativePC(&lpOptions->mLoaderInitOptions, lpRwAllocator,
                                       lpOptions->mDebugParams.mpDebugAllocator);
         mDebugComponent.Construct(this, &lpOptions->mDebugParams);
     }

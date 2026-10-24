@@ -121,6 +121,9 @@ namespace CgsResource
 
         // ---- lifecycle ---------------------------------------------------------------
         void Construct(const void* lpInitOptions, void* lpAllocator);
+        // Original virtual owner; the native two-input path remains separate.
+        virtual void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator);
         bool Prepare();
         bool Release();
         void Destruct();
