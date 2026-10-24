@@ -12,7 +12,7 @@ source=Tree().read(resource+'CgsResourceModule.cpp')
 names=['bool ResourceModule::AddOpenReadStreamRequest(',
        'bool ResourceModule::AddCloseReadStreamRequest(',
        'void ResourceModule::ProcessPendingFileSystemResponses(',
-       'void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,\n',
+       'void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,',
        'void ResourceModule::ProcessBundleLoaderStreamRequests(',
        'void ResourceModule::ProcessPoolOutputResponses(',
        'void ResourceModule::ProcessResourceResponses(',
