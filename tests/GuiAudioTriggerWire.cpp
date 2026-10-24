@@ -12,6 +12,9 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
+#if defined(AUDIO_MODE_CANDIDATE) || defined(AUDIO_MODE_ID_ONLY)
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
+#endif
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
@@ -53,6 +56,16 @@ namespace
     }
 
     using GuiOutputQueue = CgsModule::VariableEventQueue<18432, 16>;
+#if defined(AUDIO_MODE_CANDIDATE)
+    using GuiCallbackOutput = CgsGui::CgsGuiModuleIO::OutputBuffer;
+    using GuiCallbackModule = BrnGui::GuiModule;
+#elif defined(AUDIO_MODE_BASELINE)
+    using GuiCallbackOutput = GuiOutputQueue;
+    using GuiCallbackModule = BrnGui::GuiModule;
+#else
+    using GuiCallbackOutput = GuiOutputQueue;
+    using GuiCallbackModule = BrnGui::LegacyGuiModule;
+#endif
     using GuiInputQueue = CgsGui::GuiEventQueueBase<32768, 16>;
     using SoundQueue = CgsModule::VariableEventQueue<8192, 16>;
     using AudioMessage = CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>;
@@ -122,19 +135,27 @@ namespace
         return true;
     }
 
-    EventView Trigger(BrnGui::GuiModule& arModule, GuiOutputQueue& arOutput,
+    EventView Trigger(GuiCallbackModule& arModule, GuiCallbackOutput& arOutput,
                       const char* lpacComponent, const char* lpacMovie,
                       const char* lpacAction, const char* lpacLabel)
     {
         arOutput.Clear();
+#if defined(AUDIO_MODE_CANDIDATE)
+        arOutput.LockForWrite();
+#endif
 #if defined(AUDIO_MODE_ID_ONLY)
-        BrnGui::GuiModule::FlaptSoundTriggerCallbackIdOnly(
+        BrnGui::LegacyGuiModule::FlaptSoundTriggerCallbackIdOnly(
             &arModule, lpacComponent, lpacMovie, lpacAction, lpacLabel);
 #else
         BrnGui::GuiModule::FlaptSoundTriggerCallback(
             &arModule, lpacComponent, lpacMovie, lpacAction, lpacLabel);
 #endif
+#if defined(AUDIO_MODE_CANDIDATE)
+        arOutput.UnlockForWrite();
+        return First(arOutput.mOutEvents);
+#else
         return First(arOutput);
+#endif
     }
 
 #if defined(AUDIO_MODE_CANDIDATE)
@@ -151,9 +172,9 @@ namespace
                       "state output wrapper is the original {100,457,12}+100 record");
         static_assert(sizeof(AudioMessage) == 116, "sound message 6 is header16 + payload100");
 
-        GuiOutputQueue lModuleOutput;
+        GuiCallbackOutput lModuleOutput;
         lModuleOutput.Construct();
-        BrnGui::GuiModule lModule = { &lModuleOutput };
+        GuiCallbackModule lModule = { &lModuleOutput };
         SoundQueue lSoundQueue;
         lSoundQueue.Construct();
         BrnSound::Module::SoundDecoderProjection lSound;
@@ -251,7 +272,7 @@ namespace
         // and retire the stored batch once. The output event itself came from the production callback.
         const EventView lInboxSource = Trigger(lModule, lModuleOutput, "INBOX_COMPONENT",
             "InboxMovie", "ON_CHANGE", "InboxCue");
-        AudioFixture::QueueHandoff lHandoff(lModuleOutput);
+        AudioFixture::QueueHandoff lHandoff(lModuleOutput.mOutEvents);
         lHandoff.mStoredGuiEvents.Construct();
         GuiInputQueue lInput;
         lInput.Construct();
@@ -318,8 +339,8 @@ namespace
 #if defined(AUDIO_MODE_BASELINE)
     void RunBaselineNegative()
     {
-        GuiOutputQueue lOutput; lOutput.Construct();
-        BrnGui::GuiModule lModule = { &lOutput };
+        GuiCallbackOutput lOutput; lOutput.Construct();
+        GuiCallbackModule lModule = { &lOutput };
         const EventView lEvent = Trigger(lModule, lOutput, "BASE_COMPONENT", "BaseMovie",
                                          "ON_ENTER", "BaseCue");
         Check(lEvent.miType == 457 && lEvent.miSize == 100,
@@ -348,8 +369,8 @@ namespace
               "ID-only control keeps the candidate canonical payload type at100 bytes");
         Check(sizeof(AudioMessage) == 116,
               "ID-only control keeps the candidate sound message at116 bytes");
-        GuiOutputQueue lOutput; lOutput.Construct();
-        BrnGui::GuiModule lModule = { &lOutput };
+        GuiCallbackOutput lOutput; lOutput.Construct();
+        GuiCallbackModule lModule = { &lOutput };
         const EventView lEvent = Trigger(lModule, lOutput, "IDONLY_COMPONENT", "IDOnlyMovie",
                                          "ON_ENTER", "IDOnlyCue");
         Check(lEvent.miType == 457 && lEvent.miSize == 100,
