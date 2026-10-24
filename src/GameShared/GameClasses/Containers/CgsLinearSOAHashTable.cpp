@@ -19,9 +19,33 @@
 //   phase1 [start,len): r10=[a1+8]=keys ; == key -> hit: values=[a1+0xC], return + 4*pos ; ==
 //     invalidKey -> return 0 ; else ++pos,+=4 ; wrap to phase2 at len ; NO assert.
 #include "GameShared/GameClasses/Containers/CgsLinearSOAHashTable.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsContainers
 {
+    // ARTIST828E9BC8..9CBC. The unsigned comparisons and four-byte key stride
+    // attest this concrete key width; the original values array remains untouched.
+    template <>
+    void LinearSOAHashTable<s32, u32>::Initialize(u32* lpKeys, s32* lpValues, u32 luLength)
+    {
+        if (luLength == 0 || ((luLength - 1u) & luLength) != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "Length of hash table must be more than 0 and a power of 2\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsLinearSOAHashTable.h", 167);
+            CgsDev::Assert::EndAssert();
+        }
+        miLength = luLength;
+        mpKeys = lpKeys;
+        mpValues = lpValues;
+        miInvalidKey = 0xFFFFFFFFu;
+        for (u32 luSlot = 0; luSlot < miLength; ++luSlot)
+            mpKeys[luSlot] = miInvalidKey;
+    }
+
     // Force emission of the <int,int> AddEntry/FindEntry bodies (X360 0x828DF260 / 0x828DF3E0).
     template int* LinearSOAHashTable<int, int>::AddEntry(int, const int*);
     template int* LinearSOAHashTable<int, int>::FindEntry(int);

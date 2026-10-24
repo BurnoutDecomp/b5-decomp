@@ -29,6 +29,13 @@ struct LoadedBundleData {
 class BundleLoaderModule : public CgsModule::ModuleSingleBuffered {
     friend class DebugComponent;
 public:
+        // Original resource-construction monitor/trace owners; ARTIST829055B0.
+        static s32 _miStreamUpdate; // target82F33FD8
+        static s32 _miStreamEntryCopy; // target82F33FDC
+        static s32 _miStreamDataCopy; // target82F33FE0
+        static s32 _miTraceStreamUpdate_StreamHeader; // target82F33FE4
+        static s32 _miTraceStreamUpdate_StreamEntries; // target82F33FE8
+        static s32 _miTraceStreamUpdate_StreamData; // target82F33FEC
     static s32 _miUpdatePerfMon; // DecFIGS cpp32; ARTIST82F33FD4
     enum EStage { E_STAGE_START=0, E_STAGE_RUNNING=1, E_STAGE_DONE=2 };
     enum EStreamStage {
