@@ -1218,6 +1218,10 @@ namespace
 
 void BrnRendererModule::Construct()
 {
+    // ARTIST8240A7C0: bind the actual typed GlobalGraphics wrapper.
+    // Its original backing owner remains separate from the retained native arenas.
+    mpGraphicsAllocator = BrnResource::GetGraphicsAllocator();
+
     // ARTIST8240B43C..8240B710: preserve registration order, white RGBA,
     // and the original refresh-budget percentages (WorldOpaque is raw23.0).
     // This belongs here, after DebugManager::Construct, not in the C++ ctor.
@@ -1454,6 +1458,10 @@ void BrnRendererModule::Construct()
                                     "(effects apply, tint blend and composite skipped)\n");
         }
     }
+
+    // ARTIST 8240BF90: classify the constructed renderer as a new-IO module.
+    // This is the original lifetime seed, not Prepare completion or allocator readiness.
+    mbIsNewModule = true;
 }
 
 // @0x82409C20. ARTIST's stage helper increments before checking the terminal state;

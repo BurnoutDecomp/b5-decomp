@@ -49,9 +49,11 @@ void BrnRendererModule::MemoryUsage()
     const u32 luPhysicalUsage       = lUsage.m_baseResourceDescriptors[2].m_size;
 
     const u64 lu64MainStart     = static_cast<u64>(reinterpret_cast<uintptr_t>(lpMainStart));
-    const u64 lu64MainEnd       = static_cast<u64>(reinterpret_cast<uintptr_t>(lpMainStart + luMainCapacity));
     const u64 lu64PhysicalStart = static_cast<u64>(reinterpret_cast<uintptr_t>(lpPhysicalStart));
-    const u64 lu64PhysicalEnd   = static_cast<u64>(reinterpret_cast<uintptr_t>(lpPhysicalStart + luPhysicalCapacity));
+    // FLAG PC-platform leaf: a retained native arena can have an empty physical
+    // domain. Sum printed addresses as native integers, without null-pointer arithmetic.
+    const u64 lu64MainEnd       = lu64MainStart + luMainCapacity;
+    const u64 lu64PhysicalEnd   = lu64PhysicalStart + luPhysicalCapacity;
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {
