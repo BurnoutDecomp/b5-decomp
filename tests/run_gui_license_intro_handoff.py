@@ -239,19 +239,29 @@ def main():
         if len(profile_case_labels) != 1:
             raise ValueError("native profile-350 dispatch arm is not unique")
         profile_case_start = profile_case_labels[0].start()
-        profile_cache_call = "mGuiCache.RecEvent(lpEvent, liId);"
-        profile_case_cache_end = dispatch_source.index(
-            profile_cache_call, profile_case_start) + len(profile_cache_call)
-        profile_case_end = dispatch_source.index("break;", profile_case_cache_end) + len("break;")
+        # The actual350 arm falls through to a shared switch break. GuiCache
+        # delivery is now after that switch, not inside the350 arm.
+        profile_case_end = dispatch_source.index("break;", profile_case_start) + len("break;")
         profile_case = dispatch_source[profile_case_start:profile_case_end]
-        dispatch_tail_start = dispatch_source.index(
-            "mCustomRendererManager.RecvEvent(lpEvent, liId);", profile_case_end)
+        cache_tail_matches = list(re.finditer(
+            r"if \(liId != 14 && liId != 16\)\s*"
+            r"mGuiCache\.RecEvent\(lpEvent, liId\);", dispatch_source))
+        manager_tail_matches = list(re.finditer(
+            r"if \(liId != 14 && liId != 16\)\s*"
+            r"mCustomRendererManager\.RecvEvent\(lpEvent, liId\);", dispatch_source))
+        if len(cache_tail_matches) != 1 or len(manager_tail_matches) != 1:
+            raise ValueError("actual guarded cache/renderer common tails are not unique")
+        cache_tail = cache_tail_matches[0]
+        manager_tail = manager_tail_matches[0]
+        if not profile_case_end < cache_tail.start() < cache_tail.end() < manager_tail.start():
+            raise ValueError("Profile350/shared-break/cache/renderer source order changed")
         dispatch_tail_end = dispatch_source.index(
-            "const CgsModule::Event* lpNext = 0;", dispatch_tail_start)
-        dispatch_tail = dispatch_source[dispatch_tail_start:dispatch_tail_end]
-        # The recovered dispatcher also owns unrelated keyboard/save-image/platform
-        # arms. This fixture compiles its exact Profile-350 arm and common fan-out,
-        # with the one-record queue walk kept as a transparent test boundary.
+            "const CgsModule::Event* lpNext = 0;", manager_tail.end())
+        dispatch_tail = cache_tail[0] + "\n" + dispatch_source[manager_tail.start():dispatch_tail_end]
+        # Unrelated keyboard/save-image/platform arms and the separate tracker/
+        # passive-witness block remain fixture boundaries. The actual selected
+        # cache guard, renderer guard and observer fan-out are copied unchanged;
+        # the one-record queue walk remains the existing test boundary.
         dispatch = (
             "const CgsModule::Event* GuiModule::DispatchInboundGuiEvents(\n"
             "    bool& rbHasSaveImageEvent, CgsGui::ImageFileInfo& lrSaveImageInfo,\n"
@@ -446,11 +456,13 @@ switch(id) {
                  "mHudFlow.Update();",
              ])),
             ("actual Profile-350 dispatch arm binds profile/cache and reaches subscribed flow",
-             in_order(code_only(profile_case),
-                 ["mProfileHost.GetProfileManager().SetProgressionProfile",
-                  "mGuiCache.RecEvent(lpEvent, liId);"])
+             "mProfileHost.GetProfileManager().SetProgressionProfile" in code_only(profile_case)
+             and "mGuiCache.RecEvent(lpEvent, liId);" not in code_only(profile_case)
              and in_order(code_only(dispatch_tail),
-                 ["mCustomRendererManager.RecvEvent(lpEvent, liId);",
+                 ["if (liId != 14 && liId != 16)",
+                  "mGuiCache.RecEvent(lpEvent, liId);",
+                  "if (liId != 14 && liId != 16)",
+                  "mCustomRendererManager.RecvEvent(lpEvent, liId);",
                   "RouteEventToFlow(lpEvent, liId, liSize);"])),
             ("dispatcher preserves the optional suffix cursor and last-event return",
              dispatch_cursor_contract),
