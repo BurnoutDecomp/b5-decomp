@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h" // original output publisher
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // original dynamic assertion
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
@@ -122,6 +124,145 @@ void ColourCalibrationScreen::RecvEvent(const CgsModule::Event* lpEvent, s32 liI
     {
         meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_HIDE;
         CgsDev::Log::WriteToLog("[calib-screen] hide requested (GUI 515)\n");
+    }
+}
+
+// ARTIST8246AA28; original caller-owned GUI output and allocator lifecycle.
+void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
+    const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
+    CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+    rw::IResourceAllocator* lpAllocator)
+{
+    (void)lpGDMOutput; // The original ABI retains r5; the body never reads it.
+    switch (meState)
+    {
+    case E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED:
+    case E_COLOURCALIBRATIONSCREENSTATE_RELEASED:
+        break;
+    case E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_SHOW:
+        lpGDMInput->GetRequestInterface()->AcquireResource(
+            &mReceiverQueue, KI_ACQUIRE_EVENT_ID, KI_TEXTURE_POOL_ID, KPC_TEXTURE_NAME);
+        meState = E_COLOURCALIBRATIONSCREENSTATE_ACQUIRINGTEXTURERESOURCE;
+        break;
+    case E_COLOURCALIBRATIONSCREENSTATE_ACQUIRINGTEXTURERESOURCE:
+    {
+        if (mReceiverQueue.GetLength() == 0)
+            break;
+        if (mReceiverQueue.GetLength() != 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mReceiverQueue.GetLength() == 1",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 128);
+            CgsDev::Assert::EndAssert();
+        }
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        const s32 liEventId = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        if (!lpEvent)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpEvent",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 136);
+            CgsDev::Assert::EndAssert();
+        }
+        if (liEventId != KI_EVENT_ACQUIRERESOURCE)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("liEventId == CgsResource::ResourceIO::EVENT_ACQUIRERESOURCE",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 137);
+            CgsDev::Assert::EndAssert();
+        }
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        if (lpAcquire->miEventId != KI_ACQUIRE_EVENT_ID)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("595017 == lpAcquire->GetEventId()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 144);
+            CgsDev::Assert::EndAssert();
+        }
+        mColourCalibrationTextureHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+        mColourCalibrationTextureHandle.mpSourceEntry = lpAcquire->mpSourceEntry;
+        if (mColourCalibrationTextureHandle == CgsResource::NULLResourceHandle)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 147);
+            CgsDev::Assert::EndAssert();
+        }
+        mReceiverQueue.Clear();
+        // AcquireResourceResponse points at the real resource's lane-zero slot.
+        renderengine::Texture* lpTexture = *reinterpret_cast<renderengine::Texture* const*>(
+            mColourCalibrationTextureHandle.mpResourceMemory);
+        if (!lpTexture)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("NULL != lpColourCalibrationTexture",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 155);
+            CgsDev::Assert::EndAssert();
+        }
+        renderengine::TextureState::Parameters lParameters;
+        lParameters.muAddressU = 2;
+        lParameters.muAddressV = 2;
+        lParameters.muAddressW = 2;
+        lParameters.muMagFilter = 0;
+        lParameters.muMinFilter = 0;
+        lParameters.muMipFilter = 0;
+        lParameters.muField6 = 0;
+        lParameters.muField7 = 0;
+        lParameters.muMaxAnisotropy = 13;
+        lParameters.muField9 = 0;
+        lParameters.muField10 = 1;
+        lParameters.mfMipLodBias = 0.0f;
+        lParameters.mfField12 = 0.0f;
+        lParameters.muField13 = 0;
+        lParameters.muField14 = 0;
+        lParameters.muField15 = 0;
+        lParameters.mu8Field40 = 0;
+        lParameters.mu8Field41 = 0;
+        lParameters.mu8Field42 = 0;
+        lParameters.mu8Field43 = 1;
+        lParameters.mu8Field44 = 1;
+        lParameters.mpTexture = lpTexture;
+
+        // Use the actual selected typed five-lane descriptor/provider. The
+        // caller's real allocator is mandatory; no fallback allocation policy.
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        mTextureStateResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
+        mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource, &lParameters);
+    }
+        // Original acquiring-state fallthrough to the PREPARED publication.
+    case E_COLOURCALIBRATIONSCREENSTATE_PREPARED:
+    {
+        meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARED;
+        GuiOptionsBrightnessContrastPostFxControl lControl;
+        lControl.mColourCalibrationTextureHandle = mColourCalibrationTextureHandle;
+        lControl.mbEnablePostFx = false;
+        lpOutput->AddGuiOutEvent(lControl);
+        break;
+    }
+    case E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_HIDE:
+    {
+        GuiOptionsBrightnessContrastPostFxControl lControl;
+        lControl.mColourCalibrationTextureHandle = CgsResource::NULLResourceHandle;
+        lControl.mbEnablePostFx = true;
+        lpOutput->AddGuiOutEvent(lControl);
+        meState = E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED;
+        break;
+    }
+    default:
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lMessage;
+        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        lStream << "Unhandled state " << static_cast<s32>(meState)
+                << " in ColourCalibrationScreen::Prepare";
+        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp", 199);
+        CgsDev::Assert::EndAssert();
+        break;
+    }
     }
 }
 
