@@ -21,6 +21,16 @@
 #include <cstring>  // [sweep] strchr
 #include <cmath>    // sinf / cosf / std::sqrt
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h> // opt-in owned PID/slot recipe-start event
+#endif
+
 // =============================================================================
 // BrnWorld::PlaceOnTrackManager — out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnPlaceOnTrackManager.h for the
@@ -1012,6 +1022,93 @@ void PlaceOnTrackManager::ArmWinTeleportBringUp()
 // ⛔ DELETE-WHEN: NOTHING. Permanent harness capability, inert unless BRN_CRASH_SWEEP is set
 // (one getenv on the first pre-physics update, one enum test per update after).
 // ===========================================================================
+// FLAG PC-platform leaf: synchronize only the existing opt-in crash/jump harness.
+// World simulation continues. This adds no gameplay readiness, placement or state writes.
+// The helper owns creation/signalling; the game opens its own exact PID/positive-slot
+// event read-only, polls without blocking, then latches release for this one recipe.
+static bool IsCrashSweepStartReleasedPC()
+{
+    static const bool sbWaitForOwnedStart = []() {
+        const char* lpcMode = std::getenv("BRN_CRASH_SWEEP_WAIT_START");
+        return lpcMode != nullptr && std::strcmp(lpcMode, "1") == 0;
+    }();
+    if (!sbWaitForOwnedStart)
+        return true;
+
+#if defined(_WIN32)
+    // Same BRN_HARNESS_SLOT source and strict positive range as the existing
+    // PID/slot FrameRequest provider. Never fall back to a shared slot0 name.
+    static const u32 suStartSlot = []() {
+        char lacSlot[32];
+        const DWORD luLength = GetEnvironmentVariableA("BRN_HARNESS_SLOT", lacSlot, sizeof(lacSlot));
+        if (luLength == 0u || luLength >= sizeof(lacSlot)) return 0u;
+        char* lpEnd = nullptr;
+        const unsigned long luSlot = std::strtoul(lacSlot, &lpEnd, 10);
+        if (lpEnd == lacSlot || *lpEnd != '\0' || luSlot == 0u || luSlot > 65535u) return 0u;
+        return static_cast<u32>(luSlot);
+    }();
+    static bool sbReleased = false;
+    if (sbReleased)
+        return true;
+    static bool sbReportedWaiting = false;
+    if (!sbReportedWaiting)
+    {
+        sbReportedWaiting = true;
+        char lacMessage[160];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+            "[sweep-start] %s pid=%lu slot=%lu\n",
+            suStartSlot != 0u ? "waiting" : "invalid-slot-held",
+            static_cast<unsigned long>(GetCurrentProcessId()), static_cast<unsigned long>(suStartSlot));
+        CgsDev::Log::WriteToLog(lacMessage);
+    }
+    if (suStartSlot == 0u)
+        return false;
+
+    static HANDLE shStartEvent = nullptr;
+    if (shStartEvent == nullptr)
+    {
+        char lacName[128];
+        std::snprintf(lacName, sizeof(lacName), "Local\\BurnoutPC_CrashSweepStart_%lu_%lu",
+            static_cast<unsigned long>(GetCurrentProcessId()), static_cast<unsigned long>(suStartSlot));
+        shStartEvent = OpenEventA(SYNCHRONIZE, FALSE, lacName);
+    }
+    if (shStartEvent == nullptr)
+        return false;
+    const DWORD luWait = WaitForSingleObject(shStartEvent, 0);
+    if (luWait == WAIT_OBJECT_0)
+    {
+        sbReleased = true;
+        CloseHandle(shStartEvent);
+        shStartEvent = nullptr;
+        char lacMessage[128];
+        std::snprintf(lacMessage, sizeof(lacMessage), "[sweep-start] released pid=%lu slot=%lu\n",
+            static_cast<unsigned long>(GetCurrentProcessId()), static_cast<unsigned long>(suStartSlot));
+        CgsDev::Log::WriteToLog(lacMessage);
+        return true;
+    }
+    if (luWait == WAIT_FAILED)
+    {
+        CloseHandle(shStartEvent);
+        shStartEvent = nullptr;
+        static bool sbReportedFailure = false;
+        if (!sbReportedFailure)
+        {
+            sbReportedFailure = true;
+            CgsDev::Log::WriteToLog("[sweep-start] wait-failed-held\n");
+        }
+    }
+    return false;
+#else
+    static bool sbReportedUnsupported = false;
+    if (!sbReportedUnsupported)
+    {
+        sbReportedUnsupported = true;
+        CgsDev::Log::WriteToLog("[sweep-start] unsupported-platform-held\n");
+    }
+    return false;
+#endif
+}
+
 void PlaceOnTrackManager::ArmCrashSweepBringUp()
 {
     static const s32 KI_MAX_SWEEP_SHOTS = 48;
@@ -1210,6 +1307,12 @@ void PlaceOnTrackManager::ArmCrashSweepBringUp()
         {
             return;   // still parked where it spawned -- the drive has not started
         }
+
+        // FLAG PC-platform leaf: external start holds only this harness's waiting
+        // stage. Keep the original arm origin/distance, roaming gate and subsequent
+        // shot numbering, placement call and simulation-frame cadence unchanged.
+        if (!IsCrashSweepStartReleasedPC())
+            return;
 
         // [HARNESS, opt-in BRN_SWEEP_WAIT_ROAMING=1 -- NOT X360] (FX-DIRECTOR2 2026-09-25). Hold shot 0
         // until the director's arbitrator is back in ArbStateRoaming. The drive that arms the sweep
