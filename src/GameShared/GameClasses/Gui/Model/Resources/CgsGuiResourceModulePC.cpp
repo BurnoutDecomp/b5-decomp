@@ -304,44 +304,47 @@ namespace CgsGui
             return &s_FontBankPool;
         }
 
-        // Emit one type-14 load notification per AptData (0x1E) resource in the pool, each
+        // Emit one type-14 load notification per AptData (0x1E) resource in this bundle, each
         // carrying a handle to the entry's main-memory slot + the apt request type. GuiModule's
         // frame bridge routes these (request types 4..7) into the view input buffer, where the
         // REAL CgsGui::ViewModule::ProcessIncomingLoadNotification @0x8285BD30 registers each
         // header (AddAptData) -- the console notification flow, with only the bundle IO now
-        // module-side. Re-emitting a resident header is a no-op (AddAptData dedups by name), so
-        // walking the whole accumulate pool each load is safe.
+        // module-side. Shared headers must be registered on reload too, but unrelated
+        // resident headers must not multiply the notification burst for every bundle.
         // FLAG PC-platform leaf: a GuiApt movie bundle carries one AptData per embedded movie
         // (PERSISTENTAPT's import library is 61); registering them all from the bundle load is
         // the PC stand-in for the console's per-movie async .apt registration (the async
         // AptLoader stream is out of this slice).
-        u32 EmitAptDataNotifications(CgsResource::Pool* lpPool, s32 liAptType,
+        u32 EmitAptDataNotifications(CgsResource::Pool* lpPool, const char* lpacBundlePath,
+                                     s32 liAptType,
                                      GuiResourceModuleIO::OutputBuffer* lpOutput)
         {
-            u32 luEmitted = 0;
-            const u32 luMax = lpPool->GetMaxResources();
-            for (u32 lu = 0; lu < luMax; ++lu)
+            struct NotificationContext
             {
-                if (lpPool->GetEntryStatusDirect(static_cast<s32>(lu)) == 0)
-                    continue;
-                CgsResource::Entry* lpEntry = const_cast<CgsResource::Entry*>(
-                    lpPool->GetEntryDirect(static_cast<s32>(lu)));
-                if (lpEntry->mpResourceType == 0 ||
-                    lpEntry->mpResourceType->GetTypeID() != KU_APTDATA_RESOURCE_TYPE_ID)
-                    continue;
-                if (lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] == 0)
-                    continue;
+                GuiResourceModuleIO::OutputBuffer* mpOutput;
+                ResourceRequestTypes meRequestType;
+                u32 muEmitted;
+            } lContext = {lpOutput, static_cast<ResourceRequestTypes>(liAptType), 0};
+            CgsResource::PCAptOwnership::VisitBundleEntries(lpPool, lpacBundlePath,
+                [](CgsResource::Entry* lpEntry, void* lpContext)
+                {
+                    if (lpEntry->mpResourceType == 0 ||
+                        lpEntry->mpResourceType->GetTypeID() != KU_APTDATA_RESOURCE_TYPE_ID ||
+                        lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] == 0)
+                        return;
 
-                GuiEventLoadNotification lNote;
-                lNote.mResourceHandle.mpResourceMemory =
-                    &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
-                lNote.mResourceHandle.mpSourceEntry = lpEntry;
-                lNote.meRequestType   = static_cast<ResourceRequestTypes>(liAptType);
-                lNote.muLoadRequestId = 0;
-                lpOutput->AddLoadNotification(reinterpret_cast<const CgsModule::Event*>(&lNote));
-                ++luEmitted;
-            }
-            return luEmitted;
+                    NotificationContext& lrContext = *static_cast<NotificationContext*>(lpContext);
+                    GuiEventLoadNotification lNote;
+                    lNote.mResourceHandle.mpResourceMemory =
+                        &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+                    lNote.mResourceHandle.mpSourceEntry = lpEntry;
+                    lNote.meRequestType   = lrContext.meRequestType;
+                    lNote.muLoadRequestId = 0;
+                    lrContext.mpOutput->AddLoadNotification(
+                        reinterpret_cast<const CgsModule::Event*>(&lNote));
+                    ++lrContext.muEmitted;
+                }, &lContext);
+            return lContext.muEmitted;
         }
 
         // ---- the loaded-bundle LEAD registry (bundle name -> its primary AptDataHeader) -------
@@ -628,7 +631,8 @@ namespace CgsGui
                             lLoader.LoadBundle(lpRequest->macFileName, lpPool, CgsResource::ResolveResourceType);
                         RecordAptBundleLoadResult(lpPool, lpRequest->macFileName, liLoaded);
                         const u32 luEmitted =
-                            EmitAptDataNotifications(lpPool, lpRequest->miEventId, lpOutput);
+                            EmitAptDataNotifications(lpPool, lpRequest->macFileName,
+                                                     lpRequest->miEventId, lpOutput);
 
                         char lac[224];
                         std::snprintf(lac, sizeof(lac),

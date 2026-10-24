@@ -107,7 +107,7 @@ wiring = [
     ('unregister does not clear roots still referenced by importing movies',
      'InvalidateLoadedData' not in remove),
 ]
-expected_numeric = 81 if args.omit_apt_retain or args.require_new_apt_resources else 97
+expected_numeric = 87 if args.omit_apt_retain or args.require_new_apt_resources else 103
 if numeric is not None and numeric[0] != expected_numeric:
     print(f'FAIL  expected {expected_numeric} numeric checks, executed {numeric[0]}')
     raise SystemExit(1)
