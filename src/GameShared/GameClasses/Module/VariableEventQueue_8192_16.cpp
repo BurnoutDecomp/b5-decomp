@@ -60,6 +60,8 @@ template bool CgsModule::VariableEventQueue<8192, 16>::Append<4096, 16>(const Cg
 // <GuiEventAudioTraxPreview> == 0x18(24), Message<RaceCarIsNowActive> == 0x20(32),
 // Message<GuiAudioEvent>/<GuiEventAudioTraxUpdate> == 0x28/0x30, Message<GuiAudioTriggerEvent>
 // == 0x74(116). Each InnerT home is #included above so Message<InnerT> is a complete type.
+static_assert(sizeof(CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>) == 116,
+              "sound message 6 is the 16-byte header plus ARTIST's 100-byte GUI payload");
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<bool> >(const CgsSound::Io::Message<bool>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<unsigned int> >(const CgsSound::Io::Message<unsigned int>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<float> >(const CgsSound::Io::Message<float>*, s32);

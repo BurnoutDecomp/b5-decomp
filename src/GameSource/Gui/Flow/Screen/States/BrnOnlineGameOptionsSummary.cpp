@@ -190,15 +190,6 @@ namespace BrnGui
             GuiAutosaveRequestWire() : CgsGui::GuiEvent<356>(1, 12), mu8Payload(0) {}
         };
 
-        // { 100, 457, 12, the audio trigger }, channel 40, 112 bytes.
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
-        };
-
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
         {
@@ -231,7 +222,6 @@ namespace BrnGui
         static_assert(sizeof(GuiCommandWire16<175>) == 16, "command record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
         static_assert(sizeof(GuiAutosaveRequestWire) == 16, "autosave record is 16 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
         static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
         static_assert(sizeof(GuiEventNetworkCreateGameWire) == 492, "create-game record is 492 bytes");
@@ -252,9 +242,7 @@ namespace BrnGui
         {
             GuiAudioTriggerEvent lAudio;
             lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KPC_EMPTY_STRING, lpacLabel, KPC_EMPTY_STRING);
-            GuiAudioTriggerWire lAudioWire = { 100, 457, 12, {} };
-            std::memcpy(&lAudioWire.mPayload, lAudio.macComponent, sizeof(lAudioWire.mPayload));
-            PostWire(lpStateInterface, lAudioWire);
+            lpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
         }
 
         // Show / hide the main map on both the view and the internal channels.

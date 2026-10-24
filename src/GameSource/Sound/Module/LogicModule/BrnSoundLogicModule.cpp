@@ -526,25 +526,41 @@ void SoundLogicModule::ProcessGuiEvents(
                              CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lData);
             break;
         }
-        case 201: // PC's typed GuiAudioTriggerEvent id
-        case 457: // ARTIST wire id
+        case 201: // bounded compatibility for the former {0,201,12}+100 PC audio record
+        case 457: // ARTIST GUI audio-trigger payload id
         {
             CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
             lMessage.Construct(6, 0, 0, 0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
-            if (liType == 201 && liSize >= static_cast<s32>(sizeof(lMessage.mData)))
+
+            const u8* const lpuEventBytes = reinterpret_cast<const u8*>(lpEvent);
+            const GuiEventWireHeader* const lpHeader =
+                reinterpret_cast<const GuiEventWireHeader*>(lpEvent);
+            const u8* lpuAudioPayload = lpuEventBytes;
+            if (liType == 201)
             {
-                lMessage.mData =
-                    *reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
+                // Preserve only the exact legacy audio representation produced by the old
+                // GuiEvent<201>(0,12) type. Event 201/8 belongs to HideDriveThru and must
+                // never be reinterpreted as a 100-byte sound payload.
+                if (liSize != 112 || lpHeader->muPayloadSize != 0u ||
+                    lpHeader->muEventType != 201u || lpHeader->muPayloadOffset != 12u)
+                {
+                    break;
+                }
+                lpuAudioPayload = lpuEventBytes + 12;
             }
-            else
+            else if (liSize == 112 && lpHeader->muPayloadSize == 100u &&
+                     lpHeader->muEventType == 457u && lpHeader->muPayloadOffset == 12u)
             {
-                const BrnGui::GuiAudioTriggerWirePayload457& lrPayload =
-                    *reinterpret_cast<const BrnGui::GuiAudioTriggerWirePayload457*>(
-                        lpuPayload);
-                lMessage.mData.Construct(
-                    lrPayload.meAction, lrPayload.macComponent,
-                    lrPayload.macLabel, lrPayload.macMovie);
+                lpuAudioPayload = lpuEventBytes + 12;
             }
+            else if (liSize < static_cast<s32>(sizeof(lMessage.mData)))
+            {
+                break;
+            }
+
+            // ARTIST SoundLogic case457 copies exactly 0x64 bytes into message6 at +0x10.
+            // Accept its full wrapper or the already-unwrapped/raw 100-byte queue payload.
+            std::memcpy(&lMessage.mData, lpuAudioPayload, sizeof(lMessage.mData));
             QueueSoundMessage(mMessageQueue, lMessage);
             break;
         }

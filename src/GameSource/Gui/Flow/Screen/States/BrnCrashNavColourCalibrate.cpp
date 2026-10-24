@@ -80,12 +80,7 @@ namespace BrnGui
         // or consumes it; the role is read off this one producer -- "the profile changed,
         // save it". Reproduced as the exact wire record, not renamed.
         const s32 KI_EVENT_SAVE_PROFILE_REQUEST = 553;
-        // The wire id the inlined OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> stamps
-        // (X360 `li r11, 0x1C9`), as opposed to the payload type's own GuiEvent<201>.
-        // Same file-local wire view BrnOnlineGameOptions_wI_02.cpp / BrnCarSelectLivery.cpp
-        // carry; id 457 is homed only in BrnGuiDemangledEventTypes.h, which hard-collides
-        // with the BrnGuiEventTypeDefs.h this TU needs.
-        const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
+        // Audio is a 100-byte event-457 payload; StateInterface wraps it on channel 40.
 
         // ---- controller action ids (the action event's payload word +4) ------------
         // BrnGui::EGameInputActions (DWARF GameSource/Input/GameInputActions.h:24; no
@@ -189,25 +184,12 @@ namespace BrnGui
             }
         };
 
-        // The audio cue record: { 100, 457, 12, <the 100-byte payload> }, 112 bytes on
-        // channel 40 -- the record the inlined OutputGuiEvent<GuiAudioTriggerEvent>
-        // builds. Identical view to BrnOnlineGameOptions_wI_02.cpp's.
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
-
-        // Record-size pins. Every payload here is pointer-free, so the X360's AddEvent
-        // size immediates (16 / 20 / 112) must survive unchanged on the x64 host; if a
+        // StateInterface's audio specialization emits {100,457,12}+payload on channel 40.
+// Record-size pins. Every payload here is pointer-free, so the X360's AddEvent
+        // size immediates (16 / 20) must survive unchanged on the x64 host; if a
         // host layout ever drifts this is where it is caught rather than on the wire.
         static_assert(sizeof(GuiCommandWire16<514>) == 16, "card show/hide record is 16 bytes");
         static_assert(sizeof(GuiBrightnessContrastWire20) == 20, "brightness/contrast record is 20 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
         static_assert(offsetof(GuiBrightnessContrastWire20, mPayload) == 12,
                       "the 545 payload sits at the record's own header offset word (12)");
 
@@ -216,22 +198,14 @@ namespace BrnGui
         // (`bl GuiAudioTriggerEvent::Construct(&rec, 7, "", "MenuToggleDefault", "")`
         // then `bl CgsGui::StateInterface::OutputGuiEvent<GuiAudioTriggerEvent>`), so it
         // is factored here as a file-local helper rather than invented as a class method
-        // the DWARF does not declare. Posted as the wire record the console's inlined
-        // OutputGuiEvent builds (id 457, channel 40, 112 bytes) -- see the note on
-        // GuiAudioTriggerWire above.
+        // the DWARF does not declare. The typed publisher applies the original channel-40
+        // wrapper when it posts the 100-byte payload.
         void PostMenuToggleSound(CgsGui::StateInterface* lpStateInterface)
         {
-            GuiAudioTriggerWire lAudio;
+            GuiAudioTriggerEvent lAudio;
             lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KAC_EMPTY,
                              KAC_SOUND_LABEL_MENU_TOGGLE, KAC_EMPTY);
-            lAudio.muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                                  sizeof(CgsGui::GuiEvent<201>));
-            lAudio.muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            lAudio.muHeader2   = 12u;
-
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lAudio)));
+            lpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
         }
     }
 

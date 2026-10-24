@@ -31,6 +31,8 @@
 // proven offsets. This is an honest layout boundary, not a fabricated one.
 
 #pragma once
+
+#include <cstddef>
 #include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 
 #include "GameSource/GameState/BrnGameActions.h"
@@ -104,45 +106,46 @@ enum GuiFlow
     E_GUIFLOW_FIRST   = 0,
 };
 
-// BrnGuiAudioEvent.cpp / ARTIST @0x824F6350. The native payload is exactly
-// { component[32], action, label[32], movie[32] } (100 bytes). The committed PC
-// GuiEvent<N> carries its 12-byte queue header explicitly, making this queued
-// record 112 bytes in total.
-struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
+// DecFIGS BrnGuiAudioEvent.h:43 declares this class on the empty GuiEvent<452> tag.
+// ARTIST BrnGuiAudioTriggerEvent::Construct @0x824F6350 writes the field-only payload:
+// component[32], action at +32, label[32] at +36, movie[32] at +68. The X360 state
+// publisher writes id457 on channel40; module-output AddGuiOutEvent also writes raw457/100.
+struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<452>
 {
     char macComponent[32];
     s32  meAction;
     char macLabel[32];
     char macMovie[32];
 
-    GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12), meAction(0)
+    GuiAudioTriggerEvent() : meAction(0)
     {
         macComponent[0] = 0;
         macLabel[0] = 0;
         macMovie[0] = 0;
     }
 
+    s32 GetEventType() const { return 457; }
     void Construct(s32 leAction, const char* lpComponentName,
                    const char* lpLabel, const char* lpMovieName = "");
 };
 
-static_assert(sizeof(GuiAudioTriggerEvent) == 112,
-              "GuiAudioTriggerEvent is a 100-byte payload plus the 12-byte PC GuiEvent header");
+static_assert(sizeof(GuiAudioTriggerEvent) == 100 && alignof(GuiAudioTriggerEvent) == 4,
+              "ARTIST GUI audio trigger is a 100-byte, four-byte-aligned payload");
+static_assert(offsetof(GuiAudioTriggerEvent, macComponent) == 0 &&
+              offsetof(GuiAudioTriggerEvent, meAction) == 32 &&
+              offsetof(GuiAudioTriggerEvent, macLabel) == 36 &&
+              offsetof(GuiAudioTriggerEvent, macMovie) == 68,
+              "ARTIST GUI audio trigger field offsets");
 
-// ARTIST wire id 457 carries the same 100-byte payload without the PC
-// GuiEvent<201> header. OutputGuiEvent wraps this record with its own 12-byte
-// queue header before publication.
-struct GuiAudioTriggerWirePayload457
-{
-    char macComponent[32];
-    s32  meAction;
-    char macLabel[32];
-    char macMovie[32];
-};
+// Existing payload-only callsites use this name for the same canonical record.
+using GuiAudioTriggerWirePayload457 = GuiAudioTriggerEvent;
 
-static_assert(sizeof(GuiAudioTriggerWirePayload457) == 100,
-              "ARTIST GUI audio trigger payload is exactly 100 bytes");
-
+// The original StateInterface::OutputGuiEvent path boxes this 100-byte payload as
+// {100, 457, 12} on channel40. The module-output AddGuiOutEvent path is raw 457/100.
+using GuiAudioTriggerEventRecord40 = CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40>;
+static_assert(sizeof(GuiAudioTriggerEventRecord40) == 112 &&
+              offsetof(GuiAudioTriggerEventRecord40, mOutEvent) == 12,
+              "channel-40 audio wrapper is {100,457,12} plus the 100-byte payload");
 // BrnGuiEventTypeDefs.h:912 -- HUD FSM selector carried by GuiEventRunFsm.
 enum EHUDFSMs
 {

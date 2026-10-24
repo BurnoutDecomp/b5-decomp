@@ -300,15 +300,9 @@ void OnlineTeamSelection::HandleControllerInputMainSubState(const CgsModule::Eve
 
     if (lbMoved)
     {
-        // OutputGuiEvent<GuiAudioTriggerEvent>: { 100, 457, 12, the 100-byte record },
-        // 112 bytes on channel 40.
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_TOGGLE, "", "MenuItemToggleDefault", "");
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID;
-        lAudio.muHeader2   = 12u;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lAudio, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
     }
 }
 }

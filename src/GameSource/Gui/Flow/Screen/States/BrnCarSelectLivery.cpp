@@ -69,11 +69,6 @@ namespace BrnGui
         const s32 KI_GAMEMODE_NO_PAINT_A = 12;
         const s32 KI_GAMEMODE_NO_PAINT_B = 17;
 
-        // The GuiAudioTriggerEvent record's queued event id -- the same 100-byte record
-        // BrnGui::GuiAudioTriggerEvent models under id 201, posted here under 457 (identical
-        // to BrnCarSelectVehicle's carousel trigger).
-        const u32 KU_AUDIO_TRIGGER_EVENT_ID = 457;
-
         // ---- out-queue wire records --------------------------------------------------
 
         // OnLeave's screen-leave command: { 1, 80, 12, u8 }, channel 40, 16 bytes.
@@ -443,12 +438,7 @@ namespace BrnGui
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(leAction, KAC_EMPTY, "CodeLivery", KAC_EMPTY);
 
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID;
-        lAudio.muHeader2   = 12u;
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lAudio, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
     }
 }
 

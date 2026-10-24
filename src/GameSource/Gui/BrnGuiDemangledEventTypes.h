@@ -856,11 +856,10 @@ namespace BrnGui
     static_assert(offsetof(CalculateRoute, maSectionIndices) == 0x40, "section indices at +0x40");
     static_assert(offsetof(CalculateRoute, mu16EventID)      == 0x44, "leg number at +0x44 (sth)");
     struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
-    // GuiAudioTriggerEvent: NO placeholder here -- the real hand-reconstructed home is
-    // BrnGuiEventTypeDefs.h (macComponent/meAction/macLabel/macMovie, id 201, sizeof 112).
-    // FLAG / OPEN: this catalogue read the id as 457 size 100 from the AddGuiEvent<T>
-    // spine, which does NOT match the real home's id 201 size 112. Two different events
-    // are sharing one name; one of them is misnamed. Unresolved -- needs asm arbitration.
+    // GuiAudioTriggerEvent is homed in BrnGuiEventTypeDefs.h as ARTIST's 100-byte
+    // payload (component[32], action, label[32], movie[32]), event id 457. StateInterface
+    // boxes it on channel 40; module output carries raw id457/100. Id 201 above is the
+    // separate eight-byte GuiEventHideDriveThru and has no audio-trigger alias.
     // X360-RECOVERED LAYOUT (no longer an opaque placeholder). The inner field breakdown IS
     // recovered from three attesting producers -- BrnGui::ChallengeSelector::Hide (@0x82436F70),
     // BrnGui::FriendsListComponent::Close (@0x824397E8) and ::SelectPrevious (@0x82441988), which

@@ -97,29 +97,7 @@ namespace BrnGui
             s32 miButtonId;   // +0x04
         };
 
-        // ---- out-queue wire records ---------------------------------------------------
-
-        // The record the inlined OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> builds (the
-        // out-of-line instantiation @0x82436890 builds the identical one):
-        // { 100, 457, 12, the 100-byte payload }, channel 40, 112 bytes. The committed PC
-        // GuiAudioTriggerEvent already carries that 12-byte queue header in front of its
-        // 100-byte payload, so the event object IS the record -- but its GuiEvent<201>
-        // base seeds the payload-size word 0 and the id 201, while the X360 wire words are
-        // the payload size and id 457. This view restores them without forking the payload
-        // type. (Cross-TU finding: 201 is GuiEventHideDriveThru's id; 457 is the id both
-        // this record and BrnGuiDemangledEventTypes.h attest for the audio trigger.)
-        const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
-
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
-
+        // StateInterface's audio-specific OutputGuiEvent emits {100,457,12}+payload on channel 40.
         // Id 463 == BrnGui::GuiEventAudioSettings. The record
         // OutputGuiEvent<GuiEventAudioSettings> @0x82493728 builds: { 8, 463, 12, the two
         // volume words }, channel 40, 20 bytes. Field order is the X360 store order --
@@ -195,7 +173,6 @@ namespace BrnGui
         // Record-size pins. Every one of these payloads is pointer-free, so the X360's
         // AddEvent size immediate must survive unchanged on the x64 host; if a host
         // layout ever drifts, this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
         static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
         static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
         static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide hud record is 16 bytes");
@@ -235,12 +212,9 @@ namespace BrnGui
         // the event is constructed with the null label on the unrecognised path.
         CGS_ASSERT(lpcLabel, "lpcLabel");
 
-        GuiAudioTriggerWire lAudio;
+        GuiAudioTriggerEvent lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
     }
 
     // ---- ShowSettingsScreen @ 0x8249A780 -------------------------------------------
@@ -356,11 +330,9 @@ namespace BrnGui
                     const s32 liMusicVolume = mpGuiCache->GetOptionsDataProfile()->GetMusicVolume();
                     const s32 liSFXVolume   = mpGuiCache->GetOptionsDataProfile()->GetSFXVolume();
 
-                    GuiAudioTriggerWire lAudio;
+                    GuiAudioTriggerEvent lAudio;
                     lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lAudio)));
+                    mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
 
                     GuiEventAudioSettingsWire lAudioSettings(liMusicVolume, liSFXVolume);
                     mpStateInterface->GetOutputEventQueue()->AddEvent(

@@ -69,32 +69,8 @@ namespace BrnGui
         const char KAC_SOUND_LABEL_MENU_TOGGLE[]      = "MenuToggleDefault";
         const char KAC_SOUND_LABEL_MENU_ITEM_TOGGLE[] = "MenuItemToggleDefault";
 
-        // ---- out-queue wire record -----------------------------------------------------
-        // The record the inlined OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> builds:
-        // { 100, 457, 12, the 100-byte payload }, channel 40, 112 bytes (X360 stores
-        // `li r11, 0x64` / `li r11, 0x1C9` / `li r11, 0xC` then AddEvent with r5 = 0x28,
-        // r6 = 0x70). The committed PC GuiAudioTriggerEvent already carries that 12-byte
-        // queue header in front of its 100-byte payload, so the event object IS the record
-        // -- but its GuiEvent<201> base seeds the payload-size word 0 and the id 201, while
-        // the X360 wire words are the payload size and the id 457. This view restores them
-        // without forking the payload type (BrnOnlineGameRoomPlayerInfo_wH_08.cpp carries
-        // the identical view).
-        const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;   // X360 `li r11, 0x1C9`
+        // StateInterface's audio-specific OutputGuiEvent emits {100,457,12}+payload on channel 40.
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
-
-        // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
-        // immediate must survive unchanged on the x64 host; if a host layout ever drifts,
-        // this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
     }
 
     // ---- ShowTableEmpty @ 0x82486A08 -----------------------------------------------
@@ -187,11 +163,8 @@ namespace BrnGui
         CGS_ASSERT(lpcLabel, "lpcLabel");
 
         // X360: Construct(r3 = the stack event, r4 = 7, r5 = "", r6 = the label, r7 = "").
-        GuiAudioTriggerWire lAudio;
+        GuiAudioTriggerEvent lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
     }
 }

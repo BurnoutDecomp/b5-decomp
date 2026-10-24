@@ -142,20 +142,8 @@ namespace BrnGui
             }
         };
 
-        // The audio trigger's wire payload (the 100-byte body under id 457; see
-        // BrnOnlineGameRoomPlayerInfo_wN3_02.cpp for why it is re-boxed).
-        struct GuiAudioTriggerPayload457
-        {
-            char macComponent[32];
-            s32  meAction;
-            char macLabel[32];
-            char macMovie[32];
-            s32 GetEventType() const { return 457; }
-        };
-
         static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
         static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "overlay wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiAudioTriggerPayload457) == 100, "audio trigger payload is 100 bytes");
         static_assert(sizeof(GuiEventScoreboardRequestGamercardEvent) == 28, "gamercard record is 28 bytes");
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, GuiOverlayRequestWire& lrWire)
@@ -180,13 +168,7 @@ namespace BrnGui
             GuiAudioTriggerEvent lAudioTrigger;
             lAudioTrigger.Construct(leAction, KAC_EMPTY_STRING, lpcLabel, KAC_EMPTY_STRING);
 
-            GuiAudioTriggerPayload457 lPayload;
-            std::memcpy(&lPayload, lAudioTrigger.macComponent, sizeof(lPayload));
-
-            CgsGui::GuiEventWrapper<GuiAudioTriggerPayload457, KI_CHANNEL_GUI_OUT> lRecord(lPayload);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), lRecord.GetChannel(),
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudioTrigger);
         }
 
         // OutputGuiEvent<GuiEventScoreboardRequestGamercardEvent>: the committed type

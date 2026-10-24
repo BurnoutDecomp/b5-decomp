@@ -158,16 +158,7 @@ namespace BrnGui
         {
             GuiAudioTriggerEvent lEvent;
             lEvent.Construct(0, "", "RaceResult", "");
-            // The existing PC event owns a header; ARTIST emits its 100-byte body as457.
-            struct AudioWire
-            {
-                s32 miSize, miType, miOffset;
-                GuiAudioTriggerWirePayload457 mPayload;
-            } lWire = { 100, 457, 12, {} };
-            static_assert(sizeof(AudioWire) == 112, "ARTIST457 wrapper");
-            std::memcpy(&lWire.mPayload, lEvent.macComponent, sizeof(lWire.mPayload));
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), 40, sizeof(lWire));
+            lpInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lEvent);
         }
 
         // The GUI output channel the state's out-queue events go on.

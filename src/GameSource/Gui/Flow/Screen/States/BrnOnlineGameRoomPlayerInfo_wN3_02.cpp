@@ -78,31 +78,15 @@ namespace BrnGui
                 static_cast<s32>(sizeof(lRecord)));
         }
 
-        // The audio trigger's wire payload: the 100-byte body of GuiAudioTriggerEvent
-        // under id 457 (OutputGuiEvent<GuiAudioTriggerEvent> copies the payload out and
-        // boxes it as { 100, 457, 12, payload }). The committed GuiAudioTriggerEvent keeps
-        // a 12-byte header of its own in front of the payload, so the payload is re-boxed.
-        struct GuiAudioTriggerPayload457
-        {
-            char macComponent[32];
-            s32  meAction;
-            char macLabel[32];
-            char macMovie[32];
-            s32 GetEventType() const { return 457; }
-        };
-
         void PostAudioTrigger(CgsGui::StateInterface* lpStateInterface, s32 leAction,
                               const char* lpcLabel)
         {
             GuiAudioTriggerEvent lAudioTrigger;
             lAudioTrigger.Construct(leAction, KAC_EMPTY_STRING, lpcLabel, KAC_EMPTY_STRING);
 
-            GuiAudioTriggerPayload457 lPayload;
-            std::memcpy(&lPayload, lAudioTrigger.macComponent, sizeof(lPayload));
-            OutputGuiEventRecord(lpStateInterface, lPayload);
+            lpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudioTrigger);
         }
 
-        static_assert(sizeof(GuiAudioTriggerPayload457) == 100, "audio trigger payload is 100 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40>) == 32,
                       "573 record is 32 bytes");
         static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, 40>) == 492,

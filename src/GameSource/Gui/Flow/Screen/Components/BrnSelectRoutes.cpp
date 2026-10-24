@@ -409,28 +409,12 @@ namespace BrnGui
 
     namespace
     {
-        // ARTIST OutputGuiEvent<GuiAudioTriggerEvent> @82436890 posts this exact
-        // wrapper on channel 40. The homed GuiAudioTriggerEvent has a legacy PC
-        // header, so only its canonical 100-byte payload belongs in this record.
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
-        };
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "ARTIST GUI audio trigger wrapper");
-
         void PostMenuAudio(CgsGui::StateInterface* lpStateInterface, s32 liAction,
                            const char* lpacLabel)
         {
             GuiAudioTriggerEvent lAudio;
             lAudio.Construct(liAction, "", lpacLabel, "");
-            GuiAudioTriggerWire lWire = { 100, 457, 12, {} };
-            std::memcpy(&lWire.mPayload, lAudio.macComponent, sizeof(lWire.mPayload));
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), 40,
-                static_cast<s32>(sizeof(lWire)));
+            lpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
         }
 
         // The three per-round stores repeated by ARTIST's insert/remove loops.
