@@ -8,6 +8,7 @@
 
 namespace rw { struct IResourceAllocator; }
 namespace CgsLanguage { class LanguageManager; }
+namespace BrnGui { struct GuiAudioTriggerEvent; }
 
 // CgsGui::StateInterface - the channel a GUI state uses to reach the rest of the
 // game: it owns the large output event queue the state writes to, plus the access
@@ -289,4 +290,10 @@ namespace CgsGui
     {
         mOutEventQueue.AddEvent(&lrEvent, 40, static_cast<s32>(sizeof(lrEvent)));
     }
+
+    // ARTIST 0x82436890 is the audio payload-only exception to the legacy generic body above:
+    // it boxes the 100-byte id-457 payload as GuiEventWrapper<T,40> on channel 40.
+    template <>
+    void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(
+        BrnGui::GuiAudioTriggerEvent& lrEvent);
 }

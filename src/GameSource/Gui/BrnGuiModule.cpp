@@ -3553,7 +3553,7 @@ void GuiModule::Destruct()
                     mpOutputBuffer->AddEvent(lpEvent, 23, liSize);
                     break;
 
-                case 201:  // GUI audio trigger -> the module output event channel
+                case 201:  // Preserve event-201 module-output forwarding; audio triggers use id 457.
                     CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
                     mpOutputBuffer->AddEvent(lpEvent, liId, liSize);
                     break;
@@ -4514,7 +4514,7 @@ void GuiModule::Destruct()
             CgsGui::AptCommunicator::FlushTriggerEventsTo(mViewOutputBuffer.GetGuiEventQueue());
             mViewOutputBuffer.UnlockForWrite();
             // The console stores these Apt trigger records through BridgeFromViewToOutput;
-            // the next module input dispatch handles 21/22 and emits typed sound event 201.
+            // the next module input dispatch handles 21/22; case 22 emits typed sound payload 457.
             mViewOutputBuffer.LockForRead();
             {
                 const CgsModule::VariableEventQueue<18432, 16>* lpTrigQueue =

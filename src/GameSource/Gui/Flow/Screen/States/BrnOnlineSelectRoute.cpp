@@ -166,19 +166,7 @@ namespace
         // payload wrapper on channel 40. The PC event has a different 12-byte header;
         // copy only its native 100-byte body into the console record.
         lEvent.Construct(7, "", lpacLabel, "");
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
-        } lWire = { 100, 457, 12, {} };
-        static_assert(sizeof(GuiAudioTriggerWire) == 112,
-                      "ARTIST GUI audio trigger wrapper size");
-        std::memcpy(&lWire.mPayload, lEvent.macComponent, sizeof(lWire.mPayload));
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        lpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lEvent);
     }
     // The overlay request as the out-queue carries it: the GuiEvent<184> header sized to the
     // request, a pad word, then the request itself (304 bytes on the console).

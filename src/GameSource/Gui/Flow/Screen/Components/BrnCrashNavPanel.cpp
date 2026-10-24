@@ -966,9 +966,8 @@ namespace BrnGui
         // The console builds the 100-byte GuiAudioTriggerEvent on its stack and queues it as
         // X360 id 457 onto `mpStateInterface + 12` (@0x8243AFC8..0x8243AFF4). The committed
         // OutputGuiEvent<GuiAudioTriggerEvent> instantiation (@0x82436890) IS that path.
-        // FLAG: the committed record is `CgsGui::GuiEvent<201>` -- the DWARF id -- while the
-        // X360 wire id is 457; that DWARF-vs-X360 id delta is the tree-wide convention (see
-        // the "GuiEvent<450>; X360 id 455" note in BrnGuiEventTypeDefs.h), not a defect here.
+        // The event type is payload-only id 457; StateInterface's audio specialization
+        // supplies ARTIST's channel-40 {100,457,12}+payload wrapper.
         GuiAudioTriggerEvent lAudioEvent;
         lAudioEvent.Construct(KI_AUDIO_TRIGGER_ACTION, KAC_EMPTY_STRING, lpacLabel);
         mpStateInterface->OutputGuiEvent(lAudioEvent);

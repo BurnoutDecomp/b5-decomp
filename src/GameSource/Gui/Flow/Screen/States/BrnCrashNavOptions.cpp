@@ -512,8 +512,7 @@ namespace BrnGui
             // [FLAG] The X360 row-move arms also drive the music preview as the cursor
             // enters/leaves the two volume rows: landing on MUSIC_VOLUME posts
             // GuiEventAudioTraxPreview { 57, 1 }, leaving it posts { -1, 0 }, and landing
-            // on SFX_VOLUME posts a 112-byte BrnGui::GuiAudioTriggerEvent whose TYPE WORD
-            // IS 457 while this tree's GuiAudioTriggerEvent derives from GuiEvent<201>.
+            // on SFX_VOLUME posts the canonical 100-byte GuiAudioTriggerEvent payload on id 457.
             // The preview pair needs the meaning of the constant 57 (a track slot? a
             // preview mode?) and the trigger post needs the type-id discrepancy settled by
             // the record's consumer. Neither is recoverable from this call site, so both
@@ -761,18 +760,7 @@ namespace BrnGui
         GuiAudioTriggerEvent lEvent;
         lEvent.Construct(liAction, KAC_EMPTY, lpacMovie);
 
-        struct Record
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
-        } lRecord = { 100, 457, 12, {} };
-        std::memcpy(&lRecord.mPayload, lEvent.macComponent, sizeof(lRecord.mPayload));
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRecord)));
+        mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lEvent);
     }
 
     // ---- TriggerSound @0x824CDFB0 --------------------------------------------------

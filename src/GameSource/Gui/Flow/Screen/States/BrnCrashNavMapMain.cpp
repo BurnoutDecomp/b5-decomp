@@ -153,27 +153,6 @@ namespace BrnGui
             u32 muVisible;   // +0x00  the console acts only on the exact value 1
         };
 
-        // ---- out-queue payload view: the id-457 audio re-post ------------------------
-        // HandleCrashNavInputReleased's zoom arm builds a normal GuiAudioTriggerEvent,
-        // then memcpy's its 100-BYTE PAYLOAD into a wrapper record whose type word is
-        // 457, not 201 (@0x824CCE78..0x824CCEB4: `memcpy(dst, &audio, 0x64)` then the
-        // three header words 100 / 0x1C9 / 12 and `AddEvent(out+12, rec, 40, 0x70)`).
-        // 0x70 == 112 == 12 + 100, which is exactly GuiEventWrapper<T,40> over a
-        // 100-byte T. The same 100-byte-payload-under-id-457 record is already attested
-        // in the tree at BrnInGameMessageRenderer.cpp:1347/1413 ("CodeTicker"), and
-        // BrnGuiDemangledEventTypes.h:472 FLAGs the 201-vs-457 split as unresolved --
-        // this view is the honest local shape, not a second home for the type.
-        struct GuiAudioTriggerPayload457
-        {
-            char macComponent[32];   // +0x00
-            s32  meAction;           // +0x20
-            char macLabel[32];       // +0x24
-            char macMovie[32];       // +0x44
-            s32 GetEventType() const { return 457; }
-        };
-        // 100 == the console's memcpy size and the record's leading size word.
-        // (The C++ struct is naturally 4-aligned, so no padding creeps in.)
-
         // ---- the zoomed-out map centre ----------------------------------------------
         // X360 &unk_82FB4C20 -- a 16-byte .bss quadword the LTRIGGER arm loads whole and
         // stores into mMainMapComponent.mv2DesiredCentre. ⚠️ FLAG, and it is the exact
@@ -603,18 +582,7 @@ namespace BrnGui
             lAudio.Construct(KI_AUDIO_ACTION_MAP_ZOOM_OUT, KAC_EMPTY_STRING,
                              KPC_SOUND_MAP_ZOOM, KAC_EMPTY_STRING);
 
-            // The console memcpy's the 100-byte PAYLOAD out of the freshly-built event
-            // and re-boxes it under wire id 457 (see GuiAudioTriggerPayload457's note).
-            // The committed PC GuiAudioTriggerEvent carries its 12-byte GuiEvent<201>
-            // header in front of that payload, so the copy starts at macComponent.
-            GuiAudioTriggerPayload457 lPayload;
-            std::memcpy(&lPayload, &lAudio.macComponent, sizeof(lPayload));
-
-            CgsGui::GuiEventWrapper<GuiAudioTriggerPayload457, KI_CHANNEL_GUI_EVENT>
-                lRecord(lPayload);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                lRecord.GetChannel(), static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
 
             meCursorMode = E_CURSORMODE_SELECTING_ICONS;   // `li r11, 1 ; stw 0x5F50`
         }

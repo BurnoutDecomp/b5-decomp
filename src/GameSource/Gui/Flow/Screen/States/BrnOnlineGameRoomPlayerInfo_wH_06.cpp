@@ -36,11 +36,8 @@
 // so every site below is a plain by-name call on the named member -- same treatment as
 // the committed sibling screens (BrnOnlinePlay.cpp, BrnBootLegal.cpp).
 //
-// NOTE on the audio event: the X360 wire id for GuiAudioTriggerEvent is 457 (see the
-// hand-built {100,457,12} record in this TU's TriggerSound), while the committed
-// BrnGuiEventTypeDefs.h models it as GuiEvent<201>. That id discrepancy is a known
-// cross-TU finding for the conductor; this partfile does not touch the header and calls
-// the same OutputGuiEvent<GuiAudioTriggerEvent> instantiation the X360 calls.
+// Audio cue calls use the 100-byte event-457 payload; StateInterface's audio
+// specialization emits ARTIST's channel-40 wrapper.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"

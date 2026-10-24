@@ -90,12 +90,6 @@ namespace BrnGui
             return sbEnabled;
         }
 
-        // The audio trigger record's queued event id. ⓘ The committed
-        // BrnGui::GuiAudioTriggerEvent models this SAME 100-byte record under id 201 (its
-        // presentation-action producer); this screen posts it under 457. The record the X360
-        // builds is { 100, 457, 12, <the 100-byte audio record> }, 112 bytes on channel 40.
-        const u32 KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL = 457;
-
         // ---- the analogue-axis scale (an inline literal in the source; the X360 pools it
         //      at flt_8206B2B8 == 17.647058f). It maps the live axis range
         //      [KF_AXIS_DEAD_ZONE, 1.0] onto [0, 15] pixels of scroll per sample.
@@ -540,15 +534,7 @@ namespace BrnGui
                          lbClappers ? "CodeCarChoiceCarouselClappers" : "CodeCarChoiceCarousel",
                          KAC_EMPTY);
 
-        // The X360 record is { 100, 457, 12, <the 100-byte audio record> }: same payload as
-        // the committed GuiAudioTriggerEvent, different queued id (see
-        // KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL above).
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL;
-        lAudio.muHeader2   = 12u;
-
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lAudio, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
     }
 
     // ================================================================================

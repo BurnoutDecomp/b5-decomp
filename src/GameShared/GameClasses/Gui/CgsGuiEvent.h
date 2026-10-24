@@ -55,6 +55,16 @@ namespace CgsGui
     };
     static_assert(sizeof(GuiEvent<91>) == 1, "ARTIST GUI tag 91 is one byte");
 
+    // DecFIGS BrnGuiAudioEvent.h declares GuiAudioTriggerEvent : GuiEvent<452>.
+    // The class is a tag base in that declaration, not the generic 12-byte queue header;
+    // ARTIST's Construct writes the first payload field at offset zero.
+    template <>
+    struct GuiEvent<452> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 452; }
+    };
+    static_assert(sizeof(GuiEvent<452>) == 1, "DecFIGS GUI audio base tag is one byte");
+
     // ARTIST's Payback bridge uses these one-byte tag instantiations, not the generic
     // 12-byte header record: AddGuiEvent helpers 0x823D7570/0x823D7628/0x823D2FB8 pin
     // ids 178/180/183 at size 1. Keep their empty byte representation unwritten.

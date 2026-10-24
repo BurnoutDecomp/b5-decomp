@@ -13,7 +13,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (payload event 457) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 
