@@ -82,6 +82,10 @@ namespace CgsFileSystem
         // per embedded Futex).
         FileSystem();
 
+        // DecFIGS h122/146; inlined locked wrappers in ARTIST828F3D30/828F3EE0.
+        s32 Open(const char* lpcFileName, FileAccess leFileAccess, s32 liPriority, bool lbUseHDCache);
+        bool Close(u32 luFileId);
+
         // @0x8264AE28. Locked file-state read for file id `luFileId` (0..KU_MAXNOOFFILES-1).
         FileState GetStatus(u32 luFileId);
 
@@ -124,6 +128,10 @@ namespace CgsFileSystem
         // The actual file I/O primitives, called under mFileSystemFutex by FileHandle::Read/Write.
         // DECLARE-ONLY here: bodies are their own TUs (ReadInternal @0x828E8B50-region /
         // WriteInternal @0x828E8B50, homed in CgsFileSystem.cpp).
+        // Original private providers828F0718/828F08C8; same FileSystem-owned slots.
+        s32 OpenInternal(const char* lpcFileName, FileAccess leFileAccess,
+                         s32 liPriority, bool lbUseHDCache);
+        bool CloseInternal(u32 luFileId);
         bool ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead);
         bool WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition,
                            u64 luSizeToWrite);

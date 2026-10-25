@@ -5,6 +5,19 @@
 // module's file wait needs, beside their home CgsFileHandle.cpp.
 namespace CgsFileSystem
 {
+    // CgsFileHandle.h48/76; inlined pointer/id pair at828F3E54..58 and
+    // file-id reads in828F3EE0. Natural native pointer width is retained.
+    void FileHandle::Construct(FileSystem* lpFileSystem, u32 luFileId)
+    {
+        mpFileSystem = lpFileSystem;
+        muFileId = luFileId;
+    }
+
+    u32 FileHandle::GetFileId() const
+    {
+        return muFileId;
+    }
+
     // Header-inline on the console (ReplayModule::WaitForOpenReplayFiles inlines it as a direct
     // FileSystem::GetStatus(mpFileSystem, muFileId) call): the file-system slot state.
     FileState FileHandle::GetStatus() const
