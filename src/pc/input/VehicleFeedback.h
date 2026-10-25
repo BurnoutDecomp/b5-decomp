@@ -111,7 +111,7 @@ namespace CgsInput::AdaptiveTriggers
     }
 
     inline Sample ProjectVehicle(const BrnPhysics::Vehicle::RaceCarState& lrCar,
-        const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo& lrBoost, bool lbShowtime)
+        const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo& lrBoost, bool lbShowtime, unsigned luDrivenMask)
     {
         Sample lSample;
         lSample.mbShowtime = lbShowtime;
@@ -146,7 +146,7 @@ namespace CgsInput::AdaptiveTriggers
             if (!lrCar.mabWheelExists[i] || !lrWheel.mRoadContact.mbLineTestIsValid || !lrWheel.mRoadContact.mbIsOnGround) continue;
             ++lSample.muGroundedWheels;
             lSample.mfBrakeSkid = (std::max)(lSample.mfBrakeSkid, Unit(lrWheel.mfSkidFactor));
-            if (lrWheel.mbHasTraction)
+            if ((luDrivenMask & (1u << i)) && lrWheel.mbHasTraction)
             {
                 const float lfRoadSpeed = std::fabs(Finite(lrWheel.mfRoadLongSpeed));
                 const float lfSlip = std::fabs(Finite(lrWheel.mfWheelLongSpeed) - Finite(lrWheel.mfRoadLongSpeed)) /
@@ -168,7 +168,8 @@ namespace CgsInput::AdaptiveTriggers
             !lrCars.IsRaceCarActive(lePlayer) || !lrCars.IsRaceCarLoaded(lePlayer)) return {};
         const auto& lrCar = *lrCars.GetRaceCarState(lePlayer);
         const auto& lrBoost = *lrCars.GetBoostOutputInfoN(lePlayer);
-        Sample lSample = ProjectVehicle(lrCar, lrBoost, lrCars.IsCarInShowtime(lePlayer));
+        Sample lSample = ProjectVehicle(lrCar, lrBoost, lrCars.IsCarInShowtime(lePlayer),
+            EngineFeedback::GetDrivenMask(lrCar.mEntityId.muValue));
         lSample.mbDriving &= lbDrivingAllowed;
         if (!lSample.mbActive) return lSample;
         ObserveSurface(lSample, lrCar);

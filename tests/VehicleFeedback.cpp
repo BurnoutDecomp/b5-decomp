@@ -45,7 +45,7 @@ int main()
         lCar.maWheels[i].mfWheelLongSpeed = 15;
         lCar.maWheels[i].mfSkidFactor = 0.6f;
     }
-    auto lSample = AT::ProjectVehicle(lCar, lBoost, false);
+    auto lSample = AT::ProjectVehicle(lCar, lBoost, false, 0xf);
     Check(lSample.mbActive && lSample.mfGas == 0.8f && lSample.mfBrake == 0.25f && lSample.miGear == 2,
         "snapshot projection preserves forward pedal roles and actual gear");
     Check(lSample.mfRPM == 4000 && lSample.mfVerticalSpeed == -7 && lSample.mfAirTime == 0.2f,
@@ -54,25 +54,33 @@ int main()
         "boost, drift and vehicle character come from published semantic state");
     Check(lSample.muGroundedWheels == 4 && lSample.mfDrivenSlip == 0.5f && lSample.mfBrakeSkid == 0.6f,
         "valid wheel contact projects normalized relative slip and skid");
+    lCar.maWheels[2].mfWheelLongSpeed = lCar.maWheels[3].mfWheelLongSpeed = 10;
+    Check(AT::ProjectVehicle(lCar, lBoost, false, 0xc).mfDrivenSlip == 0,
+        "slipping unpowered front wheels cannot create RWD accelerator wheelspin");
+    Check(AT::ProjectVehicle(lCar, lBoost, false, 3).mfDrivenSlip == 0.5f,
+        "actual front-wheel power selection includes front slip");
+    Check(AT::ProjectVehicle(lCar, lBoost, false, 0).mfDrivenSlip == 0,
+        "unknown or frozen drive distribution cannot invent a driven axle");
+    lCar.maWheels[2].mfWheelLongSpeed = lCar.maWheels[3].mfWheelLongSpeed = 15;
     lCar.maWheels[0].mRoadContact.mbLineTestIsValid = false;
     lCar.maWheels[1].mRoadContact.mbIsOnGround = false;
     lCar.mabWheelExists[2] = false;
-    lSample = AT::ProjectVehicle(lCar, lBoost, false);
+    lSample = AT::ProjectVehicle(lCar, lBoost, false, 0xf);
     Check(lSample.muGroundedWheels == 1, "missing, invalid and airborne wheels cannot contribute ground contact");
     lCar.mi8Gear = BrnPhysics::Vehicle::KU8_REVERSE_GEAR;
-    lSample = AT::ProjectVehicle(lCar, lBoost, false);
+    lSample = AT::ProjectVehicle(lCar, lBoost, false, 0xf);
     Check(lSample.mbReverse && lSample.mfGas == 0.25f && lSample.mfBrake == 0.8f,
         "actual reverse gear swaps logical gas/brake to match engine input swap");
     lCar.meDriverType = BrnPhysics::Vehicle::E_DRIVER_TYPE_AI;
-    Check(!AT::ProjectVehicle(lCar, lBoost, false).mbDriving, "AI camera driving does not pretend player pedal control");
-    Check(AT::ProjectVehicle(lCar, lBoost, true).mbActive, "Showtime retains feedback during crash physics");
+    Check(!AT::ProjectVehicle(lCar, lBoost, false, 0xf).mbDriving, "AI camera driving does not pretend player pedal control");
+    Check(AT::ProjectVehicle(lCar, lBoost, true, 0xf).mbActive, "Showtime retains feedback during crash physics");
     lCar.mbIsHidden = true;
-    Check(!AT::ProjectVehicle(lCar, lBoost, true).mbActive, "hidden player car is inactive");
+    Check(!AT::ProjectVehicle(lCar, lBoost, true, 0xf).mbActive, "hidden player car is inactive");
     lCar.mbIsHidden = false; lCar.meDriverType = BrnPhysics::Vehicle::E_DRIVER_TYPE_PLAYER;
     lCar.mfUpShiftRPM = 1000;
-    Check(!AT::ProjectVehicle(lCar, lBoost, false).mbLimiter, "high RPM above shift threshold is not invented limiter activity");
+    Check(!AT::ProjectVehicle(lCar, lBoost, false, 0xf).mbLimiter, "high RPM above shift threshold is not invented limiter activity");
     lBoost.mbWasChainJustCompleted = true; lBoost.muNumChained = 4;
-    lSample = AT::ProjectVehicle(lCar, lBoost, false);
+    lSample = AT::ProjectVehicle(lCar, lBoost, false, 0xf);
     Check((lSample.muEvents & AT::E_EVENT_CHAIN) && lSample.muChain == 4, "chain uses semantic award flag and serial count");
 
     EV::GameEventQueue lQueue;

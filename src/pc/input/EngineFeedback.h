@@ -19,7 +19,12 @@ namespace CgsInput::AdaptiveTriggers::EngineFeedback
             Entry* lpEntry = nullptr;
             for (auto& lrEntry : maEntries) if (lrEntry.muCookie == luCookie) { lpEntry = &lrEntry; break; }
             if (!lpEntry) lpEntry = &maEntries[muNext++ % maEntries.size()];
-            *lpEntry = {luCookie, luNow, lbLimited};
+            *lpEntry = {luCookie, luNow, lbLimited, 0};
+        }
+        void RecordDrive(std::uintptr_t luCookie, unsigned luMask)
+        {
+            for (auto& lrEntry : maEntries)
+                if (lrEntry.muCookie == luCookie) { lrEntry.muDrivenMask = luMask & 0xf; return; }
         }
         void BindPlayer(std::uintptr_t luCookie, std::uint32_t luEntity)
         {
@@ -34,8 +39,16 @@ namespace CgsInput::AdaptiveTriggers::EngineFeedback
                     return lrEntry.mbLimited && luNow >= lrEntry.muUpdated && luNow - lrEntry.muUpdated <= 500;
             return false;
         }
+        unsigned GetDrivenMask(std::uint32_t luEntity, std::uint64_t luNow) const
+        {
+            if (luEntity != muPlayerEntity || !muPlayerCookie) return 0;
+            for (const auto& lrEntry : maEntries)
+                if (lrEntry.muCookie == muPlayerCookie && luNow >= lrEntry.muUpdated && luNow - lrEntry.muUpdated <= 500)
+                    return lrEntry.muDrivenMask;
+            return 0;
+        }
     private:
-        struct Entry { std::uintptr_t muCookie = 0; std::uint64_t muUpdated = 0; bool mbLimited = false; };
+        struct Entry { std::uintptr_t muCookie = 0; std::uint64_t muUpdated = 0; bool mbLimited = false; unsigned muDrivenMask = 0; };
         std::array<Entry, 64> maEntries{};
         std::size_t muNext = 0;
         std::uintptr_t muPlayerCookie = 0;
@@ -68,6 +81,19 @@ namespace CgsInput::AdaptiveTriggers::EngineFeedback
         if (!gbEnabled.load(std::memory_order_relaxed)) return;
         const std::lock_guard<std::mutex> lLock(gMutex);
         gRecorder.BindPlayer(luCookie, luEntity);
+    }
+    inline void RecordDrive(std::uintptr_t luCookie, float lfFront, float lfRear, bool lbRearOnly)
+    {
+        if (!gbEnabled.load(std::memory_order_relaxed)) return;
+        const unsigned luMask = lbRearOnly ? 0xcu : ((lfFront != 0 ? 3u : 0u) | (lfRear != 0 ? 0xcu : 0u));
+        const std::lock_guard<std::mutex> lLock(gMutex);
+        gRecorder.RecordDrive(luCookie, luMask);
+    }
+    inline unsigned GetDrivenMask(std::uint32_t luEntity)
+    {
+        if (!gbEnabled.load(std::memory_order_relaxed)) return 0;
+        const std::lock_guard<std::mutex> lLock(gMutex);
+        return gRecorder.GetDrivenMask(luEntity, Now());
     }
     inline bool IsLimited(std::uint32_t luEntity)
     {
