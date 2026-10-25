@@ -31,13 +31,13 @@
 
 namespace CgsGameTalk
 {
+    // The "Core/GameTalk" debug log window: a file-scope static in the X360 build
+    // (the asm's off_82F32FD4). Construct sizes it to 20 lines and prepares it under
+    // the "Core/GameTalk" menu path with the "Log" caption (off_82F32FBC / off_82F32FB8).
+    CgsDev::DebugUI::LogWindow sLogWindow;
+
     namespace
     {
-        // The "Core/GameTalk" debug log window: a file-scope static in the X360 build
-        // (the asm's off_82F32FD4). Construct sizes it to 20 lines and prepares it under
-        // the "Core/GameTalk" menu path with the "Log" caption (off_82F32FBC / off_82F32FB8).
-        CgsDev::DebugUI::LogWindow sLogWindow;
-
         const char* const KAC_LOG_WINDOW_PATH    = "Core/GameTalk"; // off_82F32FBC
         const char* const KAC_LOG_WINDOW_CAPTION = "Log";           // off_82F32FB8
         const s32         KI_LOG_WINDOW_LINES     = 20;             // li r4, 0x14

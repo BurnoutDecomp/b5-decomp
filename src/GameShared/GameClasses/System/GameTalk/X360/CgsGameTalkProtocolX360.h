@@ -94,7 +94,7 @@ namespace CgsGameTalk
 
         // IGameTalkProtocol override: accept a pending connection then drain any
         // received bytes into the digest buffer. X360 @0x82838690.
-        virtual void Poll();
+        virtual void Poll() override;
 
         // accept() a pending client and close the listening socket. X360 @0x82837120.
         bool AcceptIncomingConnection();
