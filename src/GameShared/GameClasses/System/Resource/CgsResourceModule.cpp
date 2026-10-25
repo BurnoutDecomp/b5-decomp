@@ -412,22 +412,9 @@ namespace CgsResource
                                       lpOptions->mDebugParams.mpDebugAllocator);
         mDebugComponent.Construct(this, &lpOptions->mDebugParams);
     }
-    // ARTIST828EC6B0, with retirement of native pending-response allocations.
+    // ARTIST828EC6B0: exactly the original two calls; native cleanup is separate.
     void ResourceModule::Destruct()
     {
-        // FLAG PC-platform leaf: temporary native response records are owned
-        // by this shuttle. Release has closed the stream slots before teardown.
-        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
-        const s32 liCount = mPendingFileResponses.Get(lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
-        for (s32 li = 0; li < liCount; ++li)
-        {
-            if (lapPending[li]->meEvent == 16)
-                delete static_cast<Events::OpenReadStreamResponse*>(lapPending[li]->mpResponse);
-            else if (lapPending[li]->meEvent == 18)
-                delete static_cast<Events::CloseReadStreamResponse*>(lapPending[li]->mpResponse);
-            mPendingFileResponses.Push(mPendingFileResponses.GetObjectIndex(lapPending[li]));
-        }
-        // ARTIST828EC6B0.
         mFileSystem.Destruct();
         CgsModule::ModuleSingleBuffered::Destruct();
     }
