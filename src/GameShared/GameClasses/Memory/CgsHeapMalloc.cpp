@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint sink
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // GLOBAL filter
 
 // CgsMemory::HeapMalloc - the engine's general-purpose heap. A thin wrapper over an embedded
 // EA::Allocator::GeneralAllocator (vendor/PPMalloc): Construct initialises the allocator over the
@@ -71,13 +73,13 @@ namespace CgsMemory
         return mAllocator.Calloc(static_cast<size_t>(lnCount), static_cast<size_t>(lnSize), 0);
     }
 
-    // The per-allocation trace sink the X360 PrintAllocations hands to TraceAllocatedMemory.
-    // X360 passed sub_828667B8 (UNIDENTIFIED in the export - its body is not recovered).
-    // [FLAG] best-effort stand-in: a no-op sink so the trace walk has a valid callback. The
-    // original almost certainly forwarded the formatted record to a CgsDev::Message debug stream
-    // (CgsHeapMalloc.cpp:176 TraceFunc, using namespace CgsDev::Message); not fabricated here.
-    static void TraceFunc(const char* /*lpcRecord*/, void* /*lpContext*/)
+    // X360 0x828667B8; DecFIGS names CgsMemory::TraceFunc(const char*, void*).
+    void TraceFunc(const char* lpcRecord, void* /*lpContext*/)
     {
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) == 0)
+            return;
+
+        *CgsDev::Log::gpDebugPrint << (lpcRecord ? lpcRecord : "<NULLSTRING>") << "\n";
     }
 
     // @ 0x82866848 - GeneralAllocator::TraceAllocatedMemory(callback, 0, 0, 0): walk the live

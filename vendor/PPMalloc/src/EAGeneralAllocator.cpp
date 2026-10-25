@@ -2,6 +2,7 @@
 #include <cstring>   // memset / memcpy
 #include <cstddef>   // offsetof
 #include <cstdint>   // uintptr_t
+#include <cstdio>    // snprintf: the original bounded trace fields
 #include "types.hpp" // u32
 
 #include <windows.h> // CRITICAL_SECTION for PPMAutoMutex
@@ -78,11 +79,14 @@ namespace Allocator
                       "SnapshotImage holds a native dynamic report context");
     }
 
-    // @ 0x82B4EDC8 / 0x82B4DC98 - default sinks (the real X360 versions route to the platform
-    // debug-print; inert here - they are only invoked on assertion/trace, which the engine paths
-    // gate behind debug flags).
+    // Existing assertion sink; the trace producer does not route through it.
     void GeneralAllocator::AssertionFailureFunctionDefault(const char* /*pMessage*/, void* /*pContext*/) {}
-    void GeneralAllocator::TraceFunctionDefault(const char* /*pMessage*/, void* /*pContext*/) {}
+
+    // ARTIST82B4DC98 is a tail call to OutputDebugStringA with the record unchanged.
+    void GeneralAllocator::TraceFunctionDefault(const char* pMessage, void* /*pContext*/)
+    {
+        OutputDebugStringA(pMessage);
+    }
 
     // bin_at(i) - see the header. i is 1-based (Init self-links bins 1..127).
     GeneralAllocator::Chunk* GeneralAllocator::GetBin(int i)
@@ -965,27 +969,169 @@ namespace Allocator
         }
     }
 
-    // @ 0x82B516F0 - dump every live allocation through pTraceCallback. The X360 flushes the fast
-    // bins, defaults the callback/context to the installed trace sink, snapshots the heap, then
-    // walks each block describing it into a text buffer. The snapshot/report/describe internals
-    // are declare-only this round, so this faithfully performs the lock + fast-bin flush + sink
-    // defaulting spine; the per-block walk lands when ReportNext/DescribeChunk are bodied.
+    // ARTIST82B4DA38; XB1 sub_140910EB0 corroborates native counts and the
+    // two-byte wchar_t branch. The preview is binary hex plus printable bytes;
+    // even the wide output returns kDataTypeBinary. Preserve its byte-filled
+    // wide padding and its distinct DEL handling.
+    GeneralAllocator::DataType GeneralAllocator::GetDataPreview(
+        const void* pData, size_t nDataSize, char* pBuffer, wchar_t* pBufferW,
+        size_t nBufferLength) const
+    {
+        if (nBufferLength < 5)
+        {
+            if (nBufferLength)
+            {
+                if (pBuffer)
+                    pBuffer[0] = 0;
+                if (pBufferW)
+                    pBufferW[0] = 0;
+            }
+            return kDataTypeBinary;
+        }
+
+        size_t nPreviewSize = (nBufferLength - 2) / 4;
+        if (nPreviewSize > nDataSize)
+            nPreviewSize = nDataSize;
+        // FLAG PC-platform leaf: do not form the original 3*N-1 separator
+        // address when no byte fits. Real live PcBlock payloads are nonempty;
+        // TraceAllocatedMemory uses the original 256-character preview buffer.
+        if (!nPreviewSize)
+        {
+            if (pBuffer)
+                pBuffer[0] = 0;
+            if (pBufferW)
+                pBufferW[0] = 0;
+            return kDataTypeBinary;
+        }
+
+        if (pBuffer)
+        {
+            memset(pBuffer, ' ', nBufferLength);
+            pBuffer[nBufferLength - 1] = 0;
+            pBuffer[3 * nPreviewSize - 1] = '\t';
+        }
+        if (pBufferW)
+        {
+            memset(pBufferW, ' ', nBufferLength * sizeof(wchar_t));
+            pBufferW[nBufferLength - 1] = 0;
+            pBufferW[3 * nPreviewSize - 1] = L'\t';
+        }
+
+        const unsigned char* const pBytes = static_cast<const unsigned char*>(pData);
+        const char kDigits[] = "0123456789abcdef";
+        for (size_t i = 0; i < nPreviewSize; ++i)
+        {
+            const unsigned char nByte = pBytes[i];
+            const char cHigh = kDigits[nByte >> 4];
+            const char cLow = kDigits[nByte & 15];
+            const signed char cByte = static_cast<signed char>(nByte);
+            if (pBuffer)
+            {
+                pBuffer[3 * i] = cHigh;
+                pBuffer[3 * i + 1] = cLow;
+                pBuffer[3 * nPreviewSize + i] =
+                    (cByte < 32 || cByte >= 127 || cByte == '"' || cByte == '\'') ? '.' : static_cast<char>(cByte);
+            }
+            if (pBufferW)
+            {
+                pBufferW[3 * i] = static_cast<wchar_t>(cHigh);
+                pBufferW[3 * i + 1] = static_cast<wchar_t>(cLow);
+                pBufferW[3 * nPreviewSize + i] =
+                    (cByte < 32 || cByte == '"' || cByte == '\'') ? L'.' : static_cast<wchar_t>(cByte);
+            }
+        }
+        return kDataTypeBinary;
+    }
+
+    // ARTIST82B4DCA0 supplies the address/size/data/attribute fields and the
+    // allocator's two delimiters. XB1 sub_14090FD90 pins the native address
+    // spelling and 0x1c capacity gate; its later <space> field is not in ARTIST.
+    // FLAG PC-platform leaf: ReportNext carries an opaque PcBlock address in
+    // Chunk*. Convert that address before metadata access, using the same real
+    // PcGetBlockInfo producer as reporting. No console Chunk field is read.
+    size_t GeneralAllocator::DescribeChunk(const Chunk* pChunk, char* pBuffer,
+                                           size_t nBufferLength, bool bAppendLineEnd) const
+    {
+        // The actual trace passes4000. Short no-append output leaves bytes intact;
+        // only append mode needs its record delimiter and terminator.
+        if (nBufferLength < 2)
+        {
+            if (nBufferLength && bAppendLineEnd)
+                pBuffer[0] = 0;
+            return 0;
+        }
+        const PcBlock* const pBlock = reinterpret_cast<const PcBlock*>(pChunk);
+        BlockInfo info;
+        PcGetBlockInfo(pBlock, &info, mHeadCoreBlock.mpCore);
+        const unsigned int nDataSize = static_cast<unsigned int>(info.mnDataSize);
+        char* pWrite = pBuffer;
+        size_t nRemaining = nBufferLength;
+        if (nRemaining >= 0x1c)
+        {
+            const int nWritten = std::snprintf(pWrite, nRemaining, "addr: 0x%016llx%c",
+                static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(info.mpData)), mcTraceFieldDelimiter);
+            pWrite += nWritten;
+            nRemaining -= nWritten;
+        }
+        if (nRemaining >= 0x1f)
+        {
+            const int nWritten = std::snprintf(pWrite, nRemaining, "size: %10u (%8x)%c",
+                nDataSize, nDataSize, mcTraceFieldDelimiter);
+            pWrite += nWritten;
+            nRemaining -= nWritten;
+        }
+        if (nRemaining >= 0x10a)
+        {
+            char data[256] = {};
+            GetDataPreview(info.mpData, info.mnDataSize, data, 0, sizeof(data));
+            const int nWritten = std::snprintf(pWrite, nRemaining, "data: %s%c", data, mcTraceFieldDelimiter);
+            pWrite += nWritten;
+            nRemaining -= nWritten;
+        }
+        const bool bInternal = (info.mBlockType & kReportInternal) != 0;
+        if ((bInternal || info.mbMemoryMapped) && nRemaining >= 0x19)
+        {
+            const int nWritten = std::snprintf(pWrite, nRemaining, "attr: %s %s%c",
+                bInternal ? "internal" : "", info.mbMemoryMapped ? "mapped" : "", mcTraceFieldDelimiter);
+            pWrite += nWritten;
+        }
+        if (bAppendLineEnd)
+        {
+            *pWrite++ = static_cast<char>(mcTraceRecordDelimiter);
+            *pWrite = 0;
+        }
+        return static_cast<size_t>(pWrite - pBuffer);
+    }
+
+    // ARTIST82B516F0: lock, conditionally consolidate fast bins, independently
+    // default the callback and context, then trace the real allocated-block
+    // report. ReportBegin/End are the recovered inline snapshot lifecycle.
     void GeneralAllocator::TraceAllocatedMemory(void (*pTraceCallback)(const char*, void*),
                                                 void* pTraceCallbackContext,
-                                                void* /*pStorage*/, size_t /*nStorageSize*/)
+                                                void* pStorage, size_t nStorageSize)
     {
         PPMAutoMutex lock(mpMutex);
-
-        ClearFastBins();
-
+        if (mnMaxFastBinChunkSize & 1)
+            ClearFastBins();
         if (!pTraceCallback)
             pTraceCallback = mpTraceFunction;
         if (!pTraceCallbackContext)
             pTraceCallbackContext = mpTraceFunctionContext;
-
-        // (Per-block enumeration via TakeSnapshot/ReportNext/DescribeChunk lands next round.)
-        (void)pTraceCallback;
-        (void)pTraceCallbackContext;
+        if (pTraceCallback)
+        {
+            const void* const pReport = ReportBegin(0, kReportAllocated, false, pStorage, nStorageSize);
+            const BlockInfo* pBlockInfo;
+            char record[0xfa0];
+            while ((pBlockInfo = ReportNext(pReport, 0x1f)) != 0)
+            {
+                if (mbTraceInternalMemory || (pBlockInfo->mBlockType & kReportInternal) == 0)
+                {
+                    DescribeChunk(static_cast<const Chunk*>(pBlockInfo->mpBlock), record, sizeof(record), true);
+                    pTraceCallback(record, pTraceCallbackContext);
+                }
+            }
+            ReportEnd(pReport);
+        }
     }
 
     // ------------------------------------------------------------------------------------
