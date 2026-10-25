@@ -35,8 +35,14 @@
 //   +0x4034  mbPrepared         set 1 by Prepare, asserted by Register/Send/Update
 // ============================================================================
 
+namespace CgsDev { namespace DebugUI { struct LogWindow; } }
+
 namespace CgsGameTalk
 {
+    // The existing ARTIST82F32FD4 owner is shared by the split native TUs.
+    // Protocol status text uses this same window's public mLog stream.
+    extern CgsDev::DebugUI::LogWindow sLogWindow;
+
     class GameTalk
     {
     public:
