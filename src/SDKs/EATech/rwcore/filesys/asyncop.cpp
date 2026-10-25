@@ -29,9 +29,9 @@ namespace rw
             }
 
             // GetSize @0x82BBD700:  ld r3, 0x18(r3); blr -- return the 64-bit size at +0x18.
-            u64 GetSize(const AsyncOp* lpOp)
+            u64 GetSize(const Handle* lpHandle)
             {
-                return lpOp->mu64Size;
+                return lpHandle->mu64Size;
             }
 
             // =============================================================================
@@ -48,14 +48,12 @@ namespace rw
                 , mbReserved08(0)               // *(result+8) = 0
                 , mbIsReadOp(0)                 // *(result+9) = 0
                 , miPriority(0)                 // *(result+12) = 0
-                , mpStream(nullptr)             // *(result+16) = 0
+                , mFileHandle(nullptr)             // *(result+16) = 0
                 , mUserData(0)                  // *(result+20) = 0
                 , mpfnComplete(&DefaultCompletion) // *(result+24) = STUB
-                , muReserved1C(0)
                 , mu64Position(0)               // *(result+32) = 0
                 , mu64ByteCount(0)              // *(result+40) = 0
                 , mpBuffer(nullptr)             // *(result+48) = 0
-                , muReserved34(0)
                 , mu64BytesDone(0)              // *(result+56) = 0
                 , mpDevice(nullptr)             // *(result+64) = 0
                 , mpfnDoIo(nullptr)             // *(result+68) = 0
@@ -69,7 +67,7 @@ namespace rw
             AsyncOp::~AsyncOp()
             {
                 ::MemoryBarrier();      // lwsync
-                mpStream  = nullptr;    // result[4] (+0x10) = 0
+                mFileHandle  = nullptr;    // result[4] (+0x10) = 0
                 mUserData = 0;          // result[5] (+0x14) = 0
                 mpBuffer  = nullptr;    // result[12] (+0x30) = 0
                 mpDevice  = nullptr;    // result[16] (+0x40) = 0
@@ -94,7 +92,7 @@ namespace rw
                 mbReserved08  = 0;              // *(a1+8) = 0
                 mbIsReadOp    = 0;              // *(a1+9) = 0
                 miPriority    = liPriority;     // stw r8, 0xC
-                mpStream      = nullptr;        // stw r11(=0), 0x10
+                mFileHandle      = nullptr;        // stw r11(=0), 0x10
                 mUserData     = luUserData;     // stw r7, 0x14
                 mu64Position  = luFlags;        // std clrldi(r5,32), 0x20  (flags zero-extended)
                 mu64ByteCount = 0;              // std r11(=0), 0x28
@@ -132,20 +130,18 @@ namespace rw
             // redirect -- the asm reads *(a1+64) straight into r3).
             //   a1=this a2=stream a3=buffer a4=position a5=callback a6=userData a7=priority
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::Read(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
+            s32 AsyncOp::Read(Handle* lpHandle, void* lpBuffer, u64 lu64Position, u64 lu64Count,
                               CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority)
             {
-                IoStream* lpStrm = static_cast<IoStream*>(lpStream);
-
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
                 ::MemoryBarrier();              // lwsync
 
                 mbReserved08  = 0;              // *(a1+8) = 0
                 mbIsReadOp    = 1;              // *(a1+9) = 1
-                mpDevice      = lpStrm->mpDevice; // v10 = *(a2+12); *(a1+64) = v10
+                mpDevice      = lpHandle->mpDevice; // v10 = *(a2+12); *(a1+64) = v10
                 miPriority    = liPriority;     // *(a1+12) = a7
-                mpStream      = static_cast<OpStream*>(lpStream); // *(a1+16) = a2
+                mFileHandle      = lpHandle; // *(a1+16) = a2
                 mu64Position  = lu64Position;   // std r6, 0x20
                 mpBuffer      = lpBuffer;       // *(a1+48) = a3  (stw r5, 0x30)
                 mu64ByteCount = lu64Count;      // std r7, 0x28
@@ -160,22 +156,20 @@ namespace rw
                 return mpDevice->InsertOp(this);
             }
 
-            s32 AsyncOp::Write(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
+            s32 AsyncOp::Write(Handle* lpHandle, const void* lpBuffer, u64 lu64Position, u64 lu64Count,
                                CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority)
             {
-                IoStream* lpStrm = static_cast<IoStream*>(lpStream);
-
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
                 ::MemoryBarrier();              // lwsync
 
                 mbReserved08  = 0;              // *(a1+8) = 0
                 mbIsReadOp    = 0;              // *(a1+9) = 0
-                mpDevice      = lpStrm->mpDevice; // v10 = *(a2+12); *(a1+64) = v10
+                mpDevice      = lpHandle->mpDevice; // v10 = *(a2+12); *(a1+64) = v10
                 miPriority    = liPriority;     // *(a1+12) = a7
-                mpStream      = static_cast<OpStream*>(lpStream); // *(a1+16) = a2
+                mFileHandle      = lpHandle; // *(a1+16) = a2
                 mu64Position  = lu64Position;   // std r6, 0x20
-                mpBuffer      = lpBuffer;       // *(a1+48) = a3  (stw r5, 0x30)
+                mpBuffer      = const_cast<void*>(lpBuffer); // DWARF's shared mData is void*; Write only borrows const input.       // *(a1+48) = a3  (stw r5, 0x30)
                 mu64ByteCount = lu64Count;      // std r7, 0x28
                 mu64BytesDone = 0;              // std r3(=0), 0x38
                 mUserData     = luUserData;     // *(a1+20) = a6
@@ -195,11 +189,9 @@ namespace rw
             // and queue. The callback defaults to STUB. (Close stores the stream at +0x10.)
             //   a1=this a2=stream a3=callback a4=userData a5=priority
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::Close(void* lpStream, CompletionCallback lpfnComplete,
+            s32 AsyncOp::Close(Handle* lpHandle, CompletionCallback lpfnComplete,
                                uintptr_t luUserData, s32 liPriority)
             {
-                IoStream* lpStrm = static_cast<IoStream*>(lpStream);
-
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
                 ::MemoryBarrier();              // lwsync
@@ -207,7 +199,7 @@ namespace rw
                 mbReserved08  = 0;              // *(a1+8) = 0
                 mbIsReadOp    = 0;              // *(a1+9) = 0
                 miPriority    = liPriority;     // *(a1+12) = a5
-                mpStream      = static_cast<OpStream*>(lpStream); // *(a1+16) = a2
+                mFileHandle      = lpHandle; // *(a1+16) = a2
                 mUserData     = luUserData;     // *(a1+20) = a4
 
                 if (!lpfnComplete)
@@ -218,21 +210,21 @@ namespace rw
                 mpBuffer      = nullptr;        // *(a1+48) = 0
                 mu64BytesDone = 0;              // *(a1+56) = 0
 
-                Device* lpDevice = lpStrm->mpDevice; // v6 = *(a2+12)
+                Device* lpDevice = lpHandle->mpDevice; // v6 = *(a2+12)
                 mpfnDoIo = &AsyncOp::DoClose;   // *(a1+68) = DoClose
                 mpDevice = lpDevice;            // *(a1+64) = v6
                 return lpDevice->InsertOp(this);
             }
 
             // -----------------------------------------------------------------------------
-            // AsyncOp::DoClose @0x82BBE010 -- destroy the result handle (mpStream) and clear it.
+            // AsyncOp::DoClose @0x82BBE010 -- destroy the result handle (mFileHandle) and clear it.
             // -----------------------------------------------------------------------------
             s32 AsyncOp::DoClose(AsyncOp* lpOp)
             {
-                Handle* lpHandle = reinterpret_cast<Handle*>(lpOp->mpStream); // *(a1+16)
+                Handle* lpHandle = lpOp->mFileHandle; // *(a1+16)
                 if (lpHandle)
                     HandleScalarDeletingDtor(lpHandle, 1);
-                lpOp->mpStream = nullptr;       // *(a1+16) = 0
+                lpOp->mFileHandle = nullptr;       // *(a1+16) = 0
                 return 1;
             }
 
@@ -258,16 +250,16 @@ namespace rw
                                                   static_cast<u32>(lpOp->mu64Position),
                                                   lpOp->mpDevice);
                 }
-                lpOp->mpStream = reinterpret_cast<OpStream*>(lpHandle); // a1[4] (+0x10) = v3
+                lpOp->mFileHandle = lpHandle; // a1[4] (+0x10) = v3
 
                 gpFileSysAllocator->Free(lpOp->mpBuffer, 0);  // free the path copy (a1[12] == +0x30)
 
-                Handle* lpResult = reinterpret_cast<Handle*>(lpOp->mpStream);
+                Handle* lpResult = lpOp->mFileHandle;
                 if (lpResult->mpFile)           // *(v4+8)
                     return 1;
                 if (lpResult)
                     HandleScalarDeletingDtor(lpResult, 1);
-                lpOp->mpStream = nullptr;       // a1[4] = 0
+                lpOp->mFileHandle = nullptr;       // a1[4] = 0
                 return -2;
             }
 
@@ -280,55 +272,37 @@ namespace rw
             // advance buffer/position and decrement the remaining count. Returns 1 when the
             // op is complete (nothing left, or a short read); otherwise re-queues itself.
             //
-            // The Stream / StreamIo layout is the X360-proven minimal shape modelled in
-            // asyncop.h; every offset and vtable slot is taken from the asm.
+            // The original pointers are actual Handle/DeviceDriver fields; use their real types.
             // -----------------------------------------------------------------------------
             s32 AsyncOp::DoRead(AsyncOp* lpOp)
             {
-                s32 liDone = 0;
-
-                IoStream* lpStream = reinterpret_cast<IoStream*>(lpOp->mpStream);
-                StreamIo* lpIo = lpStream->mpIo;
-                StreamContext* lpCtx = lpStream->mpContext;
-                void* lpDriver = lpCtx->mpDevice->GetDriver();   // *(*(ctx+0xC))+0x140
-
-                // Leading position (slot 0x1C); stash into the context.
-                u64 lu64Lead = lpIo->mpVTable->mpfnSlot1C(lpIo, lpStream->mDriverKey,
-                                                          lpOp->mu64Position, 0,
-                                                          lpDriver, lpCtx->mDriverKey);
-                lpCtx->mu64LeadPos = lu64Lead;
-
-                // Clamp the remaining count to the IO size ceiling and the per-read cap.
-                u32 luSizeCeil = lpIo->mpVTable->mpfnSlot2C(lpIo);
-                u64 lu64Want = lpOp->mu64ByteCount;
-                if (lu64Want >= luSizeCeil)
-                    lu64Want = luSizeCeil;
-                u32 luWant = static_cast<u32>(lu64Want);
-                u32 luCap = static_cast<u32>(gpFileSysManager->miMaxReadSize); // *(off_8327F078+0x24)
+                Handle* lpHandle = lpOp->mFileHandle;
+                Handle* lpOwner = lpHandle->mpOwnerHandle;
+                const u64 luPosition = lpHandle->mpDriver->Seek(lpHandle->mpFile,
+                    lpOp->mu64Position, 0, lpOwner->mpDevice->GetDriver(), lpOwner->mpFile);
+                lpOp->mFileHandle->mpOwnerHandle->mu64Position = luPosition;
+                const u32 luSizeCeiling = lpOp->mFileHandle->mpDriver->GetMaxReadSize();
+                u64 luWant64 = lpOp->mu64ByteCount;
+                if (luWant64 >= luSizeCeiling)
+                    luWant64 = luSizeCeiling;
+                u32 luWant = static_cast<u32>(luWant64);
+                const u32 luCap = static_cast<u32>(gpFileSysManager->miMaxReadSize);
                 if (luWant >= luCap)
                     luWant = luCap;
-
-                // The read transfer (slot 0x14) returns the bytes actually read.
-                s32 liBytes = lpIo->mpVTable->mpfnSlot14(lpIo, lpStream->mDriverKey,
-                                                         lpOp->mpBuffer, luWant,
-                                                         lpDriver, lpCtx->mDriverKey);
-                u64 lu64Bytes = static_cast<u32>(liBytes);
-
-                // Advance: buffer += bytes, position += bytes, remaining -= bytes,
-                // bytesDone += bytes.
-                lpOp->mpBuffer       = static_cast<u8*>(lpOp->mpBuffer) + liBytes;
-                u64 lu64Remaining    = lpOp->mu64ByteCount - lu64Bytes;
-                lpOp->mu64Position   = lpOp->mu64Position + lu64Bytes;
-                lpOp->mu64ByteCount  = lu64Remaining;
-                lpOp->mu64BytesDone  = lpOp->mu64BytesDone + lu64Bytes;
-
-                // cmpldi remaining,0 + ble -> "remaining == 0" (unsigned), OR a short read.
-                if (lu64Remaining == 0 || static_cast<u32>(liBytes) != luWant)
-                    liDone = 1;
-                else
-                    lpOp->mpDevice->InsertOp(lpOp);   // more to read -> re-queue
-
-                return liDone;
+                lpHandle = lpOp->mFileHandle;
+                lpOwner = lpHandle->mpOwnerHandle;
+                const u32 luRead = lpHandle->mpDriver->Read(lpHandle->mpFile,
+                    lpOp->mpBuffer, luWant, lpOwner->mpDevice->GetDriver(), lpOwner->mpFile);
+                const u64 luRead64 = luRead;
+                lpOp->mpBuffer = static_cast<u8*>(lpOp->mpBuffer) + luRead;
+                const u64 luRemaining = lpOp->mu64ByteCount - luRead64;
+                lpOp->mu64Position += luRead64;
+                lpOp->mu64ByteCount = luRemaining;
+                lpOp->mu64BytesDone += luRead64;
+                if (luRemaining == 0 || luRead != luWant)
+                    return 1;
+                lpOp->mpDevice->InsertOp(lpOp);
+                return 0;
             }
 
             // -----------------------------------------------------------------------------
@@ -336,50 +310,43 @@ namespace rw
             //
             // The write transfer callback. Take the leading position (slot 0x1C), write the
             // whole buffer (slot 0x18), advance the context's position, fetch the trailing
-            // position (slot 0x20) into the stream, and accumulate the written bytes. Always
+            // size (slot 0x20/GetSize) into the handle, then accumulate the written bytes. Always
             // returns 1 (a write completes in one shot).
             // -----------------------------------------------------------------------------
             s32 AsyncOp::DoWrite(AsyncOp* lpOp)
             {
-                IoStream* lpStream = reinterpret_cast<IoStream*>(lpOp->mpStream);
-                StreamIo* lpIo = lpStream->mpIo;
-                StreamContext* lpCtx = lpStream->mpContext;
-                void* lpDriver = lpCtx->mpDevice->GetDriver();
-
-                // Leading position (slot 0x1C) -> context.
-                u64 lu64Lead = lpIo->mpVTable->mpfnSlot1C(lpIo, lpStream->mDriverKey,
-                                                          lpOp->mu64Position, 0,
-                                                          lpDriver, lpCtx->mDriverKey);
-                lpCtx->mu64LeadPos = lu64Lead;
-
-                // The write transfer (slot 0x18) returns the bytes written.
-                s32 liBytes = lpIo->mpVTable->mpfnSlot18(lpIo, lpStream->mDriverKey,
-                                                         lpOp->mpBuffer, lpOp->mu64ByteCount,
-                                                         lpDriver, lpCtx->mDriverKey);
-                u64 lu64Bytes = static_cast<u32>(liBytes);
-                lpOp->mu64ByteCount = lu64Bytes;                 // *(a1+40) = bytes
-                lpCtx->mu64LeadPos = lpCtx->mu64LeadPos + lu64Bytes; // ctx position += bytes
-
-                // Trailing position (slot 0x20) -> stream.
-                u64 lu64Tail = lpIo->mpVTable->mpfnSlot20(lpIo, lpStream->mDriverKey);
-                lpStream->mu64WritePos = lu64Tail;               // *(stream+0x18) = result
-
-                lpOp->mu64BytesDone = lpOp->mu64BytesDone + lpOp->mu64ByteCount;
+                Handle* lpHandle = lpOp->mFileHandle;
+                Handle* lpOwner = lpHandle->mpOwnerHandle;
+                const u64 luPosition = lpHandle->mpDriver->Seek(lpHandle->mpFile,
+                    lpOp->mu64Position, 0, lpOwner->mpDevice->GetDriver(), lpOwner->mpFile);
+                lpOp->mFileHandle->mpOwnerHandle->mu64Position = luPosition;
+                lpHandle = lpOp->mFileHandle;
+                lpOwner = lpHandle->mpOwnerHandle;
+                const u32 luWritten = lpHandle->mpDriver->Write(lpHandle->mpFile,
+                    lpOp->mpBuffer, static_cast<u32>(lpOp->mu64ByteCount),
+                    lpOwner->mpDevice->GetDriver(), lpOwner->mpFile);
+                lpOp->mu64ByteCount = luWritten;
+                lpOwner = lpOp->mFileHandle->mpOwnerHandle;
+                lpOwner->mu64Position += static_cast<u64>(luWritten);
+                lpHandle = lpOp->mFileHandle;
+                const u64 luSize = lpHandle->mpDriver->GetSize(lpHandle->mpFile);
+                lpOp->mFileHandle->mu64Size = luSize;
+                lpOp->mu64BytesDone += lpOp->mu64ByteCount;
                 return 1;
             }
 
             // -----------------------------------------------------------------------------
             // AsyncOp::GetResultHandle @0x82BBE0C0 -- block on the op, then return the result
-            // handle (mpStream). The Device to wait on is the op's device, redirected to the
+            // handle (mFileHandle). The Device to wait on is the op's device, redirected to the
             // default device when that device is externally pumped (Device+0x06 != 0).
             // -----------------------------------------------------------------------------
-            void* AsyncOp::GetResultHandle()
+            Handle* AsyncOp::GetResultHandle()
             {
                 Device* lpDevice = mpDevice;             // *(a1+64)
                 if (lpDevice->IsExternalThread())        // *(v2+6)
                     lpDevice = gpFileSysManager->mpDefaultDevice; // *(off_8327F078+10)
                 lpDevice->Wait(this, EA::Thread::kTimeoutNone);
-                return mpStream;                         // *(a1+16)
+                return mFileHandle;                         // *(a1+16)
             }
 
             // -----------------------------------------------------------------------------
