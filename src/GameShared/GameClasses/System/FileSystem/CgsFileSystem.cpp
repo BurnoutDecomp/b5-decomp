@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -130,6 +131,55 @@ namespace
         }
         maFiles[luFileId].Close();
         return true;
+    }
+
+    // ARTIST828EC600 and828E8C20; the original public lock wrapper.
+    bool FileSystem::RegisterMemFile(const char* lpcFileName, void* lpData, u64 luSize)
+    {
+        mFileSystemFutex.Lock();
+        const bool lbResult = RegisterMemFileInternal(lpcFileName, lpData, luSize);
+        mFileSystemFutex.Unlock();
+        return lbResult;
+    }
+
+    // ARTIST828E8C20; assertion continuation calls the actual owned device.
+    bool FileSystem::RegisterMemFileInternal(const char* lpcFileName, void* lpData, u64 luSize)
+    {
+        if (!mpMemFileSystem)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "No memory file system\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\filesystem\CgsFileSystem.cpp", 663);
+            CgsDev::Assert::EndAssert();
+        }
+        return mpMemFileSystem->RegisterMemFile(lpcFileName, lpData, luSize);
+    }
+
+    bool FileSystem::UnregisterMemFile(const char* lpcFileName)
+    {
+        mFileSystemFutex.Lock();
+        const bool lbResult = UnregisterMemFileInternal(lpcFileName);
+        mFileSystemFutex.Unlock();
+        return lbResult;
+    }
+
+    // ARTIST828E8CE0; r4 is the name pointer, not a spurious64-bit third arg.
+    bool FileSystem::UnregisterMemFileInternal(const char* lpcFileName)
+    {
+        if (!mpMemFileSystem)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "No memory file system\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\filesystem\CgsFileSystem.cpp", 681);
+            CgsDev::Assert::EndAssert();
+        }
+        return mpMemFileSystem->UnregisterMemFile(lpcFileName);
     }
 
     FileSystem::FileSystem()

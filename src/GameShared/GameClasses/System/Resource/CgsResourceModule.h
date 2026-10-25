@@ -161,6 +161,9 @@ namespace CgsResource
         // Original stream/file response families use the actual filesystem allocator.
         // The selected native path retains its existing new/delete/failure policy below.
         // Register/unregister memory files22/23 and retained patch25 remain provider work.
+        bool AddRegisterMemFileRequest(const Events::RegisterMemFileRequest* lpRequest); //828EC600
+        bool AddUnregisterMemFileRequest(const Events::UnregisterMemFileRequest* lpRequest); //828EC660
+        bool AddAddPatchRequest(const Events::AddPatchRequest* lpRequest); //828FD5C8
         bool AddOpenFileRequest(const Events::OpenFileRequest* lpRequest); //828F3D30
         bool AddCloseFileRequest(const Events::CloseFileRequest* lpRequest); //828F3EE0
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
@@ -170,6 +173,9 @@ namespace CgsResource
         void ProcessPendingFileSystemResponses();                                           // @0x828F42B8
 
     private:
+        // Retain the complete selected native response body without patch activation.
+        void ProcessResourceResponsesNativePC(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
+                                               const PoolIO::OutputBuffer* lpPoolOut);
         template <typename T> void FileSystemAlloc(T** lppResult);
         template <typename T> void FileSystemFree(T* lpAddress);
         // FLAG PC-platform leaf: preserve the existing selected response allocator/failure path.

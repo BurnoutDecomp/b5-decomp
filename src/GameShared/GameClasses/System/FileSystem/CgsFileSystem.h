@@ -86,6 +86,14 @@ namespace CgsFileSystem
         s32 Open(const char* lpcFileName, FileAccess leFileAccess, s32 liPriority, bool lbUseHDCache);
         bool Close(u32 luFileId);
 
+        // DecFIGS h222/231; lock/call/unlock in ARTIST828EC600/828EC660.
+        bool RegisterMemFile(const char* lpcFileName, void* lpData, u64 luSize);
+        bool UnregisterMemFile(const char* lpcFileName);
+
+        // X360-only accessor name is descriptive:828FD668..678 reaches this
+        // actual owned PatchManager;828EC8D4..E4 reads the same owner's flag.
+        PatchManager* GetPatchManager() { return &mPatchManager; }
+
         // @0x8264AE28. Locked file-state read for file id `luFileId` (0..KU_MAXNOOFFILES-1).
         FileState GetStatus(u32 luFileId);
 
@@ -132,6 +140,9 @@ namespace CgsFileSystem
         s32 OpenInternal(const char* lpcFileName, FileAccess leFileAccess,
                          s32 liPriority, bool lbUseHDCache);
         bool CloseInternal(u32 luFileId);
+        // DecFIGS h355/361; same actual64-record memory-device owner.
+        bool RegisterMemFileInternal(const char* lpcFileName, void* lpData, u64 luSize);
+        bool UnregisterMemFileInternal(const char* lpcFileName);
         bool ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead);
         bool WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition,
                            u64 luSizeToWrite);

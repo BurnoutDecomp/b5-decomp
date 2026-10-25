@@ -65,6 +65,10 @@ namespace CgsFileSystem
         // path does not fit a PatchEntry::miacFolder buffer.
         bool AddPatch(const char* lpcFolder, s32 liValue);
 
+        // X360-only accessor name is descriptive. ARTIST828EC8D4..E4
+        // reads this exact flag at ResourceModule+0x50A10.
+        bool IsPatching() const { return mbPatching; }
+
         // @0x828E9488. If the requested path `lpcSource` is claimed by a patch, write
         // "<patchFolder>/<sourcePath>" into `lpcDest` (capacity `luDestSize`) and return true.
         // Otherwise copy the source path through unchanged and return false.

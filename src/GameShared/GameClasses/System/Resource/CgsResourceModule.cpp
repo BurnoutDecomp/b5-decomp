@@ -389,6 +389,9 @@ namespace CgsResource
             case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
             case 20: AddOpenFileRequest(reinterpret_cast<const Events::OpenFileRequest*>(lpEvent)); break;
             case 21: AddCloseFileRequest(reinterpret_cast<const Events::CloseFileRequest*>(lpEvent)); break;
+            case 22: AddRegisterMemFileRequest(reinterpret_cast<const Events::RegisterMemFileRequest*>(lpEvent)); break;
+            case 23: AddUnregisterMemFileRequest(reinterpret_cast<const Events::UnregisterMemFileRequest*>(lpEvent)); break;
+            case 25: AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
             const CgsModule::Event* lpNext = nullptr;
@@ -437,6 +440,36 @@ namespace CgsResource
                 lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
         }
         ProcessPoolOutputResponses(lpPoolOut);
+        // ARTIST828EC8C0..918: actual completion flag, four-byte event id,
+        // unconditional receiver publication, then clear the one pending latch.
+        if (mbPendingPatch && !mFileSystem.GetPatchManager()->IsPatching())
+        {
+            const s32 liEventId = mPendingPatchRequest.miEventId;
+            mPendingPatchRequest.mpUser->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&liEventId), 25, sizeof(liEventId));
+            mbPendingPatch = false;
+        }
+    }
+
+    // FLAG PC-platform leaf: exact existing selected response body retained.
+    void ResourceModule::ProcessResourceResponsesNativePC(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
+                                                  const PoolIO::OutputBuffer* lpPoolOut)
+    {
+        const auto* lpLoads = lpLoaderOut->GetLoadBundleResponseQueue();
+        for (s32 li = 0; li < lpLoads->GetLength(); ++li)
+        {
+            const auto& lrResponse = lpLoads->GetEvent(li);
+            if (lrResponse.mpUser)
+                lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 2, sizeof(lrResponse));
+        }
+        const auto* lpUnloads = lpLoaderOut->GetUnloadBundleResponseQueue();
+        for (s32 li = 0; li < lpUnloads->GetLength(); ++li)
+        {
+            const auto& lrResponse = lpUnloads->GetEvent(li);
+            if (lrResponse.mpUser)
+                lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
+        }
+        ProcessPoolOutputResponses(lpPoolOut);
     }
 
 
@@ -444,6 +477,39 @@ namespace CgsResource
 
 
 
+
+    // ARTIST828EC600: exact typed fields, actual FileSystem lock wrapper.
+    bool ResourceModule::AddRegisterMemFileRequest(const Events::RegisterMemFileRequest* lpRequest)
+    {
+        const u64 luSize = lpRequest->GetSize();
+        void* const lpData = lpRequest->GetData();
+        return mFileSystem.RegisterMemFile(lpRequest->GetFileName(), lpData, luSize);
+    }
+
+    // ARTIST828EC660: direct name-only request, no response allocation.
+    bool ResourceModule::AddUnregisterMemFileRequest(const Events::UnregisterMemFileRequest* lpRequest)
+    {
+        return mFileSystem.UnregisterMemFile(lpRequest->GetFileName());
+    }
+
+    // ARTIST828FD5C8: assert continuation, actual patch owner, full request copy.
+    bool ResourceModule::AddAddPatchRequest(const Events::AddPatchRequest* lpRequest)
+    {
+        if (mbPendingPatch)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "Can only add 1 patch at a time\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\resource\CgsResourceModule.h", 1028);
+            CgsDev::Assert::EndAssert();
+        }
+        mFileSystem.GetPatchManager()->AddPatch(lpRequest->macFileName, lpRequest->miVersion);
+        std::memcpy(&mPendingPatchRequest, lpRequest, sizeof(mPendingPatchRequest));
+        mbPendingPatch = true;
+        return true;
+    }
 
     // ARTIST828F2900/2998/2A30/2AC8: real owned response storage, not C++ new.
     template <typename T>
@@ -1083,7 +1149,7 @@ namespace CgsResource
         }
         s_memOut.LockForRead(); ProcessMemoryResponses(&s_memOut); s_memOut.UnlockForRead();
         s_loaderOut.LockForRead(); s_poolOut.LockForRead();
-        ProcessResourceResponses(&s_loaderOut, &s_poolOut);
+        ProcessResourceResponsesNativePC(&s_loaderOut, &s_poolOut);
         s_poolOut.UnlockForRead(); s_loaderOut.UnlockForRead();
         return lbBusy;
     }
