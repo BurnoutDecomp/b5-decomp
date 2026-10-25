@@ -39,6 +39,13 @@ namespace CgsMemory
         // failure mode above, so it must be diagnosable rather than silent.
         void* Reserve(size_t lnBytes);
 
+        // FLAG PC-platform leaf: strict low4GiB, power-of-two aligned Windows
+        // reservation. Returns the actual reservation base for Release(base),
+        // or null on a real invalid-request/OS-allocation failure. Rounds size
+        // to Windows pages and never uses Reserve's high-address fallback.
+        // luPageProtection is the actual Windows page-protection argument.
+        void* ReserveAligned(size_t lnBytes, size_t lnAlignment, u32 luPageProtection);
+
         // Release a block obtained from Reserve.
         void Release(void* lpBlock);
 

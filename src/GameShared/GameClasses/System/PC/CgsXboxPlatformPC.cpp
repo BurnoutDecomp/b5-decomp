@@ -1,37 +1,27 @@
-// ============================================================================
-// CgsXboxPlatformPC.cpp -- PC bodies for the Xbox 360 platform primitives the
-// vendor rw::audio::core TUs declare (2026-08-25, faithful-audio-engine phase A2).
+// CgsXboxPlatformPC.cpp -- existing Xbox platform API names with PC producers.
 //
-// FLAG [PC platform leaf]: these are the sanctioned host stand-ins for the XAM/
-// xtl platform CRT the console links -- physically impossible on PC, so each is
-// the minimal host-faithful equivalent:
-//   XPhysicalAlloc / XPhysicalFree -- the console carves GPU/DMA-visible physical
-//     memory (XMA input buffers, decoder rings). On the host plain aligned heap
-//     memory is exactly equivalent for the software decode path (there is no
-//     hardware DMA consumer; the software XMA HAL in CgsXmaHardwarePC reads the
-//     same buffers through the CPU).
-//   XMemCpy -- the console's optimized block copy; memcpy on the host.
-//
-// Signatures match the vendor declarations verbatim (System.cpp:39-41,
-// Voice.cpp:19, Decoder.cpp, DelayLine.cpp -- extern "C", so ONE definition
-// serves them all).
-// ============================================================================
+// FLAG PC-platform leaf: XPhysicalAlloc/Free use real low4GiB Windows virtual
+// reservations on this CPU/software platform. The requested size/alignment is
+// honored; no Xbox GPU/DMA physical-address identity is claimed. The existing
+// PC cached read/write protection policy remains: Xbox physical-address and
+// cache/large-page hint words are not passed as Windows allocation flags.
+// The actual reservation base is released by the same LowMemory API family.
 
-#include <cstring>   // memcpy
-#include <malloc.h>  // _aligned_malloc / _aligned_free
+#include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"
+#include <windows.h>
+#include <cstring>   // existing XMemCpy ownership note below
 
 extern "C" void *XPhysicalAlloc(unsigned long dwSize, unsigned long /*ulPhysicalAddress*/,
                                 unsigned long dwAlignment, unsigned long /*flProtect*/)
 {
-    // The console alignment argument is a byte alignment (16/128/4096 at the rwaudio
-    // call sites); 0 means "default" -- map it to the allocator minimum.
-    unsigned long lAlignment = dwAlignment ? dwAlignment : 16;
-    return _aligned_malloc(dwSize, lAlignment);
+    const size_t lnAlignment = dwAlignment ? static_cast<size_t>(dwAlignment) : 16u;
+    return CgsMemory::LowMemory::ReserveAligned(
+        static_cast<size_t>(dwSize), lnAlignment, PAGE_READWRITE);
 }
 
 extern "C" void XPhysicalFree(void *lpAddress)
 {
-    _aligned_free(lpAddress);
+    CgsMemory::LowMemory::Release(lpAddress);
 }
 
 // XMemCpy is NOT defined here: the mounted XenonD3D9Shims.cpp (src/pc/gcm/
