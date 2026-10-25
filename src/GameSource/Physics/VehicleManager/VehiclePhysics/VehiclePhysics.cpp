@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
+#include "pc/input/EngineFeedback.h"
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // the seat bring-up leg reads the RESIDENT spec (WheelSpecs, mMeshOffset)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
@@ -7087,6 +7088,12 @@ namespace Vehicle
             lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y;   // +0xB0 .y
         const f32 lfPowerToRear =
             lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z;   // +0xB0 .z
+
+        // FLAG PC-platform leaf: copy this operation's real axle selection for
+        // the trigger observer, including the handbrake rear-only branch.
+        CgsInput::AdaptiveTriggers::EngineFeedback::RecordDrive(
+            reinterpret_cast<std::uintptr_t>(&mEngine), lfPowerToFront, lfPowerToRear,
+            lbHandBrake && !(5.0f > lfForwardSpeed));
 
         if (lbHandBrake && !(5.0f > lfForwardSpeed))                  // unk_8208FB14 == 5.0
         {

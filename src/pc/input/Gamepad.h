@@ -38,6 +38,7 @@ namespace CgsInput::PCGamepad
     void PublishFeedback(const AdaptiveTriggers::Sample& lrSample);
     bool WantsFeedback(); // cheap world-side gate; diagnostics also enables observations
     void SetFeedbackAllowed(bool lbAllowed);
+    void SetFeedbackPhotoMode(bool lbPhotoMode); // copied director state; no device access
     void SuspendFeedback(); // immediate neutral output in a blocking assert
     unsigned LoadFeedbackSettings(const char* lpIniPath);
     void SetFeedbackLogger(void (*lpLogger)(const char*));

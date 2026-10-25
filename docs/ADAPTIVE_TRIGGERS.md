@@ -24,7 +24,7 @@ mailbox; only the input path resolves and sends device effects.
 | Hard launch | Brief load shudder | Low-speed, grounded gas-demand transition |
 | Gear change | Short unload, then kick | RaceCarState::mi8Gear transition under drive |
 | Rev limiter | Distinct chatter | Engine::Update's actual pre-clamp flywheel > MaxRPM limit observation |
-| Wheelspin | Irregular flutter | Valid grounded traction wheels' wheel/road longitudinal speed difference |
+| Wheelspin | Irregular flutter | Actual powered-wheel mask from ApplyEngineForcesOntoWheels, plus valid grounded wheel/road speed difference |
 | Grip returning | Short recovery, then smooth pedal | Filtered slip crossing its lower hysteresis threshold |
 | Boost activation | Brief surge | BoostOutputInfo::mbIsBoosting transition |
 | Sustained boost | Faster energetic texture | Actual boosting state |
@@ -58,6 +58,10 @@ bounded value records and integer identity cookies, never dereference saved game
 pointers, and expire observations after 500 ms. They are disabled when feedback
 observation is unnecessary. World/car changes reset the main resolver. Diagnostics
 can enable observation without a native controller for a software runtime witness.
+The powered-wheel mask follows the actual front/rear power split and the original
+handbrake rear-only branch; a grounded-wheel flag is not a drive-selection flag.
+Photo mode uses the director's actual GetInPictureParadise() signal copied in the
+post-world step, independently of the recovered rumble manager's pending transfer.
 
 ## Vehicle character
 
@@ -90,6 +94,9 @@ effect payload with only the two trigger enable bits. Right-trigger bytes start 
 zero-frequency vibration encodes Off. The smallest nonzero hardware step limits
 how finely a light effect can be scaled. Feedback and vibration are coordinated
 modes, not arbitrary simultaneous force channels.
+Texture=0 silences vibration and transient pulses while preserving smooth pedal
+resistance. Ground-contact unloading still follows takeoff/airtime. Resistance=0
+silences smooth resistance independently of enabled textures.
 
 SDL owns USB/Bluetooth framing and CRCs. Native Sony PS5 identity and a successful
 neutral output probe are required before sending adaptive effects. An output

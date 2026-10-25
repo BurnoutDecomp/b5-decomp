@@ -39,6 +39,7 @@ namespace CgsInput::PCGamepad
         AdaptiveTriggers::Sample gFeedbackSample;
         AdaptiveTriggers::Sample gObservedFeedbackSample; // input-thread copy for diagnostics
         std::atomic<bool> gbObserveFeedback{false};
+        std::atomic<bool> gbFeedbackPhotoMode{false};
         std::uint64_t guFeedbackVersion = 0, guPublishedAt = 0;
         std::uint64_t guReadFeedbackVersion = 0, guLastFeedbackSend = 0, guLastFeedbackLog = 0;
         std::uint64_t guObservedAt = 0, guLastWitnessLog = 0;
@@ -147,10 +148,10 @@ namespace CgsInput::PCGamepad
                     lbNew = true;
                 }
             }
-            if (!gbInputAllowed || !gbFeedbackAllowed)
+            if (!gbInputAllowed || !gbFeedbackAllowed || gbFeedbackPhotoMode.load(std::memory_order_relaxed))
             {
                 gFeedbackController.Reset();
-                SendFeedback({}, luNow); // deduplicated neutral state
+                SendFeedback({}, luNow, gLastFeedbackPacket != AdaptiveTriggers::Encode(AdaptiveTriggers::Output{}));
                 return;
             }
             if (lbNew)
@@ -171,12 +172,14 @@ namespace CgsInput::PCGamepad
             {
                 char lacMessage[1024];
                 std::snprintf(lacMessage, sizeof(lacMessage),
-                    "[triggers] observe device=%u support=%d car=%llu age=%llu active=%d driving=%d rpm=%.0f mph=%.1f ground=%u slip=%.2f boost=%d limiter=%d showtime=%d left=%s right=%s\n",
+                    "[triggers] observe device=%u support=%d car=%llu age=%llu active=%d driving=%d rpm=%.0f mph=%.1f gas=%.2f brake=%.2f gear=%d ground=%u slip=%.2f boost=%d limiter=%d showtime=%d left=%s right=%s\n",
                     guSelectedId, static_cast<int>(gFeedbackStatus.meSupport),
                     static_cast<unsigned long long>(gObservedFeedbackSample.muVehicle),
                     static_cast<unsigned long long>(luNow >= guObservedAt ? luNow - guObservedAt : 0),
                     gObservedFeedbackSample.mbActive, gObservedFeedbackSample.mbDriving,
-                    gObservedFeedbackSample.mfRPM, gObservedFeedbackSample.mfSpeedMPH, gObservedFeedbackSample.muGroundedWheels,
+                    gObservedFeedbackSample.mfRPM, gObservedFeedbackSample.mfSpeedMPH,
+                    gObservedFeedbackSample.mfGas, gObservedFeedbackSample.mfBrake, gObservedFeedbackSample.miGear,
+                    gObservedFeedbackSample.muGroundedWheels,
                     gObservedFeedbackSample.mfDrivenSlip, gObservedFeedbackSample.mbBoosting,
                     gObservedFeedbackSample.mbLimiter, gObservedFeedbackSample.mbShowtime,
                     AdaptiveTriggers::GetCueName(lOutput.mLeft.meCue), AdaptiveTriggers::GetCueName(lOutput.mRight.meCue));
@@ -365,6 +368,7 @@ namespace CgsInput::PCGamepad
         gbInitialized = true;
         gbInputAllowed = true;
         gbFeedbackAllowed = true;
+        gbFeedbackPhotoMode.store(false, std::memory_order_relaxed);
         gbObserveFeedback.store(gFeedbackSettings.mbDiagnostics, std::memory_order_relaxed);
         AdaptiveTriggers::EngineFeedback::SetEnabled(gFeedbackSettings.mbDiagnostics);
         gbProbeRequested.store(true, std::memory_order_relaxed);
@@ -491,6 +495,11 @@ namespace CgsInput::PCGamepad
         gbFeedbackAllowed = lbAllowed;
         ResetFeedbackState();
         if (!lbAllowed) SendFeedback({}, SDL_GetTicks(), true);
+    }
+
+    void SetFeedbackPhotoMode(bool lbPhotoMode)
+    {
+        gbFeedbackPhotoMode.store(lbPhotoMode, std::memory_order_relaxed);
     }
 
     void SuspendFeedback()

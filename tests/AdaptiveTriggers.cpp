@@ -193,9 +193,13 @@ static void TestLifecycleAndProfiles()
     EngineFeedback::Recorder lLimiter;
     lLimiter.Record(123, true, 100); lLimiter.BindPlayer(123, 7);
     Check(lLimiter.IsLimited(7, 110) && !lLimiter.IsLimited(8, 110), "real limiter observation is restricted to bound player identity");
+    lLimiter.RecordDrive(123, 0xc);
+    Check(lLimiter.GetDrivenMask(7, 110) == 0xc && lLimiter.GetDrivenMask(8, 110) == 0,
+        "actual powered-wheel mask is bound only to the local car");
     Check(!lLimiter.IsLimited(7, 601), "limiter sidecar cannot outlive its physics update");
     lLimiter.Record(123, false, 120);
     Check(!lLimiter.IsLimited(7, 121), "a clamp-free engine update clears limiter activity");
+    Check(lLimiter.GetDrivenMask(7, 121) == 0, "new engine step clears stale torque distribution before frozen/drive branch");
     lLimiter.Record(456, true, 130); lLimiter.BindPlayer(456, 8);
     Check(!lLimiter.IsLimited(7, 140) && lLimiter.IsLimited(8, 140), "car replacement rebinds limiter without leaking prior car state");
     Controller lController;
@@ -221,6 +225,19 @@ static void TestLifecycleAndProfiles()
     Check(lController.Resolve(240).mLeft.IsOff() && lController.Resolve(240).mRight.IsOff(), "both strength sliders zero clears output");
     lSettings = {}; lSettings.mfTexture = 0; lController.Configure(lSettings); lController.Submit(lSample, 260);
     Check(lController.Resolve(260).mRight.meMode == Mode::Feedback, "texture off retains smooth pedal resistance");
+    lSample.muEvents = E_EVENT_IMPACT | E_EVENT_NEAR_MISS; lSample.mfImpact = 0.9f;
+    lSample.mfBrake = 1; lSample.mfBrakeSkid = 1;
+    lController.Submit(lSample, 300);
+    Check(lController.Resolve(300).mRight.meCue == Cue::Engine && lController.Resolve(300).mLeft.meCue == Cue::Brake,
+        "zero texture silences impact/reward/skid pulses without substituting resistance pulses");
+    lSample.mbBoosting = true; lSample.mbDrifting = true; lSample.mfDrivenSlip = 1;
+    lSample.mfSurface = lSample.mfScrape = 1;
+    lController.Submit(lSample, 320);
+    Check(lController.Resolve(320).mRight.meCue == Cue::Engine && lController.Resolve(320).mLeft.meCue == Cue::Brake,
+        "zero texture preserves only smooth pedals during combined boost/drift/contact textures");
+    lSample.mbCrashing = true; lController.Submit(lSample, 340);
+    Check(lController.Resolve(340).mRight.IsOff() && lController.Resolve(340).mLeft.IsOff(),
+        "zero texture silences wreck shudder and releases driving loads");
     std::array<std::uint8_t, 3> laFrequencies{};
     for (unsigned i = 0; i < 3; ++i)
     {

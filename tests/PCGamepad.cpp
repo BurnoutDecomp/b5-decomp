@@ -194,6 +194,13 @@ static void TestAdaptiveTriggers()
     Check(lMotors.mPacket[10] == 5, "permission return does not replay suppressed snapshot");
     guNowMs += 20; PublishFeedback(lSample); Read(lState);
     Check(lMotors.mPacket[10] == 0x26, "fresh snapshot resumes continuous feedback");
+    SetFeedbackPhotoMode(true); Read(lState);
+    Check(lMotors.mPacket[10] == 5 && lMotors.mPacket[21] == 5, "director photo-mode entry clears both triggers without depending on legacy rumble transfer");
+    guNowMs += 20; lSample.muEvents = AT::E_EVENT_IMPACT; PublishFeedback(lSample); Read(lState);
+    SetFeedbackPhotoMode(false); Read(lState);
+    Check(lMotors.mPacket[10] == 5, "photo exit does not replay a suppressed impact");
+    lSample.muEvents = 0; guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lMotors.mPacket[10] == 0x26, "fresh post-photo snapshot resumes engine feedback");
     SetInputAllowed(false);
     Check(lMotors.mPacket[10] == 5 && !lMotors.muLeft && !lMotors.muRight, "focus loss clears adaptive and standard output");
     SetInputAllowed(true);
