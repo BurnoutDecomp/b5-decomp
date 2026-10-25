@@ -1,0 +1,32 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BaseEventQueue_DirtyTrickEvent_GetEvent.cpp
+        BaseEventQueue_RoadRulesDownloadEvent_AppendAddEvent.cpp
+        BrnNetworkModuleGameStateIOInterfaces.cpp
+        BrnNetworkModuleGameStateIOInterfaces_embed_check.cpp
+        BrnNetworkModuleInGamePlayerStatusInterface.cpp
+        BrnNetworkModuleStatsIOInterface.cpp
+        BrnNetworkOutGameParamsChanged.cpp
+        BrnNetworkOutPlayerEvents.cpp
+        BrnNetworkOutScoreboardHeadingList.cpp
+        BrnNetworkSharedIO.cpp
+        BrnNetworkSharedIO_Telemetry.cpp
+        EventQueue_DirtyTrickEvent_28.cpp
+        EventQueue_NetworkToGuiLiveRevengeUpdate_4.cpp
+        EventQueue_RoadRulesDownloadEvent_40.cpp
+        EventQueue_RoadRulesMessageData_40.cpp
+        EventQueue_RoadRulesRecvData_14.cpp
+
+    PUBLIC
+        BrnBuddyInformation.h
+        BrnNetworkModuleGameStateIOInterfaces.h
+        BrnNetworkModuleInGamePlayerStatusInterface.h
+        BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h
+        BrnNetworkModuleStatsIOInterface.h
+        BrnNetworkOutGameParamsChanged.h
+        BrnNetworkOutPlayerEvents.h
+        BrnNetworkOutScoreboardHeadingList.h
+        BrnNetworkSharedIO.h
+        BrnNetworkToGuiEvents.h
+        BrnNetworkToGuiIOInterfaces.h
+)

@@ -1,0 +1,21 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnNetworkBuddyManagerDebugComponent.cpp
+        BrnNetworkEventScoresManagerDebugComponent.cpp
+        BrnNetworkImageManagerDebugComponent.cpp
+        BrnNetworkLiveRevengeDebugComponent.cpp
+        BrnNetworkRoadRulesManagerDebugComponent.cpp
+        BrnNetworkScoreboardDebugComponent.cpp
+        BrnNetworkServerInterfaceDebugComponent.cpp
+        BrnNetworkStatsDebugComponent.cpp
+
+    PUBLIC
+        BrnNetworkBuddyManagerDebugComponent.h
+        BrnNetworkEventScoresManagerDebugComponent.h
+        BrnNetworkImageManagerDebugComponent.h
+        BrnNetworkLiveRevengeDebugComponent.h
+        BrnNetworkRoadRulesManagerDebugComponent.h
+        BrnNetworkScoreboardDebugComponent.h
+        BrnNetworkServerInterfaceDebugComponent.h
+        BrnNetworkStatsDebugComponent.h
+)
