@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/System/PC/CgsResourcePoolBindingsPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original formatted pool assertions
@@ -206,6 +207,117 @@ namespace CgsResource
 
     // ARTIST 828FC0B8: construct the pool bank, type registry, scratch staging,
     // allocation/relocation storage and the five request-processing states.
+    // ARTIST828FC0B8. The debug allocator is part of the virtual declaration
+    // shape, but this X360 body consumes only options/resource from r4/r5.
+    void PoolModule::Construct(const InitOptions* lpOptions,
+                               rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* /*lpDebugAllocator*/)
+    {
+        CgsModule::ModuleSingleBuffered::Construct();
+        mePoolPrepareStage = E_POOLPREPARE_START;
+        mePoolReleaseStage = E_POOLRELEASE_DONE;
+        for (s32 li = 0; li < KI_MAX_POOLS; ++li)
+            maPools[li].Construct();
+        mReceiverQueue.Construct();
+        mNumTypes = 0;
+        const auto AssertMemory = [](bool lbAvailable, s32 liLine)
+        {
+            if (!lbAvailable)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lBuffer;
+                CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+                lStream << "Out of memory\n";
+                CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp",
+                    liLine);
+                CgsDev::Assert::EndAssert();
+            }
+        };
+        // FLAG PC-platform leaf: preserve counts and original minimum alignments;
+        // actual C++ record size/alignment supplies the widened native storage.
+        void* const lpIdListMemory = lpAllocator->AllocateMemoryResource(
+            sizeof(IdListResourceType), alignof(IdListResourceType), nullptr);
+        IdListResourceType* const lpIdListType =
+            lpIdListMemory ? ::new (lpIdListMemory) IdListResourceType : nullptr;
+        lpIdListType->InitCachedValues();
+        maTypes[mNumTypes].mpcName = "IDList";
+        maTypes[mNumTypes].mpType = lpIdListType;
+        maTypes[mNumTypes].muTypeId = lpIdListType->GetCachedId();
+        ++mNumTypes;
+        for (s32 li = 0; li < lpOptions->miNumGameSpecificTypes; ++li)
+        {
+            maTypes[mNumTypes].mpcName = lpOptions->mpGameSpecificTypes[li].mpcName;
+            maTypes[mNumTypes].mpType = lpOptions->mpGameSpecificTypes[li].mpType;
+            maTypes[mNumTypes].muTypeId = maTypes[mNumTypes].mpType->GetCachedId();
+            ++mNumTypes;
+        }
+
+        ScratchPool::InitOptions lScratchOptions;
+        lScratchOptions.muMaxEntries = static_cast<u32>(lpOptions->miMaxResourceToDefrag);
+        lScratchOptions.miBankId = 999;
+        lScratchOptions.mDescriptor = lpOptions->mDefragBufferDescriptor;
+        lScratchOptions.mResource = lpOptions->mDefragBufferResource;
+        lScratchOptions.muOverheadMemorySize = ScratchPool::GetOverheadMemoryRequired(&lScratchOptions);
+        lScratchOptions.mpOverhead = lpAllocator->AllocateMemoryResource(
+            lScratchOptions.muOverheadMemorySize, 16, nullptr);
+        AssertMemory(lScratchOptions.mpOverhead != nullptr, 119);
+        mScratchPool.Construct();
+        mScratchPool.Prepare();
+        mScratchPool.InitPool(&lScratchOptions);
+
+        for (s32 liType = 0; liType < 3; ++liType)
+        {
+            mAllocListSet.manAllocRequestCounts[liType] = 0;
+            mAllocListSet.mapAllocRequests[liType] = static_cast<AllocRequest*>(
+                lpAllocator->AllocateMemoryResource(sizeof(AllocRequest) * KI_MAX_ALLOCATION_REQUESTS,
+                                                    alignof(AllocRequest), nullptr));
+            mAllocListSet.mapAllocResults[liType] = static_cast<AllocResult*>(
+                lpAllocator->AllocateMemoryResource(sizeof(AllocResult) * KI_MAX_ALLOCATION_REQUESTS,
+                                                    alignof(AllocResult), nullptr));
+            AssertMemory(mAllocListSet.mapAllocRequests[liType] != nullptr, 130);
+            AssertMemory(mAllocListSet.mapAllocResults[liType] != nullptr, 131);
+        }
+        mpAddressedAllocRequests = static_cast<AllocRequestAddressed*>(
+            lpAllocator->AllocateMemoryResource(sizeof(AllocRequestAddressed) * KI_MAX_ALLOCATION_REQUESTS,
+                                                alignof(AllocRequestAddressed), nullptr));
+        mpRelocateRequests = static_cast<RelocateRequest*>(
+            lpAllocator->AllocateMemoryResource(sizeof(RelocateRequest) * KU_MAX_POOL_ENTRIES, 128, nullptr));
+        mpLinearHeapNodes = static_cast<LinearHeapNode*>(
+            lpAllocator->AllocateMemoryResource(sizeof(LinearHeapNode) * (KU_MAX_LINEAR_HEAP_LENGTH + 8u),
+                                                128, nullptr));
+        const size_t luSharedStride = sizeof(DistributionEntry) > sizeof(RelocationEntry)
+            ? sizeof(DistributionEntry) : sizeof(RelocationEntry);
+        void* const lpDistributionAndRelocation = lpAllocator->AllocateMemoryResource(
+            luSharedStride * KU_MAX_POOL_ENTRIES, 128, nullptr);
+        // One original allocation is viewed by the two actual distribution/copy
+        // phases. The existing native record types share this same storage owner.
+        mpDistributionEntries = static_cast<DistributionEntry*>(lpDistributionAndRelocation);
+        mpRelocationEntries = static_cast<RelocationEntry*>(lpDistributionAndRelocation);
+        mpRelocateSources = static_cast<RelocateSource*>(
+            lpAllocator->AllocateMemoryResource(sizeof(RelocateSource) * KU_MAX_POOL_ENTRIES, 128, nullptr));
+        mRelocator.Construct();
+        mRelocationParams.mpOps = mpRelocationEntries;
+        mRelocationParams.miNumOps = 0;
+        mRelocationParams.mpBounceBuffer = lScratchOptions.mResource.m_baseResources[0];
+        mRelocationParams.miBounceBufferSize =
+            static_cast<s32>(lScratchOptions.mDescriptor.m_baseResourceDescriptors[0].m_size);
+        AssertMemory(mpAddressedAllocRequests != nullptr, 164);
+        AssertMemory(mpRelocateRequests != nullptr, 165);
+        AssertMemory(mpLinearHeapNodes != nullptr, 166);
+        AssertMemory(mpDistributionEntries != nullptr, 167);
+        AssertMemory(mpRelocateSources != nullptr, 168);
+        mProcessState = E_UPDATESTATE_IDLE;
+        mAllocateState.Construct(this);
+        mDeAllocateState.Construct(this);
+        mIntelliFragState.Construct(this);
+        mLiveUpdateState.Construct(this);
+        mEmergencyFragState.Construct(this);
+        mPendingCreateRequests.Construct();
+        mPendingAllocationRequests.Construct();
+        mbIsNewModule = true;
+    }
+
     void PoolModule::Construct(const void* lpInitOptions, void* lpAllocator)
     {
         mbIsNewModule = true;   // X360 *(this+4)=1 (set at the end of Construct; base Prepare skips old IO)
@@ -251,7 +363,7 @@ namespace CgsResource
 
         // The original staging pool borrows the caller's resource buffers and
         // owns tables carved from its separately allocated overhead block below.
-        mScratchPool.Construct();
+        mScratchPool.ConstructNativePC();
 
         // Bind the receiver queue's backing buffer (create/delete-pool events land here via
         // ProcessMemoryResponse, drained by ProcessReceiverQueue).
@@ -340,6 +452,97 @@ namespace CgsResource
     }
     // The existing host update transport now drives the original typed request and
     // receiver processors, then the same state machines and owned maPools sweep.
+    // ARTIST 829076D8: original state dispatch and live-pool sweep.
+    PoolModule::EUpdateResult PoolModule::Update(
+        CgsModule::IOBufferStack* /*lpInputStack*/, CgsModule::IOBufferStack* /*lpOutputStack*/,
+        const PoolIO::InputBuffer* lpInput, PoolIO::OutputBuffer* lpOutput)
+    {
+        lpOutput->LockForWrite();
+        lpInput->LockForRead();
+        ProcessInputBuffer(lpInput, lpOutput);
+        lpInput->UnlockForRead();
+        ProcessReceiverQueue(lpOutput);
+        if (Pool::_miPoolModuleStatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(Pool::_miPoolModuleStatePerfMon);
+        if (mProcessState == E_UPDATESTATE_IDLE)
+        {
+            const s32 liMonitor = Pool::_miPoolModuleIdle;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            Events::AllocateResourceListRequest lRequest;
+            if (mPendingAllocationRequests.Pop(&lRequest))
+                DoAllocateResourceListRequest(&lRequest);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        }
+
+        switch (mProcessState)
+        {
+        case E_UPDATESTATE_ALLOCATING_LIST:
+        {
+            const s32 liMonitor = Pool::_miPoolModuleAllocating;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateAllocating(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            break;
+        }
+        case E_UPDATESTATE_DEALLOCATING_LIST:
+        {
+            const s32 liMonitor = Pool::_miPoolModuleDeallocating;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateDeAllocating(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            break;
+        }
+        case E_UPDATESTATE_LIVEUPDATE:
+        {
+            const s32 liMonitor = Pool::_miPoolModuleLiveupdate;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateLiveUpdate(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            break;
+        }
+        }
+
+        if (mProcessState == E_UPDATESTATE_INTELLIFRAG)
+        {
+            const s32 liMonitor = Pool::_miPoolModuleIntellifrag;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateIntelliFrag(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        }
+        if (mProcessState == E_UPDATESTATE_EMERGENCYFRAG)
+        {
+            const s32 liMonitor = Pool::_miPoolModuleEmergencyFrag;
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+            UpdateEmergencyFrag(lpOutput);
+            if (liMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        }
+        if (Pool::_miPoolModuleStatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(Pool::_miPoolModuleStatePerfMon);
+        lpOutput->UnlockForWrite();
+
+        if (Pool::_miPoolUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(Pool::_miPoolUpdatePerfMon);
+        for (s32 liPool = 0; liPool < KI_MAX_POOLS; ++liPool)
+            if (maPools[liPool].GetId() != -1)
+                maPools[liPool].Update();
+        if (Pool::_miPoolUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(Pool::_miPoolUpdatePerfMon);
+        return mProcessState == E_UPDATESTATE_EMERGENCYFRAG ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
+    }
+
+
     bool PoolModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {
         PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);

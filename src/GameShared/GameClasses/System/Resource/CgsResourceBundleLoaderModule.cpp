@@ -1,4 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::GetPool (resolve poolId)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [stream] trace
@@ -9,6 +11,8 @@
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
 namespace CgsResource
 {
+    s32 BundleLoaderModule::_miUpdatePerfMon = -1; // ARTIST raw82F33FD4
+
     // FLAG PC-platform leaf: resource destinations must outlive native workers.
     void BundleLoaderModule::CancelStreamPC()
     {
@@ -82,8 +86,8 @@ namespace CgsResource
         CgsModule::ModuleSingleBuffered::Destruct();
     }
 
-    // Shared queue initialization. Production supplies the backing allocations
-    // through the ARTIST828EBAF8 overload; protocol fixtures supply their own.
+    // FLAG PC-platform leaf: retained native queue/initialization helper.
+    // The original three-argument owner below initializes its own original state.
     void BundleLoaderModule::Construct()
     {
         CgsModule::ModuleSingleBuffered::Construct();
@@ -107,9 +111,91 @@ namespace CgsResource
         miMaxPartialFixups = 60;
     }
 
-    // ARTIST828EBAF8..828EC144; descriptors contain five native resource lanes.
-    // Backing blocks belong to the supplied resource allocator's lifetime.
+    // ARTIST828EBAF8. This original owner is distinct from the retained native
+    // construction path; the game still selects that native path explicitly.
     void BundleLoaderModule::Construct(const InitOptions* lpOptions,
+                                      rw::IResourceAllocator* lpAllocator,
+                                      rw::IResourceAllocator* lpDebugAllocator)
+    {
+        CgsModule::ModuleSingleBuffered::Construct();
+        mReceiverQueue.Construct();
+        mLoadRequestQueue.Construct(128);
+        mUnloadRequestQueue.Construct(128);
+        meReleaseStage = E_STAGE_DONE;
+        mePrepareStage = E_STAGE_START;
+        miBundleHeaderBufferSize = lpOptions->miBundleHeaderBufferSize;
+        miDebugBufferSize = lpOptions->miDebugDataBufferSize;
+        miStreamBufferSize = lpOptions->miStreamBufferSize;
+        miMaxBundles = lpOptions->miMaxBundles;
+        miMaxResourcesPerBundle = lpOptions->miMaxResourcesPerBundle;
+        miMaxLoadedBundles = lpOptions->miMaxBundles;
+        miCurrentStream = 0;
+        mbForceUpperCaseFileNames = lpOptions->mbForceUpperCaseFileNames;
+
+        // FLAG PC-platform leaf: retain original element counts and alignments;
+        // the named records widen their pointers under the native C++ ABI.
+        mpDecompressionEntries = static_cast<CompressedData*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(sizeof(CompressedData) * miMaxResourcesPerBundle), 128, nullptr));
+        mapcStreamBuffers[0] = static_cast<char*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(miStreamBufferSize), 128, nullptr));
+        mapcStreamBuffers[1] = static_cast<char*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(miStreamBufferSize), 128, nullptr));
+        mpcSecondaryStreamBuffer = static_cast<char*>(lpAllocator->AllocateMemoryResource(
+            KU_SECONDARY_STREAM_BUFFER_SIZE, 128, nullptr));
+        mpcHeaderBuffer = static_cast<char*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(miBundleHeaderBufferSize), 16, nullptr));
+        mpNeeds = static_cast<bool*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(sizeof(bool) * miMaxResourcesPerBundle), 16, nullptr));
+        mpResources = static_cast<SmallResource*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(sizeof(SmallResource) * miMaxResourcesPerBundle), 16, nullptr));
+        mpLoadedBundles = static_cast<LoadedBundleData*>(lpAllocator->AllocateMemoryResource(
+            static_cast<u32>(sizeof(LoadedBundleData) * miMaxLoadedBundles), 16, nullptr));
+        mabStreamBuffersUsed[0] = false;
+        mabStreamBuffersUsed[1] = false;
+        mpcDebugDataBuffer = miDebugBufferSize > 0 && lpDebugAllocator
+            ? static_cast<char*>(lpDebugAllocator->AllocateMemoryResource(
+                static_cast<u32>(miDebugBufferSize), 16, nullptr))
+            : nullptr;
+
+        mpDecompressionStreamStart = mpDecompressionEntries;
+        // BF68..BF88 also passes the real entry pointer/count in r5/r6. The
+        // decompiler's two-input rendering of this call dropped both arguments.
+        mDecompressionJobInterface.Construct(CgsSystem::JobManager(),
+                                             mpDecompressionEntries, miMaxResourcesPerBundle);
+        const auto AssertAllocated = [](bool lbAllocated, const char* lpcMessage, s32 liLine)
+        {
+            if (!lbAllocated)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lBuffer;
+                CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+                lStream << lpcMessage;
+                CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsBundleLoaderModule.cpp",
+                    liLine);
+                CgsDev::Assert::EndAssert();
+            }
+        };
+        AssertAllocated(mpcHeaderBuffer && mpNeeds && mpResources && mpLoadedBundles,
+                        "Ran out of memory allocating bundle loader\n", 120);
+        AssertAllocated(mapcStreamBuffers[0] != nullptr,
+                        "Ran out of memory allocating stream buffer 0\n", 121);
+        AssertAllocated(mapcStreamBuffers[1] != nullptr,
+                        "Ran out of memory allocating stream buffer 1\n", 122);
+        mPoolReceiveQueueCache.Construct();
+        miCurrentResource = 0;
+        miCurrentMemoryType = 0;
+        miCurrentResourcePosition = 0;
+        mbIsNewModule = true;
+        miMaxPartialFixups = 60;
+        LARGE_INTEGER lTicks;
+        QueryPerformanceCounter(&lTicks);
+        muTimerTrace = static_cast<u64>(lTicks.QuadPart);
+    }
+
+    // FLAG PC-platform leaf: retained native body, unchanged after its explicit rename.
+    // Backing blocks belong to the supplied resource allocator's lifetime.
+    void BundleLoaderModule::ConstructNativePC(const InitOptions* lpOptions,
                                       rw::IResourceAllocator* lpAllocator,
                                       rw::IResourceAllocator* lpDebugAllocator)
     {
@@ -165,6 +251,27 @@ namespace CgsResource
         QueryPerformanceCounter(&lTicks);
         muTimerTrace = static_cast<u64>(lTicks.QuadPart);
     }
+    // ARTIST 82907638: stacks belong to the caller; this module consumes the supplied IO.
+    void BundleLoaderModule::Update(CgsModule::IOBufferStack* /*lpInputStack*/,
+                                     CgsModule::IOBufferStack* /*lpOutputStack*/,
+                                     const BundleLoaderIO::InputBuffer_Update* lpInput,
+                                     BundleLoaderIO::OutputBuffer* lpOutput)
+    {
+        if (_miUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(_miUpdatePerfMon);
+        lpOutput->LockForWrite();
+        lpInput->LockForRead();
+        ProcessReceiverQueue();
+        ProcessBundleLoadRequests(lpInput, lpOutput);
+        ProcessPoolResponses();
+        lpInput->UnlockForRead();
+        UpdateStream(lpOutput);
+        lpOutput->UnlockForWrite();
+        if (_miUpdatePerfMon >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(_miUpdatePerfMon);
+    }
+
+
     bool BundleLoaderModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
     {
         // ARTIST82907638; the legacy native adapter has a bool return, unused

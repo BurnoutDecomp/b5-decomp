@@ -7,6 +7,19 @@
 // EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
 namespace CgsFileSystem
 {
+    EA::Thread::AtomicInt32 FileSystem::mDiskErrorOccured(0); // primary raw830EA574
+
+    bool FileSystem::HasDiskErrorOccured() const
+    {
+        return mDiskErrorOccured.GetValue() != 0;
+    }
+
+    bool FileSystem::RWDiskErrorHandler(s32 /*liError*/)
+    {
+        mDiskErrorOccured.SetValue(1);
+        return false;
+    }
+
     // Marked PC sentinel allocator. The X360 passed the GameData allocator to
     // InitializeDeviceManager (which only stores it; DeviceManager::operator new mallocs on PC),
     // so any non-null value satisfies the "Allocator required" assert. Routing the manager through

@@ -274,6 +274,10 @@ namespace CgsResource
         }
     };
 
+    // DecFIGS CgsResourcePtr.cpp:98; ARTIST 828E3658.
+    CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lrStream,
+                                      const BaseResourcePtr& lrResource);
+
     // ADDITIVE GROW: the engine's shared "null" resource pointer sentinel. Game code
     // compares loaded resource pointers against it (`lResource != CgsResource::NULLResourcePtr`)
     // to assert a handle is populated; the X360 ARTIST build implements that compare as

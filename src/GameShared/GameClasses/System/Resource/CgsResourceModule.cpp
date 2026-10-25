@@ -6,6 +6,9 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // receiver-queue forward target
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // ResolveResourceType (bundle FixUp resolver)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"
 #include "pc/gcm/renderengine/FrameProfile.h"
 #include <cstring>                                    // memset (InitOptions zero-init)
 
@@ -13,6 +16,15 @@
 // Update preserves the loader -> pool -> memory order and delayed pool replies.
 namespace CgsResource
 {
+    // ARTIST 82F34004..1C raw initial words are all -1.
+    s32 ResourceModule::_miResourceUpdatePerfMon = -1;
+    s32 ResourceModule::_miProcessResourceRequestsPerfMon = -1;
+    s32 ResourceModule::_miUpdateBundleLoaderPerfMon = -1;
+    s32 ResourceModule::_miUpdatePoolPerfMon = -1;
+    s32 ResourceModule::_miUpdateMemoryPerfMon = -1;
+    s32 ResourceModule::_miUpdateFileSystemPerfMon = -1;
+    s32 ResourceModule::_miUpdateOutputPerfMon = -1;
+
     // ARTIST828F4558: r3 +=0x2C380, preserving callback r4 and context r5.
     void ResourceModule::DebugReportPools(PoolModule::FPoolReportCallback lpfnCallback,
                                          void* lpUserData)
@@ -136,7 +148,7 @@ namespace CgsResource
             lpRwAllocator);
         mFileSystem.Construct();
         mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
-        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpRwAllocator,
+        mBundleLoaderModule.ConstructNativePC(&lpOptions->mLoaderInitOptions, lpRwAllocator,
                                       lpOptions->mDebugParams.mpDebugAllocator);
         mDebugComponent.Construct(this, &lpOptions->mDebugParams);
     }
@@ -199,7 +211,7 @@ namespace CgsResource
 
     // ARTIST82907268: native event sizes are carried by the queue. Pool and
     // memory tags below are the original switch values, not resource tags.
-    void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
+    void ResourceModule::ProcessResourceRequests(const ResourceIO::InputBuffer* lpResIn,
         CgsMemory::MemoryIO::InputBuffer* lpMemIn,
         BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
     {
@@ -259,7 +271,7 @@ namespace CgsResource
 
     // ARTIST828EC788: bundle replies precede externally addressed pool replies.
     void ResourceModule::ProcessResourceResponses(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
-                                                  PoolIO::OutputBuffer* lpPoolOut)
+                                                  const PoolIO::OutputBuffer* lpPoolOut)
     {
         const auto* lpLoads = lpLoaderOut->GetLoadBundleResponseQueue();
         for (s32 li = 0; li < lpLoads->GetLength(); ++li)
@@ -464,6 +476,117 @@ namespace CgsResource
 
     // ARTIST82907948: pump loader, pool and memory in order. Allocation/fixup
     // responses are retained until the next update, as in the original pipeline.
+    // ARTIST 82907948: the original stack-backed resource dispatcher.
+    ResourceModule::EUpdateResult ResourceModule::Update(
+        CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+        const ResourceIO::InputBuffer* lpInputBuffer, ResourceIO::OutputBuffer* lpOutputBuffer)
+    {
+        const s32 liResourceMonitor = _miResourceUpdatePerfMon;
+        if (liResourceMonitor >= 0)
+            CgsDev::PerfMonCpu::StartMonitor(liResourceMonitor);
+        EUpdateResult leResult = E_RESULT_OK;
+        {
+            CgsModule::IOHelper<CgsMemory::MemoryIO::InputBuffer> lMemoryInput(lpInputStack, "Memory");
+            CgsModule::IOHelper<BundleLoaderIO::InputBuffer_Update> lLoaderInput(lpInputStack, "BundleLoader");
+            CgsModule::IOHelper<PoolIO::InputBuffer> lPoolInput(lpInputStack, "Pool");
+            CgsModule::IOHelper<CgsMemory::MemoryIO::OutputBuffer> lMemoryOutput(lpOutputStack, "Memory");
+            CgsModule::IOHelper<BundleLoaderIO::OutputBuffer> lLoaderOutput(lpOutputStack, "BundleLoader");
+            CgsModule::IOHelper<PoolIO::OutputBuffer> lPoolOutput(lpOutputStack, "Pool");
+            CgsMemory::MemoryIO::InputBuffer* const lpMemoryInput = lMemoryInput;
+            BundleLoaderIO::InputBuffer_Update* const lpLoaderInput = lLoaderInput;
+            PoolIO::InputBuffer* const lpPoolInput = lPoolInput;
+            CgsMemory::MemoryIO::OutputBuffer* const lpMemoryOutput = lMemoryOutput;
+            BundleLoaderIO::OutputBuffer* const lpLoaderOutput = lLoaderOutput;
+            PoolIO::OutputBuffer* const lpPoolOutput = lPoolOutput;
+
+            const s32 liFileMonitor = _miUpdateFileSystemPerfMon;
+            if (liFileMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liFileMonitor);
+            ProcessPendingFileSystemResponses();
+            if (liFileMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liFileMonitor);
+
+            const s32 liRequestMonitor = _miProcessResourceRequestsPerfMon;
+            if (liRequestMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liRequestMonitor);
+            lpInputBuffer->LockForRead();
+            lpMemoryInput->LockForWrite();
+            lpLoaderInput->LockForWrite();
+            lpPoolInput->LockForWrite();
+            ProcessResourceRequests(lpInputBuffer, lpMemoryInput, lpLoaderInput, lpPoolInput);
+            lpPoolInput->UnlockForWrite();
+            lpLoaderInput->UnlockForWrite();
+            lpMemoryInput->UnlockForWrite();
+            lpInputBuffer->UnlockForRead();
+            if (liRequestMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liRequestMonitor);
+
+            const s32 liLoaderMonitor = _miUpdateBundleLoaderPerfMon;
+            if (liLoaderMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liLoaderMonitor);
+            mBundleLoaderModule.Update(lpInputStack, lpOutputStack, lpLoaderInput, lpLoaderOutput);
+            lpLoaderOutput->LockForRead();
+            ProcessBundleLoaderStreamRequests(lpLoaderOutput);
+            lpLoaderOutput->UnlockForRead();
+            if (liLoaderMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liLoaderMonitor);
+
+            const s32 liPoolMonitor = _miUpdatePoolPerfMon;
+            if (liPoolMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liPoolMonitor);
+            CgsModule::LockBuffersForIO(lpPoolInput, lpLoaderOutput);
+            lpPoolInput->GetPoolInputQueue()->Append(
+                *static_cast<const BundleLoaderIO::OutputBuffer*>(lpLoaderOutput)->GetPoolSendQueue());
+            CgsModule::UnlockBuffersForIO(lpPoolInput, lpLoaderOutput);
+            if (mPoolModule.Update(lpInputStack, lpOutputStack, lpPoolInput, lpPoolOutput)
+                == PoolModule::E_RESULT_REQUIRE_STALL)
+                leResult = E_RESULT_REQUIRE_STALL;
+            if (liPoolMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liPoolMonitor);
+
+            {
+                CgsModule::IOHelper<BundleLoaderIO::InputBuffer_Record> lLoaderRecord(lpInputStack, "BundleLoaderRecord");
+                BundleLoaderIO::InputBuffer_Record* const lpLoaderRecord = lLoaderRecord;
+                CgsModule::LockBuffersForIO(lpLoaderRecord, lpPoolOutput);
+                lpLoaderRecord->GetPoolReceiveQueue()->Append(
+                    *static_cast<const PoolIO::OutputBuffer*>(lpPoolOutput)->GetPoolOutputQueue());
+                CgsModule::UnlockBuffersForIO(lpLoaderRecord, lpPoolOutput);
+                mBundleLoaderModule.RecordPostUpdateEvents(lpLoaderRecord);
+            }
+
+            const s32 liMemoryMonitor = _miUpdateMemoryPerfMon;
+            if (liMemoryMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liMemoryMonitor);
+            CgsModule::LockBuffersForIO(lpMemoryInput, lpPoolOutput);
+            ProcessPoolResourceRequests(lpMemoryInput, lpPoolOutput);
+            CgsModule::UnlockBuffersForIO(lpMemoryInput, lpPoolOutput);
+            mMemoryModule.Update(lpInputStack, lpOutputStack, lpMemoryInput, lpMemoryOutput);
+            if (liMemoryMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liMemoryMonitor);
+
+            const s32 liOutputMonitor = _miUpdateOutputPerfMon;
+            if (liOutputMonitor >= 0)
+                CgsDev::PerfMonCpu::StartMonitor(liOutputMonitor);
+            lpMemoryOutput->LockForRead();
+            ProcessMemoryResponses(lpMemoryOutput);
+            lpMemoryOutput->UnlockForRead();
+            lpPoolOutput->LockForRead();
+            lpLoaderOutput->LockForRead();
+            ProcessResourceResponses(lpLoaderOutput, lpPoolOutput);
+            lpLoaderOutput->UnlockForRead();
+            lpPoolOutput->UnlockForRead();
+            lpOutputBuffer->LockForWrite();
+            lpOutputBuffer->GetFileSystemStatusInterface()->SetDiskErrorOccured(mFileSystem.HasDiskErrorOccured());
+            lpOutputBuffer->UnlockForWrite();
+            if (liOutputMonitor >= 0)
+                CgsDev::PerfMonCpu::StopMonitor(liOutputMonitor);
+        }
+        if (liResourceMonitor >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(liResourceMonitor);
+        return leResult;
+    }
+
+
     bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
     {
         auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
@@ -534,7 +657,7 @@ namespace CgsResource
     // request (queue tag 1). [X360 hardcodes the per-type size 92/16; we use the recorded event size so
     // the x64-width CreateResourceRequest copies whole.]
     void ResourceModule::ProcessPoolResourceRequests(CgsMemory::MemoryIO::InputBuffer* lpMemInput,
-                                                     PoolIO::OutputBuffer* lpPoolOutput)
+                                                     const PoolIO::OutputBuffer* lpPoolOutput)
     {
         const PoolIO::OutputBuffer::PoolResourceRequestQueue* lpQ =
             static_cast<const PoolIO::OutputBuffer&>(*lpPoolOutput).GetPoolResourceRequestQueue();
@@ -559,7 +682,7 @@ namespace CgsResource
     // @ 0x828EC6F0 - route each MemoryModule response to its originating receiver queue (the request's
     // reply target, response->GetUser()) tagged for that response type. The X360 indexes a static table
     // dword_820F71D0[meEventType]; the pool-create flow carries only CREATE_RESOURCE(6) -> CreatePool(10).
-    void ResourceModule::ProcessMemoryResponses(CgsMemory::MemoryIO::OutputBuffer* lpMemOutput)
+    void ResourceModule::ProcessMemoryResponses(const CgsMemory::MemoryIO::OutputBuffer* lpMemOutput)
     {
         const CgsMemory::MemoryIO::OutputBuffer::MemoryResponseQueue* lpQ =
             static_cast<const CgsMemory::MemoryIO::OutputBuffer&>(*lpMemOutput).GetMemoryResponseQueue();

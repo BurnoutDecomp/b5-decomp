@@ -50,6 +50,15 @@ namespace CgsResource
     public:
         // Original enum result retained by the real scoped-output helper.
         enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 };
+        // DecFIGS cpp26..32; ARTIST 82F34004..1C, registered by original Construct.
+        static s32 _miResourceUpdatePerfMon;
+        static s32 _miProcessResourceRequestsPerfMon;
+        static s32 _miUpdateBundleLoaderPerfMon;
+        static s32 _miUpdatePoolPerfMon;
+        static s32 _miUpdateMemoryPerfMon;
+        static s32 _miUpdateFileSystemPerfMon;
+        static s32 _miUpdateOutputPerfMon;
+
         static const s32 KI_MAX_PENDING_FILE_SYSTEM_RESPONSES = 16;
 
         // DecFIGS CgsResourceModule.h:209-213. A pending asynchronous file
@@ -103,7 +112,7 @@ namespace CgsResource
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
-        // Genuine four-argument82907948 core; definition remains separately pending.
+        // Original stack-backed API, distinct from the retained native adapter.
         EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack,
                              CgsModule::IOBufferStack* lpOutputStack,
                              const ResourceIO::InputBuffer* lpInputBuffer,
@@ -115,20 +124,20 @@ namespace CgsResource
         // resource-request queue) into the MemoryModule input queue. Caller holds memInput write-locked +
         // poolOutput read-locked (as ResourceModule::Update does).
         void ProcessPoolResourceRequests(CgsMemory::MemoryIO::InputBuffer* lpMemInput,
-                                         PoolIO::OutputBuffer* lpPoolOutput);
+                                         const PoolIO::OutputBuffer* lpPoolOutput);
         // @ 0x828EC6F0 - forward each MemoryModule response to its originating receiver queue
         // (response->GetUser()) tagged for that response type. Caller holds memOutput read-locked.
-        void ProcessMemoryResponses(CgsMemory::MemoryIO::OutputBuffer* lpMemOutput);
+        void ProcessMemoryResponses(const CgsMemory::MemoryIO::OutputBuffer* lpMemOutput);
 
         // @ 0x82907268 - route the module's inbound resource requests to the sub-module inputs. Pool-create
         // slice: CreatePool (id 0) -> pool input. Caller holds resIn read-locked + poolIn write-locked.
         void ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn, PoolIO::InputBuffer* lpPoolIn);
-        void ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
+        void ProcessResourceRequests(const ResourceIO::InputBuffer* lpResIn,
             CgsMemory::MemoryIO::InputBuffer* lpMemIn,
             BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn);
         void ProcessBundleLoaderStreamRequests(const BundleLoaderIO::OutputBuffer* lpLoaderOut);
         void ProcessResourceResponses(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
-                                      PoolIO::OutputBuffer* lpPoolOut);
+                                      const PoolIO::OutputBuffer* lpPoolOut);
 
         // Drain the pool module's output queue (acquire/etc. responses) and route each to its requester
         // (response->mpUser). The pool-response slice of the X360 ProcessResourceResponses shuttle. Caller

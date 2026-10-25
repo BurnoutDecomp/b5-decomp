@@ -40,6 +40,15 @@ namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lp
 
 namespace CgsResource
 {
+    s32 Pool::_miPoolUpdatePerfMon = -1;
+    s32 Pool::_miPoolModuleStatePerfMon = -1;
+    s32 Pool::_miPoolModuleIdle = -1;
+    s32 Pool::_miPoolModuleAllocating = -1;
+    s32 Pool::_miPoolModuleDeallocating = -1;
+    s32 Pool::_miPoolModuleLiveupdate = -1;
+    s32 Pool::_miPoolModuleIntellifrag = -1;
+    s32 Pool::_miPoolModuleEmergencyFrag = -1;
+
     namespace
     {
         // [FLAG PC diagnostic] one heap-FULL report per pool id (see the report site below).

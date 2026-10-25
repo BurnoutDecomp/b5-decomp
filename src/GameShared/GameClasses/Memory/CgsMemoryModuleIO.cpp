@@ -14,11 +14,11 @@ namespace MemoryIO
 {
     // Lifecycle (DWARF :746/:750 + :897/:901): construct the IOBuffer base (sets the constructed
     // status bit so the lock asserts pass) and the embedded request/response event queue. Destruct
-    // clears the queue. (The X360 inlines the base Construct + the queue Construct here.)
+    // destructs the IOBuffer base and queue. ARTIST8286BB18/BB68 attest this order.
     void InputBuffer::Construct()  { CgsModule::IOBuffer::Construct(); mMemoryRequestQueue.Construct(); }
-    void InputBuffer::Destruct()   { mMemoryRequestQueue.Clear(); }
+    void InputBuffer::Destruct()   { CgsModule::IOBuffer::Destruct(); mMemoryRequestQueue.Destruct(); }
     void OutputBuffer::Construct() { CgsModule::IOBuffer::Construct(); mMemoryResponseQueue.Construct(); }
-    void OutputBuffer::Destruct()  { mMemoryResponseQueue.Clear(); }
+    void OutputBuffer::Destruct()  { CgsModule::IOBuffer::Destruct(); mMemoryResponseQueue.Destruct(); }
 
     // X360 0x82869248 (const): assert read-locked (status bit 4), then hand back the queue.
     const InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue() const
