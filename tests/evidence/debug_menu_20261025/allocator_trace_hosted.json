@@ -1,0 +1,31 @@
+{
+  "status": "Root_verified_whole_production_allocator_reporting_fixture",
+  "source": "405168b43f26ed19854d820957fd15ba5e68a330",
+  "workflow": "18b92936cd49801edfa50e67306ee0b3d0de78b2",
+  "hosted_run": 40235417212,
+  "variants": {
+    "candidate": {
+      "checks": 26,
+      "failures": 0,
+      "failure_labels": [],
+      "exit_code": 0,
+      "executable_sha256": "3212ea24a7e85626cf19a32d81030295c621f492a0e1c1aa689da1314261124f"
+    },
+    "control": {
+      "checks": 22,
+      "failures": 3,
+      "failure_labels": [
+        "trace caller storage reports real live allocations and context",
+        "trace owned storage hides its context and restores capacity",
+        "trace callback and context defaults remain independent"
+      ],
+      "exit_code": 1,
+      "executable_sha256": "f67c1f55b21144687ce096a18d1522cd5c9e4568295e4fecac96765ffd315104"
+    }
+  },
+  "owned_processes": 7,
+  "result_sha256": "870cb6da8a19b8a8ca6e0c3216e55e415e897e9aee3ff5e685f06d1df9ebc6c3",
+  "scope": "Actual producer to test callback, formatting and storage ownership; native CgsMemory log sink and debug entry remain pending.",
+  "normal_build_installed": false,
+  "new_debug_dispositions": 0
+}
