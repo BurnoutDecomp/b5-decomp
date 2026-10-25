@@ -236,6 +236,26 @@ static void TestAdaptiveTriggers()
     GetTempFileNameA(lacTemp, "atr", 0, lacIni);
     if (FILE* lpFile = std::fopen(lacIni, "w"))
     {
+        std::fputs("[AdaptiveTriggers]\nEnabled=0\n", lpFile);
+        std::fclose(lpFile);
+        Check(LoadFeedbackSettings(lacIni) == 0 && !WantsFeedback() &&
+            lReplacement.mPacket[10] == 5 && lReplacement.mPacket[21] == 5,
+            "INI master disable immediately clears both physical-trigger outputs");
+        WritePrivateProfileStringA("AdaptiveTriggers", "Enabled", "1", lacIni);
+        WritePrivateProfileStringA("AdaptiveTriggers", "LeftStrength", "0", lacIni);
+        WritePrivateProfileStringA("AdaptiveTriggers", "EngineFrequency", "50", lacIni);
+        WritePrivateProfileStringA("AdaptiveTriggers", "EngineStartPosition", "7", lacIni);
+        Check(LoadFeedbackSettings(lacIni) == 0 && WantsFeedback(), "INI master enable restores native observation");
+        lSample.mfRPM = 4500;
+        guNowMs += 20; PublishFeedback(lSample); Read(lState);
+        Check(lReplacement.mPacket[21] == 5 && lReplacement.mPacket[10] == 0x26 &&
+            lReplacement.mPacket[11] == 0x80 && lReplacement.mPacket[12] == 3 && lReplacement.mPacket[19] == 22,
+            "native INI loader applies independent side, effect-frequency and engagement settings");
+    }
+    else Check(false, "create temporary adaptive tuning fixture");
+    std::remove(lacIni);
+    if (FILE* lpFile = std::fopen(lacIni, "w"))
+    {
         std::fputs("[AdaptiveTriggers]\nPreset=Immersive\n[SystemProfile]\nControllerVibration=0\n", lpFile);
         std::fclose(lpFile);
         Check(LoadFeedbackSettings(lacIni) == 0 && !WantsFeedback(), "exact SystemProfile ControllerVibration=0 disables adaptive observation");
