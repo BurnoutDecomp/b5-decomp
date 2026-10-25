@@ -28,6 +28,9 @@
 
 namespace CgsMemory
 {
+    // X360 PrintAllocations callback; DecFIGS CgsHeapMalloc.h:582.
+    void TraceFunc(const char* lpcRecord, void* lpContext);
+
     // Tag is `class` to match the committed forward declaration in
     // BrnScoringSystem.h (`namespace CgsMemory { class HeapMalloc; }`) and
     // CgsHardwareInit.h -- avoids an elaborated-type tag mismatch (MSVC C4099).
