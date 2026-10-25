@@ -115,6 +115,10 @@ namespace CgsResource
         virtual void Construct(InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
                                rw::IResourceAllocator* lpDebugAllocator);
         void Construct(const void* lpInitOptions, void* lpAllocator);
+        // Complete old native lifecycle over the same actual owned storage.
+        bool PrepareNativePC();
+        bool ReleaseNativePC();
+        void DestructNativePC();
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred

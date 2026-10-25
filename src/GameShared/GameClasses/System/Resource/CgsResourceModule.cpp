@@ -48,14 +48,11 @@ namespace CgsResource
     // is not yet ready.
     bool ResourceModule::Prepare()
     {
-        // [reliable] The X360 sets *(this+4)=1 (mbIsNewModule) in Construct; that Construct chain isn't
-        // wired for the embedded static yet, and the header ctor doesn't take effect on it, so set it
-        // here (before the base Prepare) so ModuleSingleBuffered skips the old DataStructure IO path
-        // (and its virtual CreateInputDataStructure). Move to Construct once the bring-up chain lands.
-        mbIsNewModule = true;
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
+            mePrepareStage = E_PREPARE_START;
+            [[fallthrough]];
         case E_PREPARE_BASE:
             mePrepareStage = E_PREPARE_BASE;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
@@ -87,7 +84,10 @@ namespace CgsResource
             mePrepareStage = E_PREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid stage\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 272);
+            CgsDev::Assert::EndAssert();
             return false;
         }
     }
@@ -99,7 +99,7 @@ namespace CgsResource
         switch (meReleaseStage)
         {
         case E_RELEASE_START:
-            mBundleLoaderModule.CancelStreamPC();
+            meReleaseStage = E_RELEASE_START;
             // fall through
         case E_RELEASE_POOL:
             meReleaseStage = E_RELEASE_POOL;
@@ -131,9 +131,122 @@ namespace CgsResource
             meReleaseStage = E_RELEASE_DONE;
             return true;
         default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid stage\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 363);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
+    // FLAG PC-platform leaf: complete existing selected lifecycle retained.
+    bool ResourceModule::PrepareNativePC()
+    {
+        // [reliable] The X360 sets *(this+4)=1 (mbIsNewModule) in Construct; that Construct chain isn't
+        // wired for the embedded static yet, and the header ctor doesn't take effect on it, so set it
+        // here (before the base Prepare) so ModuleSingleBuffered skips the old DataStructure IO path
+        // (and its virtual CreateInputDataStructure). Move to Construct once the bring-up chain lands.
+        mbIsNewModule = true;
+        switch (mePrepareStage)
+        {
+        case E_PREPARE_START:
+        case E_PREPARE_BASE:
+            mePrepareStage = E_PREPARE_BASE;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                return false;
+            // fall through
+        case E_PREPARE_MEMORY:
+            mePrepareStage = E_PREPARE_MEMORY;
+            if (!mMemoryModule.Prepare())
+                return false;
+            // fall through
+        case E_PREPARE_FILESYSTEM:
+            mePrepareStage = E_PREPARE_FILESYSTEM;
+            if (!mFileSystem.PrepareNativePC())
+                return false;
+            // fall through
+        case E_PREPARE_BUNDLE:
+            mePrepareStage = E_PREPARE_BUNDLE;
+            if (!mBundleLoaderModule.Prepare())
+                return false;
+            // fall through
+        case E_PREPARE_POOL:
+            mePrepareStage = E_PREPARE_POOL;
+            if (!mPoolModule.Prepare())
+                return false;
+            mDebugComponent.Register();
+            // fall through
+        case E_PREPARE_DONE:
+            meReleaseStage = E_RELEASE_START;
+            mePrepareStage = E_PREPARE_DONE;
+            return true;
+        default:
             CGS_ASSERT(false, "Invalid stage");
             return false;
         }
+    }
+
+    // FLAG PC-platform leaf: complete existing selected lifecycle retained.
+    bool ResourceModule::ReleaseNativePC()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASE_START:
+            mBundleLoaderModule.CancelStreamPC();
+            // fall through
+        case E_RELEASE_POOL:
+            meReleaseStage = E_RELEASE_POOL;
+            if (!mPoolModule.Release())
+                return false;
+            // fall through
+        case E_RELEASE_BUNDLE:
+            meReleaseStage = E_RELEASE_BUNDLE;
+            if (!mBundleLoaderModule.Release())
+                return false;
+            // fall through
+        case E_RELEASE_FILESYSTEM:
+            meReleaseStage = E_RELEASE_FILESYSTEM;
+            if (!mFileSystem.ReleaseNativePC())
+                return false;
+            // fall through
+        case E_RELEASE_MEMORY:
+            meReleaseStage = E_RELEASE_MEMORY;
+            if (!mMemoryModule.Release())
+                return false;
+            // fall through
+        case E_RELEASE_BASE:
+            meReleaseStage = E_RELEASE_BASE;
+            if (!CgsModule::ModuleSingleBuffered::Release())
+                return false;
+            // fall through
+        case E_RELEASE_DONE:
+            mePrepareStage = E_PREPARE_START;
+            meReleaseStage = E_RELEASE_DONE;
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid stage");
+            return false;
+        }
+    }
+
+    // FLAG PC-platform leaf: complete existing selected lifecycle retained.
+    void ResourceModule::DestructNativePC()
+    {
+        // FLAG PC-platform leaf: temporary native response records are owned
+        // by this shuttle. Release has closed the stream slots before teardown.
+        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
+        const s32 liCount = mPendingFileResponses.Get(lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            if (lapPending[li]->meEvent == 16)
+                delete static_cast<Events::OpenReadStreamResponse*>(lapPending[li]->mpResponse);
+            else if (lapPending[li]->meEvent == 18)
+                delete static_cast<Events::CloseReadStreamResponse*>(lapPending[li]->mpResponse);
+            mPendingFileResponses.Push(mPendingFileResponses.GetObjectIndex(lapPending[li]));
+        }
+        // ARTIST828EC6B0.
+        mFileSystem.DestructNativePC();
+        CgsModule::ModuleSingleBuffered::Destruct();
     }
 
     // ARTIST829055B0..6568; all allocations use the actual supplied owner.

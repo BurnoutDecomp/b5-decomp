@@ -245,7 +245,8 @@ namespace rw
             // -----------------------------------------------------------------------------
             s32 AsyncOp::DoOpen(AsyncOp* lpOp)
             {
-                void* lpRaw = gpFileSysAllocator->Alloc(0x28, "rw::core::filesystem::Manager::Allocate", 0, 4, 0);
+                // FLAG PC-platform leaf: allocate the real native Handle, preserving its owner/alignment4.
+                void* lpRaw = gpFileSysAllocator->Alloc(sizeof(Handle), "rw::core::filesystem::Manager::Allocate", 0, 4, 0);
                 Handle* lpHandle = nullptr;
                 if (lpRaw)
                 {

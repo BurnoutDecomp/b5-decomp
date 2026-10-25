@@ -72,6 +72,11 @@ namespace CgsFileSystem
         // Original X360 owner, distinct from DecFIGS's five-input form.
         void Construct(rw::IResourceAllocator* lpAllocator, rw::IResourceAllocator* lpDebugAllocator,
                        char* lpcFilePrefix, DiskLayout* lpDiskLayout);
+        // Retained native lifecycle. The selected GameData path calls these
+        // through ResourceModule's explicit NativePC lifecycle alternatives.
+        bool PrepareNativePC();
+        bool ReleaseNativePC();
+        void DestructNativePC();
         bool Prepare();     // 0x828F04E8 — brings up the async device engine
         bool Release();     // 0x82903880
         void Destruct();    // 0x828E8A88
@@ -128,6 +133,8 @@ namespace CgsFileSystem
 
     private:
         // ---- DWARF CgsFileSystem.h:308/317 (private) ----
+        // DecFIGS h263; original global830EA578, not the native close-once latch.
+        static EA::Thread::AtomicInt32 mReleasing;
         static EA::Thread::AtomicInt32 mDiskErrorOccured; // DecFIGS h262, ARTIST830EA574
         static bool RWDiskErrorHandler(s32 liError); // ARTIST828E8B20 ignores its argument
         // Typed physical-device callback; DecFIGS h290, X360 registration uses the same store leaf.

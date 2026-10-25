@@ -51,6 +51,61 @@ namespace CgsFileSystem
     }
 
 
+    // Inlined ARTIST828F05B4..5DC. One real file lock covers all base/concrete stores.
+    void File::Prepare()
+    {
+        FileFutexHelper lGuard(mFutex);
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = nullptr;
+        muSeekPosition = 0;
+        muPendingOperationCount = 0;
+        mpHandle = nullptr;
+        muCacheId = 0xFFFFFFFFu;
+    }
+
+    // Inlined ARTIST82903DF0..E40. Clear concrete state before the original assert.
+    void File::Release()
+    {
+        FileFutexHelper lGuard(mFutex);
+        mpHandle = nullptr;
+        muCacheId = 0xFFFFFFFFu;
+        if (static_cast<FileState>(meFileAccess) != E_FILESTATE_CLOSED)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "static_cast<CgsFileSystem::FileState> ( meFileAccess ) == E_FILESTATE_CLOSED",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFile.cpp", 86);
+            CgsDev::Assert::EndAssert();
+        }
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = nullptr;
+        muSeekPosition = 0;
+        muPendingOperationCount = 0;
+    }
+
+    // Inlined ARTIST828E8AB4..B00. The asm stores zero, not a loop-count u64.
+    void File::Destruct()
+    {
+        FileFutexHelper lGuard(mFutex);
+        mpHandle = nullptr;
+        muCacheId = 0xFFFFFFFFu;
+        if (static_cast<FileState>(meFileAccess) != E_FILESTATE_CLOSED)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "static_cast< CgsFileSystem::FileState >(meFileAccess) == E_FILESTATE_CLOSED",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFile.cpp", 107);
+            CgsDev::Assert::EndAssert();
+        }
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = nullptr;
+        muSeekPosition = 0;
+        muPendingOperationCount = 0;
+    }
+
     using rw::core::filesys::AsyncOp;
     using rw::core::filesys::Manager;
 

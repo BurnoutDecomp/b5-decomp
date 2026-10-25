@@ -60,6 +60,7 @@ namespace CgsFileSystem
 
         // ---- lifecycle ----
         DeviceManager();                                       // 0x828F0C90
+        void Shutdown(); // ARTIST828F2260, DecFIGS h135
         void InitInternal();                                   // 0x828E9788
         static void InitializeDeviceManager(rw::IResourceAllocator* lpAllocator); // 0x828F91E0
         // Existing malloc-backed native owner; no fabricated RW allocator argument.

@@ -39,9 +39,9 @@ namespace CgsFileSystem
     {
     public:
         // ---- lifecycle (DWARF CgsFileRW.h:48-60) ----
-        // DECLARE-ONLY: no standalone X360 symbol (fully inlined into the FileSystem ctor /
-        // Construct/Prepare/Release/Destruct). BaseFile already declares the shared shape;
-        // bodies are not attested in this TU's asm.
+        // ARTIST inlines these complete concrete/base stores in FileSystem's
+        // Construct829033C0/Prepare828F04E8/Release82903880/Destruct828E8A88.
+        // Bodies live in CgsFileRW.cpp; no local synthetic base implementation.
         void Construct(FileSystem* lpFileSystem, FileLog* lpLog, s32 liIndex);
         void Prepare();
         void Release();
