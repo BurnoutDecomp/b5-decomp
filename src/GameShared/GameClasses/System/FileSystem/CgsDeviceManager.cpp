@@ -113,6 +113,33 @@ namespace
         mDeviceListFutex.Unlock();
     }
 
+    // ARTIST828F2260: real owned slots/queues and original max priority.
+    void DeviceManager::Shutdown()
+    {
+        mDeviceListFutex.Lock();
+        for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
+        {
+            PhysicalDeviceSlot& lrSlot = maPhysicalDevices[liIndex];
+            if (lrSlot.mpDevice)
+            {
+                Operation lOperation;
+                lOperation.miType = E_OP_SHUTDOWN;
+                lOperation.macPath[0] = 0;
+                lOperation.muFlags = 0;
+                lOperation.mHandle = Handle::Make(lrSlot.mpDevice, nullptr);
+                lOperation.mu64Offset = 0;
+                lOperation.mpReadBuffer = nullptr;
+                lOperation.mpWriteBuffer = nullptr;
+                lOperation.muSize = 0;
+                lOperation.mpfCallback = nullptr;
+                lOperation.mpContext = nullptr;
+                lOperation.miPriority = 0x7FFFFFFF;
+                lrSlot.mOperations.AddOperation(&lOperation);
+            }
+        }
+        mDeviceListFutex.Unlock();
+    }
+
     // ---- statics ----
     // X360 globals: dword_830EA400 (singleton), off_830EA404 (allocator).
     DeviceManager* DeviceManager::mpDeviceManager = nullptr;

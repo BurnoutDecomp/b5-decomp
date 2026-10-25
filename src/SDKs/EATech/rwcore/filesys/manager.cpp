@@ -1,3 +1,10 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 // =====================================================================================
 // rw::core::filesys::Manager -- the RenderWare core filesystem manager singleton.
 //
@@ -43,20 +50,255 @@ namespace rw
             Manager* gpFileSysManager = nullptr;
 
             // -----------------------------------------------------------------------------
-            // Un-recoverable rodata referenced by Init (device descriptors + default search
-            // path). The X360 addresses are known but their CONTENTS are not in any export,
-            // so they are modelled as flagged-null placeholders -- NEVER fabricated. When the
-            // device-table / default-path data is recovered, fill these in.
-            //   &dword_8327F098 : the default-device descriptor handed to RegisterDevice
-            //   off_82F91A3C .. off_82F91A48 : a static table of device descriptors
-            //   &unk_821811B4   : the default search-path string
-            // -----------------------------------------------------------------------------
+            // ARTIST821811E0: this genuine null driver's IO slots return zero;
+            // its Close slot is empty. Those are the original routing-driver semantics.
+            class NullFileDriver : public DeviceDriver
+            {
+            public:
+                explicit NullFileDriver(const char* lpcName) : DeviceDriver(lpcName) {}
+                ~NullFileDriver() override = default;
+                void* Open(const char*, unsigned int, Handle**) override { return nullptr; }
+                void Close(void*) override {}
+                unsigned int Read(void*, void*, unsigned int, DeviceDriver*, void*) override { return 0; }
+                u64 Seek(void*, u64, int, DeviceDriver*, void*) override { return 0; }
+                u64 GetSize(void*) override { return 0; }
+            };
+
+            // ARTIST82BBE558/82BBE870 allocate this real per-open record.
+            // HANDLE and cached64-bit position are the only fields, in this order.
+            struct XenonFileHandle
+            {
+                HANDLE mhFile;
+                u64 muPosition;
+            };
+
+            class XenonFileDeviceDriver : public DeviceDriver
+            {
+                static void NormalizePath(char* lpcDest, const char* lpcSource)
+                {
+                    // Original null-input continuation reads the destination;
+                    // do not invent empty-name handling or a truncation policy.
+                    if (!lpcSource)
+                        lpcSource = lpcDest;
+                    char lcCharacter;
+                    do
+                    {
+                        lcCharacter = *lpcSource++;
+                        *lpcDest++ = lcCharacter == '/' ? '\\' : lcCharacter;
+                    } while (lcCharacter);
+                }
+                static u64 FileTimeValue(const FILETIME& lrTime)
+                {
+                    return (static_cast<u64>(lrTime.dwHighDateTime) << 32) | lrTime.dwLowDateTime;
+                }
+                static void StoreFindData(FindData* lpDest, const WIN32_FIND_DATAA& lrSource)
+                {
+                    lpDest->mCreationTime = FileTimeValue(lrSource.ftCreationTime);
+                    lpDest->mAccessTime = FileTimeValue(lrSource.ftLastAccessTime);
+                    lpDest->mModificationTime = FileTimeValue(lrSource.ftLastWriteTime);
+                    lpDest->mSize = (static_cast<u64>(lrSource.nFileSizeHigh) << 32) | lrSource.nFileSizeLow;
+                    std::strncpy(lpDest->mName, lrSource.cFileName, sizeof(lpDest->mName));
+                    lpDest->mName[sizeof(lpDest->mName) - 1] = 0;
+                    lpDest->mFlags = 0;
+                    if (lrSource.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
+                        lpDest->mFlags = 1;
+                    if (lrSource.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                        lpDest->mFlags |= 2;
+                }
+            public:
+                // Static births82C73F28/3F70/3FB8 install only the real base name.
+                explicit XenonFileDeviceDriver(const char* lpcName) : DeviceDriver(lpcName) {}
+                ~XenonFileDeviceDriver() override = default;
+
+                // FLAG PC-platform leaf: XDK's named Win32-compatible file API
+                // is expressed through the host API; all engine flags/order remain.
+                void* Open(const char* lpcName, unsigned int luFlags, Handle**) override
+                {
+                    DWORD luAccess = GENERIC_READ;
+                    if (luFlags & 1)
+                        luAccess |= GENERIC_WRITE;
+                    DWORD luDisposition = OPEN_EXISTING;
+                    switch (luFlags & 6)
+                    {
+                    case 2: luDisposition = CREATE_NEW; break;
+                    case 4: luDisposition = TRUNCATE_EXISTING; break;
+                    case 6: luDisposition = CREATE_ALWAYS; break;
+                    }
+                    DWORD luAttributes = FILE_ATTRIBUTE_NORMAL;
+                    if (luFlags & 16)
+                        luAttributes |= FILE_FLAG_NO_BUFFERING;
+                    if (luFlags & 8)
+                        luAttributes |= FILE_FLAG_SEQUENTIAL_SCAN;
+                    char lacPath[256];
+                    if (*lpcName == '/' || *lpcName == '\\')
+                    {
+                        std::strcpy(lacPath, mDeviceName);
+                        std::strcat(lacPath, lpcName);
+                    }
+                    else
+                        std::strcpy(lacPath, lpcName);
+                    for (char* lpc = lacPath; *lpc; ++lpc)
+                        if (*lpc == '/')
+                            *lpc = '\\';
+                    HANDLE lhFile = ::CreateFileA(lacPath, luAccess, FILE_SHARE_READ, nullptr,
+                                                 luDisposition, luAttributes, nullptr);
+                    if (lhFile == INVALID_HANDLE_VALUE)
+                        return nullptr;
+                    auto* lpResult = static_cast<XenonFileHandle*>(gpFileSysAllocator->Alloc(
+                        sizeof(XenonFileHandle), KAC_ALLOC_TAG, 0, 4, 0));
+                    if (!lpResult)
+                        return nullptr;
+                    lpResult->mhFile = lhFile;
+                    lpResult->muPosition = 0;
+                    return lpResult;
+                }
+
+                void Close(void* lpFile) override
+                {
+                    ::CloseHandle(static_cast<XenonFileHandle*>(lpFile)->mhFile);
+                    gpFileSysAllocator->Free(lpFile, 0);
+                }
+                unsigned int Read(void* lpFile, void* lpBuffer, unsigned int luSize,
+                                  DeviceDriver*, void*) override
+                {
+                    auto* lpHandle = static_cast<XenonFileHandle*>(lpFile);
+                    DWORD luRead;
+                    if (!::ReadFile(lpHandle->mhFile, lpBuffer, luSize, &luRead, nullptr))
+                    {
+                        bool (*const lpErrorHandler)(s32) = gpFileSysManager->mErrorHandler;
+                        if (!lpErrorHandler(static_cast<s32>(::GetLastError())))
+                            ::Sleep(INFINITE);
+                    }
+                    lpHandle->muPosition += luRead;
+                    return luRead;
+                }
+                unsigned int Write(void* lpFile, const void* lpBuffer, unsigned int luSize,
+                                   DeviceDriver*, void*) override
+                {
+                    auto* lpHandle = static_cast<XenonFileHandle*>(lpFile);
+                    DWORD luWritten;
+                    ::WriteFile(lpHandle->mhFile, lpBuffer, luSize, &luWritten, nullptr);
+                    lpHandle->muPosition += luWritten;
+                    return luWritten;
+                }
+                u64 Seek(void* lpFile, u64 luPosition, int, DeviceDriver*, void*) override
+                {
+                    auto* lpHandle = static_cast<XenonFileHandle*>(lpFile);
+                    if (luPosition == lpHandle->muPosition)
+                        return luPosition;
+                    LARGE_INTEGER lDistance;
+                    lDistance.QuadPart = static_cast<LONGLONG>(luPosition);
+                    LARGE_INTEGER lResult;
+                    if (::SetFilePointerEx(lpHandle->mhFile, lDistance, &lResult, FILE_BEGIN))
+                        lpHandle->muPosition = static_cast<u64>(lResult.QuadPart);
+                    else
+                        lpHandle->muPosition = ::SetFilePointer(lpHandle->mhFile, 0, nullptr, FILE_CURRENT);
+                    return lpHandle->muPosition;
+                }
+                u64 GetSize(void* lpFile) override
+                {
+                    LARGE_INTEGER lSize;
+                    if (::GetFileSizeEx(static_cast<XenonFileHandle*>(lpFile)->mhFile, &lSize) == TRUE)
+                        return static_cast<u64>(lSize.QuadPart);
+                    return 0;
+                }
+                bool Resize(void* lpFile, u64 luSize) override
+                {
+                    auto* lpHandle = static_cast<XenonFileHandle*>(lpFile);
+                    LARGE_INTEGER lZero;
+                    lZero.QuadPart = 0;
+                    LARGE_INTEGER lSize;
+                    lSize.QuadPart = static_cast<LONGLONG>(luSize);
+                    LARGE_INTEGER lPosition;
+                    if (::SetFilePointerEx(lpHandle->mhFile, lZero, &lPosition, FILE_CURRENT)
+                        && ::SetFilePointerEx(lpHandle->mhFile, lSize, nullptr, FILE_BEGIN)
+                        && ::SetEndOfFile(lpHandle->mhFile)
+                        && ::SetFilePointerEx(lpHandle->mhFile, lPosition, nullptr, FILE_BEGIN))
+                    {
+                        lpHandle->muPosition = static_cast<u64>(lPosition.QuadPart);
+                        return true;
+                    }
+                    return false;
+                }
+                bool Delete(const char* lpcName) override
+                {
+                    char lacPath[256];
+                    NormalizePath(lacPath, lpcName);
+                    return ::DeleteFileA(lacPath) == TRUE;
+                }
+                bool Move(const char* lpcSource, const char* lpcDestination) override
+                {
+                    char lacDestination[256];
+                    char lacSource[256];
+                    NormalizePath(lacDestination, lpcDestination);
+                    NormalizePath(lacSource, lpcSource);
+                    return ::MoveFileA(lacSource, lacDestination) == TRUE;
+                }
+                void* FindBegin(const char* lpcName, FindData* lpFindData) override
+                {
+                    char lacPath[256];
+                    NormalizePath(lacPath, lpcName);
+                    WIN32_FIND_DATAA lData;
+                    HANDLE lhFind = ::FindFirstFileA(lacPath, &lData);
+                    XenonFileHandle* lpResult = nullptr;
+                    if (lhFind != INVALID_HANDLE_VALUE)
+                    {
+                        lpResult = static_cast<XenonFileHandle*>(gpFileSysAllocator->Alloc(
+                            sizeof(XenonFileHandle), KAC_ALLOC_TAG, 0, 4, 0));
+                        if (lpResult)
+                        {
+                            lpResult->mhFile = lhFind;
+                            lpResult->muPosition = 0;
+                        }
+                        if (lpFindData)
+                            StoreFindData(lpFindData, lData);
+                    }
+                    return lpResult;
+                }
+                bool FindNext(void* lpFind, FindData* lpFindData) override
+                {
+                    WIN32_FIND_DATAA lData;
+                    const bool lbFound = ::FindNextFileA(static_cast<XenonFileHandle*>(lpFind)->mhFile, &lData) == TRUE;
+                    if (lbFound && lpFindData)
+                        StoreFindData(lpFindData, lData);
+                    return lbFound;
+                }
+                bool FindEnd(void* lpFind) override
+                {
+                    // FLAG PC-platform leaf: a native FindFirstFile handle uses
+                    // FindClose; this is XDK CloseHandle's matching host operation.
+                    const bool lbResult = ::FindClose(static_cast<XenonFileHandle*>(lpFind)->mhFile) != FALSE;
+                    gpFileSysAllocator->Free(lpFind, 0);
+                    return lbResult;
+                }
+                bool DirectoryCreate(const char* lpcName) override
+                {
+                    char lacPath[256];
+                    NormalizePath(lacPath, lpcName);
+                    return ::CreateDirectoryA(lacPath, nullptr) == TRUE;
+                }
+                bool DirectoryRemove(const char* lpcName) override
+                {
+                    char lacPath[256];
+                    NormalizePath(lacPath, lpcName);
+                    return ::RemoveDirectoryA(lacPath) == TRUE;
+                }
+            };
+
+            // Exact original birth/table order and name strings, not null descriptors.
+            // 82C73EE0 ->8327F098;3F28 ->F084;3F70 ->F0AC;3FB8 ->F0C0.
             namespace
             {
-                DeviceDriver* const KP_DEFAULT_DEVICE_DESC = nullptr;  // the default driver (UNRECOVERED)
-                DeviceDriver* const KAP_DEVICE_TABLE[1] = { nullptr }; // the static driver table (UNRECOVERED)
-                const char* const KPC_DEFAULT_SEARCH_PATH = nullptr;// &unk_821811B4   (UNRECOVERED)
+                NullFileDriver gNullFileDriver("null:");
+                XenonFileDeviceDriver gDiscFileDriver("D:");
+                XenonFileDeviceDriver gCacheFileDriver("CACHE:");
+                XenonFileDeviceDriver gNetFileDriver("NET:");
+                DeviceDriver* const KP_DEFAULT_DEVICE_DESC = &gNullFileDriver;
+                DeviceDriver* const KAP_DEVICE_TABLE[] =
+                    { &gDiscFileDriver, &gCacheFileDriver, &gNetFileDriver };
+                const char* const KPC_DEFAULT_SEARCH_PATH = "D:";
             }
+
 
             // -----------------------------------------------------------------------------
             // Manager::Allocate @0x82BBD640
@@ -107,7 +349,7 @@ namespace rw
                 , muMaxSearchPaths(lpConfig->muMaxSearchPaths) // a1[14] = a2[0]
                 , mpSearchPathTable(nullptr)   // a1[15] = 0
                 , mbSortByPosition(0)          // a1[16] = 0
-                , muReserved44(0)              // a1[17] = 0
+                , mErrorHandler(nullptr)              // a1[17] = 0
             {
                 mDeviceList.mpHead  = nullptr;   // *a1 = 0
                 mDeviceList.mpTail  = nullptr;   // a1[1] = 0
@@ -131,7 +373,7 @@ namespace rw
             int Manager::SetSearchPath(const char* lpcSearchPath)
             {
                 ::memset(mpScratchBuffer, 0, muScratchSize);
-                ::memset(mpSearchPathTable, 0, 8 * muMaxSearchPaths);
+                ::memset(mpSearchPathTable, 0, sizeof(SearchPathEntry) * muMaxSearchPaths);
 
                 // Copy the source path (NUL-terminated) into the scratch buffer.
                 char* lpDst = mpScratchBuffer;
@@ -193,24 +435,23 @@ namespace rw
             // Manager::Init @0x82BBF0B8
             //
             // Allocate the scratch buffer (muScratchSize) and the search-path table
-            // (8*muMaxSearchPaths), register the default device descriptor, register each
+            // (sizeof(SearchPathEntry)*muMaxSearchPaths), register the default device, then each
             // entry in the static device table, then point mpCurrentDir at the default search
             // path string and apply it. Returns the SetSearchPath result.
             // -----------------------------------------------------------------------------
             int Manager::Init()
             {
                 mpScratchBuffer   = static_cast<char*>(Allocate(muScratchSize));      // a1[11]
-                mpSearchPathTable = static_cast<SearchPathEntry*>(Allocate(8 * muMaxSearchPaths)); // a1[15]
+                mpSearchPathTable = static_cast<SearchPathEntry*>(Allocate(static_cast<u32>(sizeof(SearchPathEntry) * muMaxSearchPaths))); // a1[15]
 
                 // a1[10] = RegisterDevice(off_8327F078, &dword_8327F098, 0). The X360 call
-                // target is gpFileSysManager (== this); the descriptor is UNRECOVERED rodata.
+                // target is gpFileSysManager (== this); the actual NullFileDriver is statically owned.
                 mpDefaultDevice = RegisterDevice(KP_DEFAULT_DEVICE_DESC, 0);
 
                 // Register every entry in the static device table [off_82F91A3C, off_82F91A48).
-                // The table CONTENTS are UNRECOVERED; the placeholder has a single null entry
-                // so the loop shape (do/while v2 < end) is reproduced without fabricating data.
+                // Actual three-driver order and names are pinned by raw image + static births.
                 DeviceDriver* const* lpEntry = KAP_DEVICE_TABLE;                     // v2
-                DeviceDriver* const* lpEnd   = KAP_DEVICE_TABLE + 1;                 // table end
+                DeviceDriver* const* lpEnd   = KAP_DEVICE_TABLE + sizeof(KAP_DEVICE_TABLE) / sizeof(KAP_DEVICE_TABLE[0]);                 // table end
                 do
                 {
                     RegisterDevice(*lpEntry, 0);
@@ -235,12 +476,14 @@ namespace rw
             {
                 gpFileSysAllocator = lpConfig->mpAllocator;  // off_8327F07C = *(a1+8)
 
-                void* lpRaw = gpFileSysAllocator->Alloc(0x48, KAC_ALLOC_TAG, 0, 4, 0);
+                // FLAG PC-platform leaf: actual Manager sizeof and two-pointer
+                // SearchPathEntry sizeof follow native widths; retain original
+                // allocator/name/flags/alignment4 and construction order.
+                void* lpRaw = gpFileSysAllocator->Alloc(sizeof(Manager), KAC_ALLOC_TAG, 0, 4, 0);
                 Manager* lpMgr = lpRaw ? new (lpRaw) Manager(lpConfig) : nullptr;
                 gpFileSysManager = lpMgr;                    // off_8327F078 = v3
 
-                if (gpFileSysManager)
-                    gpFileSysManager->Init();
+                gpFileSysManager->Init();
                 return gpFileSysManager;
             }
 

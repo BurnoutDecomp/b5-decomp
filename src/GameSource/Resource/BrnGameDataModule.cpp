@@ -363,7 +363,7 @@ namespace BrnResource
             // fall through
         case E_PREPARE_RESOURCE:
             mePrepareStage = E_PREPARE_RESOURCE;
-            if (!mResourceModule.Prepare())
+            if (!mResourceModule.PrepareNativePC())
                 return false;
             mReceiverQueue.Clear();
             // fall through

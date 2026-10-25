@@ -1,3 +1,6 @@
+#include <new>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "SDKs/EATech/rwcore/filesys/device.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
@@ -32,7 +35,8 @@ namespace
     }
 
 }
-    EA::Thread::AtomicInt32 FileSystem::mDiskErrorOccured(0); // primary raw830EA574
+    EA::Thread::AtomicInt32 FileSystem::mDiskErrorOccured(0);
+    EA::Thread::AtomicInt32 FileSystem::mReleasing(0); // primary raw830EA574
 
     bool FileSystem::HasDiskErrorOccured() const
     {
@@ -52,6 +56,166 @@ namespace
         mDiskErrorOccured.SetValue(1);
         return false;
     }
+
+    // ARTIST828F04E8. This path requires the actual four-argument Construct.
+    bool FileSystem::Prepare()
+    {
+        if (mbPrepared)
+            return true;
+        if (!mpFileSystemAllocator)
+            return false;
+
+        rw::core::filesys::FileSystemConfig lOptions;
+        lOptions.muMaxSearchPaths = 2;
+        lOptions.muScratchSize = 1024;
+        lOptions.mpAllocator = mpFileSystemAllocator;
+        rw::core::filesys::Manager::CreateInstance(&lOptions);
+        auto* lpManager = static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        EA::Thread::ThreadParameters lThreadParameters = lpManager->mThreadParameters;
+        lThreadParameters.mnPriority = 350;
+        lThreadParameters.mpName = "RwFileSystem";
+        lpManager = static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        lpManager->mThreadParameters = lThreadParameters;
+
+        for (u32 luIndex = 0; luIndex < KU_MAXNOOFFILES; ++luIndex)
+            maFiles[luIndex].Prepare();
+        lpManager = static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        lpManager->SetSearchPath(maFilePrefix);
+        GetDeviceManager()->SetDefaultPath(maFilePrefix);
+
+        rw::ResourceDescriptor lDescriptor;
+        // FLAG PC-platform leaf: retain the native pointer-width object sizeof;
+        // original main-only allocation,alignment4,null name and all other lanes.
+        lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(sizeof(DeviceMemFileSystem));
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        const rw::Resource lResource = mpFileSystemAllocator->DoAllocate(lDescriptor, nullptr);
+        void* const lpMemory = lResource.m_baseResources[0];
+        mpMemFileSystem = lpMemory ? ::new (lpMemory) DeviceMemFileSystem("MEM:") : nullptr;
+        // Original allocation failure continues into Construct; no new skip policy.
+        mpMemFileSystem->Construct();
+        lpManager = static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        lpManager->RegisterDevice(mpMemFileSystem, 0);
+        lpManager = static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        lpManager->mErrorHandler = &FileSystem::RWDiskErrorHandler;
+        mbPrepared = true;
+        muNumUsedReadStreams = 0;
+        mReleasing.SetValue(0);
+        return true;
+    }
+
+    // ARTIST82903880. Shutdown is retried until every original file/stream closes.
+    bool FileSystem::Release()
+    {
+        mReleasing.SetValue(1);
+        if (!mbPrepared)
+            return true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Attempting to release file system...\n";
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Closing files\n";
+        bool lbReleased = true;
+        for (u32 luIndex = 0; luIndex < KU_MAXNOOFFILES; ++luIndex)
+        {
+            File& lrFile = maFiles[luIndex];
+            if (lrFile.GetStatus() != E_FILESTATE_CLOSED)
+            {
+                if (lrFile.GetStatus() == E_FILESTATE_OPEN)
+                {
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                        *CgsDev::Log::gpDebugPrint << "Closing file " << luIndex << "\n";
+                    lrFile.Close();
+                }
+                else if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "Aborting close of file " << luIndex
+                                             << " due to pending operations\n";
+                lbReleased = false;
+            }
+            else if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "File " << luIndex << " already closed\n";
+        }
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Closing streams\n";
+        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
+        {
+            StreamDeviceDiskRead& lrStream = maReadStreams[luIndex];
+            // ARTIST reads this pair directly before the stream's own Close lock.
+            if (lrStream.miPendingOperationCount > 0 || lrStream.meStatus != StreamDeviceDiskRead::E_STATUS_CLOSED)
+            {
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "Closing stream " << luIndex << "\n";
+                lrStream.Close();
+                lbReleased = false;
+            }
+            else if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Stream " << luIndex << " already closed\n";
+        }
+        if (!lbReleased)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Failed to release file system this frame due to pending operations\n";
+            return false;
+        }
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Releasing files\n";
+        for (u32 luIndex = 0; luIndex < KU_MAXNOOFFILES; ++luIndex)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Releasing file " << luIndex << "\n";
+            maFiles[luIndex].Release();
+        }
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Destroying file system\n";
+        rw::core::filesys::Manager::DestroyInstance();
+        GetDeviceManager()->Shutdown();
+        mbPrepared = false;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "File system shutdown complete\n";
+        return true;
+    }
+
+    // ARTIST828E8A88; it does not free the arenas or invent another shutdown.
+    void FileSystem::Destruct()
+    {
+        for (u32 luIndex = 0; luIndex < KU_MAXNOOFFILES; ++luIndex)
+            maFiles[luIndex].Destruct();
+    }
+
+
+    // FLAG PC-platform leaf: complete existing native lifecycle retained.
+    bool FileSystem::PrepareNativePC()
+    {
+        EnsureDeviceManagerUp();
+        // The X360 installs maFilePrefix here. The PC physical device maps this
+        // qualified root to the game's working directory.
+        GetDeviceManager()->SetDefaultPath("p_dvd:");
+        mbPrepared = true;
+        mbReleasing = false;
+        return true;
+    }
+
+    // FLAG PC-platform leaf: complete existing native lifecycle retained.
+    bool FileSystem::ReleaseNativePC()
+    {
+        // FLAG PC-platform leaf: the native async device retains pointers into
+        // these rings. Request close once, and let callbacks finish before the
+        // owning resource arena can be retired.
+        if (!mbReleasing)
+        {
+            for (auto& lrStream : maReadStreams)
+                if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
+                    lrStream.Close();
+            mbReleasing = true;
+        }
+        for (const auto& lrStream : maReadStreams)
+            if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
+                return false;
+        muNumUsedReadStreams = 0;
+        mbPrepared = false;
+        return true;
+    }
+
+    // FLAG PC-platform leaf: complete existing native lifecycle retained.
+    void FileSystem::DestructNativePC() {}
 
     // The single PC physical device. A process-static (rather than a FileSystem member) so its
     // lifetime spans the whole run and the worker thread that references it never dangles, and so
@@ -383,35 +547,8 @@ namespace
         mbReleasing = false;
     }
 
-    bool FileSystem::Prepare()
-    {
-        EnsureDeviceManagerUp();
-        // The X360 installs maFilePrefix here. The PC physical device maps this
-        // qualified root to the game's working directory.
-        GetDeviceManager()->SetDefaultPath("p_dvd:");
-        mbPrepared = true;
-        mbReleasing = false;
-        return true;
-    }
 
-    bool FileSystem::Release()
-    {
-        // FLAG PC-platform leaf: the native async device retains pointers into
-        // these rings. Request close once, and let callbacks finish before the
-        // owning resource arena can be retired.
-        if (!mbReleasing)
-        {
-            for (auto& lrStream : maReadStreams)
-                if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
-                    lrStream.Close();
-            mbReleasing = true;
-        }
-        for (const auto& lrStream : maReadStreams)
-            if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
-                return false;
-        muNumUsedReadStreams = 0;
-        mbPrepared = false;
-        return true;
-    }
-    void FileSystem::Destruct() {}
+
+
+
 }

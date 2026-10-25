@@ -109,7 +109,7 @@ namespace rw
             //   X360 +0x38 muMaxSearchPaths  : capacity of mpSearchPathTable (8 bytes/entry)
             //   X360 +0x3C mpSearchPathTable : array of { const char* path, Device* dev }
             //   X360 +0x40 mbSortByPosition  : when == 1, read ops are reordered by position
-            //   X360 +0x44 muReserved44      : ctor-cleared trailing word
+            //   X360 +0x44 mErrorHandler     : actual error callback, ctor null
             // The X360 byte offsets are not reproduced literally (host pointer /
             // ThreadParameters sizes differ); members keep the X360 ORDER and are accessed
             // purely by name. _AssertLayout() is intentionally absent: the host
@@ -147,7 +147,7 @@ namespace rw
                 u32                           muMaxSearchPaths;    // X360 +0x38
                 SearchPathEntry*              mpSearchPathTable;   // X360 +0x3C
                 s32                           mbSortByPosition;    // X360 +0x40
-                u32                           muReserved44;        // X360 +0x44
+                bool                        (*mErrorHandler)(s32);        // X360 +0x44
 
                 // ----- rw::core::filesys::Manager methods (homed in manager.cpp) ----------
 
