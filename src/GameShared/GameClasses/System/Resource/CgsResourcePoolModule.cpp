@@ -19,6 +19,11 @@
 // dispatch is integrated separately from construction of its working state.
 namespace CgsResource
 {
+    // Original initial monitor words are -1; trace IDs are reset to zero by Construct.
+    s32 PoolModule::_miAllocateListTraceId = 0; // target82F33FF4
+    s32 PoolModule::_miFixupListTraceId = 0; // target82F33FF8
+    s32 PoolModule::_miAllocateStateTraceId = 0; // target82F33FFC
+    s32 PoolModule::_miIntellifragStateTraceId = 0; // target82F34000
     namespace
     {
         const char* const KPC_POOLMODULE_CREATE_SRC =

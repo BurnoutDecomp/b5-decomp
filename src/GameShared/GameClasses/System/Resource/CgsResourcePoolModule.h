@@ -52,6 +52,11 @@ namespace CgsResource
         friend class DebugPoolTypeList; //ARTIST828E4334..4388 reads the registered type names
 
     public:
+        // Original resource-construction monitor/trace owners; ARTIST829055B0.
+        static s32 _miAllocateListTraceId; // target82F33FF4
+        static s32 _miFixupListTraceId; // target82F33FF8
+        static s32 _miAllocateStateTraceId; // target82F33FFC
+        static s32 _miIntellifragStateTraceId; // target82F34000
         static const s32 KI_MAX_POOLS = 128;
         static const s32 KI_MAX_TYPES = 128;
         // Defrag-path capacities (DWARF CgsPoolModule.h:61-64) -- the IntelliFrag/EmergencyFrag passes

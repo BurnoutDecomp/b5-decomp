@@ -78,6 +78,30 @@ namespace CgsResource
         friend class DebugPoolTypeList; //ARTIST828EEB28..48 reads the named heap capacities
 
     public:
+        // Original resource-construction monitor/trace owners; ARTIST829055B0.
+        static s32 _miPoolDeleteHashEntryPerfMon; // target82F340B4
+        static s32 _miPoolDeleteMemoryPerfMon; // target82F340B8
+        static s32 _miPoolDeleteResourcePerfMon; // target82F340BC
+        static s32 _miPoolAllocateResourceListPerfMon; // target82F34064
+        static s32 _miPoolFixupPerfMon; // target82F34074
+        static s32 _miPoolFindByIndexPerfMon; // target82F34078
+        static s32 _miPoolFixupResourcePerfMon; // target82F3407C
+        static s32 _miPoolFindTypePerfMon; // target82F340B0
+        static s32 _miPoolDefragPerfMon; // target82F34080
+        static s32 _miPoolDefragWFInitialDeathsPerfMon; // target82F34084
+        static s32 _miPoolDefragMakeTempPerfMon; // target82F34094
+        static s32 _miPoolDefragMoveToTempPerfMon; // target82F3409C
+        static s32 _miPoolDefragResolveTempPerfMon; // target82F340A8
+        static s32 _miPoolDefragWFSourceDeathsPerfMon; // target82F34088
+        static s32 _miPoolDefragMakeDestPerfMon; // target82F34098
+        static s32 _miPoolDefragMoveToDestPerfMon; // target82F340A0
+        static s32 _miPoolDefragMoveDestRebasePerfMon; // target82F340A4
+        static s32 _miPoolDefragResolveDestPerfMon; // target82F340AC
+        static s32 _miPoolDefragWFTempDeathsPerfMon; // target82F3408C
+        static s32 _miPoolDefragWFDonePerfMon; // target82F34090
+        static s32 _miPoolAddTempTrace; // target82F340C0
+        static s32 _miResolveAllTrace; // target82F340C4
+        static s32 _miFixupTrace; // target82F340C8
         // DecFIGS h135..142; ARTIST raw82F34044..60, original Construct owns registration.
         static s32 _miPoolUpdatePerfMon;
         static s32 _miPoolModuleStatePerfMon;

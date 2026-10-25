@@ -32,27 +32,17 @@ namespace CgsFileSystem
             reinterpret_cast<unsigned char*>(const_cast<char*>(lpcPath)));
     }
 
-    // @0x828F0980 (boot trace).
+    // ARTIST828F0980..0A74: two distinct main-memory arrays, not interleaved entries.
     void PatchManager::Construct(rw::IResourceAllocator* lpAllocator)
     {
-        mpAllocator         = lpAllocator;
+        mpAllocator = lpAllocator;
         muCurrentPatchIndex = 0;
-
-        // The X360 carves the map's entry array from the allocator (a 16384-byte, 16-aligned
-        // descriptor[0] request) and binds the LinearHashTable<s32,s32> to it with length 0x1000.
-        // The length 0x1000 is the grounded immediate (Construct r6 = 0x1000); the entry storage is
-        // sized for KU_PATCH_FILE_MAP_SIZE slots.
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size =
-            KU_PATCH_FILE_MAP_SIZE * sizeof(CgsContainers::LinearHashEntry<s32, s32>);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        rw::Resource lResource = mpAllocator->DoAllocate(lDescriptor, 0);
-
-        CgsContainers::LinearHashEntry<s32, s32>* lpEntries =
-            static_cast<CgsContainers::LinearHashEntry<s32, s32>*>(lResource.m_baseResources[0]);
-        mPatchFileMap.Initialize(lpEntries, KU_PATCH_FILE_MAP_SIZE);
-
-        mbPatching     = false;
+        u32* const lpKeys = static_cast<u32*>(mpAllocator->AllocateMemoryResource(
+            KU_PATCH_FILE_MAP_SIZE * static_cast<u32>(sizeof(u32)), 16, nullptr));
+        s32* const lpValues = static_cast<s32*>(mpAllocator->AllocateMemoryResource(
+            KU_PATCH_FILE_MAP_SIZE * static_cast<u32>(sizeof(s32)), 16, nullptr));
+        mPatchFileMap.Initialize(lpKeys, lpValues, KU_PATCH_FILE_MAP_SIZE);
+        mbPatching = false;
         gpPatchManager = this;
     }
 
@@ -78,22 +68,20 @@ namespace CgsFileSystem
         return true;
     }
 
-    // @0x828F0B88. Background worker; `lpContext` is the PatchManager.
+    // ARTIST828F0B88..0C8C. The actual worker owns this main-memory scratch
+    // through the same retained allocator; its five-lane free record carries only lane0.
     intptr_t PatchManager::DirSearchThreadProc(void* lpContext)
     {
-        PatchManager* lpThis = static_cast<PatchManager*>(lpContext);
-
-        // FLAGGED: the X360 grabs a 26000-byte scratch from the allocator (vtable+16 Alloc), stores
-        // the handle into miSearchHandleCount (+0x89C), runs the walk, then frees it (vtable+20). That
-        // alloc/free pair is NOT reproduced here (the allocator interface for this manager is not yet
-        // modelled, and SearchFolder uses its own fixed stack buffers, so the overlay result is
-        // unaffected) -- left as a documented gap rather than fabricating the vtable calls. As a
-        // consequence miSearchHandleCount stays unwritten until the allocator is modelled.
+        PatchManager* const lpThis = static_cast<PatchManager*>(lpContext);
+        lpThis->mpDirectorySearchScratch = lpThis->mpAllocator->AllocateMemoryResource(
+            0x6590u, 16, nullptr);
         lpThis->SearchFolder(lpThis->maPatches[lpThis->muCurrentPatchIndex].miacFolder, "");
-
-        // Scan finished: advance to the next patch slot and clear the patching flag.
+        rw::Resource lScratchResource;
+        lScratchResource.m_baseResources[0] = lpThis->mpDirectorySearchScratch;
+        lpThis->mpAllocator->DoFree(lScratchResource);
+        const s32 liPatchIndex = lpThis->muCurrentPatchIndex;
         lpThis->mbPatching = false;
-        ++lpThis->muCurrentPatchIndex;
+        lpThis->muCurrentPatchIndex = liPatchIndex + 1;
         return 0;
     }
 
@@ -150,7 +138,7 @@ namespace CgsFileSystem
 
         const u32 luHash = HashPath(lpcFile);
 
-        s32* lpExisting = mPatchFileMap.FindEntry(static_cast<s32>(luHash));
+        s32* lpExisting = mPatchFileMap.FindEntry(luHash);
         if (lpExisting)
         {
             // The path is already claimed. The patch with the LARGER priority key wins the clash
@@ -162,7 +150,7 @@ namespace CgsFileSystem
         }
         else
         {
-            mPatchFileMap.AddEntry(static_cast<s32>(luHash), &muCurrentPatchIndex);
+            mPatchFileMap.AddEntry(luHash, &muCurrentPatchIndex);
         }
     }
 
@@ -171,7 +159,7 @@ namespace CgsFileSystem
     {
         const u32 luHash = HashPath(lpcSource);
 
-        s32* lpEntry = mPatchFileMap.FindEntry(static_cast<s32>(luHash));
+        s32* lpEntry = mPatchFileMap.FindEntry(luHash);
         if (lpEntry)
         {
             // Claimed by a patch: rewrite to "<patchFolder>/<sourcePath>".

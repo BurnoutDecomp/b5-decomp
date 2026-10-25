@@ -27,9 +27,9 @@
 
 namespace CgsFileSystem
 {
-    // A device-level error callback: receives the device error code, returns the (possibly
-    // remapped) result the failing op should report.
-    typedef int (*ErrorCallback)(int liError);
+    // The device error callback returns whether the failed operation should retry.
+    typedef bool (*FDeviceErrorCallback)(EDeviceErrors leError);
+    using ErrorCallback = FDeviceErrorCallback; // retain the existing native spelling
 
     class Device
     {
@@ -67,7 +67,7 @@ namespace CgsFileSystem
         // @0x828D65F0. If an error callback is registered, invoke it with liError and remember
         // its result; then yield the calling thread 5ms (so a hammering retry loop does not
         // starve the I/O thread) and return the callback's result (0 when none is set).
-        int CallErrorCallback(int liError);
+        bool CallErrorCallback(EDeviceErrors leError);
 
         // DeviceManager::AddPhysicalDevice installs the device's error callback (X360: *(dev+8)
         // = callback, *(dev+4) = 0).

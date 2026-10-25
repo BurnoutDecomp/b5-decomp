@@ -26,6 +26,31 @@
 
 namespace CgsFileSystem
 {
+    // Inlined ARTIST82903408..45C: one file lock covers base and concrete state.
+    void File::Construct(FileSystem* lpFileSystem, FileLog* lpLog, s32 liIndex)
+    {
+        FileFutexHelper lGuard(mFutex);
+        if (!lpLog)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpLog",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFile.cpp",
+                41);
+            CgsDev::Assert::EndAssert();
+        }
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = nullptr;
+        muSeekPosition = 0;
+        muPendingOperationCount = 0;
+        mpLog = lpLog;
+        mpFileSystem = lpFileSystem;
+        miIndex = liIndex;
+        mpHandle = nullptr;
+        muCacheId = 0xFFFFFFFFu;
+    }
+
+
     using rw::core::filesys::AsyncOp;
     using rw::core::filesys::Manager;
 

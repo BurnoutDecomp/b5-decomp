@@ -40,6 +40,30 @@ namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lp
 
 namespace CgsResource
 {
+    // Original initial monitor words are -1; trace IDs are reset to zero by Construct.
+    s32 Pool::_miPoolDeleteHashEntryPerfMon = -1; // target82F340B4
+    s32 Pool::_miPoolDeleteMemoryPerfMon = -1; // target82F340B8
+    s32 Pool::_miPoolDeleteResourcePerfMon = -1; // target82F340BC
+    s32 Pool::_miPoolAllocateResourceListPerfMon = -1; // target82F34064
+    s32 Pool::_miPoolFixupPerfMon = -1; // target82F34074
+    s32 Pool::_miPoolFindByIndexPerfMon = -1; // target82F34078
+    s32 Pool::_miPoolFixupResourcePerfMon = -1; // target82F3407C
+    s32 Pool::_miPoolFindTypePerfMon = -1; // target82F340B0
+    s32 Pool::_miPoolDefragPerfMon = -1; // target82F34080
+    s32 Pool::_miPoolDefragWFInitialDeathsPerfMon = -1; // target82F34084
+    s32 Pool::_miPoolDefragMakeTempPerfMon = -1; // target82F34094
+    s32 Pool::_miPoolDefragMoveToTempPerfMon = -1; // target82F3409C
+    s32 Pool::_miPoolDefragResolveTempPerfMon = -1; // target82F340A8
+    s32 Pool::_miPoolDefragWFSourceDeathsPerfMon = -1; // target82F34088
+    s32 Pool::_miPoolDefragMakeDestPerfMon = -1; // target82F34098
+    s32 Pool::_miPoolDefragMoveToDestPerfMon = -1; // target82F340A0
+    s32 Pool::_miPoolDefragMoveDestRebasePerfMon = -1; // target82F340A4
+    s32 Pool::_miPoolDefragResolveDestPerfMon = -1; // target82F340AC
+    s32 Pool::_miPoolDefragWFTempDeathsPerfMon = -1; // target82F3408C
+    s32 Pool::_miPoolDefragWFDonePerfMon = -1; // target82F34090
+    s32 Pool::_miPoolAddTempTrace = 0; // target82F340C0
+    s32 Pool::_miResolveAllTrace = 0; // target82F340C4
+    s32 Pool::_miFixupTrace = 0; // target82F340C8
     s32 Pool::_miPoolUpdatePerfMon = -1;
     s32 Pool::_miPoolModuleStatePerfMon = -1;
     s32 Pool::_miPoolModuleIdle = -1;
