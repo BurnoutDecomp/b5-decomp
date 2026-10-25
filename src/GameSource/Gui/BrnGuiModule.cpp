@@ -181,7 +181,14 @@ namespace
     // flow slot: each flow's ScriptedFsm holds its LuaCode resource while live.
     const u32 KU_FSM_POOL_BYTES = 256u * 1024u;
     u8 s_fsmPoolBacking[BrnGui::E_GUIFLOW_COUNT][CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
-    u8 s_fsmLuaHeapBuffer[512u * 1024u];
+    // FLAG PC-platform leaf: ARTIST allocator 38 ("Gui_FSM_Lang_Alloc") has
+    // 0x80000 bytes for 32-bit Lua. Native Lua tables, closures and allocator
+    // links contain host pointers. Scale this PC backing with pointer width so
+    // the three VMs retain their working space while another flow compiles.
+    // Keeping the console byte budget on x64 exhausts it after GUI input
+    // traffic, so the next HUD script never defines GetCurrentState.
+    const u32 KU_FSM_LUA_HEAP_BYTES = 0x80000u * sizeof(void*) / sizeof(u32);
+    u8 s_fsmLuaHeapBuffer[KU_FSM_LUA_HEAP_BYTES];
 
     // Backing for the HUD flow's 14-state pool (BrnHudFlow::Prepare carves the state
     // objects out of this linear region; BootLegal is the largest at a few KB).
