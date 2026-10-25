@@ -4,8 +4,8 @@
   "base_head": "bef9346f9dc61f2ae1770bf3c9dbdc89fe4f15a7",
   "files": {
     "config.ini.example": {
-      "expected_lf_sha256": "a0219b42ce08d907b263d75d0bafb92345ca5d5ea7dcc02bd98f7b38d72f6886",
-      "expected_lf_bytes": 7416
+      "expected_lf_sha256": "457e70a2d0448a9573b4a98ba7ce79e1715364469f61e0b246543f17cafa55e7",
+      "expected_lf_bytes": 7729
     },
     "src/GameShared/GameClasses/Core/CgsAssert.h": {
       "expected_lf_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
@@ -48,8 +48,8 @@
       "expected_lf_bytes": 2422
     },
     "src/GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp": {
-      "expected_lf_sha256": "72b76aada372ed4b1f0ef2bce5b39a4807e8e18f70593f571d71cd69ee2a2b05",
-      "expected_lf_bytes": 39963
+      "expected_lf_sha256": "a5056f8e87b425d667c2dc28a2d5564632e26dc795c758994534e88ebb45f656",
+      "expected_lf_bytes": 40331
     },
     "src/GameShared/GameClasses/System/X360/CgsXOverlappedX360.cpp": {
       "expected_lf_sha256": "7f08804d3aa8bf82c1d35b8ecb5662c22cc32a01901c3e11a27d24f439c16757",
