@@ -185,6 +185,18 @@ struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
         return lResource.m_baseResources[0];
     }
 
+    // Inlined in ARTIST8266A904..A934; DecFIGS resourceallocator.h:188.
+    // Return the original lane-zero MemoryResource through the same allocator.
+    // DoFree remains virtual; this helper changes no concrete allocator policy.
+    void FreeMemoryResource(void* lpMemoryResource)
+    {
+        Resource lResource;
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+            lResource.m_baseResources[luLane] = 0;
+        lResource.m_baseResources[0] = lpMemoryResource;
+        DoFree(lResource);
+    }
+
     virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
                                       const char* lpcName);
     virtual void DoFree(const ::rw::Resource& /*lrResource*/) {}

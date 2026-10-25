@@ -129,6 +129,19 @@ public:
     IndexType GetPoolSize() { return msCapacity; }
     IndexType GetNumFree()  { return msNumFree; }
     IndexType GetNumUsed()  { return msNumAllocated; }
+    // Inlined in ARTIST82674714..4754; DecFIGS CgsIndexedPool.h:374.
+    // A debug query scans only the current free list; it adds no range assertion.
+    bool DebugIsIndexFree(IndexType lsIndex)
+    {
+        const IndexType lsNumFree = msNumFree;
+        for (IndexType lsFree = 0; lsFree < lsNumFree; ++lsFree)
+        {
+            if (mpFreeIndices[lsFree] == lsIndex)
+                return true;
+        }
+        return false;
+    }
+
 
     // Get @ 0x828DFD38 (CgsResource::ResourceModule::ProcessPendingFileSystemResponses, char-pool):
     // gather pointers to every CURRENTLY-ALLOCATED element into the caller's buffer and return how

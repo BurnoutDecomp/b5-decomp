@@ -86,6 +86,7 @@ namespace GameDataIO
         // ARTIST8266AE68, called by actual GameData factory823AC540.
         // Original base/queue construction, repeated Clear order and debug pointer.
         void Construct();
+        void Clear(); // actual consumed payload only; ARTIST8267498C..49AC
 
         // DWARF h:63/h:69 -- the request-interface queue sizes (both 32768 entries). Declared as the
         // committed in-class constants the template instantiation uses.
@@ -177,6 +178,7 @@ namespace GameDataIO
         // ARTIST82666908 / DecFIGS h:147. Original stack-factory construction:
         // IO base, filesystem status, allocator pointer. Does not clear live byte.
         void Construct();
+        void Clear(); // original status/pointer clear preserves live byte and IO lock
 
         // FLAG PC-platform leaf: explicit name for the retained native two-store
         // initializer, called under an existing write lock at the two current PC
