@@ -247,6 +247,25 @@ namespace BrnResource
     }
 
 
+    // ARTIST82662DA0..2E14; DecFIGS BrnDLCManager.h:70.
+    bool DLCManager::Release()
+    {
+        const u32 luStage = static_cast<u32>(meReleaseStage);
+        if (luStage > static_cast<u32>(E_RELEASE_DONE))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid stage",
+                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 642);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+
+        if (luStage == static_cast<u32>(E_RELEASE_START))
+            meReleaseStage = E_RELEASE_START;
+        meReleaseStage = E_RELEASE_DONE;
+        return true;
+    }
+
     // Never called -- pins the asm-attested member offsets of DLCFeatureAvailability.
     void DLCFeatureAvailability::_AssertLayout()
     {

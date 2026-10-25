@@ -2623,8 +2623,80 @@ namespace BrnResource
         mDLCManager.Construct();
         mDLCDebugComponent.Construct();
     }
-    bool GameDataModule::Release() { return true; }
-    void GameDataModule::Destruct() {}
+    // ARTIST82664380..4504. Phase4/5/6 have only the stores below in this
+    // build; the PS3 DestroyAllocators/Pools/Banks calls are not X360 behavior.
+    bool GameDataModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASESTAGE_START:
+        case E_RELEASESTAGE_DLC:
+            meReleaseStage = E_RELEASESTAGE_DLC;
+            if (!mDLCManager.Release())
+                return false;
+            [[fallthrough]];
+        case E_RELEASESTAGE_GAMETALK:
+            meReleaseStage = E_RELEASESTAGE_GAMETALK;
+            if (!mGameTalk.Release())
+                return false;
+            [[fallthrough]];
+        case E_RELEASESTAGE_ATTRIBSYS:
+            meReleaseStage = E_RELEASESTAGE_ATTRIBSYS;
+            if (!mAttribSysModule.Release())
+                return false;
+            [[fallthrough]];
+        case E_RELEASESTAGE_DESTROYALLOCATORS:
+            meReleaseStage = E_RELEASESTAGE_DESTROYALLOCATORS;
+            [[fallthrough]];
+        case E_RELEASESTAGE_DESTROYPOOLS:
+            meReleaseStage = E_RELEASESTAGE_DESTROYPOOLS;
+            [[fallthrough]];
+        case E_RELEASESTAGE_DESTROYBANKS:
+            meReleaseStage = E_RELEASESTAGE_DESTROYBANKS;
+            [[fallthrough]];
+        case E_RELEASESTAGE_RESOURCEMODULE:
+            meReleaseStage = E_RELEASESTAGE_RESOURCEMODULE;
+            if (!mResourceModule.Release())
+                return false;
+            mReceiverQueue.Clear();
+            [[fallthrough]];
+        case E_RELEASESTAGE_MANAGER:
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Release())
+                return false;
+            [[fallthrough]];
+        case E_RELEASESTAGE_DONE:
+            // ARTIST826644BC stores8 here, including when entered at DONE9.
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            mbIsNewModule = false;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n",
+                "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1682);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
+    // ARTIST82664508..4590. The original order intentionally does not add
+    // DLC/GameTalk/LiveUpdate/ICE teardown calls absent from this function.
+    void GameDataModule::Destruct()
+    {
+        mAttribSysModule.Destruct();
+        mVehicleList.Destruct();
+        mWheelList.Destruct();
+        mResourceModule.Destruct();
+        mReceiverQueue.Clear();
+        mChallengeList.Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
+
+
+    // Existing selected native policy retained byte-for-byte in the method bodies.
+    // Native callers below must not select the original teardown before its outer exists.
+    bool GameDataModule::ReleaseNativePC() { return true; }
+    void GameDataModule::DestructNativePC() {}
 
     // ====================================================================================
     // The world-request service path (THIS BATCH): the Update request pump + the GameData
