@@ -49,7 +49,7 @@ typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 //   flt_82CDBD90 == 2.1 : the Update handback threshold. HandleDriveThru arms at 3.0,
 //                          then Update fires KI_ACTION_STOPPED_DRIVE_THRU/SetPlayerCarDriver
 //                          when the countdown crosses 2.1.
-//   flt_82CDBD94 == 5625.0 : KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ (75m squared XZ discovery radius).
+//   flt_82CDBD94 == 5625.0 : KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ (75m squared discovery radius).
 //   flt_82FADEC8 == 2.1 - 1.0 : the "just-armed min-time" comparison bound (.bss, set by the
 //                          TU's static initialiser -- see KF_DRIVE_THRU_JUST_ARMED_BOUND below).
 //   flt_82F31928 == 0.4470399916 : exit-speed scale applied to KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[i].
@@ -910,17 +910,22 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
             }
         }
 
+        // ARTIST 8239F144..8239F15C tests r17 (the freeburn argument),
+        // not r19 (online). Both offline and online freeburn discover services.
+        // Car parks still require entry.
         // Proximity discovery (only when not in a junkyard and the player car is active).
-        if (!lbIsInJunkyard && lbIsOnline && leType != 4)
+        if (!lbIsInJunkyard && lbIsFreeburn && leType != 4)
         {
             if (lpRcOutputInterface->IsPlayerCarActive())
             {
                 const Vector3 lPlayerPos = lpRcOutputInterface->GetPlayerPosition();
                 const Vector3 lDelta = rw::math::vpu::operator-(lrEntry.mPosition, lPlayerPos);
-                const f32 lfSeparationXZSq = (lDelta.x * lDelta.x) + (lDelta.z * lDelta.z);
+                // vmsum3fp128 at 8239F1C0 includes the vertical component.
+                const f32 lfSeparationSq = (lDelta.x * lDelta.x) +
+                    (lDelta.y * lDelta.y) + (lDelta.z * lDelta.z);
                 const f32 lfSeparationY    = (lDelta.y < 0.0f) ? -lDelta.y : lDelta.y;
 
-                if (lfSeparationXZSq < KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ &&
+                if (lfSeparationSq < KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ &&
                     lfSeparationY < KF_DRIVE_THRU_DISCOVERY_MAX_Y)
                 {
                     const BrnTrigger::GenericRegion::Type leRegionType =
