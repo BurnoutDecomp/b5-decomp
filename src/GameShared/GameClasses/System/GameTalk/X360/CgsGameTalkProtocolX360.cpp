@@ -1,3 +1,18 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <WinSock2.h>
+#ifdef SendMessage
+#undef SendMessage
+#endif
+#ifdef DrawText
+#undef DrawText
+#endif
+#include <type_traits>
+
 #include "GameShared/GameClasses/System/GameTalk/X360/CgsGameTalkProtocolX360.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -28,30 +43,18 @@
 // =====================================================================================
 
 // -------------------------------------------------------------------------------------
-// Platform socket / XNet surface. These are Xbox-360 Winsock + XNet externals (declared
-// here so the per-TU compile resolves them); the asm calls them directly. Signatures /
-// constants taken from the asm dereferences + immediate operands.
+// Native Winsock declarations come from the real Windows SDK above.
+// FLAG PC-platform leaf: WSADATA, fd_set, sockaddr_in and SOCKET retain the
+// host API's real storage/alignment/handle width. Engine state and callbacks
+// remain the ARTIST transport; unavailable XNet startup remains external.
 // -------------------------------------------------------------------------------------
+static_assert(std::is_same<CgsGameTalk::SOCKET, ::SOCKET>::value,
+              "GameTalk socket storage must match native WinSock SOCKET");
 extern "C"
 {
-    int  socket(int liAddressFamily, int liType, int liProtocol);
-    int  bind(CgsGameTalk::SOCKET lSocket, const void* lpAddress, int liAddressLen);
-    int  listen(CgsGameTalk::SOCKET lSocket, int liBacklog);
-    CgsGameTalk::SOCKET accept(CgsGameTalk::SOCKET lSocket, void* lpAddress, int* lpiAddressLen);
-    int  closesocket(CgsGameTalk::SOCKET lSocket);
-    int  recv(CgsGameTalk::SOCKET lSocket, void* lpBuffer, int liLength, int liFlags);
-    int  send(CgsGameTalk::SOCKET lSocket, const void* lpBuffer, int liLength, int liFlags);
-    int  setsockopt(CgsGameTalk::SOCKET lSocket, int liLevel, int liOptName,
-                    const void* lpOptVal, int liOptLen);
-    int  ioctlsocket(CgsGameTalk::SOCKET lSocket, long liCommand, unsigned long* lpuArg);
-    int  select(int liNfds, void* lpReadFds, void* lpWriteFds, void* lpExceptFds,
-                const void* lpTimeout);
-
-    int  WSAStartup(unsigned short luVersionRequested, void* lpWSAData);
-    int  WSAGetLastError();
-
-    int  XNetStartup(const void* lpParams);
-    void XMemCpy(void* lpDest, const void* lpSrc, unsigned int luSize);
+    int XNetStartup(const void* lpParams);
+    // Existing mounted XenonD3D9Shims.cpp provider: exact memcpy implementation.
+    void* XMemCpy(void* lpDest, const void* lpSrc, u32 luSize);
 }
 
 namespace
@@ -65,7 +68,7 @@ namespace
     const int    KI_LISTEN_BACKLOG     = 1;            // listen(s,1)
     const int    KI_SOCKADDR_LEN       = 16;           // accept/bind addr length
     const int    KI_RECV_BUFFER_SIZE   = 4096;         // recv(...,4096,0)
-    const CgsGameTalk::SOCKET KI_INVALID_SOCKET = -1;  // socket()/accept() failure (asm -1)
+    const CgsGameTalk::SOCKET KI_INVALID_SOCKET = INVALID_SOCKET;  // socket()/accept() failure (asm -1)
 
     // WSA error codes the asm tests (cmpwi 0x2746 / 0x2749).
     const int    KI_WSAECONNRESET      = 10054;        // 0x2746
@@ -124,7 +127,8 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
     mrInactivityTimeout = KF_DEFAULT_INACTIVITY_TIMEOUT; // stfs 10.0f,0x4010(this)
 
     // XNetStartup parameters: { sizeofStruct=0x0D, cfgFlags=1, 0, 0, 0 }.
-    unsigned char laXNetParams[2] = { KU_XNET_CFG_SIZEOFSTRUCT, 1 };
+    // ARTIST82836EE4..6F00 clears all thirteen bytes before the size/flag stores.
+    unsigned char laXNetParams[13] = { KU_XNET_CFG_SIZEOFSTRUCT, 1 };
     int liXNetError = XNetStartup(laXNetParams);
     if (liXNetError)
     {
@@ -132,19 +136,19 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
         CGS_ASSERT(liXNetError == 0, "XNetStartup failed");
     }
 
-    short lsWinsockData[1];
-    int liWsaError = WSAStartup(KU_WINSOCK_VERSION, lsWinsockData);
+    WSADATA lWinsockData;
+    int liWsaError = WSAStartup(KU_WINSOCK_VERSION, &lWinsockData);
     if (liWsaError)
     {
         gDebugStream << "WSAStartup failed (error " << liWsaError << ").\n";
         CGS_ASSERT(liWsaError == 0, "WSAStartup failed");
     }
 
-    if (lsWinsockData[0] != static_cast<short>(KU_WINSOCK_VERSION))
+    if (lWinsockData.wVersion != static_cast<short>(KU_WINSOCK_VERSION))
     {
         gDebugStream << "Failed to get proper version of Winsock, got "
-                     << (lsWinsockData[0] & 0xFF) << "." << ((lsWinsockData[0] >> 8) & 0xFF) << "\n";
-        CGS_ASSERT(lsWinsockData[0] == static_cast<short>(KU_WINSOCK_VERSION),
+                     << (lWinsockData.wVersion & 0xFF) << "." << ((lWinsockData.wVersion >> 8) & 0xFF) << "\n";
+        CGS_ASSERT(lWinsockData.wVersion == static_cast<short>(KU_WINSOCK_VERSION),
                    "Wrong Winsock version");
     }
 
@@ -169,18 +173,13 @@ void GameTalkProtocol::SetListeningMode(s32 liPort)
     sInactivityTimer.Reset();
     sInactivityTimer.SetRunning(false);   // asm 0x82837300: disarm the inactivity timer (mbRunning=0)
 
-    // sockaddr_in laid out on the stack: { family=2, port=liPort, addr=0 }.
-    struct
-    {
-        short          siFamily;
-        unsigned short suPort;
-        int            liAddress;
-        long long      llZero;
-    } lAddress;
-    lAddress.siFamily  = KI_AF_INET;
-    lAddress.suPort    = static_cast<unsigned short>(liPort);
-    lAddress.liAddress = 0;
-    lAddress.llZero    = 0;
+    // FLAG PC-platform leaf: the original big-endian halfword port store
+    // already produced network order; native little-endian Winsock needs htons.
+    const u16 luListenPort = static_cast<u16>(liPort);
+    sockaddr_in lAddress = {};
+    lAddress.sin_family = KI_AF_INET;
+    lAddress.sin_port = htons(luListenPort);
+    lAddress.sin_addr.s_addr = INADDR_ANY;
 
     mListeningSocket = socket(KI_AF_INET, KI_SOCK_STREAM, 0);
     if (mListeningSocket == KI_INVALID_SOCKET)
@@ -189,20 +188,23 @@ void GameTalkProtocol::SetListeningMode(s32 liPort)
         CGS_ASSERT(false, "Failed to create listening socket");
     }
 
-    int liReuse = 1;
-    if (setsockopt(mListeningSocket, KI_SOL_SOCKET, KI_SO_REUSEADDR, &liReuse, 1))
+    // FLAG PC-platform leaf: the same true option is a native BOOL value.
+    const BOOL lbReuse = TRUE;
+    if (setsockopt(mListeningSocket, KI_SOL_SOCKET, KI_SO_REUSEADDR,
+                   reinterpret_cast<const char*>(&lbReuse), sizeof(lbReuse)))
     {
         gDebugStream << "Failed to reuse listening socket address (error " << WSAGetLastError() << ").\n";
         CGS_ASSERT(false, "Failed to reuse listening socket address");
     }
 
-    if (bind(mListeningSocket, &lAddress, KI_SOCKADDR_LEN) == KI_INVALID_SOCKET)
+    if (bind(mListeningSocket, reinterpret_cast<const sockaddr*>(&lAddress),
+             static_cast<int>(sizeof(lAddress))) == SOCKET_ERROR)
     {
         gDebugStream << "Failed to bind listening socket (error " << WSAGetLastError() << ").\n";
         CGS_ASSERT(false, "Failed to bind listening socket");
     }
 
-    if (listen(mListeningSocket, KI_LISTEN_BACKLOG) == KI_INVALID_SOCKET)
+    if (listen(mListeningSocket, KI_LISTEN_BACKLOG) == SOCKET_ERROR)
     {
         gDebugStream << "Listening to client failed.\n";
         CGS_ASSERT(false, "Listening to client failed");
@@ -216,7 +218,7 @@ void GameTalkProtocol::SetListeningMode(s32 liPort)
     }
 
     meConnectionState = E_CONNECTIONSTATE_OBTAINING_IP; // stw 0,0x4014(this)
-    gDebugStream << "Listening on port " << lAddress.suPort << "\n";
+    gDebugStream << "Listening on port " << luListenPort << "\n";
 }
 
 // -------------------------------------------------------------------------------------
@@ -228,9 +230,9 @@ bool GameTalkProtocol::AcceptIncomingConnection()
     if (meConnectionState != E_CONNECTIONSTATE_OBTAINING_IP)
         return false;
 
-    char lacAddress[16];
-    int liAddressLen = KI_SOCKADDR_LEN;
-    mClientSocket = accept(mListeningSocket, lacAddress, &liAddressLen);
+    sockaddr_in lAddress;
+    int liAddressLen = static_cast<int>(sizeof(lAddress));
+    mClientSocket = accept(mListeningSocket, reinterpret_cast<sockaddr*>(&lAddress), &liAddressLen);
 
     if (mClientSocket != KI_INVALID_SOCKET)
     {
@@ -301,7 +303,7 @@ bool GameTalkProtocol::Send(void* lpaBuffer, s32 liMsgSize)
     for (;;)
     {
         int liSent = send(mClientSocket, lpcBuffer, liMsgSize, 0);
-        if (liSent == KI_INVALID_SOCKET)
+        if (liSent == SOCKET_ERROR)
             break;
 
         liMsgSize  -= liSent;
@@ -310,10 +312,10 @@ bool GameTalkProtocol::Send(void* lpaBuffer, s32 liMsgSize)
             return true; // fully sent.
 
         // Block until the socket is writable again.
-        int laSocketDescriptors[2];
-        laSocketDescriptors[0] = 1;
-        laSocketDescriptors[1] = mClientSocket;
-        if (!select(0, 0, laSocketDescriptors, 0, 0))
+        fd_set lSocketDescriptors;
+        lSocketDescriptors.fd_count = 1;
+        lSocketDescriptors.fd_array[0] = mClientSocket;
+        if (!select(0, 0, &lSocketDescriptors, 0, 0))
         {
             CGS_ASSERT(false, "select(0, NULL, &lSocketDescriptors, NULL, NULL)");
         }

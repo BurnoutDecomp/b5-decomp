@@ -302,12 +302,13 @@ namespace CgsFileSystem
         return 0;
     }
 
-    // CloseDirectory @0x828FA8B0. FindClose the find handle (the X360 calls CloseHandle on it,
-    // treating an INVALID handle as already closed) and return the slot to the pool.
+    // CloseDirectory @0x828FA8B0. Retire the actual find handle then return the slot.
+    // FLAG PC-platform leaf: native FindFirstFileA handles require FindClose; the
+    // XDK original uses CloseHandle for its corresponding search handle.
     int PhysicalX360Device::CloseDirectory(Handle::DeviceHandle lpHandle)
     {
         FileHandleRecord& lRecord = *static_cast<FileHandleRecord*>(lpHandle);
-        if (lRecord.mpHandle == INVALID_HANDLE_VALUE || CloseHandle(lRecord.mpHandle))
+        if (lRecord.mpHandle == INVALID_HANDLE_VALUE || FindClose(lRecord.mpHandle))
         {
             const s8 lsIndex = mHandlePool.GetObjectIndex(&lRecord);
             mHandlePool.PushIndex(lsIndex);
