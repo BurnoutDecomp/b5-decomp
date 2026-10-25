@@ -71,7 +71,7 @@ namespace CgsInput::AdaptiveTriggers
         std::uint64_t muBoostAward = 0;
         Character meCharacter = Character::Speed;
         int miGear = 0;
-        unsigned muGroundedWheels = 0;
+        unsigned muGroundedWheels = 0, muGroundedDrivenWheels = 0;
         float mfGas = 0, mfBrake = 0, mfHandBrake = 0;
         float mfSpeedMPH = 0, mfRPM = 0, mfUpShiftRPM = 0;
         float mfDrivenSlip = 0, mfBrakeSkid = 0, mfDrift = 0;
@@ -166,6 +166,7 @@ namespace CgsInput::AdaptiveTriggers
             lSample.mfAirTime = (std::max)(0.0f, Finite(lSample.mfAirTime));
             lSample.mfVerticalSpeed = std::clamp(Finite(lSample.mfVerticalSpeed), -1000.0f, 1000.0f);
             lSample.muGroundedWheels = (std::min)(lSample.muGroundedWheels, 4u);
+            lSample.muGroundedDrivenWheels = (std::min)(lSample.muGroundedDrivenWheels, lSample.muGroundedWheels);
             if (!lSample.mbActive || lSample.mbReset)
             {
                 Reset();
@@ -178,10 +179,16 @@ namespace CgsInput::AdaptiveTriggers
             if (mbValid)
             {
                 const float lfStep = static_cast<float>(luNow - muLastSample) * 0.001f;
-                mfSlip += (lSample.mfDrivenSlip - mfSlip) * (1.0f - std::exp(-lfStep * 15.0f));
-                const bool lbSpinning = lSample.muGroundedWheels && lSample.mfGas > 0.1f &&
+                if (!lSample.muGroundedDrivenWheels)
+                {
+                    mfSlip = 0;
+                    mbSpinning = false; // Lost contact is not recovered grip.
+                }
+                else if (!mSample.muGroundedDrivenWheels) mfSlip = lSample.mfDrivenSlip;
+                else mfSlip += (lSample.mfDrivenSlip - mfSlip) * (1.0f - std::exp(-lfStep * 15.0f));
+                const bool lbSpinning = lSample.muGroundedDrivenWheels && lSample.mfGas > 0.1f &&
                     mfSlip > (mbSpinning ? 0.12f : 0.25f);
-                if (mbSpinning && !lbSpinning && lSample.muGroundedWheels && lSample.mbDriving && mSample.mbDriving)
+                if (mbSpinning && !lbSpinning && lSample.muGroundedDrivenWheels && lSample.mbDriving && mSample.mbDriving)
                     Start(Cue::GripRecovery, luNow, 110, 40, 0.25f, lSample.mbReverse ? 1 : 2);
                 mbSpinning = lbSpinning;
                 if (lSample.mbDriving != mSample.mbDriving)
@@ -196,13 +203,13 @@ namespace CgsInput::AdaptiveTriggers
                             mSample.miGear > 0 && lSample.mfGas > 0.1f)
                             Start(Cue::Shift, luNow, 130, 35, 0.35f, lSample.mbReverse ? 1 : 2);
                         if (lSample.mfGas > 0.65f && mSample.mfGas < 0.3f &&
-                            std::fabs(lSample.mfSpeedMPH) < 15.0f && lSample.muGroundedWheels)
+                            std::fabs(lSample.mfSpeedMPH) < 15.0f && lSample.muGroundedDrivenWheels)
                             Start(Cue::Launch, luNow, 220, 40, 0.45f, lSample.mbReverse ? 1 : 2);
                         if (lSample.mbBoosting != mSample.mbBoosting)
                             Start(lSample.mbBoosting ? Cue::BoostStart : Cue::BoostEnd,
                                 luNow, lSample.mbBoosting ? 180 : 120, 45,
                                 lSample.mbBoosting ? 0.55f : 0.25f, lSample.mbReverse ? 1 : 2);
-                        if (lSample.mbDrifting && !mSample.mbDrifting)
+                        if (lSample.muGroundedWheels && lSample.mbDrifting && !mSample.mbDrifting)
                             Start(Cue::DriftStart, luNow, 140, 55, 0.4f, 3);
                     }
                     if (!lSample.muGroundedWheels && mSample.muGroundedWheels)
@@ -237,9 +244,15 @@ namespace CgsInput::AdaptiveTriggers
             {
                 // First frame after a lifecycle reset establishes state; it must
                 // not replay an old collision, shift, reward or boost-start.
-                mfSlip = lSample.mfDrivenSlip;
-                mbSpinning = lSample.muGroundedWheels && lSample.mfGas > 0.1f && mfSlip > 0.25f;
+                mfSlip = lSample.muGroundedDrivenWheels ? lSample.mfDrivenSlip : 0;
+                mbSpinning = lSample.muGroundedDrivenWheels && lSample.mfGas > 0.1f && mfSlip > 0.25f;
             }
+            if (!lSample.muGroundedDrivenWheels)
+            {
+                maPulses[static_cast<unsigned>(Cue::Launch)] = {};
+                maPulses[static_cast<unsigned>(Cue::GripRecovery)] = {};
+            }
+            if (!lSample.muGroundedWheels) maPulses[static_cast<unsigned>(Cue::DriftStart)] = {};
             mSample = lSample;
             muLastSample = luNow;
             mbValid = true;
@@ -275,7 +288,7 @@ namespace CgsInput::AdaptiveTriggers
                 if (lbTexture && mSample.muGroundedWheels && mSample.mbDrifting)
                     Apply(lDrive, Make(Cue::Drift, 55, 0.16f + 0.25f * mSample.mfDrift,
                         23 + 12 * mSample.mfDrift + Irregular(luNow, 0), 1));
-                if (lbTexture && mbSpinning && mSample.muGroundedWheels)
+                if (lbTexture && mbSpinning && mSample.muGroundedDrivenWheels)
                     Apply(lDrive, Make(Cue::Wheelspin, 60, 0.2f + 0.35f * mfSlip,
                         32 + 22 * mfSlip + Irregular(luNow, 17), 1));
                 if (lbTexture && mSample.mbLimiter && mSample.mfGas > 0.1f)
@@ -393,7 +406,7 @@ namespace CgsInput::AdaptiveTriggers
             const float lfScale = mSettings.GetScale() *
                 (lbTexture ? mSettings.mfTexture : mSettings.mfResistance);
             const float lfForce = Unit(lfStrength * lfScale);
-            if (lfForce <= 0.0f) return lEffect;
+            if (lfForce <= 0.0f) return {};
             lEffect.meMode = lbTexture ? Mode::Vibration : Mode::Feedback;
             lEffect.muFrequency = lbTexture ? static_cast<std::uint8_t>(std::clamp(Finite(lfFrequency), 1.0f, 120.0f)) : 0;
             bool lbAny = false;

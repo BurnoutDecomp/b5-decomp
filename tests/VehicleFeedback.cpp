@@ -61,6 +61,11 @@ int main()
         "actual front-wheel power selection includes front slip");
     Check(AT::ProjectVehicle(lCar, lBoost, false, 0).mfDrivenSlip == 0,
         "unknown or frozen drive distribution cannot invent a driven axle");
+    lCar.maWheels[2].mRoadContact.mbIsOnGround = lCar.maWheels[3].mRoadContact.mbIsOnGround = false;
+    lSample = AT::ProjectVehicle(lCar, lBoost, false, 0xc);
+    Check(lSample.muGroundedWheels == 2 && lSample.muGroundedDrivenWheels == 0,
+        "grounded unpowered front axle does not imply powered-wheel contact");
+    lCar.maWheels[2].mRoadContact.mbIsOnGround = lCar.maWheels[3].mRoadContact.mbIsOnGround = true;
     lCar.maWheels[2].mfWheelLongSpeed = lCar.maWheels[3].mfWheelLongSpeed = 15;
     lCar.maWheels[0].mRoadContact.mbLineTestIsValid = false;
     lCar.maWheels[1].mRoadContact.mbIsOnGround = false;

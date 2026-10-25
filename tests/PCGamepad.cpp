@@ -108,6 +108,7 @@ static void Check(bool lbPass, const char* lpcName)
 struct Motors
 {
     Uint16 muLeft = 0, muRight = 0;
+    Uint8 muWireLeft = 0, muWireRight = 0;
     unsigned muCalls = 0;
     unsigned muEffects = 0;
     bool mbRejectEffect = false;
@@ -119,6 +120,12 @@ static bool SDLCALL SendEffect(void* lpData, const void* lpBytes, int liSize)
     ++lrMotors.muEffects;
     if (liSize != static_cast<int>(lrMotors.mPacket.size())) return false;
     std::memcpy(lrMotors.mPacket.data(), lpBytes, lrMotors.mPacket.size());
+    // Model the pinned PS5 driver's wire mode: without its emulation bits a
+    // raw effect report selects audio haptics, even if the SDL API cache is set.
+    const bool lbEmulated = (lrMotors.mPacket[0] & 2) &&
+        ((lrMotors.mPacket[0] & 1) || (lrMotors.mPacket[38] & 4));
+    lrMotors.muWireLeft = lbEmulated ? lrMotors.mPacket[3] : 0;
+    lrMotors.muWireRight = lbEmulated ? lrMotors.mPacket[2] : 0;
     return !lrMotors.mbRejectEffect;
 }
 static bool SDLCALL Rumble(void* lpData, Uint16 luLeft, Uint16 luRight)
@@ -126,6 +133,8 @@ static bool SDLCALL Rumble(void* lpData, Uint16 luLeft, Uint16 luRight)
     auto& lrMotors = *static_cast<Motors*>(lpData);
     lrMotors.muLeft = luLeft;
     lrMotors.muRight = luRight;
+    lrMotors.muWireLeft = static_cast<Uint8>(luLeft >> 8);
+    lrMotors.muWireRight = static_cast<Uint8>(luRight >> 8);
     ++lrMotors.muCalls;
     return true;
 }
@@ -185,10 +194,20 @@ static void TestAdaptiveTriggers()
     Check(lMotors.muEffects - luBefore <= 5, "changing state sends at most 50 packets per second");
     Check(SetRumble(12345, 54321) == 0 && lMotors.muLeft == 12345 && lMotors.muRight == 54321,
         "ordinary rumble coexists with adaptive output");
-    Check(lMotors.mPacket[0] == 0x0c && lMotors.mPacket[1] == 0 && lMotors.mPacket[2] == 0 && lMotors.mPacket[3] == 0,
-        "adaptive packet never enables motor/audio/LED controls");
+    guNowMs += 20; lSample.mfRPM = 4500; PublishFeedback(lSample); Read(lState);
+    Check(lMotors.muWireLeft == 48 && lMotors.muWireRight == 212 && lMotors.mPacket[0] == 0x0e && lMotors.mPacket[38] == 4,
+        "subsequent trigger write preserves the active emulated-rumble mode and both motor values");
+    Check(lMotors.mPacket[1] == 0 && lMotors.mPacket[4] == 0 && lMotors.mPacket[44] == 0,
+        "rumble-preserving trigger packet leaves speaker and LED controls disabled");
     SetFeedbackAllowed(false);
     Check(lMotors.mPacket[10] == 5 && lMotors.mPacket[21] == 5, "pause/preference gate clears immediately without rate delay");
+    Check(lMotors.muWireLeft == 48 && lMotors.muWireRight == 212,
+        "neutral trigger clearing preserves ordinary rumble");
+    const auto luCleared = lMotors.muEffects;
+    for (unsigned i = 0; i < 50; ++i) Read(lState);
+    Check(lMotors.muEffects == luCleared, "rumble bytes do not defeat neutral-trigger deduplication");
+    SetRumble(0, 0);
+    Check(!lMotors.muWireLeft && !lMotors.muWireRight, "ordinary rumble stop remains authoritative");
     guNowMs += 20; PublishFeedback(lSample); Read(lState);
     SetFeedbackAllowed(true); Read(lState);
     Check(lMotors.mPacket[10] == 5, "permission return does not replay suppressed snapshot");
