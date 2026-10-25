@@ -63,6 +63,57 @@ handbrake rear-only branch; a grounded-wheel flag is not a drive-selection flag.
 Photo mode uses the director's actual GetInPictureParadise() signal copied in the
 post-world step, independently of the recovered rumble manager's pending transfer.
 
+## INI tuning
+
+Edit **config.ini beside Burnout_PC.exe**, section **[AdaptiveTriggers]**, then
+restart the game. The complete commented section in [config.ini.example](../config.ini.example)
+contains every applicable control with its default. Missing keys preserve the
+original Immersive tuning; names and presets are case-insensitive.
+
+| Key | Range and behavior |
+| --- | --- |
+| Enabled | 0 disables all adaptive output; 1 enables it (default) |
+| Preset | Off, Light, Standard, Immersive (default) |
+| Resistance / Texture | 0..100 percent; smooth pedal resistance and texture/pulse strength independently |
+| LeftStrength / RightStrength | 0..100 percent on physical L2/R2, regardless of forward/reverse pedal role |
+| ArcadeCues / Diagnostics | 0 or 1; reward cues default on, bounded diagnostic logs default off |
+| `<Effect>Strength` | 0..200 percent of that effect's normal strength; default 100; 0 disables it |
+| `<Effect>Frequency` | 25..200 percent of the effect's normal vibration frequency; default 100, final output capped at 120 Hz |
+| `<Effect>Duration` | 0..200 percent of a transient's normal duration; default 100; 0 skips it |
+| `<Effect>StartPosition` | -1 preserves its normal engagement zone (default); 0..9 selects the first active travel zone |
+
+Effect names are Pedal, Engine, Launch, Shift, Limiter, Wheelspin, GripRecovery,
+BoostStart, Boost, BoostEnd, Chain, Brake, BrakeSkid, DriftStart, Drift, Surface,
+Takeoff, Airborne, Landing, Scrape, Impact, Wreck, Reverse, Showtime, Bounce,
+BoostedBounce and Reward. These prefixes have no spaces or hyphens.
+
+Duration applies to Launch, Shift, GripRecovery, BoostStart, BoostEnd, Chain,
+DriftStart, Takeoff, Landing, Impact, Wreck, Bounce, BoostedBounce and Reward.
+Continuous effects follow current vehicle state. Frequency only affects vibration;
+Pedal, Brake and Showtime provide smooth resistance. Takeoff releases both
+triggers, so its Strength only enables/disables that unloading transition and its
+Frequency/StartPosition have no effect. A disabled higher-priority effect allows
+current lower-priority feedback to continue; disabling Shift also skips its initial
+unloading phase. Grounded/airborne behavior and lifecycle clearing still apply.
+
+For example:
+
+```ini
+[AdaptiveTriggers]
+Enabled=1
+EngineStrength=60
+EngineFrequency=80
+ShiftDuration=150
+BrakeStartPosition=4
+ScrapeStrength=0
+```
+
+Master strength, preset, per-effect strength and physical-trigger strength combine.
+The hardware has only eight nonzero force steps, so small numerical changes may
+feel identical. Limits are clamped; malformed text and unknown keys are reported
+and keep defaults. Settings never alter control values, vehicle physics, output
+rate limits or lifecycle clearing. ControllerVibration=0 remains a master mute.
+
 ## Vehicle character
 
 Boost type selects Speed, Stunt or Power presentation tuning. Engine frequencies
@@ -142,7 +193,7 @@ perform only their cheap disabled check.
 
 ## Physical USB and Bluetooth validation
 
-Status: pending. Record build commit, controller model/firmware where available,
+Detailed device/transport results have not been recorded. Record build commit, controller model/firmware where available,
 transport and results separately for USB and Bluetooth. Test normal input and
 ordinary rumble alongside the effects. Test Edge separately if available.
 
@@ -169,5 +220,5 @@ ordinary rumble alongside the effects. Test Edge separately if available.
    do not satisfy this physical checklist.
 
 Report both the diagnostic evidence and what each trigger physically felt like.
-The issue remains open until required software/runtime and hardware results have
-been reviewed and the implementation is merged.
+Keep physical device/transport results separate from software checks and from
+maintainer approval to merge the feature.

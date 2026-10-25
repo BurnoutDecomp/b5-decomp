@@ -36,9 +36,12 @@ In **config.ini beside Burnout_PC.exe**, add:
 
 ```ini
 [AdaptiveTriggers]
+Enabled=1
 Preset=Immersive
 Resistance=100
 Texture=100
+LeftStrength=100
+RightStrength=100
 ArcadeCues=1
 Diagnostics=0
 ```
@@ -47,7 +50,17 @@ Restart after editing. Presets are `Off`, `Light`, `Standard` and `Immersive`
 (default). Resistance and Texture independently accept 0–100 and are also scaled
 by the preset. ArcadeCues enables small reward ticks. The existing feedback
 enable/pause gates and `[SystemProfile] ControllerVibration=0` also silence
-adaptive output. Invalid settings keep their defaults; strengths are clamped.
+adaptive output. Set Enabled=0 to disable everything. LeftStrength/RightStrength
+scale the physical L2/R2 independently, including in reverse. Invalid settings keep
+their defaults; numeric ranges are clamped.
+
+Every effect also accepts Strength (0..200 percent; 0 disables it), Frequency
+(25..200 percent for vibration), Duration (0..200 percent for transient pulses)
+and StartPosition (-1 for its default, or travel zone 0..9). For example,
+EngineStrength=60 softens the engine texture, ShiftDuration=150 lengthens the
+gear-change cue, and BrakeStartPosition=4 moves the brake bite farther into travel.
+The complete ready-to-copy section is in [config.ini.example](../config.ini.example);
+see the [tuning reference](ADAPTIVE_TRIGGERS.md#ini-tuning) for effect names and limits.
 
 Use a native USB or Bluetooth connection. A translation tool presenting a virtual
 Xbox controller can hide adaptive capabilities. The adapter falls back to normal
