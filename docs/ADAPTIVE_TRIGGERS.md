@@ -60,6 +60,10 @@ observation is unnecessary. World/car changes reset the main resolver. Diagnosti
 can enable observation without a native controller for a software runtime witness.
 The powered-wheel mask follows the actual front/rear power split and the original
 handbrake rear-only branch; a grounded-wheel flag is not a drive-selection flag.
+Losing contact on all powered wheels clears filtered wheelspin without a grip
+recovery cue, even when the other axle stays grounded. Launch and recovery pulses
+are discarded on powered-wheel contact loss; drift-start pulses are discarded
+on takeoff, so they cannot reload the airborne pedals after the unloading ends.
 Photo mode uses the director's actual GetInPictureParadise() signal copied in the
 post-world step, independently of the recovered rumble manager's pending transfer.
 
@@ -139,12 +143,17 @@ Time-based envelopes do not depend on frame count; wheelspin uses smoothing and
 hysteresis. Stale snapshots release both triggers after 500 ms.
 
 [DualSenseEffects.h](../src/pc/input/DualSenseEffects.h) produces SDL's 47-byte PS5
-effect payload with only the two trigger enable bits. Right-trigger bytes start at
+effect payload. Right-trigger bytes start at
 10, left-trigger bytes at 21. Modes are Off (0x05), Feedback (0x21) and Vibration
 (0x26), with ten independent zones clamped to strength 0–8. Zero-amplitude or
 zero-frequency vibration encodes Off. The smallest nonzero hardware step limits
 how finely a light effect can be scaled. Feedback and vibration are coordinated
 modes, not arbitrary simultaneous force channels.
+When ordinary rumble is active, trigger reports and neutral trigger clears also
+carry its current motor values and emulation mode. Firmware selection and legacy
+amplitude scaling follow SDL's pinned PS5 driver, including its Edge/unknown-firmware
+policy. Trigger-only deduplication keeps motor changes from generating extra
+adaptive writes. Speaker and LED controls stay disabled in these reports.
 Texture=0 silences vibration and transient pulses while preserving smooth pedal
 resistance. Ground-contact unloading still follows takeoff/airtime. Resistance=0
 silences smooth resistance independently of enabled textures.
@@ -160,6 +169,7 @@ Protocol references:
 
 - [SDL 3.4.18 PS5 packet example](https://github.com/libsdl-org/SDL/blob/release-3.4.18/test/testcontroller.c)
 - [SDL_SendGamepadEffect](https://wiki.libsdl.org/SDL3/SDL_SendGamepadEffect)
+- [SDL 3.4.18 PS5 rumble composition](https://github.com/libsdl-org/SDL/blob/release-3.4.18/src/joystick/hidapi/SDL_hidapi_ps5.c)
 - [John Nielk1 Klein's trigger effect factories](https://gist.github.com/Nielk1/6d54cc2c00d2201ccb8c2720ad7538db), with the adapted encoding's [MIT notice](licenses/DualSenseTriggerEffects.txt)
 
 ## Software validation
