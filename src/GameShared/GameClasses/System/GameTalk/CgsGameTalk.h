@@ -52,6 +52,10 @@ namespace CgsGameTalk
         // register the debug component, and mark prepared.
         bool Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep);
 
+        // ARTIST82664418 calls this on the GameTalk owner; target82C296C8
+        // is the emitted li r3,1;blr ICF fold, with no additional cleanup.
+        bool Release();
+
         // X360 @0x828248D0 (header-inline). Forward a handler registration to the
         // GameTalk manager once prepared.
         s32 RegisterMessageHandler(EA::GameTalk::MessageHandler lpHandlerFunc,

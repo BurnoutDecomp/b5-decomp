@@ -94,10 +94,12 @@ namespace CgsResource
     // Static EA::GameTalk::MessageHandler. The X360 Hex-Rays mis-resolves the two
     // message reads as CgsNetwork::ServerInterfaceComponent::GetLastError / sub_82837E08;
     // the call sites pass the GameTalkMessage `this` (r3), so they are message accessors:
-    // GetState() (compared == 1) and GetKeyContent("ReplaceResourcesFromFile").
+    // GetNumKeys() (exactly one key) and GetKeyContent("ReplaceResourcesFromFile").
+    // The shared82836DC8 getter reads the key count; RenderMetrics also uses
+    // that same getter as its indexed key loop bound. No message state is read.
     void LiveUpdateModule::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        if (lpMessage->GetState() != 1)
+        if (lpMessage->GetNumKeys() != 1)
             return;
 
         const char* lpcFileName = lpMessage->GetKeyContent("ReplaceResourcesFromFile");

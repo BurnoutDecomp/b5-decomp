@@ -102,6 +102,15 @@ namespace CgsGameTalk
         return true;                        // ARTIST 8283952C: li r3,1
     }
 
+    // ARTIST GameDataModule::Release82664408..4424 passes the genuine
+    // GameTalk subobject to82C296C8. That two-instruction ICF body is labelled
+    // Content::DoOnPostLoad by IDA, but it only returns true. This is the actual
+    // emitted GameTalk release behavior, not a replacement network provider.
+    bool GameTalk::Release()
+    {
+        return true;
+    }
+
     // X360 @0x828248D0 (header-inline in the original CgsGameTalk.h:143-146).
     s32 GameTalk::RegisterMessageHandler(EA::GameTalk::MessageHandler lpHandlerFunc,
                                          const char* lpacFilter)

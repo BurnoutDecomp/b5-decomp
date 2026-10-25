@@ -3731,7 +3731,7 @@ namespace BrnGame
         mInputModule.Destruct();
         mWorldModule.Destruct();
         mReplayModule.Destruct();
-        mGameDataModule.Destruct();
+        mGameDataModule.DestructNativePC();
         CgsModule::ModuleSingleBuffered::Destruct();
         mNetworkModule.Destruct();
     }
@@ -3771,7 +3771,7 @@ namespace BrnGame
                 // fall through
             case E_RELEASESTAGE_GAMEDATAMODULE:
                 meReleaseStage = E_RELEASESTAGE_GAMEDATAMODULE;
-                if (!mGameDataModule.Release())
+                if (!mGameDataModule.ReleaseNativePC())
                     return false;
                 // fall through
             case E_RELEASESTAGE_MANAGER:

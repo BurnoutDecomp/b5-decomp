@@ -149,8 +149,11 @@ namespace BrnResource
                              const GameDataIO::InputBuffer* lpInputBuffer,
                              GameDataIO::OutputBuffer* lpOutputBuffer);
         bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // retained selected PC path
-        bool Release();                               // deferred
-        void Destruct();                              // deferred
+        bool Release() override; // ARTIST82664380, original staged teardown
+        void Destruct() override; // ARTIST82664508, original owned-call order
+        // Retained current PC policy; selected by the existing native outer only.
+        bool ReleaseNativePC();
+        void DestructNativePC();
 
         // @ 0x82674670 -- the per-frame pump: drain the GameDataIO::InputBuffer request
         // interface (raw CgsResource requests forward into the embedded ResourceModule input;
