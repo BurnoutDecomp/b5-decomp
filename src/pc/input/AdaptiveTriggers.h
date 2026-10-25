@@ -39,9 +39,11 @@ namespace CgsInput::AdaptiveTriggers
         float mfTexture = 1.0f;
         bool mbArcadeCues = true;
         bool mbDiagnostics = false;
+        bool mbSystemFeedbackEnabled = true;
 
         float GetScale() const
         {
+            if (!mbSystemFeedbackEnabled) return 0.0f;
             switch (mePreset)
             {
                 case Preset::Light: return 0.45f;
@@ -56,6 +58,8 @@ namespace CgsInput::AdaptiveTriggers
     {
         std::uint64_t muVehicle = 0;
         std::uint32_t muEvents = 0;
+        std::uint32_t muChain = 0;
+        std::uint64_t muBoostAward = 0;
         Character meCharacter = Character::Speed;
         int miGear = 0;
         unsigned muGroundedWheels = 0;
@@ -65,6 +69,7 @@ namespace CgsInput::AdaptiveTriggers
         float mfAirTime = 0, mfVerticalSpeed = 0;
         float mfSurface = 0, mfImpact = 0, mfScrape = 0;
         bool mbActive = false, mbReset = false, mbReverse = false;
+        bool mbDriving = true;
         bool mbBoosting = false, mbDrifting = false, mbCrashing = false;
         bool mbShowtime = false, mbLimiter = false;
     };
@@ -111,6 +116,7 @@ namespace CgsInput::AdaptiveTriggers
             mbValid = false;
             mbSpinning = false;
             mfSlip = 0;
+            muLastReward = 0;
             maPulses = {};
         }
 
@@ -127,9 +133,9 @@ namespace CgsInput::AdaptiveTriggers
             lSample.mfSurface = Unit(lSample.mfSurface);
             lSample.mfImpact = Unit(lSample.mfImpact);
             lSample.mfScrape = Unit(lSample.mfScrape);
-            lSample.mfAirTime = std::max(0.0f, Finite(lSample.mfAirTime));
+            lSample.mfAirTime = (std::max)(0.0f, Finite(lSample.mfAirTime));
             lSample.mfVerticalSpeed = std::clamp(Finite(lSample.mfVerticalSpeed), -1000.0f, 1000.0f);
-            lSample.muGroundedWheels = std::min(lSample.muGroundedWheels, 4u);
+            lSample.muGroundedWheels = (std::min)(lSample.muGroundedWheels, 4u);
             if (!lSample.mbActive || lSample.mbReset)
             {
                 Reset();
@@ -145,25 +151,30 @@ namespace CgsInput::AdaptiveTriggers
                 mfSlip += (lSample.mfDrivenSlip - mfSlip) * (1.0f - std::exp(-lfStep * 15.0f));
                 const bool lbSpinning = lSample.muGroundedWheels && lSample.mfGas > 0.1f &&
                     mfSlip > (mbSpinning ? 0.12f : 0.25f);
-                if (mbSpinning && !lbSpinning && lSample.muGroundedWheels)
+                if (mbSpinning && !lbSpinning && lSample.muGroundedWheels && lSample.mbDriving && mSample.mbDriving)
                     Start(Cue::GripRecovery, luNow, 110, 40, 0.25f, lSample.mbReverse ? 1 : 2);
                 mbSpinning = lbSpinning;
+                if (lSample.mbDriving != mSample.mbDriving)
+                    for (auto& lrPulse : maPulses) if (lrPulse.muPriority <= 65) lrPulse = {};
                 if (!lSample.mbShowtime && lSample.mbCrashing && !mSample.mbCrashing)
                     Start(Cue::Wreck, luNow, 300, 100, 0.85f, 3);
                 if (!lSample.mbCrashing || lSample.mbShowtime)
                 {
-                    if (lSample.miGear != mSample.miGear && lSample.miGear > 0 &&
-                        mSample.miGear > 0 && lSample.mfGas > 0.1f)
-                        Start(Cue::Shift, luNow, 130, 35, 0.35f, lSample.mbReverse ? 1 : 2);
-                    if (lSample.mfGas > 0.65f && mSample.mfGas < 0.3f &&
-                        std::fabs(lSample.mfSpeedMPH) < 15.0f && lSample.muGroundedWheels)
-                        Start(Cue::Launch, luNow, 220, 40, 0.45f, lSample.mbReverse ? 1 : 2);
-                    if (lSample.mbBoosting != mSample.mbBoosting)
-                        Start(lSample.mbBoosting ? Cue::BoostStart : Cue::BoostEnd,
-                            luNow, lSample.mbBoosting ? 180 : 120, 45,
-                            lSample.mbBoosting ? 0.55f : 0.25f, lSample.mbReverse ? 1 : 2);
-                    if (lSample.mbDrifting && !mSample.mbDrifting)
-                        Start(Cue::DriftStart, luNow, 140, 55, 0.4f, 3);
+                    if (lSample.mbDriving && mSample.mbDriving)
+                    {
+                        if (lSample.miGear != mSample.miGear && lSample.miGear > 0 &&
+                            mSample.miGear > 0 && lSample.mfGas > 0.1f)
+                            Start(Cue::Shift, luNow, 130, 35, 0.35f, lSample.mbReverse ? 1 : 2);
+                        if (lSample.mfGas > 0.65f && mSample.mfGas < 0.3f &&
+                            std::fabs(lSample.mfSpeedMPH) < 15.0f && lSample.muGroundedWheels)
+                            Start(Cue::Launch, luNow, 220, 40, 0.45f, lSample.mbReverse ? 1 : 2);
+                        if (lSample.mbBoosting != mSample.mbBoosting)
+                            Start(lSample.mbBoosting ? Cue::BoostStart : Cue::BoostEnd,
+                                luNow, lSample.mbBoosting ? 180 : 120, 45,
+                                lSample.mbBoosting ? 0.55f : 0.25f, lSample.mbReverse ? 1 : 2);
+                        if (lSample.mbDrifting && !mSample.mbDrifting)
+                            Start(Cue::DriftStart, luNow, 140, 55, 0.4f, 3);
+                    }
                     if (!lSample.muGroundedWheels && mSample.muGroundedWheels)
                         Start(Cue::Takeoff, luNow, 90, 65, 0.0f, 3);
                     if (lSample.muGroundedWheels && !mSample.muGroundedWheels && mSample.mfAirTime > 0.08f)
@@ -173,17 +184,23 @@ namespace CgsInput::AdaptiveTriggers
                         (mSample.mfImpact <= 0.12f || lSample.mfImpact > mSample.mfImpact + 0.15f))
                         Start(Cue::Impact, luNow, 180, 90, lSample.mfImpact, 3);
                     if (lSample.muEvents & E_EVENT_IMPACT)
-                        Start(Cue::Impact, luNow, 180, 90, std::max(lSample.mfImpact, 0.45f), 3);
+                        Start(Cue::Impact, luNow, 180, 90, (std::max)(lSample.mfImpact, 0.45f), 3);
                     if (lSample.muEvents & E_EVENT_TRAFFIC_CHECK)
-                        Start(Cue::Impact, luNow, 150, 90, std::max(lSample.mfImpact, 0.35f), 3);
+                        Start(Cue::Impact, luNow, 150, 90, (std::max)(lSample.mfImpact, 0.35f), 3);
                     if (lSample.mbShowtime && (lSample.muEvents & E_EVENT_BOUNCE))
                         Start((lSample.muEvents & E_EVENT_BOOSTED_BOUNCE) ? Cue::BoostedBounce : Cue::Bounce,
                             luNow, 220, 95, (lSample.muEvents & E_EVENT_BOOSTED_BOUNCE) ? 0.85f : 0.55f, 3);
-                    if (lSample.muEvents & E_EVENT_CHAIN)
+                    if (((lSample.muEvents & E_EVENT_CHAIN) &&
+                        (!(mSample.muEvents & E_EVENT_CHAIN) || lSample.muChain != mSample.muChain)) ||
+                        (lSample.mbBoosting && lSample.muChain > mSample.muChain))
                         Start(Cue::Chain, luNow, 250, 48, 0.5f, lSample.mbReverse ? 1 : 2);
-                    if (mSettings.mbArcadeCues && (lSample.muEvents &
-                        (E_EVENT_NEAR_MISS | E_EVENT_STUNT | E_EVENT_BOOST_AWARD)))
+                    if (mSettings.mbArcadeCues && (luNow - muLastReward >= 300) &&
+                        ((lSample.muEvents & (E_EVENT_NEAR_MISS | E_EVENT_STUNT | E_EVENT_BOOST_AWARD)) ||
+                        (lSample.muBoostAward != 0 && lSample.muBoostAward != mSample.muBoostAward)))
+                    {
                         Start(Cue::Reward, luNow, 75, 29, 0.18f, lSample.mbReverse ? 1 : 2);
+                        muLastReward = luNow;
+                    }
                 }
             }
             else
@@ -211,7 +228,7 @@ namespace CgsInput::AdaptiveTriggers
             const float lfFrequency = mSample.meCharacter == Character::Speed ? 1.15f :
                 mSample.meCharacter == Character::Heavy ? 0.65f :
                 mSample.meCharacter == Character::Power ? 0.8f : 1.0f;
-            if (!mSample.mbCrashing || mSample.mbShowtime)
+            if (mSample.mbDriving && (!mSample.mbCrashing || mSample.mbShowtime))
             {
                 Effect lDrive = Make(Cue::Pedal, 20, 0.12f * lfPower, 0, 2, true);
                 if (mSample.mbShowtime)
@@ -234,20 +251,21 @@ namespace CgsInput::AdaptiveTriggers
                     lDrive = Make(Cue::Limiter, 62, 0.35f, 18, 1);
                 if (luDrive == 1) lOutput.mLeft = lDrive; else lOutput.mRight = lDrive;
 
-                if (!mSample.mbReverse && mSample.muGroundedWheels && !mSample.mbShowtime)
+                if (mSample.muGroundedWheels && !mSample.mbShowtime)
                 {
-                    lOutput.mLeft = Make(Cue::Brake, 30,
+                    Effect lBrake = Make(Cue::Brake, 30,
                         (0.16f + 0.4f * mSample.mfBrake) * lfPower, 0, 2, true);
                     if ((mSample.mfBrake > 0.1f || mSample.mfHandBrake > 0.1f) && mSample.mfBrakeSkid > 0.18f)
-                        lOutput.mLeft = Make(Cue::BrakeSkid, 65, 0.25f + 0.4f * mSample.mfBrakeSkid,
+                        lBrake = Make(Cue::BrakeSkid, 65, 0.25f + 0.4f * mSample.mfBrakeSkid,
                             28 + Irregular(luNow, 91), 1);
+                    if (luDrive == 1) lOutput.mRight = lBrake; else lOutput.mLeft = lBrake;
                 }
                 if (mSample.muGroundedWheels)
                 {
                     const float lfSpeed = std::fabs(mSample.mfSpeedMPH);
                     if (mSample.mfSurface > 0.06f && lfSpeed > 3.0f)
                         ApplyBoth(lOutput, Make(Cue::Surface, 28, mSample.mfSurface * 0.35f,
-                            12 + std::min(lfSpeed, 200.0f) * 0.2f + Irregular(luNow, 43), 1));
+                            12 + (std::min)(lfSpeed, 200.0f) * 0.2f + Irregular(luNow, 43), 1));
                     if (mSample.mfScrape > 0.05f && lfSpeed > 2.0f)
                         ApplyBoth(lOutput, Make(Cue::Scrape, 70, 0.2f + 0.4f * mSample.mfScrape,
                             45 + Irregular(luNow, 73), 1));
@@ -256,7 +274,7 @@ namespace CgsInput::AdaptiveTriggers
 
             for (const auto& lrPulse : maPulses)
             {
-                if (!lrPulse.muDuration || luNow < lrPulse.muStart || luNow - lrPulse.muStart >= lrPulse.muDuration)
+                if ((!mSample.mbDriving && lrPulse.muPriority <= 65) || !lrPulse.muDuration || luNow < lrPulse.muStart || luNow - lrPulse.muStart >= lrPulse.muDuration)
                     continue;
                 const float lfPhase = static_cast<float>(luNow - lrPulse.muStart) / lrPulse.muDuration;
                 Effect lEffect;
@@ -269,7 +287,7 @@ namespace CgsInput::AdaptiveTriggers
                 else
                 {
                     const float lfEnvelope = lrPulse.meCue == Cue::Chain ? 1.0f :
-                        std::min(1.0f, (1.0f - lfPhase) * 2.0f);
+                        (std::min)(1.0f, (1.0f - lfPhase) * 2.0f);
                     lEffect = Make(lrPulse.meCue, lrPulse.muPriority, lrPulse.mfStrength * lfEnvelope,
                         lrPulse.meCue == Cue::Wreck ? 20.0f : lrPulse.meCue == Cue::Landing ? 28.0f :
                         lrPulse.meCue == Cue::BoostedBounce ? 44.0f : 38.0f, 1);
@@ -292,6 +310,7 @@ namespace CgsInput::AdaptiveTriggers
         Sample mSample;
         std::array<Pulse, static_cast<unsigned>(Cue::Count)> maPulses{};
         std::uint64_t muLastSample = 0;
+        std::uint64_t muLastReward = 0;
         float mfSlip = 0;
         bool mbValid = false, mbSpinning = false;
 
@@ -329,11 +348,11 @@ namespace CgsInput::AdaptiveTriggers
             lEffect.meMode = lbTexture ? Mode::Vibration : Mode::Feedback;
             lEffect.muFrequency = lbTexture ? static_cast<std::uint8_t>(std::clamp(Finite(lfFrequency), 1.0f, 120.0f)) : 0;
             bool lbAny = false;
-            for (unsigned luZone = std::min(luStart, 9u); luZone < 10; ++luZone)
+            for (unsigned luZone = (std::min)(luStart, 9u); luZone < 10; ++luZone)
             {
-                const float lfRamp = lbProgressive ? 0.4f + 0.6f * (luZone - luStart) / (9.0f - std::min(luStart, 8u)) : 1.0f;
-                const unsigned luStrength = std::max(1u, static_cast<unsigned>(std::round(lfForce * lfRamp * 8.0f)));
-                lEffect.mauStrength[luZone] = static_cast<std::uint8_t>(std::min(luStrength, 8u));
+                const float lfRamp = lbProgressive ? 0.4f + 0.6f * (luZone - luStart) / (9.0f - (std::min)(luStart, 8u)) : 1.0f;
+                const unsigned luStrength = (std::max)(1u, static_cast<unsigned>(std::round(lfForce * lfRamp * 8.0f)));
+                lEffect.mauStrength[luZone] = static_cast<std::uint8_t>((std::min)(luStrength, 8u));
                 lbAny |= luStrength != 0;
             }
             if (!lbAny) lEffect.meMode = Mode::Off;

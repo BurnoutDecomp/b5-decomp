@@ -8,3 +8,4 @@ extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow();
 extern "C" __declspec(dllimport) int __stdcall PostMessageW(void*, unsigned, std::uintptr_t, std::intptr_t);
 extern "C" __declspec(dllimport) unsigned __stdcall MapVirtualKeyW(unsigned, unsigned);
 extern "C" __declspec(dllimport) unsigned long __stdcall GetPrivateProfileSectionA(const char*, char*, unsigned long, const char*);
+extern "C" __declspec(dllimport) unsigned long __stdcall GetPrivateProfileStringA(const char*, const char*, const char*, char*, unsigned long, const char*);

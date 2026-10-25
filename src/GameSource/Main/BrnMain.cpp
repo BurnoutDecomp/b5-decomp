@@ -131,6 +131,16 @@ void LoadConfig()
     }
 
     getGameSaveDir(lacPath, "config.ini");
+    // FLAG PC-platform leaf: optional DualSense presentation settings.
+    CgsInput::PCGamepad::SetFeedbackLogger(CgsDev::Log::WriteToLog);
+    const unsigned luInvalidFeedback = CgsInput::PCGamepad::LoadFeedbackSettings(lacPath);
+    if (luInvalidFeedback)
+    {
+        char lacFeedbackLog[128];
+        std::snprintf(lacFeedbackLog, sizeof(lacFeedbackLog),
+            "[input] AdaptiveTriggers: skipped/clamped %u invalid setting(s)\n", luInvalidFeedback);
+        CgsDev::Log::WriteToLog(lacFeedbackLog);
+    }
     const unsigned luInvalidMappings = CgsInput::PCGamepad::LoadKeyboardMappings(lacPath);
     if (luInvalidMappings)
     {

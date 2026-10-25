@@ -9,5 +9,8 @@ function(brn_configure_gamepad target)
             "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${target}>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${sdl3_package_root}/LICENSE.txt"
-            "$<TARGET_FILE_DIR:${target}>/SDL3-LICENSE.txt")
+            "$<TARGET_FILE_DIR:${target}>/SDL3-LICENSE.txt"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../docs/licenses/DualSenseTriggerEffects.txt"
+            "$<TARGET_FILE_DIR:${target}>/DualSenseTriggerEffects-LICENSE.txt")
 endfunction()
