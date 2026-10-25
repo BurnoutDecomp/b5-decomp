@@ -36,6 +36,11 @@
 #include <cstdint>   // intptr_t
 #include <new>       // placement new (Manager construction over allocator storage)
 
+// Original unidentified SDK target82C208F0. Contract is one native HANDLE ->
+// DWORD physical sort key; it returnsFFFFFFFF on failure. No native provider
+// is implemented here: preserve the real unresolved dependency until recovered.
+extern "C" DWORD __cdecl sub_82C208F0(HANDLE lhFile);
+
 namespace rw
 {
     namespace core
@@ -219,6 +224,16 @@ namespace rw
                         return true;
                     }
                     return false;
+                }
+                // ARTIST82BBDD00, physical vtable slot10. The real sort-key
+                // query is mandatory; inherited QueryLocation zero is not this body.
+                u64 QueryLocation(void* lpFile) override
+                {
+                    const DWORD luSortKey = ::sub_82C208F0(
+                        static_cast<XenonFileHandle*>(lpFile)->mhFile);
+                    if (luSortKey == 0xFFFFFFFFu)
+                        return 0;
+                    return static_cast<u64>(luSortKey) << 11;
                 }
                 bool Delete(const char* lpcName) override
                 {
