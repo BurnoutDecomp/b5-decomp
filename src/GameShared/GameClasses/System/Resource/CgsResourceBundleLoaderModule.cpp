@@ -11,6 +11,13 @@
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
 namespace CgsResource
 {
+    // Original initial monitor words are -1; trace IDs are reset to zero by Construct.
+    s32 BundleLoaderModule::_miStreamUpdate = -1; // target82F33FD8
+    s32 BundleLoaderModule::_miStreamEntryCopy = -1; // target82F33FDC
+    s32 BundleLoaderModule::_miStreamDataCopy = -1; // target82F33FE0
+    s32 BundleLoaderModule::_miTraceStreamUpdate_StreamHeader = 0; // target82F33FE4
+    s32 BundleLoaderModule::_miTraceStreamUpdate_StreamEntries = 0; // target82F33FE8
+    s32 BundleLoaderModule::_miTraceStreamUpdate_StreamData = 0; // target82F33FEC
     s32 BundleLoaderModule::_miUpdatePerfMon = -1; // ARTIST raw82F33FD4
 
     // FLAG PC-platform leaf: resource destinations must outlive native workers.

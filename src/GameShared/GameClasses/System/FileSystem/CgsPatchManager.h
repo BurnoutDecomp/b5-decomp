@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsLinearHashTable.h"   // CgsContainers::LinearHashTable
+#include "GameShared/GameClasses/Containers/CgsLinearSOAHashTable.h" // separate original key/value arrays
 #include "eathread/eathread_thread.h"                               // EA::Thread::Thread
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator (entry storage)
 
@@ -21,7 +21,7 @@
 // letter + back-slashes) for the FindFirstFile scan.
 //
 // LATER patches do NOT automatically win: when two patches both contain the same file, the map keeps
-// whichever patch has the SMALLER miValue (the integer passed to AddPatch as the patch's priority
+// whichever patch has the LARGER miValue (the integer passed to AddPatch as the patch's priority
 // key) - see AddFileToCurrentPatch.
 //
 // SOURCES (X360 ARTIST): Construct 0x828F0980, AddPatch 0x828F8F80, DirSearchThreadProc 0x828F0B88,
@@ -41,7 +41,7 @@ namespace CgsFileSystem
     // CgsPatchManager.h - the patch overlay manager. Instance layout is the faithful X360 member
     // ORDER (members reached BY NAME, never by raw offset); the X360 asm of the methods below is the
     // authority for behaviour. Embedded by value inside the file system; Construct stashes the
-    // owning FileSystem so the background search thread can allocate its scratch through it.
+    // owning resource allocator so the background search thread can allocate/free its scratch.
     class PatchManager
     {
     public:
@@ -53,7 +53,7 @@ namespace CgsFileSystem
         static const u32 KU_PATCH_FILE_MAP_SIZE = 4096;
 
         // @0x828F0980 (boot trace). Stash the resource allocator, zero the current-patch index, bring
-        // up the path-hash map (length 0x1000) over allocator-supplied entry storage, clear the
+        // up the path-hash map (length0x1000) over separate allocator-owned keys/values, clear the
         // "patching" flag and publish the singleton instance pointer. `lpAllocator` is the object the
         // X360 stores at +0 and whose virtual Alloc carves the map's entry array (and, later, the
         // directory-search thread's scratch).
@@ -73,7 +73,7 @@ namespace CgsFileSystem
         // @0x828DCF40. Resolve `lpcLogical` to a host physical path in `lpcDest` (capacity
         // `luDestSize`): slash->back-slash, and if the path is "<drive>\..." emit "<drive>:\<rest>",
         // else "<path>:".
-        void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
+        static void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
 
     private:
         // @0x828F0B88. The background thread entry: scan the just-added patch folder, mark the scan
@@ -94,9 +94,10 @@ namespace CgsFileSystem
         rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    entry storage
         PatchEntry                           maPatches[KU_MAX_PATCHES];     // +4    (4)    32 * 68
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
-        CgsContainers::LinearHashTable<s32, s32> mPatchFileMap;             // +0x888 (2184)
+        CgsContainers::LinearSOAHashTable<s32, u32> mPatchFileMap;             // +0x888 (2184)
         bool                                 mbPatching;                    // +0x898 (2200)
-        s32                                  miSearchHandleCount;           // +0x89C (2204) scan result
+        // Descriptive X360-only name:828F0C1C/30 store/read an allocator pointer, not a count.
+        void*                                mpDirectorySearchScratch;       // target+0x89C
         EA::Thread::Thread                   mDirSearchThread;              // +0x8A0 (2208)
     };
 }

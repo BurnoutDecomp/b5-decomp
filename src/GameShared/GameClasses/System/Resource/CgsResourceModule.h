@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/rwcore_general_alloc.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // complete retained patch request
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"            // base
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
@@ -32,7 +34,6 @@ namespace CgsModule { struct IOBufferStack; }
 
 namespace CgsResource
 {
-    struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
     namespace ResourceIO { struct InputBuffer; struct OutputBuffer; }                    // the module's request input
     // The write-stream request event types (deprecated adders take these by pointer only).
@@ -48,6 +49,8 @@ namespace CgsResource
     {
         friend class DebugComponent;
     public:
+        // Original resource-construction monitor/trace owners; ARTIST829055B0.
+        static s32 _miUpdateTrace; // target82F34040
         // Original enum result retained by the real scoped-output helper.
         enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 };
         // DecFIGS cpp26..32; ARTIST 82F34004..1C, registered by original Construct.
@@ -91,7 +94,7 @@ namespace CgsResource
             CgsMemory::MemoryModule::InitOptions  mMemoryInitOptions;       // :150
             BundleLoaderModule::InitOptions       mLoaderInitOptions;       // :151
             PoolModule::InitOptions               mPoolInitOptions;         // :152
-            DiskLayout*                           mpDiskLayout;             // :153
+            CgsFileSystem::DiskLayout*            mpDiskLayout;             // :153
             DebugComponentParams                  mDebugParams;             // :155
             char                                  macFileSearchPath[1024];  // :157
             const char*                           mpcDiskCacheDrive;        // :158
@@ -108,7 +111,10 @@ namespace CgsResource
                 static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
         }
 
-        void Construct(const void* lpInitOptions, void* lpAllocator);  // deferred
+        // Original three-input owner, separate from the retained native two-input path.
+        virtual void Construct(InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator);
+        void Construct(const void* lpInitOptions, void* lpAllocator);
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
@@ -178,10 +184,16 @@ namespace CgsResource
         CgsMemory::MemoryModule   mMemoryModule;        // +0x46580 (a1+72032)
         CgsFileSystem::FileSystem mFileSystem;          // +0x4684C (a1+72204)
         DebugComponent            mDebugComponent;      // +0x52D18 (a1+84806)
-        PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
-        s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        // ARTIST829056D0..82905718; actual owned allocator precedes its pending pool.
+        rw::core::GeneralResourceAllocator* mpFileSystemAllocator;
         CgsContainers::IndexedPool<PendingFileResponse,
                                    KI_MAX_PENDING_FILE_SYSTEM_RESPONSES, s8>
                                   mPendingFileResponses;
+        PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        // X360-only names are descriptive:828FD5C8 sets the latch and copies the
+        // complete request;828EC788 sends its delayed response and clears it.
+        bool                      mbPendingPatch;
+        Events::AddPatchRequest    mPendingPatchRequest;
     };
 }

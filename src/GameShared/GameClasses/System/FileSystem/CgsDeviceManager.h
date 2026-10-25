@@ -21,6 +21,7 @@
 // are the (forked) vendor EAThread types.
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h" // actual singleton allocator interface
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperationPool.h"    // OperationPool
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"         // Device, ErrorCallback
@@ -60,7 +61,9 @@ namespace CgsFileSystem
         // ---- lifecycle ----
         DeviceManager();                                       // 0x828F0C90
         void InitInternal();                                   // 0x828E9788
-        static bool InitializeDeviceManager(void* lpAllocator);// 0x828F91E0
+        static void InitializeDeviceManager(rw::IResourceAllocator* lpAllocator); // 0x828F91E0
+        // Existing malloc-backed native owner; no fabricated RW allocator argument.
+        static bool InitializeDeviceManagerNativePC();
 
         // The singleton if already created (null otherwise) — lets a one-time bring-up (e.g.
         // FileSystem::Prepare) avoid re-initialising without tripping GetDeviceManager's assert.
@@ -71,7 +74,13 @@ namespace CgsFileSystem
         Device* FindDevice(const char* lpcPrefix);
 
         // Register a physical device under lpcPrefix and spawn its worker thread (step 2).
-        bool AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
+        void AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
+        // Retain the current native registration/thread policy separately.
+        bool AddPhysicalDeviceNativePC(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback);
+
+        // Original logical-device registration and its physical-worker Init operation.
+        void AddVirtualDevice(Device* lpDevice, const char* lpcPrefix,
+                              const char* lpcParent, ErrorCallback lpfErrorCallback);
 
         // FileSystem::Prepare installs the search path used by unqualified opens.
         void SetDefaultPath(const char* lpcPath);
@@ -105,8 +114,8 @@ namespace CgsFileSystem
         static intptr_t PhysicalDeviceThread(void* lpSlotContext); // 0x828F1EA8
 
         // ---- allocation ----
-        // X360 used the GameData allocator via a custom operator new(161712); on PC this is a
-        // marked malloc leaf (the DeviceManager is a single ~160KB allocation).
+        // Original lane-zero allocation through the stored RW owner. The native
+        // factory uses malloc directly and never fabricates this interface.
         static void* operator new(size_t luSize);
         static void  operator delete(void* lpBlock);
 
@@ -122,7 +131,7 @@ namespace CgsFileSystem
     private:
         // ---- statics (CgsDeviceManager.cpp) ----
         static DeviceManager* mpDeviceManager;   // X360 dword_830EA400 (singleton)
-        static void*          mpAllocator;       // X360 off_830EA404
+        static rw::IResourceAllocator* mpAllocator; // X360 off_830EA404
 
         // CgsFileSystem::GetDeviceManager() is a namespace-scope free function that reads the
         // private singleton (DWARF CgsDeviceManager.h:176).

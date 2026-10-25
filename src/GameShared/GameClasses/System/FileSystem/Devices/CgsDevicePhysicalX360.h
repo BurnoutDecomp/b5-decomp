@@ -24,7 +24,7 @@
 // GetObjectIndex divide-by-272 (@0x828EAE38) and Open's element write (`*(rec+8)=HANDLE`,
 // `*rec=position`, `*(rec+12)=mode`, name copied to rec+16). The device's pool counters are read
 // at this+24/+25/+20 (pool@this+16, byte-indexed: +8 alloc / +9 free / +4 free-list), so the
-// pool is the first member after the Device base + vptr.
+// pool follows the selector after the Device base + vptr.
 
 #include <cstddef>   // offsetof (uncalled _AssertLayout)
 #include "types.hpp"
@@ -62,12 +62,13 @@ namespace CgsFileSystem
         s32  miType;         // +0x100 1 == file, 2 == directory ((dwFileAttributes & 0x10)==0)+1
     };
 
-    class DevicePhysicalX360 : public Device
+    class PhysicalX360Device : public Device
     {
     public:
-        // Capacity of the embedded handle pool (runtime field msCapacity in the pool; the literal
-        // extent is a placeholder, the bodies are capacity-driven through the pool).
-        static const s32 KI_MAX_OPEN_FILES = 256;
+        // ARTIST8290350C..5B8 initializes sixteen actual records and free indices.
+        static const s32 KI_MAX_OPEN_FILES = 16;
+        // The original inlined device constructor stores selector0/1 for DVD/HDD.
+        void Construct(u32 luPhysicalDeviceId);
 
         // ---- worker-dispatched ops (Device base vtable order) ----
         int Connect() override;                                                                  // Init @0x828DE998 (debug trace)
@@ -88,7 +89,12 @@ namespace CgsFileSystem
     private:
         // Embedded handle pool (this+16; byte-indexed, element stride 0x110). The opaque handle
         // is a live FileHandleRecord*; Close/CloseDirectory recover its index when returning it.
+        // X360-only selector role is inferred from its two0/1 construction sites;
+        // the identifier is descriptive, not a claimed DecFIGS member name.
+        u32 muPhysicalDeviceId;
         CgsContainers::IndexedPool<FileHandleRecord, KI_MAX_OPEN_FILES, s8> mHandlePool;  // X360 this+0x10
+        FileHandleRecord maHandleRecords[KI_MAX_OPEN_FILES];
+        s8 maiHandleFreeIndices[KI_MAX_OPEN_FILES];
     };
 
     // Pointer-invariant layout facts only (the X360 32-bit-pointer offsets +8/+0xC/+0x10 and the

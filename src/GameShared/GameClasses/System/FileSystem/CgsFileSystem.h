@@ -1,6 +1,10 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/CgsPatchManager.h"
+#include "GameShared/GameClasses/System/FileSystem/CgsDiskCache.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsRemapDevice.h"
 #include <eathread/eathread_atomic.h>
 // Real instance layout: the 16 file handles, the 8 read-stream engines, the embedded log + lock.
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"
@@ -35,7 +39,7 @@ namespace CgsFileSystem
     void EnsureDeviceManagerUp();
 
     // Pointer-only members of the layout below; reconstructed in their own follow-on TUs.
-    class DiskLayout;
+    struct DiskLayout;
     class DeviceMemFileSystem;
 
     // The value handle (CgsFileHandle.h) locks this class's mFileSystemFutex and calls
@@ -63,8 +67,11 @@ namespace CgsFileSystem
     class FileSystem
     {
     public:
-        // ---- PC-native bring-up shim (separate X360 funcs, reconstructed as no-ops) ----
-        void Construct();   // 0x829033C0
+        // ---- retained native path and original construction owner ----
+        void Construct();   // retained native construction path
+        // Original X360 owner, distinct from DecFIGS's five-input form.
+        void Construct(rw::IResourceAllocator* lpAllocator, rw::IResourceAllocator* lpDebugAllocator,
+                       char* lpcFilePrefix, DiskLayout* lpDiskLayout);
         bool Prepare();     // 0x828F04E8 — brings up the async device engine
         bool Release();     // 0x82903880
         void Destruct();    // 0x828E8A88
@@ -111,6 +118,8 @@ namespace CgsFileSystem
         // ---- DWARF CgsFileSystem.h:308/317 (private) ----
         static EA::Thread::AtomicInt32 mDiskErrorOccured; // DecFIGS h262, ARTIST830EA574
         static bool RWDiskErrorHandler(s32 liError); // ARTIST828E8B20 ignores its argument
+        // Typed physical-device callback; DecFIGS h290, X360 registration uses the same store leaf.
+        static bool DiskErrorHandler(EDeviceErrors leError);
 
         // The actual file I/O primitives, called under mFileSystemFutex by FileHandle::Read/Write.
         // DECLARE-ONLY here: bodies are their own TUs (ReadInternal @0x828E8B50-region /
@@ -140,8 +149,14 @@ namespace CgsFileSystem
         DiskLayout*           mpDiskLayout;                                       // :258
         EA::Thread::Futex     mFileSystemFutex;                                   // :259
         DeviceMemFileSystem*  mpMemFileSystem;                                    // :260
+        DiskCache             mDiskCache; // X360 retains the three debug controls
+        PatchManager          mPatchManager; // ARTIST829034C4..D4
+        PhysicalX360Device    mX360DVDDrive;
+        PhysicalX360Device    mX360HardDrive;
+        RemapDevice           mX360RemapDVDDrive;
+        RemapDevice           mX360RemapHardDrive;
         bool                  mbReleasing; // FLAG PC-platform leaf: serialized close-once latch
-        // (CgsFileSystem.h:261 mDiskCache, :262 mDiskErrorOccured and the
-        //  :365 mDebugComponent are follow-on; the PS3 device block :275-281 is gated out.)
+        // The PS3-only device block is excluded; the separate debug component
+        // lifecycle remains a follow-on. X360-only member identifiers above are descriptive.
     };
 }

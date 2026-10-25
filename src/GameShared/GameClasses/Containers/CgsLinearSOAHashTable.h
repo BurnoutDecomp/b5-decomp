@@ -131,4 +131,7 @@ namespace CgsContainers
         KeyType*   mpKeys;       // key array base
         ValueType* mpValues;     // value array base
     };
+    // Original PatchManager instantiation: u32 hash/length, s32 owning-patch value.
+    template <>
+    void LinearSOAHashTable<s32, u32>::Initialize(u32* lpKeys, s32* lpValues, u32 luLength);
 }
