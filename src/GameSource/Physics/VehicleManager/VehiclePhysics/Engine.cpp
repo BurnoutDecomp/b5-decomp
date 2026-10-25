@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"
+#include "pc/input/EngineFeedback.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([powertrain] probe)
 
@@ -278,6 +279,8 @@ namespace
     // ---------------------------------------------------------------------------------------
     void Engine::Reset(VecFloat lvfWheelAngularVelocity)
     {
+        // FLAG PC-platform leaf: clear the optional limiter observation on reset.
+        CgsInput::AdaptiveTriggers::EngineFeedback::Record(reinterpret_cast<std::uintptr_t>(this), false);
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x = 0.0f;   // EngineDrive
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.y = 0.0f;   // ReactionTorque
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.w = 0.0f;   // ClutchDelay
@@ -497,7 +500,11 @@ namespace
             lfFlyWheel -= std::min(lfFlyWheel * lfSgn,
                                    mAttribs.GetFlyWheelFriction() * lfSgn * lfTimeStep);
         }
-        lfFlyWheel = std::min(mAttribs.GetMaxRPM() * KF_RPM_TO_RADIANS_PER_SEC,
+        const f32 lfMaxFlyWheel = mAttribs.GetMaxRPM() * KF_RPM_TO_RADIANS_PER_SEC;
+        // FLAG PC-platform leaf: observe the actual upper clamp, before it changes
+        // the value. This never changes torque, gearing, timing or the clamp.
+        CgsInput::AdaptiveTriggers::EngineFeedback::Record(reinterpret_cast<std::uintptr_t>(this), lfFlyWheel > lfMaxFlyWheel);
+        lfFlyWheel = std::min(lfMaxFlyWheel,
                               std::max(KF_IDLE_FLYWHEEL_ANGULAR_VELOCITY, lfFlyWheel));
         const f32 lfRPM = lfFlyWheel * KF_RADIANS_PER_SEC_TO_RPM;
 

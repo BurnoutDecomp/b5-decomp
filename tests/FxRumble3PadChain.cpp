@@ -27,11 +27,17 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "pc/input/Gamepad.h"
 #include <cstdio>
 #include <cstring>
 
 static unsigned gAsserts = 0, gChecks = 0, gFailures = 0;
 static char     gLastAssert[256];
+static bool gbAdaptiveAllowed = false;
+namespace CgsInput::PCGamepad
+{
+    void SetFeedbackAllowed(bool lbAllowed) { gbAdaptiveAllowed = lbAllowed; }
+}
 
 namespace CgsDev
 {
@@ -267,20 +273,20 @@ int main()
         Check(OneMotorCall(0, 42566, 40959),
               "the posted jolt reaches the motor: XInputSetState(0, {(f32)pow(0.75,1.5) x 65535 = 42566, 0.625 x 65535 = 40959})");
         Check(Cached(Pads().maPads[0], 42566, 40959), "...and the pad caches what it sent (+0xF4 / +0xF6)");
-        Check(gPadScans == 1, "lbUpdatePads: the pads are updated (the PC seat of InputPads::Update runs once)");
+        Check(gPadScans == 1 && gbAdaptiveAllowed, "lbUpdatePads: the pads update and adaptive output is allowed");
         Check(Pads().mafJoltTime[0][0] == 0.25f, "the jolt ages by the GAME timer step (0.25), not the sim's (0.125)");
         Check(!gPre.IsBufferLocked() && !gOut.IsBufferLocked(), "both buffers are unlocked again after the step");
 
         Step(false);
         Check(OneMotorCall(0, 0, 0), "!lbUpdatePads (the disk-error path): rumble paused, the motors are stopped");
-        Check(gPadScans == 0, "...and the pads are not updated");
+        Check(gPadScans == 0 && !gbAdaptiveAllowed, "...and pads/adaptive output are not updated");
         Check(Pads().mafJoltTime[0][0] == 0.25f, "...and the jolt does not age");
 
         Step(true, nullptr, true);
-        Check(OneMotorCall(0, 0, 0) && Pads().mafJoltTime[0][0] == 0.25f, "the buffer's pause flag (+0x394): stopped, not ageing");
+        Check(OneMotorCall(0, 0, 0) && Pads().mafJoltTime[0][0] == 0.25f && !gbAdaptiveAllowed, "the buffer's pause flag (+0x394): both feedback paths stopped, not ageing");
 
         Step(true, nullptr, false, false);
-        Check(OneMotorCall(0, 0, 0) && Pads().mafJoltTime[0][0] == 0.5f, "the buffer's enable flag off (+0x395): stopped, still ageing");
+        Check(OneMotorCall(0, 0, 0) && Pads().mafJoltTime[0][0] == 0.5f && !gbAdaptiveAllowed, "the buffer's enable flag off (+0x395): both feedback paths stopped, still ageing");
 
         Step(true);
         Check(OneMotorCall(0, 23170, 0), "t=0.5: low sustain 0.5 -> (f32)pow(0.5,1.5) x 65535 = 23170, high over -> 0");

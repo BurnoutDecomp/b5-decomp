@@ -1,4 +1,5 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
+#include "pc/input/VehicleFeedback.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diagnostic] Prepare's per-stage log line
@@ -575,6 +576,14 @@ void GameStateModule::PreWorldUpdate(
     if (lbDriveThruDataDirty)
         SendSetUpAllDriveThrusMessage(lpActionQueue);
     DetectModeStarts(lpInput, lpOutput);
+    // FLAG PC-platform leaf: optional feedback observes this frame's locked
+    // snapshot and semantic events. Publish only copied values, never a handle.
+    if (CgsInput::PCGamepad::WantsFeedback())
+        CgsInput::PCGamepad::PublishFeedback(CgsInput::AdaptiveTriggers::ObserveVehicle(
+            mLastActiveRaceCarInterface, mePlayerActiveRaceCarIndex, lGameEvents, mContactSpyInterface,
+            miSimPauseFlags != 0 || mbWaitingForStreaming || mCarSelectManager.IsInJunkyard() ||
+            mOnlineCarSelectManager.IsInOnlineCarSelect(),
+            meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME || meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE));
     lGameEvents.Destruct();
     mpGameStateInviteManager->Update(lpOutput, lpActionQueue);
     mModeManager.HandleOnlineTeamModes(lpInput, lpOutput, &mpTakedownCache->mTakedownEventQueue);

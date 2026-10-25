@@ -48,6 +48,7 @@
 // the remaining 79 methods.
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "pc/input/BoostFeedback.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
 
@@ -5675,6 +5676,9 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
                 }
             }
 
+            // FLAG PC-platform leaf: this branch is the actual local-player
+            // strategy; other active cars must not supply boost-award feedback.
+            CgsInput::AdaptiveTriggers::BoostFeedback::BindPlayer(reinterpret_cast<std::uintptr_t>(lpStrategy));
             // The boost-lock payback holds the flame on regardless of the strategy.
             lInfo.mbIsBoosting =
                 lpStrategy->IsBoosting() ||

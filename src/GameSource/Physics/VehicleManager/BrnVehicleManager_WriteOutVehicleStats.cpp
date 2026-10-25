@@ -86,6 +86,7 @@
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "pc/input/EngineFeedback.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"          // [teleport] the reset queue
@@ -198,6 +199,10 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 
         if (lbIsLocalPlayer)
         {
+            // FLAG PC-platform leaf: bind the limiter sidecar to the actual
+            // local player, without adding fields to the recovered snapshot.
+            CgsInput::AdaptiveTriggers::EngineFeedback::BindPlayer(
+                reinterpret_cast<std::uintptr_t>(&lpRaceCar->mEngine), maRaceCarEntityIDs[liRaceCar].muValue);
             RaceCarState* lpPlayerRaceCarState = lpOutputInterface->GetRaceCarState(liRaceCar);
             CGS_ASSERT(lpPlayerRaceCarState != 0, "lpPlayerRaceCarState != NULL");
 
