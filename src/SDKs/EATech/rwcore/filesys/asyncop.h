@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "coreallocator/icoreallocator_interface.h"
 #include "SDKs/EATech/rwcore/filesys/list.h"   // detail::ListSingle (the op list)
 #include "eathread/eathread.h"                  // EA::Thread::ThreadTime (GetStatus / Device::Wait timeout)
 
@@ -239,22 +240,11 @@ namespace rw
                 u64           mu64Reserved20;  // +0x20
             };
 
-            // The process-wide filesys allocator (X360 off_8327F07C). The scalar deleting
-            // destructor frees a heap Handle through its vtable slot +0xC -- the 4th pointer
-            // == Free(this, 0). Modelled faithful to that indirect-call shape; the concrete
-            // object is installed by the filesys bring-up (null until then).
-            //
-            // Alloc (vtable slot +0x08) is the full EA-allocator signature proven by the
-            // Manager/AsyncOp allocation call sites:
-            //   (*(*alloc + 4))(alloc, size, "name", flags, align, alignOffset)
-            class Allocator
-            {
-            public:
-                virtual void  Slot0() = 0;          // +0x00
-                virtual void* Alloc(u32 luSize, const char* lpcName, u32 luFlags,
-                                    u32 luAlign, u32 luAlignOffset) = 0;  // +0x08 (2nd entry)
-                virtual void  Free(void* lpBlock, unsigned int luFlags) = 0;  // +0xC (4th entry)
-            };
+            // ARTIST82BBD640/+4 aligned Alloc and82BBD678/+C Free;
+            // DecFIGS Manager::sAllocator is EA::Allocator::ICoreAllocator*.
+            // Reuse the canonical four-slot interface, including its other Alloc
+            // overload. A three-slot Slot0/Alloc/Free proxy misroutes Free.
+            using Allocator = EA::Allocator::ICoreAllocator;
 
             // X360 off_8327F07C -- defined by the device-driver TU; null until installed.
             extern Allocator* gpFileSysAllocator;

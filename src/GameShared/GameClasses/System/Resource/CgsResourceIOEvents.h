@@ -60,6 +60,26 @@ namespace Events
     // The two leading fields and the trailing field are typed s32 (the only attestation is their
     // 32-bit store width + register-passed int args); they are named by offset pending a richer
     // DWARF/caller signature.
+    // DecFIGS h1324/1365; consumers828EC600/828EC660 attest all fields.
+    // Producer constructors/setters are not declared as completed APIs here.
+    struct RegisterMemFileRequest : public Event
+    {
+        const char* GetFileName() const { return macFileName; }
+        void* GetData() const { return mpData; }
+        u64 GetSize() const { return muSize; }
+    private:
+        char macFileName[256];
+        void* mpData;
+        u64 muSize;
+    };
+
+    struct UnregisterMemFileRequest : public Event
+    {
+        const char* GetFileName() const { return macFileName; }
+    private:
+        char macFileName[256];
+    };
+
     struct AddPatchRequest : public Event
     {
         CgsModule::BaseEventReceiverQueue* mpUser; // ARTIST +0; native pointer width.

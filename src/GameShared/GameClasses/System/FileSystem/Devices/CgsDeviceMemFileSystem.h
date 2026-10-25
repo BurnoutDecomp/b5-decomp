@@ -1,36 +1,56 @@
 #pragma once
 
-// CgsDeviceMemFileSystem.h — canonical home for CgsFileSystem::DeviceMemFileSystem,
-// the in-memory file-system device (a CgsFileSystem::Device that serves files out
-// of a RAM image rather than physical storage).
-//
-// SOURCE (X360 ARTIST):
-//   DeviceMemFileSystem::`vector deleting destructor' @ 0x828E0FF8
-//
-// MINIMAL SLICE: this pass lands only the polymorphic type + its virtual destructor
-// so the destructor's vtable slot (X360 off_8209FEA8) is emitted exactly once. The
-// device's real members (the backing memory image, the per-file table) and its
-// Init/Close/Read/Write/Seek overrides are added when those bodies are
-// reconstructed. The destructor itself owns no heap members — the X360 thunk only
-// restores the vtable pointer and conditionally frees the object.
-
 #include "types.hpp"
-#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"
+#include "SDKs/EATech/rwcore/filesys/device.h"
+#include <cstddef>
 
 namespace CgsFileSystem
 {
-    class DeviceMemFileSystem : public Device
+    // ARTIST828F0670..6B4 and820F7BB8; DecFIGS Drivers/CgsDeviceMemFileSystem.h.
+    // This is a RenderWare filesys driver, separate from the game's Device engine.
+    class DeviceMemFileSystem : public rw::core::filesys::DeviceDriver
     {
     public:
-        // @0x828E0FF8 (MSVC synthesises the 'vector deleting destructor' thunk from
-        // this virtual ~DeviceMemFileSystem(): it restores the vtable slot at this+0
-        // and, when the low "should-free" flag bit is set, frees the object).
-        virtual ~DeviceMemFileSystem();
+        struct MemFile
+        {
+            char macName[128];
+            u64 muSize;
+            void* mpData;
+        };
+        static const u32 KU_MAX_MEM_FILES = 64;
 
-        // The per-operation overrides (Init/Close/Read/Write/Seek) are reconstructed
-        // separately; until then the class inherits Device's pure declarations and
-        // stays abstract. The defined virtual destructor below still forces the
-        // vtable (and the vector-deleting-destructor thunk) to be emitted in the .cpp.
+        explicit DeviceMemFileSystem(const char* lpcDeviceName);
+        ~DeviceMemFileSystem() override;
+        // ARTIST828E0FF8: deleting tail uses free; the destructor has no owned heap.
+        static void operator delete(void* lpAddress) noexcept;
+
+        void Construct();
+        bool RegisterMemFile(const char* lpcFileName, void* lpData, u64 luSize);
+        bool UnregisterMemFile(const char* lpcFileName);
+
+        void* Open(const char* lpcFileName, unsigned int luFlags,
+                   rw::core::filesys::Handle** lppHandle) override;
+        void Close(void* lpFile) override;
+        unsigned int Read(void* lpFile, void* lpBuffer, unsigned int luSize,
+                          rw::core::filesys::DeviceDriver* lpDriver, void* lpContext) override;
+        unsigned int Write(void* lpFile, const void* lpBuffer, unsigned int luSize,
+                           rw::core::filesys::DeviceDriver* lpDriver, void* lpContext) override;
+        u64 Seek(void* lpFile, u64 luPosition, int liWhence,
+                 rw::core::filesys::DeviceDriver* lpDriver, void* lpContext) override;
+        u64 GetSize(void* lpFile) override;
+        bool Resize(void* lpFile, u64 luSize) override;
+        bool Delete(const char* lpcFileName) override;
+        bool Move(const char* lpcSource, const char* lpcDestination) override;
+        void* FindBegin(const char* lpcPattern,
+                        rw::core::filesys::DeviceDriver::FindData* lpFindData) override;
+        bool FindNext(void* lpFind,
+                      rw::core::filesys::DeviceDriver::FindData* lpFindData) override;
+        bool FindEnd(void* lpFind) override;
+        bool DirectoryCreate(const char* lpcDirectory) override;
+        bool DirectoryRemove(const char* lpcDirectory) override;
+
+    private:
+        bool mbConstructed;
+        MemFile maMemFiles[KU_MAX_MEM_FILES];
     };
-
-} // namespace CgsFileSystem
+}
