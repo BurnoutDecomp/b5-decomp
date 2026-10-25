@@ -118,6 +118,22 @@ namespace Events
         s32                                miEventId; // :946  (X360 +4)
     };
 
+    // DecFIGS h1201..1242; actual read surface at828F3D50..78.
+    // Producer Construct/setter bodies remain a separate source recovery.
+    struct OpenFileRequest : public FileEvent
+    {
+        const char* GetFileName() const { return macFileName; }
+        CgsFileSystem::FileAccess GetFileAccess() const { return meFileAccess; }
+        s32 GetPriority() const { return miPriority; }
+        bool GetUseHDCache() const { return mbUseHDCache; }
+
+    protected:
+        char macFileName[128];
+        CgsFileSystem::FileAccess meFileAccess;
+        s32 miPriority;
+        bool mbUseHDCache;
+    };
+
     // CgsResourceIOEvents.h -- a file IO event that carries a file-system handle.
     struct FileHandleEvent : public FileEvent
     {
@@ -133,6 +149,10 @@ namespace Events
     struct OpenFileResponse : public FileHandleEvent
     {
     };
+
+    // DecFIGS h1283 and h1311: these genuine payload types add no members.
+    struct CloseFileRequest : public FileHandleEvent {};
+    struct CloseFileResponse : public FileHandleEvent {};
 
     // DWARF CgsResourceIOEvents.h:972-1025 -- the request to open a streaming handle on a file
     // (the console 160-byte record the sound Module::DoOpenStream builds and posts, queue event

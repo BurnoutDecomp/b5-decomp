@@ -345,10 +345,10 @@ namespace CgsResource
             else if (liId == 5)   // AcquireResourceList -> pool input (X360 routes id 5 -> pool tag 5)
                 lpPoolQ->AddEvent(lpEvent, 5, liSize);
             else if (liId == 16)  // OpenReadStream -> asynchronous FileSystem + pending response
-                AddOpenReadStreamRequest(
+                AddOpenReadStreamRequestNativePC(
                     reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent));
             else if (liId == 18)  // CloseReadStream -> asynchronous FileSystem + pending response
-                AddCloseReadStreamRequest(
+                AddCloseReadStreamRequestNativePC(
                     reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -387,6 +387,8 @@ namespace CgsResource
             case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
             case 18: AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
             case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            case 20: AddOpenFileRequest(reinterpret_cast<const Events::OpenFileRequest*>(lpEvent)); break;
+            case 21: AddCloseFileRequest(reinterpret_cast<const Events::CloseFileRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
             const CgsModule::Event* lpNext = nullptr;
@@ -437,153 +439,238 @@ namespace CgsResource
         ProcessPoolOutputResponses(lpPoolOut);
     }
 
-    // ARTIST @0x829070B0. Start the asynchronous read-stream open, build the
-    // response carrying the returned handle, and retain it in the 16-slot
-    // pending pool until FileSystem reports the stream OPEN.
-    bool ResourceModule::AddOpenReadStreamRequest(
-        const Events::OpenReadStreamRequest* lpRequest)
+
+
+
+
+
+
+    // ARTIST828F2900/2998/2A30/2AC8: real owned response storage, not C++ new.
+    template <typename T>
+    void ResourceModule::FileSystemAlloc(T** lppResult)
     {
-        CgsFileSystem::ReadStream lStream = mFileSystem.OpenReadStream(
-            lpRequest->GetFileName(), lpRequest->GetBuffer(),
-            lpRequest->GetBufferSize(), lpRequest->GetNumBlocks(),
-            lpRequest->GetNormalPriority(), lpRequest->GetHighPriority(),
-            lpRequest->GetUseHDCache());
+        rw::ResourceDescriptor lDescriptor;
+        // FLAG PC-platform leaf: actual event sizeof follows native pointer width;
+        // preserve original main-only allocation, alignment16 and null name.
+        lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(sizeof(T));
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        const rw::Resource lResource = mpFileSystemAllocator->DoAllocate(lDescriptor, nullptr);
+        *lppResult = static_cast<T*>(lResource.m_baseResources[0]);
+    }
 
-        Events::OpenReadStreamResponse* lpResponse =
-            new Events::OpenReadStreamResponse;
-        CGS_ASSERT(lpResponse != 0,
-                   "Failed to allocate temporary memory for file system request\n");
-        if (!lpResponse)
-            return false;
-        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
+    // ARTIST828EA560/5C0/620/680: five zero lanes, actual main pointer, same owner.
+    template <typename T>
+    void ResourceModule::FileSystemFree(T* lpAddress)
+    {
+        rw::Resource lResource;
+        lResource.m_baseResources[0] = lpAddress;
+        mpFileSystemAllocator->DoFree(lResource);
+    }
 
-        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
-        CGS_ASSERT(lpPending != 0,
-                   "Failed to allocate record for file system request\n");
-        if (!lpPending)
+    // Original request assertions stream only these actual messages/source lines.
+    namespace
+    {
+        void AssertFileResponseAvailable(bool lbAvailable, const char* lpcMessage, s32 liLine)
         {
-            delete lpResponse;
-            return false;
+            if (!lbAvailable)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::MessageBufferPC lBuffer;
+                CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+                lStream << lpcMessage;
+                CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.h",
+                    liLine);
+                CgsDev::Assert::EndAssert();
+            }
         }
+    }
+
+    // ARTIST829070B0. The last original bool is stack-passed at829070FC.
+    bool ResourceModule::AddOpenReadStreamRequest(const Events::OpenReadStreamRequest* lpRequest)
+    {
+        const bool lbUseHDCache = lpRequest->GetUseHDCache();
+        const s32 liHighPriority = lpRequest->GetHighPriority();
+        const s32 liNormalPriority = lpRequest->GetNormalPriority();
+        const u32 luNumBlocks = lpRequest->GetNumBlocks();
+        const u32 luBufferSize = lpRequest->GetBufferSize();
+        void* const lpBuffer = lpRequest->GetBuffer();
+        const CgsFileSystem::ReadStream lStream = mFileSystem.OpenReadStream(
+            lpRequest->GetFileName(), lpBuffer, luBufferSize, luNumBlocks,
+            liNormalPriority, liHighPriority, lbUseHDCache);
+        Events::OpenReadStreamResponse* lpResponse;
+        FileSystemAlloc(&lpResponse);
+        AssertFileResponseAvailable(lpResponse != nullptr,
+            "Failed to allocate temporary memory for file system request\n", 784);
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
+        PendingFileResponse* const lpPending = mPendingFileResponses.Pop();
+        AssertFileResponseAvailable(lpPending != nullptr,
+            "Failed to allocate record for file system request\n", 788);
         lpPending->mpResponse = lpResponse;
         lpPending->meEvent = 16;
         lpPending->muFileId = 0xFFFFFFFFu;
         return lStream.IsValid();
     }
 
-    // ARTIST @0x82905428. Retain the close response and its stream-table index,
-    // then begin the asynchronous close. Completion is published only after the
-    // FileSystem slot reaches CLOSED.
-    bool ResourceModule::AddCloseReadStreamRequest(
-        const Events::CloseReadStreamRequest* lpRequest)
+    // ARTIST82905428: allocate/copy response, retain real slot, then start close.
+    bool ResourceModule::AddCloseReadStreamRequest(const Events::CloseReadStreamRequest* lpRequest)
     {
-        const CgsFileSystem::ReadStream lStream = lpRequest->GetStream();
-        Events::CloseReadStreamResponse* lpResponse =
-            new Events::CloseReadStreamResponse;
-        CGS_ASSERT(lpResponse != 0,
-                   "Failed to allocate temporary memory for file system request\n");
-        if (!lpResponse)
-            return false;
-        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
-
-        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
-        CGS_ASSERT(lpPending != 0,
-                   "Failed to allocate record for file system request\n");
-        if (!lpPending)
-        {
-            delete lpResponse;
-            return false;
-        }
+        Events::CloseReadStreamResponse* lpResponse;
+        FileSystemAlloc(&lpResponse);
+        AssertFileResponseAvailable(lpResponse != nullptr,
+            "Failed to allocate temporary memory for file system request\n", 860);
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lpRequest->GetStream());
+        PendingFileResponse* const lpPending = mPendingFileResponses.Pop();
+        AssertFileResponseAvailable(lpPending != nullptr,
+            "Failed to allocate record for file system request\n", 864);
         lpPending->mpResponse = lpResponse;
         lpPending->meEvent = 18;
-        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
-        mFileSystem.CloseReadStream(lStream);
+        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lpRequest->GetStream());
+        mFileSystem.CloseReadStream(lpRequest->GetStream());
         return true;
     }
 
-    // ARTIST @0x828F42B8. Snapshot the live pending records so completing one
-    // can safely return its index to the pool during the walk.
+    // ARTIST828F3D30: the negative open result produces the actual null/zero handle.
+    bool ResourceModule::AddOpenFileRequest(const Events::OpenFileRequest* lpRequest)
+    {
+        const bool lbUseHDCache = lpRequest->GetUseHDCache();
+        const s32 liPriority = lpRequest->GetPriority();
+        const CgsFileSystem::FileAccess leAccess = lpRequest->GetFileAccess();
+        const s32 liFileId = mFileSystem.Open(lpRequest->GetFileName(), leAccess,
+                                             liPriority, lbUseHDCache);
+        CgsFileSystem::FileHandle lFile;
+        if (liFileId >= 0)
+            lFile.Construct(&mFileSystem, static_cast<u32>(liFileId));
+        else
+            lFile.Construct(nullptr, 0);
+        Events::OpenFileResponse* lpResponse;
+        FileSystemAlloc(&lpResponse);
+        AssertFileResponseAvailable(lpResponse != nullptr,
+            "Failed to allocate temporary memory for file system request\n", 937);
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        lpResponse->SetFileHandle(lFile);
+        PendingFileResponse* const lpPending = mPendingFileResponses.Pop();
+        AssertFileResponseAvailable(lpPending != nullptr,
+            "Failed to allocate record for file system request\n", 941);
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 20;
+        lpPending->muFileId = static_cast<u32>(liFileId);
+        return true;
+    }
+
+    // ARTIST828F3EE0: close uses this FileSystem and the request handle's actual ID.
+    bool ResourceModule::AddCloseFileRequest(const Events::CloseFileRequest* lpRequest)
+    {
+        Events::CloseFileResponse* lpResponse;
+        FileSystemAlloc(&lpResponse);
+        AssertFileResponseAvailable(lpResponse != nullptr,
+            "Failed to allocate temporary memory for file system request\n", 965);
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        lpResponse->SetFileHandle(lpRequest->GetFileHandle());
+        mFileSystem.Close(lpRequest->GetFileHandle().GetFileId());
+        PendingFileResponse* const lpPending = mPendingFileResponses.Pop();
+        AssertFileResponseAvailable(lpPending != nullptr,
+            "Failed to allocate record for file system request\n", 971);
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 21;
+        lpPending->muFileId = lpRequest->GetFileHandle().GetFileId();
+        return true;
+    }
+
+    // ARTIST828F42B8: actual four completion predicates and matched allocator/free.
     void ResourceModule::ProcessPendingFileSystemResponses()
     {
-        PendingFileResponse*
-            lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
-        const s32 liCount = mPendingFileResponses.Get(
-            lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
-
+        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        const s32 liCount = mPendingFileResponses.Get(lapPending,
+            KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
         for (s32 li = 0; li < liCount; ++li)
         {
-            PendingFileResponse* lpPending = lapPending[li];
-            bool lbComplete = false;
-            CgsModule::BaseEventReceiverQueue* lpUser = 0;
-            s32 liResponseSize = 0;
-
-            if (lpPending->meEvent == 16)
+            PendingFileResponse* const lpPending = lapPending[li];
+            switch (lpPending->meEvent)
             {
-                Events::OpenReadStreamResponse* lpResponse =
-                    static_cast<Events::OpenReadStreamResponse*>(
-                        lpPending->mpResponse);
-                // FLAG PC-platform leaf: finish a failed open only after its
-                // stream slot has closed. The invalid response handle carries
-                // failure without changing the original response record shape.
-                if (lpPending->muFileId != 0xFFFFFFFFu)
+            case 16:
+            {
+                Events::OpenReadStreamResponse* const lpResponse =
+                    static_cast<Events::OpenReadStreamResponse*>(lpPending->mpResponse);
+                if (mFileSystem.IsReadStreamOpen(lpResponse->GetStream()))
                 {
-                    lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
+                    if (lpResponse->GetUser())
+                        lpResponse->GetUser()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                            lpPending->meEvent, static_cast<s32>(sizeof(*lpResponse)));
+                    FileSystemFree(lpResponse);
+                    const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
+                    mPendingFileResponses.Push(liIndex);
                 }
-                else if (mFileSystem.HasReadStreamFailedPC(lpResponse->GetStream()))
+                break;
+            }
+            case 17:
+            case 19:
+                break;
+            case 18:
+            {
+                Events::CloseReadStreamResponse* const lpResponse =
+                    static_cast<Events::CloseReadStreamResponse*>(lpPending->mpResponse);
+                if (mFileSystem.IsReadStreamClosed(static_cast<s32>(lpPending->muFileId)))
                 {
-                    const auto lStream = lpResponse->GetStream();
-                    if (lStream.IsValid())
-                    {
-                        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
-                        mFileSystem.CloseReadStream(lStream);
-                        lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
-                    }
-                    else
-                        lbComplete = true;
-                    CgsFileSystem::ReadStream lInvalid;
-                    lInvalid.Construct(nullptr);
-                    lpResponse->Construct(lpResponse->GetUser(), lpResponse->GetEventId(), lInvalid);
+                    if (lpResponse->GetUser())
+                        lpResponse->GetUser()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                            lpPending->meEvent, static_cast<s32>(sizeof(*lpResponse)));
+                    FileSystemFree(lpResponse);
+                    const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
+                    mPendingFileResponses.Push(liIndex);
                 }
-                else
-                    lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
-                lpUser = lpResponse->GetUser();
-                liResponseSize = sizeof(*lpResponse);
+                break;
             }
-            else if (lpPending->meEvent == 18)
+            case 20:
             {
-                Events::CloseReadStreamResponse* lpResponse =
-                    static_cast<Events::CloseReadStreamResponse*>(
-                        lpPending->mpResponse);
-                lbComplete = mFileSystem.IsReadStreamClosed(
-                    static_cast<s32>(lpPending->muFileId));
-                lpUser = lpResponse->GetUser();
-                liResponseSize = sizeof(*lpResponse);
+                Events::OpenFileResponse* const lpResponse =
+                    static_cast<Events::OpenFileResponse*>(lpPending->mpResponse);
+                if (lpResponse->GetFileHandle().GetStatus() == CgsFileSystem::E_FILESTATE_OPEN)
+                {
+                    if (lpResponse->GetUser())
+                        lpResponse->GetUser()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                            lpPending->meEvent, static_cast<s32>(sizeof(*lpResponse)));
+                    FileSystemFree(lpResponse);
+                    const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
+                    mPendingFileResponses.Push(liIndex);
+                }
+                break;
             }
-            else
+            case 21:
             {
-                CGS_ASSERT(false, "Unexpected pending file response\n");
+                Events::CloseFileResponse* const lpResponse =
+                    static_cast<Events::CloseFileResponse*>(lpPending->mpResponse);
+                if (mFileSystem.GetStatus(lpPending->muFileId) == CgsFileSystem::E_FILESTATE_CLOSED)
+                {
+                    if (lpResponse->GetUser())
+                        lpResponse->GetUser()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                            lpPending->meEvent, static_cast<s32>(sizeof(*lpResponse)));
+                    FileSystemFree(lpResponse);
+                    const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
+                    mPendingFileResponses.Push(liIndex);
+                }
+                break;
             }
-
-            if (!lbComplete)
-                continue;
-
-            if (lpUser)
-                lpUser->AddEvent(
-                    static_cast<const CgsModule::Event*>(
-                        lpPending->mpResponse),
-                    lpPending->meEvent, liResponseSize);
-
-            if (lpPending->meEvent == 16)
-                delete static_cast<Events::OpenReadStreamResponse*>(
-                    lpPending->mpResponse);
-            else
-                delete static_cast<Events::CloseReadStreamResponse*>(
-                    lpPending->mpResponse);
-
-            const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
-            mPendingFileResponses.Push(liIndex);
+            default:
+                CgsDev::Assert::BeginAssert();
+                {
+                    CgsDev::Assert::MessageBufferPC lBuffer;
+                    CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    lStream << "Unexpected pending file response\n";
+                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp",
+                        1160);
+                    CgsDev::Assert::EndAssert();
+                }
+                break;
+            }
         }
     }
+
 
     // Drain the pool module's output queue (DoAcquireResourceRequest etc. responses) and forward each to
     // its requester's receiver queue (response->mpUser). The pool-response slice of ProcessResourceResponses
@@ -592,7 +679,7 @@ namespace CgsResource
     // requester as receiver id 4, which is the id GameDataModule's internal drain (and every X360
     // receiver-side consumer) switches on. Only the tags the PC pool module emits are mapped; unmapped
     // tags pass through unchanged (their producers land with their own passes).
-    void ResourceModule::ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut)
+    void ResourceModule::ProcessPoolOutputResponses(const PoolIO::OutputBuffer* lpPoolOut)
     {
         const PoolIO::OutputBuffer::PoolOutputQueue* lpQ =
             static_cast<const PoolIO::OutputBuffer&>(*lpPoolOut).GetPoolOutputQueue();
@@ -734,6 +821,208 @@ namespace CgsResource
     }
 
 
+    // FLAG PC-platform leaf: complete existing native body and allocation/failure policy retained.
+    void ResourceModule::ProcessResourceRequestsNativePC(const ResourceIO::InputBuffer* lpResIn,
+        CgsMemory::MemoryIO::InputBuffer* lpMemIn,
+        BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
+    {
+        const auto* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
+        auto* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            switch (liTag)
+            {
+            case 0: lpPoolQueue->AddEvent(lpEvent, 0, liSize); break;
+            case 1: break;
+            case 2: lpLoaderIn->GetLoadBundleRequestQueue()->AddEvent(
+                        *reinterpret_cast<const Events::LoadBundleRequest*>(lpEvent)); break;
+            case 3: lpLoaderIn->GetUnloadBundleRequestQueue()->AddEvent(
+                        *reinterpret_cast<const Events::UnloadBundleRequest*>(lpEvent)); break;
+            case 4: case 5: lpPoolQueue->AddEvent(lpEvent, liTag, liSize); break;
+            case 6: lpPoolQueue->AddEvent(lpEvent, 8, liSize); break;
+            case 7: lpPoolQueue->AddEvent(lpEvent, 11, liSize); break;
+            case 8: lpPoolQueue->AddEvent(lpEvent, 12, liSize); break;
+            case 9: case 10: case 11: case 12: case 13: case 14: case 15:
+                lpMemIn->GetMemoryRequestQueue()->AddEvent(lpEvent, 1, liSize); break;
+            case 16: AddOpenReadStreamRequestNativePC(reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent)); break;
+            case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
+            case 18: AddCloseReadStreamRequestNativePC(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
+            case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            default: CGS_ASSERT(false, "Invalid event id\n"); break;
+            }
+            const CgsModule::Event* lpNext = nullptr;
+            liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // FLAG PC-platform leaf: complete existing native body and allocation/failure policy retained.
+    void ResourceModule::ProcessBundleLoaderStreamRequestsNativePC(const BundleLoaderIO::OutputBuffer* lpLoaderOut)
+    {
+        const auto* lpQueue = lpLoaderOut->GetStreamRequestQueue();
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            if (liTag == 16)
+                AddOpenReadStreamRequestNativePC(reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent));
+            else if (liTag == 18)
+                AddCloseReadStreamRequestNativePC(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
+            else
+                CGS_ASSERT(false, "Unexpected request from bundle loader\n");
+            const CgsModule::Event* lpNext = nullptr;
+            liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // FLAG PC-platform leaf: complete existing native body and allocation/failure policy retained.
+    bool ResourceModule::AddOpenReadStreamRequestNativePC(
+        const Events::OpenReadStreamRequest* lpRequest)
+    {
+        CgsFileSystem::ReadStream lStream = mFileSystem.OpenReadStream(
+            lpRequest->GetFileName(), lpRequest->GetBuffer(),
+            lpRequest->GetBufferSize(), lpRequest->GetNumBlocks(),
+            lpRequest->GetNormalPriority(), lpRequest->GetHighPriority(),
+            lpRequest->GetUseHDCache());
+
+        Events::OpenReadStreamResponse* lpResponse =
+            new Events::OpenReadStreamResponse;
+        CGS_ASSERT(lpResponse != 0,
+                   "Failed to allocate temporary memory for file system request\n");
+        if (!lpResponse)
+            return false;
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
+
+        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
+        CGS_ASSERT(lpPending != 0,
+                   "Failed to allocate record for file system request\n");
+        if (!lpPending)
+        {
+            delete lpResponse;
+            return false;
+        }
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 16;
+        lpPending->muFileId = 0xFFFFFFFFu;
+        return lStream.IsValid();
+    }
+
+    // FLAG PC-platform leaf: complete existing native body and allocation/failure policy retained.
+    bool ResourceModule::AddCloseReadStreamRequestNativePC(
+        const Events::CloseReadStreamRequest* lpRequest)
+    {
+        const CgsFileSystem::ReadStream lStream = lpRequest->GetStream();
+        Events::CloseReadStreamResponse* lpResponse =
+            new Events::CloseReadStreamResponse;
+        CGS_ASSERT(lpResponse != 0,
+                   "Failed to allocate temporary memory for file system request\n");
+        if (!lpResponse)
+            return false;
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
+
+        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
+        CGS_ASSERT(lpPending != 0,
+                   "Failed to allocate record for file system request\n");
+        if (!lpPending)
+        {
+            delete lpResponse;
+            return false;
+        }
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 18;
+        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
+        mFileSystem.CloseReadStream(lStream);
+        return true;
+    }
+
+    // FLAG PC-platform leaf: complete existing native body and allocation/failure policy retained.
+    void ResourceModule::ProcessPendingFileSystemResponsesNativePC()
+    {
+        PendingFileResponse*
+            lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
+        const s32 liCount = mPendingFileResponses.Get(
+            lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
+
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            PendingFileResponse* lpPending = lapPending[li];
+            bool lbComplete = false;
+            CgsModule::BaseEventReceiverQueue* lpUser = 0;
+            s32 liResponseSize = 0;
+
+            if (lpPending->meEvent == 16)
+            {
+                Events::OpenReadStreamResponse* lpResponse =
+                    static_cast<Events::OpenReadStreamResponse*>(
+                        lpPending->mpResponse);
+                // FLAG PC-platform leaf: finish a failed open only after its
+                // stream slot has closed. The invalid response handle carries
+                // failure without changing the original response record shape.
+                if (lpPending->muFileId != 0xFFFFFFFFu)
+                {
+                    lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
+                }
+                else if (mFileSystem.HasReadStreamFailedPC(lpResponse->GetStream()))
+                {
+                    const auto lStream = lpResponse->GetStream();
+                    if (lStream.IsValid())
+                    {
+                        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
+                        mFileSystem.CloseReadStream(lStream);
+                        lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
+                    }
+                    else
+                        lbComplete = true;
+                    CgsFileSystem::ReadStream lInvalid;
+                    lInvalid.Construct(nullptr);
+                    lpResponse->Construct(lpResponse->GetUser(), lpResponse->GetEventId(), lInvalid);
+                }
+                else
+                    lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
+                lpUser = lpResponse->GetUser();
+                liResponseSize = sizeof(*lpResponse);
+            }
+            else if (lpPending->meEvent == 18)
+            {
+                Events::CloseReadStreamResponse* lpResponse =
+                    static_cast<Events::CloseReadStreamResponse*>(
+                        lpPending->mpResponse);
+                lbComplete = mFileSystem.IsReadStreamClosed(
+                    static_cast<s32>(lpPending->muFileId));
+                lpUser = lpResponse->GetUser();
+                liResponseSize = sizeof(*lpResponse);
+            }
+            else
+            {
+                CGS_ASSERT(false, "Unexpected pending file response\n");
+            }
+
+            if (!lbComplete)
+                continue;
+
+            if (lpUser)
+                lpUser->AddEvent(
+                    static_cast<const CgsModule::Event*>(
+                        lpPending->mpResponse),
+                    lpPending->meEvent, liResponseSize);
+
+            if (lpPending->meEvent == 16)
+                delete static_cast<Events::OpenReadStreamResponse*>(
+                    lpPending->mpResponse);
+            else
+                delete static_cast<Events::CloseReadStreamResponse*>(
+                    lpPending->mpResponse);
+
+            const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
+            mPendingFileResponses.Push(liIndex);
+        }
+    }
+
     bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
     {
         auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
@@ -753,10 +1042,10 @@ namespace CgsResource
         s_memIn.Construct(); s_memOut.Construct();
         s_loaderIn.Construct(); s_loaderOut.Construct(); s_loaderRecord.Construct();
 
-        ProcessPendingFileSystemResponses();
+        ProcessPendingFileSystemResponsesNativePC();
         lpResIn->LockForRead();
         s_memIn.LockForWrite(); s_loaderIn.LockForWrite(); s_poolIn.LockForWrite();
-        ProcessResourceRequests(lpResIn, &s_memIn, &s_loaderIn, &s_poolIn);
+        ProcessResourceRequestsNativePC(lpResIn, &s_memIn, &s_loaderIn, &s_poolIn);
         s_poolIn.UnlockForWrite(); s_loaderIn.UnlockForWrite(); s_memIn.UnlockForWrite();
         lpResIn->UnlockForRead();
         lpResIn->LockForWrite(); lpResIn->GetResourceQueue()->Clear(); lpResIn->UnlockForWrite();
@@ -765,7 +1054,7 @@ namespace CgsResource
             renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_LOAD);
             mBundleLoaderModule.Update(&s_loaderIn, &s_loaderOut);
             s_loaderOut.LockForRead();
-            ProcessBundleLoaderStreamRequests(&s_loaderOut);
+            ProcessBundleLoaderStreamRequestsNativePC(&s_loaderOut);
             s_loaderOut.UnlockForRead();
         }
         s_poolIn.LockForWrite(); s_loaderOut.LockForRead();

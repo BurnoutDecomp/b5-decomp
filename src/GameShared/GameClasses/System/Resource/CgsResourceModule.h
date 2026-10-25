@@ -148,7 +148,7 @@ namespace CgsResource
         // Drain the pool module's output queue (acquire/etc. responses) and route each to its requester
         // (response->mpUser). The pool-response slice of the X360 ProcessResourceResponses shuttle. Caller
         // holds the pool output buffer read-locked.
-        void ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut);
+        void ProcessPoolOutputResponses(const PoolIO::OutputBuffer* lpPoolOut);
 
         // Accessor so the GameDataModule's CreatePools/CreateBanks can drive the embedded PoolModule
         // (the X360 reaches it through the resource-module vtable; here a by-name accessor).
@@ -158,17 +158,11 @@ namespace CgsResource
         PoolModule&             GetPoolModule()   { return mPoolModule; }
         CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
 
-        // ---- file-system request adders (Wave 49) --------------------------------------------
-        // The two deprecated write-stream adders are bodied (bare "Write streams deprecated"
-        // assert + return false; @0x828D8310 / @0x828D83A0). The four real file-system adders
-        // (AddAddPatchRequest @0x828FD5C8 / AddCloseFileRequest @0x828F3EE0 /
-        // AddRegisterMemFileRequest @0x828EC600 / AddUnregisterMemFileRequest @0x828EC660) are
-        // PARTIAL: they need a cross-TU dependency web (FileSystem::{Lock,Unlock,Close,
-        // Register,Unregister}Internal + GetPatchManager, PatchManager::AddPatch, FileSystemAlloc,
-        // CgsContainers::IndexedPool8<PendingFileResponse,16>, and the FileEvent/FileHandleEvent/
-        // CloseFileRequest/RegisterMemFileRequest/UnregisterMemFileRequest event structs) that is
-        // not yet homed, so they are intentionally NOT declared/bodied here (left to a later wave
-        // to grow coherently, same disposition as wave44's blocked BinaryFileResource members).
+        // Original stream/file response families use the actual filesystem allocator.
+        // The selected native path retains its existing new/delete/failure policy below.
+        // Register/unregister memory files22/23 and retained patch25 remain provider work.
+        bool AddOpenFileRequest(const Events::OpenFileRequest* lpRequest); //828F3D30
+        bool AddCloseFileRequest(const Events::CloseFileRequest* lpRequest); //828F3EE0
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
         bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
         bool AddOpenReadStreamRequest(const Events::OpenReadStreamRequest* lpRequest);     // @0x829070B0
@@ -176,6 +170,17 @@ namespace CgsResource
         void ProcessPendingFileSystemResponses();                                           // @0x828F42B8
 
     private:
+        template <typename T> void FileSystemAlloc(T** lppResult);
+        template <typename T> void FileSystemFree(T* lpAddress);
+        // FLAG PC-platform leaf: preserve the existing selected response allocator/failure path.
+        bool AddOpenReadStreamRequestNativePC(const Events::OpenReadStreamRequest* lpRequest);
+        bool AddCloseReadStreamRequestNativePC(const Events::CloseReadStreamRequest* lpRequest);
+        void ProcessPendingFileSystemResponsesNativePC();
+        void ProcessResourceRequestsNativePC(const ResourceIO::InputBuffer* lpResIn,
+            CgsMemory::MemoryIO::InputBuffer* lpMemIn,
+            BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn);
+        void ProcessBundleLoaderStreamRequestsNativePC(const BundleLoaderIO::OutputBuffer* lpLoaderOut);
+
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage             mePrepareStage;       // +0x228 (a1[138])
         EReleaseStage             meReleaseStage;       // +0x22C (a1[139])

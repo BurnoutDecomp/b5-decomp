@@ -73,6 +73,65 @@ namespace
     // subsystem-wide lock, and installs the embedded subobjects' vtables. In faithful C++ that is
     // exactly the default member-subobject construction: each File / StreamDeviceDiskRead / FileLog /
     // Futex constructs itself (installing its own lock + vtable). mbPrepared starts false.
+    // DecFIGS h122; original public wrapper inlined at828F3D60..88.
+    s32 FileSystem::Open(const char* lpcFileName, FileAccess leFileAccess,
+                         s32 liPriority, bool lbUseHDCache)
+    {
+        mFileSystemFutex.Lock();
+        const s32 liFileId = OpenInternal(lpcFileName, leFileAccess, liPriority, lbUseHDCache);
+        mFileSystemFutex.Unlock();
+        return liFileId;
+    }
+
+    // ARTIST828F0718; inspect actual per-file status before taking a free slot.
+    s32 FileSystem::OpenInternal(const char* lpcFileName, FileAccess leFileAccess,
+                                 s32 liPriority, bool lbUseHDCache)
+    {
+        u32 luFileId = 0;
+        while (luFileId < KU_MAXNOOFFILES)
+        {
+            if (maFiles[luFileId].GetStatus() == E_FILESTATE_CLOSED)
+                break;
+            ++luFileId;
+        }
+        if (luFileId == KU_MAXNOOFFILES)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("No more files available to open.\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp", 455);
+            CgsDev::Assert::EndAssert();
+            return -1;
+        }
+        maFiles[luFileId].Open(lpcFileName, leFileAccess, liPriority, lbUseHDCache);
+        return static_cast<s32>(luFileId);
+    }
+
+    // DecFIGS h146; original caller inlines this lock/call/unlock sequence.
+    bool FileSystem::Close(u32 luFileId)
+    {
+        mFileSystemFutex.Lock();
+        const bool lbResult = CloseInternal(luFileId);
+        mFileSystemFutex.Unlock();
+        return lbResult;
+    }
+
+    // ARTIST828F08C8: range assertion continues into the real Close call.
+    bool FileSystem::CloseInternal(u32 luFileId)
+    {
+        if (luFileId >= KU_MAXNOOFFILES)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "Invalid file id\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp", 520);
+            CgsDev::Assert::EndAssert();
+        }
+        maFiles[luFileId].Close();
+        return true;
+    }
+
     FileSystem::FileSystem()
         : mbPrepared(false)
         , muNumUsedReadStreams(0)
