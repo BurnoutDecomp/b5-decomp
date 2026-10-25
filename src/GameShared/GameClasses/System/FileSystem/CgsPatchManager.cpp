@@ -113,9 +113,10 @@ namespace CgsFileSystem
                 CgsCore::SPrintf(lacChild, sizeof(lacChild), "%s\\%s", lpcSubFolder, lFindData.cFileName);
                 SearchFolder(lpcPatchFolder, lacChild);
             }
-            else if ((lFindData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0)
+            else if ((lFindData.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) != 0)
             {
-                // A regular file: record it under the current patch. The asm passes the path with
+                // ARTIST828F0B30 tests bit0x80 (FILE_ATTRIBUTE_NORMAL), not ARCHIVE0x20.
+                // Record it under the current patch. The asm passes the path with
                 // its leading '\' stripped (var_46F = &buf+1) so the recorded key matches lookups.
                 CgsCore::SPrintf(lacChild, sizeof(lacChild), "%s\\%s", lpcSubFolder, lFindData.cFileName);
                 AddFileToCurrentPatch(lacChild + 1);
