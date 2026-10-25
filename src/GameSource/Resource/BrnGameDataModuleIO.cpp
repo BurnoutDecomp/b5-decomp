@@ -56,6 +56,23 @@ namespace GameDataIO
         mpDebug2dRenderBuffer = 0;
     }
 
+    // Inlined in ARTIST8267498C..49AC; DecFIGS BrnGameDataModuleIO.h:91.
+    // Only the consumed payload is cleared; the caller's IO write lock remains held.
+    void InputBuffer::Clear()
+    {
+        mRequestInterface.mRequestQueue.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
+        mpDebug2dRenderBuffer = nullptr;
+    }
+
+    // Inlined in ARTIST82674818..4828; DecFIGS BrnGameDataModuleIO.h:163.
+    // The original preserves the live-update byte and the IO lock/status owner.
+    void OutputBuffer::Clear()
+    {
+        mFileSystemStatusInterface.Construct();
+        mpAllocatorList = nullptr;
+    }
+
     // ARTIST82666908. Filesystem status is separate from the live-update byte;
     // original construction stores no value to mbLiveUpdateStatus.
     void OutputBuffer::Construct()
