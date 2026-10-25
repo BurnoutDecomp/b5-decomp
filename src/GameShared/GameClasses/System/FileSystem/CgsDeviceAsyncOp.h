@@ -24,12 +24,13 @@ namespace CgsFileSystem
         void Close(Handle lHandle, s32 liPriority);                                                       // @ 0x828F24C0
 
         // Block until the in-flight operation completes (asserts one is in flight), then clear it.
+        bool IsDone(); // ARTIST828DE3E8: real semaphore count probe, no consumption
         void Wait();   // @ 0x828DE338
 
         // Results of the last completed operation (trivial inline accessors; inlined at the X360
         // call sites).
         u64    GetLastOperationSize()   const { return muSize; }
-        Handle GetLastOperationHandle() const { return mHandle; }
+        Handle GetLastOperationHandle(); // ARTIST826610A8, non-const real wait assertion
         // ARTIST 0x82661160 and DWARF :93: non-const, with the outstanding-op
         // assertion before loading the result. Defined by the same mounted provider.
         s32    GetLastOperationResult();
