@@ -7,6 +7,7 @@
 #include <new>   // std::nothrow (the GlobalGraphics arena carve)
 #include <malloc.h>   // _aligned_malloc (DefaultLinearAllocator PC backing)
 #include <Windows.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
+#include <cstring>   // original ClearResource byte fill
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
 // the heap the whole GameData resource system (ConstructResourceModule -> ResourceModule::Construct)
@@ -20,6 +21,27 @@
 // init (it points at the allocator object) so the ICE null-check passes regardless of init order.
 namespace BrnResource
 {
+    // ARTIST826647B0..47F8. A nonnull lane is filled even when its size is0;
+    // the method adds no size guard, allocator call or ownership change.
+    void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor)
+    {
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            if (lrResource.m_baseResources[luLane] != nullptr)
+                std::memset(lrResource.m_baseResources[luLane], 0xCD,
+                    lrDescriptor.m_baseResourceDescriptors[luLane].m_size);
+        }
+    }
+
+    // Original inlined two-store pointer/name overload. These existing typed
+    // fields define native layout; this method introduces no virtual dispatch.
+    void LinearResourceAllocator::Construct(rw::LinearResourceAllocator* lpAllocator,
+                                             const char* lpcName)
+    {
+        mpLinearAllocator = lpAllocator;
+        mpcName = lpcName;
+    }
+
     namespace
     {
         // 768 MB root debug heap. [PC-LEAF] the X360 reserves a fixed ~smaller budget split across banks;

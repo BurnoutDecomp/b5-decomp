@@ -31,6 +31,10 @@ namespace rw { namespace core { struct GeneralResourceAllocator; } }   // GetGam
 namespace BrnResource
 {
 
+// ARTIST826647B0; DecFIGS BrnResourceAllocator.cpp:632. Fill every
+// nonnull lane with the original0xCD byte over its descriptor size.
+void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
+
 // The Burnout heap-backed RenderWare resource allocator. Public Allocate() returns
 // an rw::Resource carved from the underlying general allocator (the X360 build
 // resolves this through the IResourceAllocator vtable's DoAllocate slot).
@@ -68,11 +72,13 @@ private:
 
 // The named game-side wrapper over an rw::LinearResourceAllocator (the GlobalGraphics,
 // GlobalResource, MemFile and EmbeddedTexture allocators of Allocators). SLICE: the two members
-// and the three inline queries the renderer's memory report reads; Construct, the remaining
-// queries and the DoAllocate / DoFree / DoFreeDisposable overrides grow here with the Allocators TU.
+// and the pointer/name Construct plus the three queries the renderer's memory report reads.
+// The remaining queries and virtual allocation/free overrides grow with the real owner chain.
 class LinearResourceAllocator : public rw::IResourceAllocator
 {
 public:
+    // Inlined ARTIST82666C48..4C / 82666D38..3C; DecFIGS cpp:1221.
+    void Construct(rw::LinearResourceAllocator* lpAllocator, const char* lpcName);
     rw::ResourceDescriptor GetCapacity() const;
     rw::ResourceDescriptor GetCurrentUsage() const;
     const rw::Resource&    GetLinearHeapBase() const;
