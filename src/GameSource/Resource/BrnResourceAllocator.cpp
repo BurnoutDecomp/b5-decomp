@@ -3,6 +3,7 @@
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
 #include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // original budget breakdown SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include <new>   // std::nothrow (the GlobalGraphics arena carve)
 #include <malloc.h>   // _aligned_malloc (DefaultLinearAllocator PC backing)
@@ -270,6 +271,49 @@ namespace BrnResource
 
         gaInitialDefaultLinearBacking[1] = _aligned_malloc(0x400000u, 0x10000u);
         maAllocators[2].Create(gaInitialDefaultLinearBacking[1], 0x400000u);
+    }
+
+    // ARTIST82661AF0..1CF0; named original Allocators::Construct caller8266AEFC.
+    // Five original usage reports followed by the separate main/physical budgets.
+    void DefaultLinearAllocator::CheckRenderwareBudget()
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Render budget used:\n";
+        for (s32 liLane = 0; liLane < 5; ++liLane)
+        {
+            if (static_cast<u32>(maAllocators[liLane].GetUsage()) != 0)
+            {
+                // ARTIST rereads usage separately for each original base1024 part.
+                const u32 luMegabytes = static_cast<u32>(maAllocators[liLane].GetUsage()) >> 20;
+                const u32 luKilobytes = (static_cast<u32>(maAllocators[liLane].GetUsage()) -
+                    (luMegabytes << 20)) >> 10;
+                const u32 luBytes = static_cast<u32>(maAllocators[liLane].GetUsage()) -
+                    (((luMegabytes << 10) + luKilobytes) << 10);
+                char lacLine[256];
+                CgsCore::SPrintf(lacLine, sizeof(lacLine), "  %umb %ukb %ub of %s\n",
+                    luMegabytes, luKilobytes, luBytes, KAC_DEFAULT_LINEAR_RESOURCE_NAMES[liLane]);
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
+        if (static_cast<u32>(maAllocators[0].GetUsage()) > 0x800u)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "Renderware over budget in main memory\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp", 825);
+            CgsDev::Assert::EndAssert();
+        }
+        if (static_cast<u32>(maAllocators[2].GetUsage()) > 0x400000u)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "Renderware over budget in physical memory\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp", 826);
+            CgsDev::Assert::EndAssert();
+        }
     }
 
     // ARTIST 0x82664800. All five descriptor lanes are allocated from the matching
