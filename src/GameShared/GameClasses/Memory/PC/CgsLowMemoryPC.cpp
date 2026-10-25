@@ -122,6 +122,138 @@ namespace CgsMemory
             return lpBlock;
         }
 
+        // PROPOSAL ONLY. FLAG PC-platform leaf: return an actual Windows
+        // reservation base whose full committed extent fits the Ptr32 domain.
+        // Existing Reserve/Release and their callers retain their current bodies.
+        void* ReserveAligned(size_t lnBytes, size_t lnAlignment, u32 luPageProtection)
+        {
+            if (lnBytes == 0 || lnBytes >= KU_LOW_LIMIT ||
+                lnAlignment >= KU_LOW_LIMIT ||
+                (lnAlignment != 0 && (lnAlignment & (lnAlignment - 1)) != 0))
+            {
+                SetLastError(ERROR_INVALID_PARAMETER);
+                return nullptr;
+            }
+
+            SYSTEM_INFO lSystemInfo;
+            GetSystemInfo(&lSystemInfo);
+            const ULONG_PTR luGranularity = lSystemInfo.dwAllocationGranularity;
+            const ULONG_PTR luPageSize = lSystemInfo.dwPageSize;
+            if (luGranularity == 0 || luPageSize == 0 ||
+                (luGranularity & (luGranularity - 1)) != 0)
+            {
+                SetLastError(ERROR_NOT_SUPPORTED);
+                return nullptr;
+            }
+
+            ULONG_PTR luLower = reinterpret_cast<ULONG_PTR>(lSystemInfo.lpMinimumApplicationAddress);
+            if (luLower < luGranularity)
+                luLower = luGranularity;
+            luLower = (luLower + luGranularity - 1) & ~(luGranularity - 1);
+            ULONG_PTR luUpper = KU_LOW_LIMIT;
+            const ULONG_PTR luSystemMaximum =
+                reinterpret_cast<ULONG_PTR>(lSystemInfo.lpMaximumApplicationAddress);
+            if (luSystemMaximum < luUpper - 1)
+                luUpper = (luSystemMaximum + 1) & ~(luGranularity - 1);
+
+            ULONG_PTR luAlignment = lnAlignment == 0 ? 16 : lnAlignment;
+            if (luAlignment < luGranularity)
+                luAlignment = luGranularity;
+            // lnBytes was bounded below4GiB above, so rounding cannot overflow
+            // this Windows-x64 SIZE_T. VirtualAlloc2 requires a page multiple.
+            const SIZE_T luRoundedBytes =
+                ((lnBytes + luPageSize - 1) / luPageSize) * luPageSize;
+            if (luLower >= luUpper || luRoundedBytes > luUpper - luLower)
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return nullptr;
+            }
+
+            // A separate thread-safe symbol cache leaves the existing native
+            // Reserve helper/cache byte-exact. It owns no allocation or arena.
+            static const PfnVirtualAlloc2 spAlignedVirtualAlloc2 = []() -> PfnVirtualAlloc2 {
+                HMODULE lhModule = GetModuleHandleW(L"kernelbase.dll");
+                if (lhModule == nullptr)
+                    lhModule = GetModuleHandleW(L"kernel32.dll");
+                if (lhModule == nullptr)
+                    return nullptr;
+                return reinterpret_cast<PfnVirtualAlloc2>(
+                    reinterpret_cast<void*>(GetProcAddress(lhModule, "VirtualAlloc2")));
+            }();
+            if (spAlignedVirtualAlloc2 != nullptr)
+            {
+                MEM_ADDRESS_REQUIREMENTS lRequirements = {};
+                lRequirements.LowestStartingAddress = reinterpret_cast<void*>(luLower);
+                lRequirements.HighestEndingAddress = reinterpret_cast<void*>(luUpper - 1);
+                lRequirements.Alignment = luAlignment;
+                MEM_EXTENDED_PARAMETER lParameter = {};
+                lParameter.Type = MemExtendedParameterAddressRequirements;
+                lParameter.Pointer = &lRequirements;
+                void* lpBlock = spAlignedVirtualAlloc2(GetCurrentProcess(), nullptr,
+                    luRoundedBytes, MEM_RESERVE | MEM_COMMIT, luPageProtection, &lParameter, 1);
+                if (lpBlock != nullptr)
+                {
+                    const ULONG_PTR luBase = reinterpret_cast<ULONG_PTR>(lpBlock);
+                    if (luBase >= luLower && luBase < luUpper &&
+                        luRoundedBytes <= luUpper - luBase &&
+                        (luBase & (luAlignment - 1)) == 0)
+                        return lpBlock;
+                    VirtualFree(lpBlock, 0, MEM_RELEASE);
+                    SetLastError(ERROR_INVALID_ADDRESS);
+                    return nullptr;
+                }
+            }
+
+            // Older hosts use actual free Windows regions. Every candidate is
+            // an aligned reservation base; no interior-pointer header or owner
+            // table is needed for the existing Release(base) operation.
+            ULONG_PTR luCursor = luLower;
+            while (luCursor < luUpper)
+            {
+                MEMORY_BASIC_INFORMATION lRegion;
+                if (VirtualQuery(reinterpret_cast<const void*>(luCursor),
+                    &lRegion, sizeof(lRegion)) == 0)
+                    return nullptr;
+                const ULONG_PTR luRegionBase = reinterpret_cast<ULONG_PTR>(lRegion.BaseAddress);
+                if (luRegionBase >= luUpper)
+                    break;
+                ULONG_PTR luRegionEnd = luUpper;
+                if (lRegion.RegionSize < luUpper - luRegionBase)
+                    luRegionEnd = luRegionBase + lRegion.RegionSize;
+                if (lRegion.State == MEM_FREE)
+                {
+                    const ULONG_PTR luStart = luCursor > luRegionBase ? luCursor : luRegionBase;
+                    const ULONG_PTR luCandidate =
+                        (luStart + luAlignment - 1) & ~(luAlignment - 1);
+                    if (luCandidate >= luLower && luCandidate < luRegionEnd &&
+                        luRoundedBytes <= luRegionEnd - luCandidate)
+                    {
+                        void* lpBlock = VirtualAlloc(reinterpret_cast<void*>(luCandidate),
+                            luRoundedBytes, MEM_RESERVE | MEM_COMMIT, luPageProtection);
+                        if (lpBlock != nullptr)
+                        {
+                            if (reinterpret_cast<ULONG_PTR>(lpBlock) == luCandidate)
+                                return lpBlock;
+                            VirtualFree(lpBlock, 0, MEM_RELEASE);
+                            SetLastError(ERROR_INVALID_ADDRESS);
+                            return nullptr;
+                        }
+                        if (GetLastError() != ERROR_INVALID_ADDRESS)
+                            return nullptr;
+                        // A reservation raced the free-region query. Requery
+                        // the next aligned candidate with strict progress.
+                        luCursor = luCandidate + luAlignment;
+                        continue;
+                    }
+                }
+                if (luRegionEnd <= luCursor)
+                    break;
+                luCursor = luRegionEnd;
+            }
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return nullptr;
+        }
+
         void Release(void* lpBlock)
         {
             if (lpBlock != 0)
