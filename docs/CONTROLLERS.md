@@ -25,6 +25,59 @@ when distributing the build. No separate SDL installation is required.
 CMake targets find `vendor/sdl3/cmake` or an explicit `SDL3_DIR` and stage the
 shared runtime and license beside their executable.
 
+## DualSense adaptive triggers
+
+Native DualSense controllers can use adaptive pedal feedback: engine revs and
+gear changes, traction and drifting, braking, boost, road contact, jumps,
+landings, scrapes, impacts and Showtime. Vehicle profiles give speed, stunt,
+powerful and large vehicles different signatures. Ordinary rumble still works.
+
+In **config.ini beside Burnout_PC.exe**, add:
+
+```ini
+[AdaptiveTriggers]
+Enabled=1
+Preset=Immersive
+Resistance=100
+Texture=100
+LeftStrength=100
+RightStrength=100
+ArcadeCues=1
+Diagnostics=0
+```
+
+Restart after editing. Presets are `Off`, `Light`, `Standard` and `Immersive`
+(default). Resistance and Texture independently accept 0–100 and are also scaled
+by the preset. ArcadeCues enables small reward ticks. The existing feedback
+enable/pause gates and `[SystemProfile] ControllerVibration=0` also silence
+adaptive output. Set Enabled=0 to disable everything. LeftStrength/RightStrength
+scale the physical L2/R2 independently, including in reverse. Invalid settings keep
+their defaults; numeric ranges are clamped.
+
+Every effect also accepts Strength (0..200 percent; 0 disables it), Frequency
+(25..200 percent for vibration), Duration (0..200 percent for transient pulses)
+and StartPosition (-1 for its default, or travel zone 0..9). For example,
+EngineStrength=60 softens the engine texture, ShiftDuration=150 lengthens the
+gear-change cue, and BrakeStartPosition=4 moves the brake bite farther into travel.
+The complete ready-to-copy section is in [config.ini.example](../config.ini.example);
+see the [tuning reference](ADAPTIVE_TRIGGERS.md#ini-tuning) for effect names and limits.
+
+Use a native USB or Bluetooth connection. A translation tool presenting a virtual
+Xbox controller can hide adaptive capabilities. The adapter falls back to normal
+input/rumble when native output is unavailable or rejected. Device selection is
+the same player-0 selection described above. DualSense Edge coverage must be
+recorded separately.
+
+Effects clear on focus loss, pause, blocking asserts, device replacement and
+shutdown; a 500 ms stale-snapshot limit also releases them when game updates stop.
+The explicit harness background override applies to trigger output as well.
+Diagnostics logs bounded `[triggers]` lines in BrnGame.log; with no controller it
+can observe the game's signals without claiming physical output.
+
+Distributions also include **DualSenseTriggerEffects-LICENSE.txt**. See the
+[effect catalogue and testing guide](ADAPTIVE_TRIGGERS.md) for signal sources,
+priorities, software checks and the pending physical USB/Bluetooth checklist.
+
 ## Map controller buttons to keyboard keys
 
 Add a `[ControllerKeyboard]` section to **config.ini beside Burnout_PC.exe**,
@@ -75,6 +128,8 @@ From the parent workflow:
 
 ```powershell
 python b5-decomp/tests/run_pc_gamepad.py
+python b5-decomp/tests/run_adaptive_triggers.py
+python b5-decomp/tests/run_vehicle_feedback.py
 python b5-decomp/tests/run_fxtailsa_pad_idle.py
 python b5-decomp/tests/run_fxrumble3_pad_rumble.py
 python b5-decomp/tests/run_cgs_keyboard_pc_contract.py

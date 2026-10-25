@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "pc/input/AdaptiveTriggers.h"
 
 // FLAG PC-platform leaf: SDL supplies the host device; these records retain the
 // XDK wire format consumed by the recovered DeviceX360Pad and ManagerX360.
@@ -31,6 +32,26 @@ namespace CgsInput::PCGamepad
     bool HasRumble();
     void SetInputAllowed(bool lbAllowed);
     std::uint32_t SetRumble(std::uint16_t luLeft, std::uint16_t luRight);
+
+    // FLAG PC-platform leaf: copied feedback mailbox, separate from the device
+    // lock. The world publishes values; only the input path sends SDL effects.
+    void PublishFeedback(const AdaptiveTriggers::Sample& lrSample);
+    bool WantsFeedback(); // cheap world-side gate; diagnostics also enables observations
+    void SetFeedbackAllowed(bool lbAllowed);
+    void SetFeedbackPhotoMode(bool lbPhotoMode); // copied director state; no device access
+    void SuspendFeedback(); // immediate neutral output in a blocking assert
+    unsigned LoadFeedbackSettings(const char* lpIniPath);
+    void SetFeedbackLogger(void (*lpLogger)(const char*));
+    struct FeedbackStatus
+    {
+        enum Support { NoDevice, Unsupported, Supported, Rejected } meSupport = NoDevice;
+        std::uint32_t muDevice = 0;
+        std::uint64_t muPackets = 0, muFailures = 0;
+        AdaptiveTriggers::Cue meLeft = AdaptiveTriggers::Cue::Off;
+        AdaptiveTriggers::Cue meRight = AdaptiveTriggers::Cue::Off;
+        bool mbWireless = false;
+    };
+    FeedbackStatus GetFeedbackStatus();
 
     // config.ini [ControllerKeyboard], loaded once at startup. Invalid entries
     // are skipped and counted. Keyboard events/state belong to this game window.

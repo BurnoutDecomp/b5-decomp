@@ -202,6 +202,11 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 {
     switch (uMsg)
     {
+    case WM_ACTIVATEAPP:
+        // FLAG PC-platform leaf: release latched trigger effects from the window
+        // pump even when a modal/load path has stopped the normal input update.
+        CgsInput::PCGamepad::SetInputAllowed(wParam != 0 || std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
+        break;
     case WM_DEVICECHANGE:
         // FLAG PC-platform leaf: allow hot-plug discovery on the next input
         // update. A one-second fallback also covers missed notifications.

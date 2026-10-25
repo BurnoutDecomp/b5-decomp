@@ -32,6 +32,7 @@ namespace Assert
     static bool IsAssertReleaseKeyDownPC()
     {
         CgsInput::PCGamepad::UpdateKeyboardMappings();
+        CgsInput::PCGamepad::SuspendFeedback();
         return (GetAsyncKeyState(VK_END) & 0x8000) != 0 || CgsInput::PCGamepad::MappedKeyDown(VK_END);
     }
 
