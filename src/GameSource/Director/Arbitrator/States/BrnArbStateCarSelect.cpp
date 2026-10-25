@@ -1009,7 +1009,9 @@ namespace BrnDirector
                 mbHasCarsToUnlock = false;
                 mToGameplayInterpolater.Release();
                 mCarUnlockCam.Release();
-                mTransitionCam.GetBehaviour()->SetControllerParametricTime0To1(
+                // ARTIST 8226FFBC..8226FFCC rewinds the +0x1A8 normal intro.
+                // It brings the picture back after the unlock movie's fade.
+                mIntroNoNewCars.GetBehaviour()->SetControllerParametricTime0To1(
                     KF_TAKE_PARAMETRIC_TIME_START);
                 mfTimeInState = 0.0f;
                 meState       = E_STATE_INTRO;
