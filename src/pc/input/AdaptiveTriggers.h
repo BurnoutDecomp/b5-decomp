@@ -32,18 +32,27 @@ namespace CgsInput::AdaptiveTriggers
     }
     inline float Unit(float lfValue) { return std::clamp(Finite(lfValue), 0.0f, 1.0f); }
 
+    struct CueTuning
+    {
+        float mfStrength = 1.0f, mfFrequency = 1.0f, mfDuration = 1.0f;
+        int miStartPosition = -1; // -1 preserves the effect's normal engagement zone.
+    };
+
     struct Settings
     {
         Preset mePreset = Preset::Immersive;
         float mfResistance = 1.0f;
         float mfTexture = 1.0f;
+        float mfLeftStrength = 1.0f, mfRightStrength = 1.0f;
+        std::array<CueTuning, static_cast<unsigned>(Cue::Count)> maCues{};
+        bool mbEnabled = true;
         bool mbArcadeCues = true;
         bool mbDiagnostics = false;
         bool mbSystemFeedbackEnabled = true;
 
         float GetScale() const
         {
-            if (!mbSystemFeedbackEnabled) return 0.0f;
+            if (!mbEnabled || !mbSystemFeedbackEnabled) return 0.0f;
             switch (mePreset)
             {
                 case Preset::Light: return 0.45f;
@@ -98,6 +107,18 @@ namespace CgsInput::AdaptiveTriggers
         return luCue < static_cast<unsigned>(Cue::Count) ? KAC_NAMES[luCue] : "invalid";
     }
 
+    inline const char* GetCueKey(Cue leCue)
+    {
+        static constexpr const char* KAC_KEYS[] = {
+            "Off", "Pedal", "Engine", "Launch", "Shift", "Limiter", "Wheelspin", "GripRecovery",
+            "BoostStart", "Boost", "BoostEnd", "Chain", "Brake", "BrakeSkid", "DriftStart", "Drift",
+            "Surface", "Takeoff", "Airborne", "Landing", "Scrape", "Impact", "Wreck", "Reverse",
+            "Showtime", "Bounce", "BoostedBounce", "Reward"
+        };
+        const unsigned luCue = static_cast<unsigned>(leCue);
+        return luCue < static_cast<unsigned>(Cue::Count) ? KAC_KEYS[luCue] : "Invalid";
+    }
+
     class Controller
     {
     public:
@@ -108,6 +129,15 @@ namespace CgsInput::AdaptiveTriggers
             mSettings = lrSettings;
             mSettings.mfResistance = Unit(mSettings.mfResistance);
             mSettings.mfTexture = Unit(mSettings.mfTexture);
+            mSettings.mfLeftStrength = Unit(mSettings.mfLeftStrength);
+            mSettings.mfRightStrength = Unit(mSettings.mfRightStrength);
+            for (auto& lrCue : mSettings.maCues)
+            {
+                lrCue.mfStrength = std::clamp(Finite(lrCue.mfStrength, 1.0f), 0.0f, 2.0f);
+                lrCue.mfFrequency = std::clamp(Finite(lrCue.mfFrequency, 1.0f), 0.25f, 2.0f);
+                lrCue.mfDuration = std::clamp(Finite(lrCue.mfDuration, 1.0f), 0.0f, 2.0f);
+                lrCue.miStartPosition = std::clamp(lrCue.miStartPosition, -1, 9);
+            }
             Reset();
         }
 
@@ -237,19 +267,19 @@ namespace CgsInput::AdaptiveTriggers
                 else if (!mSample.muGroundedWheels)
                     lDrive = Make(Cue::Airborne, 30, 0.06f, 12 + mSample.mfRPM * 0.004f, 1);
                 else if (mSample.mfGas > 0.04f)
-                    lDrive = Make(mSample.mbReverse ? Cue::Reverse : Cue::Engine, 25,
+                    Apply(lDrive, Make(mSample.mbReverse ? Cue::Reverse : Cue::Engine, 25,
                         (0.1f + 0.06f * mSample.mfGas) * lfPower,
-                        (12 + mSample.mfRPM * 0.006f) * lfFrequency, 1, true);
+                        (12 + mSample.mfRPM * 0.006f) * lfFrequency, 1, true));
                 if (lbTexture && mSample.muGroundedWheels && mSample.mbBoosting)
-                    lDrive = Make(Cue::Boost, 45, 0.3f * lfPower, 72 * lfFrequency, 1);
+                    Apply(lDrive, Make(Cue::Boost, 45, 0.3f * lfPower, 72 * lfFrequency, 1));
                 if (lbTexture && mSample.muGroundedWheels && mSample.mbDrifting)
-                    lDrive = Make(Cue::Drift, 55, 0.16f + 0.25f * mSample.mfDrift,
-                        23 + 12 * mSample.mfDrift + Irregular(luNow, 0), 1);
+                    Apply(lDrive, Make(Cue::Drift, 55, 0.16f + 0.25f * mSample.mfDrift,
+                        23 + 12 * mSample.mfDrift + Irregular(luNow, 0), 1));
                 if (lbTexture && mbSpinning && mSample.muGroundedWheels)
-                    lDrive = Make(Cue::Wheelspin, 60, 0.2f + 0.35f * mfSlip,
-                        32 + 22 * mfSlip + Irregular(luNow, 17), 1);
+                    Apply(lDrive, Make(Cue::Wheelspin, 60, 0.2f + 0.35f * mfSlip,
+                        32 + 22 * mfSlip + Irregular(luNow, 17), 1));
                 if (lbTexture && mSample.mbLimiter && mSample.mfGas > 0.1f)
-                    lDrive = Make(Cue::Limiter, 62, 0.35f, 18, 1);
+                    Apply(lDrive, Make(Cue::Limiter, 62, 0.35f, 18, 1));
                 if (luDrive == 1) lOutput.mLeft = lDrive; else lOutput.mRight = lDrive;
 
                 if (mSample.muGroundedWheels && !mSample.mbShowtime)
@@ -257,8 +287,8 @@ namespace CgsInput::AdaptiveTriggers
                     Effect lBrake = Make(Cue::Brake, 30,
                         (0.16f + 0.4f * mSample.mfBrake) * lfPower, 0, 2, true);
                     if (lbTexture && (mSample.mfBrake > 0.1f || mSample.mfHandBrake > 0.1f) && mSample.mfBrakeSkid > 0.18f)
-                        lBrake = Make(Cue::BrakeSkid, 65, 0.25f + 0.4f * mSample.mfBrakeSkid,
-                            28 + Irregular(luNow, 91), 1);
+                        Apply(lBrake, Make(Cue::BrakeSkid, 65, 0.25f + 0.4f * mSample.mfBrakeSkid,
+                            28 + Irregular(luNow, 91), 1));
                     if (luDrive == 1) lOutput.mRight = lBrake; else lOutput.mLeft = lBrake;
                 }
                 if (lbTexture && mSample.muGroundedWheels)
@@ -296,6 +326,8 @@ namespace CgsInput::AdaptiveTriggers
                 if (lrPulse.muMask & 1) Apply(lOutput.mLeft, lEffect);
                 if (lrPulse.muMask & 2) Apply(lOutput.mRight, lEffect);
             }
+            ScaleTrigger(lOutput.mLeft, mSettings.mfLeftStrength);
+            ScaleTrigger(lOutput.mRight, mSettings.mfRightStrength);
             return lOutput;
         }
 
@@ -318,6 +350,9 @@ namespace CgsInput::AdaptiveTriggers
         void Start(Cue leCue, std::uint64_t luNow, unsigned luDuration, unsigned luPriority,
             float lfStrength, unsigned luMask)
         {
+            const auto& lrTuning = mSettings.maCues[static_cast<unsigned>(leCue)];
+            if (lrTuning.mfStrength <= 0.0f || lrTuning.mfDuration <= 0.0f) return;
+            luDuration = static_cast<unsigned>(std::round(luDuration * lrTuning.mfDuration));
             maPulses[static_cast<unsigned>(leCue)] = {leCue, luNow, luDuration, luPriority, luMask, Unit(lfStrength)};
         }
         static float Irregular(std::uint64_t luNow, unsigned luSeed)
@@ -335,9 +370,20 @@ namespace CgsInput::AdaptiveTriggers
             Apply(lrOutput.mLeft, lrEffect);
             Apply(lrOutput.mRight, lrEffect);
         }
+        static void ScaleTrigger(Effect& lrEffect, float lfScale)
+        {
+            if (lfScale <= 0.0f) { lrEffect = {}; return; }
+            for (auto& luStrength : lrEffect.mauStrength)
+                if (luStrength) luStrength = static_cast<std::uint8_t>((std::max)(1.0f, std::round(luStrength * lfScale)));
+        }
         Effect Make(Cue leCue, unsigned luPriority, float lfStrength, float lfFrequency,
             unsigned luStart, bool lbProgressive = false) const
         {
+            const auto& lrTuning = mSettings.maCues[static_cast<unsigned>(leCue)];
+            if (lrTuning.mfStrength <= 0.0f) return {};
+            lfStrength *= lrTuning.mfStrength;
+            lfFrequency *= lrTuning.mfFrequency;
+            if (lrTuning.miStartPosition >= 0) luStart = static_cast<unsigned>(lrTuning.miStartPosition);
             if (lfFrequency > 0 && mSettings.mfTexture <= 0 && leCue != Cue::Engine &&
                 leCue != Cue::Reverse && leCue != Cue::Airborne) return {};
             Effect lEffect;

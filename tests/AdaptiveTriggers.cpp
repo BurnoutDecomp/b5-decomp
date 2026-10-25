@@ -2,9 +2,11 @@
 #include "pc/input/DualSenseEffects.h"
 #include "pc/input/EngineFeedback.h"
 #include "pc/input/BoostFeedback.h"
+#include "pc/input/FeedbackSettings.h"
 #include <cstdio>
 #include <limits>
 #include <chrono>
+#include <string>
 
 using namespace CgsInput::AdaptiveTriggers;
 static unsigned guChecks = 0, guFailures = 0;
@@ -288,9 +290,68 @@ static void TestControlAndAwards()
     Check(lController.Resolve(2700).mRight.meCue == Cue::Chain, "live burnout chain advancement produces double kick");
 }
 
+static void TestTuning()
+{
+    Settings lSettings;
+    Check(ParseSettings("Enabled=0\0LeftStrength=20\0RightStrength=80\0\0", lSettings) == 0 &&
+        !lSettings.mbEnabled && lSettings.mfLeftStrength == 0.2f && lSettings.mfRightStrength == 0.8f,
+        "master disable and independent physical-trigger settings parse");
+    Controller lController;
+    auto lSample = Driving();
+    lController.Configure(lSettings); lController.Submit(lSample, 100);
+    Check(lController.Resolve(100).mLeft.IsOff() && lController.Resolve(100).mRight.IsOff(), "Enabled=0 releases both triggers");
+
+    for (unsigned i = 1; i < static_cast<unsigned>(Cue::Count); ++i)
+    {
+        const std::string lKey = GetCueKey(static_cast<Cue>(i));
+        std::string lSection;
+        for (const char* lpField : {"Strength=45", "Frequency=150", "Duration=175", "StartPosition=7"})
+        { lSection += lKey + lpField; lSection.push_back('\0'); }
+        lSection.push_back('\0');
+        Check(ParseSettings(lSection.c_str(), lSettings) == 0 && lSettings.maCues[i].mfStrength == 0.45f &&
+            lSettings.maCues[i].mfFrequency == 1.5f && lSettings.maCues[i].mfDuration == 1.75f &&
+            lSettings.maCues[i].miStartPosition == 7, "every catalogue cue accepts independent tuning keys");
+    }
+    Check(ParseSettings("Enabled=2\0EngineStrength=999\0EngineFrequency=-1\0ShiftDuration=-1\0BrakeStartPosition=25\0EngineUnknown=1\0\0", lSettings) == 6 &&
+        lSettings.mbEnabled && lSettings.maCues[static_cast<unsigned>(Cue::Engine)].mfStrength == 2 &&
+        lSettings.maCues[static_cast<unsigned>(Cue::Engine)].mfFrequency == 0.25f &&
+        lSettings.maCues[static_cast<unsigned>(Cue::Shift)].mfDuration == 0 &&
+        lSettings.maCues[static_cast<unsigned>(Cue::Brake)].miStartPosition == 9,
+        "strict tuning validation clamps bounded numbers and rejects unknown keys");
+    ParseSettings("LeftStrength=0\0EngineFrequency=50\0EngineStartPosition=7\0\0", lSettings);
+    lController.Configure(lSettings); lController.Submit(lSample, 100);
+    const auto lTuned = lController.Resolve(100);
+    Check(lTuned.mLeft.IsOff() && !lTuned.mRight.IsOff() && lTuned.mRight.muFrequency == 22,
+        "L2 can disable independently while R2 frequency follows its scale");
+    bool lbEarlyZonesOff = true;
+    for (unsigned i = 0; i < 7; ++i) lbEarlyZonesOff &= lTuned.mRight.mauStrength[i] == 0;
+    Check(lbEarlyZonesOff && lTuned.mRight.mauStrength[9] > 0, "custom engagement position leaves earlier travel free");
+    ParseSettings("BoostStrength=0\0BrakeSkidStrength=0\0\0", lSettings);
+    lController.Configure(lSettings); lSample.mbBoosting = true; lSample.mfBrake = 1; lSample.mfBrakeSkid = 1;
+    lController.Submit(lSample, 100);
+    Check(lController.Resolve(100).mRight.meCue == Cue::Engine && lController.Resolve(100).mLeft.meCue == Cue::Brake,
+        "disabled high-priority textures fall back to current engine and braking");
+    ParseSettings("ShiftDuration=200\0\0", lSettings);
+    lSample = Driving(); lController.Configure(lSettings); lController.Submit(lSample, 100);
+    lSample.miGear = 3; lController.Submit(lSample, 120);
+    Check(lController.Resolve(300).mRight.meCue == Cue::Shift && lController.Resolve(381).mRight.meCue == Cue::Engine,
+        "duration tuning extends the pulse and recovers to current state");
+    ParseSettings("ShiftStrength=0\0\0", lSettings);
+    lSample = Driving(); lController.Configure(lSettings); lController.Submit(lSample, 100);
+    lSample.miGear = 3; lController.Submit(lSample, 120);
+    Check(lController.Resolve(120).mRight.meCue == Cue::Engine, "disabled shift skips its neutral unloading phase too");
+    ParseSettings("EngineStrength=0\0RightStrength=0\0\0", lSettings);
+    lSample = Driving(); lController.Configure(lSettings); lController.Submit(lSample, 100);
+    Check(lController.Resolve(100).mRight.IsOff() && !lController.Resolve(100).mLeft.IsOff(), "R2 can disable without silencing L2");
+    ParseSettings("TakeoffDuration=0\0\0", lSettings);
+    lSample = Driving(); lController.Configure(lSettings); lController.Submit(lSample, 100);
+    lSample.muGroundedWheels = 0; lController.Submit(lSample, 120);
+    Check(lController.Resolve(120).mRight.meCue == Cue::Airborne, "zero transient duration suppresses the pulse without stale force");
+}
+
 int main()
 {
-    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards();
+    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning();
     std::printf("Adaptive triggers: %u/%u checks passed\n", guChecks - guFailures, guChecks);
     return guFailures ? 1 : 0;
 }

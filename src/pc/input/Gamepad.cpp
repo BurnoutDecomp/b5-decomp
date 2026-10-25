@@ -512,7 +512,7 @@ namespace CgsInput::PCGamepad
 
     unsigned LoadFeedbackSettings(const char* lpIniPath)
     {
-        char lacSection[4096]{};
+        char lacSection[8192]{};
         const unsigned long luSize = lpIniPath ? GetPrivateProfileSectionA(
             "AdaptiveTriggers", lacSection, sizeof(lacSection), lpIniPath) : 0;
         AdaptiveTriggers::Settings lSettings;

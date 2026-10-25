@@ -26,15 +26,144 @@ DecoupleSimulation=1
 
 [AdaptiveTriggers]
 ; Native DualSense USB/Bluetooth feedback. Restart after editing.
+; Enabled=0 disables the entire feature. Existing controller vibration=0 also mutes it.
+Enabled=1
 ; Off / Light / Standard / Immersive. Default: Immersive.
 Preset=Immersive
-; Independent 0..100 scales; preset also scales both. No input remapping.
+; Overall scales, 0..100. Texture=0 silences texture/pulses; Resistance=0 mutes smooth loads.
 Resistance=100
 Texture=100
+; Physical L2/R2 scales, 0..100, including when reversing swaps the pedal roles.
+LeftStrength=100
+RightStrength=100
 ArcadeCues=1
-; Opt-in [triggers] state/output diagnostics, including observation without a pad.
+; Opt-in bounded [triggers] diagnostics; default 0.
 Diagnostics=0
-; SystemProfile.ControllerVibration=0 and the game's feedback/pause gates also mute.
+
+; Per-effect tuning below preserves the default feel at 100.
+; Strength: 0..200 percent; 0 disables that effect and allows lower-priority feedback.
+; Frequency: 25..200 percent of the driving-dependent vibration rate (capped at 120 Hz).
+; Duration: 0..200 percent for transient pulses; 0 skips the pulse.
+; StartPosition: -1 keeps the default, 0..9 sets the first active travel zone.
+; Takeoff only unloads the triggers: its Strength is an on/off switch.
+; Hardware has discrete force steps. All input travel remains available.
+
+PedalStrength=100
+PedalStartPosition=-1
+
+EngineStrength=100
+EngineFrequency=100
+EngineStartPosition=-1
+
+LaunchStrength=100
+LaunchFrequency=100
+LaunchDuration=100
+LaunchStartPosition=-1
+
+ShiftStrength=100
+ShiftFrequency=100
+ShiftDuration=100
+ShiftStartPosition=-1
+
+LimiterStrength=100
+LimiterFrequency=100
+LimiterStartPosition=-1
+
+WheelspinStrength=100
+WheelspinFrequency=100
+WheelspinStartPosition=-1
+
+GripRecoveryStrength=100
+GripRecoveryFrequency=100
+GripRecoveryDuration=100
+GripRecoveryStartPosition=-1
+
+BoostStartStrength=100
+BoostStartFrequency=100
+BoostStartDuration=100
+BoostStartStartPosition=-1
+
+BoostStrength=100
+BoostFrequency=100
+BoostStartPosition=-1
+
+BoostEndStrength=100
+BoostEndFrequency=100
+BoostEndDuration=100
+BoostEndStartPosition=-1
+
+ChainStrength=100
+ChainFrequency=100
+ChainDuration=100
+ChainStartPosition=-1
+
+BrakeStrength=100
+BrakeStartPosition=-1
+
+BrakeSkidStrength=100
+BrakeSkidFrequency=100
+BrakeSkidStartPosition=-1
+
+DriftStartStrength=100
+DriftStartFrequency=100
+DriftStartDuration=100
+DriftStartStartPosition=-1
+
+DriftStrength=100
+DriftFrequency=100
+DriftStartPosition=-1
+
+SurfaceStrength=100
+SurfaceFrequency=100
+SurfaceStartPosition=-1
+
+TakeoffStrength=100
+TakeoffDuration=100
+
+AirborneStrength=100
+AirborneFrequency=100
+AirborneStartPosition=-1
+
+LandingStrength=100
+LandingFrequency=100
+LandingDuration=100
+LandingStartPosition=-1
+
+ScrapeStrength=100
+ScrapeFrequency=100
+ScrapeStartPosition=-1
+
+ImpactStrength=100
+ImpactFrequency=100
+ImpactDuration=100
+ImpactStartPosition=-1
+
+WreckStrength=100
+WreckFrequency=100
+WreckDuration=100
+WreckStartPosition=-1
+
+ReverseStrength=100
+ReverseFrequency=100
+ReverseStartPosition=-1
+
+ShowtimeStrength=100
+ShowtimeStartPosition=-1
+
+BounceStrength=100
+BounceFrequency=100
+BounceDuration=100
+BounceStartPosition=-1
+
+BoostedBounceStrength=100
+BoostedBounceFrequency=100
+BoostedBounceDuration=100
+BoostedBounceStartPosition=-1
+
+RewardStrength=100
+RewardFrequency=100
+RewardDuration=100
+RewardStartPosition=-1
 
 [ControllerKeyboard]
 ; Optional SDL gamepad buttons/chords = keyboard keys. Restart after editing.
