@@ -11,6 +11,7 @@
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceAsyncOp.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsFileSystem
 {
@@ -20,6 +21,38 @@ namespace CgsFileSystem
         : mSemaphore(0)
         , mbOperating(false)
     {
+    }
+
+    // ARTIST828DE3E8: inspect the actual completion semaphore without consuming it.
+    bool AsyncOp::IsDone()
+    {
+        if (!mbOperating)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "No operation\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 173);
+            CgsDev::Assert::EndAssert();
+        }
+        return mSemaphore.GetCount() > 0;
+    }
+
+    // ARTIST826610A8: genuine by-value compound handle, with original wait assertion.
+    Handle AsyncOp::GetLastOperationHandle()
+    {
+        if (mbOperating)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lBuffer;
+            CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+            lStream << "Last operation has not been waited before\n";
+            CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.h", 152);
+            CgsDev::Assert::EndAssert();
+        }
+        return mHandle;
     }
 
     // ARTIST 0x82661160. Assertion continuation still returns the stored result.

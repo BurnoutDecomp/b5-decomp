@@ -1,3 +1,14 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h> // original GetFileAttributesA host API surface; no task-time call
+#ifdef DrawText
+#undef DrawText // preserve the engine's Debug2DImmediateRender method spelling
+#endif
+#include <cstdio> // sscanf
 #include "GameSource/Resource/BrnDLCManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT + Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
@@ -40,6 +51,201 @@ namespace BrnResource
         mbDLCMonitorThreadStarted = false;
         muMonitorPackageCount = 0;
     }
+
+    // ARTIST8266AF50: AllocatorList is not read in this X360 body. PS3 supplies
+    // the one-pointer declaration only; its two-stage body is a different build.
+    bool DLCManager::Prepare(GameDataIO::AllocatorList* lpAllocatorList)
+    {
+        (void)lpAllocatorList;
+        switch (mePrepareStage)
+        {
+        case E_PREPARE_START:
+            mePrepareStage = E_PREPARE_START;
+            [[fallthrough]];
+        case E_PREPARE_START_MONITOR:
+            mePrepareStage = E_PREPARE_START_MONITOR;
+            StartDLCMonitor();
+            [[fallthrough]];
+        case E_PREPARE_WAIT_MONITOR:
+        {
+            muPackageCount = 0;
+            mePrepareStage = E_PREPARE_WAIT_MONITOR;
+            if (mDLCMonitorThread.GetStatus(nullptr) == EA::Thread::Thread::kStatusRunning)
+                return false;
+            mbDLCMonitorThreadStarted = false;
+            for (s32 liPackage = 0; liPackage < muMonitorPackageCount; ++liPackage)
+            {
+                CgsCore::SPrintf(maPackages[muPackageCount].mPath, 64,
+                                 "p_hdd:/dlc%d/DATA", liPackage);
+                maPackages[muPackageCount].miPriority = 1;
+                maPackages[muPackageCount].miVersion = 0;
+                std::memset(maPackages[muPackageCount].mOpaqueTail, 0, 4);
+                ++muPackageCount;
+            }
+
+            // Actual byte_820A290C is "p_hdd:/d/", not a guessed disc root.
+            char lacLogicalRoot[256];
+            std::strcpy(lacLogicalRoot, "p_hdd:/d/");
+            const char* const lapcDiscPackages[4] = { "DLC0", "DLC1", "DLC2", "DLC3" };
+            for (s32 liDisc = 0; liDisc < 4; ++liDisc)
+            {
+                char lacPhysicalPath[256];
+                CgsCore::SPrintf(lacPhysicalPath, 256, "D:\\%s", lapcDiscPackages[liDisc]);
+                if (::GetFileAttributesA(lacPhysicalPath) != INVALID_FILE_ATTRIBUTES)
+                {
+                    DLCPackage& lrPackage = maPackages[muPackageCount];
+                    const u32 luRootLength = static_cast<u32>(std::strlen(lacLogicalRoot));
+                    if (luRootLength >= 64)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::MessageBufferPC lBuffer;
+                        CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
+                        lStream << "String " << lacLogicalRoot << " is too long. Buffer size = "
+                                << s32(64) << ", string length = " << static_cast<s32>(luRootLength) << "\n";
+                        CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    std::strcpy(lrPackage.mPath, lacLogicalRoot);
+                    if (std::strlen(lrPackage.mPath) + 4 >= 63)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1",
+                            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    std::strcat(lrPackage.mPath, lapcDiscPackages[liDisc]);
+                    maPackages[muPackageCount].miPriority = 100;
+                    maPackages[muPackageCount].miVersion = 0;
+                    std::memset(maPackages[muPackageCount].mOpaqueTail, 0, 4);
+                    ++muPackageCount;
+                }
+            }
+            miCurrentPackage = 0;
+            if (muPackageCount == 0)
+            {
+                mePrepareStage = E_PREPARE_DONE;
+                return false; // original returns false once before the DONE re-entry.
+            }
+            [[fallthrough]];
+        }
+        case E_PREPARE_OPEN_VERSION:
+        {
+            char lacVersionPath[256];
+            mePrepareStage = E_PREPARE_OPEN_VERSION;
+            CgsCore::SPrintf(lacVersionPath, 128, "%s/VERSION.TXT", maPackages[miCurrentPackage].mPath);
+            mVersionFileOp.Open(lacVersionPath, 1, 0);
+            [[fallthrough]];
+        }
+        case E_PREPARE_WAIT_OPEN:
+            mePrepareStage = E_PREPARE_WAIT_OPEN;
+            if (!mVersionFileOp.IsDone())
+                return false;
+            mVersionFileOp.Wait();
+            if (mVersionFileOp.GetLastOperationResult() != 0)
+            {
+                DLCVersionCheckFailed();
+                return false;
+            }
+            std::memset(macVersionText, 0, sizeof(macVersionText));
+            mVersionFileOp.Read(mVersionFileOp.GetLastOperationHandle(), 0,
+                                macVersionText, 16, 0);
+            [[fallthrough]];
+        case E_PREPARE_WAIT_READ:
+            mePrepareStage = E_PREPARE_WAIT_READ;
+            if (!mVersionFileOp.IsDone())
+                return false;
+            mVersionFileOp.Wait();
+            if (mVersionFileOp.GetLastOperationResult() != 0)
+            {
+                DLCVersionCheckFailed();
+                return false;
+            }
+            mVersionFileOp.Close(mVersionFileOp.GetLastOperationHandle(), 0);
+            [[fallthrough]];
+        case E_PREPARE_WAIT_CLOSE:
+            mePrepareStage = E_PREPARE_WAIT_CLOSE;
+            if (!mVersionFileOp.IsDone())
+                return false;
+            mVersionFileOp.Wait();
+            if (mVersionFileOp.GetLastOperationResult() != 0)
+            {
+                DLCVersionCheckFailed();
+                return false;
+            }
+            [[fallthrough]];
+        case E_PREPARE_PARSE_VERSION:
+        {
+            s32 liPackageMask = 0;
+            s32 liEnabled = 0;
+            mePrepareStage = E_PREPARE_PARSE_VERSION;
+            std::sscanf(macVersionText, "%d\n%d", &liPackageMask, &liEnabled);
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "\nDLC PATCH: version file contents\n";
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "  version : " << liPackageMask << "\n";
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "  enabled : " << liEnabled << "\n";
+            if (liEnabled != 1)
+            {
+                DLCVersionCheckFailed();
+                return false;
+            }
+            u32 luValidationMask = 0;
+            for (u32 luPack = 0; luPack < 5; ++luPack)
+            {
+                const u32 luPackMask = g_DLCFeatureAvailability.GetPackMask(static_cast<s32>(luPack));
+                if ((luPackMask & static_cast<u32>(liPackageMask)) == luPackMask)
+                {
+                    g_DLCFeatureAvailability.SetPackAvailabilityState(static_cast<s32>(luPack), true);
+                    luValidationMask |= luPackMask;
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                        *CgsDev::Log::gpDebugPrint << "  found pack : " << static_cast<s32>(luPackMask) << "\n";
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                        *CgsDev::Log::gpDebugPrint << "  liValidationMask : " << static_cast<s32>(luValidationMask) << "\n";
+                }
+            }
+            if (luValidationMask != static_cast<u32>(liPackageMask))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("invlaid package mask in version.txt",
+                    "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 495);
+                CgsDev::Assert::EndAssert();
+            }
+            DLCPackage& lrPackage = maPackages[miCurrentPackage];
+            lrPackage.miPriority = static_cast<s32>(static_cast<u32>(lrPackage.miPriority)
+                                                  + static_cast<u32>(liPackageMask));
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "\nDLC PATCH: enabled\n";
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "  path : " << maPackages[miCurrentPackage].mPath << "\n";
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "  priority : " << static_cast<u32>(maPackages[miCurrentPackage].miPriority) << "\n";
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "  version : " << static_cast<u32>(maPackages[miCurrentPackage].miVersion) << "\n";
+            [[fallthrough]];
+        }
+        case E_PREPARE_NEXT_PACKAGE:
+            mePrepareStage = E_PREPARE_NEXT_PACKAGE;
+            ++miCurrentPackage;
+            if (miCurrentPackage < muPackageCount)
+            {
+                mePrepareStage = E_PREPARE_OPEN_VERSION;
+                return false;
+            }
+            [[fallthrough]];
+        case E_PREPARE_DONE:
+            mePrepareStage = E_PREPARE_DONE;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid stage",
+                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 605);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
 
     // Never called -- pins the asm-attested member offsets of DLCFeatureAvailability.
     void DLCFeatureAvailability::_AssertLayout()
