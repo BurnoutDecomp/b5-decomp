@@ -18,6 +18,7 @@
 // state queued had no consumer at all; the header now includes this class instead.
 
 #include "CgsInputModule.h"
+#include "pc/input/Gamepad.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"   // FLAG PC seat: device scan and output mapping
@@ -137,6 +138,9 @@ void InputModule::ProcessRumbleRequests(const InputIO::PreWorldInputBuffer* lpPr
 
     const f32 lfTimeStep =
         lpPreWorldInputBuffer->GetTimerStatusInt()->GetGameTimerStatus()->GetCurrentTimeStep();
+    // FLAG PC-platform leaf: adaptive output follows the recovered feedback gate.
+    CgsInput::PCGamepad::SetFeedbackAllowed(lpPreWorldInputBuffer->GetRumbleEnabled() &&
+        !lpPreWorldInputBuffer->GetRumblePaused() && lbUpdatePads);
     mControllers.UpdateRumble(lfTimeStep,
                               lpPreWorldInputBuffer->GetRumblePaused() || !lbUpdatePads,
                               lpPreWorldInputBuffer->GetRumbleEnabled(),

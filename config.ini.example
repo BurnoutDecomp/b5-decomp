@@ -24,6 +24,18 @@ AdapterIndex=0
 VSync=1
 DecoupleSimulation=1
 
+[AdaptiveTriggers]
+; Native DualSense USB/Bluetooth feedback. Restart after editing.
+; Off / Light / Standard / Immersive. Default: Immersive.
+Preset=Immersive
+; Independent 0..100 scales; preset also scales both. No input remapping.
+Resistance=100
+Texture=100
+ArcadeCues=1
+; Opt-in [triggers] state/output diagnostics, including observation without a pad.
+Diagnostics=0
+; SystemProfile.ControllerVibration=0 and the game's feedback/pause gates also mute.
+
 [ControllerKeyboard]
 ; Optional SDL gamepad buttons/chords = keyboard keys. Restart after editing.
 ; R4/L4/R5/L5 name the paddles; mapped buttons replace their normal game actions.

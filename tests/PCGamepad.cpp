@@ -109,7 +109,18 @@ struct Motors
 {
     Uint16 muLeft = 0, muRight = 0;
     unsigned muCalls = 0;
+    unsigned muEffects = 0;
+    bool mbRejectEffect = false;
+    CgsInput::AdaptiveTriggers::Packet mPacket{};
 };
+static bool SDLCALL SendEffect(void* lpData, const void* lpBytes, int liSize)
+{
+    auto& lrMotors = *static_cast<Motors*>(lpData);
+    ++lrMotors.muEffects;
+    if (liSize != static_cast<int>(lrMotors.mPacket.size())) return false;
+    std::memcpy(lrMotors.mPacket.data(), lpBytes, lrMotors.mPacket.size());
+    return !lrMotors.mbRejectEffect;
+}
 static bool SDLCALL Rumble(void* lpData, Uint16 luLeft, Uint16 luRight)
 {
     auto& lrMotors = *static_cast<Motors*>(lpData);
@@ -119,7 +130,7 @@ static bool SDLCALL Rumble(void* lpData, Uint16 luLeft, Uint16 luRight)
     return true;
 }
 
-static SDL_JoystickID Attach(Motors* lpMotors, const char* lpcName)
+static SDL_JoystickID Attach(Motors* lpMotors, const char* lpcName, bool lbDualSense = false)
 {
     SDL_VirtualJoystickDesc lDesc{};
     SDL_INIT_INTERFACE(&lDesc);
@@ -131,7 +142,116 @@ static SDL_JoystickID Attach(Motors* lpMotors, const char* lpcName)
     lDesc.name = lpcName;
     lDesc.userdata = lpMotors;
     lDesc.Rumble = lpMotors ? Rumble : nullptr;
+    lDesc.SendEffect = lpMotors ? SendEffect : nullptr;
+    if (lbDualSense) { lDesc.vendor_id = 0x054c; lDesc.product_id = 0x0ce6; }
     return SDL_AttachVirtualJoystick(&lDesc);
+}
+
+static void TestAdaptiveTriggers()
+{
+    using namespace CgsInput::PCGamepad;
+    namespace AT = CgsInput::AdaptiveTriggers;
+    AT::Settings lSettings;
+    Check(AT::ParseSettings("Preset=Light\0Resistance=125\0Texture=-2\0ArcadeCues=0\0Diagnostics=1\0\0", lSettings) == 2 &&
+        lSettings.mePreset == AT::Preset::Light && lSettings.mfResistance == 1 && lSettings.mfTexture == 0 &&
+        !lSettings.mbArcadeCues && lSettings.mbDiagnostics, "adaptive section parses exact keys and clamps strengths");
+    Check(AT::ParseSettings("Preset=Wrong\0Texture=nan\0ArcadeCues=2\0Unexpected=1\0\0", lSettings) == 4 &&
+        lSettings.mePreset == AT::Preset::Immersive && lSettings.mfTexture == 1 && lSettings.mbArcadeCues,
+        "invalid adaptive settings retain documented defaults");
+    LoadFeedbackSettings(nullptr);
+    Check(Initialize(), "initialize adaptive fixture");
+    State lState;
+    Read(lState);
+    Motors lMotors;
+    const auto luPad = Attach(&lMotors, "SDL virtual native PS5", true);
+    Check(Read(lState) && GetFeedbackStatus().meSupport == FeedbackStatus::Supported,
+        "native PS5 identity plus successful neutral send enables adaptive output");
+    Check(lMotors.muEffects == 1 && lMotors.mPacket[10] == 5 && lMotors.mPacket[21] == 5,
+        "new device starts with explicit neutral effects");
+    Check(WantsFeedback(), "supported device enables cheap world observation gate");
+    AT::Sample lSample;
+    lSample.mbActive = true; lSample.muVehicle = 1; lSample.muGroundedWheels = 4;
+    lSample.mfGas = 1; lSample.mfRPM = 4500; lSample.mfSpeedMPH = 70; lSample.miGear = 2;
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lMotors.mPacket[10] == 0x26 && lMotors.mPacket[21] == 0x21, "production backend sends engine and brake modes independently");
+    const auto luBefore = lMotors.muEffects;
+    for (unsigned i = 0; i < 100; ++i) Read(lState);
+    Check(lMotors.muEffects == luBefore, "identical polling does not resend latched effect");
+    for (unsigned i = 0; i < 100; ++i)
+    {
+        ++guNowMs; lSample.mfRPM = 1000.0f + i * 80.0f;
+        PublishFeedback(lSample); Read(lState);
+    }
+    Check(lMotors.muEffects - luBefore <= 5, "changing state sends at most 50 packets per second");
+    Check(SetRumble(12345, 54321) == 0 && lMotors.muLeft == 12345 && lMotors.muRight == 54321,
+        "ordinary rumble coexists with adaptive output");
+    Check(lMotors.mPacket[0] == 0x0c && lMotors.mPacket[1] == 0 && lMotors.mPacket[2] == 0 && lMotors.mPacket[3] == 0,
+        "adaptive packet never enables motor/audio/LED controls");
+    SetFeedbackAllowed(false);
+    Check(lMotors.mPacket[10] == 5 && lMotors.mPacket[21] == 5, "pause/preference gate clears immediately without rate delay");
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    SetFeedbackAllowed(true); Read(lState);
+    Check(lMotors.mPacket[10] == 5, "permission return does not replay suppressed snapshot");
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lMotors.mPacket[10] == 0x26, "fresh snapshot resumes continuous feedback");
+    SetInputAllowed(false);
+    Check(lMotors.mPacket[10] == 5 && !lMotors.muLeft && !lMotors.muRight, "focus loss clears adaptive and standard output");
+    SetInputAllowed(true);
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    SuspendFeedback();
+    Check(lMotors.mPacket[10] == 5 && lMotors.mPacket[21] == 5, "assert path clears both effects immediately");
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    guNowMs += AT::Controller::KU_STALE_MS + 1;
+    UpdateKeyboardMappings();
+    Check(lMotors.mPacket[10] == 5 && lMotors.mPacket[21] == 5, "stale feedback clears even with no custom key mappings");
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    lSample.muEvents = AT::E_EVENT_IMPACT;
+    guNowMs += 20; PublishFeedback(lSample);
+    lSample.muEvents = 0; PublishFeedback(lSample); Read(lState);
+    Check(GetFeedbackStatus().meRight == AT::Cue::Impact, "mailbox retains event when a newer world frame arrives before input poll");
+    lMotors.mbRejectEffect = true;
+    guNowMs += 20; lSample.mbCrashing = true; PublishFeedback(lSample); Read(lState);
+    Check(GetFeedbackStatus().meSupport == FeedbackStatus::Rejected && GetFeedbackStatus().muFailures == 1,
+        "output failure disables adaptive capability for this connection");
+    const auto luRejected = lMotors.muEffects;
+    for (unsigned i = 0; i < 100; ++i) { guNowMs += 20; PublishFeedback(lSample); Read(lState); }
+    Check(lMotors.muEffects == luRejected && !WantsFeedback(), "rejected capability does not retry or request world work every frame");
+    Check(SetRumble(1111, 2222) == 0 && lMotors.muRight == 2222 && Read(lState), "adaptive rejection retains rumble and input");
+    SDL_DetachVirtualJoystick(luPad); Read(lState);
+    Motors lReplacement;
+    const auto luReplacement = Attach(&lReplacement, "SDL virtual replacement PS5", true);
+    Read(lState);
+    Check(GetFeedbackStatus().meSupport == FeedbackStatus::Supported && lReplacement.mPacket[10] == 5,
+        "replacement reprobes support and starts neutral");
+    guNowMs += 20; lSample.mbCrashing = false; PublishFeedback(lSample); Read(lState);
+    char lacTemp[MAX_PATH], lacIni[MAX_PATH];
+    GetTempPathA(sizeof(lacTemp), lacTemp);
+    GetTempFileNameA(lacTemp, "atr", 0, lacIni);
+    if (FILE* lpFile = std::fopen(lacIni, "w"))
+    {
+        std::fputs("[AdaptiveTriggers]\nPreset=Immersive\n[SystemProfile]\nControllerVibration=0\n", lpFile);
+        std::fclose(lpFile);
+        Check(LoadFeedbackSettings(lacIni) == 0 && !WantsFeedback(), "exact SystemProfile ControllerVibration=0 disables adaptive observation");
+        guNowMs += 20; PublishFeedback(lSample); Read(lState);
+        Check(lReplacement.mPacket[10] == 5 && lReplacement.mPacket[21] == 5 && Read(lState),
+            "system feedback-off keeps triggers neutral and controller input functional");
+    }
+    else Check(false, "create temporary system-vibration fixture");
+    std::remove(lacIni);
+    LoadFeedbackSettings(nullptr);
+    Shutdown();
+    Check(lReplacement.mPacket[10] == 5 && lReplacement.mPacket[21] == 5 &&
+        !lReplacement.muLeft && !lReplacement.muRight, "shutdown clears connected trigger and rumble outputs");
+    SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    SDL_DetachVirtualJoystick(luReplacement);
+    SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+    Check(Initialize(), "initialize unsupported fixture");
+    Motors lOther;
+    const auto luOther = Attach(&lOther, "SDL virtual non-PS5");
+    Read(lState);
+    Check(GetFeedbackStatus().meSupport == FeedbackStatus::Unsupported && !lOther.muEffects && !WantsFeedback(),
+        "unsupported device never receives Sony-specific output");
+    SDL_DetachVirtualJoystick(luOther); Read(lState); Shutdown();
 }
 
 alignas(16) static unsigned char gaOutput[sizeof(CgsInput::InputIO::OutputBuffer)]{};
@@ -456,6 +576,7 @@ int main(int argc, char** argv)
     Check(SelectedId() == 0 && !Read(lState), "shutdown clears selection and state");
     Shutdown();
     TestKeyboardMappings();
+    TestAdaptiveTriggers();
     std::printf("PCGamepad: %u checks, %u failures\n", guChecks, guFailures);
     return guFailures ? 1 : 0;
 }

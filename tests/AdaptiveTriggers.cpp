@@ -1,5 +1,7 @@
 #include "pc/input/AdaptiveTriggers.h"
 #include "pc/input/DualSenseEffects.h"
+#include "pc/input/EngineFeedback.h"
+#include "pc/input/BoostFeedback.h"
 #include <cstdio>
 #include <limits>
 #include <chrono>
@@ -119,7 +121,7 @@ static void TestDriving()
     Check(lController.Resolve(1700).mRight.meCue == Cue::Limiter, "explicit limiter signal has distinct chatter");
     lSample.mbLimiter = false; lSample.mbReverse = true; lSample.miGear = 0;
     lController.Submit(lSample, 1900);
-    Check(lController.Resolve(1900).mLeft.meCue == Cue::Reverse && lController.Resolve(1900).mRight.IsOff(), "reverse transfers accelerator role to L2");
+    Check(lController.Resolve(1900).mLeft.meCue == Cue::Reverse && lController.Resolve(1900).mRight.meCue == Cue::Brake, "reverse transfers accelerator role to L2 and braking to R2");
 }
 static void TestContactsAndEvents()
 {
@@ -179,6 +181,23 @@ static void TestContactsAndEvents()
 }
 static void TestLifecycleAndProfiles()
 {
+    BoostFeedback::Recorder lAwards;
+    lAwards.Record(101, 100); lAwards.BindPlayer(101);
+    Check(lAwards.GetSerial(110) == 0, "strategy binding drops pre-binding boost awards");
+    lAwards.Record(101, 120);
+    Check(lAwards.GetSerial(121) != 0 && lAwards.GetSerial(621) == 0, "actual boost award has a fresh bounded serial");
+    lAwards.Record(202, 140);
+    Check(lAwards.GetSerial(141) == 2, "other strategy awards cannot become player awards");
+    lAwards.BindPlayer(202);
+    Check(lAwards.GetSerial(142) == 0, "replacement strategy discards prior awards");
+    EngineFeedback::Recorder lLimiter;
+    lLimiter.Record(123, true, 100); lLimiter.BindPlayer(123, 7);
+    Check(lLimiter.IsLimited(7, 110) && !lLimiter.IsLimited(8, 110), "real limiter observation is restricted to bound player identity");
+    Check(!lLimiter.IsLimited(7, 601), "limiter sidecar cannot outlive its physics update");
+    lLimiter.Record(123, false, 120);
+    Check(!lLimiter.IsLimited(7, 121), "a clamp-free engine update clears limiter activity");
+    lLimiter.Record(456, true, 130); lLimiter.BindPlayer(456, 8);
+    Check(!lLimiter.IsLimited(7, 140) && lLimiter.IsLimited(8, 140), "car replacement rebinds limiter without leaking prior car state");
     Controller lController;
     auto lSample = Driving();
     lSample.muEvents = E_EVENT_IMPACT;
@@ -225,9 +244,36 @@ static void TestLifecycleAndProfiles()
     const auto lfTime = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - lStart).count();
     std::printf("Resolver + encoding: 100000 driving updates in %.2f ms (checksum %u)\n", lfTime, luChecksum);
 }
+static void TestControlAndAwards()
+{
+    Controller lController;
+    auto lSample = Driving();
+    lController.Submit(lSample, 1000);
+    lSample.mbBoosting = true; lController.Submit(lSample, 1020);
+    lSample.mbDriving = false; lSample.miGear = 3; lController.Submit(lSample, 1040);
+    Check(lController.Resolve(1040).mLeft.IsOff() && lController.Resolve(1040).mRight.IsOff(),
+        "cinematic control loss clears pedal and boost/shift transients");
+    lSample.mbCrashing = true; lController.Submit(lSample, 1060);
+    Check(lController.Resolve(1060).mRight.meCue == Cue::Wreck, "local wreck still presents its shudder without driving control");
+    lController.Submit(lSample, 1400);
+    Check(lController.Resolve(1400).mLeft.IsOff() && lController.Resolve(1400).mRight.IsOff(), "cinematic wreck settles to neutral");
+    lController.Reset(); lSample = Driving(); lController.Submit(lSample, 2000);
+    lSample.muBoostAward = 1; lController.Submit(lSample, 2020);
+    Check(lController.Resolve(2020).mRight.meCue == Cue::Reward, "actual AddBoost award serial creates a reward tick");
+    lSample.muBoostAward = 2; lController.Submit(lSample, 2140);
+    Check(lController.Resolve(2140).mRight.meCue == Cue::Engine, "continuous earning is coalesced instead of buzzing every frame");
+    lSample.muBoostAward = 3; lController.Submit(lSample, 2340);
+    Check(lController.Resolve(2340).mRight.meCue == Cue::Reward, "fresh award after cadence interval creates next tick");
+    lController.Submit(lSample, 2500);
+    Check(lController.Resolve(2500).mRight.meCue == Cue::Engine, "polling a held award serial does not repeat it");
+    lSample.mbBoosting = true; lController.Submit(lSample, 2520);
+    lSample.muChain = 1; lController.Submit(lSample, 2700);
+    Check(lController.Resolve(2700).mRight.meCue == Cue::Chain, "live burnout chain advancement produces double kick");
+}
+
 int main()
 {
-    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles();
+    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards();
     std::printf("Adaptive triggers: %u/%u checks passed\n", guChecks - guFailures, guChecks);
     return guFailures ? 1 : 0;
 }
