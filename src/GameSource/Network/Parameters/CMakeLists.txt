@@ -1,0 +1,24 @@
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        BrnNetworkEventScoreData.cpp
+        BrnNetworkGameSearchParams.cpp
+        BrnNetworkGameSearchParamsDtor.cpp
+        BrnNetworkParameterData.cpp
+        BrnNetworkPlayerInfoData.cpp
+        BrnNetworkPlayerParams.cpp
+        BrnNetworkPlayerParamsClass.cpp
+        BrnNetworkQuickJoinParams.cpp
+        BrnNetworkRoadRulesData.cpp
+        BrnNetworkUsersetParams.cpp
+
+    PUBLIC
+        BrnNetworkEventScoreData.h
+        BrnNetworkGameSearchParams.h
+        BrnNetworkParameterData.h
+        BrnNetworkPlayerInfoData.h
+        BrnNetworkPlayerParams.h
+        BrnNetworkPlayerParamsClass.h
+        BrnNetworkQuickJoinParams.h
+        BrnNetworkRoadRulesData.h
+        BrnNetworkUsersetParams.h
+)
