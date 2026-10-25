@@ -50,6 +50,8 @@ namespace CgsResource
 
         static u32 GetOverheadMemoryRequired(const InitOptions* lpOptions);
         void Construct();
+        // FLAG PC-platform leaf: retain the existing broader native reset.
+        void ConstructNativePC();
         bool Prepare();
         void InitPool(const InitOptions* lpOptions);
         void Clear();

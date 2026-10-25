@@ -57,6 +57,12 @@ namespace CgsResource
             return mbDiskErrorOccured;
         }
 
+        // Original setter inlined at ARTIST 82907E78; DecFIGS CgsResourceModuleIO.h:53.
+        void FileSystemStatusInterface::SetDiskErrorOccured(bool lbDiskErrorOccured)
+        {
+            mbDiskErrorOccured = lbDiskErrorOccured;
+        }
+
         // -------- OutputBuffer::Construct @ 0x828EC978 --------
         // Construct the IOBuffer base (sets the eStatusConstructed status bit @ +0), then
         // construct the embedded FileSystemStatusInterface @ +1 (clears its disk-error flag).

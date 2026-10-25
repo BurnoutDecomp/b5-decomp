@@ -1,4 +1,5 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
+#include "GameSource/AttribSys/Schema/BrnAttribSchema.h"
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
@@ -699,6 +700,624 @@ namespace BrnResource
         return false;
     }
 
+
+    // ARTIST 0x8266C088: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PrepareFreeburnChallengeList(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miChallengeListPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("OnlineChallenges.bndl");
+            lRequest.miPoolId = 26;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = true;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miChallengeListPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:716
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miChallengeListPrepareStage = 3;
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("B5ChallengeList"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 26;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miChallengeListPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:769
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == 0, "Invalid event id received\n"); // ARTIST cpp:776
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            CgsResource::ResourcePtr<ChallengeListResource> lResource(lHandle);
+            mChallengeList.AddListResource(lResource);
+        }
+            [[fallthrough]];
+        case 5:
+            miChallengeListPrepareStage = 5;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            mReceiverQueue.Clear();
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:803
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 0x8266CEB0: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PrepareICEList(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miICEListPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            miICEListPrepareStage = 1;
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("Cameras.bundle");
+            lRequest.miPoolId = 5;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = false;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miICEListPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:1257
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miICEListPrepareStage = 3;
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("StandardICETakes"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 5;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miICEListPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:1286
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == 0, "Invalid event id received\n"); // ARTIST cpp:1291
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            ICEList::ICETakeDictionaryResourcePtr lResource(lHandle);
+            mICEList.AddListResource(lResource);
+        }
+            [[fallthrough]];
+        case 5:
+            miICEListPrepareStage = 5;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            mReceiverQueue.Clear();
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:1311
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 0x8266D1F8: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PrepareWheelList(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miWheelListPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            miWheelListPrepareStage = 1;
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("Wheels/WheelList.bundle");
+            lRequest.miPoolId = 5;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = false;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miWheelListPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:1383
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miWheelListPrepareStage = 3;
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("B5WheelList"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 5;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miWheelListPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:1415
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == 0, "Invalid event id received\n"); // ARTIST cpp:1422
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            CgsResource::ResourcePtr<WheelListResource> lResource(lHandle);
+            mWheelList.AddListResource(lResource);
+        }
+            [[fallthrough]];
+        case 5:
+            // ARTIST 8266D4EC stores 2 on success, including entry at case5.
+            miWheelListPrepareStage = 2;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            mReceiverQueue.Clear();
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:1446
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 0x8266C8E0: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PrepareHudMessages(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miHudMessagesPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            miHudMessagesPrepareStage = 1;
+            mReceiverQueue.Clear();
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("HudMessages.hm");
+            lRequest.miPoolId = 11;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = false;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miHudMessagesPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:1015
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miHudMessagesPrepareStage = 3;
+            mReceiverQueue.Clear();
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("HudMessages.hm"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 11;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miHudMessagesPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:1045
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            mHudMessageController.AddMessages(lpResponse);
+        }
+            [[fallthrough]];
+        case 5:
+            miHudMessagesPrepareStage = 5;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:1065
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 0x8266CBA0: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PreparePopups(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miPopupsPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            miPopupsPrepareStage = 1;
+            mReceiverQueue.Clear();
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("Popups.pup");
+            lRequest.miPoolId = 11;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = false;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miPopupsPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:1135
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miPopupsPrepareStage = 3;
+            mReceiverQueue.Clear();
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("Popups.pup"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 11;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miPopupsPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:1164
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == 0, "Invalid event id received\n"); // ARTIST cpp:1167
+            mPopupController.AddPopupResource(lpResponse);
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 5:
+            miPopupsPrepareStage = 5;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:1187
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
+
+    // ARTIST 82673258: original caller uses the canonical builtin schema data owner.
+    bool GameDataModule::PrepareAttribSysSchemaResource(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
+    {
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL"); // ARTIST cpp:1481
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+
+        switch (miResourcePrepareStage)
+        {
+        case 0:
+            lpAttribModuleInputBuffer->LockForWrite();
+            lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterSchema(
+                &mReceiverQueue,
+                KAC_ATTRIB_SCHEMA_VLT_DATA, KAC_ATTRIB_SCHEMA_VLT_DATA_size,
+                KAC_ATTRIB_SCHEMA_BIN_DATA, KAC_ATTRIB_SCHEMA_BIN_DATA_size);
+            lpAttribModuleInputBuffer->UnlockForWrite();
+            mReceiverQueue.Clear();
+            miResourcePrepareStage = 1;
+            break;
+        case 1:
+            if (mReceiverQueue.GetLength() > 0)
+            {
+                mReceiverQueue.Clear();
+                miResourcePrepareStage = 2;
+            }
+            break;
+        case 2:
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid resource prepare stage.\n"); // ARTIST cpp:1534
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
+        return false;
+    }
+
+    // ARTIST 0x8266C410: original stack-backed owner, separate from the native overload.
+    bool GameDataModule::PrepareVehicleList(CgsModule::IOBufferStack* lpInputStack,
+                                            CgsModule::IOBufferStack* lpOutputStack)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
+        switch (miVehicleListPrepareStage)
+        {
+        case 0:
+        case 1:
+        {
+            miVehicleListPrepareStage = 1;
+            CgsResource::Events::LoadBundleRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName("Vehicles/VehicleList.bundle");
+            lRequest.miPoolId = 5;
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.mbAllowFailiure = true;
+            lRequest.mbUseHDCache = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 2:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miVehicleListPrepareStage = 2;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n"); // ARTIST cpp:875
+        }
+            [[fallthrough]];
+        case 3:
+        {
+            miVehicleListPrepareStage = 3;
+
+            // ARTIST HashString ends with clrldi r3, r11, 32; retain the zero extension
+            // while the canonical provider's existing C++ return type remains s32.
+            const u64 luHash = static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>("B5VehicleList"))));
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = 5;
+            lRequest.mResourceId.SetHash(luHash);
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+                static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+            [[fallthrough]];
+        case 4:
+        {
+            const s32 liLength = mReceiverQueue.GetLength();
+            miVehicleListPrepareStage = 4;
+            if (liLength < 1)
+                break;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n"); // ARTIST cpp:907
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == 0, "Invalid event id received\n"); // ARTIST cpp:914
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            CgsResource::ResourcePtr<VehicleListResource> lResource(lHandle);
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << lResource << "\n";
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                // ARTIST 82665E88 retains the real dereference assertion before this line.
+                (void)static_cast<const CgsResource::ResourcePtr<VehicleListResource>&>(lResource).operator*();
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << "[ResourceDatabaseDisabled]" << "\n";
+            }
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << "[ResourceDatabaseDisabled]" << "\n";
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: " << "[ResourceDatabaseDisabled]" << "\n";
+            mVehicleList.AddListResource(lResource);
+        }
+            [[fallthrough]];
+        case 5:
+            miVehicleListPrepareStage = 5;
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
+            mReceiverQueue.Clear();
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n"); // ARTIST cpp:946
+            break;
+        }
+
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
+    }
 
     // ARTIST8266DA28. Current GamePrepare has no IO stacks, so only the scratch
     // transport is a PC adaptation; map rows, request identities and waits are original.
@@ -1843,7 +2462,7 @@ namespace BrnResource
         // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
         // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
         // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
-        mAllocatorList.Construct();
+        mAllocatorList.ConstructNativePC();
 
         // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the
         // X360 ConstructResourceModule (0x8266D570): it now builds the real CgsResource::ResourceModule::

@@ -78,6 +78,16 @@ namespace CgsResource
         friend class DebugPoolTypeList; //ARTIST828EEB28..48 reads the named heap capacities
 
     public:
+        // DecFIGS h135..142; ARTIST raw82F34044..60, original Construct owns registration.
+        static s32 _miPoolUpdatePerfMon;
+        static s32 _miPoolModuleStatePerfMon;
+        static s32 _miPoolModuleIdle;
+        static s32 _miPoolModuleAllocating;
+        static s32 _miPoolModuleDeallocating;
+        static s32 _miPoolModuleLiveupdate;
+        static s32 _miPoolModuleIntellifrag;
+        static s32 _miPoolModuleEmergencyFrag;
+
         // :179
         enum EPrepareStage { E_PREPARESTAGE_START = 0, E_PREPARESTAGE_DONE = 1 };
         // :186

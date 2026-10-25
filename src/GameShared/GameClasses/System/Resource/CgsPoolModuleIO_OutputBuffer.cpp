@@ -27,7 +27,7 @@ namespace PoolIO
 {
     // InputBuffer lifecycle + accessors (mirror of OutputBuffer; one embedded request queue at +4).
     void InputBuffer::Construct() { CgsModule::IOBuffer::Construct(); mPoolInputQueue.Construct(); }
-    void InputBuffer::Destruct()  { mPoolInputQueue.Clear(); }
+    void InputBuffer::Destruct()  { CgsModule::IOBuffer::Destruct(); mPoolInputQueue.Destruct(); }
     const InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
@@ -56,8 +56,9 @@ namespace PoolIO
     }
     void OutputBuffer::Destruct()
     {
-        mPoolOutputQueue.Clear();
-        mPoolResourceRequestQueue.Clear();
+        CgsModule::IOBuffer::Destruct();
+        mPoolResourceRequestQueue.Destruct();
+        mPoolOutputQueue.Destruct();
     }
 
     // X360 0x828E1AA8: read-lock; return this + 4.

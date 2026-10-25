@@ -45,18 +45,22 @@ namespace CgsDev
     StrStreamBase& StrStreamBase::operator<<(u32 luValue)
     {
         PrintMode& leCurrentMode = GetPrintModePC();
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        if (leCurrentMode == E_PRINTMODE_DECIMAL)
+        switch (leCurrentMode)
         {
-            std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_UNSIGNED, luValue);
-        }
-        else
-        {
-            std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, luValue);
+        case E_PRINTMODE_DECIMAL:
+            AppendFormat("%u", luValue);
+            break;
+        case E_PRINTMODE_HEX:
+        case E_PRINTMODE_HEXONCE:
+            AppendFormat("0x%X", luValue);
+            // ARTIST 821F0F00 reloads the live mode after AppendFormat.
             if (leCurrentMode == E_PRINTMODE_HEXONCE)
                 leCurrentMode = E_PRINTMODE_DECIMAL;
+            break;
+        default:
+            break; // ARTIST unsigned modes>=3 do not emit text or change state.
         }
-        return *this << lacBuffer;
+        return *this;
     }
 
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
@@ -82,9 +86,13 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(void* lpValue)
     {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)(size_t)lpValue);
-        return *this << lacBuffer;
+        PrintMode& leCurrentMode = GetPrintModePC();
+        const PrintMode lePreviousMode = leCurrentMode;
+        leCurrentMode = E_PRINTMODE_HEX;
+        // Retain the existing u32 address projection, as in ARTIST's pointer overload.
+        *this << static_cast<u32>(reinterpret_cast<uintptr_t>(lpValue));
+        leCurrentMode = lePreviousMode;
+        return *this;
     }
 
     StrStreamBase& StrStreamBase::operator<<(PrintMode leMode)
