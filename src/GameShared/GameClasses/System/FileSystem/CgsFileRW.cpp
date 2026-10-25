@@ -211,7 +211,7 @@ namespace CgsFileSystem
         CGS_ASSERT(mpHandle != nullptr, "No file handle to begin write\n");
 
         AsyncOp* lpOp = AllocateAsyncOp();
-        lpOp->Write(mpHandle, const_cast<void*>(lpBuffer), luPosition, luSize,
+        lpOp->Write(mpHandle, lpBuffer, luPosition, luSize,
                     &File::WriteCallback, reinterpret_cast<uintptr_t>(this), 0);
         lpOp->SetPriority(miPriority);
         ++muPendingOperationCount;

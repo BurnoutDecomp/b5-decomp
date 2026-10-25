@@ -46,7 +46,7 @@ namespace rw
             //   +0x08 mbReserved08  : byte cleared by ctor/Open/Read/Write/Close
             //   +0x09 mbIsReadOp    : non-zero for read-class ops the scheduler may reorder
             //   +0x0C miPriority    : queue priority (Device sorts the op list by this)
-            //   +0x10 mpStream      : the owning Stream/File (Open/Read/Write store it; the
+            //   +0x10 mFileHandle      : the owning Stream/File (Open/Read/Write store it; the
             //                         DoIo callbacks walk it; DoOpen stores the new Handle)
             //   +0x14 mUserData     : opaque user word carried through to the callback
             //   +0x18 mpfnComplete  : completion callback (ctor/Open default it to STUB)
@@ -57,22 +57,10 @@ namespace rw
             //   +0x40 mpDevice      : the Device this op was queued on
             //   +0x44 mpfnDoIo      : the op's transfer entry point (Device calls it)
             //
-            // The +0x18 slot is the completion callback (a 32-bit function pointer in the
-            // asm: `stw r5,0x18`). The free GetSize @0x82BBD700 reads the 64-bit word at
-            // +0x18 of its argument (`ld 0x18`); that accessor is a separate free function
-            // (not an AsyncOp method) and is modelled via the mu64Size union view below so
-            // both the byte layout and both call shapes are reproduced exactly.
+            // DecFIGS async.h210 and ARTIST DoOpen/Read/Write/Close: this
+            // pointer is the genuine filesys Handle, not a second stream owner.
             struct AsyncOp;
-
-            // The object AsyncOp::mpStream points at, as the Device scheduler sees it. The
-            // scheduler only reads the word at +0x08 (`*(*(op+0x10)+8)`) -- the key it hands
-            // to the device driver's QueryLocation. The full Stream object (the
-            // AsyncOp DoIo callbacks' richer view of the same bytes) is `Stream` below.
-            struct OpStream
-            {
-                u8    macReserved0[8]; // +0x00 .. +0x07
-                void* mpDriverKey;     // +0x08  key passed to DeviceDriver::QueryLocation
-            };
+            struct Handle;
 
             // The op completion callback the scheduler fires once DoIo finishes.
             typedef void (*CompletionCallback)(AsyncOp* lpOp);
@@ -81,93 +69,25 @@ namespace rw
             // non-zero when the op has completed (the scheduler then fires mpfnComplete).
             typedef s32 (*DoIoCallback)(AsyncOp* lpOp);
 
-            // -----------------------------------------------------------------------------
-            // rw::core::filesys::Stream -- the file/stream object an AsyncOp transfers
-            // through (the object Read/Write/Close receive and store at AsyncOp::mpStream).
-            // Owned by the (not-yet-homed) Stream TU; this is the minimal shape the AsyncOp
-            // DoIo callbacks walk, every field/slot grounded by the DoRead/DoWrite asm.
-            //
-            // The IO transfer slots are dispatched through Stream::mpIo->mpVTable. Slot
-            // names below mirror the byte offsets the asm loads (`lwz r11,0xNN(vtable)`);
-            // the role comments are the inferred meaning from the surrounding stores, but
-            // the OFFSETS and the argument order are taken verbatim from the asm.
-            //   vtable +0x14 mpfnSlot14 : DoRead  data transfer (buffer, count) -> bytes
-            //   vtable +0x18 mpfnSlot18 : DoWrite data transfer (buffer, count) -> bytes
-            //   vtable +0x1C mpfnSlot1C : DoRead/DoWrite leading position call -> 64-bit pos
-            //   vtable +0x20 mpfnSlot20 : DoWrite trailing position fetch -> 64-bit pos
-            //   vtable +0x2C mpfnSlot2C : DoRead size/granularity ceiling -> u32
-            // -----------------------------------------------------------------------------
-            struct StreamIoVTable
-            {
-                void* mapfnReserved00[5];                                   // +0x00 .. +0x10
-                u64  (*mpfnSlot14)(void* lpIo, void* lpKey, void* lpBuffer,
-                                   u32 luCount, void* lpDriver, void* lpCtxKey); // +0x14
-                s32  (*mpfnSlot18)(void* lpIo, void* lpKey, void* lpBuffer,
-                                   u64 lu64Count, void* lpDriver, void* lpCtxKey); // +0x18
-                u64  (*mpfnSlot1C)(void* lpIo, void* lpKey, u64 lu64Position,
-                                   u32 luFlags, void* lpDriver, void* lpCtxKey); // +0x1C
-                u64  (*mpfnSlot20)(void* lpIo, void* lpKey);                // +0x20
-                void* mpfnReserved24;                                       // +0x24
-                void* mpfnReserved28;                                       // +0x28
-                u32  (*mpfnSlot2C)(void* lpIo);                             // +0x2C
-            };
-
-            struct StreamIo
-            {
-                const StreamIoVTable* mpVTable; // +0x00
-            };
-
-            // The per-open context Stream::mpContext points at. DoRead/DoWrite read its
-            // driver key (+0x08), its owning Device (+0x0C, whose +0x140 is the driver),
-            // and stash the leading-position result back at +0x20.
-            struct StreamContext
-            {
-                u8       macReserved00[8]; // +0x00 .. +0x07
-                void*    mDriverKey;       // +0x08  key handed to the IO slots
-                Device*  mpDevice;         // +0x0C  owning device (->mpDriver @ +0x140)
-                u8       macReserved10[16]; // +0x10 .. +0x1F
-                u64      mu64LeadPos;      // +0x20  leading-position result store
-            };
-
-            // NOTE: this is the low-level file-IO transfer object an AsyncOp reads/writes
-            // through (AsyncOp::mpStream). It is NOT rw::core::filesys::Stream, the high-level
-            // streaming reader (QueueFile/GetChunk/Kill, homed in stream.h/.cpp) -- that is a
-            // different class; this one is named IoStream to avoid the collision.
-            struct IoStream
-            {
-                u8             macReserved00[4]; // +0x00 .. +0x03
-                StreamContext* mpContext;        // +0x04  per-open context
-                void*          mDriverKey;       // +0x08  key handed to the IO slots
-                Device*        mpDevice;         // +0x0C  owning Device (Read/Write latch)
-                StreamIo*      mpIo;             // +0x10  IO interface (vtable dispatch)
-                u8             macReserved14[4]; // +0x14
-                u64            mu64WritePos;     // +0x18  DoWrite stashes slot-0x20 result here
-            };
-
+            // Actual AsyncOp members follow DWARF order with natural host
+            // widths. The console alignment gaps are not additional members.
             struct AsyncOp
             {
                 AsyncOp*           mpNext;          // +0x00  forward link in the AsyncOpList
-                s32                miResult;        // +0x04  DoIo result / status (ctor: -3)
+                volatile s32       miResult;        // +0x04  DoIo result / status (ctor: -3)
                 u8                 mbReserved08;    // +0x08
                 u8                 mbIsReadOp;      // +0x09  non-zero for read-class ops
-                u8                 macReserved0A[2]; // +0x0A .. +0x0B
-                s32                miPriority;      // +0x0C  scheduling priority
-                OpStream*          mpStream;        // +0x10  owning Stream/File (or result Handle)
+                volatile s32       miPriority;      // +0x0C  scheduling priority
+                Handle*            mFileHandle;        // +0x10  actual open/result Handle
                 uintptr_t          mUserData;       // +0x14  opaque user word for the callback
                                                     //        (pointer-width: the filesys Stream
                                                     //        stashes its engine pointer here and
                                                     //        recovers it in its op callbacks --
                                                     //        X360 stored a 32-bit word)
-                union                               // +0x18
-                {
-                    CompletionCallback mpfnComplete; // scheduler: `stw 0x18`, then call
-                    u64                mu64Size;     // free GetSize: `ld 0x18`
-                };
-                u32                muReserved1C;     // +0x1C  (tail of the +0x18 64-bit slot)
+                CompletionCallback mpfnComplete; // original callback; no Handle-size union view
                 u64                mu64Position;    // +0x20  64-bit file offset
                 u64                mu64ByteCount;   // +0x28  64-bit byte count requested
                 void*              mpBuffer;        // +0x30  transfer buffer
-                u32                muReserved34;     // +0x34
                 u64                mu64BytesDone;   // +0x38  running transferred bytes
                 Device*            mpDevice;        // +0x40  the Device this op runs on
                 DoIoCallback       mpfnDoIo;        // +0x44  transfer entry point
@@ -183,11 +103,11 @@ namespace rw
                 // @0x82BBFB48): fill the op, pick the Device, and Device::InsertOp it.
                 s32 Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
                          uintptr_t luUserData, s32 liPriority);
-                s32 Read(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
+                s32 Read(Handle* lpHandle, void* lpBuffer, u64 lu64Position, u64 lu64Count,
                          CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority);
-                s32 Write(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
+                s32 Write(Handle* lpHandle, const void* lpBuffer, u64 lu64Position, u64 lu64Count,
                           CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority);
-                s32 Close(void* lpStream, CompletionCallback lpfnComplete,
+                s32 Close(Handle* lpHandle, CompletionCallback lpfnComplete,
                           uintptr_t luUserData, s32 liPriority);
 
                 // The transfer callbacks the scheduler invokes (@0x82BBFA70 / @0x82BBFBB8 /
@@ -198,7 +118,7 @@ namespace rw
                 static s32 DoClose(AsyncOp* lpOp);
 
                 // Blocking result accessors (@0x82BBE0C0 / @0x82BBE118 / @0x82BBE058).
-                void* GetResultHandle();
+                Handle* GetResultHandle();
                 u64   GetResultSize();
                 s32   GetStatus(const EA::Thread::ThreadTime& lTimeoutAbsolute);
 
@@ -207,7 +127,7 @@ namespace rw
             };
 
             // GetSize @0x82BBD700:  ld r3, 0x18(r3)  -- return the 64-bit size at +0x18.
-            u64 GetSize(const AsyncOp* lpOp);
+            u64 GetSize(const Handle* lpHandle);
 
             // The Device's priority-ordered op queue (nodes link through AsyncOp::mpNext).
             typedef detail::ListSingle<AsyncOp> AsyncOpList;
@@ -221,7 +141,7 @@ namespace rw
             //   +0x0C mpDevice       : the Device the file was found on
             //   +0x10 mpDriver       : that Device's driver (~Handle closes mpFile through it)
             //   +0x18 mu64Size       : the file size the driver reported at open
-            //   +0x20 mu64Reserved20 : cleared by the ctor
+            //   +0x20 mu64Position : cleared by the ctor
             struct Handle
             {
                 // Handle::Handle: open lpcPath through lpDevice's driver (walking
@@ -237,7 +157,7 @@ namespace rw
                 DeviceDriver* mpDriver;        // +0x10
                 u64           mu64Size;        // +0x18  file size (Stream open/close callbacks
                                                //         copy it into StreamState::mu64FileSize)
-                u64           mu64Reserved20;  // +0x20
+                u64           mu64Position;  // +0x20, descriptive name: real owner cursor stored by DoRead/DoWrite
             };
 
             // ARTIST82BBD640/+4 aligned Alloc and82BBD678/+C Free;

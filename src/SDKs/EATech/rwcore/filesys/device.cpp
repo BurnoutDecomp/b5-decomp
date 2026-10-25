@@ -159,7 +159,7 @@ namespace rw
                 AsyncOp* lpAfter = nullptr;         // v5
                 u64 lu64NewEnd = 0;                 // v6
                 if (lpOp->mbIsReadOp)
-                    lu64NewEnd = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey) + lpOp->mu64Position;
+                    lu64NewEnd = mpDriver->QueryLocation(lpOp->mFileHandle->mpFile) + lpOp->mu64Position;
 
                 for (AsyncOp* lpCur = mOpList.mpHead; lpCur; lpCur = lpCur->mpNext)
                 {
@@ -168,7 +168,7 @@ namespace rw
                             && gpFileSysManager->mbSortByPosition == 1
                             && lpOp->mbIsReadOp
                             && lpCur->mbIsReadOp
-                            && lu64NewEnd < mpDriver->QueryLocation(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position))
+                            && lu64NewEnd < mpDriver->QueryLocation(lpCur->mFileHandle->mpFile) + lpCur->mu64Position))
                     {
                         break;
                     }
@@ -216,7 +216,7 @@ namespace rw
 
                 if (lpOp->mbIsReadOp && gpFileSysManager->mbSortByPosition == 1)
                 {
-                    u64 lu64Location = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey);  // v5
+                    u64 lu64Location = mpDriver->QueryLocation(lpOp->mFileHandle->mpFile);  // v5
                     u64 lu64Budget = mu64ReadBudget;                                          // v6
                     u64 lu64End = lu64Location + lpChosen->mu64Position;                     // v2
 
@@ -229,7 +229,7 @@ namespace rw
 
                         while (lpCur && lpCur->mbIsReadOp && lpCur->miPriority == lpChosen->miPriority)
                         {
-                            lu64CandEnd = mpDriver->QueryLocation(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position;
+                            lu64CandEnd = mpDriver->QueryLocation(lpCur->mFileHandle->mpFile) + lpCur->mu64Position;
                             if (mu64ReadBudget < lu64CandEnd)
                             {
                                 lbFound = true;
