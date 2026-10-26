@@ -78,6 +78,7 @@ static void TestDriving()
 {
     Controller lController;
     auto lSample = Driving();
+    lSample.mfBrake = 0.5f;
     lController.Submit(lSample, 100);
     auto lOutput = lController.Resolve(100);
     Check(lOutput.mRight.meCue == Cue::Engine && lOutput.mRight.meMode == Mode::Vibration, "continuous engine feedback");
@@ -133,7 +134,7 @@ static void TestDriving()
     lSample.mbLimiter = true;
     lController.Submit(lSample, 1700);
     Check(lController.Resolve(1700).mRight.meCue == Cue::Limiter, "explicit limiter signal has distinct chatter");
-    lSample.mbLimiter = false; lSample.mbReverse = true; lSample.miGear = 0;
+    lSample.mbLimiter = false; lSample.mbReverse = true; lSample.miGear = 0; lSample.mfBrake = 0.5f;
     lController.Submit(lSample, 1900);
     Check(lController.Resolve(1900).mLeft.meCue == Cue::Reverse && lController.Resolve(1900).mRight.meCue == Cue::Brake, "reverse transfers accelerator role to L2 and braking to R2");
 }
@@ -353,7 +354,7 @@ static void TestTuning()
     lSample.miGear = 3; lController.Submit(lSample, 120);
     Check(lController.Resolve(120).mRight.meCue == Cue::Engine, "disabled shift skips its neutral unloading phase too");
     ParseSettings("EngineStrength=0\0RightStrength=0\0\0", lSettings);
-    lSample = Driving(); lController.Configure(lSettings); lController.Submit(lSample, 100);
+    lSample = Driving(); lSample.mfBrake = 0.5f; lController.Configure(lSettings); lController.Submit(lSample, 100);
     Check(lController.Resolve(100).mRight.IsOff() && !lController.Resolve(100).mLeft.IsOff(), "R2 can disable without silencing L2");
     ParseSettings("TakeoffDuration=0\0\0", lSettings);
     lSample = Driving(); lController.Configure(lSettings); lController.Submit(lSample, 100);
@@ -391,14 +392,105 @@ static void TestReviewRegressions()
     Check(lController.Resolve(2130).mRight.meCue == Cue::Airborne,
         "launch shudder is discarded when powered wheels leave the road");
     Settings lSettings; lSettings.mfResistance = 0; lController.Configure(lSettings);
-    lSample = Driving(); lSample.mfSurface = 0.8f; lController.Submit(lSample, 3000);
+    lSample = Driving(); lSample.mfBrake = 0.5f; lSample.mfSurface = 0.8f; lController.Submit(lSample, 3000);
     Check(lController.Resolve(3000).mLeft.meCue == Cue::Surface && lController.Resolve(3000).mRight.meCue == Cue::Surface,
         "zero smooth resistance leaves grounded surface texture available on both pedals");
 }
 
+static unsigned Peak(const Effect& lrEffect)
+{
+    return *std::max_element(lrEffect.mauStrength.begin(), lrEffect.mauStrength.end());
+}
+static Output Steady(Sample lSample, const Settings& lrSettings = {})
+{
+    Controller lController;
+    lController.Configure(lrSettings);
+    lController.Submit(lSample, 1000);
+    return lController.Resolve(1000);
+}
+static void TestContextualResistance()
+{
+    auto lSample = Driving();
+    lSample.mfGas = 0;
+    auto lOutput = Steady(lSample);
+    Check(lOutput.mLeft.IsOff() && lOutput.mRight.IsOff(), "released pedals coast without a permanent resistance wall");
+    lSample.mbDrifting = lSample.mbBoosting = true; lSample.mfDrift = lSample.mfBrakeSkid = lSample.mfHandBrake = 1;
+    lOutput = Steady(lSample);
+    Check(lOutput.mLeft.IsOff() && lOutput.mRight.IsOff(), "coasting handbrake drift and boost state cannot load either released pedal");
+    lSample = Driving(); lSample.mfGas = 0;
+    lSample.mfSpeedMPH = 0; lSample.mfRPM = 1000;
+    Check(Steady(lSample).mLeft.IsOff() && Steady(lSample).mRight.IsOff(), "stationary untouched pedals remain unloaded");
+    lSample = Driving();
+    lSample.mfGas = 0.25f; const auto luQuarterGas = Force(Steady(lSample).mRight);
+    lSample.mfGas = 0.5f; const auto luHalfGas = Force(Steady(lSample).mRight);
+    lSample.mfGas = 1; const auto lEngine = Steady(lSample).mRight;
+    Check(luQuarterGas < luHalfGas && luHalfGas < Force(lEngine), "throttle effort rises through distinct light, medium and full-demand levels");
+    bool lbComfortable = true;
+    for (unsigned i = 0; i < 4; ++i)
+        for (int g = 1; g <= 6; ++g)
+        {
+            lSample.meCharacter = static_cast<Character>(i); lSample.miGear = g;
+            const auto lEffect = Steady(lSample).mRight;
+            lbComfortable &= !lEffect.IsOff() && Peak(lEffect) <= 4;
+        }
+    Check(lbComfortable, "ordinary full throttle stays in the lower half of hardware force across four profiles and all gears");
+    lSample = Driving(); lSample.mfGas = 0; lSample.mfBrake = 0.25f;
+    const auto luQuarterBrake = Force(Steady(lSample).mLeft);
+    lSample.mfBrake = 0.5f; const auto luHalfBrake = Force(Steady(lSample).mLeft);
+    lSample.mfBrake = 1; const auto lHardBrake = Steady(lSample).mLeft;
+    Check(luQuarterBrake < luHalfBrake && luHalfBrake < Force(lHardBrake) && Peak(lHardBrake) >= 4,
+        "braking builds from free initial travel through bite to firm full braking");
+    lSample = Driving(); lSample.mbBoosting = true;
+    Check(Force(Steady(lSample).mRight) > Force(lEngine) && Peak(Steady(lSample).mRight) < 8,
+        "sustained boost adds effort without holding maximum force");
+    lSample = Driving(); lSample.mfDrivenSlip = 1;
+    Check(Steady(lSample).mRight.meCue == Cue::Wheelspin && Force(Steady(lSample).mRight) < Force(lEngine),
+        "wheelspin eases accelerator load into a lighter flutter");
+    lSample = Driving(); lSample.mbDrifting = true; lSample.mfDrift = 1;
+    Check(Force(Steady(lSample).mRight) < Force(lEngine), "drifting leaves lighter progressive accelerator travel for grip control");
+    lSample = Driving(); lSample.muGroundedWheels = lSample.muGroundedDrivenWheels = 0;
+    lOutput = Steady(lSample);
+    Check(lOutput.mLeft.IsOff() && Force(lOutput.mRight) < Force(lEngine), "airborne pedals unload while a faint late-travel engine texture remains");
+    lSample = Driving(); lSample.mfSurface = 1;
+    Check(Steady(lSample).mLeft.IsOff() && Steady(lSample).mRight.meCue == Cue::Surface,
+        "road texture does not load an untouched brake pedal");
+    lSample.mfGas = 0; lSample.mfBrake = 0.5f;
+    Check(Steady(lSample).mRight.IsOff() && Steady(lSample).mLeft.meCue == Cue::Brake,
+        "braking retains its priority while an untouched accelerator stays unloaded on rough roads");
+    lSample = Driving(); lSample.mbReverse = true; lSample.miGear = 0;
+    Check(!Steady(lSample).mLeft.IsOff() && Steady(lSample).mRight.IsOff(),
+        "reverse acceleration loads L2 while leaving its unused brake role on R2 free");
+    lSample.mfGas = 0; lSample.mfBrake = 1;
+    Check(Steady(lSample).mLeft.IsOff() && Steady(lSample).mRight.meCue == Cue::Brake,
+        "reverse braking builds pressure on R2 and releases the accelerator on L2");
+    Settings lSettings; lSettings.mfLeftStrength = lSettings.mfRightStrength = 0.01f;
+    lSample = Driving(); lSample.mfBrake = 1;
+    Check(Steady(lSample, lSettings).mLeft.IsOff() && Steady(lSample, lSettings).mRight.IsOff(),
+        "sub-resolution strength settings release zones instead of rounding back up to a permanent minimum");
+    lSettings = {}; lSettings.maCues[static_cast<unsigned>(Cue::Engine)].miStartPosition = 9;
+    lSample = Driving();
+    Check(Peak(Steady(lSample, lSettings).mRight) == Peak(lEngine), "last-zone engagement retains the requested peak force");
+    Controller lController; lController.Submit(lSample, 1000);
+    lSample.mfImpact = 0.15f; lSample.muEvents = E_EVENT_IMPACT; lController.Submit(lSample, 1020);
+    const auto luSmallHit = Peak(lController.Resolve(1020).mRight);
+    lSample.mfImpact = 0.95f; lController.Submit(lSample, 1060);
+    Check(luSmallHit <= 2 && Peak(lController.Resolve(1060).mRight) >= 6,
+        "small contact stays light while a genuinely stronger new impact interrupts it");
+    for (unsigned t = 1076; t <= 1300; t += 16) lController.Submit(lSample, t);
+    Check(lController.Resolve(1300).mRight.meCue == Cue::Engine,
+        "a persistent contact event cannot keep restarting the strongest pulse");
+    lController.Reset(); lSample = Driving(); lController.Submit(lSample, 2000);
+    lSample.mfImpact = 0.9f; lSample.muEvents = E_EVENT_IMPACT; lController.Submit(lSample, 2020);
+    Check(lController.Resolve(2199).mRight.meCue == Cue::Engine,
+        "a sub-resolution pulse tail yields to current feedback instead of holding a one-step wall");
+    lController.Reset(); lSample = Driving(); lSample.mfDrivenSlip = 1; lController.Submit(lSample, 3000);
+    lSample.mfGas = 0; lController.Submit(lSample, 3020);
+    Check(lController.Resolve(3020).mRight.IsOff(), "releasing the accelerator during wheelspin is not a grip-recovery event");
+}
+
 int main()
 {
-    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning(); TestReviewRegressions();
+    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning(); TestReviewRegressions(); TestContextualResistance();
     std::printf("Adaptive triggers: %u/%u checks passed\n", guChecks - guFailures, guChecks);
     return guFailures ? 1 : 0;
 }
