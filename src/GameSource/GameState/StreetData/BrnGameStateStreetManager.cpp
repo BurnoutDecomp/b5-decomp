@@ -2226,7 +2226,8 @@ namespace BrnGameState
                                 const ::EActiveRaceCarIndex lePlayerIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
                                 const BrnPhysics::Vehicle::RaceCarState* lpPlayerRaceCarState =
                                     lpActiveRaceCarInterface->GetRaceCarState( lePlayerIndex );
-                                if ( ( ( ( 0.44704f * lpPlayerRaceCarState->mfMaxSpeedMPH ) * 4.0f ) > lfDistanceToTurning
+                                // ARTIST 8234F4CC reads speed @0x3CC, not maximum speed @0x3D0.
+                                if ( ( ( ( 0.44704f * lpPlayerRaceCarState->mfSpeedMPH ) * 4.0f ) > lfDistanceToTurning
                                     || lfDistanceToTurning < 50.0f )
                                   && lfDistanceToTurning != 0.0f )
                                 {
@@ -2277,7 +2278,8 @@ namespace BrnGameState
                                 const ::EActiveRaceCarIndex lePlayerIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
                                 const BrnPhysics::Vehicle::RaceCarState* lpPlayerRaceCarState =
                                     lpActiveRaceCarInterface->GetRaceCarState( lePlayerIndex );
-                                if ( ( ( ( 0.44704f * lpPlayerRaceCarState->mfMaxSpeedMPH ) * 4.0f ) > lfDistanceToTurning
+                                // ARTIST 8234F3C0: predict four seconds at the current speed.
+                                if ( ( ( ( 0.44704f * lpPlayerRaceCarState->mfSpeedMPH ) * 4.0f ) > lfDistanceToTurning
                                     || lfDistanceToTurning < 50.0f )
                                   && lfDistanceToTurning != 0.0f )
                                 {
@@ -2604,6 +2606,35 @@ namespace BrnGameState
 
         CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
         lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lMessage ), 276, 368 );
+
+        // FLAG PC-platform leaf: opt-in route/indicator witness at guidance changes.
+        if ( std::getenv("BRN_ROADRULES_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            static s32 siLinesLeft = 96;
+            static s32 siLastCurrent = -999, siLastLeft = -999, siLastRight = -999;
+            static s32 siLastState = -999;
+            const s32 liState = lMessage.miLeftRoadHighlightState * 4 + lMessage.miRightRoadHighlightState;
+            if ( siLinesLeft > 0 && (siLastCurrent != miCurrentPlayerRoadIndex || siLastLeft != mLeftRoadIndex
+                 || siLastRight != mRightRoadIndex || siLastState != liState) )
+            {
+                --siLinesLeft;
+                siLastCurrent = miCurrentPlayerRoadIndex; siLastLeft = mLeftRoadIndex;
+                siLastRight = mRightRoadIndex; siLastState = liState;
+                const Vector3 lPosition = lpActiveRaceCarInterface->GetPlayerPosition();
+                const BrnAI::Route* lpRoute = reinterpret_cast<const BrnAI::Route*>(lpLastAICarOutputInterface->GetPlayerRoute());
+                const s32 liCurrentNode = lpLastAICarOutputInterface->GetPlayerRouteNodeIndex();
+                *CgsDev::Log::gpDebugPrint << "[route-guidance] pos=(" << lPosition.x << "," << lPosition.y << "," << lPosition.z
+                    << ") current=" << miCurrentPlayerRoadIndex << " left=" << mLeftRoadIndex << " right=" << mRightRoadIndex
+                    << " highlight=" << lMessage.miLeftRoadHighlightState << "," << lMessage.miRightRoadHighlightState
+                    << " node=" << liCurrentNode << "/" << lpRoute->GetNodeCount() << "\n";
+                for ( s32 liNode = liCurrentNode; liNode >= 0 && liNode < lpRoute->GetNodeCount() && liNode < liCurrentNode + 13; ++liNode )
+                {
+                    const BrnAI::RouteNode* lpNode = lpRoute->GetNode(liNode);
+                    *CgsDev::Log::gpDebugPrint << "[route-guidance-node] i=" << liNode << " section=" << static_cast<u32>(lpNode->GetSectionIndex())
+                        << " road=" << GetRoadIndexFromAISectionIndex(lpNode->GetSectionIndex()) << " pos=(" << lpNode->GetX() << "," << lpNode->GetY() << ")\n";
+                }
+            }
+        }
 
         CgsDev::PerfMonCpu::StopMonitor( miUpcomingRoadsSentMessagePM );
     }
