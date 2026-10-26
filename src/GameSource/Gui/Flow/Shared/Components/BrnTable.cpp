@@ -34,15 +34,14 @@ namespace BrnGui
     // @0x82483708 -- fetch row liIndex as a TableRow*. The X360 bounds-checks the index
     // with a single UNSIGNED compare (`a2 >= 0x10`, i.e. liIndex outside [0, 16)), firing
     // "Table::GetSelectable() invalid index specified" (BrnTable.h:356), then forwards to
-    // the base SelectableGroup::GetSelectable and returns its slot. TableRow derives from
-    // SelectableGroup (not Selectable), so the base Selectable* is reinterpret_cast — a
-    // static_cast would be ill-formed across the unrelated bases.
+    // the base SelectableGroup::GetSelectable and returns its slot, which is one of this
+    // table's own rows (a TableRow IS a Selectable through SelectableGroup).
     TableRow* Table::GetSelectable(s32 liIndex)
     {
         CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_MAX_ROWS_PER_TABLE),
                    "Table::GetSelectable() invalid index specified");
 
-        return reinterpret_cast<TableRow*>(SelectableGroup::GetSelectable(liIndex));
+        return static_cast<TableRow*>(SelectableGroup::GetSelectable(liIndex));
     }
 
     // @0x82489720 -- forward a colour value to a row's cell. Resolves the row via
@@ -81,9 +80,9 @@ namespace BrnGui
     // The loop counter is an s8 (`extsb r31`) compared against the s8 row count.
     void Table::Update()
     {
-        if (IsQueried())
+        if (IsDirty())
         {
-            ClearQueriedFlag();
+            ClearFlag(E_FLAG_DIRTY);
         }
 
         if (mpData != 0 && miNumRows > 0)
@@ -91,7 +90,7 @@ namespace BrnGui
             for (s8 liRow = 0; liRow < miNumRows; ++liRow)
             {
                 TableRow& lrRow = maRows[liRow];
-                if (lrRow.IsQueried())
+                if (lrRow.IsDirty())
                 {
                     lrRow.Update();   // row component vtable slot 5 == SelectableGroup::Update
                 }
@@ -175,8 +174,8 @@ namespace BrnGui
                              lpacName, static_cast<s32>(liRow));
 
             TableRow& lrRow = maRows[liRow];
-            lrRow.muFlags          = static_cast<u8>(lrRow.muFlags | KU_FLAG_QUERIED);   // 0x824E9970
-            lrRow.mu64SelectedId   = static_cast<u64>(static_cast<s64>(liRow));            // std extsw(row), +0x10
+            lrRow.SetDirty();                                              // 0x824E9970
+            lrRow.SetId(static_cast<u64>(static_cast<s64>(liRow)));        // std extsw(row), +0x10
 
             lrRow.Construct(lacRowName, lpStateInterface, lpacCellName,
                             lappCellComponents[liRow], lpeComponentTypes,
@@ -195,7 +194,7 @@ namespace BrnGui
         if (lbWasWrapped)
         {
             mbWrapped = false;
-            muFlags   = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+            SetDirty();
         }
 
         for (s8 liRow = 0; liRow < miNumRows; ++liRow)
@@ -232,11 +231,9 @@ namespace BrnGui
             {
                 lrRow.SetupRow(miNumColumns, lbEnableShowingAnim);
                 lrRow.SetEnableShowingAnim(mbEnableShowingAnim);       // stb 0x32BF -> row+0x301
-                // slot 7 on the table == SelectableGroup::Add. The row IS the group's item on
-                // the console (TableRow derives from SelectableGroup, whose head is a
-                // Selectable) -- the same reinterpret the committed Table::GetSelectable uses
-                // on the way back out.
-                Add(reinterpret_cast<Selectable*>(&lrRow));
+                // slot 7 on the table == SelectableGroup::Add. The row IS the group's item:
+                // TableRow derives from SelectableGroup, whose primary base is Selectable.
+                Add(&lrRow);
             }
         }
 
@@ -248,11 +245,11 @@ namespace BrnGui
         if (lbWrapped != mbWrapped)
         {
             mbWrapped = lbWrapped;
-            muFlags   = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+            SetDirty();
         }
 
         SetRowData();
-        muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+        SetDirty();
     }
 
     // @0x824E49C8 (66 insns) -- see the header note.
@@ -269,7 +266,7 @@ namespace BrnGui
             }
         }
 
-        muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+        SetDirty();
     }
 
     // @0x824E6C58 (70 insns) -- move the highlight down; when the cursor sits on the last

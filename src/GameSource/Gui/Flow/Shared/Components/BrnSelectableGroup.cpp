@@ -6,7 +6,7 @@
 // with a highlight cursor + wrap flag. Member-by-name access; each item's highlight/select
 // virtuals are called directly (Selectable vtable slots: 0 SetActive, 1 SetHighlightable,
 // 2 SetSelectable, 3 SetHighlighted, 4 Select, 5 Update). The group's own dirty bit is
-// muFlags 0x10.
+// Selectable dirty bit (mxFlags 0x10).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"   // BrnGui::Selectable (item virtuals + accessors)
@@ -24,20 +24,22 @@ namespace BrnGui
         CGS_ASSERT(lpStateInterface != 0, "Invalid StateInterface passed to SelectableGroup::Construct");
 
         // X360: GuiComponent::Construct(this + 0x18, name, stateInterface, parentName).
-        mGuiComponentBase.Construct(lpacName, lpStateInterface, lpacParentName);
+        GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
 
-        mu64SelectedId = luAptId;   // *(this+0x10)
-        muFlags        = 0;         // *(this+0x0C)
+        SetId(luAptId);             // *(this+0x10)
+        ClearFlags();               // *(this+0x0C)
         for (s32 li = 0; li < KI_MAX_SELECTABLES; ++li)
             maSelectables[li] = 0;
 
-        Clear();
+        // A direct `bl BrnGui__SelectableGroup__Clear`, not a slot-6 dispatch: a derived
+        // group's Construct runs the BASE Clear here and its own Clear afterwards.
+        SelectableGroup::Clear();
 
         // The asm re-normalises the group tail after Clear (idempotent with Clear's resets).
         mbWrapped          = false;
         miSelectableCount  = 0;
         miHighlightedIndex = -1;
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
     }
 
     // @ 0x824E3100 -- reset + release every occupied slot, then clear the group state.
@@ -58,9 +60,9 @@ namespace BrnGui
             }
         }
         miSelectableCount  = 0;
-        mu64SelectedId     = KU64_NO_ID;
+        SetId(KU64_NO_ID);
         miHighlightedIndex = -1;
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
     }
 
     // @ 0x824E32F8 -- append a selectable pointer, ++count, dirty.
@@ -72,7 +74,7 @@ namespace BrnGui
 
         maSelectables[miSelectableCount] = lpSelectable;
         ++miSelectableCount;
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
     }
 
     // @ 0x8240FC98 -- bounds-check, set the queried flag, return the slot.
@@ -80,7 +82,7 @@ namespace BrnGui
     {
         CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount,
                    "Invalid index passed to SelectableGroup::GetSelectable()");
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
         return maSelectables[liIndex];
     }
 
@@ -138,7 +140,7 @@ namespace BrnGui
             {
                 maSelectables[miHighlightedIndex]->SetHighlighted(false);
                 miHighlightedIndex = -1;
-                muFlags |= KU_FLAG_QUERIED;
+                SetDirty();
                 return true;
             }
             return false;
@@ -152,7 +154,7 @@ namespace BrnGui
             maSelectables[miHighlightedIndex]->SetHighlighted(false);
         miHighlightedIndex = static_cast<s8>(liIndex);
         lpSel->SetHighlighted(true);
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
         return true;
     }
 
@@ -260,7 +262,7 @@ namespace BrnGui
                 lpSel->SetActive(true);
                 lpSel->SetHighlightable(true);
                 lpSel->SetSelectable(true);
-                muFlags |= KU_FLAG_QUERIED;
+                SetDirty();
             }
         }
         else
@@ -278,11 +280,16 @@ namespace BrnGui
         {
             if (lpSel->IsActive())
             {
-                // (The X360 also debug-asserts here when disabling the last usable item, via two
-                // un-named component-vtable slots 10/11 that count remaining usable items; that
-                // debug-only guard is omitted pending those slots' identity.)
+                // Disabling the highlighted item first moves the highlight off it: slot 10
+                // then slot 11 on the group's own vptr (`lwz 0x28` / `lwz 0x2C`, r4 = 0), i.e.
+                // HighlightNext(false) and, only if that found nothing, HighlightPrevious(false).
+                // Neither moving is the console's "last item" tripwire (cpp:246, non-gating).
+                if (lpSel->IsHighlighted() && !HighlightNext(false) && !HighlightPrevious(false))
+                {
+                    CGS_ASSERT(false, "Disabling the last item available");
+                }
                 lpSel->SetActive(false);
-                muFlags |= KU_FLAG_QUERIED;
+                SetDirty();
             }
         }
         else
@@ -303,9 +310,9 @@ namespace BrnGui
     // @ 0x824E3FE0 -- if dirty, Update every item and clear the dirty bit.
     void SelectableGroup::Update()
     {
-        if ((muFlags & KU_FLAG_QUERIED) == 0)
+        if (!IsDirty())
             return;
-        muFlags ^= KU_FLAG_QUERIED;
+        ClearFlag(E_FLAG_DIRTY);   // `xori 0x10` on a bit just tested set
         for (s32 li = 0; li < miSelectableCount; ++li)
         {
             Selectable* lpSel = maSelectables[li];
