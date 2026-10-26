@@ -8032,12 +8032,9 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     SendStreamerEvents( lpOutput );
 
-    // X360 0x82307948..0x82307960: test the registered +0x18349 switch and draw the original
-    // player-position/velocity overlay before the replay serializer call.
-    if( mbDisplayPlayerCarPosition )
-    {
-        DebugRenderPosition();
-    }
+    // FLAG PC-platform leaf: the position overlay is submitted by the world render
+    // pass. Its transient queue is consumed per presentation, while this update runs
+    // at the fixed simulation rate (possibly zero or multiple times per presentation).
 
     // The console's own unlock order: read first (0x82307980), then write (0x82307988).
     if( lpInput != 0 )
@@ -8052,6 +8049,12 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 // counts the first eight global slots, then searches all 35 slots for the nearest AI.
 void RaceCarEntityModule::DebugRenderPosition() const
 {
+    // The console's caller gate (82307948..82307960), moved with the PC render producer.
+    if( !mbDisplayPlayerCarPosition )
+    {
+        return;
+    }
+
     CgsDev::DebugInterface lDebugInterface;
     CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
     const CgsDev::DebugUI::Metrics& lrMetrics = lDebugInterface.GetUI().GetMetrics();
