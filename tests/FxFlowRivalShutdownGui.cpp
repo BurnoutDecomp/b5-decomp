@@ -34,7 +34,7 @@ namespace Assert
 }
 namespace Log
 {
-    DebugPrint* gpDebugPrint = nullptr;   // the [td-gui] witness stays silent
+    StrStreamBase* gpDebugPrint = nullptr;   // the [td-gui] witness stays silent
     StrStreamBase& DebugPrint::operator<<(const char*) { return *this; }
 }
 namespace Message { u64 gxMessageFilterFlags = 0; }

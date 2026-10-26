@@ -61,7 +61,7 @@ def arm(body, label_pattern):
 
 
 def wiring(tree):
-    body = mask(definition(tree.read(MODULE_CPP), "void GuiModule::DispatchInboundGuiEvents("))
+    body = mask(definition(tree.read(MODULE_CPP), "GuiModule::DispatchInboundGuiEvents("))
     ok = True
     for event_id in ("373", "374"):
         label = re.search(r"\bcase\s+" + event_id + r"\s*:", body)
