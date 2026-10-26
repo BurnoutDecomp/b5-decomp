@@ -1427,9 +1427,9 @@ namespace BrnWorld
     //     (whole-prop +0x5E; per-part group +0x2C), NOT a hard-coded 0.
     // The first-move edge publishes THREE events, not two (⭐ Q6 round-1 fix): the first,
     // PropBecamePhysicalEvent (@0x822F1560/0x822F1564), is now BODIED -- its payload type,
-    // queue and onward Append to the sound module all exist in the tree. The other two
-    // (PropVFXLocatorEvent::AddEventSafe @0x822F15C8, HitOverheadSignEvent::AddEvent
-    // @0x822F162C) and the ResourcePtr-list tail splice remain FLAGGED (see inline).
+    // queue and onward Append to the sound module all exist in the tree. The overhead-sign
+    // event is also published below. PropVFXLocatorEvent::AddEventSafe @0x822F15C8 and the
+    // ResourcePtr-list tail splice remain FLAGGED (see inline).
     // The prop-index math (entity index -> prop pool slot) and the part-copy loop are
     // reproduced as the X360 performs them.
     //
@@ -1768,10 +1768,7 @@ namespace BrnWorld
                         }
                     }
 
-                    // FLAGGED EVENT PUBLISHES -- the REMAINING TWO of the console's three (the
-                    // first, PropBecamePhysicalEvent, is bodied above). The gate above is now
-                    // asm-faithful; these two payload types are large unreconstructed IO records
-                    // this TU does not own:
+                    // FLAGGED EVENT PUBLISH -- the VFX-locator payload remains unreconstructed:
                     //   * PropEntityIO::PropVFXLocatorEvent::AddEventSafe @ 0x822F15C8 -- pushes
                     //     a VFX-locator record onto the post-physics output buffer's queue. Its
                     //     payload, read straight off the staging stores at 0x822F1590-0x822F15BC,
@@ -1781,18 +1778,21 @@ namespace BrnWorld
                     //     ⚠️ CORRECTED 2026-08-19: this note used to call that second word the
                     //     "zone id". +0x44 is muTypeId; mu16ZoneIndex is +0x46 and is not read
                     //     here (a wrong comment is a real defect).
-                    //   * for the three overhead-sign prop graphics ids (lpType->GetGraphicsId(),
-                    //     console +0x58, compared against 0x7A4D6 / 0x7A4C2 / 0x7B8C2 at
-                    //     0x822F15D0-0x822F1604), additionally
-                    //     BrnGameState::GameStateModuleIO::HitOverheadSignEvent::AddEvent
-                    //     @ 0x822F162C, whose payload is the prop's ENTITY INDEX as a single
-                    //     byte (`stb r15, var_1C0` -- r15 is the 14-bit index, truncated).
-                    // FLAGGED: not reproduced -- both targets fork event-queue / GameState IO
-                    // types outside this TU. The id test itself is kept live, now folded onto
-                    // PropTypeData::IsOverheadSign() (the shared header homes that predicate and
-                    // names this site as one of the copies to retire).
-                    const bool lbOverheadSign = lpType->IsOverheadSign();
-                    (void)lbOverheadSign;
+                    // ARTIST 822F15D0..822F162C: the first movement of an overhead sign
+                    // posts its entity index as one byte. The existing GameState scorer
+                    // consumes this event only during Showtime.
+                    if (lpType->IsOverheadSign())
+                    {
+                        BrnGameState::GameStateModuleIO::HitOverheadSignEvent lEvent;
+                        lEvent.muRaceCarId = static_cast<u8>(luPropIndex);
+                        lpOutput->GetHitOverheadSignQueue()->AddEvent(lEvent);
+                        // FLAG PC-platform leaf: opt-in physical sign-hit witness.
+                        if (getenv("BRN_PROP_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint << "[overhead-sign] first-move entity="
+                                << luPropIndex << " graphics=" << lpType->GetGraphicsId() << "\n";
+                        }
+                    }
                 }
 
                 // Install the new world transform and push the entity position to the scene.
