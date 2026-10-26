@@ -414,6 +414,10 @@ static void TestContextualResistance()
     lSample.mfGas = 0;
     auto lOutput = Steady(lSample);
     Check(lOutput.mLeft.IsOff() && lOutput.mRight.IsOff(), "released pedals coast without a permanent resistance wall");
+    lSample.mbDrifting = lSample.mbBoosting = true; lSample.mfDrift = lSample.mfBrakeSkid = lSample.mfHandBrake = 1;
+    lOutput = Steady(lSample);
+    Check(lOutput.mLeft.IsOff() && lOutput.mRight.IsOff(), "coasting handbrake drift and boost state cannot load either released pedal");
+    lSample = Driving(); lSample.mfGas = 0;
     lSample.mfSpeedMPH = 0; lSample.mfRPM = 1000;
     Check(Steady(lSample).mLeft.IsOff() && Steady(lSample).mRight.IsOff(), "stationary untouched pedals remain unloaded");
     lSample = Driving();
@@ -479,6 +483,9 @@ static void TestContextualResistance()
     lSample.mfImpact = 0.9f; lSample.muEvents = E_EVENT_IMPACT; lController.Submit(lSample, 2020);
     Check(lController.Resolve(2199).mRight.meCue == Cue::Engine,
         "a sub-resolution pulse tail yields to current feedback instead of holding a one-step wall");
+    lController.Reset(); lSample = Driving(); lSample.mfDrivenSlip = 1; lController.Submit(lSample, 3000);
+    lSample.mfGas = 0; lController.Submit(lSample, 3020);
+    Check(lController.Resolve(3020).mRight.IsOff(), "releasing the accelerator during wheelspin is not a grip-recovery event");
 }
 
 int main()

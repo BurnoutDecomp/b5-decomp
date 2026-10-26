@@ -120,7 +120,8 @@ rate limits or lifecycle clearing. ControllerVibration=0 remains a master mute.
 
 ## Pedal resistance
 
-The default tuning leaves released pedals unloaded. `Resistance=100` and effect
+The default tuning leaves released pedals free of continuous driving load;
+brief event/contact cues can still occur. `Resistance=100` and effect
 `Strength=100` mean the full situational curve, not constant maximum motor force.
 Normal engine effort follows actual throttle demand, gear and powered-wheel grip;
 RPM sets the texture frequency. This is presentation tuning, not measured engine
