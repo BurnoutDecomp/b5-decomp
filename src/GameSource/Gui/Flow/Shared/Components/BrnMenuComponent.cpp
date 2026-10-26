@@ -20,13 +20,10 @@ namespace BrnGui
     using CgsGui::StateInterface;
 
     // @0x824FFEF8 -- the console ctor only seeds vtables: the group's primary + GuiComponent
-    // branch, and each of the 16 MenuItem sub-objects' Selectable + GuiComponent vtables. Here
-    // the SelectableGroup base (its GuiComponent identity) and the 16 MenuItem members establish
-    // their own vtables via member construction; the modelled component-vtable pointer is not
-    // materialised on PC (the reconstructed methods dispatch by name).
+    // branch, and each of the 16 MenuItem sub-objects' Selectable + GuiComponent vtables. All
+    // of those are the compiler's own vptr stores here (base and member construction).
     MenuComponent::MenuComponent()
     {
-        mppVTable      = nullptr;
         miNumMenuItems = 0;
     }
 
@@ -92,9 +89,9 @@ namespace BrnGui
         if (lbWrap != mbWrapped)
         {
             mbWrapped = lbWrap;
-            muFlags |= KU_FLAG_QUERIED;
+            SetDirty();
         }
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
     }
 
     // @0x8241EA88 -- retext the row at liIndex.
@@ -113,7 +110,7 @@ namespace BrnGui
         if (mbWrapped)
         {
             mbWrapped = false;
-            muFlags |= KU_FLAG_QUERIED;
+            SetDirty();
         }
         for (s32 li = 0; li < miNumMenuItems; ++li)
             maItems[li].Clear();
@@ -145,7 +142,7 @@ namespace BrnGui
         lpItem->SetSelectable(false);      // item slot 2
     }
 
-    // @? -- next-row highlight (SelectableGroup::HighlightNext, not quiet).
+    // @0x824E4DE0 -- next-row highlight (SelectableGroup::HighlightNext, not quiet).
     bool MenuComponent::HighlightNext()
     {
         return SelectableGroup::HighlightNext(false);

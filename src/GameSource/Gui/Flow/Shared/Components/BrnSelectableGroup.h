@@ -7,55 +7,87 @@
 //
 // A group of up to 100 selectable items (BrnGui::Selectable*) with a current-highlight
 // cursor and a wrap flag; the shared base of the menu component groups (BrnGui::
-// MenuComponent / MenuToggleGroup / TableRow / the online screens). Reconstructed from
-// the X360 ARTIST build (semantic parity by named members; the x64 gate widens the
-// stored Selectable pointers to 8 bytes, so byte offsets are documentary only).
+// MenuComponent / MenuToggleGroupVarSize / TextSelection / ColourSelection / Table /
+// TableRow). Reconstructed from the X360 ARTIST build (the x64 gate widens pointers to
+// 8 bytes, so byte offsets are documentary only).
 //
-// Recovered layout (guest 32-bit offsets in the comments):
-//   +0x00 : component vtable pointer (modelled -- see note below)
-//   +0x0C : muFlags       -- the dirty/queried flag byte (methods OR in 0x10)
-//   +0x10 : mu64SelectedId-- the group's own cached id (Clear stores KU64_NO_ID)
+// CLASS SHAPE. A group IS a Selectable (a group can itself be an item of another group:
+// Table::SetupTable adds its TableRows) and a GuiComponent:
+//   +0x00 : Selectable           -- vptr, selection text, mxFlags @+0x0C, mId @+0x10
+//   +0x18 : CgsGui::GuiComponent -- its own vptr (one slot: Construct), name, hash, iface
 //   +0xA4 : miSelectableCount   (s8, signed bounds checks)
 //   +0xA5 : miHighlightedIndex  (s8, -1 == none)
 //   +0xA6 : mbWrapped           (bool, HighlightNext/Previous wrap-around)
 //   +0xA8 : maSelectables[100]  (Selectable* -- Add() appends, GetSelectable() returns)
+// The DecFIGS dump prints only one base (`: public CgsGui::GuiComponent`), as it does for
+// MenuToggle; the Selectable head at +0x00 is attested by every group vtable below, whose
+// slots 0..3 are Selectable::SetActive/SetHighlightable/SetSelectable/SetHighlighted.
 //
-// The component vtable is modelled as the named `mppVTable` data pointer (the project's
-// flat-vtable convention: derived screens dispatch the component virtuals through it BY
-// SLOT -- see BrnTableRow/BrnMenuToggleGroup). The reconstructed methods below call each
-// other and the item Selectable virtuals directly by name (semantic parity), so the menu
-// flow does not depend on mppVTable being a live table.
+// VTABLE (off_82072F98, the plain SelectableGroup table built by the CarSelectVehicle and
+// ImageGalleryState ctors; read from the ARTIST .rdata):
+//    0..3  Selectable::SetActive / SetHighlightable / SetSelectable / SetHighlighted
+//    4     SelectableGroup::Select            @0x824E3EC8
+//    5     SelectableGroup::Update            @0x824E3FE0
+//    6     SelectableGroup::Clear             @0x824E3100
+//    7     SelectableGroup::Add               @0x824E32F8
+//    8     SelectableGroup::Enable            @0x824E3490
+//    9     SelectableGroup::Disable           @0x824E3620
+//   10     SelectableGroup::HighlightNext     @0x824E3808
+//   11     SelectableGroup::HighlightPrevious @0x824E3A78
+//   12     SelectableGroup::HighlightIndex    @0x824E3CE0
+// The DecFIGS DWARF marks exactly these virtual (BrnSelectableGroup.h); derived groups
+// override 4..6 and append their own slots from 13 (see BrnTable.h / BrnTableRow.h /
+// BrnMenuComponent.h / BrnMenuToggleGroup.h).
 // ===================================================================================
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (the group's identity base)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (second base)
+#include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"     // BrnGui::Selectable (primary base)
 
-// Forward-declared: the group stores Selectable* and calls their virtuals in the .cpp
-// (which includes BrnSelectable.h). Pointer members need only the incomplete type here.
 namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {
-    struct Selectable;
-
-    struct SelectableGroup
+    struct SelectableGroup : public Selectable, public CgsGui::GuiComponent
     {
         static const s32 KI_MAX_SELECTABLES = 100;   // GetHighlighted / Add bound (0x64)
         static const s32 KI_MAX_ADD         = 128;   // Add's hard index cap (0x80)
-        static const u8  KU_FLAG_QUERIED    = 0x10;   // *(this+0xC) |= 0x10 (dirty/queried)
-        // The "no id" reset value Clear stores into mu64SelectedId (X360 `li -1 ; clrldi 32`).
+        // The Selectable dirty bit (`*(this+0xC) |= 0x10`) under the name the group bodies
+        // have always used for it.
+        static const u8  KU_FLAG_QUERIED    = E_FLAG_DIRTY;
+        // The "no id" reset value Clear stores into the group's own id (X360 `li -1 ; clrldi 32`).
         static const u64 KU64_NO_ID         = 0xFFFFFFFFull;
 
         // @ 0x824E65B8 -- name the group, wire its state interface + apt id, null the
         // selectable slots, then Clear(). (a4 = parent name, a5 = apt id.)
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName, u64 luAptId);
+
+        // @ 0x824E3EC8 -- Select() the currently-highlighted item if it is selectable. Slot 4.
+        virtual void Select();
+        // @ 0x824E3FE0 -- when the group is dirty, Update() every item and clear the dirty bit.
+        // Slot 5.
+        virtual void Update();
         // @ 0x824E3100 -- clear every occupied slot (reset each item + drop the pointer),
-        // then reset the count/highlight/id. Component vtable slot 6.
-        void Clear();
+        // then reset the count/highlight/id. Slot 6.
+        virtual void Clear();
         // @ 0x824E32F8 -- append a selectable pointer to the next free slot, ++count, dirty.
-        // Component vtable slot 7.
-        void Add(Selectable* lpSelectable);
+        // Slot 7.
+        virtual void Add(Selectable* lpSelectable);
+        // @ 0x824E3490 -- (re)enable the item at index (Active/Highlightable/Selectable on).
+        // Slot 8.
+        virtual void Enable(s32 liIndex);
+        // @ 0x824E3620 -- disable the item at index (Active off), asserting it is not the last.
+        // Slot 9.
+        virtual void Disable(s32 liIndex);
+        // @ 0x824E3808 -- move the highlight to the next selectable/highlightable/non-hidden
+        // item; lbQuiet suppresses the HighlightIndex call. Wraps when mbWrapped. Slot 10.
+        virtual bool HighlightNext(bool lbQuiet);
+        // @ 0x824E3A78 -- as HighlightNext, toward the previous item. Slot 11.
+        virtual bool HighlightPrevious(bool lbQuiet);
+        // @ 0x824E3CE0 -- highlight the item at index (un-highlight the previous; -1 clears the
+        // highlight). Returns true when the highlight changed. Slot 12.
+        virtual bool HighlightIndex(s32 liIndex);
 
         // @ 0x8240FC98 -- bounds-check index against the count, set the queried flag, return
         // maSelectables[index].
@@ -64,119 +96,27 @@ namespace BrnGui
         Selectable* GetHighlighted();
         // @ 0x8241EA28 -- assert a row is highlighted, return its id.
         u64 GetHighlightedId();
-        // The highlight cursor itself (-1 == none). ADDITIVE ACCESSOR, no standalone X360
-        // symbol: callers that need the INDEX rather than the item read the member inline
-        // -- e.g. CrashNavOptions::HandleOptionChanged @0x824D9408 switches on it.
+        // The highlight cursor itself (-1 == none). DWARF BrnSelectableGroup.h:203 declares it;
+        // callers that need the INDEX rather than the item read the member inline -- e.g.
+        // CrashNavOptions::HandleOptionChanged @0x824D9408 switches on it.
         s32 GetHighlightedIndex() const { return static_cast<s32>(miHighlightedIndex); }
         // @ 0x824E4158 -- linear-search the items for one whose id matches, return its index
         // (-1 if none).
         s32 GetIndexFromId(u64 luId);
-
-        // @ 0x824E3CE0 -- highlight the item at index (un-highlight the previous; -1 clears the
-        // highlight). Returns true when the highlight changed. Component vtable slot 12.
-        bool HighlightIndex(s32 liIndex);
         // @ 0x824E6720 -- resolve the id to an index, then HighlightIndex it.
         bool HighlightId(u64 luId);
-        // @ 0x824E3808 -- move the highlight to the next selectable/highlightable/non-hidden
-        // item; lbQuiet suppresses the HighlightIndex call. Wraps when mbWrapped.
-        bool HighlightNext(bool lbQuiet);
-        // @ 0x824E3A78 -- as HighlightNext, toward the previous item.
-        bool HighlightPrevious(bool lbQuiet);
-
-        // @ 0x824E3490 -- (re)enable the item at index (Active/Highlightable/Selectable on).
-        void Enable(s32 liIndex);
-        // @ 0x824E3620 -- disable the item at index (Active off), asserting it is not the last.
-        void Disable(s32 liIndex);
-        // @ 0x824E3EC8 -- Select() the currently-highlighted item if it is selectable.
-        void Select();
-        // @ 0x824E3FE0 -- when the group is dirty, Update() every item and clear the dirty bit.
-        // Component vtable slot 5.
-        void Update();
-
-        // ADDITIVE GROW (BrnGui::CarSelectVehicle::OnEnter @0x824C9470). The group head IS a
-        // BrnGui::Selectable on the console (this class models that head as reserved storage
-        // plus the muFlags byte, so it cannot inherit the method), and OnEnter reaches
-        // Selectable::SetHighlightable through the group's component vtable SLOT 1:
-        // `(*(*(this + 0x2370) + 4))(this + 0x2370, 1)`. muFlags IS Selectable::mxFlags --
-        // both live at +0x0C -- so this reproduces Selectable::SetHighlightable @0x824E5730
-        // store for store on the same byte: set/clear bit 1, dirty and report a change.
-        bool SetHighlightable(bool lbHighlightable)
-        {
-            const u8 luFlags = muFlags;
-            if (lbHighlightable == (((luFlags >> 1) & 1) != 0))
-                return false;
-            muFlags = static_cast<u8>(lbHighlightable ? (luFlags | 0x02) : (luFlags ^ 0x02));
-            muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
-            return true;
-        }
-
-        // ADDITIVE GROW (BrnGui::CarSelectLivery, 2026-08-02). The three SIBLING slots of the
-        // SetHighlightable above -- slot 0 SetActive, slot 2 SetSelectable, slot 3
-        // SetHighlighted. CarSelectLivery reaches all three on its MenuToggleGroupVarSize<2>
-        // (`(*(*(this + 0x8F0) + 0/8/0xC))(...)` in SetupComponents and HandleControllerInput).
-        // Same construction as SetHighlightable: muFlags IS Selectable::mxFlags, so these
-        // reproduce Selectable::SetActive @0x824E56E0 / SetSelectable @0x824E5780 /
-        // SetHighlighted @0x824E57D0 store for store on the same byte.
-        bool SetActive(bool lbActive)           { return SetStateFlag(0x01, lbActive); }
-        bool SetSelectable(bool lbSelectable)   { return SetStateFlag(0x04, lbSelectable); }
-        bool SetHighlighted(bool lbHighlighted) { return SetStateFlag(0x08, lbHighlighted); }
 
         // @ 0x824E31D8 -- set one item's id + dirty it.
         void SetSelectableId(s32 liIndex, u64 luId);
         // @ 0x824E3248 -- set every item's id (from the array, or its index when null) + dirty.
         void SetIds(const u64* lpaIds);
 
-        // The component's apt name (delegates to the group's GuiComponent identity).
-        const char* GetName() const { return mGuiComponentBase.GetName(); }
+        // The flag surface (IsHighlighted, SetDirty, the Set* virtuals) is the Selectable
+        // base's; the apt name (GetName) is the GuiComponent base's.
 
-        // The flag byte as the owning screen states sample it (`*(group + 0xC) & 8`).
-        bool IsHighlighted() const { return (muFlags & 0x08) != 0; }
-
-        // ADDITIVE GROW (Table::Update @0x824E4890, 2026-09-02). The queried/dirty bit as
-        // the table's own Update samples it on EACH ROW (`lbz 0x244 ; rlwinm 0,27,27` --
-        // row+0xC) and clears it on itself (`lbz 0xC ; xori 0x10 ; stb`). muFlags is
-        // private, and a derived Table may not touch a sibling TableRow's copy, so the two
-        // bit operations Update performs are exposed by name. Same byte, same bit as
-        // SelectableGroup::Update's own `muFlags ^= KU_FLAG_QUERIED`.
-        bool IsQueried() const     { return (muFlags & KU_FLAG_QUERIED) != 0; }
-        void ClearQueriedFlag()    { muFlags = static_cast<u8>(muFlags ^ KU_FLAG_QUERIED); }
-        // ImageGalleryState::HandleCollectedDataEvent ORs the bit in on its overview group.
-        void SetDirty()            { muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED); }
-
-    private:
-        // The shared body of the four Selectable flag setters: no-op (returning false) when
-        // the bit already reads the requested way, otherwise flip it, dirty the component and
-        // report the change.
-        bool SetStateFlag(u8 luBit, bool lbSet)
-        {
-            const u8 luFlags = muFlags;
-            if (lbSet == ((luFlags & luBit) != 0))
-                return false;
-            muFlags = static_cast<u8>(lbSet ? (luFlags | luBit) : (luFlags ^ luBit));
-            muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
-            return true;
-        }
-
-    public:
-
-        // Members carrying the recovered fields. The leading head (+0x00..+0xA3) is the
-        // multiply-inherited Selectable + GuiComponent base pair, modelled as reserved spans
-        // (the x64 gate accesses everything by name; the spans keep the recovered fields
-        // labelled at their guest offsets for clarity).
-        void** mppVTable;               // +0x00 (modelled component vtable pointer)
-        u8  maHeadReserved[0x08];       // +0x04..+0x0B (Selectable text; not touched here)
-        u8  muFlags;                    // +0x0C (methods OR in 0x10)
-        u8  maPadD[3];                  // +0x0D..+0x0F (align to the id word)
-        u64 mu64SelectedId;             // +0x10 (Clear stores KU64_NO_ID)
-        // +0x18..+0xA3 -- the group's GuiComponent identity (name + hashed name + state
-        // interface). The console multiply-inherits GuiComponent here; modelled by
-        // composition with the real type (Construct forwards to mGuiComponentBase.Construct,
-        // exactly the X360 `GuiComponent::Construct(this + 0x18, ...)`). Byte-sized to match.
-        CgsGui::GuiComponent mGuiComponentBase; // +0x18 (0x8C bytes)
         s8  miSelectableCount;          // +0xA4
         s8  miHighlightedIndex;         // +0xA5 (-1 == none)
         bool mbWrapped;                 // +0xA6
-        u8  maPadA7[1];                 // +0xA7 (align to the pointer array)
         Selectable* maSelectables[KI_MAX_SELECTABLES]; // +0xA8 (this[42 + i] on the console)
     };
 }

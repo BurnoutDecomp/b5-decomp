@@ -19,8 +19,8 @@
 // (references/DecFIGS/dwarfdump/.../BrnTextSelection.h) confirms every part of it.
 //
 //   ctor @0x824F9A48                       what it stores                    => member
-//   stw off_82073020, 0x000(r3)            the widget's OWN vtable           => the group head
-//   stw off_8207301C, 0x018(r3)            the GuiComponent sub-vtable       => SelectableGroup::mGuiComponentBase (+0x18)
+//   stw off_82073020, 0x000(r3)            the widget's OWN vtable           => the Selectable base
+//   stw off_8207301C, 0x018(r3)            the GuiComponent sub-vtable       => the GuiComponent base (+0x18)
 //   100 x stw off_8207182C @ +0x238, +0x18 the TextSelectionItem row vtables => maSelectionItems[100] (+0x238)
 //   stw off_82072F8C, 0xB98(r3)            the TextField vtable              => mTextField (+0xB98)
 //
@@ -45,22 +45,6 @@
 //       12 0x824E3CE0 SelectableGroup::HighlightIndex
 // Update at slot 5 is the class's ONLY override; every other slot is the base's. This also
 // independently re-validates the whole slot map documented in BrnSelectableGroup.h.
-//
-// ⚠️ Update() is declared NON-virtual here even though the DecFIGS DWARF attests it
-// `virtual void Update()` (BrnTextSelection.cpp:143) and the vtable above shows it really
-// does occupy the base's slot 5. That is a KNOWN, BOUNDED divergence, not an oversight:
-// BrnSelectableGroup.h deliberately keeps the group NON-POLYMORPHIC and models the
-// console's component vtable as the flat `mppVTable` data pointer, so no member of this
-// family can be a true override until that family-wide model changes (which would insert a
-// vptr into MenuComponent / MenuToggleGroup / Table / TableRow as well -- the live title
-// menu -- and is therefore its own change). It is behaviourally inert here because BOTH
-// X360 dispatch sites reach Update through the CONCRETE type:
-//   * SetupTextSelection's own closing `(*(*this + 20))(this)`;
-//   * CarSelectVehicle::UpdateComponents' `(*(*(this + 0x8F0) + 20))(this + 0x8F0)` on its
-//     TextSelection-typed member mCarSelector.
-// No call site anywhere holds a SelectableGroup* to a TextSelection. The committed siblings
-// MenuComponent / MenuToggleGroup / TableRow already hide Clear()/GetSelectable()/Update()
-// the same way.
 // ===================================================================================
 
 #include "types.hpp"
@@ -104,8 +88,8 @@ namespace BrnGui
 
         // @ 0x824E83A0 (DWARF BrnTextSelection.cpp:143) -- component vtable slot 5. When the
         // widget is dirty, push the highlighted row's text into the display field and run
-        // the group update. See the virtual/hiding note above.
-        void Update();
+        // the group update. The class's only override.
+        virtual void Update();
 
         // ---- members over the SelectableGroup base (DWARF h:82/h:83; the X360 offsets are
         //      documentary -- the x64 gate widens the row/base pointers, so every access is
