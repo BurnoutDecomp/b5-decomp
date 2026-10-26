@@ -70,12 +70,6 @@
 //    only the resource-type handler). Those are STREAMED SERIALISED records; minting
 //    their host layouts from the DWARF outside this slice is exactly how a silent
 //    on-disc/host stride mismatch gets in. Left for the TU that homes them.
-// 3. THE OVERHEAD-SIGN REFRESH tail of GenerateDispatchLists (@0x822FBE20..
-//    0x822FC0C8, gated on lbRenderCoronas, runs every 60 frames). It appends to
-//    PropEntityModule::mVisibleOverheadSigns, which B1 could only model as
-//    1052 opaque bytes because GuiOverheadSignInfoEvent::VisibleOverheadSignArray has
-//    no committed home, and it calls BrnGui::OverheadSignScore<32>::IsFull/Grow, which
-//    do not exist in the tree either.
 // 4. THE DEBUG BOUNDING-CIRCLE tail of RenderModel (@0x822C50C4..0x822C52AC, gated
 //    on mbDrawBoundingSpheres, which Construct clears). Its two file-scope gates,
 //    byte_82CDB6B0 and flt_82CDB6B4, have exactly ONE cross-reference each in the
@@ -992,30 +986,55 @@ PropEntityModule::GenerateDispatchLists(
     CgsGraphics::ModelInstanceCollector::EndInstanceCollection();
     lpInput->UnlockForRead();
 
-    // -------------------------------------------------------------------------
-    // PARKED (see banner item 3): the overhead-sign refresh @0x822FBE20..0x822FC0C8.
-    //   if ( lbRenderCoronas && --miFramesUntilUpdateVisibleSigns <= 0 )
-    //   {
-    //       mVisibleOverheadSigns.Clear();
-    //       for each visible non-replay whole prop:
-    //           if ( !prop->IsSmashed()-flag-bit-0x20 &&
-    //                type->muSomeId is one of { 500950, 500930, 506050 }  (overhead signs)
-    //                                        or { 428180, 428152 }        (the "score" pair) &&
-    //                !mVisibleOverheadSigns.IsFull() &&
-    //                MagnitudeSquared( mPlayerPosition - prop->mWorldTransform.Pos() )
-    //                    <= unk_82FAD730 )
-    //           {
-    //               entry = mVisibleOverheadSigns.Grow();
-    //               entry->position = prop->mWorldTransform.Pos();
-    //               entry->id       = PropEntityID( id ).GetEntityIndex();
-    //               entry->position += ( score-pair ? unk_82FAD900 : unk_82FAD740 );
-    //           }
-    //       miFramesUntilUpdateVisibleSigns = 60;
-    //   }
-    // mVisibleOverheadSigns has no real type (B1 could only model it as 1052 opaque bytes)
-    // and BrnGui::OverheadSignScore<32>::IsFull/Grow do not exist in the tree. Nothing in
-    // the tree reads the list, so not maintaining it changes no observable behaviour yet.
-    // -------------------------------------------------------------------------
+    // ARTIST 822FBE20..822FC0C8: refresh score markers every 60 main-view frames.
+    // The CRT initialisers at 82C4C1A0 / 82C4C1C8 / 82C4C208 pin the squared
+    // range to 10000 and the two vertical offsets to 3 and 5 metres respectively.
+    if ( lbRenderCoronas && --miFramesUntilUpdateVisibleSigns <= 0 )
+    {
+        mVisibleOverheadSigns.Clear();
+        for ( u32 luEntity = 0; luEntity < luNumEntities; ++luEntity )
+        {
+            const CgsSceneManager::EntityId lEntityId = lrVisibleEntities.GetItem( luEntity );
+            if ( lEntityId.GetOwner() == KU8_ENTITYTYPE_REPLAY_PROP )
+                continue;
+
+            CGS_ASSERT( lEntityId.GetOwner() == E_ENTITYTYPE_PROP,
+                        "mEntityId.GetOwner() == E_ENTITYTYPE_PROP" );
+            const PropEntityID lPropId( lEntityId );
+            if ( lPropId.GetPartIndex() != 0 )
+                continue;
+
+            PropEntityInstance* lpProp = mZoneManager.GetProp( lPropId );
+            const BrnPhysics::Props::PropTypeData* lpType =
+                GetPropPhysicsDataHeader()->GetType( lpProp->GetTypeId() );
+            if ( ( lpProp->mu8Flags & KU_MOVED_BIT ) != 0 )
+                continue;
+
+            const u32 luGraphicsId = lpType->GetGraphicsId();
+            const bool lbScorePair = luGraphicsId == 428180u || luGraphicsId == 428152u;
+            if ( ( !lpType->IsOverheadSign() && !lbScorePair ) || mVisibleOverheadSigns.IsFull() )
+                continue;
+
+            const Vector3 lPosition = lpProp->GetWorldTransform().Pos();
+            if ( MagnitudeSquared( mPlayerPosition - lPosition ) <= 10000.0f )
+            {
+                BrnGui::OverheadSignScore* lpScore = mVisibleOverheadSigns.Grow();
+                lpScore->mWorldSpacePosition = lPosition;
+                lpScore->muEntityIndex = static_cast<u16>( lPropId.GetEntityIndex() );
+                const Vector3 lOffset = { 0.0f, lbScorePair ? 5.0f : 3.0f, 0.0f, 0.0f };
+                lpScore->mWorldSpacePosition = lpScore->mWorldSpacePosition + lOffset;
+            }
+        }
+        miFramesUntilUpdateVisibleSigns = 60;
+        // FLAG PC-platform leaf: opt-in witness for the live score-marker producer.
+        if ( getenv("BRN_PROP_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0
+          && mVisibleOverheadSigns.GetLength() != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "[overhead-sign] visible="
+                << mVisibleOverheadSigns.GetLength() << " firstEntity="
+                << static_cast<u32>(mVisibleOverheadSigns.GetItem(0).muEntityIndex) << "\n";
+        }
+    }
 
     // ---- [DIAG prop-render wave 2026-08-12] THE SUBMISSION WITNESS -----------
     // ⛔ DELETE-WHEN props are confirmed on screen.

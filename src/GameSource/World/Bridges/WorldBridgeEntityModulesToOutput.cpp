@@ -552,6 +552,12 @@ void BridgeEntityModulesToOutput_PostPhysics(
             *lpRecordHitPropQueue,
             BrnGameState::GameStateModuleIO::E_EVENT_RECORD_PROP_HIT);
 
+        // ARTIST 827AF080..827AF09C, leg 11: carry the one-byte sign-hit records
+        // to GameState before the prop output queue is cleared for the next frame.
+        lpOutputBuffer->GetGameEventQueue()->Append(
+            *lpPropOutput_PostPhysics->GetHitOverheadSignQueue(),
+            BrnGameState::GameStateModuleIO::E_EVENT_OVERHEAD_SIGN_HIT);
+
         // [DIAG] NOT IN THE X360 BINARY -- the gateui `[UI-gate]` ladder's world rung. Same
         // idiom and same env guard as PropEntityModule_wQ_04.cpp's "[prop-diag] BREAK" line
         // (a once-evaluated static latch + the gpDebugPrint null test), first-N capped so a
