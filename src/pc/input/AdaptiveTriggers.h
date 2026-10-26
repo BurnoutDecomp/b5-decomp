@@ -188,7 +188,8 @@ namespace CgsInput::AdaptiveTriggers
                 else mfSlip += (lSample.mfDrivenSlip - mfSlip) * (1.0f - std::exp(-lfStep * 15.0f));
                 const bool lbSpinning = lSample.muGroundedDrivenWheels && lSample.mfGas > 0.1f &&
                     mfSlip > (mbSpinning ? 0.12f : 0.25f);
-                if (mbSpinning && !lbSpinning && lSample.muGroundedDrivenWheels && lSample.mbDriving && mSample.mbDriving)
+                if (mbSpinning && !lbSpinning && mfSlip <= 0.12f && lSample.mfGas > 0.1f &&
+                    lSample.muGroundedDrivenWheels && lSample.mbDriving && mSample.mbDriving)
                     Start(Cue::GripRecovery, luNow, 110, 40, 0.25f, lSample.mbReverse ? 1 : 2);
                 mbSpinning = lbSpinning;
                 if (lSample.mbDriving != mSample.mbDriving)
@@ -289,9 +290,9 @@ namespace CgsInput::AdaptiveTriggers
                 else if (mSample.mfGas > 0.04f)
                     Apply(lDrive, Make(mSample.mbReverse ? Cue::Reverse : Cue::Engine, 25,
                         lfEngineLoad, (12 + mSample.mfRPM * 0.006f) * lfFrequency, 3, true));
-                if (lbTexture && mSample.muGroundedWheels && mSample.mbBoosting)
+                if (lbTexture && lfGas > 0.04f && mSample.muGroundedWheels && mSample.mbBoosting)
                     Apply(lDrive, Make(Cue::Boost, 45, (0.18f + 0.22f * lfGas) * lfGrip * lfPower, 72 * lfFrequency, 3, true));
-                if (lbTexture && mSample.muGroundedWheels && mSample.mbDrifting)
+                if (lbTexture && lfGas > 0.04f && mSample.muGroundedWheels && mSample.mbDrifting)
                     Apply(lDrive, Make(Cue::Drift, 55, (0.08f + 0.15f * mSample.mfDrift) * (0.4f + 0.6f * lfGas),
                         23 + 12 * mSample.mfDrift + Irregular(luNow, 0), 3, true));
                 if (lbTexture && mbSpinning && mSample.muGroundedDrivenWheels)
@@ -305,7 +306,7 @@ namespace CgsInput::AdaptiveTriggers
                 {
                     Effect lBrake = Make(Cue::Brake, 30,
                         lfBrake * (0.12f + 0.46f * lfBrake) * lfPower, 0, 3, true);
-                    if (lbTexture && (mSample.mfBrake > 0.1f || mSample.mfHandBrake > 0.1f) && mSample.mfBrakeSkid > 0.18f)
+                    if (lbTexture && lfBrake > 0.1f && mSample.mfBrakeSkid > 0.18f)
                         Apply(lBrake, Make(Cue::BrakeSkid, 65, 0.10f + 0.30f * lfBrake + 0.12f * mSample.mfBrakeSkid,
                             28 + Irregular(luNow, 91), 3));
                     if (luDrive == 1) lOutput.mRight = lBrake; else lOutput.mLeft = lBrake;
