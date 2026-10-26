@@ -43,7 +43,11 @@ namespace BrnGui
         // The header-inline flag surface (DWARF-declared; inlined by the X360).
         bool GetFlag(StateFlags leFlag) const { return (mxFlags & static_cast<u8>(leFlag)) != 0; }
         void SetFlag(StateFlags leFlag)       { mxFlags = static_cast<u8>(mxFlags | static_cast<u8>(leFlag)); }
-        void ClearFlag(StateFlags leFlag)     { mxFlags = static_cast<u8>(mxFlags & ~static_cast<u8>(leFlag)); }
+        // An XOR, not an and-not: every inlined ClearFlag(E_FLAG_DIRTY) in ARTIST is
+        // `xori r11, r11, 0x10` (RivalTableCell / ImageGallery*Selectable / FriendsListEntry /
+        // MenuItem / MenuToggle / TableRow ::Update), and TableRow::Update issues it without
+        // testing the bit first.
+        void ClearFlag(StateFlags leFlag)     { mxFlags = static_cast<u8>(mxFlags ^ static_cast<u8>(leFlag)); }
         void ClearFlags()                     { mxFlags = 0; }
 
         bool IsActive() const        { return GetFlag(E_FLAG_ACTIVE); }

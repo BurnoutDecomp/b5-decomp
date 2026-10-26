@@ -56,7 +56,7 @@ namespace BrnGui
         lrItem.mbIsGradient        = true;         // item +0x20
         lrItem.SetDirty();                         // item +0x0C |= 0x10
 
-        muFlags |= KU_FLAG_QUERIED;                // picker +0x0C |= 0x10
+        SetDirty();                // picker +0x0C |= 0x10
     }
 
     // ---- SetupColourSelectionGradient @ 0x824E9E58 ----------------------------------
@@ -74,7 +74,7 @@ namespace BrnGui
         if (lbActive != mbWrapped)
         {
             mbWrapped = lbActive;
-            muFlags  |= KU_FLAG_QUERIED;
+            SetDirty();
         }
 
         s32 liCount = liActiveCount;
@@ -108,14 +108,14 @@ namespace BrnGui
             HighlightIndex(0);                             // picker slot 12
         }
 
-        muFlags |= KU_FLAG_QUERIED;
+        SetDirty();
         Update();                                          // picker slot 5
     }
 
     // ---- Update @ 0x824E8840 --------------------------------------------------------
     void ColourSelection::Update()
     {
-        if ((muFlags & KU_FLAG_QUERIED) == 0)
+        if (!IsDirty())
         {
             return;
         }

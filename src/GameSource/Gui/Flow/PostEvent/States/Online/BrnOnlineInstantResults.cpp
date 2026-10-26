@@ -1230,7 +1230,7 @@ namespace BrnGui
                     lpFirstPlayer = 0;
                 mTable.GetSelectable(liRow)->SetHighlightable(true);
                 TableRow* lpRow = mTable.GetSelectable(liRow);
-                lpRow->mu64SelectedId = static_cast<u64>(static_cast<s64>(lpStatus->mNetworkPlayerID));
+                lpRow->SetId(static_cast<u64>(static_cast<s64>(lpStatus->mNetworkPlayerID)));
                 lpRow->SetDirty();
             }
             if (lpFirstPlayer)

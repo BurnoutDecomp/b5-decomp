@@ -10,37 +10,20 @@
 //   TableRow::AppendExpectedAptComponent @0x824E4DF0
 //   TableRowDataSet::Clear             @0x824E4F68
 //
-// Reconstructed store-for-store from the X360 ARTIST pseudocode/asm. Member access is BY
-// NAME. The component flag byte the row dirties is the base SelectableGroup +0xC byte
-// (muFlags); 0x10 is its "needs re-output" bit.
+// Reconstructed store-for-store from the X360 ARTIST pseudocode/asm. TableRow derives
+// from SelectableGroup, so the row IS a Selectable with a live vptr (off_82073140, see
+// BrnTableRow.h for its slot map): the component virtuals below are ordinary virtual
+// calls, and the dirty bit is the Selectable base's E_FLAG_DIRTY (0x10).
 //
-// ⚠️⚠️ 2026-08-03 -- THE FLAT-VTABLE DISPATCH IN THIS FILE WAS UNSOUND AND IS RETIRED,
-// as it already was in BrnMenuToggleGroup.cpp and its sibling group TUs (2026-08-02). Every
-// component virtual used to be reached through `mppVTable[slot]`. `SelectableGroup::
-// mppVTable` is a MODELLED data member that NOTHING in this tree ever writes -- its own
-// header says so, and BrnMenuComponent.cpp:28 explicitly stores nullptr into it -- so the
-// first call through it would have jumped through a null pointer. This TU was unmounted,
-// which is the only reason it never fired; it is mounted from today (BrnOnlineCustomMatch.h
-// embeds a Table by value, so BrnScreenFlow needs the whole Table/TableRow/TableCell
-// family), so the dispatches had to go before the mount, not after.
-//
-// Every target is known BY NAME. The slot map is the one resolved from .rdata for the
-// sibling groups (BrnMenuToggleGroup.cpp:18-23): slots 0/1/2/3 == SetActive /
-// SetHighlightable / SetSelectable / SetHighlighted, slot 6 == Clear. The two slot-6 sites
-// dispatch on the ROW'S OWN vptr, so they land on TableRow::Clear, not the base:
+// The two slot-6 sites dispatch on the ROW'S OWN vptr, so they land on TableRow::Clear,
+// not the base -- written as plain (virtual) Clear() calls:
 //   * Construct @0x824E70EC  `bl SelectableGroup::Construct` then `lwz r11,0(r20)` /
 //     `lwz r11,0x18(r11)` / `bctrl` with r3 = this and no second argument.
 //   * SetupRow  @0x824E4C9C  the same pair, then slot 0 with r4 = 1.
-//   * TableRow::Clear @0x824E4D00 is itself reached ONLY through a vtable -- the export's
-//     xrefs_to is EMPTY -- and it opens with `bl BrnGui__SelectableGroup__Clear`, the
-//     derived-override-calls-base shape. Its own four dispatches read 0x0/0x4/0xC/0x8 with
-//     r4 = 0/1/0/1, i.e. SetActive(false) / SetHighlightable(true) / SetHighlighted(false)
-//     / SetSelectable(true) -- exactly the four calls below, now by name.
-//
-// ⚠️ ONE LIVE FLAT DISPATCH SURVIVES IN THE TREE after this file:
-// BrnOnlineTimeoutTimerComponent.cpp:23 still calls through its own `mppVTable[3]`. That TU
-// is UNMOUNTED, which is the only thing keeping it inert -- de-flatten it BEFORE mounting it,
-// exactly as was done here.
+// TableRow::Clear @0x824E4D00 opens with `bl BrnGui__SelectableGroup__Clear` (the derived-
+// override-calls-base shape); its own four dispatches read 0x0/0x4/0xC/0x8 with r4 =
+// 0/1/0/1, i.e. SetActive(false) / SetHighlightable(true) / SetHighlighted(false) /
+// SetSelectable(true).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnTableRow.h"
 
@@ -52,64 +35,6 @@
 
 namespace BrnGui
 {
-    // ---------------------------------------------------------------------------------
-    // The component "needs re-output" bit OR'd into the base flag byte (X360 `ori 0x10`).
-    static const u8 KU_FLAG_DIRTY = 0x10;
-
-    // FLAG PC divergence -- the row's live Selectable vptr.
-    // Table::SetupTable registers each row in the table's own group as a Selectable*
-    // (`Add(reinterpret_cast<Selectable*>(&lrRow))`; on the console the group head IS a
-    // Selectable). From then on the base SelectableGroup dispatches the Selectable virtuals
-    // on the row through that pointer: HighlightIndex slot 3 (`lwz r11,0(item) ;
-    // lwz r11,0xC(r11) ; bctrl`, ARTIST 0x824E3CE0), Clear slots 0/3/1/5, Enable/Disable
-    // slots 0..2, Select slot 4, Update slot 5. On the X360 those land in the row's vtable
-    // off_82073140. The PC SelectableGroup is non-polymorphic and models the vptr as the
-    // mppVTable data member, which nothing wrote, so the first such call (SetupTable ->
-    // HighlightIndex(0), opening the online Custom Match screen) jumped through a null vptr.
-    //
-    // The table below is that vtable's Selectable prefix, laid out like the PC Selectable's
-    // own vtable (BrnSelectable.h: six virtuals, no destructor; the x64 HighlightIndex reads
-    // SetHighlighted at +0x18 == slot 3). Each entry is the X360 slot target, called BY NAME:
-    //   slots 0..3  Selectable::SetActive/SetHighlightable/SetSelectable/SetHighlighted
-    //               (0x824E56E0/5730/5780/57D0, not overridden; SelectableGroup's inline
-    //               setters reproduce them store for store on the same flag byte)
-    //   slot  4     SelectableGroup::Select (0x824E3EC8; TableRow has no override in ARTIST)
-    //   slot  5     TableRow::Update (0x824E99C8; its xrefs_to is empty, so vtable-only)
-    // A free function taking the object pointer first has the same x64 calling convention as
-    // a member call (`this` in rcx), which is what makes the hand-built table callable.
-    namespace
-    {
-        bool RowSetActive(TableRow* lpRow, bool lbActive)               { return lpRow->SetActive(lbActive); }
-        bool RowSetHighlightable(TableRow* lpRow, bool lbHighlightable) { return lpRow->SetHighlightable(lbHighlightable); }
-        bool RowSetSelectable(TableRow* lpRow, bool lbSelectable)       { return lpRow->SetSelectable(lbSelectable); }
-        bool RowSetHighlighted(TableRow* lpRow, bool lbHighlighted)     { return lpRow->SetHighlighted(lbHighlighted); }
-        void RowSelect(TableRow* lpRow)                                 { lpRow->SelectableGroup::Select(); }
-        void RowUpdate(TableRow* lpRow)                                 { lpRow->Update(); }
-
-        struct RowSelectableVTable
-        {
-            bool (*mpSetActive)(TableRow*, bool);
-            bool (*mpSetHighlightable)(TableRow*, bool);
-            bool (*mpSetSelectable)(TableRow*, bool);
-            bool (*mpSetHighlighted)(TableRow*, bool);
-            void (*mpSelect)(TableRow*);
-            void (*mpUpdate)(TableRow*);
-        };
-
-        const RowSelectableVTable KS_ROW_SELECTABLE_VTABLE =
-        {
-            &RowSetActive, &RowSetHighlightable, &RowSetSelectable, &RowSetHighlighted,
-            &RowSelect, &RowUpdate,
-        };
-    }
-
-    // Inlined into Table::Table @0x82500F40 (`stw r26, 0(r31)`, r26 = off_82073140); the
-    // GuiComponent vptr and the cell vector construction are the compiler's own.
-    TableRow::TableRow()
-    {
-        mppVTable = reinterpret_cast<void**>(const_cast<RowSelectableVTable*>(&KS_ROW_SELECTABLE_VTABLE));
-    }
-
     // @0x824E6F00 -----------------------------------------------------------------------
     void TableRow::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                              const char* lpacCellName, CgsGui::GuiComponent** lppComponents,
@@ -179,11 +104,11 @@ namespace BrnGui
         if (lbEnableShowingAnim != mbWrapped)
         {
             mbWrapped = lbEnableShowingAnim;
-            muFlags |= KU_FLAG_DIRTY;
+            SetDirty();
         }
 
         // The X360 unconditionally re-raises the dirty bit on the way out.
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
     }
 
     // @0x824E4D00 -----------------------------------------------------------------------
@@ -195,14 +120,14 @@ namespace BrnGui
         if (mbWrapped)
         {
             mbWrapped = false;
-            muFlags |= KU_FLAG_DIRTY;
+            SetDirty();
         }
 
         // Reset the row's runtime state (X360 0x824E4D4C..0x824E4D68):
-        mu64SelectedId    = KU64_NO_ID;                 // std 0xFFFFFFFF, 0x10 (base id -> none)
+        SetId(KU64_NO_ID);                               // std 0xFFFFFFFF, 0x10 (base id -> none)
         mpData            = 0;                           // stw 0, 0x2F8
         mePreviousState   = E_TABLEROWSTATES_INVISIBLE;  // stw 1, 0x2FC
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
 
         // X360 @0x824E4D40..0x824E4DB8: four component virtuals in this order -- slot 0
         // (r4=0), slot 1 (r4=1), slot 3 (r4=0), slot 2 (r4=1). By the .rdata slot map that is
@@ -213,7 +138,7 @@ namespace BrnGui
         SetHighlighted(false);
         SetSelectable(true);
 
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
     }
 
     // @0x824E4DE0 -----------------------------------------------------------------------
@@ -223,16 +148,24 @@ namespace BrnGui
         return SelectableGroup::HighlightNext(false);
     }
 
+    // @0x824E4DE8 -----------------------------------------------------------------------
+    bool TableRow::HighlightPrevious()
+    {
+        // `li r4,0 ; b SelectableGroup::HighlightPrevious` (one body, ICF-folded with
+        // MenuComponent::HighlightPrevious).
+        return SelectableGroup::HighlightPrevious(false);
+    }
+
     // @0x824E4EE8 -----------------------------------------------------------------------
     TableRow::TableRowStates TableRow::FindState() const
     {
         // Not enabled  -> INVISIBLE; not visible -> DISABLED.
-        if ((muFlags & 0x01) == 0)
+        if (!IsActive())
             return E_TABLEROWSTATES_INVISIBLE;
-        if ((muFlags & 0x04) == 0)
+        if (!IsSelectable())
             return E_TABLEROWSTATES_DISABLED;
 
-        const bool lbHighlighted = (muFlags & 0x08) != 0;
+        const bool lbHighlighted = IsHighlighted();
         const bool lbPrevInvisible = (mePreviousState == E_TABLEROWSTATES_INVISIBLE);
 
         if (lbHighlighted)
@@ -286,7 +219,7 @@ namespace BrnGui
         CGS_ASSERT(lpData != 0, "TableRow::SetData() Invalid DataSet"); // X360 line 271
 
         mpData = lpData;
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
     }
 
     // @0x824890E8 -- set a cell's text directly in the backing data set and dirty the component.
@@ -297,7 +230,7 @@ namespace BrnGui
 
         mpData->SetText(liCell, lpacText);
 
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
     }
 
     // @0x82489210 -- set a cell's colour: drive the cell's text-field colour and record the
@@ -310,7 +243,7 @@ namespace BrnGui
         mpData->SetColourValue(liColumn, liColour);
         mpData->SetUseColour(liColumn, 1);
 
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
     }
 
     // @0x82489300 -- set a cell's text from a localised string. Only valid on TextField cells
@@ -341,7 +274,7 @@ namespace BrnGui
 
         mpData->SetInteger(liCell, static_cast<s32>(luState));
 
-        muFlags |= KU_FLAG_DIRTY;
+        SetDirty();
     }
 
     // @0x824E4F68 -----------------------------------------------------------------------
@@ -475,14 +408,13 @@ namespace BrnGui
     // unconditional -- reproduced, not normalised to a clear).
     void TableRow::Update()
     {
-        if ((muFlags & KU_FLAG_QUERIED) != 0)
+        if (IsDirty())
         {
             const TableRowStates leState = FindState();
             CGS_ASSERT(leState != E_TABLEROWSTATES_COUNT,
                        "Unable to find a relevant state for this TableRow");                // cpp:155
 
-            mGuiComponentBase.AddOutputAptViewState(KAC_APT_STATE_NAME,
-                                                    KAPC_ROW_STATE_APT_STATES[leState], false);
+            AddOutputAptViewState(KAC_APT_STATE_NAME, KAPC_ROW_STATE_APT_STATES[leState], false);
             mePreviousState = leState;
         }
 
@@ -512,6 +444,6 @@ namespace BrnGui
             lrCell.Update();   // cell vtable slot 1, every column
         }
 
-        muFlags = static_cast<u8>(muFlags ^ KU_FLAG_QUERIED);   // 0x824E9BF8 xori, unconditional
+        ClearFlag(E_FLAG_DIRTY);   // 0x824E9C30 xori, unconditional (ClearFlag is the XOR)
     }
 }

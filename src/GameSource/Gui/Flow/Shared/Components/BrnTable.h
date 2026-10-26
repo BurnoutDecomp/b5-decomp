@@ -99,12 +99,10 @@ namespace BrnGui
     //     mbEnableShowingAnim bool
     // Ctor @0x82500F40 default-constructs maRows[16] (each row default-constructs its 16
     // TableCells via a `vector constructor iterator'); the members are primed by
-    // Construct/Clear. Update/Clear/HighlightNext/HighlightPrevious are virtual overrides
-    // ON THE CONSOLE (DWARF BrnTable.cpp:135/166/191/231), so the original emitted vptr
-    // stores. They are declared PLAIN here, exactly as the base SelectableGroup declares
-    // its own dispatchable methods (the project's flat-vtable convention): adding `virtual`
-    // to this class would introduce a host vptr the base does not have. Measured console
-    // slots are named per method below.
+    // Construct/Clear. Update/Clear/HighlightNext/HighlightPrevious are virtual (DWARF
+    // BrnTable.cpp:135/166/191/231). The table's vtable off_820747D4, read from the ARTIST
+    // .rdata: 0..3 Selectable's, 4 SelectableGroup::Select, 5 Table::Update, 6 Table::Clear,
+    // 7..12 SelectableGroup's, 13 Table::HighlightNext, 14 Table::HighlightPrevious.
     //
     // Console member offsets confirmed by Construct @0x824E96E8 / SetupTable @0x824E6A90:
     //   maRows base +0x238 (stride 0x308), mpData +0x32B8, miNumRows +0x32BC,
@@ -112,10 +110,8 @@ namespace BrnGui
     //   DOCUMENTATION ONLY -- TableRow itself contains pointers, so its host size is not
     //   0x308 and none of these console offsets may enter host arithmetic.
     //
-    // GetSelectable returns TableRow* by reinterpret_cast-ing the base group's Selectable*
-    // (TableRow derives from SelectableGroup, NOT Selectable, so a static_cast is ill-formed).
-    // Its body is NOT homed in this wave (verify-FAIL sibling); it is declared here because
-    // SetColourValue / SetLocalisedText call it. Body lands in a later wave.
+    // GetSelectable returns the base group's Selectable* as the TableRow it is (every item a
+    // Table adds is one of its own rows).
     // ===================================================================================
     class Table : public SelectableGroup
     {
@@ -205,17 +201,15 @@ namespace BrnGui
         // is already at the end, then tail-call the base SelectableGroup::HighlightNext/
         // HighlightPrevious with lbQuiet == false. Both assert mpData is bound
         // ("Table::HighlightNext() Row data not set" / "...HighlightPrevious()...").
-        // NOTE: these HIDE the base SelectableGroup::HighlightNext(bool)/HighlightPrevious(bool)
-        // for Table objects, which is the console behaviour (different vtable slots).
-        bool HighlightNext();
-        bool HighlightPrevious();
+        // Slots 13/14, NEW virtuals (they hide, not override, the base's slot-10/11
+        // HighlightNext(bool)/HighlightPrevious(bool)).
+        virtual bool HighlightNext();
+        virtual bool HighlightPrevious();
 
         // @0x824E4940 (DWARF BrnTable.cpp:166) -- the table's own component-slot-6 Clear:
         // SelectableGroup::Clear, drop the wrap flag (dirtying), reset the data-set window
-        // (miFirstRowDataSet = -1, mpData = 0), then slot 6 on every row. Plain per the
-        // flat-vtable convention; HIDES SelectableGroup::Clear on a Table as the console's
-        // override does. Landed 2026-09-02 (BrnTable.cpp).
-        void Clear();
+        // (miFirstRowDataSet = -1, mpData = 0), then slot 6 on every row. Slot 6.
+        virtual void Clear();
 
         // @0x824E49C8 (DWARF BrnTable.cpp:266) -- bind row i to data set
         // (miFirstRowDataSet + i) for every row inside the data set's count, then dirty.
@@ -224,12 +218,9 @@ namespace BrnGui
 
         // @0x824E4890 (DWARF BrnTable.cpp:135) -- the table's own component-slot-5 Update:
         // drop the group's queried bit, then, when a data set is bound and rows exist,
-        // Update() every row whose own queried bit is set. Plain (not virtual) per the
-        // flat-vtable convention above; callers that reach the console's slot 5 on a Table
-        // spell `mTable.Update()` (OnlineCustomMatch::Update @0x824ACF74). Landed 2026-09-02
-        // in BrnTable.cpp. NOTE: this HIDES SelectableGroup::Update on a Table, which is
-        // exactly the console's override.
-        void Update();
+        // Update() every row whose own queried bit is set. Slot 5 (OnlineCustomMatch::Update
+        // @0x824ACF74 reaches it as `mTable.Update()`).
+        virtual void Update();
 
         // ARTIST824E6E78: register each live row and its cell components.
         void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);
