@@ -1012,6 +1012,13 @@ namespace BrnWorld
         // ================================================================
         mrTimestep = lpInput->GetCurrentTimestep();
 
+        // FLAG PC-platform leaf: count fixed 60 Hz update ticks instead of rendered
+        // frames. Saturate until the next main-view pass refreshes the marker list.
+        if ( miFramesUntilUpdateVisibleSigns > 0 )
+        {
+            --miFramesUntilUpdateVisibleSigns;
+        }
+
         // P9: the corona-phase advance -- STILL PARKED. Re-measured 2026-08-19 (wave Q6 C5):
         // the decode is COMPLETE and every raw offset now has a DWARF name
         //   e->mrMasterTime = fmod( e->mrMasterTime + mrTimestep, e->GetTotalTime() );
