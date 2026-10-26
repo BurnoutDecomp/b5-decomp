@@ -66,10 +66,11 @@ void DeformationManager::Post(VecFloat lvfTimeStep){
 }
 } }
 struct Timer { f32 GetRate() const{return .25f;} f32 GetScaleCurrent() const{return .5f;} };
+struct FrameClock { f32 GetLastFrameSeconds() const{return .25f;} };
 struct DebugManager { void Update(f32 step){if(step!=.125f||gPhase!=1)std::abort();} };
 struct Game
 {
-    Timer mGameTimer;DebugManager mDebugManager;
+    Timer mGameTimer;FrameClock mFrameRateManager;DebugManager mDebugManager;
     void Debug(){
 #include "max_phase_game.inc"
     }

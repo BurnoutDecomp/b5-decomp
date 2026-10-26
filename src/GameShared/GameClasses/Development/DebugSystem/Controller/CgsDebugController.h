@@ -29,6 +29,12 @@ namespace CgsDev
         // 0x82815EF8 path - the DebugManager hands the controller its gamepad source.
         void SetGamePad(DebugManagerPad* lpDebugManagerPad);
 
+#if !defined(D_PLATFORM_X360)
+        // FLAG PC-platform leaf: the caller supplies the scale used by the UI
+        // delta so the original 60 Hz repeat ceiling remains in real seconds.
+        void SetRepeatTimeScalePC(f32 lfScale) { mfRepeatTimeScalePC = lfScale; }
+#endif
+
         DebugUI::InputEvent GetInputEvent() const { return meInputEvent; }
 
         static const s32 KI_MAX_BUTTONS = 8;
@@ -134,6 +140,7 @@ namespace CgsDev
         bool mabPCKeysDown[256];
         bool mabPCKeysPressed[256];
         bool mbPCKeyboardCaptured;
+        f32 mfRepeatTimeScalePC;
 #endif
     };
 }

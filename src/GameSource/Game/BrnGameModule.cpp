@@ -37,6 +37,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: the 60Hz-sim / uncapped-render blend
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // RegisterFunction (the Debug/Sim actions)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameSource/GameState/BrnGameEvents.h"
 #include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::InputBuffer/OutputBuffer (GamePrepare's renderer pair)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
@@ -4498,7 +4499,13 @@ namespace BrnGame
         // overlay freeze with the simulation instead of continuing to tick -- which is the
         // opposite of what a debug overlay is for, and exactly the state you are in when you
         // most want it.
-        mDebugManager.Update(mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
+        // FLAG PC-platform leaf: this pass runs once per presentation, including
+        // zero/multiple-substep frames. Use actual frame time while retaining the
+        // original game-timer multiplier (independent of simulation pause/slowdown).
+#if !defined(D_PLATFORM_X360)
+        mDebugManager.GetUI().GetController().SetRepeatTimeScalePC(mGameTimer.GetScaleCurrent());
+#endif
+        mDebugManager.Update(mFrameRateManager.GetLastFrameSeconds() * mGameTimer.GetScaleCurrent());
         // FLAG PC-platform leaf: opt-in maximum command at the original debug
         // callback phase (ARTIST823CB598), before flow/vehicle physics updates.
         static const bool sbMaxPresetProbePC = (std::getenv("BRN_PLAYTEST_MAX_DEFORM_AT") != nullptr);
