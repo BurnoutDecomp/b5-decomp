@@ -2054,13 +2054,9 @@ namespace
     // -- strength-reduced `% 100`), then `+ 1`. De-optimised back to the modulo it came from.
     const u32 KU_PERCENTAGE_ROLL_MODULUS = 100u;
 
-    // PickVehicleToSpawn @0x82723880..0x8272388C builds a full 64-bit CgsID literal
-    //     lis r10, 0x6A16 ; lis r9, -0x40D2 ; ori r9, r9, 0xA6A4 ; insrdi r10, r9, 32, 0
-    // == 0xBF2EA6A4'6A160000, and in showtime mode accepts a picked vehicle type ONLY when
-    // its asset's CgsID equals that literal (`cmpld` + `li r11,1 / mr r11,r24(0)`).
-    // FLAG: the 12-character printable form of this CgsID is not decoded here -- the value is
-    // the recovered instruction immediate, and naming the asset would be a guess.
-    const u64 KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID = 0xBF2EA6A46A160000ull;
+    // ARTIST 82723880..827238B0 compares the full CgsID for TUSRV01 (the RV).
+    // Showtime accepts unequal IDs, overriding the normal bus/truck percentage gate.
+    const u64 KU_SHOWTIME_EXCLUDED_VEHICLE_ASSET_ID = 0xBF2EA6A46A160000ull;
 
     // StaticTrafficParam::Kill (inlined into StaticVehicles_KillParam @0x82721DC4):
     // `andi. r11, r11, 0x8C ; ori r11, r11, 2`. 0x8C keeps three bits that have no attested
@@ -2788,7 +2784,7 @@ void TrafficEntityModule::StaticVehicles_UpdateVehicles(
 //       if ((mRand.RandomUInt() % 100 + 1) > miBigVehicleAmount)  ok = false;
 //   if (mbPlayingShowtimeMode)
 //       ok = (mpData->mpaVehicleAssets[lpType->muAssetId].GetVehicleId()
-//             == KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID);
+//             != KU_SHOWTIME_EXCLUDED_VEHICLE_ASSET_ID);
 //   return ok ? luType : (u8)lpFlowType->mpauVehicleTypeIds[0];
 //
 // The showtime comparand is a full 64-bit load (`ldx r11, mpaVehicleAssets, assetId*8` then
@@ -2853,8 +2849,10 @@ u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
 
     if (mbPlayingShowtimeMode)
     {
+        // ARTIST 827238A0..827238B0 accepts unequal IDs, rejecting only TUSRV01.
+        // This assignment also overrides the normal big-vehicle roll, as on ARTIST.
         lbAcceptable = (mpData->mpaVehicleAssets[lpType->muAssetId].GetVehicleId()
-                        == KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID);
+                        != KU_SHOWTIME_EXCLUDED_VEHICLE_ASSET_ID);
     }
 
     if (lbAcceptable)
@@ -8243,6 +8241,19 @@ void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
     lfSpeed.z = lpNewParam->mfSpeed;
     lfSpeed.w = lpNewParam->mfSpeed;
     lpTransform->Initialise(lPos, lDir, lRight, lfSpeed);
+
+    // FLAG PC-platform leaf: opt-in witness for fresh Showtime traffic allocation.
+    if (mbPlayingShowtimeMode)
+    {
+        if (CgsDev::StrStreamBase* lpDiag = ShowtimeDiagStream())
+        {
+            *lpDiag << "[showtime-spawn] param=" << luFreeSlot
+                    << " type=" << luVehicleTypeId
+                    << " class=" << static_cast<u32>(lpVehicleType->muVehicleClass)
+                    << " asset=" << mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId()
+                    << " pos=(" << lPos.x << "," << lPos.y << "," << lPos.z << ")\n";
+        }
+    }
 
     // 0x827368E0. Offline (mbAllowDivergentBehaviour false) a still-alive recycled vehicle is
     // divorced from its param rather than asserted about.
