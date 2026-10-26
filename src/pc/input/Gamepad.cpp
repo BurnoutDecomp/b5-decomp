@@ -30,6 +30,7 @@ namespace CgsInput::PCGamepad
         Uint16 guLeft = 0, guRight = 0;
         Uint64 guLastRumble = 0;
         bool gbRumblePlaying = false;
+        bool gbEnhancedRumble = true;
         bool gbInitialized = false;
         bool gbInputAllowed = true;
         KeyboardMapping gKeyboardMapping;
@@ -65,11 +66,24 @@ namespace CgsInput::PCGamepad
             gFeedbackSample.muEvents = 0;
         }
 
+        AdaptiveTriggers::RumbleState FeedbackRumble()
+        {
+            AdaptiveTriggers::RumbleState lRumble;
+            lRumble.mbEnhanced = gbEnhancedRumble;
+            if (gbInputAllowed && gbRumblePlaying)
+            {
+                lRumble.muLeft = guLeft;
+                lRumble.muRight = guRight;
+            }
+            return lRumble;
+        }
+
         bool SendFeedback(const AdaptiveTriggers::Output& lrOutput, Uint64 luNow, bool lbImmediate = false)
         {
             if (!gpPad || gFeedbackStatus.meSupport != FeedbackStatus::Supported) return false;
-            const auto lPacket = AdaptiveTriggers::Encode(lrOutput);
-            if (!lbImmediate && (lPacket == gLastFeedbackPacket || luNow - guLastFeedbackSend < 20)) return true;
+            const auto lTriggers = AdaptiveTriggers::Encode(lrOutput);
+            if (!lbImmediate && (lTriggers == gLastFeedbackPacket || luNow - guLastFeedbackSend < 20)) return true;
+            const auto lPacket = AdaptiveTriggers::Encode(lrOutput, FeedbackRumble());
             const bool lbSent = SDL_SendGamepadEffect(gpPad, lPacket.data(), static_cast<int>(lPacket.size()));
             if (!lbSent)
             {
@@ -80,7 +94,7 @@ namespace CgsInput::PCGamepad
                 LogFeedback(lacMessage);
                 // A failed write may have partially changed the device. Attempt
                 // one neutral reset, then stop retrying until device replacement.
-                const auto lClear = AdaptiveTriggers::Encode(AdaptiveTriggers::Output{});
+                const auto lClear = AdaptiveTriggers::Encode(AdaptiveTriggers::Output{}, FeedbackRumble());
                 SDL_SendGamepadEffect(gpPad, lClear.data(), static_cast<int>(lClear.size()));
                 gFeedbackStatus.meSupport = FeedbackStatus::Rejected;
                 gbObserveFeedback.store(gFeedbackSettings.mbDiagnostics, std::memory_order_relaxed);
@@ -91,7 +105,7 @@ namespace CgsInput::PCGamepad
             }
             ++gFeedbackStatus.muPackets;
             guLastFeedbackSend = luNow;
-            gLastFeedbackPacket = lPacket;
+            gLastFeedbackPacket = lTriggers; // Motor-only changes stay with SDL_RumbleGamepad.
             if ((lrOutput.mLeft.meCue != gFeedbackStatus.meLeft || lrOutput.mRight.meCue != gFeedbackStatus.meRight) &&
                 (lbImmediate || luNow - guLastFeedbackLog >= 250))
             {
@@ -121,6 +135,8 @@ namespace CgsInput::PCGamepad
             // Real type ignores user mapping overrides. A PS5-shaped virtual Xbox
             // mapping cannot opt itself into Sony-specific output packets.
             if (SDL_GetRealGamepadType(gpPad) != SDL_GAMEPAD_TYPE_PS5 || SDL_GetGamepadVendor(gpPad) != 0x054c) return;
+            const auto luFirmware = SDL_GetGamepadFirmwareVersion(gpPad);
+            gbEnhancedRumble = SDL_GetGamepadProduct(gpPad) == 0x0df2 || luFirmware == 0 || luFirmware >= 0x0224;
             gFeedbackStatus.meSupport = FeedbackStatus::Supported;
             SendFeedback({}, SDL_GetTicks(), true); // harmless neutral capability probe
             gbObserveFeedback.store(gFeedbackSettings.mbDiagnostics ||

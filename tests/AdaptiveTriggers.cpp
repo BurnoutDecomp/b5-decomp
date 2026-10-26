@@ -21,6 +21,7 @@ static Sample Driving()
     lSample.muVehicle = 1;
     lSample.mbActive = true;
     lSample.muGroundedWheels = 4;
+    lSample.muGroundedDrivenWheels = 4;
     lSample.miGear = 2;
     lSample.mfGas = 1;
     lSample.mfSpeedMPH = 70;
@@ -61,6 +62,17 @@ static void TestEncoding()
     for (unsigned i = 1; i < lPacket.size(); ++i)
         if (i < 10 || i >= 32) lbUnrelatedClear &= lPacket[i] == 0;
     Check(lbUnrelatedClear, "rumble, LEDs and audio are untouched");
+    const auto lEnhanced = Encode(lOutput, {12345, 54321, true});
+    Check(lEnhanced[0] == 0x0e && lEnhanced[38] == 4 && lEnhanced[2] == 212 && lEnhanced[3] == 48,
+        "enhanced PS5 rumble mode and motor amplitudes survive trigger reports");
+    const auto lLegacy = Encode(lOutput, {12345, 54321, false});
+    Check(lLegacy[0] == 0x0f && lLegacy[38] == 0 && lLegacy[2] == 106 && lLegacy[3] == 24,
+        "old-firmware rumble uses SDL's legacy mode and half-amplitude scaling");
+    const auto lClear = Encode(Output{}, {12345, 54321, true});
+    Check(lClear[10] == 5 && lClear[21] == 5 && lClear[2] == 212 && lClear[38] == 4,
+        "neutral trigger clear preserves active ordinary rumble");
+    Check(std::memcmp(lEnhanced.data() + 10, lPacket.data() + 10, 22) == 0,
+        "rumble composition preserves both independently encoded trigger effects");
 }
 static void TestDriving()
 {
@@ -349,9 +361,44 @@ static void TestTuning()
     Check(lController.Resolve(120).mRight.meCue == Cue::Airborne, "zero transient duration suppresses the pulse without stale force");
 }
 
+static void TestReviewRegressions()
+{
+    Controller lController;
+    auto lSample = Driving();
+    lSample.mfDrivenSlip = 1;
+    lController.Submit(lSample, 100);
+    lSample.muGroundedWheels = 2; lSample.muGroundedDrivenWheels = 0; lSample.mfDrivenSlip = 0;
+    lController.Submit(lSample, 120);
+    Check(lController.Resolve(120).mRight.meCue == Cue::Engine,
+        "lifting only powered wheels stops wheelspin even while the other axle is grounded");
+    lController.Submit(lSample, 300);
+    Check(lController.Resolve(300).mRight.meCue != Cue::GripRecovery,
+        "losing powered-wheel contact cannot award a false grip recovery");
+    lSample.muGroundedDrivenWheels = 2; lController.Submit(lSample, 320);
+    Check(lController.Resolve(320).mRight.meCue == Cue::Engine,
+        "powered wheels recontact without replaying a discarded recovery");
+    lController.Reset(); lSample = Driving(); lController.Submit(lSample, 1000);
+    lSample.mbDrifting = true; lController.Submit(lSample, 1010);
+    lSample.muGroundedWheels = lSample.muGroundedDrivenWheels = 0;
+    lController.Submit(lSample, 1030);
+    Check(lController.Resolve(1130).mLeft.IsOff() && lController.Resolve(1130).mRight.meCue == Cue::Airborne,
+        "drift initiation cannot reload airborne triggers after takeoff expires");
+    lController.Reset(); lSample = Driving(); lSample.mfSpeedMPH = 5; lSample.mfGas = 0;
+    lController.Submit(lSample, 2000);
+    lSample.mfGas = 1; lController.Submit(lSample, 2010);
+    lSample.muGroundedWheels = lSample.muGroundedDrivenWheels = 0;
+    lController.Submit(lSample, 2030);
+    Check(lController.Resolve(2130).mRight.meCue == Cue::Airborne,
+        "launch shudder is discarded when powered wheels leave the road");
+    Settings lSettings; lSettings.mfResistance = 0; lController.Configure(lSettings);
+    lSample = Driving(); lSample.mfSurface = 0.8f; lController.Submit(lSample, 3000);
+    Check(lController.Resolve(3000).mLeft.meCue == Cue::Surface && lController.Resolve(3000).mRight.meCue == Cue::Surface,
+        "zero smooth resistance leaves grounded surface texture available on both pedals");
+}
+
 int main()
 {
-    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning();
+    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning(); TestReviewRegressions();
     std::printf("Adaptive triggers: %u/%u checks passed\n", guChecks - guFailures, guChecks);
     return guFailures ? 1 : 0;
 }

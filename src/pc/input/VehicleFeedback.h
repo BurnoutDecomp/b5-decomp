@@ -148,6 +148,7 @@ namespace CgsInput::AdaptiveTriggers
             lSample.mfBrakeSkid = (std::max)(lSample.mfBrakeSkid, Unit(lrWheel.mfSkidFactor));
             if ((luDrivenMask & (1u << i)) && lrWheel.mbHasTraction)
             {
+                ++lSample.muGroundedDrivenWheels;
                 const float lfRoadSpeed = std::fabs(Finite(lrWheel.mfRoadLongSpeed));
                 const float lfSlip = std::fabs(Finite(lrWheel.mfWheelLongSpeed) - Finite(lrWheel.mfRoadLongSpeed)) /
                     (std::max)(5.0f, lfRoadSpeed);
