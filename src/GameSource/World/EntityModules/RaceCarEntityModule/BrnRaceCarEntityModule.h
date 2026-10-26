@@ -293,8 +293,8 @@ public:
                                 RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
 
-        // X360 0x822BDAB0; DecFIGS declares this const. PostPhysicsUpdate calls it after
-        // SendStreamerEvents when the +0x18349 debug variable is true.
+        // X360 0x822BDAB0; DecFIGS declares this const. Native PC submits this from
+        // WorldModule's render pass; the original +0x18349 switch is checked inside.
         void DebugRenderPosition() const;
 
         // ⭐⭐ X360 0x822E87B8 -- THE PHYSICS READBACK (physics-return-path wave 2026-08-11).

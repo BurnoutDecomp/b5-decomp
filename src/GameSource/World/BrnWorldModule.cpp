@@ -3937,6 +3937,11 @@ WorldModule::GenerateDispatchLists(
 
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderMainScreen );
 
+    // FLAG PC-platform leaf: transient debug text must be queued once per rendered
+    // frame, including presentations with no physics tick. Read the completed car
+    // snapshot here; do not advance simulation to refresh the overlay.
+    mRaceCarEntityModule.DebugRenderPosition();
+
     // ---- the dispatch-pass IO buffer set -----------------------------------
     WorldEntityIO::InputBuffer_GenerateDispatchLists* lpWorldDispatchInput = 0;
     BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch* lpTrafficDispatchInput = 0;
