@@ -986,10 +986,12 @@ PropEntityModule::GenerateDispatchLists(
     CgsGraphics::ModelInstanceCollector::EndInstanceCollection();
     lpInput->UnlockForRead();
 
-    // ARTIST 822FBE20..822FC0C8: refresh score markers every 60 main-view frames.
+    // ARTIST 822FBE20..822FC0C8: refresh score markers every 60 console frames.
+    // FLAG PC-platform leaf: PreSceneUpdate advances the countdown at fixed 60 Hz;
+    // main-view rendering consumes it, independent of presentation rate.
     // The CRT initialisers at 82C4C1A0 / 82C4C1C8 / 82C4C208 pin the squared
     // range to 10000 and the two vertical offsets to 3 and 5 metres respectively.
-    if ( lbRenderCoronas && --miFramesUntilUpdateVisibleSigns <= 0 )
+    if ( lbRenderCoronas && miFramesUntilUpdateVisibleSigns <= 0 )
     {
         mVisibleOverheadSigns.Clear();
         for ( u32 luEntity = 0; luEntity < luNumEntities; ++luEntity )

@@ -71,6 +71,7 @@ struct Picker {
     s32 miFramesUntilUpdateVisibleSigns=1;
     Vector3 mPlayerPosition{};
     const Types* GetPropPhysicsDataHeader(){return &data;}
+    void Tick();
     void Discover(bool lbRenderCoronas);
 };
 struct CrashModeScoring {
@@ -93,7 +94,7 @@ int main(){
         picker.mZoneManager.props[i].mWorldTransform.Pos()=Vector3{float(i),0,0,0};
     }
     picker.lrVisibleEntities.count=5;
-    picker.Discover(true);
+    picker.Tick();picker.Discover(true);
     Check(picker.mVisibleOverheadSigns.GetLength()==5,"all three sign types and both bonus props discovered");
     for(u32 i=0;i<picker.mVisibleOverheadSigns.GetLength();++i){
         const auto& s=picker.mVisibleOverheadSigns.GetItem(i);
@@ -104,18 +105,18 @@ int main(){
     picker.mZoneManager.props[2].mWorldTransform.Pos().x=100.0f;
     picker.mZoneManager.props[3].muTypeId=5;
     picker.lrVisibleEntities.ids[4].mId=(34u<<24)|(4<<10);
-    picker.miFramesUntilUpdateVisibleSigns=1;picker.Discover(true);
+    picker.miFramesUntilUpdateVisibleSigns=1;picker.Tick();picker.Discover(true);
     Check(picker.mVisibleOverheadSigns.GetLength()==1,"moved, distant, ordinary and replay props excluded; radius inclusive");
     if(picker.mVisibleOverheadSigns.GetLength())Check(picker.mVisibleOverheadSigns.GetItem(0).muEntityIndex==2,"100 metre boundary retained");
     picker.lrVisibleEntities.count=0;
     picker.Discover(false);
     Check(picker.miFramesUntilUpdateVisibleSigns==60&&picker.mVisibleOverheadSigns.GetLength()==1,"reflection passes leave timer and markers alone");
-    for(int i=0;i<59;++i)picker.Discover(true);
-    Check(picker.mVisibleOverheadSigns.GetLength()==1,"markers cached for 59 main-view frames");
-    picker.Discover(true);
+    for(int i=0;i<59;++i){picker.Tick();picker.Discover(true);}
+    Check(picker.mVisibleOverheadSigns.GetLength()==1,"markers cached for 59 fixed simulation ticks");
+    picker.Tick();picker.Discover(true);
     Check(picker.mVisibleOverheadSigns.GetLength()==0,"empty visible frame clears expired markers");
     for(u32 i=0;i<40;++i){picker.mZoneManager.props[i].mu8Flags=0;picker.mZoneManager.props[i].muTypeId=0;picker.mZoneManager.props[i].mWorldTransform.Pos().x=0;picker.lrVisibleEntities.ids[i].mId=(u32(E_ENTITYTYPE_PROP)<<24)|(i<<10);}
-    picker.lrVisibleEntities.count=40;picker.miFramesUntilUpdateVisibleSigns=1;picker.Discover(true);
+    picker.lrVisibleEntities.count=40;picker.miFramesUntilUpdateVisibleSigns=1;picker.Tick();picker.Discover(true);
     Check(picker.mVisibleOverheadSigns.GetLength()==32,"marker capacity bounded at 32");
     static PropOutput output;static WorldOutput world;
     output.signs.Construct();world.events.Construct();
@@ -136,6 +137,37 @@ int main(){
     scorer.mfTimeSinceLastHitOverheadSign=1;scorer.DealWithHitOverheadSign();Check(scorer.miBaseScore==20000,"cooldown boundary awards next hit");
     output.signs.Clear();prop.mu8Flags=0;Move(true,&prop,&picker.data.types[5],0,&output);
     Check(output.signs.GetLength()==0,"ordinary props do not emit overhead-sign events");
+    const int rates[]={30,60,120,144,240};
+    for(int fps:rates){
+        Picker cadence;cadence.mVisibleOverheadSigns.Construct();cadence.lrVisibleEntities.count=1;
+        cadence.lrVisibleEntities.ids[0].Set(E_ENTITYTYPE_PROP,0,0);
+        cadence.data.types[0].muSceneUriId=500950;
+        int accumulator=0,ticks=0,lastRefresh=-1,refreshes=0;float last=-1;
+        for(int frame=0;frame<fps*3;++frame){
+            accumulator+=60;int count=accumulator/fps;accumulator%=fps;
+            for(int i=0;i<count;++i){cadence.Tick();++ticks;}
+            cadence.mZoneManager.props[0].mWorldTransform.Pos().x=float(ticks)*.001f;
+            cadence.Discover(true);
+            const int beforeReflections=cadence.miFramesUntilUpdateVisibleSigns;
+            cadence.Discover(false);cadence.Discover(false);
+            Check(cadence.miFramesUntilUpdateVisibleSigns==beforeReflections,"reflection passes do not consume sign cadence");
+            if(cadence.mVisibleOverheadSigns.GetLength()){
+                float position=cadence.mVisibleOverheadSigns.GetItem(0).mWorldSpacePosition.x;
+                if(position!=last){
+                    if(lastRefresh>=0)Check(ticks-lastRefresh==60,"marker refresh stays at one second of fixed ticks across presentation rates");
+                    lastRefresh=ticks;last=position;++refreshes;
+                }
+            }
+        }
+        Check(refreshes==3,"three-second window has exactly three sign refreshes at every FPS");
+        const int before=cadence.miFramesUntilUpdateVisibleSigns;
+        for(int i=0;i<120;++i)cadence.Discover(true);
+        Check(cadence.miFramesUntilUpdateVisibleSigns==before,"extra presentations without simulation do not expire markers");
+        for(int i=0;i<120;++i)cadence.Tick();
+        Check(cadence.miFramesUntilUpdateVisibleSigns==0,"countdown saturates while world rendering is skipped");
+        cadence.Discover(true);
+        Check(cadence.miFramesUntilUpdateVisibleSigns==60,"main-view rendering resumes with an immediate refresh");
+    }
     Check(CgsDev::Assert::assertions==0,"no assertions");
     std::printf("ShowtimeOverheadSigns: %d checks, %d failures\n",checks,failures);return failures?1:0;
 }
