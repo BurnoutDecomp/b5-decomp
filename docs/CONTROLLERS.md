@@ -32,6 +32,12 @@ gear changes, traction and drifting, braking, boost, road contact, jumps,
 landings, scrapes, impacts and Showtime. Vehicle profiles give speed, stunt,
 powerful and large vehicles different signatures. Ordinary rumble still works.
 
+Released pedals have no steady load; brief event/contact cues can still occur.
+Resistance builds with throttle/brake demand, becomes
+firmer under boost or hard braking, and eases during wheelspin, drifting and
+airtime. Strong contact forces are brief. The default 100 strength uses these
+situational curves; it does not hold the motor at maximum.
+
 In **config.ini beside Burnout_PC.exe**, add:
 
 ```ini
