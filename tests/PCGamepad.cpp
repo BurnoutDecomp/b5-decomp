@@ -180,6 +180,7 @@ static void TestAdaptiveTriggers()
     Check(WantsFeedback(), "supported device enables cheap world observation gate");
     AT::Sample lSample;
     lSample.mbActive = true; lSample.muVehicle = 1; lSample.muGroundedWheels = 4;
+    lSample.muGroundedDrivenWheels = 4; lSample.mfBrake = 0.5f;
     lSample.mfGas = 1; lSample.mfRPM = 4500; lSample.mfSpeedMPH = 70; lSample.miGear = 2;
     guNowMs += 20; PublishFeedback(lSample); Read(lState);
     Check(lMotors.mPacket[10] == 0x26 && lMotors.mPacket[21] == 0x21, "production backend sends engine and brake modes independently");

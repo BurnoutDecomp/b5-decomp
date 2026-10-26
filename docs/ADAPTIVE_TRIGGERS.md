@@ -118,6 +118,37 @@ feel identical. Limits are clamped; malformed text and unknown keys are reported
 and keep defaults. Settings never alter control values, vehicle physics, output
 rate limits or lifecycle clearing. ControllerVibration=0 remains a master mute.
 
+## Pedal resistance
+
+The default tuning leaves released pedals unloaded. `Resistance=100` and effect
+`Strength=100` mean the full situational curve, not constant maximum motor force.
+Normal engine effort follows actual throttle demand, gear and powered-wheel grip;
+RPM sets the texture frequency. This is presentation tuning, not measured engine
+torque or a change to vehicle physics.
+
+| Situation | Resistance behavior |
+| --- | --- |
+| Stopped or coasting with pedals released | Both pedals free |
+| Partial to full acceleration | Increasing effort and a progressive travel curve; lower gears feel weightier |
+| Sustained boost | More effort than normal acceleration, with a distinct texture |
+| Wheelspin or drifting | Lighter accelerator travel and flutter so loss of grip does not become a solid wall |
+| Braking | Free initial travel, then an increasing bite; full braking becomes firm |
+| Brake skid | Coarse chatter with less peak load than full-grip hard braking |
+| Airborne | Brake load disappears; only faint late-travel engine texture remains |
+| Rough surfaces or scraping | Texture on engaged pedals; untouched pedals stay free |
+| Heavy impact or wreck | Brief stronger force followed by release; an ongoing contact cannot keep restarting the same peak |
+
+With default Immersive settings, ordinary accelerator commands remain in levels
+0..4 of the eight hardware force steps; hard braking reaches roughly 5..6.
+Higher steps are reserved for strong short contacts. These are command levels,
+not measured physical-force units, and per-effect tuning above 100 can raise them.
+Reverse follows the same rules on the swapped physical pedal roles.
+
+Zones below hardware resolution are released instead of being rounded up to a
+minimum load. This preserves the light end of progressive travel and allows faint
+tails to give way to current feedback. Very low strength settings may therefore
+switch a zone off. The exact perceived force still needs physical calibration.
+
 ## Vehicle character
 
 Boost type selects Speed, Stunt or Power presentation tuning. Engine frequencies
