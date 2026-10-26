@@ -8,19 +8,13 @@
 // (the <3> recon fixed the canonical member names/signatures in BrnMenuToggleGroup.h; the <2>/<4>
 // /<5> recons match those bodies store-for-store, differing only in TI_SIZE).
 //
-// ⚠️⚠️ 2026-08-02 -- THE FLAT-VTABLE DISPATCH IN THIS FILE WAS UNSOUND AND IS RETIRED.
-// Every group/row virtual used to be reached through `lpGroup->mppVTable[slot]` or
-// `(*(void***)lpItem)[slot]`. `SelectableGroup::mppVTable` is a MODELLED data member that
-// NOTHING in this tree ever writes (its own header says so: "flow does not depend on
-// mppVTable being a live table"), and BrnGui::MenuToggle exposed no vtable at all -- so the
-// first call through either would have jumped through an uninitialised pointer. This TU was
-// unmounted, which is the only reason it never fired. Both targets are now known BY NAME:
+// The group is a real SelectableGroup (so a real Selectable with a live vptr) and its rows
+// are real MenuToggles, so every group/row virtual below is an ordinary virtual call. Slot
+// map (read from the ARTIST .rdata, e.g. MenuToggleGroupVarSize<2> @0x820746F0):
 //   group slot  0/1/2/3 -> SetActive / SetHighlightable / SetSelectable / SetHighlighted
 //   group slot  4/5/6/7 -> Select / Update / Clear / Add
 //   group slot 10/11/12 -> HighlightNext / HighlightPrevious / HighlightIndex
-// (the slot map resolved from .rdata for TextSelection @0x82073020,
-//  MenuToggleGroupVarSize<2> @0x820746F0 and ColourMenuToggle @0x82074730), so every
-// dispatch below is a plain by-name call and the two helper families are gone.
+//   group slot 13/14    -> HighlightNextItem / HighlightPreviousItem
 //
 // The compiler-synthesised default ctor (MenuToggleGroupVarSize()) used to be BLOCKED on the
 // grounds that its X360 body installs a raft of sub-object vtables. That is exactly what C++
@@ -107,7 +101,7 @@ namespace BrnGui
         if (mbWrapped)                    // base +0xA6
         {
             mbWrapped = false;
-            muFlags |= KU_FLAG_DIRTY;     // +0xC |= 0x10
+            SetDirty();     // +0xC |= 0x10
         }
 
         for (s32 liIndex = 0; liIndex < miMaxItems; ++liIndex)
@@ -172,7 +166,7 @@ namespace BrnGui
     {
         CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE,
                    "MenuToggleGroup::GetSelectable() invalid index specified");
-        return reinterpret_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
+        return static_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
     }
 
     // ---------------------------------------------------------------------------------
@@ -251,9 +245,9 @@ namespace BrnGui
         if ((lbWrapped != 0) != mbWrapped)
         {
             mbWrapped = (lbWrapped != 0);
-            muFlags |= KU_FLAG_DIRTY;
+            SetDirty();
         }
-        muFlags |= KU_FLAG_DIRTY;                        // always dirty
+        SetDirty();                        // always dirty
     }
 
     // ---------------------------------------------------------------------------------

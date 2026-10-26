@@ -37,20 +37,13 @@ namespace BrnGui
     // (off_82073020 @+0x000), the GuiComponent sub-object's (off_8207301C @+0x018), the 100
     // row vtables (off_8207182C from +0x238 at a 0x18 stride) and the display field's
     // (off_82072F8C @+0xB98). In C++ every one of those is emitted implicitly -- by this
-    // object's own construction, by the SelectableGroup base's embedded GuiComponent, by the
-    // 100 TextSelectionItem default ctors and by the TextField member -- so the body carries
-    // only the one store the model cannot emit implicitly. In particular the console does
-    // NOT clear the row table or the group state here; SelectableGroup::Construct's Clear()
+    // object's own construction (Selectable and GuiComponent bases), by the 100
+    // TextSelectionItem default ctors and by the TextField member -- so the body is empty.
+    // In particular the console does NOT clear the row table or the group state here;
+    // SelectableGroup::Construct's Clear()
     // does that, and a "helpful" zero-fill (which the retired shell did) would diverge.
     TextSelection::TextSelection()
     {
-        // BrnSelectableGroup.h keeps the group non-polymorphic and models the console's
-        // component vtable as the `mppVTable` data pointer, so the ctor's `stw off_82073020,
-        // 0(r3)` has no implicit counterpart. Null it, exactly as the committed sibling
-        // BrnGui::MenuComponent does (BrnMenuComponent.cpp:28) -- nothing dispatches a
-        // TextSelection through mppVTable (see the header note), and leaving it
-        // indeterminate is how a stale pointer gets called.
-        mppVTable = 0;
     }
 
     // ---- Construct @ 0x824E8128 ----------------------------------------------------
@@ -87,7 +80,7 @@ namespace BrnGui
         if (lbWrapped != mbWrapped)
         {
             mbWrapped = lbWrapped;
-            muFlags   = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+            SetDirty();
         }
 
         for (s32 liRow = 0; liRow < KI_MAX_ITEMS_PER_SELECTION; ++liRow)
@@ -118,7 +111,7 @@ namespace BrnGui
             HighlightIndex(0);                       // group slot 12
         }
 
-        muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+        SetDirty();
         Update();                                    // group slot 5 -- this class's override
     }
 
@@ -136,7 +129,7 @@ namespace BrnGui
 
         maSelectionItems[liIndex].SetText(lpacItemText);
 
-        muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+        SetDirty();
     }
 
     // ---- Update @ 0x824E83A0 -- component vtable slot 5 ----------------------------
@@ -145,7 +138,7 @@ namespace BrnGui
     // string. miHighlightedIndex is compared as a SIGNED byte (X360 `extsb / cmpwi -1`).
     void TextSelection::Update()
     {
-        if ((muFlags & KU_FLAG_QUERIED) == 0)
+        if (!IsDirty())
             return;
 
         const char* lpacText = KAC_EMPTY_TEXT;

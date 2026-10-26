@@ -11,10 +11,9 @@
 // ARTIST build (semantic parity by named members; the x64 gate widens pointers, so the
 // guest offsets in the comments are documentary).
 //
-// The console dispatches the group/item methods through modelled component vtables; the
-// reconstructed methods call each other + the MenuItem::Selectable virtuals directly by
-// name (SetActive/SetHighlightable/SetSelectable/SetHighlighted/Select/Update), so the
-// menu flow does not need a live vtable.
+// Vtable off_82074068, read from the ARTIST .rdata: 0..3 Selectable's, 4/5 SelectableGroup's
+// Select/Update, 6 MenuComponent::Clear, 7..12 SelectableGroup's, 13 HighlightNext
+// (@0x824E4DE0, ICF-folded with TableRow::HighlightNext), 14 HighlightPrevious (@0x824E4DE8).
 // ===================================================================================
 
 #include "types.hpp"
@@ -50,8 +49,8 @@ namespace BrnGui
         // @0x8241EA88 -- set the localisation-key text of the row at liIndex (-> MenuItem::SetText).
         void SetText(s32 liIndex, const char* lpacText);
 
-        // @0x824E6428 -- clear the group + reset every row (component vtable slot 6).
-        void Clear();
+        // @0x824E6428 -- clear the group + reset every row. Slot 6.
+        virtual void Clear();
 
         // @0x8240FE20 -- bounds-check [0,16), return the row pointer (a MenuItem*).
         MenuItem* GetSelectable(s32 liIndex);
@@ -62,10 +61,11 @@ namespace BrnGui
         // @0x824E2E38 -- make the row un-highlightable + un-selectable.
         void DisableSelectable(s32 liIndex);
 
-        // @? -- move the highlight to the next row (SelectableGroup::HighlightNext, not quiet).
-        bool HighlightNext();
-        // @0x824E4DE8 -- move the highlight to the previous row (not quiet).
-        bool HighlightPrevious();
+        // @0x824E4DE0 -- move the highlight to the next row (SelectableGroup::HighlightNext,
+        // not quiet). Slot 13, a new virtual.
+        virtual bool HighlightNext();
+        // @0x824E4DE8 -- move the highlight to the previous row (not quiet). Slot 14.
+        virtual bool HighlightPrevious();
 
         // @0x824E2DE0 -- register each row's apt name with the loading-screen cache. The old
         // "deferred" note here is STALE: GuiCache::AppendExpectedAptComponent(GuiFlow, const

@@ -66,7 +66,7 @@ namespace BrnGui
 
         // @ 0x824E8840 -- component slot 5. When dirty, push the highlighted swatch's colour
         // (or gradient) into the swatch panel, then run the group update.
-        void Update();
+        virtual void Update();
 
         // @ 0x824E8528 - pack a normalised colour vector (lpv4Colour[0..2] = R,G,B in 0..1)
         // into 0x00RRGGBB. Each channel is scaled by 255.0 and truncated toward zero; the

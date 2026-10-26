@@ -750,13 +750,12 @@ namespace BrnGui
         if (lpAptEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {
             // `strstr(trigger->mpacComponentName, this + 0xBC)`; this+0xBC is
-            // mFilterToggles.mGuiComponentBase.macName (group +0x18 + 0x04).
+            // mFilterToggles' GuiComponent::macName (group +0x18 + 0x04).
             if (std::strstr(lpAptEvent->mpacComponentName, mFilterToggles.GetName()) != 0)
             {
                 // `*(this + 0xAC) |= 0x10` -- the group head IS a Selectable, and +0xAC is
-                // mFilterToggles.muFlags.
-                mFilterToggles.muFlags =
-                    static_cast<u8>(mFilterToggles.muFlags | SelectableGroup::KU_FLAG_QUERIED);
+                // mFilterToggles' Selectable::mxFlags: an inlined SetDirty().
+                mFilterToggles.SetDirty();
             }
         }
     }

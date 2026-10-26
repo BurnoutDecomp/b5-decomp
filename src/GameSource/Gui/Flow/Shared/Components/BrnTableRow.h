@@ -90,12 +90,6 @@ namespace BrnGui
             E_TABLEROWSTATES_COUNT                 = 7,
         };
 
-        // The default constructor the X360 inlines into Table::Table @0x82500F40: it writes
-        // the row's vptr (off_82073140, row+0x00) and its GuiComponent vptr (row+0x18), then
-        // vector-constructs the 16 cells. FLAG PC divergence: the row+0x00 store is
-        // reproduced by hand into the modelled mppVTable (see BrnTableRow.cpp).
-        TableRow();
-
         // @0x824E6F00 -- build the row: validate its arguments, run the base Construct, clear
         // the cell array, then build miNumColumns cells (names formatted "<cellname>_<idx>").
         // PARAM ORDER/ROLES are taken from the X360 ASM (the DWARF labels positions 3 and 7
@@ -111,15 +105,26 @@ namespace BrnGui
         // animation. Asserts 0 <= liColumn <= miNumColumns.
         void SetupRow(s32 liColumn, bool lbEnableShowingAnim);
 
-        // @0x824E4D00 -- reset the row to its empty/invisible state.
-        void Clear();
+        // Row vtable off_82073140 (written by Table::Table @0x82500F40), read from the ARTIST
+        // .rdata: slots 0..3 Selectable's, 4 Select (an empty body, ICF-folded with every
+        // other empty `blr`), 5 TableRow::Update, 6 TableRow::Clear, 7..12 SelectableGroup's,
+        // then the two the row declares itself: 13 HighlightNext, 14 HighlightPrevious.
 
-        // @0x824E4DE0 -- highlight the next selectable (no wrap): forwards to the base.
-        bool HighlightNext();
-        bool HighlightPrevious();
+        // DWARF BrnTableRow.h:232 -- a row is never selected; slot 4 is `blr` (0x8284CB38).
+        virtual void Select() {}
 
-        void Select();
-        void Update();
+        // @0x824E99C8 -- slot 5.
+        virtual void Update();
+
+        // @0x824E4D00 -- reset the row to its empty/invisible state. Slot 6.
+        virtual void Clear();
+
+        // @0x824E4DE0 -- highlight the next selectable without the quiet flag: forwards to the
+        // base. Slot 13.
+        virtual bool HighlightNext();
+        // @0x824E4DE8 (ICF-folded with MenuComponent::HighlightPrevious, the same two
+        // instructions) -- the mirror. Slot 14.
+        virtual bool HighlightPrevious();
 
         // @0x824E4DF0 -- register the row's apt component, and each cell's component, as
         // expected on the given flow layer.

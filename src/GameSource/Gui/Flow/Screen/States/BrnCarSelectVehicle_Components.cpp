@@ -341,8 +341,7 @@ namespace BrnGui
         if (mpVehicleList == 0)
             return;
 
-        mCarouselOverviewSelectableGroup.muFlags =
-            static_cast<u8>(mCarouselOverviewSelectableGroup.muFlags | SelectableGroup::KU_FLAG_QUERIED);
+        mCarouselOverviewSelectableGroup.SetDirty();
 
         // Blank every icon first.
         for (s32 liIcon = 0; liIcon < KI_NUMBER_VISIBLE_VEHICLE_ICONS; ++liIcon)

@@ -12,10 +12,9 @@
 // only maItems' element count differing.
 //
 // Recovered X360 layout (base ptr is u8*, so displacement == byte offset; the gate
-// compiles 64-bit so members are declared BY NAME, the reserved head carrying the
-// unrecovered SelectableGroup/GuiComponent base):
-//   +0x00  : component vtable pointer (installed by the ctor)
-//   +0x0C  : u8  muFlags        -- dirty flags (|= 0x10 on any mutation)
+// compiles 64-bit so members are declared BY NAME):
+//   +0x00  : Selectable vptr (off_820746F0 / 82074790 / 82074750 / 820730AC for <2>..<5>)
+//   +0x0C  : Selectable::mxFlags -- dirty bit 0x10 (SetDirty) on any mutation
 //   +0xA4  : s8  base selectable count (SelectableGroup::miSelectableCount)
 //   +0xA6  : u8  mbWrapped      -- SetupGroup/Clear write it; dirty on change
 //   +0x238 : MenuToggle maItems[TI_SIZE]   (element stride 0xE98 == sizeof(MenuToggle))
@@ -45,9 +44,6 @@ namespace BrnGui
     template <s32 TI_SIZE>
     struct MenuToggleGroupVarSize : public SelectableGroup
     {
-        // Component dirty flag OR-ed into muFlags (+0xC) on any mutation.
-        static const u8 KU_FLAG_DIRTY = 0x10;
-
         // @ 0x82500DB8 (<3>) / 0x82500AC0 (<2>) -- install the group vtable and
         // default-construct the TI_SIZE MenuToggle rows (each brings up its embedded
         // TextSelection arrays). Every store in the X360 body is a sub-object vtable install
@@ -61,9 +57,10 @@ namespace BrnGui
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        s32 liItemCount, const char* lpacParentName, u64 luAptId);
 
-        // Group virtual (DWARF `virtual void Clear()`); resets the selectable set, drops the
-        // wrap flag (dirtying), then clears each live row via its component clear virtual.
-        void Clear();
+        // Group virtual (DWARF `virtual void Clear()`), slot 6; resets the selectable set,
+        // drops the wrap flag (dirtying), then clears each live row via its component clear
+        // virtual.
+        virtual void Clear();
 
         // Forward each live row's expected apt component onto the GUI cache (warns via the
         // filter-gated debug print if the group was never SetupGroup'd).
@@ -100,12 +97,13 @@ namespace BrnGui
         // miLoadedItems, then Unloaded each of the miMaxItems rows.
         void Unloaded();
 
+        // The two virtuals the template appends to the SelectableGroup table, in its slot
+        // order (13 then 14; e.g. <3>: 0x82500EF0 / 0x82500F18).
+        // @ 0x82500EF0 (<3>) -- advance the highlight on the currently-highlighted row.
+        virtual bool HighlightNextItem();
         // @ 0x82500F18 (<3>) -- retreat the highlight on the currently-highlighted row.
-        bool HighlightPreviousItem();
+        virtual bool HighlightPreviousItem();
 
-        // Not in this batch (declared for the modelled group vtable / cross-refs); the
-        // "get the highlighted MenuToggle row" helper + GetSelectable land with their TUs.
-        bool HighlightNextItem();
         MenuToggle* GetSelectable(s32 liIndex);
 
         // ----- recovered layout -----
