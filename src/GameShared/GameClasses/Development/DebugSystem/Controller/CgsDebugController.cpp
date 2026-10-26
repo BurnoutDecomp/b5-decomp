@@ -112,6 +112,7 @@ namespace CgsDev
         for (s32 liKey = 0; liKey < 256; ++liKey)
             mabPCKeysDown[liKey] = mabPCKeysPressed[liKey] = false;
         mbPCKeyboardCaptured = false;
+        mfRepeatTimeScalePC = 1.0f;
 #endif
     }
 
@@ -374,13 +375,27 @@ namespace CgsDev
         }
         else
         {
+            // FLAG PC-platform leaf: input is polled per presentation. Carry
+            // fractional repeat time and retain the console's 60 Hz acceleration
+            // sample and maximum repeat rate at independent render rates.
+            f32 lfRepeatTickPC = 1.0f / 60.0f;
+#if !defined(D_PLATFORM_X360)
+            lfRepeatTickPC *= mfRepeatTimeScalePC;
+#endif
+            if (!(lfTimeStep > 0.0f))
+                return DebugUI::E_INPUTEVENT_NONE;
             mfEventRepeatDelay -= lfTimeStep;
             if (mfEventRepeatDelay > 0.0f)
                 return DebugUI::E_INPUTEVENT_NONE;
-            mfEventRepeatDelay = mfEventRepeatDelayMax;
-            mfEventRepeatDelayMax -= mpMetrics->mfAutoRepeatAcceleration * lfTimeStep;
-            if (mfEventRepeatDelayMax < 0.0f)
-                mfEventRepeatDelayMax = 0.0f;
+            if (mfEventRepeatDelayMax < lfRepeatTickPC)
+                mfEventRepeatDelayMax = lfRepeatTickPC;
+            mfEventRepeatDelay += mfEventRepeatDelayMax;
+            // Do not queue a burst of navigation events after a stalled frame.
+            if (mfEventRepeatDelay < 0.0f)
+                mfEventRepeatDelay = mfEventRepeatDelayMax;
+            mfEventRepeatDelayMax -= mpMetrics->mfAutoRepeatAcceleration * lfRepeatTickPC;
+            if (mfEventRepeatDelayMax < lfRepeatTickPC)
+                mfEventRepeatDelayMax = lfRepeatTickPC;
         }
         return leInputEvent;
     }
