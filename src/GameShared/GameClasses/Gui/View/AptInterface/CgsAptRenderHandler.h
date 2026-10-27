@@ -62,6 +62,9 @@ namespace CgsGui
 
     class AptRenderHandler
     {
+        // The original AptAux debug operations update the existing text-layout
+        // inputs consumed by AllocateString; no separate debug state is stored.
+        friend class AptAux;
     public:
         // X360 0x827DFBD8. Brings the two per-shape texture-state caches up empty, clears the
         // batch transform, marks every AptString slot free, and seeds the renderer/white-texture

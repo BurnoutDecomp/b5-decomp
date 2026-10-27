@@ -136,6 +136,11 @@ namespace CgsGui
         // AptCommunicator::UpdateAllComponents (the "UpdateAll" push to the movie AS).
         void UpdateComponents();
 
+        // DecFIGS CgsAptAux.h:394/398; ARTIST8285FEF0..8285FF3C
+        // inlines these operations into ViewModule's view-event61/62 arms.
+        void DebugRotateToNextFontEffect();
+        void DebugChangeFontSpacing(f32 lfSpacing);
+
         // DecFIGS CgsAptAux.h:426; ARTIST824F8484 inlines this existing
         // communicator pointer through the actual view/AptAux owner chain.
         AptCommunicator* GetAptCommunicatorInstance() { return mpAptCommunicator; }
