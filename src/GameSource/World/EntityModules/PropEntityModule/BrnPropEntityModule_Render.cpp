@@ -70,13 +70,7 @@
 //    only the resource-type handler). Those are STREAMED SERIALISED records; minting
 //    their host layouts from the DWARF outside this slice is exactly how a silent
 //    on-disc/host stride mismatch gets in. Left for the TU that homes them.
-// 4. THE DEBUG BOUNDING-CIRCLE tail of RenderModel (@0x822C50C4..0x822C52AC, gated
-//    on mbDrawBoundingSpheres, which Construct clears). Its two file-scope gates,
-//    byte_82CDB6B0 and flt_82CDB6B4, have exactly ONE cross-reference each in the
-//    whole image -- RenderModel's own read -- so neither initialiser is recoverable
-//    from a function-only export, and the distance threshold cannot be invented. The
-//    five LOD colours it uses ARE recovered (they match the world module's
-//    KAU_LOD_COLOURS byte for byte) and are recorded in the comment at the site.
+// The original bounding-circle tail and its image-backed debug constants are recovered below.
 //
 // ---- Model::RenderModelOnly ------------------------------------------------
 // RenderModel is one of the five sites the X360 inlines Model::RenderModelOnly into
@@ -115,6 +109,9 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // DrawRenderable::AddToBin
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
+#include "pc/math/VmxFloat.h"
 
 #include "rw/math/vpu/vector3_operation.h"                                // MagnitudeSquared
 
@@ -135,6 +132,12 @@ static const u8 KU8_ENTITYTYPE_REPLAY_PROP = 34;
 
 namespace BrnWorld
 {
+// ARTIST image: byte_82CDB6B0 = 1, flt_82CDB6B4 = 2000.0f. Both have only their
+// RenderModel reader in the absolute-address scan; neither has a CRT-init writer.
+static bool sbDrawPropCircles = true;
+static f32 sfPropCircleDrawDistance = 2000.0f;
+
+
 
 // =============================================================================
 // Layout tripwires for the ONE structural assumption this TU makes (never called).
@@ -399,30 +402,39 @@ PropEntityModule::RenderModel(
     // @0x822C50AC..0x822C50C0: DispatchBin::EndPacket() inlined, submitted with sort key 0.
     lpDispatchList->Submit( 0, lpDispatchBin->EndPacket() );
 
-    // -------------------------------------------------------------------------
-    // PARKED (see banner item 4): the mbDrawBoundingSpheres debug tail
-    // @0x822C50C4..0x822C52AC.
-    //   if ( mbDrawBoundingSpheres &&
-    //        Magnitude( lCameraPosition - lpTransform->Pos() ) < flt_82CDB6B4 )
-    //   {
-    //       CgsDev::DebugInterface lDebugInterface;
-    //       if ( byte_82CDB6B0 )
-    //       {
-    //           const Renderable* lpLodRenderable = lpModel->GetRenderable( leLodState );
-    //           Vector3 lCentre = TransformPoint( *lpTransform,
-    //                                 lpLodRenderable->mBoundingSphere.GetVector3() );
-    //           f32 lfRadius = lpLodRenderable->mBoundingSphere.GetPlus()
-    //                        * Magnitude( Max( row0, Max( row1, row2 ) ) );
-    //           lDebugInterface.GetRender().DrawCircle(
-    //               lCentre, Normalise( lCameraPosition - lCentre ), lfRadius,
-    //               KAU_LOD_COLOURS[ leLodState ] );
-    //       }
-    //   }
-    // with KAU_LOD_COLOURS = { 0xFF00FF00, 0xFFFF0000, 0xFF0000FF, 0xFF00FFFF, 0xFFFFFF00 }
-    // (stack-materialised at 0x822C50D4..0x822C5108; byte-identical to the world module's).
-    // Blocked ONLY on flt_82CDB6B4 -- the distance gate -- whose initialiser has no
-    // recoverable value: the whole-export scan finds one reference, this read.
-    // -------------------------------------------------------------------------
+    // ARTIST 0x822C50C4..0x822C52AC. The live menu gate owns the original
+    // distance-limited, LOD-coloured prop bounding-circle tail.
+    if (mbDrawBoundingSpheres &&
+        CgsPC::VmxFloat::Magnitude3(lCameraPosition - lpTransform->Pos()) < sfPropCircleDrawDistance)
+    {
+        static const CgsDev::RGBA KAU_LOD_COLOURS[5] =
+            {0xFF00FF00u, 0xFFFF0000u, 0xFF0000FFu, 0xFF00FFFFu, 0xFFFFFF00u};
+
+        CgsDev::DebugInterface lDebugInterface;
+        CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
+        const CgsGraphics::Renderable* lpLodRenderable = lpModel->GetRenderable(leLodState);
+        const Vector3 lCentre = rw::math::vpu::TransformPoint(
+            *lpTransform, lpLodRenderable->mBoundingSphere.GetVector3());
+
+        // vmax(right, up), then vmax(result, at), followed by the original
+        // three-lane magnitude. Signed components are retained before the max.
+        namespace vmx = CgsPC::VmxFloat;
+        const Vector3 lRight = lpTransform->Right();
+        const Vector3 lUp = lpTransform->Up();
+        const Vector3 lAt = lpTransform->At();
+        const Vector3 lMaximum = {
+            vmx::Maximum(vmx::Maximum(lRight.x, lUp.x), lAt.x),
+            vmx::Maximum(vmx::Maximum(lRight.y, lUp.y), lAt.y),
+            vmx::Maximum(vmx::Maximum(lRight.z, lUp.z), lAt.z), 0.0f};
+        const f32 lfRadius = vmx::Multiply(lpLodRenderable->mBoundingSphere.GetPlus(),
+                                         vmx::Magnitude3(lMaximum));
+
+        if (sbDrawPropCircles)
+        {
+            const Vector3 lNormal = vmx::Normalize3Unconditional(lCameraPosition - lCentre, 2u);
+            lrRender.DrawCircle(lCentre, lNormal, lfRadius, KAU_LOD_COLOURS[leLodState]);
+        }
+    }
 
     return true;
 }
