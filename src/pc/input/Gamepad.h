@@ -40,11 +40,14 @@ namespace CgsInput::PCGamepad
     void SetFeedbackAllowed(bool lbAllowed);
     void SetFeedbackPhotoMode(bool lbPhotoMode); // copied director state; no device access
     void SuspendFeedback(); // immediate neutral output in a blocking assert
+    // Also remembers the path: the input thread re-reads [AdaptiveTriggers] when
+    // config.ini changes, so tuning applies without restarting the game.
     unsigned LoadFeedbackSettings(const char* lpIniPath);
     void SetFeedbackLogger(void (*lpLogger)(const char*));
     struct FeedbackStatus
     {
         enum Support { NoDevice, Unsupported, Supported, Rejected } meSupport = NoDevice;
+        enum Output { NoOutput, DualSense, SteamController } meOutput = NoOutput;
         std::uint32_t muDevice = 0;
         std::uint64_t muPackets = 0, muFailures = 0;
         AdaptiveTriggers::Cue meLeft = AdaptiveTriggers::Cue::Off;

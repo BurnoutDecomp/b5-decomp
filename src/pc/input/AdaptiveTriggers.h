@@ -49,6 +49,14 @@ namespace CgsInput::AdaptiveTriggers
         bool mbArcadeCues = true;
         bool mbDiagnostics = false;
         bool mbSystemFeedbackEnabled = true;
+        // Steam Controller (Triton) haptics: no trigger resistance exists, so the
+        // same cues play as an amplitude-modulated tone. Hardware-unverified defaults.
+        int miSteamToneHz = 160;   // LRA carrier, 50..400 Hz
+        int miSteamGainDb = 0;     // gain at full strength, -24..6 dB
+        bool mbSteamResistanceTicks = true; // tick when a smooth load engages
+        // Haptic actuator ids for L2 / R2 effects (see SteamHaptics.h): the grip
+        // motors behind the triggers by default; trackpads are 0 and 1.
+        std::uint8_t muSteamLeftActuator = 2, muSteamRightActuator = 4;
 
         float GetScale() const
         {

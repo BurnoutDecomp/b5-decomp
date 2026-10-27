@@ -1,0 +1,20 @@
+{
+  "native_accepted_ids": [
+    "BrnGraphics::DebugComponent::OnActivate#0029",
+    "BrnGraphics::DebugComponent::OnActivate#0030"
+  ],
+  "original_noop_ids": [
+    "BrnNetwork::BuddyManagerDebugComponent::OnActivate#0005",
+    "BrnNetwork::BuddyManagerDebugComponent::OnActivate#0006",
+    "BrnNetwork::BuddyManagerDebugComponent::OnActivate#0009",
+    "BrnNetwork::BuddyManagerDebugComponent::OnActivate#0012",
+    "BrnNetwork::ImageManagerDebugComponent::OnActivate#0001"
+  ],
+  "tested_source": "1887d92de05d915d53bc4f7645acf84daa39d1bc",
+  "exe_sha256": "9686984019a51e0cd915a032679e631362bc98d060479a3e128e560bc0b1f2fb",
+  "native_review_seal_sha256": "2e0e3e591bab3221575d36d5558fb0a4290cbbd36ecb43ba7dbf0b244dbdd7a9",
+  "original_noop_review_sha256": "cb8846b9f52f177b469302d8f230b662011be37447ce7d3274100ef40b980ef5",
+  "strict_case_and_driver_failures_retained": true,
+  "normal_package_changed": false,
+  "workflow_evidence": "progress/debug_menu/screenshot_and_noops_20261027"
+}
