@@ -1,5 +1,6 @@
 #include "pc/input/AdaptiveTriggers.h"
 #include "pc/input/DualSenseEffects.h"
+#include "pc/input/SteamHaptics.h"
 #include "pc/input/EngineFeedback.h"
 #include "pc/input/BoostFeedback.h"
 #include "pc/input/FeedbackSettings.h"
@@ -488,9 +489,60 @@ static void TestContextualResistance()
     Check(lController.Resolve(3020).mRight.IsOff(), "releasing the accelerator during wheelspin is not a grip-recovery event");
 }
 
+static void TestSteamHaptics()
+{
+    namespace Steam = SteamHaptics;
+    Settings lSettings;
+    Effect lOff, lTone, lLoad;
+    lTone.meMode = Mode::Vibration; lTone.meCue = Cue::Engine; lTone.muFrequency = 45; lTone.mauStrength[7] = 8;
+    auto laReports = Steam::Translate(lTone, lOff, Steam::E_ACTUATOR_RIGHT_GRIP, lSettings);
+    Check(laReports[0].muSize == 10 && laReports[0].mau == std::array<std::uint8_t, 10>{0x83, 4, 0, 160, 0, 200, 0, 45, 0, 100} &&
+        !laReports[1].muSize, "full-strength vibration is one right-side LFO tone at the configured carrier");
+    lTone.mauStrength[7] = 4;
+    Check(Steam::Translate(lTone, lOff, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].mau[2] == static_cast<std::uint8_t>(-6),
+        "halving the strongest zone lowers the tone 6 dB");
+    lTone.mauStrength.fill(0);
+    lTone.mauStrength[0] = 1;
+    lSettings.miSteamGainDb = -24;
+    Check(!Steam::Translate(lTone, lOff, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].muSize,
+        "levels below the actuator floor are released instead of rounded up");
+    lSettings = {};
+    lTone.mauStrength[0] = 8;
+    laReports = Steam::Translate(lOff, lTone, Steam::E_ACTUATOR_LEFT_GRIP, lSettings);
+    Check(laReports[0].muSize == 4 && laReports[0].mau[0] == 0x82 && laReports[0].mau[1] == 2 && laReports[0].mau[2] == 0,
+        "leaving a tone stops that side explicitly");
+    Check(!Steam::Translate(lOff, lOff, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].muSize, "neutral after neutral sends nothing");
+    lLoad.meMode = Mode::Feedback; lLoad.meCue = Cue::Brake; lLoad.mauStrength[4] = 8;
+    laReports = Steam::Translate(lLoad, lTone, Steam::E_ACTUATOR_LEFT_GRIP, lSettings);
+    Check(laReports[0].mau[2] == Steam::E_COMMAND_OFF && laReports[1].muSize == 4 && laReports[1].mau[2] == Steam::E_COMMAND_TICK,
+        "a smooth load stops the previous tone, then ticks once on engagement");
+    Check(!Steam::Translate(lLoad, lLoad, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].muSize, "a held load has no continuous haptic");
+    lSettings.mbSteamResistanceTicks = false;
+    Check(!Steam::Translate(lLoad, lOff, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].muSize, "SteamResistanceTicks=0 disables load ticks");
+    lSettings = {};
+    Check(ParseSettings("SteamToneFrequency=220\0SteamGain=-6\0SteamResistanceTicks=0\0\0", lSettings) == 0 &&
+        lSettings.miSteamToneHz == 220 && lSettings.miSteamGainDb == -6 && !lSettings.mbSteamResistanceTicks,
+        "Steam tuning shares the [AdaptiveTriggers] section");
+    Check(ParseSettings("SteamToneFrequency=9999\0SteamGain=40\0SteamResistanceTicks=2\0\0", lSettings) == 3 &&
+        lSettings.miSteamToneHz == 400 && lSettings.miSteamGainDb == 6 && lSettings.mbSteamResistanceTicks,
+        "out-of-range Steam tuning clamps and is reported");
+    lSettings = {};
+    Check(lSettings.muSteamLeftActuator == 2 && lSettings.muSteamRightActuator == 4, "grip motors are the default actuators");
+    Check(ParseSettings("SteamLeftActuator=LeftTrackpad\0SteamRightActuator=1\0\0", lSettings) == 0 &&
+        lSettings.muSteamLeftActuator == 0 && lSettings.muSteamRightActuator == 1, "actuators accept names and ids");
+    Check(ParseSettings("SteamLeftActuator=5\0SteamRightActuator=Triggers\0\0", lSettings) == 2 &&
+        lSettings.muSteamLeftActuator == 2 && lSettings.muSteamRightActuator == 4,
+        "the controller-restart id and unknown names are rejected, keeping defaults");
+    lSettings = {};
+    lTone.mauStrength.fill(0); lTone.mauStrength[2] = 8;
+    lSettings.miSteamToneHz = 300;
+    Check(Steam::Translate(lTone, lOff, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].mau[3] == 44 &&
+        Steam::Translate(lTone, lOff, Steam::E_ACTUATOR_LEFT_GRIP, lSettings)[0].mau[4] == 1, "carrier frequency is little-endian");
+}
+
 int main()
 {
-    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning(); TestReviewRegressions(); TestContextualResistance();
+    TestEncoding(); TestDriving(); TestContactsAndEvents(); TestLifecycleAndProfiles(); TestControlAndAwards(); TestTuning(); TestReviewRegressions(); TestContextualResistance(); TestSteamHaptics();
     std::printf("Adaptive triggers: %u/%u checks passed\n", guChecks - guFailures, guChecks);
     return guFailures ? 1 : 0;
 }

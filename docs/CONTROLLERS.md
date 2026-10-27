@@ -18,11 +18,13 @@ Losing focus also stops rumble. The harness's `BRN_INPUT_ALLOW_BACKGROUND=1` kee
 gamepad input and rumble available in background runs; it does not enable background
 keyboard input. Rumble stops when the backend shuts down.
 
-The build uses **SDL3 3.4.18**, downloaded from the official release with a pinned
-SHA-256. From the parent workflow run `build sdl3`, then `build exe`; `build all`
+The build uses **SDL3 3.4.18** built from the `vendor/SDL` submodule: the
+[BurnoutDecomp/SDL](https://github.com/BurnoutDecomp/SDL) fork's `burnout/3.4.18`
+branch, release 3.4.18 plus the Steam Controller haptics backport
+([libsdl-org/SDL#16398](https://github.com/libsdl-org/SDL/pull/16398)). From the parent workflow run `build sdl3`, then `build exe`; `build all`
 also fetches SDL. Keep **SDL3.dll** and **SDL3-LICENSE.txt** beside the executable
 when distributing the build. No separate SDL installation is required.
-CMake targets find `vendor/sdl3/cmake` or an explicit `SDL3_DIR` and stage the
+CMake targets build the submodule with `add_subdirectory` and stage the
 shared runtime and license beside their executable.
 
 ## DualSense adaptive triggers
@@ -52,7 +54,8 @@ ArcadeCues=1
 Diagnostics=0
 ```
 
-Restart after editing. Presets are `Off`, `Light`, `Standard` and `Immersive`
+Edits apply while the game runs: config.ini is re-read within a second of being
+saved, and BrnGame.log records each reload. Presets are `Off`, `Light`, `Standard` and `Immersive`
 (default). Resistance and Texture independently accept 0–100 and are also scaled
 by the preset. ArcadeCues enables small reward ticks. The existing feedback
 enable/pause gates and `[SystemProfile] ControllerVibration=0` also silence
@@ -79,6 +82,36 @@ shutdown; a 500 ms stale-snapshot limit also releases them when game updates sto
 The explicit harness background override applies to trigger output as well.
 Diagnostics logs bounded `[triggers]` lines in BrnGame.log; with no controller it
 can observe the game's signals without claiming physical output.
+
+## Steam Controller trigger haptics
+
+The second-generation Steam Controller (wired, Bluetooth or through its puck)
+receives the same per-trigger effects as a DualSense, from the same
+`[AdaptiveTriggers]` settings. It has no motorized trigger resistance, so its
+haptic actuators present them instead:
+
+| DualSense effect | Steam Controller |
+| --- | --- |
+| Vibration (engine, limiter, wheelspin, boost, drift, surfaces, scrapes, impacts, landings…) | A tone at `SteamToneFrequency`, amplitude-pulsed at the effect's own frequency; strength sets the gain (each halving is -6 dB) |
+| Smooth resistance (pedal, braking, Showtime) | One short tick when the load engages (`SteamResistanceTicks`); nothing while it is held |
+| Off | The side's tone is stopped explicitly |
+
+L2 effects play on `SteamLeftActuator` and R2 effects on `SteamRightActuator`.
+The defaults are the grip motors behind the triggers (`LeftGrip`, `RightGrip`);
+`LeftTrackpad`, `RightTrackpad`, `BothGrips` and `BothTrackpads` are also
+accepted, as are the raw ids 0–4 and 6. The report byte names an actuator, not
+just a side (ids from Pixel1011's SteamHapticsPlayer firmware notes; `LeftGrip`
+= 2 is inferred). Id 5 drives every motor and restarts the controller, so it is
+rejected. Tones carry
+a 200 ms expiry and are renewed every 100 ms, so a stalled game cannot leave one
+playing. This needs the fork's Triton haptics backport: a stock SDL rejects the
+neutral probe and the controller stays input/rumble-only. Steam Input must not be
+translating the controller, or the game sees a virtual pad without haptics.
+`Diagnostics=1` logs `output=2` for this path.
+
+To tune it without a restart, run the game in windowed mode with `Diagnostics=1`,
+then edit and save `SteamToneFrequency`, `SteamGain`, `Texture` or individual
+`<Effect>Strength`/`<Effect>Frequency` values while driving.
 
 Distributions also include **DualSenseTriggerEffects-LICENSE.txt**. See the
 [effect catalogue and testing guide](ADAPTIVE_TRIGGERS.md) for signal sources,

@@ -301,6 +301,117 @@ static void TestAdaptiveTriggers()
     SDL_DetachVirtualJoystick(luOther); Read(lState); Shutdown();
 }
 
+struct SteamReports
+{
+    std::vector<std::vector<Uint8>> maReports;
+    bool mbReject = false;
+};
+static bool SDLCALL SendSteamEffect(void* lpData, const void* lpBytes, int liSize)
+{
+    auto& lrReports = *static_cast<SteamReports*>(lpData);
+    if (lrReports.mbReject) return false;
+    const auto* lpByte = static_cast<const Uint8*>(lpBytes);
+    lrReports.maReports.emplace_back(lpByte, lpByte + liSize);
+    return true;
+}
+
+static void TestSteamHaptics()
+{
+    using namespace CgsInput::PCGamepad;
+    namespace AT = CgsInput::AdaptiveTriggers;
+    LoadFeedbackSettings(nullptr);
+    Check(Initialize(), "initialize Steam fixture");
+    State lState;
+    SteamReports lReports;
+    SDL_VirtualJoystickDesc lDesc{};
+    SDL_INIT_INTERFACE(&lDesc);
+    lDesc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    lDesc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    lDesc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    lDesc.name = "SDL virtual Steam Controller";
+    lDesc.vendor_id = 0x28de;
+    lDesc.product_id = 0x1302;
+    lDesc.userdata = &lReports;
+    lDesc.SendEffect = SendSteamEffect;
+    const auto luPad = SDL_AttachVirtualJoystick(&lDesc);
+    Read(lState);
+    Check(GetFeedbackStatus().meSupport == FeedbackStatus::Supported &&
+        GetFeedbackStatus().meOutput == FeedbackStatus::SteamController && WantsFeedback(),
+        "Steam Controller identity plus accepted haptic stop enables trigger haptics");
+    Check(lReports.maReports.size() == 2 && lReports.maReports[0] == std::vector<Uint8>{0x82, 2, 0, 0} &&
+        lReports.maReports[1] == std::vector<Uint8>{0x82, 4, 0, 0},
+        "new Steam Controller starts by stopping both grip actuators");
+    AT::Sample lSample;
+    lSample.mbActive = true; lSample.muVehicle = 1; lSample.muGroundedWheels = 4;
+    lSample.muGroundedDrivenWheels = 4; lSample.mfGas = 1; lSample.mfRPM = 4500;
+    lSample.mfSpeedMPH = 70; lSample.miGear = 2;
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lReports.maReports.size() == 3 && lReports.maReports[2].size() == 10 &&
+        lReports.maReports[2][0] == 0x83 && lReports.maReports[2][1] == 4,
+        "engine texture on R2 becomes an LFO tone on the right grip motor");
+    for (unsigned i = 0; i < 50; ++i) { guNowMs += 1; Read(lState); }
+    Check(lReports.maReports.size() == 3, "an unchanged tone is not resent before its renewal time");
+    guNowMs += AT::SteamHaptics::KU_RENEW_MS; PublishFeedback(lSample); Read(lState);
+    Check(lReports.maReports.size() == 4 && lReports.maReports[3] == lReports.maReports[2],
+        "an unchanged tone is renewed before the device expires it");
+    SetFeedbackAllowed(false);
+    Check(lReports.maReports.back() == std::vector<Uint8>{0x82, 4, 0, 0}, "pause stops the playing actuator immediately");
+    const auto luPaused = lReports.maReports.size();
+    for (unsigned i = 0; i < 20; ++i) { guNowMs += 50; Read(lState); }
+    Check(lReports.maReports.size() == luPaused, "a stopped side is not renewed while paused");
+    SetFeedbackAllowed(true);
+    char lacTemp[MAX_PATH], lacIni[MAX_PATH];
+    GetTempPathA(sizeof(lacTemp), lacTemp);
+    GetTempFileNameA(lacTemp, "stm", 0, lacIni);
+    WritePrivateProfileStringA("AdaptiveTriggers", "SteamToneFrequency", "250", lacIni);
+    Check(LoadFeedbackSettings(lacIni) == 0, "Steam tuning loads from config.ini");
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lReports.maReports.back().size() == 10 && lReports.maReports.back()[3] == 250,
+        "configured carrier reaches the Steam tone report");
+    // Hot reload: a later write is picked up by the input thread without a restart.
+    WritePrivateProfileStringA("AdaptiveTriggers", "SteamToneFrequency", "120", lacIni);
+    HANDLE lhFile = CreateFileA(lacIni, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    FILETIME lTime{};
+    GetFileTime(lhFile, nullptr, nullptr, &lTime);
+    lTime.dwLowDateTime += 20000000; // +2 s: independent of the file system's timestamp resolution
+    if (lTime.dwLowDateTime < 20000000) ++lTime.dwHighDateTime;
+    SetFileTime(lhFile, nullptr, nullptr, &lTime);
+    CloseHandle(lhFile);
+    guNowMs += 1000; Read(lState);
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lReports.maReports.back().size() == 10 && lReports.maReports.back()[3] == 120,
+        "editing config.ini while running applies the new tuning");
+    WritePrivateProfileStringA("AdaptiveTriggers", "SteamRightActuator", "RightTrackpad", lacIni);
+    lhFile = CreateFileA(lacIni, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    lTime.dwLowDateTime += 20000000;
+    if (lTime.dwLowDateTime < 20000000) ++lTime.dwHighDateTime;
+    SetFileTime(lhFile, nullptr, nullptr, &lTime);
+    CloseHandle(lhFile);
+    guNowMs += 1000; Read(lState);
+    const auto luSwitched = lReports.maReports.size();
+    guNowMs += 20; PublishFeedback(lSample); Read(lState);
+    Check(lReports.maReports.size() > luSwitched && lReports.maReports.back()[1] == 1,
+        "switching the R2 actuator live moves the tone to the right trackpad");
+    bool lbNeverRestart = true;
+    for (const auto& lrReport : lReports.maReports) lbNeverRestart &= lrReport.size() < 2 || lrReport[1] != 5;
+    Check(lbNeverRestart, "the controller-restart actuator id is never sent");
+    lReports.mbReject = true;
+    guNowMs += 20; lSample.mfRPM = 6000; PublishFeedback(lSample); Read(lState);
+    Check(GetFeedbackStatus().meSupport == FeedbackStatus::Rejected && Read(lState),
+        "a rejected haptic report disables only trigger haptics");
+    std::remove(lacIni);
+    LoadFeedbackSettings(nullptr);
+    SDL_DetachVirtualJoystick(luPad); Read(lState);
+    lReports = {};
+    lReports.mbReject = true;
+    const auto luStock = SDL_AttachVirtualJoystick(&lDesc);
+    Read(lState);
+    Check(GetFeedbackStatus().meSupport == FeedbackStatus::Unsupported && !WantsFeedback(),
+        "an SDL build without the Triton haptics backport stays input-only");
+    SDL_DetachVirtualJoystick(luStock); Read(lState);
+    Shutdown();
+}
+
 alignas(16) static unsigned char gaOutput[sizeof(CgsInput::InputIO::OutputBuffer)]{};
 static auto* Output() { return reinterpret_cast<CgsInput::InputIO::OutputBuffer*>(gaOutput); }
 static void Frame() { CgsInput::InputPadsPC::UpdatePlayer0(Output()); }
@@ -624,6 +735,7 @@ int main(int argc, char** argv)
     Shutdown();
     TestKeyboardMappings();
     TestAdaptiveTriggers();
+    TestSteamHaptics();
     std::printf("PCGamepad: %u checks, %u failures\n", guChecks, guFailures);
     return guFailures ? 1 : 0;
 }
