@@ -1,0 +1,10 @@
+{
+  "failed_run": 40493564927,
+  "source": "f7e064e16b1eea011ca28cc72360da3239743527",
+  "workflow": "1ec33a436082ee97e8fb99de7fbbb55e784dc3d7",
+  "failure": "Hosted-only fixture rejected the absent CANDIDATE_RUNNER_ENVIRONMENT before any screenshot worker/compiler/test execution",
+  "correction": "Pass the existing real runner.environment context into the separate screenshot step, matching the main build step",
+  "guard_unchanged": true,
+  "production_source_unchanged": true,
+  "native_site_credit": 0
+}
