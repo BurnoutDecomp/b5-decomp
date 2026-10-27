@@ -124,6 +124,9 @@ namespace CgsGui
         // AptChangeTargetInstance -> the ext-object phase (build + register the
         // AptCommunicator extension into mpAptCommunicator). Body in CgsAptAux.cpp.
         void InitializeApt();
+        // ARTIST82848F70; DecFIGS h:321. Tears down this owner's target,
+        // with the real SDK allocator prerequisite supplied separately.
+        void UnInitializeApt();
 
         // X360 0x828503E0 / 0x828504B0. AptDataHandler and Apt engine lifecycle.
         bool Prepare(CgsMemory::HeapMalloc* lpAllocator);

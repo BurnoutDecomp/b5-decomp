@@ -153,6 +153,15 @@ namespace CgsGui
         BridgeEventInterpreterToGuiResource(lpResourceInput, lpInterpreterRead);
         CgsModule::UnlockBuffersForIO(lpResourceInput, lpInterpreterRead);
         mGuiResource.Update(lpResourceInput, lpResourceOutput);
+        // FLAG PC-platform leaf: preserve the real request/response owner and
+        // put the bundle visitor's registrations on the existing View channel
+        // before the interpreter's play records are appended below.
+        lpResourceOutput->LockForWrite();
+        lpOutput->LockForWrite();
+        mGuiResource.ServicePlatformRequests(lpResourceOutput,
+            lpOutput->GetViewOutEventsNonConst());
+        lpOutput->UnlockForWrite();
+        lpResourceOutput->UnlockForWrite();
         CgsDev::PerfMonCpu::StopMonitor(miUpdateMainPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miUpdateOutputPM);

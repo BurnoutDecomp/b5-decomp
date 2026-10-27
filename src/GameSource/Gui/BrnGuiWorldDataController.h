@@ -196,6 +196,9 @@ namespace BrnGui
         const BrnProgression::ProgressionData* GetProgressionData() const;
 
     private:
+        // ARTIST824F9320 folds WorldData Release into this GUI owner. Permit
+        // that exact named state store without offset arithmetic or a new API.
+        friend class GuiModule;
         // Full DWARF-faithful member set (BrnGuiWorldDataController.h:182-193), in source order.
         // mReceiverQueue is the REAL CgsModule::EventReceiverQueue<1024,16> (2026-08-02): the X360
         // Construct's `*(wdc+0x18) = 1024 / *(wdc+0x1C) = 16 / *(wdc+0x08) = wdc+0x20` pins both the

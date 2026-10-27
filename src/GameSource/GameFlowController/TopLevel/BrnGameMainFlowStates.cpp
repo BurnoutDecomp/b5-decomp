@@ -875,6 +875,47 @@ namespace BrnGameMainFlowController
     }
 }
 
+bool LoadingScriptedState::LoadGUIModule(
+    BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+    CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+    CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+    CgsGui::ViewIO::InputBuffer* lpViewInput,
+    const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
+    if (lrGui.Prepare(lpGuiOutput, lpGameDataInput, lpGameDataOutput))
+    {
+        lpGuiInput->LockForWrite();
+        BrnGui::GuiEventRunFsm lEvent;
+        lEvent.mFsmId = CgsIDCompress("BrnBFPreFsm");
+        lEvent.mInitialStateId = 0;
+        lEvent.meFsmToRun = BrnGui::E_GUI_HUD_BOOT;
+        lEvent.meFlowToUse = BrnGui::E_GUIFLOW_HUD;
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+            static_cast<s32>(sizeof(lEvent)));
+        lEvent.mFsmId = CgsIDCompress("BrnOverlay");
+        lEvent.meFlowToUse = BrnGui::E_GUIFLOW_OVERLAY;
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+            static_cast<s32>(sizeof(lEvent)));
+        lpGuiInput->UnlockForWrite();
+        return true;
+    }
+    lrGui.Update(static_cast<BrnUpdateSet>(0x40),
+        lpGameModule->GetUpdateInputBufferStack(), lpGameModule->GetUpdateOutputBufferStack(),
+        lpGuiInput, lpGuiOutput, lpModelOutput, lpViewInput,
+        lpGameDataInput, lpGameDataOutput);
+    lpModelOutput->LockForRead();
+    lpGuiOutput->LockForRead();
+    lpGameModule->BridgeGuiToResource(lpGameDataInput, lpModelOutput, lpGuiOutput);
+    lpGuiOutput->UnlockForRead();
+    lpModelOutput->UnlockForRead();
+    return false;
+}
+
 void LoadingScriptedState::Update()
 {
     EnsureScriptedLoadGameDataIO();
@@ -1093,9 +1134,7 @@ void LoadingScriptedState::Update()
         lrGui.SetFrameUpdateSet(lUpdateSet);
         lrGui.SetGuiEventInputBuffer(lpGuiInput);
         lrGui.Update(&s_GameDataInput, &s_GameDataOutput);
-        lpGuiOutput->LockForWrite();
-        lpGuiOutput->AddGuiOutEvents(lrGui.GetGuiOutQueue());
-        lpGuiOutput->UnlockForWrite();
+        // GUI Update populated the actual output; raw consumers use its mirror.
 
         lpGuiOutput->LockForRead();
         lSoundInput->LockForWrite();
@@ -1338,6 +1377,12 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         BrnGameMainFlowController::GetScriptedLoadGameDataInput();
     BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
         BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+    // FLAG PC-platform leaf: these existing frame owners are cleared once,
+    // before Prepare can publish a serialiser or the false-Prepare pump runs.
+    BrnGame::BrnGameModule* lpGameModuleForGui = BrnGame::GetMainGameModule();
+    lpGameModuleForGui->GetGuiOutputBuffer()->Clear();
+    lpGameModuleForGui->GetGuiModelOutputBuffer()->Clear();
+    lpGameModuleForGui->GetGuiModule().GetGuiOutQueue()->Clear();
 
     // ⭐ GATED 2026-08-17 (boot audit F-P5-7). The old note claimed the console "re-posts the
     // show command every update tick". It does not: the `stw 1 -> +0x9990` lives in the
@@ -1374,73 +1419,11 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             AdvanceLoadingStage(E_LOADINGSTAGE_GUIMODULE);
         break;
     case E_LOADINGSTAGE_GUIMODULE:
-        // ⭐ THIS IS WHERE THE GUI IS BUILT, 2026-08-16 (boot audit F-P1-1/F-P5-2). X360
-        // LoadGUIModule @0x823EF310:
-        //
-        //     prepared = (gui->vtable+0x58)(gui, ...);          // GuiModule::Prepare
-        //     if (!prepared) {
-        //         (gui->vtable+0x60)(gui, 0x40, updIn, updOut, ...);   // the GUI update leg
-        //         LockForRead(both); BridgeGuiToResource(gm, ...); UnlockForRead(both);
-        //         return 0;                                    // stay in this stage
-        //     }
-        //     LockForWrite(guiIn);
-        //     AddEvent({CgsIDCompress("BrnBFPreFsm"), 0, flow 1}, 0x90, 0x18);
-        //     AddEvent({CgsIDCompress("BrnOverlay"),  0, flow 2}, 0x90, 0x18);
-        //     UnlockForWrite(guiIn); return 1;
-        //
-        // The two RunFsm posts were already here and already carry the console's payloads
-        // (id 0x90, size 0x18, flow words 1 and 2). What was missing was everything they
-        // are supposed to be GATED ON: this stage posted them immediately and advanced,
-        // because the GUI had already been prepared back in BrnGameModule::Construct.
-        //
-        // [FLAG] The retry leg is not reproduced, and does not need to be YET: this build's
-        // GuiModule::Prepare is the one-shot synchronous collapse of the console's 16-stage
-        // resumable ladder (@0x82518D68), so it answers true on the first pump and there is
-        // no not-done pass to service. That makes stage 2 one long frame with the loading
-        // screen up rather than N frames of a live GUI -- the right ORDER, not yet the right
-        // PACING. Adopting the real ladder (and with it this retry leg, the vtable+0x60
-        // update-set-0x40 pump and the BridgeGuiToResource forward) is boot-audit F-P8a-1.
-        {
-            BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-
-            if (!lpGameModule->GetGuiModule().IsPrepared())
-            {
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "InitialLoadingScreen: loading stage 2 (GUIModule) -- preparing\n";
-                lpGameModule->GetGuiModule().Prepare();
-                break;   // do NOT post or advance until it reports done
-            }
-
-            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = lpGameModule->GetGuiInputBuffer();
-            if (lpGuiInput != 0)
-            {
-                BrnGui::GuiEventRunFsm lEvent;
-                lEvent.mFsmId          = CgsIDCompress("BrnBFPreFsm");
-                lEvent.mInitialStateId = 0;
-                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
-                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_HUD;
-                lpGuiInput->LockForWrite();
-                lpGuiInput->GetGuiEvents()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
-                    static_cast<s32>(sizeof(lEvent)));
-
-                // The overlay kick (the X360 posts it back-to-back in the same write
-                // bracket; the state id stays 0 = the script's initial state).
-                lEvent.mFsmId          = CgsIDCompress("BrnOverlay");
-                lEvent.mInitialStateId = 0;
-                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
-                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_OVERLAY;
-                lpGuiInput->GetGuiEvents()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
-                    static_cast<s32>(sizeof(lEvent)));
-                lpGuiInput->UnlockForWrite();
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "InitialLoadingScreen: posted RunFsm(BrnBFPreFsm -> HUD) + RunFsm(BrnOverlay -> OVERLAY)\n";
-                AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
-            }
-        }
+        if (LoadGUIModule(lpGameDataInput,
+            lpGameModuleForGui->GetGuiInputBuffer(), lpGameModuleForGui->GetGuiOutputBuffer(),
+            lpGameModuleForGui->GetGuiModelOutputBuffer(),
+            lpGameModuleForGui->GetGuiModule().GetViewInputBuffer(), lpGameDataOutput))
+            AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
         break;
     case E_LOADINGSTAGE_DIRECTORMODULE:
         // X360 0x823E74C0: LoadDirectorModule -- REAL, and now threaded with this frame's
@@ -1587,10 +1570,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         lrGui.SetGuiEventInputBuffer(lpGuiInput);
         lrGui.SetFrameUpdateSet(static_cast<BrnUpdateSet>(0x40));
         lrGui.Update(lpGameDataInput, lpGameDataOutput);
-        lpGuiOutput->Clear();
-        lpGuiOutput->LockForWrite();
-        lpGuiOutput->AddGuiOutEvents(lrGui.GetGuiOutQueue());
-        lpGuiOutput->UnlockForWrite();
+        // Keep actual GUI/resource/action output and the matching legacy mirror.
         lpModelOutput->LockForRead();
         lpGuiOutput->LockForRead();
         lpGameModule->BridgeGuiToResource(lpGameDataInput, lpModelOutput, lpGuiOutput);

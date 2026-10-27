@@ -146,6 +146,9 @@ namespace BrnGui
         };
 
         bool Prepare() override;
+        bool Prepare(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+            BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
         // ARTIST825194B8; original native vtable+0x5C. The selected host
         // keeps PrepareWorldData2 until the outer phase is migrated as a whole.
         virtual bool Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
@@ -165,6 +168,15 @@ namespace BrnGui
         // not the complete original native GuiModule::Update signature.
         void Update(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
                     const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
+        void Update(BrnUpdateSet leUpdateSet,
+            CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+            CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+            CgsGui::ViewIO::InputBuffer* lpViewInput,
+            BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
+
 
         // The frame's simulation update set. X360 GuiModule::Update @0x82527A58 receives it as
         // its second argument from the module scheduler (`a2`) and reads ONE bit of it: bit 8
@@ -186,7 +198,8 @@ namespace BrnGui
         // was prepared before the frame loop started" now tests -- above all the game module's
         // per-frame Update() drive, which on the console does not exist until the module
         // scheduler has the module prepared.
-        bool IsPrepared() const { return mbPrepared; }
+        bool IsPrepared() const
+        { return mePrepareStage == E_PREPARE_DONE && meReleaseStage == E_RELEASE_START; }
 
         // ARTIST 0x825146B8: forward the supplied complete renderer set, render
         // the view, update/record movies, then post renderer effect-frame events.
@@ -217,7 +230,6 @@ namespace BrnGui
         void UpdateAndRenderMovieManager(CgsGui::ViewIO::InputBuffer* lpViewInput);
         // BridgeFromViewToOutput @0x8285DE10 -- after the view module's Update, append its
         // own out-event queue (33 GuiEventLoadingScreenState lives there) onto the module out.
-        void BridgeFromViewToOutput();
 
         static void FlaptSoundTriggerCallback(void* lpUserData,
                                               const char* lpcComponentName,
@@ -353,7 +365,8 @@ namespace BrnGui
         // appended suffix; the frame owner initializes the image-save flag once.
         const CgsModule::Event* DispatchInboundGuiEvents(
             bool& rbHasSaveImageEvent, CgsGui::ImageFileInfo& lrSaveImageInfo,
-            const CgsModule::Event* lpAfterEvent = 0);
+            const CgsModule::Event* lpAfterEvent,
+            CgsGui::ModelIO::OutputBuffer* lpModelOutput);
         void AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo);
 
         // Drain one flow's StateInterface output queue -- the per-frame dispatch point
@@ -362,7 +375,6 @@ namespace BrnGui
         // records (-> mGuiOutQueue for the game bridge), the channel-41 view-state
         // records (-> the view input queue), and the menu-music / audio-trigger events
         // (155/201, the PC sound leaves).
-        void DrainFlowOutputQueue(s32 liFlow);
 
         // ARTIST 0x82507800; reads the base GUI module output queue after its Update.
         // The selected PC path has no caller for this OutputBuffer-based entry yet.
@@ -389,17 +401,14 @@ namespace BrnGui
         // servicer that loads FSM\<NAME>.BUNDLE), and bridge its GuiEventLoadNotification
         // (14) records back into the ModelIO output buffer the controller reads. Replaces
         // the host stand-in ServiceFsmBundleRequests below (Phase 1 of retiring that path).
-        void DispatchGuiResourceModule();
 
         // [PC IO] the ORIGINAL host FSM-bundle stand-in: drained the ModelIO input
         // buffer's load requests, loaded "FSM/<NAME>.BUNDLE" synchronously, and posted
         // the GuiEventLoadNotification (14) itself. SUPERSEDED by DispatchGuiResourceModule
         // (the real module now owns this); retained unused this phase (/OPT:REF strips it).
-        void ServiceFsmBundleRequests();
 
         // Post one event into each live flow's in-queue if that flow subscribed to it
         // (the observer-subscription filter, per flow).
-        void RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize);
 
         enum ECollisionWorldStateValidationState
         {
@@ -448,10 +457,9 @@ namespace BrnGui
         // buffer itself lives on the update IO stack and is re-created per sub-step).
         CgsGui::CgsGuiModuleIO::InputBuffer* mpGuiEventInputBuffer;
 
-        // ARTIST's callback publishes GuiAudioTriggerEvent through GuiModule's current
-        // output buffer. The PC scheduler exposes that channel as mGuiOutQueue, so retain
-        // the same explicit producer pointer instead of bypassing the event route.
-        CgsModule::VariableEventQueue<18432, 16>* mpOutputBuffer;
+        // Original typed current-output owner (DecFIGS h:539). It is borrowed
+        // only during Update and cleared before post-base handling.
+        CgsGui::CgsGuiModuleIO::OutputBuffer* mpOutputBuffer;
 
         // ARTIST82518BB0..BD0: this derived receiver owns its inline 1024-byte backing.
         // Separate owners handle collision validation and GameData replies.
@@ -642,13 +650,8 @@ namespace BrnGui
         CgsGui::ModelIO::InputBuffer  mModelInputBuffer;
         CgsGui::ModelIO::OutputBuffer mModelOutputBuffer;
 
-        // The REAL GUI resource-loading module + its own per-frame IO pair. Wired in to
-        // REPLACE the host FSM-bundle stand-in: the controller's GuiEventLoadRequest queue
-        // (out of mModelInputBuffer) is handed to the module, which loads FSM\<NAME>.BUNDLE
-        // through its acquire machine + the [PC] platform servicer and posts the
-        // GuiEventLoadNotification (14) back -- DispatchGuiResourceModule bridges those into
-        // mModelOutputBuffer for the controller. The console recreates the module IO
-        // buffers each frame; the PC pair is persistent and cleared per frame.
+        // Retained legacy storage; the selected path uses the shared Model's
+        // actual Resource and fresh IO-stack owners. These members are inactive.
         CgsGui::GuiResourceModule                 mGuiResourceModule;
         CgsGui::GuiResourceModuleIO::InputBuffer  mResourceInputBuffer;
         CgsGui::GuiResourceModuleIO::OutputBuffer mResourceOutputBuffer;
@@ -705,12 +708,8 @@ namespace BrnGui
         // resource while live, so the pools must not alias across flows).
         CgsResource::Pool mFsmBundlePool[E_GUIFLOW_COUNT];
         bool              mbResourcesReadyFed;   // fed BF_LEGAL its resources-ready (567) yet
-        // The Prepare latch behind IsPrepared() (see the accessor's note). The console has no
-        // such member because its stage word IS the latch -- CgsGui::GuiModule::Prepare
-        // @0x82518D68 is a 16-stage resumable ladder whose gated stages return 0 until the
-        // stage word reaches DONE (boot audit F-P8a-1). This build's Prepare is still the
-        // one-shot synchronous collapse of that ladder, so a bool is the whole of the state;
-        // it becomes the stage word when the ladder itself is adopted.
+        // Selected Render may run after its real View and Movie owners prepare.
+        // Full GUI readiness comes from the derived lifecycle stages in IsPrepared().
         bool              mbPrepared;
     };
 

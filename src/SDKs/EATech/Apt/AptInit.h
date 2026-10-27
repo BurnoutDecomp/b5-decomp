@@ -41,6 +41,11 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
 // walks and destroy both initialized pool managers. Aliases are not nulled.
 void AptAllocatorShutdown();
 
+// Existing typed teardown entries in AptInit.cpp. The game-glue owner discards
+// their current return-register wrappers; its explicit update argument is zero.
+int AptUpdateShutdown(int nUnused);
+int AptRenderShutdown();
+
 // InitializeApt @0x82848E50 -- the keystone host bring-up: the exact 6-call sequence
 // (allocator + update + render + create-target + change-target + [ext-object]). `pAptAux`
 // is the CgsGui::AptAux instance (the console's a1); the create-target result is stored

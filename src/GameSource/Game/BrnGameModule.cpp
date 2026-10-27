@@ -4204,96 +4204,11 @@ namespace BrnGame
         BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
             BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
 
-        // ---- X360 GuiModule::Prepare stage 14, driven from here -------------------------
-        // BrnGui::WorldDataController::Prepare @0x82516770 stages its resource requests into
-        // the GameData request interface and reads the replies out of its own receiver queue.
-        // The console runs it from BrnGui::GuiModule::Prepare, which the module scheduler
-        // calls with THIS SAME buffer pair; the PC's GuiModule::Prepare runs at Construct
-        // time, long before the GameData IO exists, so the stage is driven here -- the one
-        // place the pair is live and pumped -- immediately BEFORE the pump, so a request
-        // staged this sub-step is serviced in the same call and its reply is waiting on the
-        // next. (Same "stage then pump" order as GamePrepare's own stages.)
-        // Stops re-entering once the machine reports done; while a stage is parked on a
-        // request no PC producer answers it only re-checks its queue (it does not re-issue),
-        // which is the console's own arm -- see the banner in BrnGuiWorldDataController.cpp.
-        //
-        // ⭐⭐ [event-starts wave 2026-08-27] AND THE SECOND MACHINE, WorldDataController::Prepare2
-        // @0x82516CB8 -- the ONLY writer of the controller's mpProgressionData / mpStreetData, and
-        // therefore the thing that makes GetEventInfoFromEventId answer with a real RaceEventData
-        // instead of NULL (the sat-nav's `lpRaceEventData` assert, BrnSatNavRenderer.cpp:1307).
-        //
-        // ⛔ THE TWO MACHINES SHARE ONE RECEIVER QUEUE, so exactly one of them is pumped per
-        // sub-step. THE ORDER IS THE CONSOLE'S OWN AND IS NO LONGER A WORKAROUND (corrected
-        // 2026-08-27, challenge-list wave): Prepare runs to COMPLETION first, then Prepare2.
-        //
-        // ⚠️ WHAT THIS REPLACED, AND WHY IT HAD TO GO. The previous form handed the queue to
-        // Prepare2 the moment Prepare merely PARKED at PREPARING_ACQUIRING_STREET_DATA, because
-        // no PC producer answered its GetFreeburnChallengeList and parking was permanent. That
-        // producer LANDED IN THIS WAVE (GameDataModule Prepare stage 10 +
-        // ProcessGetFreeburnChallengeListRequest, id 53), so Prepare now parks at stage 9 only
-        // until the reply arrives -- and the old "parked" test would have handed the queue away
-        // in exactly that window and let Prepare2's ProgressionData acquire consume the reply
-        // meant for Prepare. Each stage takes "the one event on the queue" WITHOUT checking what
-        // it is, so that is not untidy, it is a cross-bind. Gating on mbWorldDataPrepared instead
-        // makes the hand-off happen once, after Prepare has genuinely finished.
-        //
-        // ⚠️ AND PREPARE2 NEEDS A SECOND, INDEPENDENT PRECONDITION -- the root cause of the
-        // "[GuiWorldData] Prepare2 done: mpProgressionData bound = 0" line this wave inherited.
-        // Prepare2 does not stream anything: it ACQUIRES "ProgressionData" and "StreetData" BY
-        // NAME out of pool 5, and the two bundles that put them there ("Progression.dat",
-        // "STREETDATA.DAT") are loaded by the GAME-STATE lane's own second pass,
-        // GameStateModule::Prepare2, which runs from the scripted-load flow much later than this
-        // thread starts. An acquire for an absent resource is ANSWERED (with a null memory
-        // pointer), not queued -- so running Prepare2 early does not retry: it completes, binds
-        // NOTHING, and latches meState2 == 5 for the rest of the session, which is exactly what
-        // the boot log showed (GUI Prepare2 done at log line 240; ProgressionManager LOADED at
-        // line 518). IsPrepare2Complete() is the PC observer that says both bundles are resident.
-        // DELETE-WHEN the module scheduler's real Prepare2 pass orders the two lanes (the console
-        // has no such gate because the scheduler runs GameState's Prepare2 before the GUI's).
-        if (!mbWorldDataPrepared && lpGameDataInput != 0)
-        {
-            lpGameDataInput->LockForWrite();
-            mbWorldDataPrepared = mGuiModule.PrepareWorldData(lpGameDataInput);
-            lpGameDataInput->UnlockForWrite();
-
-            // [diagnostic, one-shot] the keystone this whole car-select campaign turned on:
-            // print the vehicle list the GUI side ended up holding, from the GUI side.
-            static bool s_bLoggedGuiVehicleList = false;
-            if (!s_bLoggedGuiVehicleList
-                && mGuiModule.GetWorldDataController().GetVehicleList() != 0)
-            {
-                s_bLoggedGuiVehicleList = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[GuiWorldData] mpVehicleList = "
-                    << const_cast<void*>(static_cast<const void*>(
-                           mGuiModule.GetWorldDataController().GetVehicleList()))
-                    << " (" << mGuiModule.GetWorldDataController().GetVehicleList()->GetVehicleCount()
-                    << " entries), state "
-                    << static_cast<s32>(mGuiModule.GetWorldDataController().GetState()) << "\n";
-            }
-
-            // [diagnostic, one-shot] NOT IN THE X360 BINARY. Prepare reaching
-            // WFPLAYERCARCOLOURS (11) is what un-gates the five meState-asserting accessors --
-            // that is the whole point of the challenge-list wave -- but FOUR of them go straight
-            // through mpTriggerData with no null path of their own, and the stage-2/3
-            // "TriggerData" acquire is ANSWERED even when Triggers.dat is not yet resident. So
-            // report which pointers the machine actually ended up holding, not just that it
-            // finished. DELETE-WHEN the acquire reports a miss as a miss.
-            static bool s_bLoggedGuiWorldDataDone = false;
-            if (!s_bLoggedGuiWorldDataDone && mbWorldDataPrepared && CgsDev::Log::gpDebugPrint != 0)
-            {
-                s_bLoggedGuiWorldDataDone = true;
-                const BrnGui::WorldDataController& lrWdc = mGuiModule.GetWorldDataController();
-                *CgsDev::Log::gpDebugPrint
-                    << "[GuiWorldData] Prepare done: state " << static_cast<s32>(lrWdc.GetState())
-                    << ", triggerData bound = " << (lrWdc.HasTriggerData() ? 1 : 0)
-                    << ", carColours bound = " << (lrWdc.HasPlayerCarColours() ? 1 : 0)
-                    << ", challengeList = "
-                    << const_cast<void*>(static_cast<const void*>(lrWdc.GetFreeburnChallengeList()))
-                    << "\n";
-            }
-        }
-        else if (!mbWorldData2Prepared && lpGameDataInput != 0
+        // The primary machine is now owned by actual GuiModule::Prepare stage14.
+        // Derive this existing host bookkeeping from its completed real owner;
+        // this thread only pumps GameData and may later drive the separate phase2.
+        mbWorldDataPrepared = mGuiModule.IsPrepared();
+        if (mbWorldDataPrepared && !mbWorldData2Prepared && lpGameDataInput != 0
                  && mGameStateModule.IsPrepare2Complete())
         {
             lpGameDataInput->LockForWrite();
@@ -4900,10 +4815,8 @@ namespace BrnGame
                     mGuiModule.Update();
                     // FLAG PC-platform leaf: export the batch just produced by this
                     // no-argument GUI port into the frame-owned native output object.
-                    mpGuiOutputBuffer->Clear();
-                    mpGuiOutputBuffer->LockForWrite();
-                    mpGuiOutputBuffer->AddGuiOutEvents(mGuiModule.GetGuiOutQueue());
-                    mpGuiOutputBuffer->UnlockForWrite();
+                    // The selected GUI populated this actual output owner directly.
+                    // Keep its pre-world/resource/action records and exact raw mirror.
                     // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
                     // commands (70/71, the loading screen 19/20, ...) the states posted.
                     BridgeGuiToGame(mGuiModule.GetGuiOutQueue());

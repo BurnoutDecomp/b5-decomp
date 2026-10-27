@@ -82,6 +82,8 @@ namespace CgsGuiModuleIO
         int SetGuiResourceRequestQueue(const GuiResourceRequestQueueStorage* lpRequestQueue);
         // X360 0x823B4130: read-lock (bit 4) handle to the out-event queue.
         const GuiEventQueue* GetOutEventQueue() const;
+        // FLAG PC-platform leaf: borrowed raw access for existing selected producers.
+        GuiEventQueue* GetOutEventQueueNonConst();
         // X360 0x8250C718: write-lock (bit 3); asserts the source queue ptr is non-null,
         // then bulk-appends it into mOutEvents. Returns the Append result (int/bool).
         int AddGuiOutEvents(const GuiEventQueueSmall* lpSourceQueue);

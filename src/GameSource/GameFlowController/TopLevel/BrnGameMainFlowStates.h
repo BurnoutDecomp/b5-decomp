@@ -121,6 +121,15 @@ protected:
     bool LoadSoundModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    // ARTIST823EF310; real false-Prepare GUI Update and request handoff.
+    bool LoadGUIModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+        CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+        CgsGui::ViewIO::InputBuffer* lpViewInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
+
+
     // X360 0x823E72F0 -- one frame of the world-module load: create a scratch
     // BrnWorldIO::UpdateOutputBuffer on the update output stack, drive WorldModule::
     // Prepare (vtable +68) with the update IO stacks + the GameData allocator list, and

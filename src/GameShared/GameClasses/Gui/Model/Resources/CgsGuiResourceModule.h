@@ -136,6 +136,14 @@ namespace CgsGui
             return lpOutput->GetLoadNotifications();
         }
 
+        // FLAG PC-platform leaf: the caller owns the original resource request
+        // queue and an existing large View queue. The synchronous bundle visitor
+        // emits its extra per-movie registrations directly into that View queue;
+        // genuine request completions stay on the original notification channel.
+        // The target is borrowed only for this call and is never retained.
+        void ServicePlatformRequests(OutputBuffer* lpOutput,
+            GuiEventQueueBase<65536, 16>* lpRegistrationTarget);
+
     private:
         // X360 @0x82848068 (DWARF :730): qsort comparator -- ascending meResourceType.
         static s32 SortBundleQueue(const void* lpLeft, const void* lpRight);
@@ -182,13 +190,6 @@ namespace CgsGui
         // X360 @0x8284FFE8 (DWARF :362): match type-3 receiver responses (unload
         // completions, by full-path hash) onto the pending records; mark parsed, unloaded.
         void ParseUnloaded();
-
-        // [PC] platform request servicer -- the synchronous stand-in for the console's
-        // resource/pool module chain that consumes the output buffer's request queue and
-        // posts the responses back into mReceiverQueue. Runs at the Update tail (the spot
-        // the console scheduler would run the downstream modules). Defined in
-        // CgsGuiResourceModulePC.cpp (FLAG'd PC-platform leaf).
-        void ServicePlatformRequests(OutputBuffer* lpOutput);
 
         // ---- members (DWARF :132-173; X360 offsets in the class comment) --------------
         EPrepareStage   mePrepareStage;

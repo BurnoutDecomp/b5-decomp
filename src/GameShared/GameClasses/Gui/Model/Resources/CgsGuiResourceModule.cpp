@@ -727,10 +727,8 @@ namespace CgsGui
                 break;
         }
 
-        // [PC] service the request queue this frame's stage just posted (the console
-        // scheduler runs the downstream resource/pool modules here); see the FLAG'd body.
-        ServicePlatformRequests(lpOutput);
-
+        // The selected PC caller services these requests after this original
+        // engine phase, with its existing, explicitly owned View destination.
         lpOutput->UnlockForWrite();
     }
 }
