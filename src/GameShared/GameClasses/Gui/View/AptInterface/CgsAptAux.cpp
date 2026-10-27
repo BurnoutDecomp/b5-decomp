@@ -287,6 +287,19 @@ namespace CgsGui
         AptRegisterExtension(mpAptCommunicator);
     }
 
+    // ARTIST 82848F70..8FB4. The target is the one stored by this owner,
+    // not whichever target happens to be selected in the process-global context.
+    // The same core sequence is visible in native64 1400C8E26..8E43;
+    // additional native enclosing-release operations are not inferred here.
+    void AptAux::UnInitializeApt()
+    {
+        AptUpdateShutdown(0);
+        AptDestroyTargetInstance(mpAptTargetInstance);
+        mpAptTargetInstance = nullptr;
+        AptRenderShutdown();
+        AptAllocatorShutdown();
+    }
+
     bool AptAux::Prepare(CgsMemory::HeapMalloc* lpAllocator)
     {
         switch (miState0)
@@ -312,27 +325,31 @@ namespace CgsGui
         }
     }
 
+    // Complete ARTIST 828504B0..82850568. Preserve every stage store and
+    // call the real owner helper only on the original state-1 path.
     bool AptAux::Release()
     {
         switch (miState4)
         {
         case 0:
-            miState4 = 1;
-            // The engine shutdown chain is reconstructed separately from ownership.
-            // Keep the live target intact until that chain is available.
+            miState4 = 0;
             // fall through
         case 1:
-            miState4 = 2;
+            miState4 = 1;
+            UnInitializeApt();
             // fall through
         case 2:
-            miState4 = 3;
-            miState0 = 0;
-            return true;
+            miState4 = 2;
+            // fall through
         case 3:
             miState0 = 0;
+            miState4 = 3;
             return true;
         default:
-            CGS_ASSERT(false, "CgsGUI::AptAux::Release() Invalid State!");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("CgsGUI::AptAux::Release() Invalid State!",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAux.cpp", 302);
+            CgsDev::Assert::EndAssert();
             return false;
         }
     }

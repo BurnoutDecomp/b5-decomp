@@ -105,6 +105,14 @@ namespace ModelIO
         return &mViewOutEvents;
     }
 
+    // FLAG PC-platform leaf: the synchronous platform visitor borrows this
+    // already-existing View channel while its owning IO buffer is write-locked.
+    OutputBuffer::GuiViewEventQueue* OutputBuffer::GetViewOutEventsNonConst()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mViewOutEvents;
+    }
+
     // X360 0x824F7538: read-lock (bit 4) const handle to the load-notification queue (this+0x15034).
     const OutputBuffer::GuiNotificationQueue* OutputBuffer::GetLoadNotifications() const
     {

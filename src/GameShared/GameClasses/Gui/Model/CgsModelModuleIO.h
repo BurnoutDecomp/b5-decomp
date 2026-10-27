@@ -69,6 +69,9 @@ namespace ModelIO
         const GuiEventQueue* GetGuiOutEvents() const;
         // X360 0x8284E148: read-lock (bit 4) const handle to the view-event queue (this+0x5024).
         const GuiViewEventQueue* GetViewOutEvents() const;
+        // FLAG PC-platform leaf: write-locked access for the existing bundle
+        // registration producer; no additional queue or IO storage is created.
+        GuiViewEventQueue* GetViewOutEventsNonConst();
         // X360 0x824F7538: read-lock (bit 4) const handle to the load-notification queue
         // (this+0x15034 == 86068).
         const GuiNotificationQueue* GetLoadNotifications() const;

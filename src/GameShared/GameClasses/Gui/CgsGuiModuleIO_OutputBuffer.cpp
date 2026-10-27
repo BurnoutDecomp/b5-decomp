@@ -73,6 +73,14 @@ namespace CgsGuiModuleIO
         return &mOutEvents;
     }
 
+    // FLAG PC-platform leaf: same original queue, checked under its owner's lock.
+    OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueueNonConst()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mOutEvents;
+    }
+
+
     // X360 0x8250C718: write-lock; asserts the source queue ptr is non-null, then bulk-appends
     // it into mOutEvents (VariableEventQueue<18432,16>::Append<4096,16>). The X360 emits both
     // asserts before the Append call, then returns the Append result.

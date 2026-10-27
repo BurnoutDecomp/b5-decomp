@@ -317,14 +317,14 @@ namespace CgsGui
         // AptLoader stream is out of this slice).
         u32 EmitAptDataNotifications(CgsResource::Pool* lpPool, const char* lpacBundlePath,
                                      s32 liAptType,
-                                     GuiResourceModuleIO::OutputBuffer* lpOutput)
+                                     GuiEventQueueBase<65536, 16>* lpRegistrationTarget)
         {
             struct NotificationContext
             {
-                GuiResourceModuleIO::OutputBuffer* mpOutput;
+                GuiEventQueueBase<65536, 16>* mpRegistrationTarget;
                 ResourceRequestTypes meRequestType;
                 u32 muEmitted;
-            } lContext = {lpOutput, static_cast<ResourceRequestTypes>(liAptType), 0};
+            } lContext = {lpRegistrationTarget, static_cast<ResourceRequestTypes>(liAptType), 0};
             CgsResource::PCAptOwnership::VisitBundleEntries(lpPool, lpacBundlePath,
                 [](CgsResource::Entry* lpEntry, void* lpContext)
                 {
@@ -340,8 +340,9 @@ namespace CgsGui
                     lNote.mResourceHandle.mpSourceEntry = lpEntry;
                     lNote.meRequestType   = lrContext.meRequestType;
                     lNote.muLoadRequestId = 0;
-                    lrContext.mpOutput->AddLoadNotification(
-                        reinterpret_cast<const CgsModule::Event*>(&lNote));
+                    lrContext.mpRegistrationTarget->CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lNote), 14,
+                        static_cast<s32>(sizeof(lNote)));
                     ++lrContext.muEmitted;
                 }, &lContext);
             return lContext.muEmitted;
@@ -555,7 +556,8 @@ namespace CgsGui
     // FLAG PC-platform leaf: the synchronous stand-in for the console's async resource /
     // pool module chain -- drains this frame's OutputBuffer request queue with CRT file IO
     // (CgsResource::BundleLoader) and posts each response into the request's receiver queue.
-    void GuiResourceModule::ServicePlatformRequests(OutputBuffer* lpOutput)
+    void GuiResourceModule::ServicePlatformRequests(OutputBuffer* lpOutput,
+        GuiEventQueueBase<65536, 16>* lpRegistrationTarget)
     {
         CGS_ASSERT(lpOutput != 0, "Invalid output buffer in GuiResourceModule::ServicePlatformRequests");
 
@@ -632,7 +634,7 @@ namespace CgsGui
                         RecordAptBundleLoadResult(lpPool, lpRequest->macFileName, liLoaded);
                         const u32 luEmitted =
                             EmitAptDataNotifications(lpPool, lpRequest->macFileName,
-                                                     lpRequest->miEventId, lpOutput);
+                                                     lpRequest->miEventId, lpRegistrationTarget);
 
                         char lac[224];
                         std::snprintf(lac, sizeof(lac),
