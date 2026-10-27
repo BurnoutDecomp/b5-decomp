@@ -20,7 +20,6 @@ namespace BrnNetwork
     void ImageManagerDebugComponent::Construct( NetworkImageManager* lpImageManager,
                                                 CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor )
     {
-        CgsDev::DebugComponent::Construct();   // base two-phase init
         mImage.Construct();
         mCompressedImage.Construct();
         miImageQuality = 0;

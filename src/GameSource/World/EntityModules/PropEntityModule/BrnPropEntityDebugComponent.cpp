@@ -124,7 +124,6 @@ namespace BrnWorld
     // COMDAT-folded DebugComponent::Construct.)
     void PropEntityDebugComponent::Construct(PropEntityModule* lpPropEntityModule)
     {
-        DebugComponent::Construct();
 
         CGS_ASSERT(lpPropEntityModule != nullptr, "lpPropEntityModule != NULL");
         mpPropEntityModule = lpPropEntityModule;

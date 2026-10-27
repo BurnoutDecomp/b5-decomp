@@ -48,7 +48,6 @@ namespace BrnNetwork
     void LiveRevengeDebugComponent::Construct(LiveRevengeManager* lpLiveRevengeManager)
     {
         mpLiveRevengeManager = lpLiveRevengeManager;
-        CgsDev::DebugComponent::Construct();
         Register();
     }
 

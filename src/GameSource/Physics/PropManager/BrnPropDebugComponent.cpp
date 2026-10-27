@@ -79,7 +79,6 @@ namespace Props
     // the same fold is analysed in full with all five refuting emissions.
     void PropDebugComponent::Construct(PropManager* lpPropManager)
     {
-        CgsDev::DebugComponent::Construct();
         CGS_ASSERT(lpPropManager, "lpPropManager != NULL");            // baked line 52
 
         mpPropManager = lpPropManager;

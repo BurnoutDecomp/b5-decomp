@@ -150,7 +150,6 @@ namespace
 // intersection array are left as they are, exactly as the console leaves them.
 void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 {
-    DebugComponent::Construct();
 
     CGS_ASSERT(lpRaceCarEntityModule != nullptr, "lpRaceCarEntityModule != NULL");
 

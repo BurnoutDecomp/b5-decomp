@@ -98,7 +98,6 @@ namespace BrnWorld
     // artifact on a void function and is dropped.
     void PVSDebugComponent::Construct(WorldEntityModule* lpWorldEntityModule)
     {
-        DebugComponent::Construct();
 
         mpWorldEntityModule = lpWorldEntityModule;
 

@@ -99,7 +99,6 @@ namespace BrnTraffic
     // vehicle name, and seed the four pool counters (and the picked-vehicle id) to -1.
     void DebugComponent::Construct(TrafficEntityModule* lpModule)
     {
-        CgsDev::DebugComponent::Construct();
 
         CGS_ASSERT(lpModule != nullptr, "lpModule != NULL");
         mpModule = lpModule;                       // +0x0C

@@ -55,7 +55,6 @@ void GuiCustRendererDebugComponent::Construct(CustomRendererManager* lpCustRende
                " invalid custom render manager passed to custom render debug component");
 
     // The X360 chains the (empty) base DebugComponent::Construct here (ICF-folded to a bare blr).
-    DebugComponent::Construct();
 
     mpCustRenderManager = lpCustRenderManager;
 

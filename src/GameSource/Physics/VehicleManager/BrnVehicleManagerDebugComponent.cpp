@@ -75,7 +75,6 @@ namespace Vehicle
         // for every empty function in the image (IDA names it
         // CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct). Called with r3 ==
         // this at the very top of a Construct, it is the base component's own Construct.
-        DebugComponent::Construct();
 
         // 0x825B5A90..0x825B5AB4, BrnVehicleManagerDebugComponent.cpp:92
         CGS_ASSERT(lpVehicleManager != 0, "lpVehicleManager != NULL");

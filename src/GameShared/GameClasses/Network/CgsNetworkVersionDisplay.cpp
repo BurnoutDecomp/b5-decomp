@@ -45,7 +45,6 @@ namespace CgsNetwork
     // string, no count, an out-of-range server type and no rebroadcast note.
     void VersionDisplay::Construct()
     {
-        DebugComponent::Construct();
 
         mpcVersion       = nullptr;
         muField_04       = 0;

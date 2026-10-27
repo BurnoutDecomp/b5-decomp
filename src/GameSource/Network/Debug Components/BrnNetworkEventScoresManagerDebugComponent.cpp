@@ -24,7 +24,6 @@ namespace BrnNetwork
 {
     void EventScoresManagerDebugComponent::Construct( EventScoresManager* lpEventScoresManager )
     {
-        CgsDev::DebugComponent::Construct();   // base two-phase init
         mpEventScoresManager = lpEventScoresManager;
         Register();
     }
