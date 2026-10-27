@@ -2133,7 +2133,7 @@ WorldEntityModule::RenderInstance(
                     lpLodRenderable->mBoundingSphere.GetPlus() * GetMaximumScale( lpInstance->mTransform );
 
                 lDebugInterface.GetRender().DrawCircle(
-                    lCentre, ( lCentre - lCameraPosition ),
+                    lCentre, CgsPC::VmxFloat::Normalize3Unconditional(lCameraPosition - lCentre, 2u),
                     lfRadius, KAU_LOD_COLOURS[ luLodState ] );
             }
         }

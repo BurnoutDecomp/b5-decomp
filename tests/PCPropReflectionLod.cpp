@@ -278,9 +278,11 @@ int main()
  Check(CgsDev::gCircleRecords.size()==1,"world player-track circle reaches extracted production RenderInstance in the camera pass");
  if(CgsDev::gCircleRecords.size()==1){const auto& c=CgsDev::gCircleRecords[0];
   Check(c.colour==0xFF00FF00u&&NearVector(c.centre,{7,10,15,0}),"world instance circle uses selected LOD0 sphere centre and ARTIST colour");
-  Check(NearScalar(c.radius,1.5f*lfSphereScale),"world instance circle radius uses production GetMaximumScale");}
+  Check(NearScalar(c.radius,1.5f*lfSphereScale),"world instance circle radius uses production GetMaximumScale");
+  Check(NearVector(c.normal,{-0.70710678f,0.70710678f,0,0}),"world camera-pass circle uses the original normalized camera-minus-centre normal");}
  CgsDev::gCircleRecords.clear();renderWorld(true);
  Check(CgsDev::gCircleRecords.size()==1,"world debug circle tail also runs in the shadow pass");
+ if(CgsDev::gCircleRecords.size()==1)Check(NearVector(CgsDev::gCircleRecords[0].normal,{-0.70710678f,0.70710678f,0,0}),"world shadow-pass circle uses the original normalized camera-minus-centre normal");
  lWorld.mbDrawBoundingSpheres=false;CgsDev::gCircleRecords.clear();renderWorld(false);
  Check(CgsDev::gCircleRecords.empty(),"world Draw instance bounding spheres off suppresses the debug draw");
  lWorld.mbDrawBoundingSpheres=true;lWorld.mWorldGraphicsStreamer.index=7;CgsDev::gCircleRecords.clear();renderWorld(false);
