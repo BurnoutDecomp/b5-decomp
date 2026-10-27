@@ -1,0 +1,216 @@
+{
+  "schema": 1,
+  "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa",
+  "source_parent": "adcf2684e81dfaf842f6e96a8eebf8aa09e09232",
+  "workflow_checkpoint": "3e4f93f5afa6fd5d917fe248f3730a4fbac9c877",
+  "runtime_original_control": "1887d92de05d915d53bc4f7645acf84daa39d1bc",
+  "independent_source_review_sha256": "cb8846b9f52f177b469302d8f230b662011be37447ce7d3274100ef40b980ef5",
+  "normalization": "UTF8_BOM_removed_CRLF_to_LF_only_for_checkout_identity; genuine old source content/raw/blob identities retained separately",
+  "source_files": [
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.cpp",
+      "lf_sha256": "a270760d03044a9c0e2ff43faa01c6a6c765e2deee15826836ceb418da60d438",
+      "reviewed_raw_sha256": "a270760d03044a9c0e2ff43faa01c6a6c765e2deee15826836ceb418da60d438",
+      "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.cpp",
+      "lf_sha256": "5c7bff33e1d463887332dba6b395a749c8bdbdc993b7d2a77e38a5bebf867167",
+      "reviewed_raw_sha256": "5c7bff33e1d463887332dba6b395a749c8bdbdc993b7d2a77e38a5bebf867167",
+      "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h",
+      "lf_sha256": "ecec1cb849d5b72719ed11f7138468275d03d67b778f680521f2a543779e9a15",
+      "reviewed_raw_sha256": "ecec1cb849d5b72719ed11f7138468275d03d67b778f680521f2a543779e9a15",
+      "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h",
+      "lf_sha256": "93d4e4f7a2ce5b0e63e199e7b48e831103bb5c15c1082922d5d2b4807bf92c20",
+      "reviewed_raw_sha256": "93d4e4f7a2ce5b0e63e199e7b48e831103bb5c15c1082922d5d2b4807bf92c20",
+      "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Managers/BrnNetworkBuddyManagerBase.cpp",
+      "lf_sha256": "20e4868af69585dcb8ef20c5209156a8ee7fc5a07de089f604d1adda3faada3d",
+      "reviewed_raw_sha256": "20e4868af69585dcb8ef20c5209156a8ee7fc5a07de089f604d1adda3faada3d",
+      "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    }
+  ],
+  "providers": [
+    {
+      "path": "tests/fxgs_common.py",
+      "lf_sha256": "6230372da7ef60e446a165470a61850964b7b7498576eaec93dbb58555ae9033",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "tests/online_save_route_owned.py",
+      "lf_sha256": "c21a018a37c094eec2c6befcd19b8862f8c33c84b66f84c33c55eac600649179",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Module/CgsVariableEventQueue.h",
+      "lf_sha256": "3c4da2211eddabcd7c31d97bc7a6a69e6c2a3222598fa0618bca428694d04e60",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/CgsGuiEvent.h",
+      "lf_sha256": "1d818d3b97711af66dba4c5748d0cfbfbf6cf8ed8bd548f5c7937b202a8ccad3",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h",
+      "lf_sha256": "8bff4736ccba4cc3976144de5bb67d82c60fa45227d20d2f97c5d87145802b53",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.cpp",
+      "lf_sha256": "305a0be4410b21b401585316532ba76e495adf228de9620dc049ad70588ca8a3",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h",
+      "lf_sha256": "c97f2d2001311567e730130979c90ccc1d50be4d705b75c5c4887dc688f960ed",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h",
+      "lf_sha256": "3db0029fe237d4fc3a495cbe8cd74b2a6571ac8d84b522e46142028f87572909",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/System/Resource/CgsResourceHandle.h",
+      "lf_sha256": "0b29046fdd47a51dee83d654128776d44689a22ce81d044367beaf2a9007b9c5",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Fonts/CgsUnicode.h",
+      "lf_sha256": "4c28588256e16166a1f556894c059b3e6fd9d59a437b729d5ce7c3e1d795cde0",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/SDKs/EATech/include/Apt/Apt.h",
+      "lf_sha256": "e924e8e155d76fb0c9222bddb07964232b05da38c11f7655c12cfc53e58b0151",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/GameState/BrnCgsPlayerName.h",
+      "lf_sha256": "8c28a4609343f4ac802e49eff7adf6cd6fd3382aa7bacc2d6ffbbc734e2766e7",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/BrnNetworkModuleIO.h",
+      "lf_sha256": "cf5a749903f3568ac2dc50080029507a1fcba076af8849e3efed711a8d76156b",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Managers/BrnNetworkBuddyManagerBase.h",
+      "lf_sha256": "42bd886d018b882ed7a4594cd1be63933040db78edbfc5a2e1ac70cff7f71cc7",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.cpp",
+      "lf_sha256": "ddce692496521c6459c84eb95172cf3f8312939068936645f0fe68440907cbdd",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.h",
+      "lf_sha256": "21a784d48fc4860307d7fdccbff070476c2ee56f44e278fdfba1e1b02aa75895",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.h",
+      "lf_sha256": "38146e16ca759c3362977240e8026754dfe305ee9e1c16343439a8b6849b98c0",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Network/Buddies/DirtySock/X360/CgsBuddyManagerDirtySockX360.h",
+      "lf_sha256": "e352795cb56fc3da01deaafa3a9eec46c43fe2cca09172c22bc7104e71a1bc99",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.cpp",
+      "lf_sha256": "706bb560cac22e6ad42b0d1167d2ca74ed8725e7b98ff1fad8c81e4ebc863cd2",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.h",
+      "lf_sha256": "a8d99d0c27ac1fbf1459c07e40eaf53f00ff79283b7482989bd9ab888a99d8fe",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameSource/Network/Debug Components/BrnNetworkImageManagerDebugComponent.cpp",
+      "lf_sha256": "52c115978848e59b551b3d2e96465a005d883d409109a78fd42bee866a8baad0",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/CgsStrStream.cpp",
+      "lf_sha256": "776842d20db1a31a28a2a021df426b040141535d67a7e39bbdc4d1d1d707af40",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/CgsStrStream.h",
+      "lf_sha256": "77ef0067c55c9ba677d54be66a804b782093a94273676e0fcae79fd51fb7deba",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Core/CgsAssert.h",
+      "lf_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/Log/CgsLog.h",
+      "lf_sha256": "27d76d0c147b70e39f57ad7c9465e84ebccf96271ff77ba7e14a1298e4e5b8b8",
+      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+    }
+  ],
+  "workflow_providers": [
+    {
+      "path": "tools/build/msvc_env.bat",
+      "lf_sha256": "64a57b7edcbc7ba793316cdafc19a74b64106ae276f3771d93996e766c76f3b6"
+    },
+    {
+      "path": "tools/build/msvc_flags.txt",
+      "lf_sha256": "f409e36fd3bb17cd8ced47f33fb9488c667a260d4dd274a7b6a1a6643356bfc2"
+    },
+    {
+      "path": "tools/build/msvc_includes.txt",
+      "lf_sha256": "e08ea1f7a1243ec960cc41d4d2137796e86a13e949cd6e59fe5baf6c82e80acc"
+    }
+  ],
+  "fixture_files": [
+    {
+      "path": "tests/FontBuddy.cpp",
+      "lf_sha256": "bbf07231bcccf48644a74022a6fe3dd07c26bcbe82243dc5af352fa94234c1f7"
+    },
+    {
+      "path": "tests/run_font_buddy.py",
+      "lf_sha256": "9c179d08a4947686daa8cca87e25f92e9a2b295e591caa5e0f2751a00e8ec164"
+    },
+    {
+      "path": "tests/evidence/font_buddy/BOUNDARIES.md",
+      "lf_sha256": "d212e16198f0df5001e4f1a6ddbcc7004672165da91d9bc4835654e1db725093"
+    },
+    {
+      "path": "tests/evidence/font_buddy/test_plan.json",
+      "lf_sha256": "ba346c9d6aea1a43a566ea6eab0738149bbd0a57727e50060be58e4042d1aac6"
+    },
+    {
+      "path": "tests/evidence/font_buddy/original_control_sources.json",
+      "lf_sha256": "49f2871949a991e73959d512bad6ad4edfff56e630d0c0ba647f269432935ad7"
+    }
+  ],
+  "original_source_files": {
+    "src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.cpp": {
+      "raw_sha256": "7749f21ca050ca4d7356342a642bc380b41e3efbb46c1201cde71de1a3b97f66",
+      "git_blob_sha1": "715b5ba55ff5ddc41e1f10dd3b37e6bec394c057"
+    },
+    "src/GameSource/Network/Managers/BrnNetworkBuddyManagerBase.cpp": {
+      "raw_sha256": "ee0aad3b58e6d1d1f974cba1077d13755055b7f647d7d0600841900e46b60185",
+      "git_blob_sha1": "a9066a19111b1b1f993ac99dbadb6485cf4b8c66"
+    }
+  },
+  "source_provider_or_math_repin": false,
+  "local_execution": false
+}
