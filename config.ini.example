@@ -25,7 +25,8 @@ VSync=1
 DecoupleSimulation=1
 
 [AdaptiveTriggers]
-; Native DualSense USB/Bluetooth feedback. Restart after editing.
+; Native DualSense adaptive triggers and Steam Controller (2nd gen) trigger haptics.
+; Edits apply while the game runs (config.ini is re-read within a second of saving).
 ; Enabled=0 disables the entire feature. Existing controller vibration=0 also mutes it.
 Enabled=1
 ; Off / Light / Standard / Immersive. Default: Immersive.
@@ -164,6 +165,20 @@ RewardStrength=100
 RewardFrequency=100
 RewardDuration=100
 RewardStartPosition=-1
+
+; Steam Controller (2nd generation) only: it has no trigger resistance, so the
+; same effects play on its haptic actuators. Vibration effects become a tone at
+; SteamToneFrequency (50..400 Hz) pulsing at the effect's frequency; SteamGain
+; (-24..6 dB) is the level at full strength. SteamResistanceTicks=1 marks a smooth
+; load (accelerator/brake resistance) with one short tick when it engages.
+; Defaults are not yet hardware-calibrated. The settings above apply as well.
+SteamToneFrequency=160
+SteamGain=0
+SteamResistanceTicks=1
+; Which haptic motor plays L2 / R2 effects: LeftGrip, RightGrip, BothGrips
+; (the motors behind the triggers), LeftTrackpad, RightTrackpad, BothTrackpads.
+SteamLeftActuator=LeftGrip
+SteamRightActuator=RightGrip
 
 [ControllerKeyboard]
 ; Optional SDL gamepad buttons/chords = keyboard keys. Restart after editing.
