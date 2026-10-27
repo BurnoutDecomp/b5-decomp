@@ -1,0 +1,196 @@
+{
+  "schema": 1,
+  "cases": {
+    "invalid": {
+      "check_ids": [
+        "invalid.status_before_error",
+        "invalid.status_before_version",
+        "invalid.null_status",
+        "invalid.null_input",
+        "invalid.short_size",
+        "invalid.secure_flag",
+        "invalid.unknown_flag",
+        "invalid.tail_2",
+        "invalid.tail_3",
+        "invalid.tail_4",
+        "invalid.tail_5",
+        "invalid.tail_6",
+        "invalid.tail_7",
+        "invalid.tail_8",
+        "invalid.tail_9",
+        "invalid.tail_10",
+        "invalid.tail_11",
+        "invalid.tail_12",
+        "invalid.no_wsa_calls",
+        "invalid.no_cleanup_calls",
+        "invalid.status_unchanged",
+        "invalid.version_unchanged",
+        "invalid.assert_count",
+        "invalid.assert_balance",
+        "invalid.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "success": {
+      "check_ids": [
+        "success.startup_result",
+        "success.request_version",
+        "success.status",
+        "success.version",
+        "success.repeat_result",
+        "success.startups1",
+        "success.cleanups0",
+        "success.model_refs1",
+        "success.invalid_after_ready",
+        "success.status_preserved",
+        "success.version_preserved",
+        "success.repeat_after_invalid",
+        "success.assert_count",
+        "success.assert_balance",
+        "success.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "startup_retry": {
+      "check_ids": [
+        "startup_retry.first_error",
+        "startup_retry.no_rollback",
+        "startup_retry.model_refs0",
+        "startup_retry.status_error",
+        "startup_retry.version0",
+        "startup_retry.retry_success",
+        "startup_retry.startups2",
+        "startup_retry.cleanups0",
+        "startup_retry.model_refs1",
+        "startup_retry.repeat_success",
+        "startup_retry.no_extra_startup",
+        "startup_retry.assert_count",
+        "startup_retry.assert_balance",
+        "startup_retry.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "version_retry": {
+      "check_ids": [
+        "version_retry.bad_version_result",
+        "version_retry.cleanup1",
+        "version_retry.model_refs0",
+        "version_retry.status_bad_version",
+        "version_retry.version_observed",
+        "version_retry.retry_success",
+        "version_retry.startups2",
+        "version_retry.cleanups1",
+        "version_retry.model_refs1",
+        "version_retry.repeat_success",
+        "version_retry.no_more_acquire",
+        "version_retry.assert_count",
+        "version_retry.assert_balance",
+        "version_retry.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "cleanup_failure": {
+      "check_ids": [
+        "cleanup_failure.cleanup_error_result",
+        "cleanup_failure.cleanup_attempt1",
+        "cleanup_failure.last_error1",
+        "cleanup_failure.status_error",
+        "cleanup_failure.version_observed",
+        "cleanup_failure.repeat_error",
+        "cleanup_failure.no_second_acquire",
+        "cleanup_failure.no_second_cleanup",
+        "cleanup_failure.invalid_after_latched_failure",
+        "cleanup_failure.status_still_error",
+        "cleanup_failure.assert_count",
+        "cleanup_failure.assert_balance",
+        "cleanup_failure.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "concurrent": {
+      "check_ids": [
+        "concurrent.all_results0",
+        "concurrent.startup1",
+        "concurrent.cleanup0",
+        "concurrent.model_refs1",
+        "concurrent.status0",
+        "concurrent.version202",
+        "concurrent.assert_count",
+        "concurrent.assert_balance",
+        "concurrent.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "caller_success": {
+      "check_ids": [
+        "caller_success.xnet_call1",
+        "caller_success.request_bytes13",
+        "caller_success.request_alignment4",
+        "caller_success.single_wsa_acquisition",
+        "caller_success.one_retained_model_reference",
+        "caller_success.no_cleanup",
+        "caller_success.port",
+        "caller_success.native_socket_sentinel",
+        "caller_success.initial_cursors",
+        "caller_success.listening_state",
+        "caller_success.timeout",
+        "caller_success.timer_calls_and_step",
+        "caller_success.assert_count",
+        "caller_success.assert_balance",
+        "caller_success.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "caller_failure": {
+      "check_ids": [
+        "caller_failure.one_startup_attempt",
+        "caller_failure.no_cleanup",
+        "caller_failure.no_acquired_model_reference",
+        "caller_failure.original_assert_lines",
+        "caller_failure.original_assert_messages",
+        "caller_failure.initial_state_retained",
+        "caller_failure.original_assert_continuation",
+        "caller_failure.status_error",
+        "caller_failure.version0",
+        "caller_failure.assert_count",
+        "caller_failure.assert_balance",
+        "caller_failure.native_arguments_valid"
+      ],
+      "failed_ids": [],
+      "exit_code": 0
+    },
+    "old_caller": {
+      "check_ids": [
+        "old_caller.xnet_call1",
+        "old_caller.request_bytes13",
+        "old_caller.single_wsa_acquisition",
+        "old_caller.one_retained_model_reference",
+        "old_caller.no_cleanup",
+        "old_caller.port",
+        "old_caller.native_socket_sentinel",
+        "old_caller.initial_cursors",
+        "old_caller.listening_state",
+        "old_caller.timeout",
+        "old_caller.timer_calls_and_step",
+        "old_caller.assert_count",
+        "old_caller.assert_balance",
+        "old_caller.native_arguments_valid"
+      ],
+      "failed_ids": [
+        "old_caller.single_wsa_acquisition",
+        "old_caller.one_retained_model_reference"
+      ],
+      "exit_code": 1
+    }
+  },
+  "author_expectations_not_evaluated": true,
+  "native_boundary": "Only injected WSA endpoints; model references do not prove actual native reference state, especially after failed cleanup",
+  "old_control_scope": "Full unchanged held994c Construct plus common real new provider; expected native startup/model-ref counters become2. Original provider is absent, so no missing-symbol or dummy old-provider control is claimed."
+}
