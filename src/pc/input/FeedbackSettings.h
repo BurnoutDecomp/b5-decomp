@@ -7,7 +7,8 @@
 #include <cerrno>
 #include <cstdio>
 
-// FLAG PC-platform leaf: strict parser for config.ini [AdaptiveTriggers].
+// FLAG PC-platform leaf: strict parser for config.ini [AdaptiveTriggers], shared by
+// the DualSense adaptive triggers and the Steam Controller haptics.
 namespace CgsInput::AdaptiveTriggers
 {
     inline bool Equal(const char* lpA, const char* lpB)
@@ -48,6 +49,23 @@ namespace CgsInput::AdaptiveTriggers
                 else ++luInvalid;
                 continue;
             }
+            if (Equal(lpKey, "SteamLeftActuator") || Equal(lpKey, "SteamRightActuator"))
+            {
+                static constexpr struct { const char* mpName; long miId; } KA_ACTUATORS[] = {
+                    {"LeftTrackpad", 0}, {"RightTrackpad", 1}, {"LeftGrip", 2},
+                    {"BothGrips", 3}, {"RightGrip", 4}, {"BothTrackpads", 6}};
+                long liId = -1;
+                for (const auto& lrActuator : KA_ACTUATORS)
+                    if (Equal(lacValue, lrActuator.mpName)) liId = lrActuator.miId;
+                char* lpIdTail = nullptr;
+                if (liId < 0 && *lacValue) liId = std::strtol(lacValue, &lpIdTail, 10);
+                if (lpIdTail && *lpIdTail) liId = -1;
+                // 5 restarts the controller; 7 and above address nothing.
+                if (liId < 0 || liId > 6 || liId == 5) { ++luInvalid; continue; }
+                if (Equal(lpKey, "SteamLeftActuator")) lrSettings.muSteamLeftActuator = static_cast<std::uint8_t>(liId);
+                else lrSettings.muSteamRightActuator = static_cast<std::uint8_t>(liId);
+                continue;
+            }
             errno = 0;
             char* lpTail = nullptr;
             const long liValue = std::strtol(lacValue, &lpTail, 10);
@@ -62,11 +80,21 @@ namespace CgsInput::AdaptiveTriggers
                 else lrSettings.mfRightStrength = lfValue;
                 if (liValue < 0 || liValue > 100) ++luInvalid;
             }
-            else if (Equal(lpKey, "Enabled") || Equal(lpKey, "ArcadeCues") || Equal(lpKey, "Diagnostics"))
+            else if (Equal(lpKey, "SteamToneFrequency") || Equal(lpKey, "SteamGain"))
+            {
+                const bool lbTone = Equal(lpKey, "SteamToneFrequency");
+                const long liClamped = lbTone ? std::clamp(liValue, 50l, 400l) : std::clamp(liValue, -24l, 6l);
+                if (liValue != liClamped) ++luInvalid;
+                if (lbTone) lrSettings.miSteamToneHz = static_cast<int>(liClamped);
+                else lrSettings.miSteamGainDb = static_cast<int>(liClamped);
+            }
+            else if (Equal(lpKey, "Enabled") || Equal(lpKey, "ArcadeCues") || Equal(lpKey, "Diagnostics") ||
+                     Equal(lpKey, "SteamResistanceTicks"))
             {
                 if (liValue != 0 && liValue != 1) { ++luInvalid; continue; }
                 if (Equal(lpKey, "Enabled")) lrSettings.mbEnabled = liValue != 0;
                 else if (Equal(lpKey, "ArcadeCues")) lrSettings.mbArcadeCues = liValue != 0;
+                else if (Equal(lpKey, "SteamResistanceTicks")) lrSettings.mbSteamResistanceTicks = liValue != 0;
                 else lrSettings.mbDiagnostics = liValue != 0;
             }
             else

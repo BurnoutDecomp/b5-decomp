@@ -2,6 +2,7 @@
 #include "pc/input/KeyboardMapping.h"
 #include "pc/input/KeyboardHost.h"
 #include "pc/input/DualSenseEffects.h"
+#include "pc/input/SteamHaptics.h"
 #include "pc/input/FeedbackSettings.h"
 #include "pc/input/EngineFeedback.h"
 #include "pc/input/BoostFeedback.h"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <filesystem>
 #include <mutex>
 #include <cstdio>
 
@@ -52,6 +54,14 @@ namespace CgsInput::PCGamepad
         AdaptiveTriggers::Packet gLastFeedbackPacket{};
         FeedbackStatus gFeedbackStatus;
         void (*gpFeedbackLogger)(const char*) = nullptr;
+        // Steam Controller: last presented effect and last sent tone per side (0 = L2).
+        std::array<AdaptiveTriggers::Effect, 2> gaSteamEffect{};
+        std::array<AdaptiveTriggers::SteamHaptics::Report, 2> gaSteamTone{};
+        std::array<Uint64, 2> gauSteamToneSent{};
+        // config.ini watched for [AdaptiveTriggers] edits while the game runs.
+        char gacFeedbackIni[260]{};
+        std::uint64_t guFeedbackIniStamp = 0;
+        Uint64 guLastIniCheck = 0;
 
         void LogFeedback(const char* lpMessage)
         {
@@ -78,34 +88,110 @@ namespace CgsInput::PCGamepad
             return lRumble;
         }
 
+        bool SendSteamStop()
+        {
+            namespace Steam = AdaptiveTriggers::SteamHaptics;
+            gaSteamEffect = {};
+            gaSteamTone = {};
+            // Stop exactly the configured actuators (never the restart-all id).
+            const std::uint8_t lauActuator[2] = {gFeedbackSettings.muSteamLeftActuator, gFeedbackSettings.muSteamRightActuator};
+            bool lbSent = true;
+            for (unsigned i = 0; i < 2; ++i)
+            {
+                if (i && lauActuator[1] == lauActuator[0]) break;
+                const auto lStop = Steam::Command(lauActuator[i], Steam::E_COMMAND_OFF);
+                lbSent = SDL_SendGamepadEffect(gpPad, lStop.mau.data(), lStop.muSize) && lbSent;
+            }
+            return lbSent;
+        }
+
+        void RejectFeedback()
+        {
+            ++gFeedbackStatus.muFailures;
+            char lacMessage[384];
+            std::snprintf(lacMessage, sizeof(lacMessage), "[triggers] device=%u output rejected: %.240s\n",
+                guSelectedId, SDL_GetError());
+            LogFeedback(lacMessage);
+            // A failed write may have partially changed the device. Attempt
+            // one neutral reset, then stop retrying until device replacement.
+            if (gFeedbackStatus.meOutput == FeedbackStatus::SteamController)
+                SendSteamStop();
+            else
+            {
+                const auto lClear = AdaptiveTriggers::Encode(AdaptiveTriggers::Output{}, FeedbackRumble());
+                SDL_SendGamepadEffect(gpPad, lClear.data(), static_cast<int>(lClear.size()));
+            }
+            gFeedbackStatus.meSupport = FeedbackStatus::Rejected;
+            gbObserveFeedback.store(gFeedbackSettings.mbDiagnostics, std::memory_order_relaxed);
+            AdaptiveTriggers::EngineFeedback::SetEnabled(gFeedbackSettings.mbDiagnostics);
+            gFeedbackStatus.meLeft = gFeedbackStatus.meRight = AdaptiveTriggers::Cue::Off;
+            ResetFeedbackState();
+        }
+
+        // Steam Controller: one HID report per changed side. Tones expire on the
+        // device, so an unchanged tone is renewed instead of deduplicated forever.
+        bool SendSteamFeedback(const AdaptiveTriggers::Output& lrOutput, Uint64 luNow, bool lbImmediate)
+        {
+            namespace Steam = AdaptiveTriggers::SteamHaptics;
+            const auto lTriggers = AdaptiveTriggers::Encode(lrOutput);
+            bool lbRenew = false;
+            for (unsigned i = 0; i < 2; ++i)
+                lbRenew |= gaSteamTone[i].IsTone() && luNow - gauSteamToneSent[i] >= Steam::KU_RENEW_MS;
+            if (!lbImmediate && ((lTriggers == gLastFeedbackPacket && !lbRenew) || luNow - guLastFeedbackSend < 20))
+                return false;
+            const AdaptiveTriggers::Effect* const lapEffect[2] = {&lrOutput.mLeft, &lrOutput.mRight};
+            for (unsigned i = 0; i < 2; ++i)
+            {
+                const auto laReports = Steam::Translate(*lapEffect[i], gaSteamEffect[i],
+                    i ? gFeedbackSettings.muSteamRightActuator : gFeedbackSettings.muSteamLeftActuator, gFeedbackSettings);
+                for (const auto& lrReport : laReports)
+                {
+                    if (!lrReport.muSize) continue;
+                    if (lrReport.IsTone() && lrReport == gaSteamTone[i] && luNow - gauSteamToneSent[i] < Steam::KU_RENEW_MS)
+                        continue;
+                    if (!SDL_SendGamepadEffect(gpPad, lrReport.mau.data(), lrReport.muSize))
+                    {
+                        RejectFeedback();
+                        return false;
+                    }
+                    ++gFeedbackStatus.muPackets;
+                    if (lrReport.IsTone())
+                    {
+                        gaSteamTone[i] = lrReport;
+                        gauSteamToneSent[i] = luNow;
+                    }
+                    else if (lrReport.mau[2] == Steam::E_COMMAND_OFF)
+                        gaSteamTone[i] = {};
+                }
+                gaSteamEffect[i] = *lapEffect[i];
+            }
+            guLastFeedbackSend = luNow;
+            gLastFeedbackPacket = lTriggers; // logical last output, shared with the neutral checks
+            return true;
+        }
+
         bool SendFeedback(const AdaptiveTriggers::Output& lrOutput, Uint64 luNow, bool lbImmediate = false)
         {
             if (!gpPad || gFeedbackStatus.meSupport != FeedbackStatus::Supported) return false;
-            const auto lTriggers = AdaptiveTriggers::Encode(lrOutput);
-            if (!lbImmediate && (lTriggers == gLastFeedbackPacket || luNow - guLastFeedbackSend < 20)) return true;
-            const auto lPacket = AdaptiveTriggers::Encode(lrOutput, FeedbackRumble());
-            const bool lbSent = SDL_SendGamepadEffect(gpPad, lPacket.data(), static_cast<int>(lPacket.size()));
-            if (!lbSent)
+            if (gFeedbackStatus.meOutput == FeedbackStatus::SteamController)
             {
-                ++gFeedbackStatus.muFailures;
-                char lacMessage[384];
-                std::snprintf(lacMessage, sizeof(lacMessage), "[triggers] device=%u output rejected: %.240s\n",
-                    guSelectedId, SDL_GetError());
-                LogFeedback(lacMessage);
-                // A failed write may have partially changed the device. Attempt
-                // one neutral reset, then stop retrying until device replacement.
-                const auto lClear = AdaptiveTriggers::Encode(AdaptiveTriggers::Output{}, FeedbackRumble());
-                SDL_SendGamepadEffect(gpPad, lClear.data(), static_cast<int>(lClear.size()));
-                gFeedbackStatus.meSupport = FeedbackStatus::Rejected;
-                gbObserveFeedback.store(gFeedbackSettings.mbDiagnostics, std::memory_order_relaxed);
-                AdaptiveTriggers::EngineFeedback::SetEnabled(gFeedbackSettings.mbDiagnostics);
-                gFeedbackStatus.meLeft = gFeedbackStatus.meRight = AdaptiveTriggers::Cue::Off;
-                ResetFeedbackState();
-                return false;
+                if (!SendSteamFeedback(lrOutput, luNow, lbImmediate))
+                    return gFeedbackStatus.meSupport == FeedbackStatus::Supported;
             }
-            ++gFeedbackStatus.muPackets;
-            guLastFeedbackSend = luNow;
-            gLastFeedbackPacket = lTriggers; // Motor-only changes stay with SDL_RumbleGamepad.
+            else
+            {
+                const auto lTriggers = AdaptiveTriggers::Encode(lrOutput);
+                if (!lbImmediate && (lTriggers == gLastFeedbackPacket || luNow - guLastFeedbackSend < 20)) return true;
+                const auto lPacket = AdaptiveTriggers::Encode(lrOutput, FeedbackRumble());
+                if (!SDL_SendGamepadEffect(gpPad, lPacket.data(), static_cast<int>(lPacket.size())))
+                {
+                    RejectFeedback();
+                    return false;
+                }
+                ++gFeedbackStatus.muPackets;
+                guLastFeedbackSend = luNow;
+                gLastFeedbackPacket = lTriggers; // Motor-only changes stay with SDL_RumbleGamepad.
+            }
             if ((lrOutput.mLeft.meCue != gFeedbackStatus.meLeft || lrOutput.mRight.meCue != gFeedbackStatus.meRight) &&
                 (lbImmediate || luNow - guLastFeedbackLog >= 250))
             {
@@ -131,20 +217,48 @@ namespace CgsInput::PCGamepad
             gFeedbackStatus.mbWireless = SDL_GetGamepadConnectionState(gpPad) == SDL_JOYSTICK_CONNECTION_WIRELESS;
             gFeedbackStatus.meSupport = FeedbackStatus::Unsupported;
             gLastFeedbackPacket = {};
+            gaSteamEffect = {};
+            gaSteamTone = {};
             ResetFeedbackState();
+            const Uint16 luVendor = SDL_GetGamepadVendor(gpPad), luProduct = SDL_GetGamepadProduct(gpPad);
             // Real type ignores user mapping overrides. A PS5-shaped virtual Xbox
             // mapping cannot opt itself into Sony-specific output packets.
-            if (SDL_GetRealGamepadType(gpPad) != SDL_GAMEPAD_TYPE_PS5 || SDL_GetGamepadVendor(gpPad) != 0x054c) return;
-            const auto luFirmware = SDL_GetGamepadFirmwareVersion(gpPad);
-            gbEnhancedRumble = SDL_GetGamepadProduct(gpPad) == 0x0df2 || luFirmware == 0 || luFirmware >= 0x0224;
-            gFeedbackStatus.meSupport = FeedbackStatus::Supported;
-            SendFeedback({}, SDL_GetTicks(), true); // harmless neutral capability probe
+            if (SDL_GetRealGamepadType(gpPad) == SDL_GAMEPAD_TYPE_PS5 && luVendor == 0x054c)
+            {
+                const auto luFirmware = SDL_GetGamepadFirmwareVersion(gpPad);
+                gbEnhancedRumble = luProduct == 0x0df2 || luFirmware == 0 || luFirmware >= 0x0224;
+                gFeedbackStatus.meOutput = FeedbackStatus::DualSense;
+                gFeedbackStatus.meSupport = FeedbackStatus::Supported;
+                SendFeedback({}, SDL_GetTicks(), true); // harmless neutral capability probe
+            }
+            // Second-generation Steam Controller, wired/Bluetooth or through its
+            // puck (SDL's k_eControllerType_SteamControllerTriton product ids).
+            else if (luVendor == 0x28de && luProduct >= 0x1302 && luProduct <= 0x1305)
+            {
+                gFeedbackStatus.meOutput = FeedbackStatus::SteamController;
+                // A neutral stop doubles as the capability probe: only the
+                // vendor/SDL fork's Triton driver accepts haptic output reports.
+                gFeedbackStatus.meSupport = SendSteamStop() ? FeedbackStatus::Supported : FeedbackStatus::Unsupported;
+                // Which SDL3.dll actually loaded decides this path; say so.
+                const int liVersion = SDL_GetVersion();
+                char lacMessage[384];
+                std::snprintf(lacMessage, sizeof(lacMessage),
+                    "[triggers] Steam Controller %04x:%04x actuators L2=%u R2=%u SDL %d.%d.%d (%s) haptic probe %s%.200s\n",
+                    luVendor, luProduct, gFeedbackSettings.muSteamLeftActuator, gFeedbackSettings.muSteamRightActuator, SDL_VERSIONNUM_MAJOR(liVersion), SDL_VERSIONNUM_MINOR(liVersion),
+                    SDL_VERSIONNUM_MICRO(liVersion), SDL_GetRevision(),
+                    gFeedbackStatus.meSupport == FeedbackStatus::Supported ? "accepted" : "rejected: ",
+                    gFeedbackStatus.meSupport == FeedbackStatus::Supported ? "" : SDL_GetError());
+                LogFeedback(lacMessage);
+            }
+            else return;
             gbObserveFeedback.store(gFeedbackSettings.mbDiagnostics ||
                 (gFeedbackStatus.meSupport == FeedbackStatus::Supported && gFeedbackSettings.GetScale() > 0), std::memory_order_relaxed);
             AdaptiveTriggers::EngineFeedback::SetEnabled(gbObserveFeedback.load(std::memory_order_relaxed));
-            LogFeedback(gFeedbackStatus.meSupport == FeedbackStatus::Supported ?
-                "[triggers] native DualSense effect output accepted; physical output requires hardware validation\n" :
-                "[triggers] adaptive output unavailable; input and standard rumble remain active\n");
+            LogFeedback(gFeedbackStatus.meSupport != FeedbackStatus::Supported ?
+                "[triggers] adaptive output unavailable; input and standard rumble remain active\n" :
+                gFeedbackStatus.meOutput == FeedbackStatus::SteamController ?
+                "[triggers] Steam Controller haptic output accepted; physical output requires hardware validation\n" :
+                "[triggers] native DualSense effect output accepted; physical output requires hardware validation\n");
         }
 
         void UpdateFeedback(Uint64 luNow)
@@ -188,8 +302,8 @@ namespace CgsInput::PCGamepad
             {
                 char lacMessage[1024];
                 std::snprintf(lacMessage, sizeof(lacMessage),
-                    "[triggers] observe device=%u support=%d car=%llu age=%llu active=%d driving=%d rpm=%.0f mph=%.1f gas=%.2f brake=%.2f gear=%d ground=%u slip=%.2f boost=%d limiter=%d showtime=%d left=%s right=%s\n",
-                    guSelectedId, static_cast<int>(gFeedbackStatus.meSupport),
+                    "[triggers] observe device=%u support=%d output=%d car=%llu age=%llu active=%d driving=%d rpm=%.0f mph=%.1f gas=%.2f brake=%.2f gear=%d ground=%u slip=%.2f boost=%d limiter=%d showtime=%d left=%s right=%s\n",
+                    guSelectedId, static_cast<int>(gFeedbackStatus.meSupport), static_cast<int>(gFeedbackStatus.meOutput),
                     static_cast<unsigned long long>(gObservedFeedbackSample.muVehicle),
                     static_cast<unsigned long long>(luNow >= guObservedAt ? luNow - guObservedAt : 0),
                     gObservedFeedbackSample.mbActive, gObservedFeedbackSample.mbDriving,
@@ -212,6 +326,70 @@ namespace CgsInput::PCGamepad
             const bool lbClear = lOutput.mLeft.IsOff() && lOutput.mRight.IsOff() &&
                 (gLastFeedbackPacket[10] != 5 || gLastFeedbackPacket[21] != 5);
             SendFeedback(lOutput, luNow, lbClear);
+        }
+
+        std::uint64_t IniStamp(const char* lpIniPath)
+        {
+            std::error_code lError;
+            const auto lTime = std::filesystem::last_write_time(lpIniPath, lError);
+            return lError ? 0 : static_cast<std::uint64_t>(lTime.time_since_epoch().count());
+        }
+
+        unsigned ReadFeedbackSettings(const char* lpIniPath, AdaptiveTriggers::Settings& lrSettings)
+        {
+            char lacSection[8192]{};
+            const unsigned long luSize = lpIniPath ? GetPrivateProfileSectionA(
+                "AdaptiveTriggers", lacSection, sizeof(lacSection), lpIniPath) : 0;
+            unsigned luInvalid = luSize == sizeof(lacSection) - 2 ? 1 : AdaptiveTriggers::ParseSettings(lacSection, lrSettings);
+            // Same 0..3 raw preference accepted by the existing PC system profile.
+            // Zero silences adaptive output; invalid profile text keeps its default.
+            char lacVibration[64] = "3";
+            const unsigned long luVibrationSize = lpIniPath ? GetPrivateProfileStringA("SystemProfile", "ControllerVibration", "3",
+                lacVibration, sizeof(lacVibration), lpIniPath) : 1;
+            char* lpTail = nullptr;
+            errno = 0;
+            const long liVibration = std::strtol(lacVibration, &lpTail, 10);
+            while (lpTail && std::isspace(static_cast<unsigned char>(*lpTail))) ++lpTail;
+            if (luVibrationSize == sizeof(lacVibration) - 1 || !lpTail || *lpTail || errno == ERANGE || liVibration < 0 || liVibration > 3) ++luInvalid;
+            else if (*lacVibration) lrSettings.mbSystemFeedbackEnabled = liVibration != 0;
+            return luInvalid;
+        }
+
+        // gMutex held.
+        void ApplyFeedbackSettings(const AdaptiveTriggers::Settings& lrSettings)
+        {
+            SendFeedback({}, SDL_GetTicks(), true);
+            // The actuators may change: silence the old ones before switching.
+            if (gpPad && gFeedbackStatus.meSupport == FeedbackStatus::Supported &&
+                gFeedbackStatus.meOutput == FeedbackStatus::SteamController)
+                SendSteamStop();
+            gFeedbackSettings = lrSettings;
+            gbObserveFeedback.store(lrSettings.mbDiagnostics ||
+                (gFeedbackStatus.meSupport == FeedbackStatus::Supported && lrSettings.GetScale() > 0), std::memory_order_relaxed);
+            AdaptiveTriggers::EngineFeedback::SetEnabled(gbObserveFeedback.load(std::memory_order_relaxed));
+            gFeedbackController.Configure(lrSettings);
+            ResetFeedbackState();
+        }
+
+        // Tuning without a restart: a changed config.ini write time re-reads the
+        // whole section, exactly as at startup. gMutex held; at most once a second.
+        void ReloadFeedbackSettings(Uint64 luNow)
+        {
+            if (!*gacFeedbackIni || luNow - guLastIniCheck < 1000) return;
+            guLastIniCheck = luNow;
+            const std::uint64_t luStamp = IniStamp(gacFeedbackIni);
+            if (!luStamp || luStamp == guFeedbackIniStamp) return;
+            guFeedbackIniStamp = luStamp;
+            AdaptiveTriggers::Settings lSettings;
+            const unsigned luInvalid = ReadFeedbackSettings(gacFeedbackIni, lSettings);
+            ApplyFeedbackSettings(lSettings);
+            if (gpFeedbackLogger)
+            {
+                char lacMessage[128];
+                std::snprintf(lacMessage, sizeof(lacMessage),
+                    "[input] AdaptiveTriggers: config.ini reloaded, %u invalid setting(s)\n", luInvalid);
+                gpFeedbackLogger(lacMessage);
+            }
         }
 
         bool IsModifier(unsigned luKey) { return luKey >= 0x10 && luKey <= 0x12; }
@@ -341,6 +519,7 @@ namespace CgsInput::PCGamepad
                 }
             }
             UpdateKeyboard();
+            ReloadFeedbackSettings(luNow);
             UpdateFeedback(luNow);
             // Only our input event ranges; leave the application's other SDL
             // events alone. The watch has already recorded lifecycle changes.
@@ -363,9 +542,75 @@ namespace CgsInput::PCGamepad
         }
     }
 
+    namespace
+    {
+        // The window procedure can run inside an SDL call made under gMutex on
+        // the same thread: a sent message such as WM_ACTIVATEAPP is delivered by
+        // any message check SDL performs there. Re-locking would throw
+        // resource_deadlock_would_occur, so such nested calls are recorded and
+        // applied when the outer call releases the device.
+        thread_local bool tbHoldingDevice = false;
+        int giPendingInputAllowed = -1;      // -1 none, else 0/1
+        bool gbPendingKeyboardWindow = false;
+        void* gpPendingKeyboardWindow = nullptr;
+
+        void ApplyInputAllowed(bool lbAllowed)
+        {
+            if (gbInputAllowed == lbAllowed)
+                return;
+            gbInputAllowed = lbAllowed;
+            if (gpPad)
+            {
+                ApplyRumble();
+                ResetFeedbackState();
+                if (!lbAllowed) SendFeedback({}, SDL_GetTicks(), true);
+            }
+        }
+
+        void ApplyKeyboardWindow(void* lpWindow)
+        {
+            PublishKeyboard(0, false);
+            if (!lpWindow)
+            {
+                gbInputAllowed = false;
+                ResetFeedbackState();
+                SendFeedback({}, SDL_GetTicks(), true);
+                if (gpPad) ApplyRumble();
+            }
+            gpKeyboardWindow = lpWindow;
+        }
+
+        struct DeviceLock
+        {
+            std::unique_lock<std::mutex> mLock{gMutex};
+            DeviceLock() { tbHoldingDevice = true; }
+            ~DeviceLock()
+            {
+                // Still held: anything these apply that re-enters defers again.
+                while (giPendingInputAllowed >= 0 || gbPendingKeyboardWindow)
+                {
+                    if (gbPendingKeyboardWindow)
+                    {
+                        gbPendingKeyboardWindow = false;
+                        ApplyKeyboardWindow(gpPendingKeyboardWindow);
+                    }
+                    if (giPendingInputAllowed >= 0)
+                    {
+                        const bool lbAllowed = giPendingInputAllowed != 0;
+                        giPendingInputAllowed = -1;
+                        ApplyInputAllowed(lbAllowed);
+                    }
+                }
+                tbHoldingDevice = false;
+            }
+            DeviceLock(const DeviceLock&) = delete;
+            DeviceLock& operator=(const DeviceLock&) = delete;
+        };
+    }
+
     bool Initialize()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (gbInitialized)
             return true;
         SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
@@ -393,7 +638,7 @@ namespace CgsInput::PCGamepad
 
     void Shutdown()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (!gbInitialized)
             return;
         ClosePad();
@@ -412,7 +657,7 @@ namespace CgsInput::PCGamepad
 
     bool Read(State& lrState)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         lrState = {};
         if (!gbInitialized)
             return false;
@@ -452,34 +697,31 @@ namespace CgsInput::PCGamepad
 
     std::uint32_t SelectedId()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return guSelectedId;
     }
 
     bool HasRumble()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return gpPad && SDL_GetBooleanProperty(SDL_GetGamepadProperties(gpPad),
                                                SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
     }
 
     void SetInputAllowed(bool lbAllowed)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
-        if (gbInputAllowed == lbAllowed)
-            return;
-        gbInputAllowed = lbAllowed;
-        if (gpPad)
+        if (tbHoldingDevice)
         {
-            ApplyRumble();
-            ResetFeedbackState();
-            if (!lbAllowed) SendFeedback({}, SDL_GetTicks(), true);
+            giPendingInputAllowed = lbAllowed ? 1 : 0;
+            return;
         }
+        const DeviceLock lLock;
+        ApplyInputAllowed(lbAllowed);
     }
 
     std::uint32_t SetRumble(std::uint16_t luLeft, std::uint16_t luRight)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (!gpPad || !SDL_GamepadConnected(gpPad))
             return 1167; // ERROR_DEVICE_NOT_CONNECTED
         guLeft = luLeft;
@@ -506,7 +748,7 @@ namespace CgsInput::PCGamepad
 
     void SetFeedbackAllowed(bool lbAllowed)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (gbFeedbackAllowed == lbAllowed) return;
         gbFeedbackAllowed = lbAllowed;
         ResetFeedbackState();
@@ -520,7 +762,7 @@ namespace CgsInput::PCGamepad
 
     void SuspendFeedback()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         ResetFeedbackState();
         if (gLastFeedbackPacket != AdaptiveTriggers::Encode(AdaptiveTriggers::Output{}))
             SendFeedback({}, SDL_GetTicks(), true);
@@ -528,42 +770,26 @@ namespace CgsInput::PCGamepad
 
     unsigned LoadFeedbackSettings(const char* lpIniPath)
     {
-        char lacSection[8192]{};
-        const unsigned long luSize = lpIniPath ? GetPrivateProfileSectionA(
-            "AdaptiveTriggers", lacSection, sizeof(lacSection), lpIniPath) : 0;
         AdaptiveTriggers::Settings lSettings;
-        unsigned luInvalid = luSize == sizeof(lacSection) - 2 ? 1 : AdaptiveTriggers::ParseSettings(lacSection, lSettings);
-        // Same 0..3 raw preference accepted by the existing PC system profile.
-        // Zero silences adaptive output; invalid profile text keeps its default.
-        char lacVibration[64] = "3";
-        const unsigned long luVibrationSize = lpIniPath ? GetPrivateProfileStringA("SystemProfile", "ControllerVibration", "3",
-            lacVibration, sizeof(lacVibration), lpIniPath) : 1;
-        char* lpTail = nullptr;
-        errno = 0;
-        const long liVibration = std::strtol(lacVibration, &lpTail, 10);
-        while (lpTail && std::isspace(static_cast<unsigned char>(*lpTail))) ++lpTail;
-        if (luVibrationSize == sizeof(lacVibration) - 1 || !lpTail || *lpTail || errno == ERANGE || liVibration < 0 || liVibration > 3) ++luInvalid;
-        else if (*lacVibration) lSettings.mbSystemFeedbackEnabled = liVibration != 0;
-        const std::lock_guard<std::mutex> lLock(gMutex);
-        SendFeedback({}, SDL_GetTicks(), true);
-        gFeedbackSettings = lSettings;
-        gbObserveFeedback.store(lSettings.mbDiagnostics ||
-            (gFeedbackStatus.meSupport == FeedbackStatus::Supported && lSettings.GetScale() > 0), std::memory_order_relaxed);
-        AdaptiveTriggers::EngineFeedback::SetEnabled(gbObserveFeedback.load(std::memory_order_relaxed));
-        gFeedbackController.Configure(lSettings);
-        ResetFeedbackState();
+        const unsigned luInvalid = ReadFeedbackSettings(lpIniPath, lSettings);
+        const DeviceLock lLock;
+        gacFeedbackIni[0] = 0;
+        if (lpIniPath && std::strlen(lpIniPath) < sizeof(gacFeedbackIni))
+            std::strcpy(gacFeedbackIni, lpIniPath);
+        guFeedbackIniStamp = lpIniPath ? IniStamp(lpIniPath) : 0;
+        ApplyFeedbackSettings(lSettings);
         return luInvalid;
     }
 
     void SetFeedbackLogger(void (*lpLogger)(const char*))
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         gpFeedbackLogger = lpLogger;
     }
 
     FeedbackStatus GetFeedbackStatus()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return gFeedbackStatus;
     }
 
@@ -574,7 +800,7 @@ namespace CgsInput::PCGamepad
             "ControllerKeyboard", lacSection, sizeof(lacSection), lpIniPath) : 0;
         KeyboardMapping lMapping;
         const unsigned luInvalid = luSize == sizeof(lacSection) - 2 ? 1 : lMapping.LoadSection(lacSection);
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         PublishKeyboard(0, false);
         gKeyboardMapping = std::move(lMapping);
         return luInvalid;
@@ -582,27 +808,25 @@ namespace CgsInput::PCGamepad
 
     void SetKeyboardWindow(void* lpWindow)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
-        PublishKeyboard(0, false);
-        if (!lpWindow)
+        if (tbHoldingDevice)
         {
-            gbInputAllowed = false;
-            ResetFeedbackState();
-            SendFeedback({}, SDL_GetTicks(), true);
-            if (gpPad) ApplyRumble();
+            gbPendingKeyboardWindow = true;
+            gpPendingKeyboardWindow = lpWindow;
+            return;
         }
-        gpKeyboardWindow = lpWindow;
+        const DeviceLock lLock;
+        ApplyKeyboardWindow(lpWindow);
     }
 
     void UpdateKeyboardMappings()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (gbInitialized) UpdateDevice(); // also services feedback expiry with no key mappings
     }
 
     bool MappedKeyDown(int liVirtualKey)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return liVirtualKey > 0 && liVirtualKey < 256 && gKeyboardMapping.GetKeys()[liVirtualKey];
     }
 }
