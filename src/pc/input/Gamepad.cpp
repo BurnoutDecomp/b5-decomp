@@ -542,9 +542,75 @@ namespace CgsInput::PCGamepad
         }
     }
 
+    namespace
+    {
+        // The window procedure can run inside an SDL call made under gMutex on
+        // the same thread: a sent message such as WM_ACTIVATEAPP is delivered by
+        // any message check SDL performs there. Re-locking would throw
+        // resource_deadlock_would_occur, so such nested calls are recorded and
+        // applied when the outer call releases the device.
+        thread_local bool tbHoldingDevice = false;
+        int giPendingInputAllowed = -1;      // -1 none, else 0/1
+        bool gbPendingKeyboardWindow = false;
+        void* gpPendingKeyboardWindow = nullptr;
+
+        void ApplyInputAllowed(bool lbAllowed)
+        {
+            if (gbInputAllowed == lbAllowed)
+                return;
+            gbInputAllowed = lbAllowed;
+            if (gpPad)
+            {
+                ApplyRumble();
+                ResetFeedbackState();
+                if (!lbAllowed) SendFeedback({}, SDL_GetTicks(), true);
+            }
+        }
+
+        void ApplyKeyboardWindow(void* lpWindow)
+        {
+            PublishKeyboard(0, false);
+            if (!lpWindow)
+            {
+                gbInputAllowed = false;
+                ResetFeedbackState();
+                SendFeedback({}, SDL_GetTicks(), true);
+                if (gpPad) ApplyRumble();
+            }
+            gpKeyboardWindow = lpWindow;
+        }
+
+        struct DeviceLock
+        {
+            std::unique_lock<std::mutex> mLock{gMutex};
+            DeviceLock() { tbHoldingDevice = true; }
+            ~DeviceLock()
+            {
+                // Still held: anything these apply that re-enters defers again.
+                while (giPendingInputAllowed >= 0 || gbPendingKeyboardWindow)
+                {
+                    if (gbPendingKeyboardWindow)
+                    {
+                        gbPendingKeyboardWindow = false;
+                        ApplyKeyboardWindow(gpPendingKeyboardWindow);
+                    }
+                    if (giPendingInputAllowed >= 0)
+                    {
+                        const bool lbAllowed = giPendingInputAllowed != 0;
+                        giPendingInputAllowed = -1;
+                        ApplyInputAllowed(lbAllowed);
+                    }
+                }
+                tbHoldingDevice = false;
+            }
+            DeviceLock(const DeviceLock&) = delete;
+            DeviceLock& operator=(const DeviceLock&) = delete;
+        };
+    }
+
     bool Initialize()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (gbInitialized)
             return true;
         SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
@@ -572,7 +638,7 @@ namespace CgsInput::PCGamepad
 
     void Shutdown()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (!gbInitialized)
             return;
         ClosePad();
@@ -591,7 +657,7 @@ namespace CgsInput::PCGamepad
 
     bool Read(State& lrState)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         lrState = {};
         if (!gbInitialized)
             return false;
@@ -631,34 +697,31 @@ namespace CgsInput::PCGamepad
 
     std::uint32_t SelectedId()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return guSelectedId;
     }
 
     bool HasRumble()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return gpPad && SDL_GetBooleanProperty(SDL_GetGamepadProperties(gpPad),
                                                SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
     }
 
     void SetInputAllowed(bool lbAllowed)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
-        if (gbInputAllowed == lbAllowed)
-            return;
-        gbInputAllowed = lbAllowed;
-        if (gpPad)
+        if (tbHoldingDevice)
         {
-            ApplyRumble();
-            ResetFeedbackState();
-            if (!lbAllowed) SendFeedback({}, SDL_GetTicks(), true);
+            giPendingInputAllowed = lbAllowed ? 1 : 0;
+            return;
         }
+        const DeviceLock lLock;
+        ApplyInputAllowed(lbAllowed);
     }
 
     std::uint32_t SetRumble(std::uint16_t luLeft, std::uint16_t luRight)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (!gpPad || !SDL_GamepadConnected(gpPad))
             return 1167; // ERROR_DEVICE_NOT_CONNECTED
         guLeft = luLeft;
@@ -685,7 +748,7 @@ namespace CgsInput::PCGamepad
 
     void SetFeedbackAllowed(bool lbAllowed)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (gbFeedbackAllowed == lbAllowed) return;
         gbFeedbackAllowed = lbAllowed;
         ResetFeedbackState();
@@ -699,7 +762,7 @@ namespace CgsInput::PCGamepad
 
     void SuspendFeedback()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         ResetFeedbackState();
         if (gLastFeedbackPacket != AdaptiveTriggers::Encode(AdaptiveTriggers::Output{}))
             SendFeedback({}, SDL_GetTicks(), true);
@@ -709,7 +772,7 @@ namespace CgsInput::PCGamepad
     {
         AdaptiveTriggers::Settings lSettings;
         const unsigned luInvalid = ReadFeedbackSettings(lpIniPath, lSettings);
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         gacFeedbackIni[0] = 0;
         if (lpIniPath && std::strlen(lpIniPath) < sizeof(gacFeedbackIni))
             std::strcpy(gacFeedbackIni, lpIniPath);
@@ -720,13 +783,13 @@ namespace CgsInput::PCGamepad
 
     void SetFeedbackLogger(void (*lpLogger)(const char*))
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         gpFeedbackLogger = lpLogger;
     }
 
     FeedbackStatus GetFeedbackStatus()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return gFeedbackStatus;
     }
 
@@ -737,7 +800,7 @@ namespace CgsInput::PCGamepad
             "ControllerKeyboard", lacSection, sizeof(lacSection), lpIniPath) : 0;
         KeyboardMapping lMapping;
         const unsigned luInvalid = luSize == sizeof(lacSection) - 2 ? 1 : lMapping.LoadSection(lacSection);
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         PublishKeyboard(0, false);
         gKeyboardMapping = std::move(lMapping);
         return luInvalid;
@@ -745,27 +808,25 @@ namespace CgsInput::PCGamepad
 
     void SetKeyboardWindow(void* lpWindow)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
-        PublishKeyboard(0, false);
-        if (!lpWindow)
+        if (tbHoldingDevice)
         {
-            gbInputAllowed = false;
-            ResetFeedbackState();
-            SendFeedback({}, SDL_GetTicks(), true);
-            if (gpPad) ApplyRumble();
+            gbPendingKeyboardWindow = true;
+            gpPendingKeyboardWindow = lpWindow;
+            return;
         }
-        gpKeyboardWindow = lpWindow;
+        const DeviceLock lLock;
+        ApplyKeyboardWindow(lpWindow);
     }
 
     void UpdateKeyboardMappings()
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         if (gbInitialized) UpdateDevice(); // also services feedback expiry with no key mappings
     }
 
     bool MappedKeyDown(int liVirtualKey)
     {
-        const std::lock_guard<std::mutex> lLock(gMutex);
+        const DeviceLock lLock;
         return liVirtualKey > 0 && liVirtualKey < 256 && gKeyboardMapping.GetKeys()[liVirtualKey];
     }
 }

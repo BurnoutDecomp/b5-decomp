@@ -305,6 +305,7 @@ struct SteamReports
 {
     std::vector<std::vector<Uint8>> maReports;
     bool mbReject = false;
+    bool mbReenter = false; // model WM_ACTIVATEAPP dispatched inside an SDL call
 };
 static bool SDLCALL SendSteamEffect(void* lpData, const void* lpBytes, int liSize)
 {
@@ -312,6 +313,11 @@ static bool SDLCALL SendSteamEffect(void* lpData, const void* lpBytes, int liSiz
     if (lrReports.mbReject) return false;
     const auto* lpByte = static_cast<const Uint8*>(lpBytes);
     lrReports.maReports.emplace_back(lpByte, lpByte + liSize);
+    if (lrReports.mbReenter)
+    {
+        lrReports.mbReenter = false;
+        CgsInput::PCGamepad::SetInputAllowed(false);
+    }
     return true;
 }
 
@@ -395,6 +401,16 @@ static void TestSteamHaptics()
     bool lbNeverRestart = true;
     for (const auto& lrReport : lReports.maReports) lbNeverRestart &= lrReport.size() < 2 || lrReport[1] != 5;
     Check(lbNeverRestart, "the controller-restart actuator id is never sent");
+    // Alt-tab regression: the window procedure re-enters SetInputAllowed from
+    // inside an SDL call made while the device lock is held on this thread.
+    lReports.mbReenter = true;
+    guNowMs += 20; lSample.mfRPM = 5000; PublishFeedback(lSample);
+    bool lbThrew = false;
+    try { Read(lState); } catch (...) { lbThrew = true; }
+    Check(!lbThrew && !lReports.mbReenter, "focus change dispatched inside an SDL call does not re-lock the device");
+    Check(lReports.maReports.back() == std::vector<Uint8>{0x82, 1, 0, 0},
+        "the nested focus loss is applied after the outer call and stops the haptic");
+    SetInputAllowed(true);
     lReports.mbReject = true;
     guNowMs += 20; lSample.mfRPM = 6000; PublishFeedback(lSample); Read(lState);
     Check(GetFeedbackStatus().meSupport == FeedbackStatus::Rejected && Read(lState),
