@@ -26,6 +26,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // gpDebugPrint / gxMessageFilterFlags (debug-draw gates)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"         // TriangleCacheInterface (GetCache / GetNumCachedTriangleBatches)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"            // PotentialContact
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"                    // Triangle4 (+ AOSTriangle)
@@ -34,6 +36,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h"           // VehicleManagerDebugComponent (mbRenderWallContacts / mbRenderGroundContacts)
 
 #include "rw/math/vpu/vector3_operation.h"                                               // vpu::{Dot, Subtract, Normalize}
+#include "pc/math/VmxFloat.h"
 
 #include <cstdlib>                                                                       // getenv -- the [kerb] probe's opt-in latch
 
@@ -495,27 +498,25 @@ namespace Vehicle
         const bool lbIsWall = !lbIsCurb
                            && (kvfWallNormalMaxHeight > fabsf(lTriangle.mNormal.y));
 
-        // ---- the two debug-draw overlays: GATED, NOT RECONSTRUCTED -----------------------------
-        // The console draws the classified triangle + three vertex spheres (DebugRender::
-        // DrawTriangle @0x8282C218 / DrawSolidSphere @0x8282BF28, offset flt_820047C8 == 0.05,
-        // red 0xFF0000FF for walls / green 0xFF00FF00 for curbs) behind the dev-menu toggles
-        // mbRenderWallContacts / mbRenderGroundContacts (mDebugComponent +597/+598). Both
-        // toggles are FALSE on this build (nothing sets them); the 3D CInEventDrawTriangle
-        // record + dispatcher are not reconstructed. Loud named gate, dead until toggled.
-        if ((mDebugComponent.RenderWallContacts() && lbIsWall)
-            || (mDebugComponent.RenderGroundContacts() && lbIsCurb))
+        // ARTIST 825C67B0..825C6998: one buffered triangle and three solid
+        // spheres for each enabled classification. Only the triangle is offset
+        // along the normal (0.05); the spheres stay at the vertices, radius 0.3.
+        const auto lDrawContact = [&](CgsDev::RGBA luColour)
         {
-            static bool sbLoggedDrawGate = false;
-            if (!sbLoggedDrawGate)
-            {
-                sbLoggedDrawGate = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: ValidateRaceCarWorldContact's wall/ground contact "
-                           "debug draw (DebugRender::DrawTriangle 3D family) not reconstructed "
-                           "[FLAG PC boot gate]. Reported once, not per frame\n";
-            }
-        }
+            CgsDev::DebugInterface lDebugInterface;
+            CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
+            const Vector3 lvVertex0 = CgsPC::VmxFloat::MultiplyAdd(lTriangle.mNormal, 0.05f, lTriangle.mVertex0);
+            const Vector3 lvVertex1 = CgsPC::VmxFloat::MultiplyAdd(lTriangle.mNormal, 0.05f, lTriangle.mVertex1);
+            const Vector3 lvVertex2 = CgsPC::VmxFloat::MultiplyAdd(lTriangle.mNormal, 0.05f, lTriangle.mVertex2);
+            lrRender.DrawTriangle(lvVertex0, lvVertex1, lvVertex2, luColour);
+            lrRender.DrawSolidSphere(lTriangle.mVertex0, 0.3f, luColour);
+            lrRender.DrawSolidSphere(lTriangle.mVertex1, 0.3f, luColour);
+            lrRender.DrawSolidSphere(lTriangle.mVertex2, 0.3f, luColour);
+        };
+        if (mDebugComponent.RenderWallContacts() && lbIsWall)
+            lDrawContact(0xFF0000FFu);
+        if (mDebugComponent.RenderGroundContacts() && lbIsCurb)
+            lDrawContact(0xFF00FF00u);
 
         // ---- record the wall triangle on the car's debug component (REAL console behaviour,
         //      unconditional on the wall classification -- NOT a draw) --------------------------
