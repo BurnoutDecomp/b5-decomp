@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "commit": "0117424f57852e7244a91c9664a6ac8a48c7b2b3",
+  "writer_present": false,
+  "scope": "Exact real request-only producer/normal present/predicate fragments; no injected old writer or noop body.",
+  "origins": {
+    "src/GameSource/Graphics/BrnRendererModule.cpp": {
+      "source_sha256": "861c521eaed4ddfbcc02181f8ac1a9c74e9b36d8788eea3fca9784dbd90af27a",
+      "lf_sha256": "a7ed15da8e46744b46d46ff10c38189fd3bf65c22111981bd1de006a144c7c51",
+      "original_git_blob_sha1": "16fe8515889fcbf29a52457acee8efa4b24322ff",
+      "evidence_path": "scratch/debug_screenshot_recovery_20261027/preimages/src/GameSource/Graphics/BrnRendererModule.cpp"
+    },
+    "src/GameSource/Graphics/BrnRendererModule_wBT_01.cpp": {
+      "source_sha256": "91ae0a2e403ec3e142893a38a8e6d84a5588a7da8646ecd48e4bbf9eb96918c9",
+      "lf_sha256": "800cdffc5080dedc02eff1ccc54d146aec76922ef3fb6e85357d43bfe9e6d05d",
+      "original_git_blob_sha1": "0fd58e944469aa4a088e31f587519c1e99fff609",
+      "evidence_path": "scratch/debug_screenshot_recovery_20261027/preimages/src/GameSource/Graphics/BrnRendererModule_wBT_01.cpp"
+    }
+  },
+  "slices": {
+    "handoff": "if (mbUpdateThreadTakeScreenshot)\n    {\n        mbUpdateThreadTakeScreenshot = false;\n        mbDispatchThreadTakeScreenshot = true;\n    }",
+    "terminal": "lRenderStage.Next(RENDER_PRESENT);\n    renderengine::Device::ShowPixelBuffer();\n    CgsDev::PerfMonGpu::StopProfiling(); // ARTIST8240E244, after Present.",
+    "overlay_condition": "mbRenderHudImmediateMode\n        && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot)"
+  }
+}
