@@ -305,17 +305,17 @@ namespace BrnNetwork
 
         if (mpTOS != nullptr)
         {
-            lTextEvent.miMarker = 1;
-            std::strncpy(lTextEvent.macId, "TOS_TEXT", CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
-            lTextEvent.mpText = mpTOS;
+            lTextEvent.meOperation = CgsGui::GuiEventAddLocalisedTextPointer::E_OPERATION_REMOVE;
+            std::strncpy(lTextEvent.macIdToAddToDatabase, "TOS_TEXT", CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
+            lTextEvent.mpString = mpTOS;
             mpNetworkModule->AddOutputGuiEvent(lTextEvent);
         }
 
         if (mpNews != nullptr)
         {
-            lTextEvent.miMarker = 1;
-            std::strncpy(lTextEvent.macId, "NEWS_TEXT", CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
-            lTextEvent.mpText = mpNews;
+            lTextEvent.meOperation = CgsGui::GuiEventAddLocalisedTextPointer::E_OPERATION_REMOVE;
+            std::strncpy(lTextEvent.macIdToAddToDatabase, "NEWS_TEXT", CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
+            lTextEvent.mpString = mpNews;
             mpNetworkModule->AddOutputGuiEvent(lTextEvent);
         }
     }
@@ -936,7 +936,7 @@ namespace BrnNetwork
                 CgsUnicode::Copy(*lppText, reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpcBuffer));
 
                 CgsGui::GuiEventAddLocalisedTextPointer lTextEvent;
-                lTextEvent.miMarker = 0;
+                lTextEvent.meOperation = CgsGui::GuiEventAddLocalisedTextPointer::E_OPERATION_ADD;
                 // The bounded copy's own "String too long" check (inlined from the string utilities).
                 if (!(std::strlen(lpcTextID) < static_cast<u32>(CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH)))
                 {
@@ -947,8 +947,8 @@ namespace BrnNetwork
                     CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
-                std::strncpy(lTextEvent.macId, lpcTextID, CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
-                lTextEvent.mpText = *lppText;
+                std::strncpy(lTextEvent.macIdToAddToDatabase, lpcTextID, CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
+                lTextEvent.mpString = *lppText;
                 mpNetworkModule->AddOutputGuiEvent(lTextEvent);
             }
         }

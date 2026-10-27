@@ -1,5 +1,8 @@
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventUpdateLocalisedCpt.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventAddLocalisedTextPointer.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventLocalisedTextPointerRemoved.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
 #include <cstring>
@@ -494,17 +497,82 @@ namespace CgsGui
         }
     }
 
-    // X360 @0x8285ED00 -- NOT YET RECONSTRUCTED (the ledger dossier holds the
-    // reviewed body): the language view events (10-12). Land with the
-    // language-ownership slice.
+    // ARTIST8285ED00..EE60. r5(size) and r7(output) are not read: the
+    // removal acknowledgement is published on this view's own256-byte queue.
     void ViewModule::ProcessIncomingLanguageEvent(const void* lpEvent, s32 liSize,
                                                   s32 liEventId,
                                                   ViewIO::OutputBuffer* lpOutput)
     {
-        (void)lpEvent;
         (void)liSize;
-        (void)liEventId;
         (void)lpOutput;
+        switch (liEventId)
+        {
+        case 10:
+        {
+            const GuiEventUpdateLocalisedCpt* lpLocalisedEvent =
+                static_cast<const GuiEventUpdateLocalisedCpt*>(lpEvent);
+            char lacLocalisedValue[GuiEventUpdateLocalisedCpt::KU_MAX_STRING_LENGTH];
+            switch (lpLocalisedEvent->meFormatType)
+            {
+            case E_LOCALISEFORMAT_TIME_MINS_AND_SECS:
+                mLanguageManager.FormatMinutesAndSecondsString(
+                    lacLocalisedValue, lpLocalisedEvent->mfTimeInSecs,
+                    GuiEventUpdateLocalisedCpt::KU_MAX_STRING_LENGTH);
+                break;
+            case E_LOCALISEFORMAT_TIME_SECS:
+                mLanguageManager.FormatSecondsString(
+                    lacLocalisedValue, lpLocalisedEvent->mfTimeInSecs,
+                    GuiEventUpdateLocalisedCpt::KU_MAX_STRING_LENGTH);
+                break;
+            default:
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Undefined format type for localised value",
+                    "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.cpp", 654);
+                CgsDev::Assert::EndAssert();
+                break;
+            }
+            // ORIGINAL UNDEFINED-INPUT BOUNDARY: ARTIST's invalid-format arm
+            // asserts, then still passes this unwritten automatic buffer.
+            // Preserve that broken control flow; do not initialize/fabricate
+            // its bytes or claim portable equivalence for undefined outcomes.
+            AptAux::UpdateFlashComponent(&mAptAux, lpLocalisedEvent->macName,
+                lpLocalisedEvent->macVariable, lacLocalisedValue, false);
+            break;
+        }
+        case 11:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("E_GUI_ADD_LOCALISED_TEXT event is no longer supported",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.cpp", 671);
+            CgsDev::Assert::EndAssert();
+            break;
+        case 12:
+        {
+            const GuiEventAddLocalisedTextPointer* lpPointerEvent =
+                static_cast<const GuiEventAddLocalisedTextPointer*>(lpEvent);
+            if (lpPointerEvent->meOperation == GuiEventAddLocalisedTextPointer::E_OPERATION_ADD)
+            {
+                mLanguageManager.AddStringPointer(
+                    lpPointerEvent->macIdToAddToDatabase, lpPointerEvent->mpString);
+            }
+            else
+            {
+                // Every nonzero original operation takes the remove arm.
+                mLanguageManager.RemoveStringPointer(lpPointerEvent->macIdToAddToDatabase);
+                GuiEventLocalisedTextPointerRemoved lRemoved;
+                lRemoved.SetStringRemoved(lpPointerEvent->macIdToAddToDatabase);
+                mOutputEventQueue.CgsModule::VariableEventQueue<256, 16>::AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRemoved), 13,
+                    static_cast<s32>(sizeof(lRemoved)));
+            }
+            break;
+        }
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Unexpected type sent to ViewModule::ProcessIncomingLanguageEvent",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.cpp", 701);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
     }
 
     // =========================================================================
