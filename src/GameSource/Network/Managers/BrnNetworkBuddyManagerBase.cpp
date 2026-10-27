@@ -718,16 +718,20 @@ namespace BrnNetwork
                 break;
             }
             case 9:
-                SendInvite(NULL);
+                // ARTIST8256B7BC/C0 selects slot0x20; r4 still carries
+                // the original event's leading PlayerName through the call.
+                RevokeInvite(reinterpret_cast<const CgsNetwork::PlayerName*>(lpEvent));
                 break;
             case 10:
-                AcceptInvite(NULL);
+                AcceptInvite(reinterpret_cast<const CgsNetwork::PlayerName*>(lpEvent));
                 break;
             case 11:
-                JoinBuddy(NULL);
+                DeclineInvite(reinterpret_cast<const CgsNetwork::PlayerName*>(lpEvent));
                 break;
             case 12:
-                CancelInvites();
+                // ARTIST8256B7C8/CC selects slot0x10 (JoinBuddy), not
+                // CancelInvites. Preserve the selected buddy payload.
+                JoinBuddy(reinterpret_cast<const CgsNetwork::PlayerName*>(lpEvent));
                 break;
             default:
                 break;

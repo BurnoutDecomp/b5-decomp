@@ -360,12 +360,16 @@ namespace CgsGui
                 break;
 
             case 61:
-            case 62:
-                // FLAG (deferred stores): the guest cycles a 0..4 counter (61, module
-                // +166996) and stores the asserted spacing value (62, +167000) -- both
-                // land in the un-modelled tail of mAptAux (past the render handler).
-                // Reproduce them when those AptAux members gain named homes.
+                mAptAux.DebugRotateToNextFontEffect();
                 break;
+
+            case 62:
+            {
+                const f32* lpSpacingEvent = reinterpret_cast<const f32*>(lpEvent);
+                CGS_ASSERT(lpSpacingEvent != nullptr, "lpSpacingEvent");
+                mAptAux.DebugChangeFontSpacing(*lpSpacingEvent);
+                break;
+            }
 
             // ⭐ [hud F4 2026-09-06] the 204/212/213/214/215/223 case block that stood here
             // is GONE, and its absence is the console's shape: ProcessIncomingViewEvents

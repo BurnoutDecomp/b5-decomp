@@ -404,6 +404,23 @@ namespace CgsGui
         CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxRenderTarget);
     }
 
+    // ARTIST8285FEF0..8285FF10: wrap only the actual E_EFFECT_ALL value4.
+    void AptAux::DebugRotateToNextFontEffect()
+    {
+        if (mRenderHandler.miTextEffect == 4)
+            mRenderHandler.miTextEffect = 0;
+        else
+            mRenderHandler.miTextEffect = static_cast<s32>(
+                static_cast<u32>(mRenderHandler.miTextEffect) + 1u);
+    }
+
+    // ARTIST8285FF38/3C: store the original f32 without clamping or
+    // invalidating existing strings. AllocateString observes it on layout.
+    void AptAux::DebugChangeFontSpacing(f32 lfSpacing)
+    {
+        mRenderHandler.mfFontSizeScale = lfSpacing;
+    }
+
     // -------------------------------------------------------------------------
     // AptAux::UpdateComponents - X360 0x82850570. The per-frame component flush
     // AptAux::Update @0x82853B20 runs FIRST (perfmon "AptAux - Upd Comps"), BEFORE
