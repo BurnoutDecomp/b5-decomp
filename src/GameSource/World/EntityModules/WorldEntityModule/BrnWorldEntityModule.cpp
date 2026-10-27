@@ -75,7 +75,7 @@ static s32 siUpdateStreamFrameCounter = 0;
 static s32 siCurrentTrackUnitIndex = 0;
 
 // X360 byte_82CDB6B8 -- debug gate for the per-instance bounding-circle draw.
-static bool sbDrawInstanceCircles = false;
+static bool sbDrawInstanceCircles = true;
 
 // Scene-manager entity owner id for world instances (the X360 EntityId::Set owner 5).
 static const u32 KU_ENTITY_OWNER_WORLD = 5;
