@@ -1155,9 +1155,55 @@ static void DumpBackBufferIfRequested()
         DWORD luLen = GetEnvironmentVariableA("BRN_FRAME_DUMP", sacDir, sizeof(sacDir));
         if (luLen == 0 || luLen >= sizeof(sacDir)) { sacDir[0] = 0; }
     }
-    if (sacDir[0] == 0 || (renderengine::guDispatchPresentCountPC % renderengine::FrameDumpEvery()) != 0u)
+    // [case capture] BRN_FRAME_DUMP_REQUEST=1 switches this private positive-slot
+    // run to one requested back-buffer image per owner-checked event. The event name
+    // includes this process PID and BRN_HARNESS_SLOT. The unset/default path preserves
+    // the existing periodic sampler.
+    // FLAG PC-platform leaf: opt-in screenshot request; it does not change game input, state or physics.
+    static const bool sbNamedFrameRequest = []() {
+        char lacMode[8];
+        const DWORD luLen = GetEnvironmentVariableA("BRN_FRAME_DUMP_REQUEST", lacMode, sizeof(lacMode));
+        return luLen == 1u && lacMode[0] == '1';
+    }();
+    static const u32 suNamedFrameSlot = []() {
+        if (!sbNamedFrameRequest) return 0u;
+        char lacSlot[32];
+        const DWORD luLen = GetEnvironmentVariableA("BRN_HARNESS_SLOT", lacSlot, sizeof(lacSlot));
+        if (luLen == 0u || luLen >= sizeof(lacSlot)) return 0u;
+        char* lpEnd = nullptr;
+        const unsigned long luSlot = std::strtoul(lacSlot, &lpEnd, 10);
+        if (lpEnd == lacSlot || *lpEnd != '\0' || luSlot == 0u || luSlot > 65535u) return 0u;
+        return static_cast<u32>(luSlot);
+    }();
+    static HANDLE shNamedFrameRequest = nullptr;
+    static u32 suNamedFrameSequence = 0u;
+    if (sacDir[0] == 0)
     {
         return;
+    }
+    if (!sbNamedFrameRequest &&
+        (renderengine::guDispatchPresentCountPC % renderengine::FrameDumpEvery()) != 0u)
+    {
+        return;
+    }
+    if (sbNamedFrameRequest)
+    {
+        if (suNamedFrameSlot == 0u) return;
+        if (shNamedFrameRequest == nullptr)
+        {
+            char lacEventName[128];
+            std::snprintf(lacEventName, sizeof(lacEventName),
+                          "Local\\BurnoutPC_FrameRequest_%lu_%lu",
+                          static_cast<unsigned long>(GetCurrentProcessId()),
+                          static_cast<unsigned long>(suNamedFrameSlot));
+            shNamedFrameRequest = OpenEventA(EVENT_MODIFY_STATE | SYNCHRONIZE,
+                                             FALSE, lacEventName);
+        }
+        if (shNamedFrameRequest == nullptr ||
+            WaitForSingleObject(shNamedFrameRequest, 0) != WAIT_OBJECT_0)
+        {
+            return;
+        }
     }
 
     // FLAG PC-platform leaf: align a bounded consecutive final-frame window
@@ -1353,7 +1399,24 @@ static void DumpBackBufferIfRequested()
                 {
                     fwrite(static_cast<const u8*>(lLock.pBits) + y * lLock.Pitch, 1, luW * 4u, lpFile);
                 }
-                fclose(lpFile);
+                if (sbNamedFrameRequest)
+                {
+                    const int liFrameWriteError = ferror(lpFile);
+                    const int liFrameCloseResult = fclose(lpFile);
+                    if (liFrameWriteError == 0 && liFrameCloseResult == 0 &&
+                        shNamedFrameRequest != nullptr && ResetEvent(shNamedFrameRequest))
+                    {
+                        ++suNamedFrameSequence;
+                        char lacAck[256];
+                        std::snprintf(lacAck, sizeof(lacAck),
+                                      "[frame-request] pid=%lu slot=%u seq=%u present=%u file=bb_%06u.bmp\n",
+                                      static_cast<unsigned long>(GetCurrentProcessId()), suNamedFrameSlot,
+                                      suNamedFrameSequence, renderengine::guDispatchPresentCountPC,
+                                      renderengine::guDispatchPresentCountPC);
+                        CgsDev::Log::WriteToLog(lacAck);
+                    }
+                }
+                else { fclose(lpFile); }
 
                 // [diag] Stamp the SIMULATION timestep this frame was rendered under into a
                 // sidecar CSV beside the dump. ⭐ WITHOUT IT A CAPTURE OF A TIME DILATION

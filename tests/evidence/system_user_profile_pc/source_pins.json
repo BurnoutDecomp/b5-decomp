@@ -4,8 +4,8 @@
   "base_head": "bef9346f9dc61f2ae1770bf3c9dbdc89fe4f15a7",
   "files": {
     "config.ini.example": {
-      "expected_lf_sha256": "457e70a2d0448a9573b4a98ba7ce79e1715364469f61e0b246543f17cafa55e7",
-      "expected_lf_bytes": 7729
+      "expected_lf_sha256": "5209e1e74980cd9399d2377eb14c17df8c9ba6b604973a04648ccc9d0aa40fb9",
+      "expected_lf_bytes": 10810
     },
     "src/GameShared/GameClasses/Core/CgsAssert.h": {
       "expected_lf_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
