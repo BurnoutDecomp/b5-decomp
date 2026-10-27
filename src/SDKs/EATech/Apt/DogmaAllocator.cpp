@@ -322,6 +322,29 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
 }
 
 // ---------------------------------------------------------------------------
+// Outside-allocation iteration (inlined in allocator shutdown)
+// ---------------------------------------------------------------------------
+// De-inlined from ARTIST82AE92B4..92DC and native64 14082DBAB..DBC7.
+// The item count, outside-tracking flag and list head are all original gates.
+void* DOGMA_PoolManager::GetFirstOutsideAllocation()
+{
+    if (!mnItemsAllocated || !mbTrackOutsideAllocations || !mpFirstOutSideAllocation)
+        return nullptr;
+    return mpFirstOutSideAllocation->GetReturnedPointer();
+}
+
+// De-inlined from ARTIST82AE92E4..92F4 and native64 14082DBD7..DBE4.
+// The existing native-width node helper accounts for its two pointer links.
+// As in the original loop, pCurrent must be a live returned outside pointer.
+void* DOGMA_PoolManager::GetNextOutsideAllocation(const void* pCurrent)
+{
+    OutsideAllocationT* const lpCurrent =
+        OutsideAllocationT::GetStructPointerFromReturnedPointer(pCurrent);
+    OutsideAllocationT* const lpNext = lpCurrent->pNext;
+    return lpNext ? lpNext->GetReturnedPointer() : nullptr;
+}
+
+// ---------------------------------------------------------------------------
 // Allocate @ 0x82AE1058
 // ---------------------------------------------------------------------------
 void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)

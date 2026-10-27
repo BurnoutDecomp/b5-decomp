@@ -249,8 +249,9 @@ extern int  gAptDeferredReleaseCount;       // dword_8324E508 (AptGlobals.cpp)
 // The pool-manager OBJECTS come from the host base-alloc hook: the console's
 // dword_8324E818(48) is gAptFuncs.pfnMemAlloc (CgsGui::AptCallbackMemory::Alloc
 // @0x828491C8, installed by AptAux::ConstructApt before InitializeApt chains here);
-// console 48 covers the 32-bit object, x64 allocates sizeof. Neither object is ever
-// freed -- process-lifetime, matching the console. The GC min/max statics come
+// console 48 covers the 32-bit object, x64 allocates sizeof. AllocatorShutdown
+// destroys/frees both objects; reinitialization allocates fresh objects and
+// overwrites every alias through WireAllocatorGlobals. The GC min/max statics come
 // straight from StaticInitialize's scan of the per-VFT size table (byte_82144A18
 // rodata RECOVERED -- 0x82144A18 dump: the console-shipped scan yields min 0x00 /
 // max 0x44; StaticInitialize regenerates the x64 table contents from the
@@ -310,6 +311,38 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
 
     WireAllocatorGlobals();
     return s_pGCPool;
+}
+
+// ===========================================================================
+// AptAllocatorShutdown: ARTIST82AE9298..9380, native64 sub_14082DB90.
+// The walks are deliberately read-only. Destruction, sized deletion and the
+// absence of alias stores match both originals; no success result is invented.
+// Only the enclosing owner release will activate this entry after review.
+void AptAllocatorShutdown()
+{
+    static_assert(sizeof(DOGMA_PoolManager) == 72,
+        "XB1 allocator shutdown frees a 72-byte DOGMA manager");
+    static_assert(sizeof(AptValueGC_PoolManager) == 72,
+        "XB1 allocator shutdown frees a 72-byte GC manager");
+
+    DOGMA_PoolManager* const lpNonGcPool = gpAptPseudoDataPool;
+    for (void* lpOutside = lpNonGcPool->GetFirstOutsideAllocation(); lpOutside;
+         lpOutside = lpNonGcPool->GetNextOutsideAllocation(lpOutside))
+    {
+    }
+
+    AptValueGC_PoolManager* const lpGcPool = gpGCPoolManager;
+    if (lpGcPool->GetFirstOutsideAllocation())
+    {
+        for (AptValue* lpValue = lpGcPool->GetFirstAptValue(); lpValue;
+             lpValue = lpGcPool->GetNextAptValue(lpValue))
+        {
+        }
+    }
+
+    delete lpNonGcPool;
+    // The original reloads the GC global after destroying the non-GC pool.
+    delete gpGCPoolManager;
 }
 
 // ===========================================================================

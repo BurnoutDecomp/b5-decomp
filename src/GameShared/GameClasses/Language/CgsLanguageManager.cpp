@@ -457,16 +457,11 @@ namespace CgsLanguage
         return true;
     }
 
-    // X360 0x82864000 -- UNVERIFIED body: that address is not in the export set, so
-    // this reconstruction is inferred from the ViewModule::Release call contract (the
-    // caller loops until true) and the <=0x28-byte size budget: reset the lifecycle
-    // stages, drop the allocator, report done. Export 0x82864000 to verify the exact
-    // stores before trusting this beyond the boot path.
+    // ARTIST 82864000..82864020: unload the actual table, then return true.
+    // There are no allocator or lifecycle-stage stores in the original body.
     bool LanguageManager::Release()
     {
-        meReleaseStage = E_RELEASESTAGE_DONE;
-        mePrepareStage = E_PREPARESTAGE_START;
-        mpLanguageAllocator = 0;
+        UnloadStringTable();
         return true;
     }
 
