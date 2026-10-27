@@ -1287,46 +1287,39 @@ namespace BrnGui
 
     bool GuiModule::Prepare()
     {
-        // ---- X360 GuiModule::Prepare @0x82518D68, STAGE 1 (the mGuiConfig fill) -----------
-        // The console's stage 1 reads seven pool ids and seven allocators out of the GameData
-        // OUTPUT buffer's AllocatorList. The selected PC path keeps its existing two rows:
-        //     *(gm + 311932) = AllocatorList::GetRWLinearResourceAllocator(list, 42)
-        // (0x82518DE0's `ori r21, r11, 0xC27C`), the allocator ColourCalibrationScreen::Update
-        // carves its texture-state resource from. Bank 42 is "Network Image Allocator" and is
-        // a real RW-LINEAR bank on this build (BrnMemoryMapData.h:109), created by
-        // GameDataModule::CreateAllocators.
-        // FLAG PC drive point: the console's module scheduler hands GuiModule::Prepare the
-        // GameData IO pair; on PC the pair is the one the whole scripted load already uses.
-        // The ordering that makes this safe is proven, not assumed: BrnGameModule::GamePrepare
-        // runs `mGameDataModule.Prepare(0,0)` to completion (returning false until done) and
-        // the loading flow -- which is what calls GuiModule::Prepare -- only runs once
-        // GamePrepare has returned done, so CreateAllocators has already registered bank 42.
-        // Read once here, exactly as the console reads it once in Prepare.
-        // NO LOCK PAIR OF ITS OWN (step-11 verifier catch): the only caller,
-        // InitialLoadingScreen's stage-2 leg in BrnGameMainFlowStates.cpp (:691 LockForRead ..
-        // :1073 Prepare() .. :789 UnlockForRead), already holds this buffer's read lock, and
-        // CgsModule::IOBuffer's lock is a single status BIT (CgsIOBuffer.h:26/:42), not a count --
-        // an inner Unlock would clear the caller's lock and its own UnlockForRead would then assert
-        // "Not locked for read". GetAllocatorList's read assert is satisfied by the caller's bracket.
-        mGuiConfig.mpTextureAllocator = 0;
-        mGuiConfig.mpRendererAllocator = 0;
+        // ARTIST 82518E9C..82519024: the complete original config, including
+        // the shared language/FSM bank. This selected PC entry borrows the same
+        // already read-locked GameData output; it does not acquire a second lock.
+        BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+        if (lpGameDataOutput->GetAllocatorList() == 0)
         {
-            BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
-                BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
-            if (lpGameDataOutput != 0)
-            {
-                // (IsBufferLockedForReading is protected; GetAllocatorList's own read assert
-                // is the check.)
-                const BrnResource::GameDataIO::AllocatorList* lpAllocators =
-                    lpGameDataOutput->GetAllocatorList();
-                if (lpAllocators != 0)
-                {
-                    mGuiConfig.mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
-                    mGuiConfig.mpRendererAllocator =
-                        lpAllocators->GetRWGeneralResourceAllocator(31);
-                }
-            }
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            lStream << "Invalid allocator list passed into BrnGui::GuiModule::Prepare";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 367);
+            CgsDev::Assert::EndAssert();
         }
+        mGuiConfig.miAptPersistentBunldePoolId = 8;
+        mGuiConfig.miAptStreamedbundlePoolId = 9;
+        mGuiConfig.miFontBundlePoolId = 0;
+        mGuiConfig.miFSMBunldePoolId = 11;
+        mGuiConfig.miLanguageBundlePoolId = 11;
+        mGuiConfig.miTexturesBundlePoolId = 12;
+        mGuiConfig.miGlobalTexturePoolId = 10;
+        mGuiConfig.mpAptAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(32);
+        mGuiConfig.mpFSMAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(38);
+        mGuiConfig.mpRendererAllocator =
+            lpGameDataOutput->GetAllocatorList()->GetRWGeneralResourceAllocator(31);
+        mGuiConfig.mpLanguageAllocator = lpGameDataOutput->GetAllocatorList()->GetHeapAllocator(38);
+        mGuiConfig.mpGuiStateAllocator = lpGameDataOutput->GetAllocatorList()->GetLinearAllocator(44);
+        mGuiConfig.mpTextureAllocator =
+            lpGameDataOutput->GetAllocatorList()->GetRWLinearResourceAllocator(42);
+        mGuiConfig.mpFlaptAllocator = lpGameDataOutput->GetAllocatorList()->GetLinearAllocator(66);
+        mGuiConfig.mpGuiStateAllocator->SetAlignment(16);
+        mGuiConfig.mpFlaptAllocator->SetAlignment(16);
 
         // Load VIDEOS\VIDEOLIST.BUNDLE synchronously (English; see MovieManager::Prepare) and
         // publish the manager so the renderer draws the active movie each frame (interim render
