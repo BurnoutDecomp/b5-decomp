@@ -3026,7 +3026,8 @@ namespace BrnDirector
     void MainDirector::BuildBehaviourSharedInfo(const DirectorInputOutput* lpIO,
                                                 s32 liPlayerCarIndex,
                                                 Camera::BehaviourSharedInfo& lSharedInfo,
-                                                ICE::CameraSpaceHandler& lCameraSpaces)
+                                                ICE::CameraSpaceHandler& lCameraSpaces,
+                                                bool lbPreScene)
     {
         const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
 
@@ -3048,7 +3049,11 @@ namespace BrnDirector
 
         f32 lfWorldTimestep       = 0.0f;
         f32 lfWorldNoSlomoTimestep = 0.0f;
-        if (lpSimTimer->IsRunning())                                    // [+36]
+        // ARTIST PreScene 0x8225538C gates on input->IsSimPaused(); PostScene
+        // 0x8224FDAC gates on the captured timer's running byte. A pause action
+        // can change the current pause state after the timer snapshot was taken.
+        const bool lbWorldAdvances = lbPreScene ? !lpInput->IsSimPaused() : lpSimTimer->IsRunning();
+        if (lbWorldAdvances)
         {
             lfWorldTimestep        = lpSimTimer->GetCurrentTimeStep();  // [+32] * [+28]
             lfWorldNoSlomoTimestep = lpSimTimer->GetBaseTimeStep();     // [+28]
@@ -3221,7 +3226,7 @@ namespace BrnDirector
         // UNCONDITIONALLY but only Constructs it behind a guard, so a default-initialised
         // object hands every ICE consumer 528 bytes of the PREVIOUS frame's stack.
         ICE::CameraSpaceHandler     lCameraSpaces = ICE::CameraSpaceHandler();
-        BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
+        BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces, true);
 
         // The behaviour manager does not consume the debug-printer interior.
         static u8 saOpaqueDebugPrinter[64]   = { 0 };
@@ -3268,7 +3273,7 @@ namespace BrnDirector
         // Zeroing costs one 528-byte stack clear per frame and makes the unconstructed case
         // DETERMINISTIC (mpGamePlayCam == 0), where the arm's own assert can see it.
         ICE::CameraSpaceHandler     lCameraSpaces = ICE::CameraSpaceHandler();
-        BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
+        BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces, false);
 
         static u8 saOpaqueDebugPrinter[64]   = { 0 };
 
