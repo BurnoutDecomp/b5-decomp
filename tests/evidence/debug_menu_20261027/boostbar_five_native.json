@@ -1,0 +1,20 @@
+{
+  "accepted_site_ids": [
+    "BrnGui::GuiCustRendererDebugComponent::OnActivate#0011",
+    "BrnGui::GuiCustRendererDebugComponent::OnActivate#0014",
+    "BrnGui::GuiCustRendererDebugComponent::OnActivate#0015",
+    "BrnGui::GuiCustRendererDebugComponent::OnActivate#0016",
+    "BrnGui::GuiCustRendererDebugComponent::OnActivate#0017"
+  ],
+  "tested_source": "f0b8f37b39b89390f61f1f0264c8b704950fb030",
+  "exe_sha256": "5072c6c3bcf0e64913dc7f15ba51e9395c2417d844324b70e6e7e83c8a8a282e",
+  "canonical_case": "PASS",
+  "states": 15,
+  "frames": 16,
+  "independent_review_sha256": "e694f0f18202a958a32d1c7d45084bf2ab4c78337212aa4f264848dc959887de",
+  "new_verified": 5,
+  "workflow_evidence": "progress/debug_menu/boostbar_five_native_20261027",
+  "current_dev_runtime_verified": false,
+  "wrapper_failure_retained": true,
+  "normal_package_unchanged": true
+}
