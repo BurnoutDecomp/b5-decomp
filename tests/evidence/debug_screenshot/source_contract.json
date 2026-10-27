@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "scope": "Exact production writer/formatter and actual bounded handoff/present/overlay expression; native lock/unlock body identity only.",
+  "candidate_definition_sha256": {
+    "handoff": "a20e69ab6bf6f1a4e1dce4c8f3e8be3b412f88ffd91004697271ad697292b4b3",
+    "terminal": "4321323b1feb4be71d0d5187f33ba2bd9bad0cd06d91ea99af477d88f47720f0",
+    "overlay_condition": "c0650ec76aa18dfe5ba6b8432c9ad0b5c52fb12cbda876344fd444c7a9e94504",
+    "writer": "1fc74af8f2501d228e7b79ed8c138187a2f868d07fbc5dce40b7939f890a581e",
+    "descriptor": "298ba5627688c0b2f11ecf62ff3896d25c1ada206d6a10eb59a06b1a66c9e4d5",
+    "formatter": "ca8ec6863b82da887387d5f211a63e3d36593f3bde74fd0ec3387362e2bf69c7",
+    "native_lock": "f2e6ae9f5c880e99ae5e8a2a79a05bd5b0e0b0f918cf4f7e700eb1edf5983a87",
+    "native_unlock": "e6fb71d0534d3434bd1d88599c972828b5c3242f7947af01915d1b1509b66769"
+  },
+  "legacy_snapshot_lf_sha256": "13405d844727f4ec6f423d236db6882b56acac794607a666969fdf8e0bb936da",
+  "fixture_inputs": {
+    "tests/DebugScreenshot.cpp": "cd74313c7efbceb21ae5ae7369ae4fcdd402defd66b0f13e076654952e714e1b",
+    "tests/run_debug_screenshot.py": "d87973c3d7088cb03021f827c277e5b4594435b14caa1d7ffe2b8547797819af",
+    "tests/evidence/debug_screenshot/test_plan.json": "e3364159add08dbf19a50421977c14a470ea088b9a687b863fcc84acd3b6366a",
+    "tests/fxgs_common.py": "6230372da7ef60e446a165470a61850964b7b7498576eaec93dbb58555ae9033",
+    "tests/online_save_route_owned.py": "c21a018a37c094eec2c6befcd19b8862f8c33c84b66f84c33c55eac600649179",
+    "src/pc/gcm/renderengine/pixelformat.h": "75e91afb605cb1c73e846bb8033174ecbef2d052dae76a6d9eb79669464658b0"
+  },
+  "native_boundary": "Only front-buffer present/lock/unlock are simulated for pixel data; real stdio files are used. Diagnostic/profiling sinks record calls only.",
+  "composition": "Native service-body identities are pinned; the whole device.cpp input is recorded without rejecting retained frame-request diagnostics outside those bodies."
+}
