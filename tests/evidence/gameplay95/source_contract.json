@@ -1,0 +1,265 @@
+{
+  "schema": 1,
+  "author_source_commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+  "author_workflow_commit": "6990e170e7f0d1993b59973f914ed6fc2b78c4e9",
+  "source_files": [
+    {
+      "path": "src/GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp",
+      "pre_commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "pre_raw_sha256": "749b05e6fc73ca157fcd3bb025e0606ce07615834fb699bdd9087d52b94f4643",
+      "pre_git_blob_sha1": "12e8bb187cade751c3dca73320ad5205ef86356a",
+      "pre_bytes": 550216,
+      "post_raw_sha256": "578d0db4916d4cd041fb9be04daa251210b27f916e3882023b5ccd701ca61e40",
+      "post_lf_sha256": "578d0db4916d4cd041fb9be04daa251210b27f916e3882023b5ccd701ca61e40",
+      "post_bytes": 551244,
+      "matches_sealed_6502_preimage": true
+    },
+    {
+      "path": "src/GameSource/Physics/VehicleManager/BrnVehicleManager_ValidateRaceCarWorldContact.cpp",
+      "pre_commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "pre_raw_sha256": "11732a6ce06d17a466f25cab6436840ddb897618cd35bc221efe97d85fc2a00e",
+      "pre_git_blob_sha1": "db2290453c75b544d4afae09c7de49a88e4779a4",
+      "pre_bytes": 55158,
+      "post_raw_sha256": "22592d2867cdf74bcb40b2ca8b8c68f4eab13182bee9620fd16a439a940888a9",
+      "post_lf_sha256": "22592d2867cdf74bcb40b2ca8b8c68f4eab13182bee9620fd16a439a940888a9",
+      "post_bytes": 55303,
+      "matches_sealed_6502_preimage": true
+    },
+    {
+      "path": "src/GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule_Render.cpp",
+      "pre_commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "pre_raw_sha256": "18f5da9097c1ecd29633a2279b638ccd706582cefc05b3ce80d7fc8ea29202f4",
+      "pre_git_blob_sha1": "6901b406a7f6da99e49730e7550539cafdbb6ab7",
+      "pre_bytes": 145605,
+      "post_raw_sha256": "b56d4987b9d3d72138f596e4b35bc729253bcfb0609b823926a454b046eb9473",
+      "post_lf_sha256": "b56d4987b9d3d72138f596e4b35bc729253bcfb0609b823926a454b046eb9473",
+      "post_bytes": 144733,
+      "matches_sealed_6502_preimage": true
+    }
+  ],
+  "providers": [
+    {
+      "path": "src/GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "487714016d69a6bdad54f317e805fbf70e2411a176ca5065c820b0312079e1ac",
+      "lf_sha256": "487714016d69a6bdad54f317e805fbf70e2411a176ca5065c820b0312079e1ac",
+      "git_blob_sha1": "249c882d5cd03f980e6306e87fe991df44fc2d6d",
+      "bytes": 133931
+    },
+    {
+      "path": "src/GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "d8af5e5eecbf1aab34e6a98bb7cf9f55ee481c1d9cb073bb2a1ec76f29125131",
+      "lf_sha256": "d8af5e5eecbf1aab34e6a98bb7cf9f55ee481c1d9cb073bb2a1ec76f29125131",
+      "git_blob_sha1": "187fe4519fb04c3dce1a4f4083f0be0aeb0a2910",
+      "bytes": 17097
+    },
+    {
+      "path": "src/GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "00fab50700b93950bda95b8ef5950593671e7edd6c5444a4d3f00fce67cbd698",
+      "lf_sha256": "00fab50700b93950bda95b8ef5950593671e7edd6c5444a4d3f00fce67cbd698",
+      "git_blob_sha1": "e1bae935a463c63707675968980f87f4b42382a2",
+      "bytes": 4817
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.cpp",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "288f450fadbed02f1eb4f87e04ee7d0b00ca4c98774246a4db2d5ece2a375886",
+      "lf_sha256": "288f450fadbed02f1eb4f87e04ee7d0b00ca4c98774246a4db2d5ece2a375886",
+      "git_blob_sha1": "1aeddd58550cfe8784769ab8b90d2e77c1326730",
+      "bytes": 8340
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "97129bc97af07d7499925a56dc1676eddc2d6d1fba9fa232e6c17db747200fc2",
+      "lf_sha256": "97129bc97af07d7499925a56dc1676eddc2d6d1fba9fa232e6c17db747200fc2",
+      "git_blob_sha1": "f0c0b4a728b46a21d59172e536cc333a12c3bc8f",
+      "bytes": 4903
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.cpp",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "ab64e57f14f6f6f1dee49b4e5371cfcabaa5d7f059fc67495aac7a0b67da25fd",
+      "lf_sha256": "ab64e57f14f6f6f1dee49b4e5371cfcabaa5d7f059fc67495aac7a0b67da25fd",
+      "git_blob_sha1": "c0b102c8446b034ed66da70ffddf1bb7999c445e",
+      "bytes": 34729
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "5dc1a1e1cb0e7c23c9bbf060d8df27c110d830e0ff0e9c7bf8c54c8ef13b0f9f",
+      "lf_sha256": "5dc1a1e1cb0e7c23c9bbf060d8df27c110d830e0ff0e9c7bf8c54c8ef13b0f9f",
+      "git_blob_sha1": "7c175277315f95ee3da1e3fe3c562d5a9721201a",
+      "bytes": 9933
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "35dd8fdb027e2f0f752b9afd4f5d93e196a0b6b66f52d4fb7cfa87b0d6487673",
+      "lf_sha256": "35dd8fdb027e2f0f752b9afd4f5d93e196a0b6b66f52d4fb7cfa87b0d6487673",
+      "git_blob_sha1": "be92641ea337ec4494e07c0b090fa8c550e66cc4",
+      "bytes": 12610
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.cpp",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "13f171990b1d34f58f3e462f8c3335fb57833d766c4688b44bd759898210e734",
+      "lf_sha256": "13f171990b1d34f58f3e462f8c3335fb57833d766c4688b44bd759898210e734",
+      "git_blob_sha1": "f7f8f20874ea0c642347891cce6058d68730936d",
+      "bytes": 33998
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "539faa6e7d6519fa162409caf158250a1b217cbe8f0044cb43195227dc8cbd98",
+      "lf_sha256": "539faa6e7d6519fa162409caf158250a1b217cbe8f0044cb43195227dc8cbd98",
+      "git_blob_sha1": "76103963e6f3d4ef1433957bdc218dc0f234dd5a",
+      "bytes": 10652
+    },
+    {
+      "path": "src/GameShared/GameClasses/Module/CgsVariableEventQueue.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "3c4da2211eddabcd7c31d97bc7a6a69e6c2a3222598fa0618bca428694d04e60",
+      "lf_sha256": "3c4da2211eddabcd7c31d97bc7a6a69e6c2a3222598fa0618bca428694d04e60",
+      "git_blob_sha1": "cd59e9223f292cf1e2029d47cba70f36ed88fdb6",
+      "bytes": 39881
+    },
+    {
+      "path": "src/GameShared/GameClasses/Module/CgsEventQueue.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "061acfc51ecd8ebb7c6795eeb93d3020750b8033e67a4791bac65dc1b337b933",
+      "lf_sha256": "061acfc51ecd8ebb7c6795eeb93d3020750b8033e67a4791bac65dc1b337b933",
+      "git_blob_sha1": "4e542c03c655508ee6e43746834a09fa728ad223",
+      "bytes": 697
+    },
+    {
+      "path": "src/GameShared/GameClasses/Core/CgsAssert.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
+      "lf_sha256": "df42ae34e232097e60d85c2abf7125fea0406d6be6aefcfb414539769baf4458",
+      "git_blob_sha1": "42100162fec0e6fee96d9991692422398739583d",
+      "bytes": 4328
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/CgsStrStream.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "77ef0067c55c9ba677d54be66a804b782093a94273676e0fcae79fd51fb7deba",
+      "lf_sha256": "77ef0067c55c9ba677d54be66a804b782093a94273676e0fcae79fd51fb7deba",
+      "git_blob_sha1": "e1068c3e93d65fdd63ae3d6fc72beba687f1492d",
+      "bytes": 5698
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/CgsStrStream.cpp",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "776842d20db1a31a28a2a021df426b040141535d67a7e39bbdc4d1d1d707af40",
+      "lf_sha256": "776842d20db1a31a28a2a021df426b040141535d67a7e39bbdc4d1d1d707af40",
+      "git_blob_sha1": "2ed5004d628cda57c97beabdd1eaebe2fdfe0c02",
+      "bytes": 7445
+    },
+    {
+      "path": "src/GameShared/GameClasses/Development/Log/CgsLog.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "27d76d0c147b70e39f57ad7c9465e84ebccf96271ff77ba7e14a1298e4e5b8b8",
+      "lf_sha256": "27d76d0c147b70e39f57ad7c9465e84ebccf96271ff77ba7e14a1298e4e5b8b8",
+      "git_blob_sha1": "45b984e4fad690a29ad007d08596af4f25590eef",
+      "bytes": 2974
+    },
+    {
+      "path": "src/GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "d0233580facc77e565ae0bd04cddc8569795b807f6941bab3e0b8bc9ad2d7160",
+      "lf_sha256": "d0233580facc77e565ae0bd04cddc8569795b807f6941bab3e0b8bc9ad2d7160",
+      "git_blob_sha1": "7ad18efcf1261c9640b24582307e76d84ccd934e",
+      "bytes": 1931
+    },
+    {
+      "path": "src/GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "266e1b68d179cb98174be78d5a5f384ee3c4463493ad51558aa10b5c20c0d865",
+      "lf_sha256": "266e1b68d179cb98174be78d5a5f384ee3c4463493ad51558aa10b5c20c0d865",
+      "git_blob_sha1": "ab3c9104d5f4bc6c2cc2483fcf5df920a522ee94",
+      "bytes": 505
+    },
+    {
+      "path": "src/GameShared/GameClasses/RenderWare/RwRGBA.cpp",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "d99f46e767dcb2ea7a95528da8e6f4960d05d7832e871d3c0ec52a09e83c63a1",
+      "lf_sha256": "d99f46e767dcb2ea7a95528da8e6f4960d05d7832e871d3c0ec52a09e83c63a1",
+      "git_blob_sha1": "d8af3d6df53f1d0aecf86730534d68a036796b3d",
+      "bytes": 340
+    },
+    {
+      "path": "src/pc/math/VmxFloat.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "111f98855bf3d49d25487eaafd2d4bc1152aa4e8887047310ae4842081776796",
+      "lf_sha256": "111f98855bf3d49d25487eaafd2d4bc1152aa4e8887047310ae4842081776796",
+      "git_blob_sha1": "ec6e89b00dcde865fa44292553c21bc743744930",
+      "bytes": 4544
+    },
+    {
+      "path": "src/pc/gcm/renderengine/VertexDescriptor.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "33e5eea16ab9e43ee1aa1247de9a8eb974224afa79506a5f4833b5d264809b77",
+      "lf_sha256": "33e5eea16ab9e43ee1aa1247de9a8eb974224afa79506a5f4833b5d264809b77",
+      "git_blob_sha1": "03fcac708fc45b9b9aae1ebda4ce97fdb50984e3",
+      "bytes": 4623
+    },
+    {
+      "path": "src/pc/gcm/renderengine/renderstates.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "2ce7426c31a0410bf4d8692b47f06109591dfc80a43494a1065a6b0028078522",
+      "lf_sha256": "2ce7426c31a0410bf4d8692b47f06109591dfc80a43494a1065a6b0028078522",
+      "git_blob_sha1": "6678edda9746616fc155268a6b90e5bc12d1827d",
+      "bytes": 21932
+    },
+    {
+      "path": "src/SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "9c720dd14d2452475b30d315453bcc32e4ae82a985a6c102f710787891b72b75",
+      "lf_sha256": "9c720dd14d2452475b30d315453bcc32e4ae82a985a6c102f710787891b72b75",
+      "git_blob_sha1": "b5d196affcd57a2f451f497a667e120db75f41ec",
+      "bytes": 5142
+    },
+    {
+      "path": "tests/fxgs_common.py",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "6230372da7ef60e446a165470a61850964b7b7498576eaec93dbb58555ae9033",
+      "lf_sha256": "6230372da7ef60e446a165470a61850964b7b7498576eaec93dbb58555ae9033",
+      "git_blob_sha1": "25fd753de3e4bf0f8755afcd8bcc8cbc19db5d0b",
+      "bytes": 8364
+    },
+    {
+      "path": "tests/online_save_route_owned.py",
+      "commit": "33c80e2393a34c7550a72867c1ddd6e5c11c6fb0",
+      "raw_sha256": "c21a018a37c094eec2c6befcd19b8862f8c33c84b66f84c33c55eac600649179",
+      "lf_sha256": "c21a018a37c094eec2c6befcd19b8862f8c33c84b66f84c33c55eac600649179",
+      "git_blob_sha1": "cf1633c6e0309c6b2d0ea72c671e2acf94af3906",
+      "bytes": 12783
+    }
+  ],
+  "fixture_files": [
+    {
+      "path": "tests/Gameplay95.cpp",
+      "lf_sha256": "d339bf570a4dab66b554fc969f1f8a59cceb4febc327202a56296cc6af02b3f9"
+    },
+    {
+      "path": "tests/run_gameplay95.py",
+      "lf_sha256": "2d120d5971253175b463c6c175893cb240a5e802344e230b9b88c1a0598dc2d1"
+    },
+    {
+      "path": "tests/evidence/gameplay95/test_plan.json",
+      "lf_sha256": "28b573a040e4c824fac0c06f35c1d2749f049fb00c3b73c865f7d24736e65f68"
+    },
+    {
+      "path": "tests/evidence/gameplay95/baseline_6502d53.json",
+      "lf_sha256": "245a7600250256bf1839f9786ba0b6e3a4e0da6f3f7f1e6df388dee79cf78dcb"
+    },
+    {
+      "path": "tests/evidence/gameplay95/baseline_11cbd50.json",
+      "lf_sha256": "e2296024bc76e249a541e35528ed59508e520cd4bdd352850aedcd8f8c34b4f5"
+    }
+  ],
+  "validation": "author-only static proposal; no compile, import, or fixture/case evaluation performed"
+}
