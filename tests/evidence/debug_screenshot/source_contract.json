@@ -13,7 +13,7 @@
   },
   "legacy_snapshot_lf_sha256": "13405d844727f4ec6f423d236db6882b56acac794607a666969fdf8e0bb936da",
   "fixture_inputs": {
-    "tests/DebugScreenshot.cpp": "cd74313c7efbceb21ae5ae7369ae4fcdd402defd66b0f13e076654952e714e1b",
+    "tests/DebugScreenshot.cpp": "2a69d7420878492069697979e6ee1f0fd8b48fe3ae1b4a122bd0ee78121a37d4",
     "tests/run_debug_screenshot.py": "d87973c3d7088cb03021f827c277e5b4594435b14caa1d7ffe2b8547797819af",
     "tests/evidence/debug_screenshot/test_plan.json": "e3364159add08dbf19a50421977c14a470ea088b9a687b863fcc84acd3b6366a",
     "tests/fxgs_common.py": "6230372da7ef60e446a165470a61850964b7b7498576eaec93dbb58555ae9033",

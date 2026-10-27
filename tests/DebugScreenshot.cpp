@@ -1,4 +1,8 @@
 // Production screenshot writer + exact request/present slices. No game or D3D device.
+// This fixture uses public owner storage; do not expose STL private members.
+// Shared engine-access macros otherwise change MSVC standard-library symbols.
+#undef private
+#undef protected
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <algorithm>
