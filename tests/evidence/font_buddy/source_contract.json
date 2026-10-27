@@ -141,8 +141,9 @@
     },
     {
       "path": "src/GameSource/Network/Debug Components/BrnNetworkImageManagerDebugComponent.cpp",
-      "lf_sha256": "52c115978848e59b551b3d2e96465a005d883d409109a78fd42bee866a8baad0",
-      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+      "lf_sha256": "1c5f2fbfc688d497e2bcf53bf32479aff432cb1891fad917aba36122f6814234",
+      "source_checkpoint": "b2176a78f27b06a0f7e0e2b93b151055049926a3",
+      "composition_scope": "All20 extracted definitions unchanged; only the reviewed Image Construct base-call deletion changes this provider file."
     },
     {
       "path": "src/GameShared/GameClasses/Development/CgsStrStream.cpp",
