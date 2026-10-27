@@ -18324,9 +18324,10 @@ void TrafficEntityModule::UpdateCrashSlider()
         mfShowtimeTimer += mfSimTimeStep;
 
         // 0x82715AC4..0x82715AD8. Either the scheduled gap elapsed, or the player has been
-        // mis-bouncing for 3 s -- both mint a fresh crash spike.
-        if (mfShowtimeTimer >= mfShowtimeTimeNextCrashSpike ||
-            mfShowtimeMisBounceTimer >= KF_CRASH_SLIDER_MISBOUNCE_SPIKE_TIME)
+        // mis-bouncing for 3 s -- both mint a fresh crash spike. The PPC branches
+        // test !LT, so unordered inputs also take the spike arm.
+        if (!(mfShowtimeTimer < mfShowtimeTimeNextCrashSpike) ||
+            !(mfShowtimeMisBounceTimer < KF_CRASH_SLIDER_MISBOUNCE_SPIKE_TIME))
         {
             // 0x82715AE0..0x82715AF0 -- score pinned at 100 with the decay switched OFF, so
             // it HOLDS until the five-second block below turns the decay back on.
@@ -18344,8 +18345,9 @@ void TrafficEntityModule::UpdateCrashSlider()
             // fmadds and adds the 30 after, so the gap is 30..45 s from now.
             mfShowtimeMisBounceTimer     = 0.0f;
             mfShowtimeTimeLastCrashSpike = mfShowtimeTimer;
-            mfShowtimeTimeNextCrashSpike = mfShowtimeTimer
-                                         + lfSpikeGapJitter * KF_CRASH_SLIDER_SPIKE_GAP_VARIATION
+            mfShowtimeTimeNextCrashSpike = std::fma(lfSpikeGapJitter,
+                                                  KF_CRASH_SLIDER_SPIKE_GAP_VARIATION,
+                                                  mfShowtimeTimer)
                                          + KF_CRASH_SLIDER_SPIKE_GAP;
         }
 
@@ -18353,7 +18355,8 @@ void TrafficEntityModule::UpdateCrashSlider()
         // ⚠️ The console parks mfShowtimeTimeLastCrashSpike at the NEXT spike time, not at
         // "now" -- that is what makes this block fire exactly once per spike instead of every
         // frame afterwards (`lfs f12, 0(r30)` reads +0x724B4, stores to +0x724B8).
-        if (mfShowtimeTimer - mfShowtimeTimeLastCrashSpike >= KF_CRASH_SLIDER_SPIKE_HOLD_TIME)
+        // blt skips this arm only for an ordered value below the hold time.
+        if (!(mfShowtimeTimer - mfShowtimeTimeLastCrashSpike < KF_CRASH_SLIDER_SPIKE_HOLD_TIME))
         {
             mfShowtimeTimeLastCrashSpike  = mfShowtimeTimeNextCrashSpike;
             mfCrashSliderCrashScoreFactor = KF_CRASH_SLIDER_FACTOR_AFTER_SPIKE;
@@ -18364,17 +18367,21 @@ void TrafficEntityModule::UpdateCrashSlider()
     // 0x82715BA4..0x82715BDC. Below "1 point" the score is not interesting; otherwise it
     // decays proportionally (`fnmsubs f0, f12, f0, f0` == score - decay*dt*score) and is
     // clamped to [0, 100] with two fsels.
-    if (mfCrashSliderCrashScore <= KF_CRASH_SLIDER_MIN_INTERESTING)
+    // ble tests !GT: an unordered score follows the same zeroing arm.
+    if (!(mfCrashSliderCrashScore > KF_CRASH_SLIDER_MIN_INTERESTING))
     {
         mfCrashSliderCrashScore = 0.0f;
     }
     else
     {
         const f32 lfDecayThisFrame = mfCrashSliderCrashScoreDecay * mfSimTimeStep;
-        f32 lfScore = mfCrashSliderCrashScore - lfDecayThisFrame * mfCrashSliderCrashScore;
+        f32 lfScore = -std::fma(lfDecayThisFrame, mfCrashSliderCrashScore,
+                               -mfCrashSliderCrashScore); // fnmsubs: one rounding, then negate
 
-        if (lfScore < 0.0f)                       { lfScore = 0.0f; }
-        if (lfScore > KF_CRASH_SLIDER_MAX_SCORE)  { lfScore = KF_CRASH_SLIDER_MAX_SCORE; }
+        // Preserve both fsel selectors: an unordered decay result selects 100.
+        lfScore = (-lfScore >= 0.0f) ? 0.0f : lfScore;
+        lfScore = (KF_CRASH_SLIDER_MAX_SCORE - lfScore >= 0.0f)
+                ? lfScore : KF_CRASH_SLIDER_MAX_SCORE;
         mfCrashSliderCrashScore = lfScore;
     }
 
@@ -18389,8 +18396,8 @@ void TrafficEntityModule::UpdateCrashSlider()
     // 0.01: everything below 10 points reads as zero, 100 points reads as one.
     f32 lfFinal = (mfCrashSliderCrashScore - KF_CRASH_SLIDER_ZERO_POINT)
                 * KF_CRASH_SLIDER_RECIP_RANGE;
-    if (lfFinal < 0.0f) { lfFinal = 0.0f; }
-    if (lfFinal > 1.0f) { lfFinal = 1.0f; }
+    lfFinal = (-lfFinal >= 0.0f) ? 0.0f : lfFinal;
+    lfFinal = (1.0f - lfFinal >= 0.0f) ? lfFinal : 1.0f;
     mfCrashSliderFinalValue = lfFinal;
 }
 
