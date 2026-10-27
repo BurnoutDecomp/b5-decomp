@@ -455,16 +455,20 @@ namespace
     }
 
     // Bind every sign to its apt object. The first pass reads each sign's authored stage
-    // position (a 2048 x 2048 stage) off its controller and maps it into the world rect; later
+    // position off its controller and maps it into the world rect; later
     // passes keep the position already stored. Every sign then gets its road id, its "RD_"
     // artwork with the post shown, and is made visible.
     void RoadSignIconManager::SetupComponent()
     {
         Vector4 lv4StageRect;
-        lv4StageRect.x = 0.0f;
-        lv4StageRect.y = 0.0f;
-        lv4StageRect.z = 2048.0f;
-        lv4StageRect.w = 2048.0f;
+        // FLAG PC data correction: intentional ARTIST divergence. The retained
+        // RoadIconComponent coordinates and map artwork use different rectangles.
+        // Convert from the corrected authoring rectangle before caching world
+        // positions, keeping sign rendering and icon navigation aligned.
+        lv4StageRect.x = 154.4f;
+        lv4StageRect.y = -141.8f;
+        lv4StageRect.z = 2425.3f;
+        lv4StageRect.w = 2115.5f;
 
         for (s32 liIndex = 0; liIndex < GetNumIcons(); ++liIndex)
         {

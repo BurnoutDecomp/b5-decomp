@@ -197,10 +197,11 @@ namespace BrnDirector
         // NOT an X360 function -- the shared prologue of the two passes above (the console
         // builds the same ~1540-byte BehaviourSharedInfo on its own stack inside each). The
         // CameraSpaceHandler is the CALLER's stack object on the console too, so it is passed
-        // in by reference rather than returned.
+        // in by reference rather than returned. The two phases retain their distinct
+        // world-clock gates: current pause state before scene queries, timer status after.
         void BuildBehaviourSharedInfo(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex,
                                       Camera::BehaviourSharedInfo& lSharedInfo,
-                                      ICE::CameraSpaceHandler& lCameraSpaces);
+                                      ICE::CameraSpaceHandler& lCameraSpaces, bool lbPreScene);
 
         // NOT an X360 function -- the shared prologue of the console's two CollisionPolicySharedInfo
         // builds (PreScene 0x822557B4..0x82255830, PostScene 0x8224FE18..0x8224FF28). Added
