@@ -99,6 +99,9 @@
 #include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include <stdlib.h> // getenv / atoi ([deform-upload] control, host-side diagnostic only)
 
+// The selector backing DeformationDebugComponent::OnActivate's "Render car part" control.
+namespace BrnPhysics { namespace Deformation { extern s32 giDebugOnlyRenderThisCarPart; } }
+
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied
 // by the CgsShaderConstants TU). Mirrors the committed extern in the sibling TUs.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
@@ -717,9 +720,9 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
     // ---- the body-part loop -------------------------------------------------
     // `if (*(this + 99147))` -- the module's own render switch (see the header's
-    // two-point offset fit). dword_82CDB49C is a debug "draw only this part index"
-    // filter (-1 == every part); it has no writer in the XEX, so the -1 path is the
-    // only reachable one and the filter is not modelled.
+    // two-point offset fit). ARTIST also reads the shared debug selector at
+    // dword_82CDB49C here: -1 draws every part; otherwise only the selected mesh index
+    // reaches the visibility/model/detached-transform and submission path.
     if ( mbRenderCarsDuringCrash && !CgsPC::Reflections::IsPlayerWheelCapture() )
     {
         const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrDetachedParts =
@@ -751,6 +754,14 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
         for ( u32 luPartIdx = 0; luPartIdx < lpCarGraphicsSpec->muPartsCount; ++luPartIdx )
         {
+            // ARTIST 0x822CFF3C..0x822CFF50: -1 bypasses this gate; otherwise compare
+            // the selected debug mesh id with the loop's part index and skip on mismatch.
+            const s32 liSelectedPart = BrnPhysics::Deformation::giDebugOnlyRenderThisCarPart;
+            if ( liSelectedPart != -1 && liSelectedPart != static_cast< s32 >( luPartIdx ) )
+            {
+                continue;
+            }
+
             if ( !lpRenderParams->IsPartVisible( static_cast< u8 >( luPartIdx ) ) )
             {
                 continue;

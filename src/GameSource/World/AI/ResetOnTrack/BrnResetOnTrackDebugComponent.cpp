@@ -27,11 +27,9 @@ namespace
     const f32 KF_MPH_TO_METRES_PER_SECOND = 0.44704f;
     const f32 KF_DEGREES_PER_RADIAN = 57.295780181884766f; // flt_820C3B48
 
-    // Mutable source-level shadow for flt_830180B0. findinit identifies a short leaf
-    // writer at 0x82C6D0C0 that stores (1.0 / 0.44704), but its startup registration
-    // or other caller has not been pinned. Preserve the reader dependency without
-    // asserting that the image's initial zero is the runtime value.
-    f32 gResetSpeedDisplayScale;
+    // ARTIST initializer @0x82C6D0C0 computes 1.0 / flt_82F31928 (0.44704) and
+    // stores flt_830180B0; RenderHUD reads it at 0x82778928 for the mph display.
+    const f32 gResetSpeedDisplayScale = 1.0f / KF_MPH_TO_METRES_PER_SECOND;
 
     const CgsDev::RGBA K_WHITE = 0xFFFFFFFFu;
     const CgsDev::RGBA K_CYAN  = 0xFF00FFFFu;
