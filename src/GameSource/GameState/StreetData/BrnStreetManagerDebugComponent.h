@@ -67,7 +67,6 @@ namespace BrnGameState
         // inline site; it is deliberately NOT touched here (faithful to the asm).
         void Construct( StreetManager* lpStreetManager )
         {
-            DebugComponent::Construct();
             miNumberOfRoadRulesToWin = 0;
             mpStreetManager          = lpStreetManager;
         }

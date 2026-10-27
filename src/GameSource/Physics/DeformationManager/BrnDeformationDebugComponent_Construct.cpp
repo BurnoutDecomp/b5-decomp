@@ -54,7 +54,6 @@ namespace Deformation
     // =============================================================================================
     void DeformationDebugComponent::Construct(DeformationManager* lpDeformationManager)
     {
-        CgsDev::DebugComponent::Construct();   // base two-phase init (X360 folded body)
 
         CGS_ASSERT( lpDeformationManager != nullptr, "lpDeformationManager" );   // BrnDeformationDebugComponent.cpp:158
         mpDeformationManager = lpDeformationManager;

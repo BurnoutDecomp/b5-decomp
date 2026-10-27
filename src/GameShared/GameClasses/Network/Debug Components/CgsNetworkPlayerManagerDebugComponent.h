@@ -49,7 +49,6 @@ namespace CgsNetwork
         // The lifecycle is inlined into PlayerManager's Construct / Prepare / Release / Destruct.
         void Construct(PlayerManager* lpPlayerManager)
         {
-            CgsDev::DebugComponent::Construct();
             mpPlayerManager = lpPlayerManager;
             Register();
             mbDrawBandwidthUsage          = false;

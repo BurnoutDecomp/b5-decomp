@@ -35,7 +35,6 @@ namespace BrnWorld
     // emitted here as an empty COMDAT-folded body @ 0x8284CB38.)
     void TriggerEntityModuleDebugComponent::Construct(TriggerEntityModule* lpTriggerEntityModule)
     {
-        DebugComponent::Construct();
 
         CGS_ASSERT(lpTriggerEntityModule != nullptr, "lpTriggerEntityModule != NULL");
         mpTriggerEntityModule = lpTriggerEntityModule;

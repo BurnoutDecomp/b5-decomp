@@ -176,7 +176,6 @@ namespace BrnResource
     // Every string below is a baked .rdata literal (stw aFeatures.../aCars.../aGameModes...).
     void DLCDebugComponent::Construct()
     {
-        CgsDev::DebugComponent::Construct();   // base two-phase init (X360 folded body)
 
         std::memset(mapcFeatureNames, 0, sizeof(mapcFeatureNames));   // memset(this+0xC, 0, 100)
 

@@ -444,7 +444,6 @@ namespace BrnResource
     // the base Construct and these member stores at the embedded member.
     void DebugComponent::Construct(GameDataModule* lpModule, rw::IResourceAllocator* lpAllocator)
     {
-        CgsDev::DebugComponent::Construct();
 
         mpModule = lpModule;
         mbShowHud = true;

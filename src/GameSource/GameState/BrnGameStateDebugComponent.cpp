@@ -148,7 +148,6 @@ namespace
     // Byte +0x17 and the text buffer are intentionally left untouched, as in ARTIST.
     void GameStateDebugComponent::Construct(GameStateModule* lpGameStateModule)
     {
-        DebugComponent::Construct();
         CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule != NULL");
 
         mpGameStateModule = lpGameStateModule;

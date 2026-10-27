@@ -39,7 +39,6 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void StuntManagerDebugComponent::Construct(StuntManager* lpStuntManager)
     {
-        DebugComponent::Construct();
 
         mpStuntManager = lpStuntManager;
 

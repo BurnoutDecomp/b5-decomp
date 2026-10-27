@@ -68,7 +68,6 @@ namespace BrnGameState
     void ResetPlayerDebugComponent::Construct(GameStateModule* lpGameStateModule)
     {
         // Base init (the X360 folds the CgsDev::DebugComponent::Construct body in via ICF).
-        DebugComponent::Construct();
 
         CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule != NULL");
 

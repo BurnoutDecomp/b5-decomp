@@ -131,7 +131,6 @@ namespace BrnEffects
     {
         // Base debug-component construction (the X360 inlines DebugComponent's trivial body,
         // which the linker folded to a shared empty function - semantically the base ctor).
-        DebugComponent::Construct();
 
         CGS_ASSERT(lpEffectsModule != NULL, "lpEffectsModule != NULL");
         mpEffectsModule = lpEffectsModule;

@@ -71,7 +71,6 @@ namespace CgsLanguage
         mrSeconds  = 0.0f;
         mrDistance = 1000.0f;
 
-        CgsDev::DebugComponent::Construct();   // base two-phase init (X360 tail call)
     }
 
     const char* LanguageManagerDebugComponent::GetName() const

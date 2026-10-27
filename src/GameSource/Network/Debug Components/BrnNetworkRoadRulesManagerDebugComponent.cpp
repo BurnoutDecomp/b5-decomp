@@ -24,7 +24,6 @@ namespace BrnNetwork
 {
     void RoadRulesManagerDebugComponent::Construct( NetworkRoadRulesManager* lpRoadRulesManager )
     {
-        CgsDev::DebugComponent::Construct();   // base two-phase init
         mpRoadRulesManager = lpRoadRulesManager;
         Register();
     }

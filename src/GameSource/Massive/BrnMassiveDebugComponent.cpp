@@ -42,7 +42,6 @@ void BrnMassiveDebugComponent::Construct(const char* const* lpapcMassiveNames, s
     mfLineSpacing      = 1.5f;
     miDebugSubscriber  = -1;
 
-    CgsDev::DebugComponent::Construct();
 }
 
 const char* BrnMassiveDebugComponent::GetName() const

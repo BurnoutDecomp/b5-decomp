@@ -116,7 +116,6 @@ namespace BrnProgression
     void ProgressionDebugComponent::Construct(ProgressionManager* lpProgressionManager,
                                               BrnGameState::ModeManager* lpModeManager)
     {
-        CgsDev::DebugComponent::Construct();
 
         mpProgressionManager = lpProgressionManager;
         mpModeManager = lpModeManager;

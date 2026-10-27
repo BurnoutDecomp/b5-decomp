@@ -172,7 +172,6 @@ namespace Vehicle
     // ========================================================================================
     void PhysicalTrafficManagerDebugComponent::Construct(PhysicalTrafficManager* lpTrafficManager)
     {
-        DebugComponent::Construct();                    // bl <empty> @0x82636DF8
 
         mpTrafficManager           = lpTrafficManager;  // stw  r31,   0x0C(r29)
         mbDrawTrafficAirRams       = false;             // stb  0,     0x10(r29)

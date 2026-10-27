@@ -52,7 +52,6 @@ namespace
 // @0x827B1828.
 void WorldDebugComponent::Construct(WorldModule* lpWorldModule)
 {
-    CgsDev::DebugComponent::Construct();
     CGS_ASSERT(lpWorldModule != nullptr, "lpWorldModule != NULL");
 
     mpWorldModule = lpWorldModule;

@@ -34,7 +34,6 @@ namespace BrnDirector
 // ----------------------------------------------------------------------------
 void DebugComponent::Construct(DirectorModule* lpDirectorModule)
 {
-    CgsDev::DebugComponent::Construct();
 
     CGS_ASSERT(lpDirectorModule != 0, "lpCameraModule != NULL");
 
