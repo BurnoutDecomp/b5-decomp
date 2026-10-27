@@ -87,13 +87,14 @@ namespace BrnNetwork
         const u8 KU8_NEWLINE = 0x0A; // 10
 
         // Publish the downloaded terms-of-service text to the front end under KPC_TOS_TEXT_ID.
-        void PublishTosText(BrnNetworkModule* lpNetworkModule, CgsUnicode::CgsUtf8* lpTosText)
+        void PublishTosText(BrnNetworkModule* lpNetworkModule, CgsUnicode::CgsUtf8* lpTosText,
+                            CgsGui::GuiEventAddLocalisedTextPointer::EOperation leOperation)
         {
             CgsGui::GuiEventAddLocalisedTextPointer lEvent;
-            lEvent.miMarker = 1;
-            std::strncpy(lEvent.macId, KPC_TOS_TEXT_ID,
+            lEvent.meOperation = leOperation;
+            std::strncpy(lEvent.macIdToAddToDatabase, KPC_TOS_TEXT_ID,
                          CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
-            lEvent.mpText = lpTosText;
+            lEvent.mpString = lpTosText;
             lpNetworkModule->AddOutputGuiEvent<CgsGui::GuiEventAddLocalisedTextPointer>(lEvent);
         }
     }
@@ -294,8 +295,9 @@ namespace BrnNetwork
             mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_NO_AGREEMENT, 0);
         }
 
-        // Re-publish the terms-of-service text to the front end and suspend the config download.
-        PublishTosText(mpNetworkModule, mpTOS);
+        // Remove the borrowed terms-of-service pointer, then suspend the config download.
+        PublishTosText(mpNetworkModule, mpTOS,
+                       CgsGui::GuiEventAddLocalisedTextPointer::E_OPERATION_REMOVE);
         mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent()->Suspend();
     }
 
@@ -629,7 +631,8 @@ namespace BrnNetwork
             mpTOS = static_cast<CgsUnicode::CgsUtf8*>(CgsNetwork::ServerInterfaceDirtySock::MemAlloc(liBufferSize, 0, 0));
             CgsUnicode::Copy(mpTOS, lpText);
 
-            PublishTosText(mpNetworkModule, mpTOS);
+            PublishTosText(mpNetworkModule, mpTOS,
+                           CgsGui::GuiEventAddLocalisedTextPointer::E_OPERATION_ADD);
             lpHttp->DestroyHttpsDownload();
             mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_TOS, 0);
             meSubState = E_SUBSTATE_WAITING_SELECTION;

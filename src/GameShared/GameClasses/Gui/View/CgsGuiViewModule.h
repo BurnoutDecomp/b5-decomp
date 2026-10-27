@@ -120,9 +120,9 @@ namespace CgsGui
         // bool show/hide event (type 33) onto the output queue.
         void ProcessIncomingAptEvent(const void* lpEvent, s32 liEventId);
 
-        // X360 0x8285ED00 -- NOT YET RECONSTRUCTED (ledger dossier holds the reviewed
-        // body): the language view events (10-12). Land with the language-ownership
-        // slice.
+        // ARTIST8285ED00: format the original localised component value(10),
+        // reject deprecated11, or add/remove the borrowed text pointer(12).
+        // Removal posts the original hash acknowledgement13 on the owned view queue.
         void ProcessIncomingLanguageEvent(const void* lpEvent, s32 liSize, s32 liEventId,
                                           ViewIO::OutputBuffer* lpOutput);
 
