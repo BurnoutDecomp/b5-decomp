@@ -1251,8 +1251,9 @@ namespace BrnGameState
 {
     // -----------------------------------------------------------------------
     // @ 0x82317268. qsort comparator over SectionWalkData: orders the collected
-    // portals by ascending absolute entry angle (DecFIGS: two rw::math::fpu::
-    // Abs<float> reads of mfEntryAngle, deoptimised here to fabsf).
+    // portals by descending absolute entry angle. ARTIST 0x82317268..88
+    // returns +1 when |first| < |second|, and -1 otherwise (including ties).
+    // Side exits must be visited before bends farther along the forward road.
     // -----------------------------------------------------------------------
     int32_t CompareSectionWalkData( const void* lpData1, const void* lpData2 )
     {
@@ -1262,11 +1263,7 @@ namespace BrnGameState
         const f32 lfAbsAngle1 = fabsf( lpWalkData1->mfEntryAngle );
         const f32 lfAbsAngle2 = fabsf( lpWalkData2->mfEntryAngle );
 
-        if ( lfAbsAngle1 < lfAbsAngle2 )
-            return -1;
-        if ( lfAbsAngle1 > lfAbsAngle2 )
-            return 1;
-        return 0;
+        return lfAbsAngle1 < lfAbsAngle2 ? 1 : -1;
     }
 
     // -----------------------------------------------------------------------
