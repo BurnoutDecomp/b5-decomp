@@ -37,6 +37,10 @@ extern unsigned int gAptCommonConfig[17];   // unk_82F733B8 (68 bytes + the trai
 // (0x10000, 0x4000, 0x10000, 0x4000). Returns the GC pool. Body in AptInit.cpp.
 void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogmaOvf);
 
+// ARTIST82AE9298 / native64 sub_14082DB90: finish the original diagnostic
+// walks and destroy both initialized pool managers. Aliases are not nulled.
+void AptAllocatorShutdown();
+
 // InitializeApt @0x82848E50 -- the keystone host bring-up: the exact 6-call sequence
 // (allocator + update + render + create-target + change-target + [ext-object]). `pAptAux`
 // is the CgsGui::AptAux instance (the console's a1); the create-target result is stored
