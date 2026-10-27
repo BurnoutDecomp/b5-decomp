@@ -369,6 +369,9 @@ void RaceCarEntityModule::Construct()
     // X360 Construct @0x822FDBA4 / @0x822FDBAC seeds +0x1834A to 0 and +0x18349 to 1.
     mbRivalDebug = false;
     mbDisplayPlayerCarPosition = true;
+    // ARTIST 822FDBDC/E4: both inputs to the tilt-steering enable gate start disabled.
+    mbPaybackSixaxisSteering = false;
+    mbSixaxisSteeringEnabled = false;
     mbInCarSelectScreen       = false;
     mbInCarModScreen          = false;
     meCarSelectResetType      = 0;     // E_CAR_SELECT_DONT_DROP
@@ -383,6 +386,26 @@ void RaceCarEntityModule::Construct()
     mpVehicleList        = 0;
     mpWheelList          = 0;
     mbCarColoursBound    = false;
+
+    // ARTIST 822FE1B8..822FE2A0 resets these editable values on every
+    // Construct call. In-class initializers alone do not reset a reused module.
+    DEBUG_mbOverrideDamage        = false;
+    DEBUG_mfVehicleScratchAmount  = 0.0f;
+    DEBUG_mfVehicleDustAmount     = 0.0f;
+    DEBUG_mfVehicleCrumpleAmount  = 0.0f;
+    DEBUG_mfSelfIlluminationR     = 0.0f;
+    DEBUG_mfSelfIlluminationG     = 0.0f;
+    DEBUG_mfSelfIlluminationB     = 0.0f;
+    DEBUG_mbOverrideCarColor      = false;
+    DEBUG_mfOverridePaintColorR   = 0.0f;
+    DEBUG_mfOverridePaintColorG   = 0.0f;
+    DEBUG_mfOverridePaintColorB   = 0.0f;
+    DEBUG_mfOverridePearlColorR   = 0.0f;
+    DEBUG_mfOverridePearlColorG   = 0.0f;
+    DEBUG_mfOverridePearlColorB   = 0.0f;
+    DEBUG_mbOverrideCarPalette    = false;
+    DEBUG_miPaletteIndex          = 0;
+    DEBUG_miColourIndex           = 0;
 
     // ⭐ 0x822FE274..0x822FE2AC -- the base-deformation mirror block. These five seats were NAMED
     // in this header but NEVER SEEDED here, so on the host they started as whatever the module's

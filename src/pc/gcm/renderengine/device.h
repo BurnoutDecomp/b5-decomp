@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "pc/gcm/renderengine/pixelformat.h"
 #include <Windows.h>
 
 struct IDirect3D9;
@@ -162,6 +163,17 @@ namespace renderengine
         static bool FrameBegin();
         static bool FrameBeginNoClear();
         static void ShowPixelBuffer();
+        // DWARF device.h:1383; ARTIST82B633E0..3410 corroborates each field.
+        struct LockedFrontBuffer
+        {
+            const void* pixelData;
+            PixelFormat format;
+            u32 pitch;
+            u16 width;
+            u16 height;
+        };
+        static bool LockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer);
+        static void UnlockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer);
         static bool ResizeDisplay(u32 luWidth, u32 luHeight);
         static bool PreparePresentationPC();
 

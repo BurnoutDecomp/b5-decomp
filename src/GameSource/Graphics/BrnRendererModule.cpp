@@ -7025,6 +7025,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         lRenderStage.Next(RENDER_PRESENT);
         renderengine::Device::ShowPixelBuffer();
         CgsDev::PerfMonGpu::StopProfiling();
+        TakeScreenshot();
         return;
     }
 
@@ -7085,7 +7086,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         if (lfFrameMs > lfBudgetMs * 1.10f) liBehind = 1;
         if (lfFrameMs > lfBudgetMs * 1.50f) liBehind = 2;
         if (lfFrameMs > lfBudgetMs * 2.00f) liBehind = 3;
-        RenderThreeThreadMonitors(liBehind < 3, liBehind < 2, liBehind < 1);
+        // ARTIST8240E194..E1E0 applies the same HUD/screenshot gate here.
+        if (mbRenderHudImmediateMode &&
+            (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
+            RenderThreeThreadMonitors(liBehind < 3, liBehind < 2, liBehind < 1);
     }
 
     CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDebug2d);
@@ -7097,6 +7101,8 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     lRenderStage.Next(RENDER_PRESENT);
     renderengine::Device::ShowPixelBuffer();
     CgsDev::PerfMonGpu::StopProfiling(); // ARTIST8240E244, after Present.
+    // ARTIST8240E2B4 consumes the request after the presented frame exists.
+    TakeScreenshot();
 }
 
 // FLAG PC-platform leaf: the modal loop consumes its own bank on the fenced
