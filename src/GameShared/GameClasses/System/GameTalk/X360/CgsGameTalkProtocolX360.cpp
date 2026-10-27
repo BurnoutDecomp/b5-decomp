@@ -49,13 +49,16 @@
 // Native Winsock declarations come from the real Windows SDK above.
 // FLAG PC-platform leaf: WSADATA, fd_set, sockaddr_in and SOCKET retain the
 // host API's real storage/alignment/handle width. Engine state and callbacks
-// remain the ARTIST transport; unavailable XNet startup remains external.
+// remain the ARTIST transport. The narrow PC XNet provider owns GameTalk's
+// startup; the following status read never acquires another WSA reference.
 // -------------------------------------------------------------------------------------
 static_assert(std::is_same<CgsGameTalk::SOCKET, ::SOCKET>::value,
               "GameTalk socket storage must match native WinSock SOCKET");
+struct XNetStartupParams;
 extern "C"
 {
-    int XNetStartup(const void* lpParams);
+    int __cdecl XNetStartup(XNetStartupParams* lpParams);
+    int __cdecl CgsPcGameTalkWinsockStartupStatus(unsigned short* lpuVersion);
     // Existing mounted XenonD3D9Shims.cpp provider: exact memcpy implementation.
     void* XMemCpy(void* lpDest, const void* lpSrc, u32 luSize);
 }
@@ -128,8 +131,8 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
 
     // XNetStartup parameters: { sizeofStruct=0x0D, cfgFlags=1, 0, 0, 0 }.
     // ARTIST82836EE4..6F00 clears all thirteen bytes before the size/flag stores.
-    unsigned char laXNetParams[13] = { KU_XNET_CFG_SIZEOFSTRUCT, 1 };
-    int liXNetError = XNetStartup(laXNetParams);
+    alignas(4) unsigned char laXNetParams[13] = { KU_XNET_CFG_SIZEOFSTRUCT, 1 };
+    int liXNetError = XNetStartup(reinterpret_cast<XNetStartupParams*>(laXNetParams));
     if (liXNetError)
     {
         CgsDev::Assert::BeginAssert();
@@ -141,8 +144,8 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
         CgsDev::Assert::EndAssert();
     }
 
-    WSADATA lWinsockData;
-    int liWsaError = WSAStartup(KU_WINSOCK_VERSION, &lWinsockData);
+    unsigned short luWinsockVersion = 0;
+    int liWsaError = CgsPcGameTalkWinsockStartupStatus(&luWinsockVersion);
     if (liWsaError)
     {
         CgsDev::Assert::BeginAssert();
@@ -154,12 +157,12 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
         CgsDev::Assert::EndAssert();
     }
 
-    if (lWinsockData.wVersion != static_cast<short>(KU_WINSOCK_VERSION))
+    if (luWinsockVersion != static_cast<short>(KU_WINSOCK_VERSION))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::MessageBufferPC lAssertBuffer;
         CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
-        lAssertStream << "Failed to get proper version of Winsock, got " << static_cast<u32>(lWinsockData.wVersion & 0xFFu) << "." << static_cast<u32>((lWinsockData.wVersion >> 8) & 0xFFu) << "\n";
+        lAssertStream << "Failed to get proper version of Winsock, got " << static_cast<u32>(luWinsockVersion & 0xFFu) << "." << static_cast<u32>((luWinsockVersion >> 8) & 0xFFu) << "\n";
         CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 107);
         CgsDev::Assert::EndAssert();
