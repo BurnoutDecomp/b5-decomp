@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "status": "author_expected_not_executed",
+  "ordered_check_ids": [
+    "handoff_update_cleared",
+    "handoff_dispatch_set",
+    "no_request_no_lock",
+    "no_request_no_counter",
+    "lock_fail_request_consumed",
+    "lock_fail_counter_unchanged",
+    "lock_fail_no_unlock",
+    "lock_fail_attempt_after_present",
+    "no_dir_no_creation",
+    "no_dir_request_consumed",
+    "no_dir_counter_advanced",
+    "no_dir_unlock",
+    "no_dir_original_open_failure",
+    "file_exists",
+    "header_exact",
+    "bottomup_bgr_exact",
+    "alpha_and_padding_removed",
+    "counter_filename_before_increment",
+    "success_request_consumed",
+    "success_counter_advanced",
+    "success_single_lock_unlock",
+    "success_post_present_order",
+    "idle_no_duplicate_capture",
+    "second_request_new_file",
+    "second_request_counter",
+    "fopen_collision_request_consumed",
+    "fopen_collision_counter_advanced",
+    "fopen_collision_unlocked",
+    "fopen_collision_not_replaced",
+    "overlay_hud_gate",
+    "overlay_idle_visible",
+    "overlay_request_false_hides",
+    "overlay_request_true_keeps"
+  ],
+  "variants": {
+    "candidate": {
+      "exit_code": 0,
+      "failure_ids": []
+    },
+    "unchanged011742": {
+      "exit_code": 1,
+      "failure_ids": [
+        "lock_fail_request_consumed",
+        "lock_fail_attempt_after_present",
+        "no_dir_request_consumed",
+        "no_dir_counter_advanced",
+        "no_dir_unlock",
+        "no_dir_original_open_failure",
+        "file_exists",
+        "header_exact",
+        "bottomup_bgr_exact",
+        "alpha_and_padding_removed",
+        "counter_filename_before_increment",
+        "success_request_consumed",
+        "success_counter_advanced",
+        "success_single_lock_unlock",
+        "success_post_present_order",
+        "second_request_new_file",
+        "second_request_counter",
+        "fopen_collision_request_consumed",
+        "fopen_collision_counter_advanced",
+        "fopen_collision_unlocked"
+      ]
+    }
+  },
+  "acceptance": "Both variants must compile and execute all33 checks. Missing body/compiler failures are not accepted as the negative control.",
+  "not_covered": [
+    "Native D3D9 readback/COM failure ownership",
+    "Actual menu input or native overlay pixels",
+    "Short fwrite/fclose failures requiring non-GPU interception or filesystem faults",
+    "Whole Render concurrency/dispatcher traversal"
+  ]
+}

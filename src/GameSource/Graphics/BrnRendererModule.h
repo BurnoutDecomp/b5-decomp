@@ -627,6 +627,9 @@ public:
     void DEBUGTriggerScreenShot(const char* lpcScreenShotText);
 
 private:
+    // ARTIST823F6730; original dispatch-side request consumer.
+    void TakeScreenshot();
+
     // Reset the render frame, point the interpreter at it, build
     // the per-frame DispatchObjectContext the console keeps on Render's stack, expand the GDL object
     // lists into mesh lists and sort every pass list. Returns false when the GDL ring never came

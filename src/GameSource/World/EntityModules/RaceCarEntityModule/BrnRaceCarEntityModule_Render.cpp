@@ -330,11 +330,9 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // v119 is the vector the console later uploads as shader constant 23
     // (`vmr128 v1, v119 ; SetShaderConstantData(23)` @0x822CFE64..0x822CFE70).
     //
-    // ⚠️ ONE DELIBERATE DIFFERENCE, and it removes a console defect rather than adding a
-    // PC one: on the console v119 is left UNINITIALISED when the debug bool is false, so
-    // constant 23 is uploaded from whatever VMX register 119 held. Seeding it to zero here
-    // is exactly what the existing constant-23 upload below already did before this wave,
-    // so no shipped value changes; what changes is that the debug arm now has a real home.
+    // ARTIST 822CF708/70C/718/720 zeros all four lanes of var_4D0; 822CF738
+    // addresses that stack vector and 822CF760 loads it into v119. The override-off
+    // value is therefore the original zero vector, not an uninitialized register.
     Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
     if ( DEBUG_mbOverrideDamage )
     {
@@ -711,17 +709,9 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
             22, reinterpret_cast< const Vector4* >( lpRenderParams->GetVerletOffsets() ) );
 
-        // 23 is the companion scale, and -- MEASURED against SHADERS_PC.BNDL's variable
-        // tables -- it is a PIXEL-shader constant (PS c5, declared by 5 programs), so it
-        // cannot move a vertex: it is shading only. It is uploaded as zero rather than left
-        // unset purely so the register carries a deterministic value instead of whatever the
-        // previous draw's PS c5 held.
-        // DELETE-WHEN the deformation debug component's scale has a real source.
-        // ⭐ 2026-08-17: the vector is now BUILT at the console's own position, from the
-        // DEBUG_mbOverrideDamage arm at the top of this function (crumple -> lane X,
-        // dust -> lane Z). At retail that arm never runs, so this still uploads the same
-        // zeros it did before; what changed is that the console's own producer is present
-        // instead of an unconditional literal.
+        // ARTIST 822CFE64..FE70 uploads the original v119 as constant 23.
+        // Its default is the four-lane zero vector initialized above; the debug
+        // override substitutes crumple in X and dust in Z before this upload.
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
     }
 

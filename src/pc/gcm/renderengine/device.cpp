@@ -1555,3 +1555,98 @@ void renderengine::Device::ShowPixelBuffer()
     renderengine::gpDiagLastResolveDest = nullptr;
     renderengine::guDiagWorldDraws = 0; renderengine::guDiagImBatches = 0; renderengine::guDiagImFullBlack = 0; renderengine::guDiagComposites = 0;
 }
+
+
+namespace renderengine
+{
+namespace
+{
+    IDirect3DSurface9* spLockedFrontBufferReadbackPC = nullptr;
+}
+}
+
+// FLAG PC-platform leaf: the owned PCFrameBuffer colour surface is retained
+// through Present. Copy that actual game frame, including original overlay
+// decisions, through the existing native D3D9 resolve/readback helper.
+bool renderengine::Device::LockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer)
+{
+    lrLockedFrontBuffer = {};
+    lrLockedFrontBuffer.format = PIXELFORMAT_NA;
+    IDirect3DSurface9* lpSource = nullptr;
+    IDirect3DSurface9* lpReadback = nullptr;
+    D3DSURFACE_DESC lDesc = {};
+    D3DLOCKED_RECT lLock = {};
+    bool lbLocked = false;
+    HRESULT lhr = D3DERR_INVALIDCALL;
+
+    if (gDevice && gPresentation.LastPresentSucceeded() && !spLockedFrontBufferReadbackPC)
+        lhr = PCGetBackBuffer(&lpSource);
+    if (SUCCEEDED(lhr))
+        lhr = lpSource->GetDesc(&lDesc);
+    if (SUCCEEDED(lhr) &&
+        (!lDesc.Width || !lDesc.Height || lDesc.Width > 0xFFFFu || lDesc.Height > 0xFFFFu ||
+         (lDesc.Format != D3DFMT_X8R8G8B8 && lDesc.Format != D3DFMT_A8R8G8B8)))
+        lhr = D3DERR_INVALIDCALL;
+    if (SUCCEEDED(lhr))
+        lhr = gDevice->CreateOffscreenPlainSurface(lDesc.Width, lDesc.Height, lDesc.Format,
+                                                  D3DPOOL_SYSTEMMEM, &lpReadback, nullptr);
+    if (SUCCEEDED(lhr))
+        lhr = ReadNativeColourTargetPC(lpSource, lpReadback, lDesc);
+    if (SUCCEEDED(lhr))
+    {
+        lhr = lpReadback->LockRect(&lLock, nullptr, D3DLOCK_READONLY);
+        lbLocked = SUCCEEDED(lhr);
+    }
+    if (SUCCEEDED(lhr) && (!lLock.pBits || lLock.Pitch < static_cast<INT>(lDesc.Width * 4u)))
+        lhr = D3DERR_INVALIDCALL;
+
+    if (SUCCEEDED(lhr))
+    {
+        lrLockedFrontBuffer.pixelData = lLock.pBits;
+        lrLockedFrontBuffer.format = lDesc.Format == D3DFMT_X8R8G8B8
+            ? PIXELFORMAT_X8R8G8B8 : PIXELFORMAT_A8R8G8B8;
+        lrLockedFrontBuffer.pitch = static_cast<u32>(lLock.Pitch);
+        lrLockedFrontBuffer.width = static_cast<u16>(lDesc.Width);
+        lrLockedFrontBuffer.height = static_cast<u16>(lDesc.Height);
+        spLockedFrontBufferReadbackPC = lpReadback;
+        lpReadback = nullptr;
+    }
+    else if (lbLocked)
+    {
+        lpReadback->UnlockRect();
+    }
+    if (lpReadback) lpReadback->Release();
+    if (lpSource) lpSource->Release();
+    if (FAILED(lhr))
+    {
+        char lacMessage[180];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[screenshot] front-buffer lock failed hr=%08X size=%ux%u format=%u\n",
+                      static_cast<unsigned>(lhr), lDesc.Width, lDesc.Height,
+                      static_cast<unsigned>(lDesc.Format));
+        CgsDev::Log::WriteToLog(lacMessage);
+        return false;
+    }
+    return true;
+}
+
+// FLAG PC-platform leaf: release only the surface retained by the successful
+// native lock. The original caller's descriptor remains unchanged after unlock.
+void renderengine::Device::UnlockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer)
+{
+    (void)lrLockedFrontBuffer;
+    if (spLockedFrontBufferReadbackPC)
+    {
+        const HRESULT lhr = spLockedFrontBufferReadbackPC->UnlockRect();
+        spLockedFrontBufferReadbackPC->Release();
+        spLockedFrontBufferReadbackPC = nullptr;
+        if (FAILED(lhr))
+        {
+            char lacMessage[96];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[screenshot] front-buffer unlock failed hr=%08X\n",
+                          static_cast<unsigned>(lhr));
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+    }
+}
