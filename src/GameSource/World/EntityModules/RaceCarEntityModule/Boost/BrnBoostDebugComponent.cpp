@@ -110,7 +110,7 @@ namespace BrnWorld
         BoostBurnout5& lrBoostBurnout5 = lpComponent->mpRaceCarEntityModule->mBoostManager.mBoostBurnout5;
 
         f32 lfBoostAmount = lrBoostBurnout5.mfMaxBoost;
-        if (lrBoostBurnout5.mfBoostAmount >= lfBoostAmount)
+        if (!(lrBoostBurnout5.mfBoostAmount < lfBoostAmount))
         {
             lfBoostAmount = 0.0f;
         }
