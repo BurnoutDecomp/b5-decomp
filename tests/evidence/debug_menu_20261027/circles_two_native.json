@@ -1,0 +1,18 @@
+{
+  "accepted_site_ids": [
+    "BrnWorld::WorldEntityModule::Construct#0002",
+    "BrnWorld::PropEntityModule::Construct#0001"
+  ],
+  "tested_source": "7d5a10bb41f23bd3f4a9f1ab72de047b15a6e789",
+  "tested_workflow": "8d886b7909a53a9bb5b072d1d736bd06f06e1fac",
+  "exe_sha256": "08ac2dfecd8607cd6e313ab8d89599345ceffc8a0cb929fcfa150a9376b7f39d",
+  "canonical_flow": "PASS",
+  "canonical_case": "FAIL_original_retained",
+  "independent_review_sha256": "263bea33e5d52ccae97d328d95ae62d4dd4b2f0a40c8c0c61a836e52b8e97ba2",
+  "states": 6,
+  "frames": 7,
+  "new_verified": 2,
+  "current_dev_runtime_verified": false,
+  "normal_package_unchanged": true,
+  "workflow_evidence": "progress/debug_menu/circles_two_native_20261027"
+}

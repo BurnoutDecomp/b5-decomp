@@ -2,6 +2,8 @@
 #define NOMINMAX
 #include <cstdio>
 #include <initializer_list>
+#include <cmath>
+#include <vector>
 #include "types.hpp"
 #include "pc/gcm/renderengine/reflections/PropReflection.h"
 #include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
@@ -10,26 +12,53 @@ static int giChecks=0,giFailures=0;
 static void Check(bool b,const char* s){++giChecks;if(!b){++giFailures;std::printf("FAIL %s\n",s);}}
 #define CGS_ASSERT(b,s) Check(!!(b),s)
 namespace rw { namespace math { namespace vpu {
-struct Vector3 { using InParam=const Vector3&; f32 x=0,y=0,z=0; };
-static Vector3 operator-(Vector3 a,Vector3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
+struct Vector3 { using InParam=const Vector3&; f32 x=0,y=0,z=0,w=0; };
+static Vector3 operator-(Vector3 a,Vector3 b){return {a.x-b.x,a.y-b.y,a.z-b.z,a.w-b.w};}
 static f32 MagnitudeSquared(Vector3 v){return v.x*v.x+v.y*v.y+v.z*v.z;}
 struct Matrix44 { using InParam=const Matrix44&; };
-struct Matrix44Affine { Vector3 mPosition; const Vector3& Pos() const {return mPosition;} };
+struct Matrix44Affine {
+ Vector3 mPosition,mRight{1,0,0,0},mUp{0,1,0,0},mAt{0,0,1,0};
+ const Vector3& Pos() const {return mPosition;}
+ const Vector3& Right() const {return mRight;}
+ const Vector3& Up() const {return mUp;}
+ const Vector3& At() const {return mAt;}
+};
+static Vector3 TransformPoint(const Matrix44Affine& m,const Vector3& v){return {
+ m.mPosition.x+v.x*m.mRight.x+v.y*m.mUp.x+v.z*m.mAt.x,
+ m.mPosition.y+v.x*m.mRight.y+v.y*m.mUp.y+v.z*m.mAt.y,
+ m.mPosition.z+v.x*m.mRight.z+v.y*m.mUp.z+v.z*m.mAt.z,0.0f};}
 } } }
 using namespace rw::math::vpu;
+namespace CgsPC { namespace VmxFloat {
+static f32 Multiply(f32 a,f32 b){return a*b;}
+static f32 Maximum(f32 a,f32 b){return a>b?a:b;}
+static f32 Magnitude3(const rw::math::vpu::Vector3& v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);}
+static rw::math::vpu::Vector3 Normalize3Unconditional(const rw::math::vpu::Vector3& v,u32){const f32 n=Magnitude3(v);return n==0.0f?v:rw::math::vpu::Vector3{v.x/n,v.y/n,v.z/n,0.0f};}
+} }
+namespace CgsDev {
+using RGBA=u32;
+struct CircleRecord {rw::math::vpu::Vector3 centre,normal;f32 radius;RGBA colour;};
+static std::vector<CircleRecord> gCircleRecords;
+struct DebugRender {void DrawCircle(rw::math::vpu::Vector3 c,rw::math::vpu::Vector3 n,f32 r,RGBA colour){gCircleRecords.push_back({c,n,r,colour});}};
+struct DebugInterface {DebugRender& GetRender(){static DebugRender r;return r;}};
+}
 namespace CgsGraphics {
-struct Renderable { s32 miState; struct {f32 w=1;} mBoundingSphere; };
+static s32 giLastRenderableState=-1;
+struct BoundingSphere { Vector3 mCentre; f32 w=1; Vector3 GetVector3() const {return mCentre;} f32 GetPlus() const {return w;} };
+struct Renderable { s32 miState; BoundingSphere mBoundingSphere; };
 struct Model {
- enum State {E_STATE_LOD_0,E_STATE_LOD_1,E_STATE_LOD_2,E_STATE_COUNT=16};
+ enum State {E_STATE_LOD_0,E_STATE_LOD_1,E_STATE_LOD_2,E_STATE_COUNT=16,E_STATE_INVALID=-1};
  enum {E_FLAG_MODEL_USES_INSTANCE_SHADER=1,KU_OBJECTS_PER_JOB_BLOCK=128};
  bool mabExists[3]={true,true,true}; bool mbInstanced=false; u32 muNumLods=3;
  Renderable maRenderables[3]={{0},{1},{2}};
  u32 GetNumLods() const {return muNumLods;}
+ u32 GetNumRenderables() const {return muNumLods;}
  f32 GetLodDistance(u32 i) const {Check(i<muNumLods,"authored LOD access stays within the model's actual state count");static f32 d[3]={10,20,100};return i<muNumLods?d[i]:0;}
  bool DoesStateExist(State s) const {return s>=0 && u32(s)<muNumLods && mabExists[s];}
  bool GetFlag(int) const {return mbInstanced;}
- const Renderable* GetRenderable(State s) const {return &maRenderables[s];}
+ const Renderable* GetRenderable(State s) const {giLastRenderableState=static_cast<s32>(s);return &maRenderables[s];}
 };
+struct Instance {Model* mpModel=nullptr;Matrix44Affine mTransform;};
 struct DispatchBin {void BeginPacket(){} const void* EndPacket(){return this;}};
 struct DispatchList {u32 muCount=0;u32 GetCount()const{return muCount;}void Submit(int,const void*){++muCount;}};
 struct DispatchFrame {DispatchBin mBin;DispatchList maLists[32];DispatchList*GetList(u32 i){return &maLists[i];}DispatchBin&GetBin(){return mBin;}};
@@ -42,8 +71,8 @@ struct Constants {void SetShaderConstantData(int,const Matrix44Affine&) {}};
 static Constants mShaderConstantTable;
 }
 namespace renderengine {
-enum GraphicsModelCategoryPC{E_GRAPHICS_PROP,E_GRAPHICS_PROP_ENVMAP};
-struct Diagnostics {u32 muPropBase=0,muPropEnvExtended=0;};
+enum GraphicsModelCategoryPC{E_GRAPHICS_PROP,E_GRAPHICS_PROP_ENVMAP,E_GRAPHICS_WORLD};
+struct Diagnostics {u32 muPropBase=0,muPropEnvExtended=0,muWorldBase=0;};
 static bool GraphicsDiagnosticsEnabledPC(){return false;}
 static Diagnostics&GetGraphicsDiagnosticsPC(){static Diagnostics d;return d;}
 static void RecordGraphicsModelPC(GraphicsModelCategoryPC,const CgsGraphics::Model*,u32){}
@@ -53,12 +82,24 @@ using namespace CgsGraphics;
 enum{E_TECHNIQUE_ZONLY=9};
 struct ShaderLodInfo {u8 GetEnvMapTechnique()const{return 7;}template<class Bounds>u8 GetLodTechnique(const Bounds&,const Matrix44Affine&,const Vector3&)const{return 3;}};
 struct PropEntityModule {
- bool mbOverrideLod=false,mbOverrideLodDistances=false;s32 miLodOverrideValue=0; s32 mauOverrideLodDistances[3]={100,200,300};
+ bool mbOverrideLod=false,mbOverrideLodDistances=false;
+ s32 miLodOverrideValue=0; s32 mauOverrideLodDistances[3]={100,200,300};
+ bool mbDrawBoundingSpheres=false;
  bool RenderModel(Model*,const Matrix44Affine*,DispatchFrame*,Matrix44::InParam,Vector3::InParam,f32,s32,s32,s32,bool,bool,const ShaderLodInfo*);
+};
+struct WorldGraphicsStreamer {s32 index=0;s32 GetIndexFromId(s32) const {return index;}};
+struct WorldEntityModule {
+ bool mbOverrideLod=false,mbDrawBoundingSpheres=false,mbOverrideLodDistances=false,mbMassiveGenerateImpressionData=false;
+ s32 miLodOverrideValue=0,mauOverrideLodDistances[3]={100,200,300},miPlayerZoneNumber=0;
+ WorldGraphicsStreamer mWorldGraphicsStreamer;
+ void GenerateMassiveImpressionData(const Matrix44Affine&,Matrix44::InParam,Model*,Vector3::InParam,Vector3::InParam){}
+ void RenderInstance(CgsGraphics::Instance*,bool,Matrix44::InParam,Vector3::InParam,Vector3::InParam,f32,s32,s32,s32,u8,CgsGraphics::DispatchFrame*,const ShaderLodInfo*);
 };
 }
 #include "pc/gcm/renderengine/shadows/SceneSettings.h"
 #include "pc_prop_reflection_lod.inc"
+static bool NearScalar(f32 a,f32 b){return std::fabs(a-b)<0.02f;}
+static bool NearVector(Vector3 a,Vector3 b){return NearScalar(a.x,b.x)&&NearScalar(a.y,b.y)&&NearScalar(a.z,b.z);}
 int main()
 {
  using namespace CgsGraphics;using namespace BrnWorld;
@@ -164,5 +205,94 @@ int main()
   Check(draw(false,true,{79,0,0})&&u32(giDrawState)<count,"small shadow extension falls back to an existing sparse model state");
  }
  lModel.muNumLods=3;lrSmall.mbEnabled=false;
+ std::printf("PCReflectionBaseline: %d checks, %d failures\n",giChecks,giFailures);
+ const int giCircleChecksBefore=giChecks,giCircleFailuresBefore=giFailures;
+ // Exercise the actual extracted RenderModel and RenderInstance bodies through a recording sink.
+ const f32 lfSphereScale=std::sqrt(29.0f);
+ lTransform.mPosition={5,10,15,0};lTransform.mRight={2,0,0,0};lTransform.mUp={0,3,0,0};lTransform.mAt={0,0,4,0};
+ lModel.maRenderables[0].mBoundingSphere.mCentre={1,0,0,0};lModel.maRenderables[0].mBoundingSphere.w=1.5f;
+ lModel.maRenderables[1].mBoundingSphere.mCentre={-1,2,0,0};lModel.maRenderables[1].mBoundingSphere.w=2.0f;
+ lModel.maRenderables[2].mBoundingSphere.mCentre={1,2,3,0};lModel.maRenderables[2].mBoundingSphere.w=2.5f;
+ lModel.mbInstanced=false;lModule.mbOverrideLod=false;lModule.mbOverrideLodDistances=false;
+ const bool lbOldPropGate=lModule.mbDrawBoundingSpheres;const s32 liOldPropLod=renderengine::PropEnvironmentMapLodPC();
+ const f32 lfOldEnvDistance=renderengine::EnvironmentMapDrawDistancePC();
+#if BRN_HAS_PROP_CIRCLE_IMAGE_DATA
+ Check(sbDrawPropCircles,"ARTIST byte_82CDB6B0 is enabled by its image byte");
+ Check(NearScalar(sfPropCircleDrawDistance,2000.0f),"ARTIST flt_82CDB6B4 uses the image-backed 2000-unit cutoff");
+ const bool lbOldPropCircleGlobal=sbDrawPropCircles;
+#else
+ Check(false,"candidate RenderModel source contains the recovered ARTIST circle data");
+#endif
+ renderengine::EnvironmentMapDrawDistancePC()=2100.0f;lModule.mbDrawBoundingSpheres=true;
+ renderengine::PropEnvironmentMapLodPC()=0;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,14,15,0})&&CgsDev::gCircleRecords.size()==1,"LOD0 prop circle is emitted by extracted production RenderModel");
+ if(CgsDev::gCircleRecords.size()==1){const auto& c=CgsDev::gCircleRecords[0];
+  Check(giDrawState==0&&giLastRenderableState==0&&c.colour==0xFF00FF00u,"LOD0 circle uses the selected renderable and green ARTIST colour");
+  Check(NearVector(c.centre,{7,10,15,0})&&NearScalar(c.radius,1.5f*lfSphereScale),"LOD0 circle uses transformed sphere centre and scaled radius");
+  Check(NearVector(c.normal,{0.6f,0.8f,0,0}),"LOD0 circle faces from the transformed centre toward the camera");}
+ renderengine::PropEnvironmentMapLodPC()=1;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{3,19,19,0})&&CgsDev::gCircleRecords.size()==1,"LOD1 prop circle is emitted by extracted production RenderModel");
+ if(CgsDev::gCircleRecords.size()==1){const auto& c=CgsDev::gCircleRecords[0];
+  Check(giDrawState==1&&giLastRenderableState==1&&c.colour==0xFFFF0000u,"LOD1 circle uses the selected renderable and red ARTIST colour");
+  Check(NearVector(c.centre,{3,16,15,0})&&NearScalar(c.radius,2.0f*lfSphereScale),"LOD1 circle uses its own transformed sphere and scaled radius");
+  Check(NearVector(c.normal,{0,0.6f,0.8f,0}),"LOD1 circle normal uses the selected sphere centre");}
+ renderengine::PropEnvironmentMapLodPC()=2;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,20,27,0})&&CgsDev::gCircleRecords.size()==1,"LOD2 prop circle is emitted by extracted production RenderModel");
+ if(CgsDev::gCircleRecords.size()==1){const auto& c=CgsDev::gCircleRecords[0];
+  Check(giDrawState==2&&giLastRenderableState==2&&c.colour==0xFF0000FFu,"LOD2 circle uses the selected renderable and blue ARTIST colour");
+  Check(NearVector(c.centre,{7,16,27,0})&&NearScalar(c.radius,2.5f*lfSphereScale),"LOD2 circle uses its own transformed sphere and scaled radius");
+  Check(NearVector(c.normal,{0.6f,0.8f,0,0}),"LOD2 circle is camera-facing");}
+ CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{2004,10,15,0})&&CgsDev::gCircleRecords.size()==1,"prop circle is present at 1999 units, inside the strict ARTIST cutoff");
+ CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{2005,10,15,0})&&CgsDev::gCircleRecords.empty(),"prop circle is absent at the exclusive 2000-unit ARTIST cutoff");
+ CgsDev::gCircleRecords.clear();
+ Check(!draw(true,false,{2105,10,15,0})&&CgsDev::gCircleRecords.empty(),"culled props return before the debug-circle tail");
+ lModel.mbInstanced=true;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,20,27,0})&&giInstanceState==2&&CgsDev::gCircleRecords.empty(),"instanced props return before the debug-circle tail");
+ lModel.mbInstanced=false;
+ CgsDev::gCircleRecords.clear();lModule.mbDrawBoundingSpheres=false;
+ Check(draw(true,false,{10,14,15,0})&&CgsDev::gCircleRecords.empty(),"Draw prop bounding spheres off suppresses the actual RenderModel tail");
+ lModule.mbDrawBoundingSpheres=true;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,14,15,0})&&CgsDev::gCircleRecords.size()==1,"restoring Draw prop bounding spheres restores circle emission");
+#if BRN_HAS_PROP_CIRCLE_IMAGE_DATA
+ sbDrawPropCircles=false;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,14,15,0})&&CgsDev::gCircleRecords.empty(),"ARTIST internal prop-circle byte independently gates DrawCircle");
+ sbDrawPropCircles=lbOldPropCircleGlobal;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,14,15,0})&&CgsDev::gCircleRecords.size()==1,"restoring the prop-circle byte restores DrawCircle");
+#endif
+ lModule.mbDrawBoundingSpheres=false;CgsDev::gCircleRecords.clear();
+ Check(draw(true,false,{10,14,15,0})&&CgsDev::gCircleRecords.empty(),"prop debug flag returns to its original off state");
+ lModule.mbDrawBoundingSpheres=lbOldPropGate;renderengine::PropEnvironmentMapLodPC()=liOldPropLod;
+ renderengine::EnvironmentMapDrawDistancePC()=lfOldEnvDistance;
+
+ // The companion world correction changes only the ARTIST-backed instance-circle byte default.
+ const bool lbOldInstanceCircleFlag=sbDrawInstanceCircles;
+ Check(sbDrawInstanceCircles,"ARTIST byte_82CDB6B8 enables the world instance-circle gate by default");
+ WorldEntityModule lWorld;lWorld.mbDrawBoundingSpheres=true;lWorld.miPlayerZoneNumber=5;
+ lWorld.mWorldGraphicsStreamer.index=0;siCurrentTrackUnitIndex=0;
+ CgsGraphics::Instance lWorldInstance;lWorldInstance.mpModel=&lModel;lWorldInstance.mTransform=lTransform;
+ Matrix44 lWorldView;ShaderLodInfo lWorldShader;
+ auto renderWorld=[&](bool shadow){lWorld.RenderInstance(&lWorldInstance,shadow,lWorldView,Vector3{5,12,15,0},Vector3{0,0,1,0},4.0f,5,11,15,0,&lFrame,&lWorldShader);};
+ CgsDev::gCircleRecords.clear();renderWorld(false);
+ Check(CgsDev::gCircleRecords.size()==1,"world player-track circle reaches extracted production RenderInstance in the camera pass");
+ if(CgsDev::gCircleRecords.size()==1){const auto& c=CgsDev::gCircleRecords[0];
+  Check(c.colour==0xFF00FF00u&&NearVector(c.centre,{7,10,15,0}),"world instance circle uses selected LOD0 sphere centre and ARTIST colour");
+  Check(NearScalar(c.radius,1.5f*lfSphereScale),"world instance circle radius uses production GetMaximumScale");
+  Check(NearVector(c.normal,{-0.70710678f,0.70710678f,0,0}),"world camera-pass circle uses the original normalized camera-minus-centre normal");}
+ CgsDev::gCircleRecords.clear();renderWorld(true);
+ Check(CgsDev::gCircleRecords.size()==1,"world debug circle tail also runs in the shadow pass");
+ if(CgsDev::gCircleRecords.size()==1)Check(NearVector(CgsDev::gCircleRecords[0].normal,{-0.70710678f,0.70710678f,0,0}),"world shadow-pass circle uses the original normalized camera-minus-centre normal");
+ lWorld.mbDrawBoundingSpheres=false;CgsDev::gCircleRecords.clear();renderWorld(false);
+ Check(CgsDev::gCircleRecords.empty(),"world Draw instance bounding spheres off suppresses the debug draw");
+ lWorld.mbDrawBoundingSpheres=true;lWorld.mWorldGraphicsStreamer.index=7;CgsDev::gCircleRecords.clear();renderWorld(false);
+ Check(CgsDev::gCircleRecords.empty(),"world debug draw remains restricted to the current player track unit");
+ lWorld.mWorldGraphicsStreamer.index=0;sbDrawInstanceCircles=false;CgsDev::gCircleRecords.clear();renderWorld(false);
+ Check(CgsDev::gCircleRecords.empty(),"world instance-circle byte off suppresses the draw");
+ sbDrawInstanceCircles=true;CgsDev::gCircleRecords.clear();renderWorld(false);
+ Check(CgsDev::gCircleRecords.size()==1,"restoring the world instance-circle byte restores the draw");
+ sbDrawInstanceCircles=lbOldInstanceCircleFlag;CgsDev::gCircleRecords.clear();renderWorld(false);
+ Check(CgsDev::gCircleRecords.size()==(lbOldInstanceCircleFlag?1u:0u),"world instance-circle byte returns to its original state");
+ std::printf("PCDebugCircles: %d checks, %d failures\n",giChecks-giCircleChecksBefore,giFailures-giCircleFailuresBefore);
  std::printf("PCPropReflectionLod: %d checks, %d failures\n",giChecks,giFailures);return giFailures?1:0;
 }
