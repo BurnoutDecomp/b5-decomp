@@ -9,9 +9,10 @@
   "source_files": [
     {
       "path": "src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.cpp",
-      "lf_sha256": "a270760d03044a9c0e2ff43faa01c6a6c765e2deee15826836ceb418da60d438",
-      "reviewed_raw_sha256": "a270760d03044a9c0e2ff43faa01c6a6c765e2deee15826836ceb418da60d438",
-      "source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+      "lf_sha256": "05b078983343a1bd3cfba570d8c71e89d3c6b91288d2b5360c7bc702ec2b6fd6",
+      "reviewed_raw_sha256": "05b078983343a1bd3cfba570d8c71e89d3c6b91288d2b5360c7bc702ec2b6fd6",
+      "source_checkpoint": "4536700d6225ec0f05bef63f751f843750a6cbd2",
+      "composition_scope": "Existing20 extracted font/Buddy definitions unchanged; reviewed language/lifecycle changes lie outside those bodies."
     },
     {
       "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.cpp",
@@ -61,8 +62,9 @@
     },
     {
       "path": "src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h",
-      "lf_sha256": "8bff4736ccba4cc3976144de5bb67d82c60fa45227d20d2f97c5d87145802b53",
-      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+      "lf_sha256": "3c2c085e55eeedaacaac9db63a4dacd7ea241f4c460d9fda6c1014e8e199f102",
+      "source_checkpoint": "4536700d6225ec0f05bef63f751f843750a6cbd2",
+      "composition_scope": "Existing20 extracted font/Buddy definitions unchanged; reviewed language/lifecycle changes lie outside those bodies."
     },
     {
       "path": "src/GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.cpp",
@@ -141,8 +143,9 @@
     },
     {
       "path": "src/GameSource/Network/Debug Components/BrnNetworkImageManagerDebugComponent.cpp",
-      "lf_sha256": "52c115978848e59b551b3d2e96465a005d883d409109a78fd42bee866a8baad0",
-      "unchanged_source_checkpoint": "4a1d01e42a9838fe97e97921cfba16fc6231d1aa"
+      "lf_sha256": "1c5f2fbfc688d497e2bcf53bf32479aff432cb1891fad917aba36122f6814234",
+      "source_checkpoint": "4536700d6225ec0f05bef63f751f843750a6cbd2",
+      "composition_scope": "Existing20 extracted font/Buddy definitions unchanged; reviewed language/lifecycle changes lie outside those bodies."
     },
     {
       "path": "src/GameShared/GameClasses/Development/CgsStrStream.cpp",
