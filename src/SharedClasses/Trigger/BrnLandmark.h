@@ -1,6 +1,7 @@
 #ifndef BRN_LANDMARK_H
 #define BRN_LANDMARK_H
 
+#include <cstddef>
 #include "types.hpp"          // fixed-width ints
 #include "BrnCommonTypes.h"   // CgsID, Vector3
 #include "SharedClasses/Trigger/BrnTriggerBase.h"  // TriggerRegion (base) + BoxRegion
@@ -99,11 +100,19 @@ public:
     inline bool    IsOnline() const;
 
 private:
+    friend struct TriggerData;
     StartingGrid* mpaStartingGrids;
     int8_t        miStartingGridCount;
     uint8_t       muDesignIndex;
     uint8_t       muDistrict;
     uint8_t       mu8Flags;
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(Landmark) == 52), "X360 table stride");
+        CGS_STATIC_ASSERT((offsetof(Landmark, mpaStartingGrids) == 0x2C), "ARTIST table member");
+        CGS_STATIC_ASSERT((offsetof(Landmark, miStartingGridCount) == 0x30), "ARTIST table member");
+        CGS_STATIC_ASSERT((offsetof(Landmark, mu8Flags) == 0x33), "ARTIST table member");
+    }
 };
 
 inline void

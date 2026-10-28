@@ -18,6 +18,10 @@ namespace BrnDirector
 namespace Camera
 {
 
+const f32 DebugMenuSerialiser::KF_DEBUG_ADJUST_STEP = 0.01f;
+const f32 DebugMenuSerialiser::KF_FOV_MIN_DEGS = 1.0f;
+const f32 DebugMenuSerialiser::KF_FOV_MAX_DEGS = 150.0f;
+
 // ----------------------------------------------------------------------------
 // AddToPath -- append "<lpacPath>/" to the menu path and advance the stack position by the
 // pushed length. The two appends are the inlined CgsCore::StrCat (each asserts the result

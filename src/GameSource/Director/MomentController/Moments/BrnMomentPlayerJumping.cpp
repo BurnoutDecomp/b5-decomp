@@ -245,19 +245,19 @@ bool MomentPlayerJumping::Prepare(void* lrBehaviourController)
     {
         const Camera::BehaviourParameterBank& lrBank = lrBehaviourManager.GetBehaviourParameterBank();
 
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(1));    // mRigRearQFwd
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(2));    // mRigFrontQCuFwd
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(7));    // mRigRoofFwd
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(10));   // mRigUnderbelly
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(9));    // mRigFrontQCuFwd2
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(5));    // mRigBootViewFwd
+        mRigCollection.AddShot(&lrBank.GetNamedParameters().mRigRearQFwd);    // mRigRearQFwd
+        mRigCollection.AddShot(&lrBank.GetNamedParameters().mRigFrontQCuFwd);    // mRigFrontQCuFwd
+        mRigCollection.AddShot(&lrBank.GetNamedParameters().mRigRoofFwd);    // mRigRoofFwd
+        mRigCollection.AddShot(&lrBank.GetNamedParameters().mRigUnderbelly);   // mRigUnderbelly
+        mRigCollection.AddShot(&lrBank.GetNamedParameters().mRigFrontQCuFwd2);    // mRigFrontQCuFwd2
+        mRigCollection.AddShot(&lrBank.GetNamedParameters().mRigBootViewFwd);    // mRigBootViewFwd
 
-        mBystanderCollection.AddShot(&lrBank.GetPlayerJumpingBystanderShotParams(0));   // mBystanderJumpLeftParameters
-        mBystanderCollection.AddShot(&lrBank.GetPlayerJumpingBystanderShotParams(2));   // mBystanderJumpFromBehindParameters
+        mBystanderCollection.AddShot(&lrBank.GetNamedParameters().mBystanderJumpLeftParameters);   // mBystanderJumpLeftParameters
+        mBystanderCollection.AddShot(&lrBank.GetNamedParameters().mBystanderJumpFromBehindParameters);   // mBystanderJumpFromBehindParameters
 
-        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(11));   // mRigDropUnderbelly
-        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(12));   // mRigDropFrontQCuFwd
-        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(13));   // mRigDropBootViewFwd
+        mDroppedRigCollection.AddShot(&lrBank.GetNamedParameters().mRigDropUnderbelly);   // mRigDropUnderbelly
+        mDroppedRigCollection.AddShot(&lrBank.GetNamedParameters().mRigDropFrontQCuFwd);   // mRigDropFrontQCuFwd
+        mDroppedRigCollection.AddShot(&lrBank.GetNamedParameters().mRigDropBootViewFwd);   // mRigDropBootViewFwd
 
         const Attrib::Gen::shotgroup& lrJumpShots = lrBehaviourManager.GetDirectorResourceManager()->GetJumpRig();
         u32 luNumShots = lrJumpShots.Num_ShotList();

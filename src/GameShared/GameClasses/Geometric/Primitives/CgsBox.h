@@ -202,6 +202,9 @@ namespace CgsGeometric
             // 0x825E6994 `clrlwi r11,r3,24 ; cmplwi cr6,r11,0 ; bne cr6, <epilogue>`.
             if (!IsValid())
             {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                             CgsDev::Assert::giMessageBufferSize);
                 const Vector3& lrRight = lTransform.Right();
                 const Vector3& lrUp    = lTransform.Up();
                 const Vector3& lrAt    = lTransform.At();
@@ -210,34 +213,31 @@ namespace CgsGeometric
                 // " Orthogonal: ", read back from var_70 at 0x825E6C44). Transpose +
                 // Mult + SelfSubtract(identity) + three MagnitudeSquared + one more, then
                 // `vandc` (Abs) and `vcmpgtfp` against the broadcast tolerance.
-                const Vector3 lGramErrorRight =
-                    Vector3{ rw::math::vpu::Dot(lrRight, lrRight),
+                const Vector3 lGramRight = { rw::math::vpu::Dot(lrRight, lrRight),
                              rw::math::vpu::Dot(lrRight, lrUp),
-                             rw::math::vpu::Dot(lrRight, lrAt), 0.0f }
-                    - rw::math::vpu::GetVector3_XAxis();
-                const Vector3 lGramErrorUp =
-                    Vector3{ rw::math::vpu::Dot(lrUp, lrRight),
+                             rw::math::vpu::Dot(lrRight, lrAt), 0.0f };
+                const Vector3 lGramErrorRight = lGramRight - rw::math::vpu::GetVector3_XAxis();
+                const Vector3 lGramUp = { rw::math::vpu::Dot(lrUp, lrRight),
                              rw::math::vpu::Dot(lrUp, lrUp),
-                             rw::math::vpu::Dot(lrUp, lrAt), 0.0f }
-                    - rw::math::vpu::GetVector3_YAxis();
-                const Vector3 lGramErrorAt =
-                    Vector3{ rw::math::vpu::Dot(lrAt, lrRight),
+                             rw::math::vpu::Dot(lrUp, lrAt), 0.0f };
+                const Vector3 lGramErrorUp = lGramUp - rw::math::vpu::GetVector3_YAxis();
+                const Vector3 lGramAt = { rw::math::vpu::Dot(lrAt, lrRight),
                              rw::math::vpu::Dot(lrAt, lrUp),
-                             rw::math::vpu::Dot(lrAt, lrAt), 0.0f }
-                    - rw::math::vpu::GetVector3_ZAxis();
-                const f32 lfOrthogonalError = rw::math::vpu::MagnitudeSquared(
-                    Vector3{ rw::math::vpu::MagnitudeSquared(lGramErrorRight),
+                             rw::math::vpu::Dot(lrAt, lrAt), 0.0f };
+                const Vector3 lGramErrorAt = lGramAt - rw::math::vpu::GetVector3_ZAxis();
+                const Vector3 lGramMagnitudes = { rw::math::vpu::MagnitudeSquared(lGramErrorRight),
                              rw::math::vpu::MagnitudeSquared(lGramErrorUp),
-                             rw::math::vpu::MagnitudeSquared(lGramErrorAt), 0.0f });
+                             rw::math::vpu::MagnitudeSquared(lGramErrorAt), 0.0f };
+                const f32 lfOrthogonalError = rw::math::vpu::MagnitudeSquared(lGramMagnitudes);
                 const bool lbOrthogonal =
                     !(std::fabs(lfOrthogonalError) > KF_BOX_VALIDITY_TOLERANCE);
 
                 // 0x825E6A30..0x825E6ADC -- the NORMALITY verdict (printed after
                 // " Normal:", read back from var_60 at 0x825E6C94).
-                const f32 lfNormalError = rw::math::vpu::MagnitudeSquared(
-                    Vector3{ rw::math::vpu::MagnitudeSquared(lrRight) - 1.0f,
+                const Vector3 lNormalMagnitudes = { rw::math::vpu::MagnitudeSquared(lrRight) - 1.0f,
                              rw::math::vpu::MagnitudeSquared(lrUp)    - 1.0f,
-                             rw::math::vpu::MagnitudeSquared(lrAt)    - 1.0f, 0.0f });
+                             rw::math::vpu::MagnitudeSquared(lrAt)    - 1.0f, 0.0f };
+                const f32 lfNormalError = rw::math::vpu::MagnitudeSquared(lNormalMagnitudes);
                 const bool lbNormal =
                     !(std::fabs(lfNormalError) > KF_BOX_VALIDITY_TOLERANCE);
 
@@ -247,9 +247,6 @@ namespace CgsGeometric
                 // `vmsum3fp128` with the at row and `vcmpgefp` against zero.
                 const bool lbRightHanded =
                     rw::math::vpu::Dot(rw::math::vpu::Cross(lrRight, lrUp), lrAt) >= 0.0f;
-
-                CgsDev::StrStream lStrStream(lacMessageBuffer,
-                                             CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
 
                 lStrStream << "Transform: ";
                 lStrStream.AppendFormat(   // sub_821F0FC0's own format string
@@ -274,10 +271,9 @@ namespace CgsGeometric
                 lStrStream << (lbRightHanded ? "true" : "false");
                 lStrStream << "\n";
 
-                CgsDev::Assert::BeginAssert();
                 // console: FireAssert(gpcMessageBuffer,
                 //     "..\\..\\..\\GameShared\\GameClasses\\Geometric/Primitives/CgsBox.h", 95)
-                CgsDev::Assert::FireAssert(lacMessageBuffer, __FILE__, __LINE__);
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                 CgsDev::Assert::EndAssert();
             }
         }

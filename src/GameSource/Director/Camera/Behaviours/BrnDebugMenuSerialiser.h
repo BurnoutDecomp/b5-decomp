@@ -144,9 +144,9 @@ private:
     static const s32 KI_PATHSTACKSIZE = 64;
 
     // The per-component adjust step and the FOV menu range.
-    static constexpr f32 KF_DEBUG_ADJUST_STEP = 0.01f;
-    static constexpr f32 KF_FOV_MIN_DEGS      = 1.0f;
-    static constexpr f32 KF_FOV_MAX_DEGS      = 150.0f;
+    static const f32 KF_DEBUG_ADJUST_STEP;
+    static const f32 KF_FOV_MIN_DEGS;
+    static const f32 KF_FOV_MAX_DEGS;
 
     // Pop "<lpcPath>/" back off the path stack. Always inlined into the nested-block visitor.
     void RemoveFromPath(const char* lpcPath)

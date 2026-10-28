@@ -1,4 +1,5 @@
 #include "SharedClasses/Trigger/BrnTriggerData.h"
+#include "SharedClasses/Trigger/BrnSignatureStunt.h"
 #include "SharedClasses/Trigger/BrnLandmark.h"      // complete Landmark (GetOnlineLandmark walk, GetLandmarkFromRegionIndex cast)
 #include "SharedClasses/Trigger/BrnTriggerBase.h"    // TriggerRegion::GetType() / E_TYPE_LANDMARK
 #include "SharedClasses/Trigger/BrnKillzone.h"       // complete Killzone (GetKillzone stride)
@@ -122,10 +123,7 @@ BrnTrigger::TriggerData::GetLandmark( int liIndex )
     return &mpLandmarks[liIndex];
 }
 
-// NOTE: the X360 streams the miss diagnostic into the global CgsDev::Assert::gpcMessageBuffer.
-// That global has no committed home, so -- matching the committed CgsID.cpp / BrnGameStateSharedIO.cpp
-// precedent -- the message is built into a local stack buffer via CgsDev::StrStream instead;
-// behaviorally identical.
+// The original formatted diagnostics use the shared assert buffer under BeginAssert.
 const BrnTrigger::Landmark*
 BrnTrigger::TriggerData::GetOnlineLandmark( int liLandmarkIndex ) const
 {
@@ -144,15 +142,14 @@ BrnTrigger::TriggerData::GetOnlineLandmark( int liLandmarkIndex ) const
         }
     }
 
-    // Not found: build the diagnostic into a local assert buffer and fire.
+    // Not found: format into the original shared assert buffer.
     {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStream( lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStream << "Couldn't find online landmark " << liLandmarkIndex
                 << " out of " << miOnlineLandmarkCount << "\n";
-        CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
+            CgsDev::Assert::gpcMessageBuffer,
             "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
             425 );
         CgsDev::Assert::EndAssert();
@@ -187,53 +184,6 @@ BrnTrigger::TriggerData::FindLandmark( CgsID lId ) const
     return mpLandmarks;
 }
 
-// -----------------------------------------------------------------------------
-// RELOCATION VIEWS (FixUp / FixDown).
-//
-// Landmark / SignatureStunt / Killzone keep their pointer members private in their own
-// owning headers, so the relocation loops reach them through these local views -- the same
-// idiom the committed BrnProgression::ProgressionData::FixDown uses.
-//
-// ⚠️ THESE ARE HOST OFFSETS, NOT CONSOLE OFFSETS. The lane-data port widens every
-// serialised pointer slot to 64 bits, so Landmark grew 52 -> 64 bytes (mpaStartingGrids
-// 0x2C -> 0x30), SignatureStunt 24 -> 32 (mppStuntElements 0x10, count 0x14 -> 0x18) and
-// Killzone 16 -> 32 (mppTriggers 0x00, count 0x04 -> 0x08; mpRegionIds 0x08 -> 0x10, count
-// 0x0C -> 0x18). Leaving the old console offsets here would have walked every one of these
-// records at the wrong stride against the widened TRIGGERS.DAT -- bug class (c). The sizeof
-// asserts below are the contract with tools/assets/bundles/lane_transcode.py's emitter.
-// -----------------------------------------------------------------------------
-namespace
-{
-    struct LandmarkRelocationView
-    {
-        u8        _0[0x30];          // TriggerRegion subobject (44 B) + pad to the pointer
-        uintptr_t mpaStartingGrids;  // host +0x30 (console +0x2C)
-        s8        miStartingGridCount;
-        u8        muDesignIndex;
-        u8        muDistrict;
-        u8        mu8Flags;
-        u8        _pad[4];
-    };
-
-    struct SignatureStuntRelocationView
-    {
-        u8        _0[0x10];             // CgsID mId (8) + int64 miCamera (8)
-        uintptr_t mppStuntElements;     // host +0x10
-        s32       miStuntElementCount;  // host +0x18 (console +0x14)
-        s32       _pad;
-    };
-
-    struct KillzoneRelocationView
-    {
-        uintptr_t mppTriggers;      // host +0x00
-        s32       miTriggerCount;   // host +0x08 (console +0x04)
-        s32       _pad0;
-        uintptr_t mpRegionIds;      // host +0x10 (console +0x08)
-        s32       miRegionIdCount;  // host +0x18 (console +0x0C)
-        s32       _pad1;
-    };
-}
-
 // X360 0x8267F800. Load-time pointer relocation "fix DOWN": converts every stored pointer from
 // an absolute load address back to a serialised file offset by SUBTRACTING the load-base delta
 // (luDelta). It is the exact inverse of FixUp. The X360 inlined every per-element FixDown into
@@ -248,30 +198,29 @@ namespace
 //
 // Pointer relocation is intrinsically address arithmetic, so each rebased pointer is handled via
 // reinterpret_cast<uintptr_t>(p) - luDelta -- the established BrnProgressionData::FixDown idiom.
-// Killzone/SignatureStunt internal pointers are private to their owning types, so they are reached
-// through local relocation views laid out to those types' authoritative (DWARF) member offsets.
-uintptr_t
+// TriggerData is a friend of the native record types, so their original private fields are
+// reached by name without host relocation views.
+void
 BrnTrigger::TriggerData::FixDown( uintptr_t luDelta )
 {
     // ---- Landmarks: rebase each landmark's starting-grid pointer.
-    LandmarkRelocationView* lpLandmarks = reinterpret_cast<LandmarkRelocationView*>( mpLandmarks );
     for ( int liLandmarkIndex = 0; liLandmarkIndex < miLandmarkCount; ++liLandmarkIndex )
     {
         CGS_ASSERT( liLandmarkIndex < miLandmarkCount, "liLandmarkIndex < miLandmarkCount" );
-        lpLandmarks[liLandmarkIndex].mpaStartingGrids -= luDelta;
+        Landmark& lrLandmark = mpLandmarks[liLandmarkIndex];
+        lrLandmark.mpaStartingGrids = reinterpret_cast<StartingGrid*>(
+            reinterpret_cast<uintptr_t>(lrLandmark.mpaStartingGrids) - luDelta);
     }
 
     // ---- Signature stunts: rebase the stunt-element array and every element pointer in it.
-    SignatureStuntRelocationView* lpSignatureStunts =
-        reinterpret_cast<SignatureStuntRelocationView*>( mpSignatureStunts );
     for ( int liSignatureStuntIndex = 0; liSignatureStuntIndex < miSignatureStuntCount; ++liSignatureStuntIndex )
     {
         CGS_ASSERT( liSignatureStuntIndex < miSignatureStuntCount, "liSignatureStuntIndex < miSignatureStuntCount" );
-        SignatureStuntRelocationView& lrStunt = lpSignatureStunts[liSignatureStuntIndex];
-        uintptr_t* lpElements = reinterpret_cast<uintptr_t*>( lrStunt.mppStuntElements );
+        SignatureStunt& lrStunt = mpSignatureStunts[liSignatureStuntIndex];
+        const GenericRegion** lpElements = lrStunt.mppStuntElements;
         for ( int liElementIndex = 0; liElementIndex < lrStunt.miStuntElementCount; ++liElementIndex )
-            lpElements[liElementIndex] -= luDelta;
-        lrStunt.mppStuntElements -= luDelta;
+            lpElements[liElementIndex] = reinterpret_cast<const GenericRegion*>(reinterpret_cast<uintptr_t>(lpElements[liElementIndex]) - luDelta);
+        lrStunt.mppStuntElements = reinterpret_cast<const GenericRegion**>(reinterpret_cast<uintptr_t>(lrStunt.mppStuntElements) - luDelta);
     }
 
     // ---- Generic regions: bounds-checked count walk only (no relocatable inner pointers here).
@@ -281,16 +230,15 @@ BrnTrigger::TriggerData::FixDown( uintptr_t luDelta )
     }
 
     // ---- Killzones: rebase the trigger array, every trigger pointer in it, and the region-id array.
-    KillzoneRelocationView* lpKillzones = reinterpret_cast<KillzoneRelocationView*>( mpKillzones );
     for ( int liKillzoneIndex = 0; liKillzoneIndex < miKillzoneCount; ++liKillzoneIndex )
     {
         CGS_ASSERT( liKillzoneIndex < miKillzoneCount, "liKillzoneIndex < miKillzoneCount" );
-        KillzoneRelocationView& lrKillzone = lpKillzones[liKillzoneIndex];
-        uintptr_t* lpTriggers = reinterpret_cast<uintptr_t*>( lrKillzone.mppTriggers );
+        Killzone& lrKillzone = mpKillzones[liKillzoneIndex];
+        const GenericRegion** lpTriggers = lrKillzone.mppTriggers;
         for ( int liTriggerIndex = 0; liTriggerIndex < lrKillzone.miTriggerCount; ++liTriggerIndex )
-            lpTriggers[liTriggerIndex] -= luDelta;
-        lrKillzone.mppTriggers -= luDelta;
-        lrKillzone.mpRegionIds -= luDelta;
+            lpTriggers[liTriggerIndex] = reinterpret_cast<const GenericRegion*>(reinterpret_cast<uintptr_t>(lpTriggers[liTriggerIndex]) - luDelta);
+        lrKillzone.mppTriggers = reinterpret_cast<const GenericRegion**>(reinterpret_cast<uintptr_t>(lrKillzone.mppTriggers) - luDelta);
+        lrKillzone.mpRegionIds = reinterpret_cast<CgsID*>(reinterpret_cast<uintptr_t>(lrKillzone.mpRegionIds) - luDelta);
     }
 
     // ---- Blackspots / VFX-box regions / roaming locations / spawn locations: count walks only.
@@ -329,34 +277,30 @@ BrnTrigger::TriggerData::FixDown( uintptr_t luDelta )
     mpSpawnLocations   = reinterpret_cast<SpawnLocation*>( reinterpret_cast<uintptr_t>( mpSpawnLocations ) - luDelta );
     mppRegions         = reinterpret_cast<TriggerRegion**>( reinterpret_cast<uintptr_t>( mppRegions ) - luDelta );
 
-    return luDelta;
 }
 
 // X360 0x8267FC08. Load-time pointer relocation "fix UP": converts every stored pointer from a
 // serialised file offset to its absolute load address by ADDING the load-base delta (luDelta).
 // It is the exact inverse of FixDown.
 //
-// Version guard: the routine first asserts miVersionNumber == KI_VERSION_NUMBER (34). The X360
-// builds the mismatch diagnostic into the global CgsDev::Assert::gpcMessageBuffer; matching the
-// committed GetOnlineLandmark precedent in this TU, the message is built into a local stack
-// buffer via CgsDev::StrStream instead (behaviorally identical). The version-mismatch assert
+// Version guard: assert miVersionNumber == KI_VERSION_NUMBER (34), formatting the
+// diagnostic into the original shared buffer under BeginAssert. The version-mismatch assert
 // carries the .cpp file/line "..\\unity\\../../SharedClasses/Trigger/BrnTriggerData.cpp":168.
 //
 // The X360 rebases the nine top-level array base pointers FIRST (before walking the arrays), so
 // the per-element loops below dereference already-fixed-up bases. Inner per-element rebasing is
-// open-coded over relocation views, same as FixDown.
-uintptr_t
+// open-coded over the native records, same as FixDown.
+void
 BrnTrigger::TriggerData::FixUp( uintptr_t luDelta )
 {
     if ( miVersionNumber != KI_VERSION_NUMBER )
     {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStream( lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStream << "Trigger data version mismatch. Expected: " << static_cast<s32>( KI_VERSION_NUMBER )
                 << ", got: " << static_cast<s32>( miVersionNumber );
-        CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
+            CgsDev::Assert::gpcMessageBuffer,
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Trigger/BrnTriggerData.cpp",
             168 );
         CgsDev::Assert::EndAssert();
@@ -374,24 +318,23 @@ BrnTrigger::TriggerData::FixUp( uintptr_t luDelta )
     mppRegions         = reinterpret_cast<TriggerRegion**>( reinterpret_cast<uintptr_t>( mppRegions ) + luDelta );
 
     // ---- Landmarks: rebase each landmark's starting-grid pointer.
-    LandmarkRelocationView* lpLandmarks = reinterpret_cast<LandmarkRelocationView*>( mpLandmarks );
     for ( int liLandmarkIndex = 0; liLandmarkIndex < miLandmarkCount; ++liLandmarkIndex )
     {
         CGS_ASSERT( liLandmarkIndex < miLandmarkCount, "liLandmarkIndex < miLandmarkCount" );
-        lpLandmarks[liLandmarkIndex].mpaStartingGrids += luDelta;
+        Landmark& lrLandmark = mpLandmarks[liLandmarkIndex];
+        lrLandmark.mpaStartingGrids = reinterpret_cast<StartingGrid*>(
+            reinterpret_cast<uintptr_t>(lrLandmark.mpaStartingGrids) + luDelta);
     }
 
     // ---- Signature stunts: rebase the stunt-element array, then every element pointer in it.
-    SignatureStuntRelocationView* lpSignatureStunts =
-        reinterpret_cast<SignatureStuntRelocationView*>( mpSignatureStunts );
     for ( int liSignatureStuntIndex = 0; liSignatureStuntIndex < miSignatureStuntCount; ++liSignatureStuntIndex )
     {
         CGS_ASSERT( liSignatureStuntIndex < miSignatureStuntCount, "liSignatureStuntIndex < miSignatureStuntCount" );
-        SignatureStuntRelocationView& lrStunt = lpSignatureStunts[liSignatureStuntIndex];
-        lrStunt.mppStuntElements += luDelta;
-        uintptr_t* lpElements = reinterpret_cast<uintptr_t*>( lrStunt.mppStuntElements );
+        SignatureStunt& lrStunt = mpSignatureStunts[liSignatureStuntIndex];
+        lrStunt.mppStuntElements = reinterpret_cast<const GenericRegion**>(reinterpret_cast<uintptr_t>(lrStunt.mppStuntElements) + luDelta);
+        const GenericRegion** lpElements = lrStunt.mppStuntElements;
         for ( int liElementIndex = 0; liElementIndex < lrStunt.miStuntElementCount; ++liElementIndex )
-            lpElements[liElementIndex] += luDelta;
+            lpElements[liElementIndex] = reinterpret_cast<const GenericRegion*>(reinterpret_cast<uintptr_t>(lpElements[liElementIndex]) + luDelta);
     }
 
     // ---- Generic regions: bounds-checked count walk only.
@@ -401,16 +344,15 @@ BrnTrigger::TriggerData::FixUp( uintptr_t luDelta )
     }
 
     // ---- Killzones: rebase the trigger array + region-id array, then every trigger pointer.
-    KillzoneRelocationView* lpKillzones = reinterpret_cast<KillzoneRelocationView*>( mpKillzones );
     for ( int liKillzoneIndex = 0; liKillzoneIndex < miKillzoneCount; ++liKillzoneIndex )
     {
         CGS_ASSERT( liKillzoneIndex < miKillzoneCount, "liKillzoneIndex < miKillzoneCount" );
-        KillzoneRelocationView& lrKillzone = lpKillzones[liKillzoneIndex];
-        lrKillzone.mppTriggers += luDelta;
-        lrKillzone.mpRegionIds += luDelta;
-        uintptr_t* lpTriggers = reinterpret_cast<uintptr_t*>( lrKillzone.mppTriggers );
+        Killzone& lrKillzone = mpKillzones[liKillzoneIndex];
+        lrKillzone.mppTriggers = reinterpret_cast<const GenericRegion**>(reinterpret_cast<uintptr_t>(lrKillzone.mppTriggers) + luDelta);
+        lrKillzone.mpRegionIds = reinterpret_cast<CgsID*>(reinterpret_cast<uintptr_t>(lrKillzone.mpRegionIds) + luDelta);
+        const GenericRegion** lpTriggers = lrKillzone.mppTriggers;
         for ( int liTriggerIndex = 0; liTriggerIndex < lrKillzone.miTriggerCount; ++liTriggerIndex )
-            lpTriggers[liTriggerIndex] += luDelta;
+            lpTriggers[liTriggerIndex] = reinterpret_cast<const GenericRegion*>(reinterpret_cast<uintptr_t>(lpTriggers[liTriggerIndex]) + luDelta);
     }
 
     // ---- Blackspots / roaming locations / spawn locations / VFX-box regions: count walks only.
@@ -439,5 +381,4 @@ BrnTrigger::TriggerData::FixUp( uintptr_t luDelta )
             lpRegions[liRegionIndex] += luDelta;
     }
 
-    return luDelta;
 }

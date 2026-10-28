@@ -997,8 +997,8 @@ private:
     // GameStateModule::Construct calls it at the console's own position, so both pointers are
     // installed before anything can read them. ComputeCompletionPercentage's own null guards stay
     // (they are the console's contract, not a PC crutch) but they no longer fire.
-    BrnGameState::StreetManager*           mpStreetManager = 0;  // X360 +133424 (0x20930)
-    BrnGameState::StuntManager*            mpStuntManager  = 0;  // X360 +133444 (0x20944)
+    BrnGameState::StreetManager* mpStreetManager;  // X360 +133424 (0x20930)
+    BrnGameState::StuntManager* mpStuntManager;  // X360 +133444 (0x20944)
 
     // ---- [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] the landmark -> AI-section cache ----
     // DWARF BrnProgressionManager.h:809/:810 give the record verbatim:
@@ -1059,7 +1059,7 @@ private:
         E_LOADSTAGE_ACQUIRE_REQUESTED= 3,   // AcquireResource("ProgressionData") issued
         E_LOADSTAGE_DONE             = 4    // mpProgressionData bound
     };
-    ELoadStage meLoadStage = E_LOADSTAGE_NOT_STARTED;                             // X360 +133340
+    ELoadStage meLoadStage;                             // X360 +133340
 
     CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData;  // X360 +133348 (0x20 stride)
     CgsResource::ResourcePtr<BrnAI::AISectionsData>           mpAISectionData;    // X360 +133380
@@ -1068,18 +1068,14 @@ private:
     // X360 +133328 (0x208D0). The CarData record for the car the player is currently in.
     // OnPlayerCarChange writes it (and clears it on the lbUpdateProfile == false path);
     // GetCurrentCarData() hands it back.
-    // ⚠️ The five members below carry in-class zero initialisers. The X360 ctor @0x827DEA50 does
-    // NOT store to any of them (the console object is BSS-resident, so they start zeroed); on the
-    // host this class is a by-value sub-object of GameStateModule inside BrnGameModule and would
-    // otherwise start as garbage. Same precedent as GameStateModule::mpOutputBuffer. This is an
-    // initialisation-site difference only -- no behavioural divergence.
-    CarData*  mpCurrentCarData = 0;
+    // Initialization follows the native constructor/lifecycle, without host defaults.
+    CarData* mpCurrentCarData;
     // X360 +133332 (0x208D4). The chosen-livery record for that car
     // (Profile::GetChosenLiveryDataForBaseCar's answer, cached by OnPlayerCarChange).
     // The element type (BrnProgression::LiveryData) is owned by BrnProfile.h, included above.
-    LiveryData* mpCurrentLiveryData = 0;
+    LiveryData* mpCurrentLiveryData;
     // X360 +133448 (0x20948). The loaded vehicle list (see SetVehicleList).
-    const BrnResource::VehicleList* mpVehicleList = 0;
+    const BrnResource::VehicleList* mpVehicleList;
     // X360 +133468 (0x2095C). AddCar increments it for every E_UNLOCK_TYPE_SPONSOR car and once
     // more for "CARBEAGT" specifically. FLAG: name inferred from those two increments only.
     // [progression wave 2026-09-06, conductor] RENAMED from miSponsorCarCount: the DWARF names
@@ -1087,15 +1083,15 @@ private:
     // and ApplyVehicleList @0x82359A20 seeds it from the vehicle list's selectable-minus-sponsor
     // pair; AddCar's two increments (sponsor cars, CARBEAGT) grow that maximum. The GUI reads it
     // as `miCarsTotal` (GameBridgeGameStateToX_StuntGuiEvents.cpp).
-    s32       miMaxCarCount = 0;
+    s32 miMaxCarCount;
     // X360 +133484 (0x2096C), read as an UNSIGNED byte by GetProgressionRank (`>= 0x80` == the
     // signed-negative "rank not set yet" case, which answers 0). Distinct from the Profile's own
     // mi8CurrentProgressionRank at Profile+112 -- this is the manager's live cache.
-    s8        mi8ProgressionRank = 0;
+    s8 mi8ProgressionRank;
     // X360 +133489 (0x20971) / +133512 (0x20988) -- the two one-byte request flags
     // CarSelectManager::UpdateExitState sets to 1 on junkyard exit.
-    bool      mbUpdateRivalsRequested = false;   // DWARF :185 `mbUpdateRivals` (+133489)
-    bool      mbDriveThrusDirty = false;         // DWARF :218 `mbDriveThruDataDirtyFlag` (+133512)
+    bool mbUpdateRivalsRequested;   // DWARF :185 `mbUpdateRivals` (+133489)
+    bool mbDriveThrusDirty;         // DWARF :218 `mbDriveThruDataDirtyFlag` (+133512)
     // ⭐ X360 +133487 (0x2096F). The FORCED-autosave request latch. CheckForSpecialCarUnlocks
     // raises it on the 100%-completion arm (`stbx r22, r31, 0x2096F` @0x82396288) and
     // PreWorldUpdate @0x823A4F68 drains it: `if (*(this + 133487)) { payload = 1;
@@ -1104,19 +1100,19 @@ private:
     // id-356 arm ORs it into mbForceProfileAutosave, which bypasses the 60 s throttle. The
     // drive-thru arm posts the same action 55 with a payload of ZERO (unforced). Same action,
     // different urgency, and the byte is the whole difference.
-    bool      mbAutosaveRequested = false;       // DWARF :179 `mbForceAutoSaveForOneHundredPercent` (+133487)
+    bool mbAutosaveRequested;       // DWARF :179 `mbForceAutoSaveForOneHundredPercent` (+133487)
 
     // X360 +133491 (0x20973). DWARF BrnProgressionManager.h:191 `mbPlayerMedalsUpdateRequired`.
     // PreWorldUpdate @0x823A4F68 polls it (`lbzx r11, r31, 0x20973`) and, when set, runs
     // UpdatePlayerMedals + UnlockRivals -- neither of which is reconstructed, so on PC the poll
     // parks with a one-shot log and the byte stays set (the console clears it in the callee).
     // Construct @0x8237A5F8 seeds 0; false is the host's zero-initialised value.
-    bool      mbPlayerMedalsUpdateRequired = false;              // X360 +133491 (0x20973)
+    bool mbPlayerMedalsUpdateRequired;              // X360 +133491 (0x20973)
     // [L4 boot order 2026-09-28] X360 +133492 (0x20974). DWARF BrnProgressionManager.h:876
     // `bool mbPlayerJustWonATrophyUpdateRequired` -- the byte after mbPlayerMedalsUpdateRequired (:875).
     // OnLoadProfile @0x823893E0 clears it (`stbx r15(0), r29, 0x20974`). ⚠️ NO READER ON PC yet (the
     // console's PreWorldUpdate trophy leg is not reconstructed); the store is the console's.
-    bool      mbPlayerJustWonATrophyUpdateRequired = false;      // X360 +133492 (0x20974)
+    bool mbPlayerJustWonATrophyUpdateRequired;      // X360 +133492 (0x20974)
 
     // ---- [stuntrace waveB / agent 10] the deferred "all win types for this mode" check -------
     // X360 +133440 (0x20940). The training manager the progression layer queues its
@@ -1128,7 +1124,7 @@ private:
     // BrnProgressionManager.cpp:126 -> `*(a1 + 133440) = a4`), and Construct is now reconstructed
     // and called from GameStateModule::Construct. SetTrainingManager (the PC-only stand-in setter
     // declared above) therefore still has no caller -- and no longer needs one.
-    BrnGameState::TrainingManager* mpTrainingManager = 0;      // X360 +133440 (0x20940)
+    BrnGameState::TrainingManager* mpTrainingManager;      // X360 +133440 (0x20940)
 
     // X360 +133493 (0x20975) / +133494 (0x20976). The gate pair ProgressionManager::PreWorldUpdate
     // @0x823A4F68 polls (`if (+133493) if (+133494)`) before running a 2 s timer at +133500 and
@@ -1138,8 +1134,8 @@ private:
     // ⚠️ FLAG (NAMES PROVISIONAL): the assert string only names the MODE member below, so which
     // of the two bytes is the "pending" one and which the "armed" one is an inference from the
     // writer/reader pair. Do not rename without a third witness.
-    bool      mbCheckAllWinTypesPending = false;               // X360 +133493 (0x20975) DWARF :197 `mbCheckForAllEventTypeComplete`
-    bool      mbCheckAllWinTypesArmed   = false;               // X360 +133494 (0x20976) DWARF :200 `mbNeedCheckForAllWinTypes`
+    bool mbCheckAllWinTypesPending;               // X360 +133493 (0x20975) DWARF :197 `mbCheckForAllEventTypeComplete`
+    bool mbCheckAllWinTypesArmed;               // X360 +133494 (0x20976) DWARF :200 `mbNeedCheckForAllWinTypes`
 
     // X360 +133496 (0x20978). PINNED BY THE ASSERT STRING: PreWorldUpdate @0x823A4F68 fires
     // "meModeToCheckForAllWinTypes != RaceEventData::E_MODE_INVALID"
@@ -1147,11 +1143,11 @@ private:
     // CheckForAllModeTypeCompletion. Logical type BrnProgression::RaceEventData::EModeType;
     // stored as the s32 the X360 writes (`stwx` of the event record's +0xEC mode BYTE, so the
     // stored value is a zero-extended byte). Construct seeds -1 (E_MODE_INVALID).
-    s32       meModeToCheckForAllWinTypes = -1;                // X360 +133496 (0x20978)
+    s32 meModeToCheckForAllWinTypes;                // X360 +133496 (0x20978)
 
     // X360 +133500 (0x2097C). DWARF :206 `mfTimeTillAllEventTypeCompleteHudMessage` -- the 2 s
     // (flt_82001D9C) hold PreWorldUpdate runs on the sim step before CheckForAllModeTypeCompletion.
-    f32       mfTimeTillAllEventTypeCompleteHudMessage = 0.0f;  // X360 +133500 (0x2097C)
+    f32 mfTimeTillAllEventTypeCompleteHudMessage;  // X360 +133500 (0x2097C)
 
     // ---- [takedown P1 wave 2026-09-03] the "all rivals beaten" flag pair --------------------
     // X360 +133504 (0x20980) / +133505 (0x20981), two consecutive bools in the DWARF's order
@@ -1161,12 +1157,12 @@ private:
     // ... if (+133504)`) and clears both -- that reader is not reconstructed yet, so on PC the
     // pair is written and never consumed (no HUD "all rivals beaten" message). Construct seeds
     // are not attested here; false is the zero-initialised host value.
-    bool      mbNeedToShowAllRivalsBeatenMessage = false;      // X360 +133504 (0x20980)
-    bool      mbShowShutDownAllIfNeeded          = false;      // X360 +133505 (0x20981)
+    bool mbNeedToShowAllRivalsBeatenMessage;      // X360 +133504 (0x20980)
+    bool mbShowShutDownAllIfNeeded;      // X360 +133505 (0x20981)
 
     // X360 +133508 (0x20984). DWARF :215 `mfTimeTillShowAllRivalsBeatenMessage` -- the 2 s hold
     // PreWorldUpdate runs on the sim step before posting AllRivalsShutDownAction (210).
-    f32       mfTimeTillShowAllRivalsBeatenMessage = 0.0f;      // X360 +133508 (0x20984)
+    f32 mfTimeTillShowAllRivalsBeatenMessage;      // X360 +133508 (0x20984)
 
     // X360 +133516 (0x2098C). DWARF :221 `miPreWorldUpdate` -- the CgsDev::PerfMonCpu handle
     // PreWorldUpdate brackets itself with (`lwz r3, 0(r23)` where r23 == this + 0x2098C).
@@ -1175,7 +1171,7 @@ private:
     // and asserts it >= 0 (BrnProgressionManager.cpp:197). The -1 in-class initialiser stays as
     // the pre-Construct value (the host has no BSS zero to lean on) and is exactly what
     // StartMonitor/StopMonitor reject through IsValidHandle if anything ticks before Construct.
-    s32       miPreWorldUpdate = -1;                            // X360 +133516 (0x2098C)
+    s32 miPreWorldUpdate;                            // X360 +133516 (0x2098C)
 
     // ---- [progression wave: medals] ---------------------------------------------------------
     // The two members UnlockToProgressionRank's shared rank tail (@0x8239E094, park Q4) writes and
@@ -1196,12 +1192,12 @@ private:
     // ⚠️ NO READER ON PC. The console consumer is GetGiftCarId @0x8237AC80 (DWARF
     // BrnProgressionManager.cpp:559, `GetGiftCarId(ECarType leLeastUsedCarType)`), which is not
     // reconstructed. The store is real and is reproduced; nothing observes it yet.
-    CgsID     mNewlyUnlockedCarID = 0; // X360 +133472 (0x20960), DWARF :164
-    s32       meLeastUsedCarType = 0;                           // X360 +133480 (0x20968), DWARF :167
+    CgsID mNewlyUnlockedCarID; // X360 +133472 (0x20960), DWARF :164
+    s32 meLeastUsedCarType;                           // X360 +133480 (0x20968), DWARF :167
     // mbHasJustRankedUp -- DWARF :182. `stbx 1 -> +0x20970` @0x8239E1D0, and ONLY when the rank
     // argument is non-zero, so the rank-0 starting unlock does not read as "you just ranked up".
     // Consumed and cleared by ShowModeResults after it records the rank-up.
-    bool      mbHasJustRankedUp = false;                        // X360 +133488 (0x20970), DWARF :182
+    bool mbHasJustRankedUp;                        // X360 +133488 (0x20970), DWARF :182
 
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
     // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.
@@ -1237,7 +1233,7 @@ private:
     // cursor reaches ProgressionData::GetRivalCount(). Construct @0x8237A5F8 is not reconstructed;
     // 0 is both the host's zero-initialised value and the "start of a fresh pass" value the
     // console's own reset (`stw r23, 0(r29)` with r23 == 0) writes.
-    s32       miLastUpdatedRival = 0;                           // X360 +133416 (0x20928)
+    s32 miLastUpdatedRival;                           // X360 +133416 (0x20928)
 
 public:
     // X360 0x8236F658. DWARF :661 `CgsID UnlockRivals(InputBuffer::GameActionQueue*)`. Walks the
@@ -1293,7 +1289,7 @@ private:
     // X360 +133428 (0x20934). The junkyard/car-select manager. Construct @0x8237A5F8 asserts it
     // non-null ("lpCarSelectManager != NULL", BrnProgressionManager.cpp:124) and stores it; this
     // build has no reconstructed READER yet, so it is installed and documented, not consumed.
-    BrnGameState::CarSelectManager* mpCarSelectManager = 0;     // X360 +133428 (0x20934)
+    BrnGameState::CarSelectManager* mpCarSelectManager;     // X360 +133428 (0x20934)
 
     // X360 +133344 (0x208E0). LoadAIData's stage word -- the exact twin of meLoadStage above,
     // switched on by ProgressionManager::LoadAIData @0x8239A0D0 (`v6 = a1 + 133344`). The five
@@ -1308,7 +1304,7 @@ private:
         E_AI_DATA_ACQUIRE_REQUESTED   = 3,   // GetAILanes ("WorldMapData") issued
         E_AI_DATA_LOAD_COMPLETE       = 4    // mpAISectionData bound
     };
-    AILoadStage meAILoadStage = E_AI_DATA_LOAD_NOT_STARTED;     // X360 +133344 (0x208E0)
+    AILoadStage meAILoadStage;     // X360 +133344 (0x208E0)
 
     // X360 +121216 (0x1D980) / +133336 (0x208D8). The preset ("HACK_") race table and its live
     // count. ProcessLoadedPresetRaces @0x8236FDF8 fills both (`*(a1 + 133336) = HACK_SetupRaces(...)`
@@ -1316,13 +1312,13 @@ private:
     // GetRacesAtLandmark @0x8236F830 and LandmarkHasAvailableRaces @0x8236F928 are the readers and
     // both take the count from +133336, NOT from the array's own count word.
     Array<Race, 64> maPresetRaces;                              // X360 +121216 (0x1D980)
-    u32             muNumPresetRaces = 0;                       // X360 +133336 (0x208D8)
+    u32 muNumPresetRaces;                       // X360 +133336 (0x208D8)
 
     // X360 +133520 (0x20990). DWARF :224 `miPostWorldUpdate` -- the second CgsDev::PerfMonCpu
     // handle Construct registers ("Prog: Post-World Up"), asserted >= 0 at
     // BrnProgressionManager.cpp:198. The PostWorldUpdate body that brackets itself with it is not
     // reconstructed; the handle is registered anyway because Construct's assert reads it.
-    s32 miPostWorldUpdate = -1;                                 // X360 +133520 (0x20990)
+    s32 miPostWorldUpdate;                                 // X360 +133520 (0x20990)
 
 public:
     // X360 0x8237A5F8. THE MANAGER'S CONSTRUCT. Sole caller: GameStateModule::Construct

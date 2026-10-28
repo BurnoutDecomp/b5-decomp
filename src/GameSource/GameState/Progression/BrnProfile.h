@@ -3,6 +3,7 @@
 
 #include <cstddef>  // offsetof (Profile::_AssertLayout)
 #include "types.hpp"
+#include <cfloat>
 #include "BrnCommonTypes.h"                               // CgsID, Vector3 (rw::math::vpu::Vector3)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"  // BrnProgression::ETrainingType (Profile training-flag accessors)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"      // BrnTrigger::GenericRegion::Type (drive-thru discovery accessors)
@@ -981,7 +982,7 @@ public:
     // ("logical: BrnResource::ECarType; not yet homed"); no enum is invented here.
     s32 GetCurrentCarTypeWithMinDistance() const
     {
-        f32 lfSmallest = 3.40282347e+38f;                  // flt_82029B70
+        f32 lfSmallest = FLT_MAX;                  // flt_82029B70
         s32 liCarType  = 0;                                // r9 starts at r22 == 0
         for (s32 liIndex = 0; liIndex < 3; ++liIndex)
         {
@@ -1164,7 +1165,7 @@ private:
     // @ +118032..+118039).
     static void _AssertLayout()
     {
-        CGS_STATIC_ASSERT((sizeof(mb100PercentCompletionSequenceShown) == 1),
+        CGS_STATIC_ASSERT((sizeof(((Profile*)0)->mb100PercentCompletionSequenceShown) == 1),
                       "completion flags are single bytes (X360 lbzx/stbx)");
         CGS_STATIC_ASSERT((offsetof(Profile, mbHaveSeenEliteCompletionSequence) -
                       offsetof(Profile, mb100PercentCompletionSequenceShown) == 6),
