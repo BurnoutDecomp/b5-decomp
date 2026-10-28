@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BEHAVIOUR_BYSTANDER_CAM_IMPACT_CONTROLLERS_H
 
 #include "types.hpp"
+#include <cfloat>
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"  // Utils::CameraImpactEffect (by value)
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"         // Utils::Random typedef (CgsNumeric::Random)
 
@@ -74,7 +75,7 @@ public:
     // gate is `mfTimeSinceLastSlomo >= 2.0f`).
     void Construct()
     {
-        mfTimeSinceLastSlomo = 3.4028235e38f;   // stfs flt_8200173C (FLT_MAX), 0x1A8(state)
+        mfTimeSinceLastSlomo = FLT_MAX;   // stfs flt_8200173C (FLT_MAX), 0x1A8(state)
         mfTimeInSlomo        = 0.0f;            // stfs flt_82001CC0 (0.0),    0x1AC(state)
         mbFirstFrameOfSlomo  = false;           // stb  0,                     0x1B0(state)
     }

@@ -488,7 +488,7 @@ namespace CgsResource
         // ARTIST 828F5D38-4C clears all three owner words, then publishes the
         // empty resource to its alias ring twice. Cached aliases must not keep
         // pointers to the heap bytes (or native raster) just retired above.
-        auto* lpOwner = reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource);
+        BaseResourcePtr* lpOwner = reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource);
         lpOwner->Propogate();
         lpOwner->Propogate();
     }
@@ -998,7 +998,7 @@ namespace CgsResource
     {
         for (s32 t = 0; t < 3; ++t)
         {
-            const auto& lrDescriptor = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[t];
+            const rw::BaseResourceDescriptor& lrDescriptor = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[t];
             if (lrDescriptor.m_size == 0) continue;
             AllocRequest& lrRequest = lpSet->mapAllocRequests[t][lpSet->manAllocRequestCounts[t]++];
             lrRequest.muSize = lrDescriptor.m_size;
@@ -1236,7 +1236,7 @@ namespace CgsResource
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         ScratchEntry* lpScratch = mpCurrentScratchPool->GetEntry(liIndex);
         Entry* lpEntry = &mpResourceEntries[lpScratch->miEntryId];
-        rw::Resource lSource = {}, lDest = {};
+        rw::Resource lSource, lDest; // Native default constructor clears all five lanes.
         ResourceDescriptor lDescriptor;
         lpEntry->mResource.ConvertToRWResource(lSource);
         lDest = lSource;
@@ -1255,7 +1255,7 @@ namespace CgsResource
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         ScratchEntry* lpScratch = mpCurrentScratchPool->GetEntry(liIndex);
         Entry* lpEntry = &mpResourceEntries[lpScratch->miEntryId];
-        rw::Resource lSource = {}, lDest = {};
+        rw::Resource lSource, lDest; // Native default constructor clears all five lanes.
         ResourceDescriptor lDescriptor;
         lpEntry->mResource.ConvertToRWResource(lSource);
         lDest = lSource;
@@ -1437,7 +1437,7 @@ namespace CgsResource
         {
             const s32 liEntryId = static_cast<s32>(reinterpret_cast<uintptr_t>(mpRelocateSources[lu].mpOwner));
             Entry* lpEntry = &mpResourceEntries[liEntryId];
-            rw::Resource lSource = {}, lDest = {};
+            rw::Resource lSource, lDest; // Native default constructor clears all five lanes.
             ResourceDescriptor lDescriptor;
             lpEntry->mResource.ConvertToRWResource(lSource);
             lDest = lSource;

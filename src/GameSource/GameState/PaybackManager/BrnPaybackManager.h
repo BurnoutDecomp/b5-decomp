@@ -109,7 +109,7 @@ namespace BrnGameState
 
         // X360-attested "no dirty trick" sentinel for the two EPaybackType members (Construct stores
         // 3, ProcessPaybackTriggerableEvent asserts against it). See the header note above.
-        static constexpr BrnNetwork::EPaybackType KE_NO_DIRTY_TRICK =
+        static const BrnNetwork::EPaybackType KE_NO_DIRTY_TRICK =
             static_cast<BrnNetwork::EPaybackType>(3);
 
         // ------------------------------------------------------------------ public API

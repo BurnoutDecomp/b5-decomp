@@ -133,7 +133,7 @@ void GameStateModule::ProcessGameEvents_Group2(s32                              
                 break;
             }
 
-            mpTrainingManager->ForceUnpause(lpActionQueue);
+            mTrainingManager.ForceUnpause(lpActionQueue);
 
             if (lpStartNetworkGameEvent->mbIsStartingGameAfterPlayerJoin)
             {
@@ -281,15 +281,15 @@ void GameStateModule::ProcessGameEvents_Group2(s32                              
                 BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
                 if (!lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE))
                 {
-                    mpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE);
+                    mTrainingManager.RequestTraining(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE);
                 }
                 else if (!lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE_2))
                 {
-                    mpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE_2);
+                    mTrainingManager.RequestTraining(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE_2);
                 }
                 else if (!lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE_3))
                 {
-                    mpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE_3);
+                    mTrainingManager.RequestTraining(BrnProgression::E_TRAINING_TYPE_JOIN_FREEBURN_ONLINE_3);
                 }
             }
         }

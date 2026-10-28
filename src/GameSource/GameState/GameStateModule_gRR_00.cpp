@@ -259,22 +259,19 @@ void GameStateModule::ProcessTakedownEvents(
         // Profile+0x6C is mfInCarTimePlayed. The whole gauntlet is the inlined tip-request guard
         // the tree already names on TrainingManager (IsTipPending / IsInPictureParadise /
         // GetProfile / GetTimeSinceLastTip / RequestTip -- the BrnDriveThruManager.cpp idiom).
-        // [GUARD] mpTrainingManager is a pointer on this build (the console embeds the manager);
-        // the null test is the pointer-ness artefact, not a console branch.
         if (static_cast<s32>(lrEvent.meVictimIndex) == static_cast<s32>(GetPlayerActiveRaceCarIndex()) &&
             GetCurrentGameModeType() == GameStateModuleIO::E_MODE_MARKED_MAN &&
-            mpTrainingManager != 0 &&
-            !mpTrainingManager->IsTipPending() &&
-            !mpTrainingManager->IsInPictureParadise() &&
-            mpTrainingManager->IsTipAllowedInGameMode(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN))
+            !mTrainingManager.IsTipPending() &&
+            !mTrainingManager.IsInPictureParadise() &&
+            mTrainingManager.IsTipAllowedInGameMode(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN))
         {
-            BrnProgression::Profile* lpProfile = mpTrainingManager->GetProfile();
+            BrnProgression::Profile* lpProfile = mTrainingManager.GetProfile();
             CGS_ASSERT(lpProfile != 0, "lpProfile");   // BrnTrainingManager.cpp:382
             if (lpProfile != 0 &&
                 !lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN) &&
-                mpTrainingManager->GetTimeSinceLastTip() >= KF_TRAINING_TIP_SETTLE_TIME)   // fcmpu/blt @0x823900AC
+                mTrainingManager.GetTimeSinceLastTip() >= KF_TRAINING_TIP_SETTLE_TIME)   // fcmpu/blt @0x823900AC
             {
-                mpTrainingManager->RequestTip(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN);
+                mTrainingManager.RequestTip(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN);
             }
         }
     }

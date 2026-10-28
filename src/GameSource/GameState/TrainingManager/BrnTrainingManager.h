@@ -35,13 +35,16 @@
 // and FLAGGED there -- their bodies + real member layout land with those owning TUs.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
-#include "SharedClasses/Progression/BrnTrainingTypes.h"                  // BrnProgression::ETrainingType
-#include "GameSource/GameState/BrnGameStateModule.h"                     // GameStateModule (IsOnlineGameMode / RequestPause / GetLastActiveRaceCarInterface / timed-mode accessors)
-#include "GameSource/GameState/BrnGameStateModuleIO.h"                   // GameStateModuleIO::GameActionQueue (the OutputBuffer's CgsModule::VariableEventQueue<13312,16>)
-#include "GameSource/GameState/Progression/BrnProgressionManager.h"      // BrnProgression::ProgressionManager (GetProfile)
-#include "GameSource/GameState/Progression/BrnProfile.h"                 // BrnProgression::Profile (training-flag accessors)
-#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface (IsPlayerCarActive / GetBoostOutputInfoN / GetPlayerActiveRaceCarIndex)
+#include <cstddef>
+#include "SharedClasses/Progression/BrnTrainingTypes.h"
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // GameActionQueue
+
+namespace BrnProgression { class ProgressionManager; class Profile; }
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+namespace BrnGameState {
+    class GameStateModule;
+    namespace GameStateModuleIO { struct PreWorldInputBuffer; }
+}
 
 namespace BrnGameState
 {
@@ -61,9 +64,8 @@ class TrainingManager
 {
 public:
     // ---- Lifecycle / wiring ---------------------------------------------------------------
-    // ⭐ [tut-ticker] BODIED 2026-08-24 from the PS3 DecFIGS export (0x241DE0; the X360 inlines
-    // it into GameStateModule::Construct's neighbourhood -- no X360 export exists). Seeds every
-    // member: state INACTIVE, type -1, tips ENABLED, boost-clock -600, everything else 0/false.
+    // ARTIST GameStateModule::Construct inlines these stores at 0x82380584..0x823805C4.
+    // State INACTIVE, type -1, tips enabled, boost clock -600, other scalars zero.
     void Construct(BrnProgression::ProgressionManager* lpProgressionManager,
                    GameStateModule* lpGameStateModule);
 
@@ -73,7 +75,6 @@ public:
     //            RCEntityActiveRaceCarOutputInterface*, f32, bool)
     // ARTIST 823937E4 keeps r4 as the input buffer; 823938C4..823938D0 reads
     // its controller interface's active port before calling XUserGetSigninState.
-    // The PC signin leaf retains that original user-index argument.
     void Update(const GameStateModuleIO::PreWorldInputBuffer* lpInputBuffer,
                 GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                 BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
@@ -143,7 +144,7 @@ public:
     // ⭐ [stuntrace wave D, D3] X360-INLINED read of meCurrentTrainingType (+0x04). No symbol
     // exists in the image -- every consumer renders as a bare `lbz`/`lwz` at the owner's offset.
     // THREE sites in this wave's chain read it through the GameStateModule, all as gsm+46644
-    // (== mpTrainingManager + 0x04, since the console embeds the manager at gsm+46640):
+    // (== mTrainingManager + 0x04, since the console embeds the manager at gsm+46640):
     //   ShouldStartSnapRaceMode              @0x82363700  `if (!*(a1+46640) || *(a1+46644) >= 77)`
     //   CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418  twice -- the mbCanEnterEvent gate and
     //                                                     the action's own mbCanEnterEvent field
@@ -191,5 +192,23 @@ private:
     f32                                 mfLastBoostMessagePlayTime;  // +0x1C
     s32                                 miNextAtomikaFreeburnVoIndex;// +0x20
     bool                                mbGotAirBefore;              // +0x24
+
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(TrainingManager) == 0x28), "ARTIST training manager");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, meTrainingState) == 0x00), "ARTIST meTrainingState");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, meCurrentTrainingType) == 0x04), "ARTIST meCurrentTrainingType");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mpProgressionManager) == 0x08), "ARTIST mpProgressionManager");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mpGameStateModule) == 0x0C), "ARTIST mpGameStateModule");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mfStateTime) == 0x10), "ARTIST mfStateTime");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mbInPictureParadise) == 0x14), "ARTIST mbInPictureParadise");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mbIsOnlinePossible) == 0x15), "ARTIST mbIsOnlinePossible");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mbTipsEnabled) == 0x16), "ARTIST mbTipsEnabled");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mbVoiceoverFinishedLastFrame) == 0x17), "ARTIST mbVoiceoverFinishedLastFrame");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mfLastMessageFinishedTime) == 0x18), "ARTIST mfLastMessageFinishedTime");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mfLastBoostMessagePlayTime) == 0x1C), "ARTIST mfLastBoostMessagePlayTime");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, miNextAtomikaFreeburnVoIndex) == 0x20), "ARTIST miNextAtomikaFreeburnVoIndex");
+        CGS_STATIC_ASSERT((offsetof(TrainingManager, mbGotAirBefore) == 0x24), "ARTIST mbGotAirBefore");
+    }
 };
 }

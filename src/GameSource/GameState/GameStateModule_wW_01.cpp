@@ -117,17 +117,16 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
         // so an unordered compare still asks.
         if (lpBoostInfo->meBoostType == BrnWorld::E_BOOST_TYPE_DANGER &&
             !(lpBoostInfo->mfBoostAmount < lpBoostInfo->mfMaxBoost) &&
-            mpTrainingManager != 0 &&
-            !mpTrainingManager->IsTipPending() &&
-            !mpTrainingManager->IsInPictureParadise() &&
-            mpTrainingManager->IsTipAllowedInGameMode(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL))
+            !mTrainingManager.IsTipPending() &&
+            !mTrainingManager.IsInPictureParadise() &&
+            mTrainingManager.IsTipAllowedInGameMode(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL))
         {
-            BrnProgression::Profile* lpTipProfile = mpTrainingManager->GetProfile();
+            BrnProgression::Profile* lpTipProfile = mTrainingManager.GetProfile();
             CGS_ASSERT(lpTipProfile != 0, "lpProfile");
             if (!lpTipProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL) &&
-                !(mpTrainingManager->GetTimeSinceLastTip() < KF_TRAINING_TIP_SETTLE_TIME))
+                !(mTrainingManager.GetTimeSinceLastTip() < KF_TRAINING_TIP_SETTLE_TIME))
             {
-                mpTrainingManager->RequestTip(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL);
+                mTrainingManager.RequestTip(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL);
             }
         }
 

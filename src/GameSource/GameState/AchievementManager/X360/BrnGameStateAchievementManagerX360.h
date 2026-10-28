@@ -26,49 +26,26 @@
 //   +0x54  maAchievementDetails  (XACHIEVEMENT_DETAILS[50], 36B each -- enumerate scratch)
 //   +0x75C maAchievementsToWrite (XUSER_ACHIEVEMENT[50], 8B each  -- write scratch)
 //
-// The X360 byte offsets are 32-bit-pointer/Xenon facts; on a 64-bit host the base,
-// the embedded CgsXOverlapped, and the scratch buffers widen/re-pad, so members are
-// accessed BY NAME and absolute offsets are NOT static_asserted (same rule as the
-// sibling BrnNetwork::*ManagerX360 homes).
+// Native offsets are checked against the actual SDK records below.
 //
 // The per-frame pump: Update tracks the active controller's user index, and while that
 // user is signed in and no asynchronous call is in flight, first downloads the user's
 // earnt achievements (GetAchievementsFromX360Api: enumerate, then map each earnt
 // achievement id back to its local bit through KAU_ACHIEVEMENT_IDS), then writes up to
 // three queued achievements per call (WriteAchievements). The system calls go through the
-// PC platform layer (CgsXboxLivePC*.cpp).
+// Xbox system-software APIs declared by the XDK.
 // ----------------------------------------------------------------------------
 
 #include "types.hpp"
+#include <xtl.h>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"            // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/System/CgsXOverlapped.h"            // CgsSystem::CgsXOverlapped
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // base + EAchievement
 
-// ---------------------------------------------------------------------------
-// The two system-software achievement records the manager hands the enumerate / write
-// calls (console layouts: details 36 bytes -- id, three string pointers, image id, cred,
-// achieved FILETIME, flags; write record 8 bytes -- user index, achievement id). The
-// string pointers are host pointers here; nothing on the host reads them.
-// ---------------------------------------------------------------------------
-struct XACHIEVEMENT_DETAILS
-{
-    u32       dwId;               // console +0x00
-    wchar_t*  pwszLabel;          // console +0x04
-    wchar_t*  pwszDescription;    // console +0x08
-    wchar_t*  pwszUnachieved;     // console +0x0C
-    u32       dwImageId;          // console +0x10
-    u32       dwCred;             // console +0x14
-    u32       dwAchievedLow;      // console +0x18 (ftAchieved.dwLowDateTime)
-    u32       dwAchievedHigh;     // console +0x1C (ftAchieved.dwHighDateTime)
-    u32       dwFlags;            // console +0x20
-};
-
-struct XUSER_ACHIEVEMENT
-{
-    u32 dwUserIndex;              // +0x00
-    u32 dwAchievementId;          // +0x04
-};
-CGS_STATIC_ASSERT((sizeof(XUSER_ACHIEVEMENT) == 8), "XUSER_ACHIEVEMENT is 8 bytes");
+// Use the original SDK record definitions and calling conventions.
+CGS_STATIC_ASSERT((sizeof(XACHIEVEMENT_DETAILS) == 36), "X360 achievement details");
+CGS_STATIC_ASSERT((offsetof(XACHIEVEMENT_DETAILS, ftAchieved) == 0x18), "ARTIST completion time");
+CGS_STATIC_ASSERT((sizeof(XUSER_ACHIEVEMENT) == 8), "X360 achievement write record");
 
 namespace BrnGameState
 {
@@ -143,8 +120,8 @@ private:
     CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS> mAchievementsToWrite; // +0x20
     s32                                          miUserIndex;          // +0x28 (-1 == none)
     s32                                          miState;              // +0x2C (0/1/2)
-    u32                                          mcbBuffer;            // +0x30 (bytes)
-    void*                                        mhEnumerator;         // +0x34 (HANDLE)
+    DWORD                                        mcbBuffer;            // +0x30 (bytes)
+    HANDLE                                       mhEnumerator;         // +0x34 (HANDLE)
     CgsSystem::CgsXOverlapped                    mOverLapped;          // +0x38 (28 bytes)
 
     // Enumerate / write scratch (console: the details from +0x54 at a 36-byte stride, the write
@@ -152,6 +129,19 @@ private:
     // the module's road-rules manager follows at the next 8-byte boundary).
     XACHIEVEMENT_DETAILS maAchievementDetails[KU_NUM_ACHIEVEMENTS];            // +0x54
     XUSER_ACHIEVEMENT    maAchievementsToWrite[KU_MAX_ACHIEVEMENTS_PER_WRITE]; // +0x75C
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(AchievementManagerX360) == 0x778), "X360 achievement manager size");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, mAchievementsEarnt) == 0x18), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, mAchievementsToWrite) == 0x20), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, miUserIndex) == 0x28), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, miState) == 0x2C), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, mcbBuffer) == 0x30), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, mhEnumerator) == 0x34), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, mOverLapped) == 0x38), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, maAchievementDetails) == 0x54), "ARTIST achievement member");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerX360, maAchievementsToWrite) == 0x75C), "ARTIST achievement member");
+    }
 };
 
 }
