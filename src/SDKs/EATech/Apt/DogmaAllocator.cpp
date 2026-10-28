@@ -2,7 +2,7 @@
 
 #include <cstring>   // memset
 #include <cstdlib>   // (the retired CRT-heap leaf backing; kept for the debug/guard paths)
-#include <intrin.h>  // _Interlocked* (MSVC)
+#include <xtl.h>  // _Interlocked* (MSVC)
 
 // TEMPORARY DEBUG: guard-page allocator for the DOGMA pool -- every Allocate gets
 // its own virtual page(s), every Deallocate flips the block PAGE_NOACCESS and never

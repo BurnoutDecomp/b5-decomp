@@ -9,7 +9,7 @@
 #include "SDKs/EATech/eathread/eathread_condition.h"
 
 #include <xtl.h>  // CRITICAL_SECTION, Initialize/Enter/LeaveCriticalSection
-#include <intrin.h>   // _InterlockedIncrement / _InterlockedExchange / _InterlockedExchangeAdd
+#include <xtl.h>   // _InterlockedIncrement / _InterlockedExchange / _InterlockedExchangeAdd
 
 namespace EA
 {

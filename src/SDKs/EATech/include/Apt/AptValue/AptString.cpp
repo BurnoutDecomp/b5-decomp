@@ -20,7 +20,7 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"             // gpNonGCPoolManager (the non-GC value pool)
 #include "SDKs/Packages/Apt/2.00.00/source/AptValue/AptString.h" // StringMembersIndex::in_word_set recognizer
 
-#include <intrin.h>  // _InterlockedExchange (the Apt non-GC value-pool spin lock)
+#include <xtl.h>  // _InterlockedExchange (the Apt non-GC value-pool spin lock)
 #include <new>       // placement new (construct an AptString into pooled storage)
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
 #include "types.hpp"   // uintptr_t (the StringMembersIndex wordlist member-id payload)

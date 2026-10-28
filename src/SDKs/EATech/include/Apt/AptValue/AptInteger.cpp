@@ -4,7 +4,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"
-#include <intrin.h>   // _InterlockedExchange (the free-list spin lock)
+#include <xtl.h>   // _InterlockedExchange (the free-list spin lock)
 #include <new>        // placement new
 
 AptInteger* AptInteger::spFirstFree = 0;

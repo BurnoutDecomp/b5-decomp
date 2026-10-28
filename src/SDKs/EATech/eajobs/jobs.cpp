@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eajobs/jobs.h"
 
-#include <intrin.h> // _InterlockedExchange (MSVC atomic intrinsic)
+#include <xtl.h> // _InterlockedExchange (MSVC atomic intrinsic)
 #include <xtl.h>
 
 // ============================================================================

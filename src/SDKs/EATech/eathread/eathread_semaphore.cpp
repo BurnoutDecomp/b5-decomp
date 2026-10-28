@@ -5,7 +5,7 @@
 // snapshot divergence FLAG and the WAIT-TIMEOUT FLAG.
 
 #include <xtl.h>  // CreateSemaphoreA / WaitForSingleObject / CloseHandle / GetTickCount
-#include <intrin.h>   // _InterlockedDecrement -- portable stand-in for the X360
+#include <xtl.h>   // _InterlockedDecrement -- portable stand-in for the X360
                       // interrupt-masked lwarx/stwcx. reservation idiom.
 #include <new>        // placement new (SemaphoreFactory::ConstructSemaphore)
 

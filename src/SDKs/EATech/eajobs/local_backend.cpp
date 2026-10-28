@@ -3,7 +3,7 @@
 #include "eathread/eathread_semaphore.h"
 #include "SDKs/EATech/eajobs/jobs.h"               // EA::Jobs::Allocator / GetAllocator (off_8327F280 Free)
 
-#include <intrin.h>  // _InterlockedCompareExchange / _InterlockedExchange (atomic CAS)
+#include <xtl.h>  // _InterlockedCompareExchange / _InterlockedExchange (atomic CAS)
 #include <xtl.h> // QueryPerformanceCounter, LARGE_INTEGER
 #include <cstring>   // std::memcpy (the parameters blob copy)
 #include <cstddef>   // offsetof (the uncalled _AssertLayout layout pins)

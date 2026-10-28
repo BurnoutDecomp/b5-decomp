@@ -13,7 +13,7 @@
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // AptSharedPtrDecRef / AptSharedPtrDelete
 #include "SDKs/EATech/include/Apt/AptRenderHooks.h" // AptHook_DrawShape (the RW boundary)
 
-#include <intrin.h>   // _InterlockedExchangeAdd (MSVC)
+#include <xtl.h>   // _InterlockedExchangeAdd (MSVC)
 
 // GetRefCount @0x7DEDDC -- the high-16 of the packed word.
 uint32_t AptCharacter::GetRefCount() const

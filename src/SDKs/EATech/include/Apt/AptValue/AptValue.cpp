@@ -19,7 +19,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"              // mp__Proto__ (the MC parent-chain walk)
 #include "eathread/eathread.h"                                    // EA::Thread::GetThreadId / ThreadId
 
-#include <intrin.h>   // _InterlockedExchange (the Apt GC flag lock)
+#include <xtl.h>   // _InterlockedExchange (the Apt GC flag lock)
 
 // The Apt GC reference-registration callback. The GC value types' RegisterReferences
 // call through it, so the mark walk is inert while it is null. The callback BODY is

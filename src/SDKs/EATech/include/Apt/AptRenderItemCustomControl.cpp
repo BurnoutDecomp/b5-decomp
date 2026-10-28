@@ -23,7 +23,7 @@
 
 extern int gnCurrRenderTickConsumed;   // dword_8324E524 (AptGlobals.cpp; the Render-side tick)
 
-#include <intrin.h>   // _InterlockedExchange (the render-tree spin lock)
+#include <xtl.h>   // _InterlockedExchange (the render-tree spin lock)
 #include <new>        // placement new
 
    // X360 unk_8324E7CC
