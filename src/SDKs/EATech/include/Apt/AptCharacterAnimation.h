@@ -1,101 +1,43 @@
 #pragma once
 
-// ===========================================================================
-// EATech Apt -- AptCharacterAnimation: a loaded .apt movie's root.
-//
-// It owns the movie's character table (the AptCharacters), its import table (the
-// other .apt files it pulls characters from), and an init-indicator list. It is
-// produced by AptCharacterAnimation::Fixup (@0x82AFF268) from the serialized .apt.
-//
-// SERIALIZED 64-BIT DEF-BASE / IN-PLACE (the faithful GUIAPT64 "1:7:8" format).
-// The struct below IS the on-disk movie def-base overlaid directly (the loader
-// relocates it IN PLACE via Fixup, then the runtime reads it through this struct
-// -- AptGetMovieCharacterAnimation returns `char + KU_AptEmbeddedMovieOff`, a
-// pointer straight into the 64-bit file blob). So the member OFFSETS are the
-// VERIFIED 64-bit serialized offsets (vs TITLE_SCREEN02.bundle), NOT a transcoded
-// runtime layout: charCount@0x18, charTable@0x20, importCount@0x34, importTable@
-// 0x38, initCount@0x40, initList@0x48 -- exactly the byte offsets Fixup already
-// relocates. (The old code laid these at a transcoded +0x0C/+0x10/+0x20/... which
-// mismatched the def-base Fixup produced; redefining the struct to the serialized
-// layout makes the named-member methods read the correct offsets.)
-//
-// The 32-bit console record has the SAME field order at half the pointer width
-// (frameCount@0, framesOffset@4, charCount@0xC, charTable@0x10, importCount@0x20,
-// importTable@0x24, initCount@0x28, initList@0x2C); those console dword positions
-// are noted for traceability of the ARTIST/PS3 asm this is decompiled from.
-//
-// SHAPE + BODIES from the PS3 EXTERNAL ELF:
-//   IsImport          @0x7E3738   UnmapCharacter   @0x7E36CC
-//   ClearCharacterList@0x810DEC   IncCharacterList @0x80E790
-//   (ResetInitIndicators @0x7E37A4, GetIDFromImportFile @0x7E77FC, Fixup/Resolve
-//    reach into the AptMovie timeline / the imported export table.)
-//
-// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
-// ===========================================================================
-
-#include <cstddef>   // offsetof (the layout static_asserts below)
+// ARTIST's in-place 32-bit movie definition follows the 16-byte AptCharacter.
+// The final name/id list serves both library exports and class-init indicators.
+#include <cstddef>
 #include "types.hpp"
-
-#include "SDKs/EATech/include/Apt/AptCharacter.h"    // AptCharacter (table entries)
-#include "SDKs/EATech/include/Apt/AptSharedPtr.h"     // AptFilePtr (import + IncCharacterList)
+#include "SDKs/EATech/include/Apt/AptCharacter.h"
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"
 
 struct AptFile;
 
-// One import: pull character `mnId` from `mpImportFileName`'s export `mpClassName`.
-// Serialized 64-bit record = 32 bytes {movieName@0, importName@8, id@0x10, AptFile
-// @0x18} -- the widened GUIAPT64 form of the 16-byte console record
-// {name@+0, class@+4, id@+8, AptFilePtr@+12}. On x64 the two 8-byte pointers +
-// the padded int naturally lay the fields at the serialized stride 0x20.
 struct AptImportEntry
 {
-    const char* mpImportFileName;   // +0x00  the .apt to load
-    const char* mpClassName;        // +0x08  the exported symbol to import from it
-    int32_t     mnId;               // +0x10  the local character id this maps to
-    AptFile*    mpFile;             // +0x18  the loaded import (an AptFilePtr's AptFile*)
+    const char* mpImportFileName;   // +0x00
+    const char* mpClassName;        // +0x04
+    int32_t mnId;                  // +0x08
+    AptFile* mpFile;               // +0x0C
 };
-// Lock the serialized 64-bit import-entry stride/offsets (the Fixup walk indexes
-// mpImportTable by 0x20 and reads name@0/class@8/id@0x10/AptFile@0x18).
 
-// One init indicator. Serialized 64-bit record = 16 bytes {ptr@0, indicator@8} --
-// the widened GUIAPT64 form of the 8-byte console record {ptr@+0, indicator@+4};
-// the indicator is sign-flagged (negated while pending, restored by
-// ResetInitIndicators).
 struct AptInitEntry
 {
-    void*   mpInitObject;   // +0x00
-    int32_t mnIndicator;    // +0x08
+    void* mpInitObject;            // +0x00 name
+    int32_t mnIndicator;           // +0x04 character id, negated when consumed
 };
 
 struct AptCharacterAnimation
 {
-    // The serialized 64-bit movie def-base, overlaid in place. Offsets are the
-    // VERIFIED GUIAPT64 byte offsets (vs TITLE_SCREEN02.bundle); explicit padding
-    // holds the not-yet-decoded slots so offsetof() matches the file exactly.
-    // Console dword indices are noted for traceability of the ARTIST/PS3 asm.
-
-    int32_t        mnFrameCount;      // +0x00  console [0]  frameCount
-    void*          mpFrames;          // +0x08  console [1]  framesOffset (the timeline; AptMovie::resolve)
-    void*          mpUnk10;           // +0x10  console [2]  (undecoded)
-    int32_t        mnCharacterCount;  // +0x18  console [3]  charCount
-    AptCharacter** mpCharacterTable;  // +0x20  console [4]  charTable
-    int32_t        mnScreenW;         // +0x28  console [5]  screen width
-    int32_t        mnScreenH;         // +0x2C              screen height
-    // +0x30 -- the AUTHORED frame period in milliseconds; the SAME slot AptFile.h's
-    // AptMovieData view names mnMillisecondsPerFrame (root+0x50), and the only thing
-    // AptUpdateRunTargetFrames paces the timeline from. MEASURED over all 290 shipped
-    // GUIAPT bundles: the value is only ever 16 / 33 / 83 (60 / 30 / 12 fps) and NEVER 0
-    // -- authored data, not scratch. (It was mis-named mnResolveScratch and cleared by
-    // Resolve: the console's `*(a1+48)=0` is def+0x30 on the 4-BYTE def -- the dword after
-    // initList@+0x2C -- which widens to def+0x50 here. See mnParsedValueCount below.)
-    int32_t        mnMillisecondsPerFrame;  // +0x30  console [7] @def+0x1C
-    int32_t        mnImportCount;     // +0x34  console [8]  importCount
-    AptImportEntry* mpImportTable;    // +0x38  console [9]  importTable (stride 0x20)
-    int32_t        mnInitListCount;   // +0x40  console [10] initCount
-    AptInitEntry*  mpInitList;        // +0x48  console [11] initList (stride 0x10)
-    // +0x50 -- the resolved-value count _parseStream accumulates during Fixup (the XB1
-    // CompleteLoad sub_1408348B0 zeroes `*(def+80)` then threads `def+80` as the resolve
-    // twin sub_1408567D0's a4; every parse of an action stream ++s it per resolved entry).
-    int32_t        mnParsedValueCount; // +0x50  xb1 [a4 of the resolve walk]
+    int32_t mnFrameCount;          // +0x00
+    void* mpFrames;                // +0x04
+    void* mpUnk10;                 // +0x08 label-hash slot
+    int32_t mnCharacterCount;      // +0x0C
+    AptCharacter** mpCharacterTable; // +0x10
+    int32_t mnScreenW;             // +0x14
+    int32_t mnScreenH;             // +0x18
+    int32_t mnMillisecondsPerFrame; // +0x1C
+    int32_t mnImportCount;         // +0x20
+    AptImportEntry* mpImportTable; // +0x24
+    int32_t mnInitListCount;       // +0x28
+    AptInitEntry* mpInitList;      // +0x2C
+    int32_t mnParsedValueCount;    // +0x30
 
     // @0x7E3738 -- index of the import whose id == nId, or -1.
     int32_t IsImport(int32_t nId);
@@ -150,11 +92,7 @@ struct AptCharacterAnimation
     // animation refs, un-relocates every record's pointer slot (subtracting the load
     // base), tears down the imports, and stamps the freed characters. nBase is the
     // load base (r4). Returns the last sub-result. Body in the .cpp.
-    // ⚠️ nBase is the LOAD BASE, i.e. a POINTER. The console's r4 is a 32-bit pointer
-    // so its `int` spelling is lossless there; on x64 the same value is a 64-bit heap
-    // address and an int32_t parameter TRUNCATES it, making every un-relocation in
-    // pass 2 subtract the wrong number. Widened to intptr_t (the x64 native-8 rule);
-    // the single caller is AptFile::~AptFile.
+    // nBase is the 32-bit load address.
     void* Unresolve(intptr_t nBase);
 
     // @0x82AD92A8 (PS3 @0x7E37A4) -- restore the init-indicator list (declared above
@@ -165,8 +103,8 @@ struct AptCharacterAnimation
     // clear the resolve scratch + run the recursive Fixup. Returns the root.
     AptCharacterAnimation* Resolve(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
     // @0x82AFF268 (PS3 @0xF44D40) -- relocate the serialised movie root IN PLACE against
-    // the load base (the aptDataOffset memory address). SINGLE native-64-bit path (GUIAPT64
-    // "1:7:8" only); the console dual-path/transcode is gone. Faithful body in the .cpp.
+    // the load base (the aptDataOffset memory address). The remaining PC
+    // record accesses in this body still require native recovery.
     AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
     // @0x82AFF... (PS3 @0xF44894, DecFIGS AptCharacterAnimation::Link(AptCharacter*, void*)) --
     // bind a just-loaded movie root into the scene (AptLoader::Update's state 3->4 import/
@@ -176,13 +114,20 @@ struct AptCharacterAnimation
 
 };
 
-// Lock the serialized 64-bit def-base offsets Fixup relocates + the runtime reads
-// (VERIFIED vs TITLE_SCREEN02.bundle). A member reorder that desynced these from
-// the file blob would silently break every named-member accessor + the Fixup walk.
-// The two slots the console/x64 offset widening used to collide (see the members above):
-// def+0x30 is the authored frame period, def+0x50 the resolve walk's accumulator -- the
-// XB1 CompleteLoad sub_1408348B0 clears ONLY the latter (`mov qword ptr [r10+50h], 0`).
-
-CGS_STATIC_ASSERT((sizeof(AptImportEntry) == 16), "ARTIST import entry");
-CGS_STATIC_ASSERT((sizeof(AptInitEntry) == 8), "ARTIST init entry");
-CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnParsedValueCount) == 0x30), "ARTIST resolve counter");
+// Native offsets used by FindExport, GetIDFromImportFile, Resolve and Fixup.
+CGS_STATIC_ASSERT((sizeof(AptImportEntry) == 0x10), "ARTIST import stride");
+CGS_STATIC_ASSERT((offsetof(AptImportEntry, mpClassName) == 0x04), "ARTIST import class");
+CGS_STATIC_ASSERT((offsetof(AptImportEntry, mnId) == 0x08), "ARTIST import id");
+CGS_STATIC_ASSERT((offsetof(AptImportEntry, mpFile) == 0x0C), "ARTIST import file");
+CGS_STATIC_ASSERT((sizeof(AptInitEntry) == 0x08), "ARTIST export/init stride");
+CGS_STATIC_ASSERT((offsetof(AptInitEntry, mnIndicator) == 0x04), "ARTIST export/init id");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mpFrames) == 0x04), "ARTIST movie frames");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnCharacterCount) == 0x0C), "ARTIST movie characters");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mpCharacterTable) == 0x10), "ARTIST movie character table");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnMillisecondsPerFrame) == 0x1C), "ARTIST movie frame period");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnImportCount) == 0x20), "ARTIST movie imports");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mpImportTable) == 0x24), "ARTIST movie import table");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnInitListCount) == 0x28), "ARTIST movie exports/init count");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mpInitList) == 0x2C), "ARTIST movie exports/init list");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnParsedValueCount) == 0x30), "ARTIST movie resolve counter");
+CGS_STATIC_ASSERT((sizeof(AptCharacterAnimation) == 0x34), "ARTIST movie definition");

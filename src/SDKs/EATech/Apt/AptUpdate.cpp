@@ -20,7 +20,7 @@
 
 #include "types.hpp"
 
-#include <cstdio>   // snprintf (the input-recorder frame stamp, gated off by default)
+#include <cstdio>   // sprintf (the input-recorder frame stamp, gated off by default)
 #include <cstring>  // memcpy / strlen (the saved-input stream reads)
 
 #include "SDKs/EATech/include/Apt/AptTarget.h"                    // AptTarget + gpAptTarget + the target API
@@ -28,7 +28,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // the root animation inst (mnAccumulatedUpdateMs @+0x24)
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"                // mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacter.h"                 // the movie root character
-#include "SDKs/EATech/include/Apt/AptFile.h"                      // AptMovieData (mnMillisecondsPerFrame view)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"        // native authored frame period
 #include "SDKs/EATech/include/Apt/AptLinker.h"                    // AptLinker::Update
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // ProcessTextInst / ProcessCustomControls / ProcessMaskMatricies
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (deferred-release flush)
@@ -81,15 +81,13 @@ static void AptUpdateRecordFrame()
     if (gAptInputRecorderEnabled)
     {
         char lacTag[24];
-        std::snprintf(lacTag, sizeof(lacTag), "%06d", gAptInputRecorderTag);
-        if (gAptFuncs.pfnDebugSetScreenGrabPending)   // dword_8324E834 == gAptFuncs+0x1C
-            gAptFuncs.pfnDebugSetScreenGrabPending(lacTag);
+        std::sprintf(lacTag, "%06d", gAptInputRecorderTag);
+        gAptFuncs.pfnDebugSetScreenGrabPending(lacTag);
 
         int laRecord[2];
         laRecord[0] = static_cast<int>(gAptInputRecorderTag);
         laRecord[1] = 0x03000000;
-        if (gAptFuncs.pfnDebugAddSavedInput)          // dword_8324E830 == gAptFuncs+0x18
-            gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(laRecord), 8);
+        gAptFuncs.pfnDebugAddSavedInput(reinterpret_cast<AptSavedInputRecord*>(laRecord), 8);
     }
 }
 
@@ -114,7 +112,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     AptCharacterAnimationInst* pRootAnimInst =
         static_cast<AptCharacterAnimationInst*>(pRootInst);
     uint32_t nBankedMs = pRootAnimInst->mnAccumulatedUpdateMs + nElapsedMs;
-    uint32_t nMsPerFrame = reinterpret_cast<const AptMovieData*>(
+    uint32_t nMsPerFrame = AptGetMovieCharacterAnimation(
         pRootInst->mpRenderItem->mpCharacter)->mnMillisecondsPerFrame;
 
     if (nBankedMs >= nMsPerFrame)

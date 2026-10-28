@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h" // native embedded movie accessor
 // ===========================================================================
 // EATech Apt -- AptDisplayList: the teardown / removal core of a movie clip's
 // child display list.   Reconstructed from the X360 ARTIST.XEX pseudocode/asm
@@ -42,7 +43,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacter.h"            // mpFixupLink / mnType / mpAnimationFile (placed char binding)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mnClipActionFlags / mpClipEventHandlers (_addToSetCaches)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // ExecuteInitActions
-#include "SDKs/EATech/include/Apt/AptFile.h"                 // AptMovieData (the .apt root + import table)
+#include "SDKs/EATech/include/Apt/AptFile.h"                 // loaded movie records
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // GetNewInsts / GetNewInstSize / DecNewInstSize / mInputSet
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"     // callFunction / the GC-root stacks (class binding)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // Push/PopStaticData (the register window)
@@ -1356,8 +1357,8 @@ int AptCIH::AssociateInstToClass()
     AptCharacter* const pChar = pInst->GetRenderItem()->mpCharacter;
     if (pChar == 0 || pChar->mpFixupLink == 0)
         return 0;
-    const AptMovieData* const pMovie =
-        reinterpret_cast<const AptMovieData*>(pChar->mpFixupLink);   // the ROOT char header
+    const AptCharacterAnimation* const pMovie =
+        AptGetMovieCharacterAnimation(pChar->mpFixupLink);   // the ROOT char header
 
     // console: the prototype/__proto__ land on the CHAR INST's property hash
     // (v2[3] == pInst->mpProperties -- the same hash timeline variables use),
@@ -1380,16 +1381,16 @@ int AptCIH::AssociateInstToClass()
 
     // 2. the char's export name.
     const char* pExportName = 0;
-    if (pMovie->mnExportCount > 0 && pMovie->mpExportTable != 0
+    if (pMovie->mnInitListCount > 0 && pMovie->mpInitList != 0
         && pMovie->mpCharacterTable != 0)
     {
-        for (int32_t li = 0; li < pMovie->mnExportCount; ++li)
+        for (int32_t li = 0; li < pMovie->mnInitListCount; ++li)
         {
-            const AptExportEntry& lrEntry = pMovie->mpExportTable[li];
-            if (lrEntry.mnCharacterId >= 0 && lrEntry.mnCharacterId < pMovie->mnCharacterCount
-                && pMovie->mpCharacterTable[lrEntry.mnCharacterId] == pChar)
+            const AptInitEntry& lrEntry = pMovie->mpInitList[li];
+            if (lrEntry.mnIndicator >= 0 && lrEntry.mnIndicator < pMovie->mnCharacterCount
+                && pMovie->mpCharacterTable[lrEntry.mnIndicator] == pChar)
             {
-                pExportName = lrEntry.mpName;
+                pExportName = static_cast<const char*>(lrEntry.mpInitObject);
                 break;
             }
         }

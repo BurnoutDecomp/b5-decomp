@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h" // native embedded movie accessor
 // ===========================================================================
 // EATech Apt -- AptCharacterAnimation accessors.   DECOMPILED from the PS3
 // EXTERNAL ELF (cross-checked vs X360 ARTIST). See the header for the
@@ -419,9 +420,9 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
 int32_t AptCharacterAnimation::GetIDFromImportFile(int32_t nImportIndex)
 {
     const AptImportEntry& import = mpImportTable[nImportIndex];
-    const AptMovieData* pMovie = static_cast<const AptMovieData*>(import.mpFile->mpData);
+    const AptCharacterAnimation* pMovie = AptGetMovieCharacterAnimation(static_cast<AptCharacter*>(import.mpFile->mpData));
 
-    const int32_t nExportCount = pMovie->mnExportCount;
+    const int32_t nExportCount = pMovie->mnInitListCount;
     if (nExportCount <= 0)
         return -1;
 
@@ -431,7 +432,7 @@ int32_t AptCharacterAnimation::GetIDFromImportFile(int32_t nImportIndex)
         // Inline strcmp: walk until the SEARCH key (class name) terminates,
         // breaking early on any mismatch. Bytes are unsigned (asm lbz).
         const char* pSearch = pClassName;
-        const char* pExport = pMovie->mpExportTable[iExport].mpName;
+        const char* pExport = static_cast<const char*>(pMovie->mpInitList[iExport].mpInitObject);
         int nDiff;
         do
         {
@@ -444,7 +445,7 @@ int32_t AptCharacterAnimation::GetIDFromImportFile(int32_t nImportIndex)
         while (nDiff == 0);
 
         if (nDiff == 0)   // names matched up to a shared terminator
-            return pMovie->mpExportTable[iExport].mnCharacterId;
+            return pMovie->mpInitList[iExport].mnIndicator;
     }
     return -1;
 }

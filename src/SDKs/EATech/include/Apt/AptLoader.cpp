@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h" // native embedded movie accessor
 // ===========================================================================
 // EATech Apt -- AptLoader request layer.   DECOMPILED from the PS3 EXTERNAL ELF
 // (cross-checked vs X360 ARTIST):
@@ -25,7 +26,7 @@
 #include "SDKs/EATech/include/Apt/AptLoader.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"          // the serialised .apt header
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h" // Resolve (the movie root)
-#include "SDKs/EATech/include/Apt/AptFile.h"               // AptMovieData (AllImportsAvailable)
+#include "SDKs/EATech/include/Apt/AptFile.h"               // loaded AptFile
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/include/Apt/AptTarget.h"    // gpAptTarget->mpLinker (off_8324E574+0x20)
 #include "SDKs/EATech/include/Apt/AptLinker.h"    // AptLinker::isFileImported (the cancel-path probe)
@@ -36,11 +37,8 @@
 
 #include <new>       // placement new (init the AptFile's EAStringC member in pool memory)
 #include <cstring>   // strlen
-#include <cstdio>    // [aptlife] snprintf -- diagnostic only
-#include <cstdlib>   // [aptlife] getenv latch -- diagnostic only
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"   // KU_AptEmbeddedMovieOff ([aptlife] def-base probe)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [aptlife] CgsDev::Log::WriteToLog
 
 
 // The one global lock for the loader's list. (EA::Thread::Mutex is recursive,
@@ -356,13 +354,12 @@ void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, AptConstFil
 
 // AllImportsAvailable @0x82AEB270 -- true when every import referenced by `file`'s
 // movie has finished loading (AptLoader::IsLoaded accepts it). Consumes the passed
-// handle (the by-value AptFilePtr argument's teardown). AptMovieData is the homed
-// native-8 view of the loaded .apt movie root (AptFile.h).
+// handle (the by-value AptFilePtr argument's teardown).
 bool AptLoader::AllImportsAvailable(AptFilePtr file)
 {
     bool bAllAvailable = true;
 
-    const AptMovieData* pMovie = static_cast<const AptMovieData*>(file.pData->mpData);
+    const AptCharacterAnimation* pMovie = AptGetMovieCharacterAnimation(static_cast<AptCharacter*>(file.pData->mpData));
     if (pMovie->mnImportCount > 0)
     {
         for (int32_t iImport = 0; iImport < pMovie->mnImportCount; ++iImport)
@@ -569,7 +566,7 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
             {
                 // Resolved: walk this movie's import table and recurse on imports
                 // no other linked movie still needs.
-                const AptMovieData* pMovie = static_cast<const AptMovieData*>(pFile->mpData);   // [c:+0x14]
+                const AptCharacterAnimation* pMovie = AptGetMovieCharacterAnimation(static_cast<AptCharacter*>(pFile->mpData));   // [c:+0x14]
                 if (pMovie->mnImportCount > 0)                                                  // [c:+0x30]
                 {
                     for (int32_t iImport = 0; iImport < pMovie->mnImportCount; ++iImport)       // [c:+0x34]
@@ -587,8 +584,8 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
                             // movie still imports it, recurse to cancel it.
                             if (!gpAptTarget->mpLinker->isFileImported(&candidate))   // off_8324E574->mpLinker
                             {
-                                const AptMovieData* pSelfMovie =
-                                    static_cast<const AptMovieData*>(pFile->mpData);
+                                const AptCharacterAnimation* pSelfMovie =
+                                    AptGetMovieCharacterAnimation(static_cast<AptCharacter*>(pFile->mpData));
                                 EAStringC recurseName(pSelfMovie->mpImportTable[iImport].mpImportFileName);
                                 CancelPreloadedAnimation(recurseName);
                             }
@@ -605,62 +602,6 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
         // Release the findFile reference on the named file.
         if (AptSharedPtrDecRef(pFile) == 0)
             AptSharedPtrDelete(pFile);
-    }
-
-    MutexAptLoader.Unlock();
-}
-
-//
-// The key is AptFile::mpDataBlock, which CompleteLoad sets to the AptDataHeader the
-// movie resolved from -- so the match is by IDENTITY of the header being un-registered,
-// never by name. mnField12 keeps the outgoing state, exactly as every other state
-// advance in this file records it.
-// ---------------------------------------------------------------------------
-void AptLoader::InvalidateLoadedData(const void* pDataBlock)
-{
-    if (pDataBlock == 0)
-        return;
-
-    MutexAptLoader.Lock();
-
-    AptLoaderNode* pPrev = 0;
-    AptLoaderNode* pNode = mpHead;
-    while (pNode != 0)
-    {
-        AptFile* const pFile = pNode->mpFile;
-        if (pFile == 0 || pFile->mpDataBlock != pDataBlock)
-        {
-            pPrev = pNode;
-            pNode = pNode->mpNext;
-            continue;
-        }
-
-
-        // Cut the file loose from its (gone) data. mpData null also makes the
-        // ~AptFile resolved-teardown branch a no-op, so the orphan can never
-        // Unresolve a freed blob if its last reference ever does drop.
-        pFile->mnField12        = pFile->mnState;
-        pFile->mnState          = 0;         // orphaned: neither requested nor loaded
-        pFile->mpData           = 0;
-        pFile->mpDataBlock      = 0;
-        pFile->mpResolveContext = 0;
-
-        // ⭐ UNLINK the weak node -- do NOT leave the file "requested" in the list.
-        // Leaving it there makes the very next AptLoader::Update re-kick a load for a
-        // movie nobody asked for, in the same frame the GUI is tearing the screen down;
-        // MEASURED, that eager re-load pulled the movie in through the host's fallback
-        // per-movie bundle path and left the HUD unable to re-mount after the resume.
-        // Off the list, findFile/IsLoaded/Update never see the orphan again, so the next
-        // real request builds a FRESH AptFile and runs the full faithful load.
-        // The orphan itself stays alive on its residual references -- that leak is the
-        // open half of this bug and is NOT fixed here.
-        AptLoaderNode* const pDead = pNode;
-        pNode = pNode->mpNext;
-        if (pPrev == 0)
-            mpHead = pNode;
-        else
-            pPrev->mpNext = pNode;
-        gpNonGCPoolManager->Deallocate(pDead, sizeof(AptLoaderNode));
     }
 
     MutexAptLoader.Unlock();
