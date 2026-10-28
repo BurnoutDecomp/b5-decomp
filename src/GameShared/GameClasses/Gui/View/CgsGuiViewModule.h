@@ -118,7 +118,8 @@ namespace CgsGui
         // invalid), 18 = play movie on a level (record the name in
         // macCurrentlyPlayingMovies + AptAux::LoadFlashAnimation), 19/20 = post the
         // bool show/hide event (type 33) onto the output queue.
-        void ProcessIncomingAptEvent(const void* lpEvent, s32 liEventId);
+        void ProcessIncomingAptEvent(const CgsModule::Event* lpEvent,
+                                     s32 liEventSize, s32 liEventId);
 
         // ARTIST8285ED00: format the original localised component value(10),
         // reject deprecated11, or add/remove the borrowed text pointer(12).
