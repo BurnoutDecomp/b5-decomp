@@ -4341,7 +4341,10 @@ void PropManager::ApplyAntiHerdingForce( CgsPhysics::PhysicsSimulationIO::InputB
 
     if (lAboveRaceCar)
     {
-        lFinalForce = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lFinalForce = lAggregateValue;
+        }
     }
 
     // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (bug #2, "props sent flying way too
@@ -5456,14 +5459,20 @@ void PropManager::AddContactResultsToQueue(
 
             // Full 16-byte lane copies (lvx/stvx on the console): Vector3Plus source, Vector3
             // destination, w lane carried verbatim -- the committed twin's spelling.
-            lContact.mPointOnA = Vector3{ lrResult.mPrimitive0Contact.x,
+            {
+                const Vector3 lAggregateValue = { lrResult.mPrimitive0Contact.x,
                                           lrResult.mPrimitive0Contact.y,
                                           lrResult.mPrimitive0Contact.z,
                                           lrResult.mPrimitive0Contact.w };
-            lContact.mPointOnB = Vector3{ lrResult.mPrimitive1Contact.x,
+                lContact.mPointOnA = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrResult.mPrimitive1Contact.x,
                                           lrResult.mPrimitive1Contact.y,
                                           lrResult.mPrimitive1Contact.z,
                                           lrResult.mPrimitive1Contact.w };
+                lContact.mPointOnB = lAggregateValue;
+            }
 
             // ⚠️ UNMODIFIED -- no sign flip and no tag selection on this path. See difference (3)
             // in the ICF block above; the vehicle twin's negation must NOT be copied here.
@@ -5493,14 +5502,20 @@ void PropManager::AddContactResultsToQueue(
                 DebugWorldContactInfo& lrDebugContact =
                     mpDebugWorldContacts[miNumDebugWorldContacts % KI_MAX_DEBUG_WORLD_CONTACTS];
 
-                lrDebugContact.mPoint0 = Vector3{ lrResult.mPrimitive0Contact.x,
+                {
+                    const Vector3 lAggregateValue = { lrResult.mPrimitive0Contact.x,
                                                   lrResult.mPrimitive0Contact.y,
                                                   lrResult.mPrimitive0Contact.z,
                                                   lrResult.mPrimitive0Contact.w };
-                lrDebugContact.mPoint1 = Vector3{ lrResult.mPrimitive1Contact.x,
+                    lrDebugContact.mPoint0 = lAggregateValue;
+                }
+                {
+                    const Vector3 lAggregateValue = { lrResult.mPrimitive1Contact.x,
                                                   lrResult.mPrimitive1Contact.y,
                                                   lrResult.mPrimitive1Contact.z,
                                                   lrResult.mPrimitive1Contact.w };
+                    lrDebugContact.mPoint1 = lAggregateValue;
+                }
                 lrDebugContact.mNormal = lrResult.mPrimitive0Normal;
 
                 ++miNumDebugWorldContacts;                              // 0x82613190, unwrapped

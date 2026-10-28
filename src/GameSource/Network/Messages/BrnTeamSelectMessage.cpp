@@ -193,7 +193,7 @@ namespace BrnNetwork
                       "PlayerTeamInfo.mPlayerID @ +0x00 (BrnNetworkManager::PackOrUnpack target)");
         CGS_STATIC_ASSERT((offsetof(TeamSelectMessage::PlayerTeamInfo, miTeam) == 4),
                       "PlayerTeamInfo.miTeam @ +0x04 (quantised int [1,8])");
-        CGS_STATIC_ASSERT((sizeof(TeamSelectMessage::maPlayerTeamInfo) == 0x40),
+        CGS_STATIC_ASSERT((sizeof(((TeamSelectMessage*)0)->maPlayerTeamInfo) == 0x40),
                       "the player-team table is the 64-byte payload XMemSet/XMemCpy'd");
         // The four trailing scalars run miNumPlayers, miNumTeams, mbAutobalance, mbFinalSelection
         // in that storage order (the asm stores +0x68/+0x6C/+0x70/+0x71 in that sequence).

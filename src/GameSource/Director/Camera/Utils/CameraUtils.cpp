@@ -988,13 +988,19 @@ Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
     lFromAffine.xAxis = lrFrom.xAxis;
     lFromAffine.yAxis = lrFrom.yAxis;
     lFromAffine.zAxis = lrFrom.zAxis;
-    lFromAffine.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lFromAffine.wAxis = lAggregateValue;
+    }
 
     Matrix44Affine lToAffine;
     lToAffine.xAxis = lrTo.xAxis;
     lToAffine.yAxis = lrTo.yAxis;
     lToAffine.zAxis = lrTo.zAxis;
-    lToAffine.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lToAffine.wAxis = lAggregateValue;
+    }
 
     // The console's transpose is the vmrghw/vmrglw lane merge; for an orthonormal basis the
     // SDK's orthonormal inverse is the same 3x3 (its translation lane is computed from a zero

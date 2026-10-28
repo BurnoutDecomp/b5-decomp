@@ -548,8 +548,14 @@ namespace BrnAI
 
         ResetOnTrackCoords lCoords;
         lCoords.mpAISection = 0;
-        lCoords.mPosition   = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        lCoords.mDirection  = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lCoords.mPosition = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lCoords.mDirection = lAggregateValue;
+        }
 
         AIModuleIO::ResetOnTrackResult lResult;
 

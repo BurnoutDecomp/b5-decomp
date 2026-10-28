@@ -1100,14 +1100,20 @@ namespace Vehicle
                 PotentialContact lContact;
                 // Full 16-byte lane copies (lvx/stvx on the console) -- Vector3Plus source,
                 // Vector3 destination, w lane carried verbatim.
-                lContact.mPointOnA = Vector3{ lrRecord.mPrimitive0Contact.x,
+                {
+                    const Vector3 lAggregateValue = { lrRecord.mPrimitive0Contact.x,
                                               lrRecord.mPrimitive0Contact.y,
                                               lrRecord.mPrimitive0Contact.z,
-                                              lrRecord.mPrimitive0Contact.w };   // triangle point
-                lContact.mPointOnB = Vector3{ lrRecord.mPrimitive1Contact.x,
+                                              lrRecord.mPrimitive0Contact.w };
+                    lContact.mPointOnA = lAggregateValue;
+                }   // triangle point
+                {
+                    const Vector3 lAggregateValue = { lrRecord.mPrimitive1Contact.x,
                                               lrRecord.mPrimitive1Contact.y,
                                               lrRecord.mPrimitive1Contact.z,
-                                              lrRecord.mPrimitive1Contact.w };   // sphere point
+                                              lrRecord.mPrimitive1Contact.w };
+                    lContact.mPointOnB = lAggregateValue;
+                }   // sphere point
 
                 // vxor with the 0x80000000 splat == all-four-lane sign flip (the SwapEntityOrder
                 // precedent), of the tag-selected source normal.
@@ -1462,14 +1468,20 @@ namespace Vehicle
                 const PrimitiveTestResult& lrRecord = lpaResults[lu16Result];
 
                 PotentialContact lContact;
-                lContact.mPointOnA = Vector3{ lrRecord.mPrimitive0Contact.x,
+                {
+                    const Vector3 lAggregateValue = { lrRecord.mPrimitive0Contact.x,
                                               lrRecord.mPrimitive0Contact.y,
                                               lrRecord.mPrimitive0Contact.z,
-                                              lrRecord.mPrimitive0Contact.w };   // +0x20, triangle point
-                lContact.mPointOnB = Vector3{ lrRecord.mPrimitive1Contact.x,
+                                              lrRecord.mPrimitive0Contact.w };
+                    lContact.mPointOnA = lAggregateValue;
+                }   // +0x20, triangle point
+                {
+                    const Vector3 lAggregateValue = { lrRecord.mPrimitive1Contact.x,
                                               lrRecord.mPrimitive1Contact.y,
                                               lrRecord.mPrimitive1Contact.z,
-                                              lrRecord.mPrimitive1Contact.w };   // +0x30, part point
+                                              lrRecord.mPrimitive1Contact.w };
+                    lContact.mPointOnB = lAggregateValue;
+                }   // +0x30, part point
 
                 // ALWAYS +0x10, negated only when tag B is zero -- see the banner.
                 if (lResultList.mu16UserTagB != 0)

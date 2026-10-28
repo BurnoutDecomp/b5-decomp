@@ -116,10 +116,14 @@ namespace BrnDirector
 
             if (liNumValues == 6)
             {
-                mpInstance->mFlyCamPosition =
-                    Vector3{ lafValues[0], lafValues[1], lafValues[2], 0.0f };
-                mpInstance->mFlyCamTarget =
-                    Vector3{ lafValues[3], lafValues[4], lafValues[5], 0.0f };
+                {
+                    const Vector3 lAggregateValue = { lafValues[0], lafValues[1], lafValues[2], 0.0f };
+                    mpInstance->mFlyCamPosition = lAggregateValue;
+                }
+                {
+                    const Vector3 lAggregateValue = { lafValues[3], lafValues[4], lafValues[5], 0.0f };
+                    mpInstance->mFlyCamTarget = lAggregateValue;
+                }
                 mpInstance->muLiveCamRequest = E_LIVECAMREQUEST_FLY_CAMERA;
             }
         }

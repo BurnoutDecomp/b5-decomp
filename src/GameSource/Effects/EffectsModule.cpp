@@ -3851,17 +3851,50 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
     if ((guQADebugEffectPointInitFlags & 1u) == 0)
     {
         guQADebugEffectPointInitFlags |= 1u;
-        gaQADebugEffectPoints[0]  = rw::math::vpu::Vector4{ -1.0f, -0.5f,  1.4f, 0.0f };
-        gaQADebugEffectPoints[1]  = rw::math::vpu::Vector4{  1.0f, -0.5f,  1.4f, 0.0f };
-        gaQADebugEffectPoints[2]  = rw::math::vpu::Vector4{ -1.0f, -0.5f, -1.25f, 0.0f };
-        gaQADebugEffectPoints[3]  = rw::math::vpu::Vector4{  1.0f, -0.5f, -1.25f, 0.0f };
-        gaQADebugEffectPoints[4]  = rw::math::vpu::Vector4{  0.0f, -0.5f,  2.0f, 0.0f };
-        gaQADebugEffectPoints[5]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
-        gaQADebugEffectPoints[6]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
-        gaQADebugEffectPoints[7]  = rw::math::vpu::Vector4{  0.0f,  0.0f,  0.0f, 0.0f };
-        gaQADebugEffectPoints[8]  = rw::math::vpu::Vector4{  0.0f, -0.4f,  1.4f, 0.0f };
-        gaQADebugEffectPoints[9]  = rw::math::vpu::Vector4{  0.0f, -0.4f, -1.75f, 0.0f };
-        gaQADebugEffectPoints[10] = rw::math::vpu::Vector4{  0.0f, -0.5f,  0.0f, 0.0f };
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = { -1.0f, -0.5f,  1.4f, 0.0f };
+            gaQADebugEffectPoints[0] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  1.0f, -0.5f,  1.4f, 0.0f };
+            gaQADebugEffectPoints[1] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = { -1.0f, -0.5f, -1.25f, 0.0f };
+            gaQADebugEffectPoints[2] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  1.0f, -0.5f, -1.25f, 0.0f };
+            gaQADebugEffectPoints[3] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.5f,  2.0f, 0.0f };
+            gaQADebugEffectPoints[4] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f,  0.0f,  0.0f, 0.0f };
+            gaQADebugEffectPoints[5] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f,  0.0f,  0.0f, 0.0f };
+            gaQADebugEffectPoints[6] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f,  0.0f,  0.0f, 0.0f };
+            gaQADebugEffectPoints[7] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.4f,  1.4f, 0.0f };
+            gaQADebugEffectPoints[8] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.4f, -1.75f, 0.0f };
+            gaQADebugEffectPoints[9] = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.5f,  0.0f, 0.0f };
+            gaQADebugEffectPoints[10] = lAggregateValue;
+        }
     }
 
     BrnParticle::LionEffect* const lpInstanceEffect = mParticleModule.GetLionEffect(mEffectInstanceHandle);

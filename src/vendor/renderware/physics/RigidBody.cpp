@@ -101,10 +101,22 @@ RigidBody& RigidBody::operator=(const RigidBody& rOther)
 rw::math::vpu::Matrix44Affine RigidBody::GetTransform() const
 {
     rw::math::vpu::Matrix44Affine lResult;
-    lResult.xAxis = rw::math::vpu::Vector3{ mRi.x,  mRi.y,  mRi.z,  mRi.w  };   // +0x40
-    lResult.yAxis = rw::math::vpu::Vector3{ mUp.x,  mUp.y,  mUp.z,  mUp.w  };   // +0x50
-    lResult.zAxis = rw::math::vpu::Vector3{ mAt.x,  mAt.y,  mAt.z,  mAt.w  };   // +0x60
-    lResult.wAxis = rw::math::vpu::Vector3{ mCom.x, mCom.y, mCom.z, mCom.w };   // +0x10
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { mRi.x,  mRi.y,  mRi.z,  mRi.w  };
+        lResult.xAxis = lAggregateValue;
+    }   // +0x40
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { mUp.x,  mUp.y,  mUp.z,  mUp.w  };
+        lResult.yAxis = lAggregateValue;
+    }   // +0x50
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { mAt.x,  mAt.y,  mAt.z,  mAt.w  };
+        lResult.zAxis = lAggregateValue;
+    }   // +0x60
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { mCom.x, mCom.y, mCom.z, mCom.w };
+        lResult.wAxis = lAggregateValue;
+    }   // +0x10
     return lResult;
 }
 

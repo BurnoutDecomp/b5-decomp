@@ -326,7 +326,7 @@ namespace Vehicle
         // (16 vs 8, x20) and four 4->8 pointers and EventQueue<s8,50> (72 vs 64) all sit ahead of it
         // inside the manager. What still reproduces exactly is the manager's OWN seat, so that is
         // what is pinned; the map is reached BY NAME through it and needs no offset at all.
-        CGS_STATIC_ASSERT((sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600),
+        CGS_STATIC_ASSERT((sizeof(((PhysicalTrafficManager*)0)->mu8GlobalToPhysicalEntityIndexMap) == 600),
                       "and it is 600 bytes -- the sizeof the console's own assert text names "
                       "(asm cmplwi 0x258)");
     }

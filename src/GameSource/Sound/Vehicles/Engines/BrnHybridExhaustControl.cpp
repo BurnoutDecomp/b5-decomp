@@ -115,7 +115,10 @@ HybridExhaustControl::HybridExhaustControl()
     // mFinalEngineMix / mFinalEngineVolume: EngineMix default ctor -> all 0.0f
 {
     for (u32 luPoint = 0; luPoint < 6; ++luPoint)
-        maCrossFadesPoints[luPoint] = Vector2{0.0f, 0.0f, 0.0f, 0.0f};
+        {
+            const Vector2 lAggregateValue = {0.0f, 0.0f, 0.0f, 0.0f};
+            maCrossFadesPoints[luPoint] = lAggregateValue;
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -215,13 +218,31 @@ bool HybridExhaustControl::Attach()
     const f32 lfDecelMaxRpm = mVehicleEngineAttributes.DecelMaxRpm();
     const f32 lfFadeInRpm = lfDecelMaxRpm -
         (lfDecelMaxRpm - lfDecelMinRpm) * KF_DECEL_GINSU_FADE_IN;
-    maCrossFadesPoints[0] = Vector2{0.0f, 0.0f, 0.0f, 0.0f};
-    maCrossFadesPoints[1] = Vector2{lfIdleRpm, 0.0f, 0.0f, 0.0f};
-    maCrossFadesPoints[2] = Vector2{lfIdleRpm + 200.0f, 1.0f, 0.0f, 0.0f};
-    maCrossFadesPoints[3] = Vector2{lfFadeInRpm, 1.0f, 0.0f, 0.0f};
-    maCrossFadesPoints[4] = Vector2{lfDecelMaxRpm, 0.0f, 0.0f, 0.0f};
-    maCrossFadesPoints[5] = Vector2{mVehicleEngineAttributes.MaxRpm(),
+    {
+        const Vector2 lAggregateValue = {0.0f, 0.0f, 0.0f, 0.0f};
+        maCrossFadesPoints[0] = lAggregateValue;
+    }
+    {
+        const Vector2 lAggregateValue = {lfIdleRpm, 0.0f, 0.0f, 0.0f};
+        maCrossFadesPoints[1] = lAggregateValue;
+    }
+    {
+        const Vector2 lAggregateValue = {lfIdleRpm + 200.0f, 1.0f, 0.0f, 0.0f};
+        maCrossFadesPoints[2] = lAggregateValue;
+    }
+    {
+        const Vector2 lAggregateValue = {lfFadeInRpm, 1.0f, 0.0f, 0.0f};
+        maCrossFadesPoints[3] = lAggregateValue;
+    }
+    {
+        const Vector2 lAggregateValue = {lfDecelMaxRpm, 0.0f, 0.0f, 0.0f};
+        maCrossFadesPoints[4] = lAggregateValue;
+    }
+    {
+        const Vector2 lAggregateValue = {mVehicleEngineAttributes.MaxRpm(),
                                     0.0f, 0.0f, 0.0f};
+        maCrossFadesPoints[5] = lAggregateValue;
+    }
 
     mPhysicsDeltaRpm.Flush(0.0f);
     mAudioDeltaRpm.Flush(0.0f);

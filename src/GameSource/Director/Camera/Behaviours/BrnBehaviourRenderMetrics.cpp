@@ -221,9 +221,12 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
 
             if (lrResult.mbIntersection && lrResult.mPosition.y > 0.0f)
             {
-                mCamPosition = Vector3{ lrResult.mPosition.x,
+                {
+                    const Vector3 lAggregateValue = { lrResult.mPosition.x,
                                         lrResult.mPosition.y + KF_CAMERA_HEIGHT_ABOVE_GROUND,
                                         lrResult.mPosition.z, 0.0f };
+                    mCamPosition = lAggregateValue;
+                }
                 mbWaitingForLineTest = false;
                 mfYOffset            = 0.0f;
                 mLineTest.Clear();
@@ -243,7 +246,10 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
                 mLineTest.Clear();
                 mbWaitingForLineTest = false;
                 mCamPosition  = mInitialPosition;
-                mGroundNormal = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+                {
+                    const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                    mGroundNormal = lAggregateValue;
+                }
             }
         }
         else
@@ -365,9 +371,15 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
             CGS_ASSERT(lpMessage->GetSize(liIndex) >= (int)(6 * sizeof(f32)),
                        "lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))");
 
-            lpBehaviour->mIdlePosition  = Vector3{ lpfContent[0], lpfContent[1], lpfContent[2], 0.0f };
+            {
+                const Vector3 lAggregateValue = { lpfContent[0], lpfContent[1], lpfContent[2], 0.0f };
+                lpBehaviour->mIdlePosition = lAggregateValue;
+            }
             lpBehaviour->mbIdleCamOn    = true;
-            lpBehaviour->mIdleDirection = Vector3{ lpfContent[3], lpfContent[4], lpfContent[5], 0.0f };
+            {
+                const Vector3 lAggregateValue = { lpfContent[3], lpfContent[4], lpfContent[5], 0.0f };
+                lpBehaviour->mIdleDirection = lAggregateValue;
+            }
         }
         else if (_stricmp(lpcKey, "StopRenderMetrics") == 0)
         {

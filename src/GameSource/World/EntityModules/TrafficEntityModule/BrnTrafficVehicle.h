@@ -31,7 +31,8 @@ struct Axle
     void Initialise()
     {
         mPosAndWheelRadius.SetZero();
-        mUpAndDebug = Vector3Plus{ 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3Plus lUpAndDebug = { 0.0f, 1.0f, 0.0f, 0.0f };
+        mUpAndDebug = lUpAndDebug;
     }
 
     bool TryIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1);

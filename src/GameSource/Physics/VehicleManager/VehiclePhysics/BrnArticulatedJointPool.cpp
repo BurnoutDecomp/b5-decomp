@@ -114,7 +114,8 @@ namespace
         lResult.xAxis = Rotate(lrJoint.xAxis);
         lResult.yAxis = Rotate(lrJoint.yAxis);
         lResult.zAxis = Rotate(lrJoint.zAxis);
-        lResult.wAxis = Vector3{
+        {
+            const Vector3 lAggregateValue = {
             JointMultiplyAdd(lvPosition.z, lvZ.x, JointMultiplyAdd(lvPosition.y, lvY.x,
                 JointMultiplyAdd(lvPosition.x, lvX.x, lvInversePosition.x))),
             JointMultiplyAdd(lvPosition.z, lvZ.y, JointMultiplyAdd(lvPosition.y, lvY.y,
@@ -123,6 +124,8 @@ namespace
                 JointMultiplyAdd(lvPosition.x, lvX.z, lvInversePosition.z))),
             JointMultiplyAdd(lvPosition.z, lvZ.w, JointMultiplyAdd(lvPosition.y, lvY.w,
                 JointMultiplyAdd(lvPosition.x, lvX.w, lvInversePosition.w)))};
+            lResult.wAxis = lAggregateValue;
+        }
         return lResult;
     }
 }
@@ -306,8 +309,14 @@ void ArticulatedJointPool::ConstructArticulatedJoint(
         ? rw::physics::TWIST_LOCKED : rw::physics::TWIST_ARC;
     lrLimits.mTwista = mfTwistAngleDegrees * kfDegreesToRadians;
     lrLimits.mTwistc = XboxMath::XMVectorCos(lrLimits.mTwista);
-    lrLimits.mPprism = Vector3{0.1f, 0.1f, 0.1f, 0.0f};
-    lrLimits.mVprism = Vector3{0.1f, 0.1f, 0.1f, 0.0f};
+    {
+        const Vector3 lAggregateValue = {0.1f, 0.1f, 0.1f, 0.0f};
+        lrLimits.mPprism = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = {0.1f, 0.1f, 0.1f, 0.0f};
+        lrLimits.mVprism = lAggregateValue;
+    }
     lrLimits.mVtwist = mfMaxTwistVelocityDegrees * kfDegreesToRadians;
 
     // 0x825D7EA4 / 0x825D7F30..0x825D8018: vxor negation of cab.At(),
@@ -332,8 +341,11 @@ void ArticulatedJointPool::ConstructArticulatedJoint(
         JointNegativeMultiplySubtract(lfLengthSquared, JointMultiply(lfEstimate, lfEstimate), 1.0f), lfEstimate);
     const float lfInverseLength = JointMultiplyAdd(JointMultiply(lfStep1, 0.5f),
         JointNegativeMultiplySubtract(lfLengthSquared, JointMultiply(lfStep1, lfStep1), 1.0f), lfStep1);
-    lvCross = Vector3{JointMultiply(lvCross.x, lfInverseLength), JointMultiply(lvCross.y, lfInverseLength),
+    {
+        const Vector3 lAggregateValue = {JointMultiply(lvCross.x, lfInverseLength), JointMultiply(lvCross.y, lfInverseLength),
                       JointMultiply(lvCross.z, lfInverseLength), JointMultiply(lvCross.w, lfInverseLength)};
+        lvCross = lAggregateValue;
+    }
 
     Matrix44Affine lJointTransform;
     lJointTransform.xAxis = lvHingeAxis;

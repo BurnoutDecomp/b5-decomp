@@ -272,10 +272,22 @@ void BuildUVs(const BuildUVData& arUVData, VecFloat lvfFrame, VecFloat lvfNextFr
     {
         // asm 0x822782DC..0x82278318. Both frame slots hold the same pair, so the shader's
         // cross-fade is a no-op whatever weight it is given.
-        lpaUVsOut[0] = Vector4{ 0.0f, 1.0f, 0.0f, 1.0f };   // unk_82FABA60
-        lpaUVsOut[1] = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };   // vspltisw v12, 0
-        lpaUVsOut[2] = Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };   // vcfsx(vspltisw 1, 0)
-        lpaUVsOut[3] = Vector4{ 1.0f, 0.0f, 1.0f, 0.0f };   // unk_82FAB880
+        {
+            const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 1.0f };
+            lpaUVsOut[0] = lAggregateValue;
+        }   // unk_82FABA60
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lpaUVsOut[1] = lAggregateValue;
+        }   // vspltisw v12, 0
+        {
+            const Vector4 lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+            lpaUVsOut[2] = lAggregateValue;
+        }   // vcfsx(vspltisw 1, 0)
+        {
+            const Vector4 lAggregateValue = { 1.0f, 0.0f, 1.0f, 0.0f };
+            lpaUVsOut[3] = lAggregateValue;
+        }   // unk_82FAB880
         return;
     }
 
@@ -316,10 +328,22 @@ void BuildUVs(const BuildUVData& arUVData, VecFloat lvfFrame, VecFloat lvfNextFr
     const f32 lfU1Right  = lfU1Left + lfInvNumX;
 
     // asm 0x82278280..0x822782D4 -- the four (u, v, u', v') corners.
-    lpaUVsOut[0] = Vector4{ lfU0Left,  lfV0Bottom, lfU1Left,  lfV1Bottom };
-    lpaUVsOut[1] = Vector4{ lfU0Left,  lfV0Top,    lfU1Left,  lfV1Top    };
-    lpaUVsOut[2] = Vector4{ lfU0Right, lfV0Bottom, lfU1Right, lfV1Bottom };
-    lpaUVsOut[3] = Vector4{ lfU0Right, lfV0Top,    lfU1Right, lfV1Top    };
+    {
+        const Vector4 lAggregateValue = { lfU0Left,  lfV0Bottom, lfU1Left,  lfV1Bottom };
+        lpaUVsOut[0] = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { lfU0Left,  lfV0Top,    lfU1Left,  lfV1Top    };
+        lpaUVsOut[1] = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { lfU0Right, lfV0Bottom, lfU1Right, lfV1Bottom };
+        lpaUVsOut[2] = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { lfU0Right, lfV0Top,    lfU1Right, lfV1Top    };
+        lpaUVsOut[3] = lAggregateValue;
+    }
 }
 
 // =================================================================================================

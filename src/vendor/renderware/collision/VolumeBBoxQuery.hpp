@@ -18,8 +18,7 @@
 // Every console offset in the comments is attested by the wave-2 bodies
 // (field-by-field priming by VolumeVolumeQuery::GetPrimitiveBBoxOverlaps
 // @ 0x82BB3AB0 + the loads/stores of GetOverlaps/AddVolumeRef/Initialize).
-// Pointers widen on x64 exactly as the committed GPInstance precedent;
-// access is by name.
+// Native pointer words and aligned vector members preserve these offsets.
 //
 // This header lives apart from VolumeQuery.hpp on purpose: the by-value
 // AABBox / VolRef embeds pull the SDKs/EATech vpu math headers, which must
@@ -27,6 +26,7 @@
 // BrnCommonTypes vpu vocabulary).
 
 #include "types.hpp"
+#include <cstddef>
 #include "vendor/renderware/collision/AABBox.hpp"        // AABBox (embedded m_aabb)
 #include "vendor/renderware/collision/FeatureEdge.hpp"   // RwBool
 #include "vendor/renderware/collision/VolRef.hpp"        // VolRef (embedded m_currVRef)
@@ -102,5 +102,15 @@ namespace collision
         u32            m_tag;                   // +0xEC  current tag context
         u8             m_numTagBits;            // +0xF0
     };
+
+    CGS_STATIC_ASSERT((sizeof(VolumeBBoxQuery) == 0x100), "X360 bbox query header");
+    CGS_STATIC_ASSERT((__alignof(VolumeBBoxQuery) == 16), "X360 bbox query alignment");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_stackVRefBuffer) == 0x30), "X360 bbox stack buffer");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_currVRef) == 0x40), "X360 bbox current ref");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_stackMax) == 0xC4), "X360 bbox stack capacity");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_primVRefBuffer) == 0xC8), "X360 bbox result buffer");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_instVolPool) == 0xD4), "X360 bbox instance pool");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_spatialMapQueryMem) == 0xE4), "X360 bbox workspace");
+    CGS_STATIC_ASSERT((offsetof(VolumeBBoxQuery, m_numTagBits) == 0xF0), "X360 bbox tag bits");
 }
 }

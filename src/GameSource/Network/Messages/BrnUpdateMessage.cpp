@@ -56,21 +56,27 @@ namespace BrnNetwork
         if (rw::math::vpu::Magnitude(mUpdateData.mLinearVelocity) >= KF_UPDATE_LINEAR_VELOCITY_CLAMP_START)
         {
             const Vector3 lUnit = rw::math::vpu::Normalize(mUpdateData.mLinearVelocity);
-            mUpdateData.mLinearVelocity = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 lUnit.x * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
                 lUnit.y * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
                 lUnit.z * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
                 lUnit.w * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE };
+                mUpdateData.mLinearVelocity = lAggregateValue;
+            }
         }
 
         if (rw::math::vpu::Magnitude(mUpdateData.mAngularVelocity) >= KF_UPDATE_ANGULAR_VELOCITY_CLAMP_START)
         {
             const Vector3 lUnit = rw::math::vpu::Normalize(mUpdateData.mAngularVelocity);
-            mUpdateData.mAngularVelocity = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 lUnit.x * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
                 lUnit.y * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
                 lUnit.z * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
                 lUnit.w * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE };
+                mUpdateData.mAngularVelocity = lAggregateValue;
+            }
         }
 
         const Vector3 lPositionMax = {  KF_UPDATE_POSITION_MAX_XZ,  KF_UPDATE_POSITION_MAX_Y,

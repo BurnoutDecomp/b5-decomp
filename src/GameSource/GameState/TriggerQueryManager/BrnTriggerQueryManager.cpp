@@ -130,7 +130,10 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
     maLastFrameTriggers.Construct();   // X360: stw 0 @ +1560
 
     // Cached refresh position (X360: stvx128 v0 zero store @ +1776).
-    mLastPlayerPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mLastPlayerPosition = lAggregateValue;
+    }
 
     // Dirty/region flags + invalid traffic-light id.
     mbTriggersUpdated            = false;   // X360: stb 0 @ +1808
@@ -836,21 +839,30 @@ void TriggerQueryManager::SubmitTriggerQueries(
                                    lLookAheadDist.z * lfReciprocalLength,
                                    lLookAheadDist.w * lfReciprocalLength};
             if (lfLengthSquared > 225.0f)
-                lLookAheadDist = Vector3{lForward.x * 15.0f, lForward.y * 15.0f,
+                {
+                    const Vector3 lAggregateValue = {lForward.x * 15.0f, lForward.y * 15.0f,
                                          lForward.z * 15.0f, lForward.w * 15.0f};
-            mPlayerLookAheadPos = Vector3{lrCar.mPosition.x + lLookAheadDist.x,
+                    lLookAheadDist = lAggregateValue;
+                }
+            {
+                const Vector3 lAggregateValue = {lrCar.mPosition.x + lLookAheadDist.x,
                                          lrCar.mPosition.y + lLookAheadDist.y,
                                          lrCar.mPosition.z + lLookAheadDist.z,
                                          lrCar.mPosition.w + lLookAheadDist.w};
+                mPlayerLookAheadPos = lAggregateValue;
+            }
             if (mbDoSoundLookAheadThisFrame)
             {
                 lEvent.mQueryID.SetIndex(999);
                 lEvent.mLineStart = mPlayerLookAheadPos;
                 // 82392990 vmaddfp D,A,B,C = A*C+B.
-                lEvent.mLineEnd = Vector3{std::fma(lForward.x, 4.0f, mPlayerLookAheadPos.x),
+                {
+                    const Vector3 lAggregateValue = {std::fma(lForward.x, 4.0f, mPlayerLookAheadPos.x),
                                           std::fma(lForward.y, 4.0f, mPlayerLookAheadPos.y),
                                           std::fma(lForward.z, 4.0f, mPlayerLookAheadPos.z),
                                           std::fma(lForward.w, 4.0f, mPlayerLookAheadPos.w)};
+                    lEvent.mLineEnd = lAggregateValue;
+                }
                 lpTriggerInterface->AddEvent(&lEvent, 3);
             }
         }
@@ -1040,7 +1052,10 @@ void TriggerQueryManager::PostWorldUpdate(
     {
         mCachedLookAheadSoundAction.mQueryPos = mPlayerLookAheadPos;
         maSoundActions.Append(mCachedLookAheadSoundAction);
-        mCachedLookAheadSoundAction.mQueryPos = Vector3{};
+        {
+            const Vector3 lAggregateValue = { 0 };
+            mCachedLookAheadSoundAction.mQueryPos = lAggregateValue;
+        }
         mCachedLookAheadSoundAction.mEntityId.muValue = 0;
         mCachedLookAheadSoundAction.meResultType = SoundTriggerAction::E_TYPE_INVALID;
         mCachedLookAheadSoundAction.muActiveTriggers = 0;

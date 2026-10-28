@@ -268,8 +268,11 @@ namespace Deformation
         // i.e. the CLOSING SPEED, stored at 0x8262510C. Positive by construction on this path (the
         // function has already early-returned when it is <= 0), which is exactly why the head's
         // `ASSERT(mvfVelocityAlongNormal >= 0)` (line 319) never fires on console.
-        lParams.mvfVelocityAlongNormal = VecFloat{ lfClosingSpeed, lfClosingSpeed,
+        {
+            const VecFloat lAggregateValue = { lfClosingSpeed, lfClosingSpeed,
                                                    lfClosingSpeed, lfClosingSpeed };
+            lParams.mvfVelocityAlongNormal = lAggregateValue;
+        }
         // +0xB0 mpImpulsePasser <- `addi r11, r30, 0x18E4 ; stw r11, var_D0(r1)` @0x82625118/28.
         // 0x18E4 is this object's mImpulsePasser map base (the same base ResetSensors' inlined
         // SetCollidableBodyMap stores through). THIS is the chain's handle -- without it the sensor
@@ -634,8 +637,10 @@ namespace Deformation
         {
             const f32 lfClosing    = vpu::Dot(lRelativeMotion, lContact.mNormal);
             const f32 lfAbsClosing = (lfClosing < 0.0f) ? -lfClosing : lfClosing;
-            lParams.mvfVelocityAlongNormal =
-                VecFloat{ lfAbsClosing, lfAbsClosing, lfAbsClosing, lfAbsClosing };
+            {
+                const VecFloat lAggregateValue = { lfAbsClosing, lfAbsClosing, lfAbsClosing, lfAbsClosing };
+                lParams.mvfVelocityAlongNormal = lAggregateValue;
+            }
         }
         // +0xB0 mpImpulsePasser -- `addi r10, r31, 0x18E4` @0x82624B48 then `stw r10, 0x190(r1)`
         // @0x82624B64 (the PS3 twin spells the identical pair at 0x746F6C/0x746F98).

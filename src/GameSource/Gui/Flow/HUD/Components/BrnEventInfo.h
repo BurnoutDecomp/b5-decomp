@@ -356,7 +356,7 @@ namespace BrnGui
         static void _AssertLayout()
         {
             // (1) The two array bounds the X360 loop/index arithmetic proves.
-            CGS_STATIC_ASSERT((sizeof(EventInfoComponent::maTextField)
+            CGS_STATIC_ASSERT((sizeof(((EventInfoComponent*)0)->maTextField)
                         / sizeof(TextFieldComponentType) == 7),
                           "maTextField is [7] on X360 (PrepareComponentsForGameMode loop bound @0x824291B4)");
             CGS_STATIC_ASSERT((KI_STUNT_TYPE_STRING_ID_COUNT == 18),

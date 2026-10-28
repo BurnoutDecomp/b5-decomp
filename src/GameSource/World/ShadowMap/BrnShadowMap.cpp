@@ -205,10 +205,22 @@ namespace BrnWorld
             // maCachedMatrix[luMap] = the identity basis with a ZERO fourth row
             // (the four stvx128 @r9-0x20/-0x10/+0/+0x10, stride 0x40): rows
             // {1,0,0,0} {0,1,0,0} {0,0,1,0} {0,0,0,0} exactly as stored.
-            maCachedMatrix[luMap].xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
-            maCachedMatrix[luMap].yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
-            maCachedMatrix[luMap].zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
-            maCachedMatrix[luMap].wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                maCachedMatrix[luMap].xAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                maCachedMatrix[luMap].yAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                maCachedMatrix[luMap].zAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                maCachedMatrix[luMap].wAxis = lAggregateValue;
+            }
         }
 
         mbUpdateDebugRender = true;                                   // stb r11, 0x1501
@@ -1106,12 +1118,18 @@ namespace BrnWorld
             Vector4 lvZ;
             if (IsZero3(lfDx, lfDy, lfDz))
             {
-                lvZ = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };   // unk_82181520
+                {
+                    const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                    lvZ = lAggregateValue;
+                }   // unk_82181520
             }
             else
             {
                 const f32 lfInvLen = 1.0f / std::sqrt(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz); // vrsqrtefp + 2x NR
-                lvZ = Vector4{ lfDx * lfInvLen, lfDy * lfInvLen, lfDz * lfInvLen, 0.0f };
+                {
+                    const Vector4 lAggregateValue = { lfDx * lfInvLen, lfDy * lfInvLen, lfDz * lfInvLen, 0.0f };
+                    lvZ = lAggregateValue;
+                }
             }
             CGS_ASSERT(IsValid3(lvZ.x, lvZ.y, lvZ.z),
                        "Invalid Z Axis after normalisation, pre-normalised: ");   // CameraUtils.cpp:779
@@ -1123,12 +1141,18 @@ namespace BrnWorld
             Vector4 lvX;
             if (IsZero3(lfCx, lfCy, lfCz))
             {
-                lvX = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };   // w::math::vpu::detail::gIVector
+                {
+                    const Vector4 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                    lvX = lAggregateValue;
+                }   // w::math::vpu::detail::gIVector
             }
             else
             {
                 const f32 lfInvLen = 1.0f / std::sqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);
-                lvX = Vector4{ lfCx * lfInvLen, lfCy * lfInvLen, lfCz * lfInvLen, 0.0f };
+                {
+                    const Vector4 lAggregateValue = { lfCx * lfInvLen, lfCy * lfInvLen, lfCz * lfInvLen, 0.0f };
+                    lvX = lAggregateValue;
+                }
             }
             CGS_ASSERT(IsValid3(lvX.x, lvX.y, lvX.z), "IsValid(lXaxis)");        // CameraUtils.cpp:793
 
@@ -1285,10 +1309,22 @@ namespace BrnWorld
             // the outlined CameraUtils builder (bl sub_8220C960) -> mTransform rows
             Vector4 laRows[4];
             BuildLightCameraTransform(laRows, lvFocus, lvEyePoint, lvUpReference);
-            lrDirCamera.mTransform.xAxis = rw::math::vpu::Vector3{ laRows[0].x, laRows[0].y, laRows[0].z, laRows[0].w };
-            lrDirCamera.mTransform.yAxis = rw::math::vpu::Vector3{ laRows[1].x, laRows[1].y, laRows[1].z, laRows[1].w };
-            lrDirCamera.mTransform.zAxis = rw::math::vpu::Vector3{ laRows[2].x, laRows[2].y, laRows[2].z, laRows[2].w };
-            lrDirCamera.mTransform.wAxis = rw::math::vpu::Vector3{ laRows[3].x, laRows[3].y, laRows[3].z, laRows[3].w };
+            {
+                const rw::math::vpu::Vector3 lAggregateValue = { laRows[0].x, laRows[0].y, laRows[0].z, laRows[0].w };
+                lrDirCamera.mTransform.xAxis = lAggregateValue;
+            }
+            {
+                const rw::math::vpu::Vector3 lAggregateValue = { laRows[1].x, laRows[1].y, laRows[1].z, laRows[1].w };
+                lrDirCamera.mTransform.yAxis = lAggregateValue;
+            }
+            {
+                const rw::math::vpu::Vector3 lAggregateValue = { laRows[2].x, laRows[2].y, laRows[2].z, laRows[2].w };
+                lrDirCamera.mTransform.zAxis = lAggregateValue;
+            }
+            {
+                const rw::math::vpu::Vector3 lAggregateValue = { laRows[3].x, laRows[3].y, laRows[3].z, laRows[3].w };
+                lrDirCamera.mTransform.wAxis = lAggregateValue;
+            }
 
             lrDirCamera.ValidateTransformWithDebugInfo();        // bl @0x827DA974
             lrDirCamera.CopyToCgsCamera(&maCgsShadowMapCamera[luMap]);
@@ -1895,14 +1931,22 @@ namespace BrnWorld
             lTsmBBInfo.mWorldToLight = maCgsShadowMapCamera[luMapIndex].mViewProjection;
             {   // the four lvx/stvx rows of the cascade view matrix
                 const Matrix44& lrView = maCgsShadowMapCamera[luMapIndex].mView;
-                lTsmBBInfo.mWorldToLightView.xAxis =
-                    Vector3{ lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
-                lTsmBBInfo.mWorldToLightView.yAxis =
-                    Vector3{ lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
-                lTsmBBInfo.mWorldToLightView.zAxis =
-                    Vector3{ lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
-                lTsmBBInfo.mWorldToLightView.wAxis =
-                    Vector3{ lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w };
+                {
+                    const Vector3 lAggregateValue = { lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
+                    lTsmBBInfo.mWorldToLightView.xAxis = lAggregateValue;
+                }
+                {
+                    const Vector3 lAggregateValue = { lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
+                    lTsmBBInfo.mWorldToLightView.yAxis = lAggregateValue;
+                }
+                {
+                    const Vector3 lAggregateValue = { lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
+                    lTsmBBInfo.mWorldToLightView.zAxis = lAggregateValue;
+                }
+                {
+                    const Vector3 lAggregateValue = { lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w };
+                    lTsmBBInfo.mWorldToLightView.wAxis = lAggregateValue;
+                }
             }
 
             lCamera.Clone(&lTsmBBInfo.mCamera);
@@ -1940,10 +1984,13 @@ namespace BrnWorld
             Vector4 laProbeScratch[8];
             for (u32 luI = 0; luI < 8; ++luI)
             {
-                laProbeScratch[luI] = Vector4{ KF_SHADOW_CAM_PROBE_CANARY,
+                {
+                    const Vector4 lAggregateValue = { KF_SHADOW_CAM_PROBE_CANARY,
                                                KF_SHADOW_CAM_PROBE_CANARY,
                                                KF_SHADOW_CAM_PROBE_CANARY,
                                                KF_SHADOW_CAM_PROBE_CANARY };
+                    laProbeScratch[luI] = lAggregateValue;
+                }
             }
             lTsmBBInfo.mSubFrustum.CalcVertices(laProbeScratch);
 
@@ -1975,9 +2022,12 @@ namespace BrnWorld
         for (u32 luI = 0; luI < 8; ++luI)                            // BrnShadowMap.cpp:1265
         {
             lFrustumPointsLightSpace3d[luI] = TransformPoint(lFrustumPoints[luI], lWorldToLight);
-            lFrustumPointsLightSpace[luI]   = Vector4{ lFrustumPointsLightSpace3d[luI].x,
+            {
+                const Vector4 lAggregateValue = { lFrustumPointsLightSpace3d[luI].x,
                                                        lFrustumPointsLightSpace3d[luI].y,
                                                        0.0f, 0.0f };
+                lFrustumPointsLightSpace[luI] = lAggregateValue;
+            }
         }
 
         // ---- 4. centre line + the seed base direction (0x827D9410..0x827D9548)
@@ -1997,10 +2047,16 @@ namespace BrnWorld
                 lvFar.z  += lFrustumPointsLightSpace[luI + 4].z;
                 lvFar.w  += lFrustumPointsLightSpace[luI + 4].w;
             }
-            lCentreLineStart = Vector4{ lvNear.x * K_1_OVER_4.x, lvNear.y * K_1_OVER_4.y,
+            {
+                const Vector4 lAggregateValue = { lvNear.x * K_1_OVER_4.x, lvNear.y * K_1_OVER_4.y,
                                         lvNear.z * K_1_OVER_4.z, lvNear.w * K_1_OVER_4.w };
-            lCentreLineEnd   = Vector4{ lvFar.x * K_1_OVER_4.x, lvFar.y * K_1_OVER_4.y,
+                lCentreLineStart = lAggregateValue;
+            }
+            {
+                const Vector4 lAggregateValue = { lvFar.x * K_1_OVER_4.x, lvFar.y * K_1_OVER_4.y,
                                         lvFar.z * K_1_OVER_4.z, lvFar.w * K_1_OVER_4.w };
+                lCentreLineEnd = lAggregateValue;
+            }
         }
         const Vector4 lCentreLineVec = Normalize3(Vector4{                   // :1291
             lCentreLineEnd.x - lCentreLineStart.x, lCentreLineEnd.y - lCentreLineStart.y,
@@ -2043,10 +2099,22 @@ namespace BrnWorld
         {
             const f32 lfSin = std::sin(lRotation);
             Matrix44Affine lRotationAroundZMatrix;                             // :1310
-            lRotationAroundZMatrix.xAxis = Vector3{  lfCos, lfSin, 0.0f, 0.0f };
-            lRotationAroundZMatrix.yAxis = Vector3{ -lfSin, lfCos, 0.0f, 0.0f };
-            lRotationAroundZMatrix.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
-            lRotationAroundZMatrix.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = {  lfCos, lfSin, 0.0f, 0.0f };
+                lRotationAroundZMatrix.xAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { -lfSin, lfCos, 0.0f, 0.0f };
+                lRotationAroundZMatrix.yAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                lRotationAroundZMatrix.zAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lRotationAroundZMatrix.wAxis = lAggregateValue;
+            }
 
             const Vector4 lvBase = TransformVector(lOriginalBaseLineVec, lRotationAroundZMatrix);
             const Vector4 lvSide{ -lvBase.y, lvBase.x, 0.0f, 0.0f };
@@ -2177,10 +2245,22 @@ namespace BrnWorld
             laBestBoxPoints[2].z - laBestBoxPoints[3].z, laBestBoxPoints[2].w - laBestBoxPoints[3].w });
 
         Matrix44 lTransformT1;                                                 // :1472
-        lTransformT1.xAxis = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };
-        lTransformT1.yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
-        lTransformT1.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
-        lTransformT1.wAxis = Vector4{ -lvCentre.x, -lvCentre.y, 0.0f, 1.0f };
+        {
+            const Vector4 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            lTransformT1.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            lTransformT1.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            lTransformT1.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { -lvCentre.x, -lvCentre.y, 0.0f, 1.0f };
+            lTransformT1.wAxis = lAggregateValue;
+        }
 
         // DUMPED 2026-08-12 (.data, big-endian) -- both rows are the exact SIGN
         //   INVERSE of the values previously DERIVED here:
@@ -2201,21 +2281,45 @@ namespace BrnWorld
         static const f32 YMult[4] = {  0.0f,  1.0f, -1.0f,  0.0f };            // flt_82F30E40 (dumped)
 
         Matrix44 lTransformR;                                                  // :1485
-        lTransformR.xAxis = Vector4{ lVecU.x * XMult[0] + lVecU.y * YMult[0],
+        {
+            const Vector4 lAggregateValue = { lVecU.x * XMult[0] + lVecU.y * YMult[0],
                                      lVecU.x * XMult[1] + lVecU.y * YMult[1], 0.0f, 0.0f };
-        lTransformR.yAxis = Vector4{ lVecU.x * XMult[2] + lVecU.y * YMult[2],
+            lTransformR.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { lVecU.x * XMult[2] + lVecU.y * YMult[2],
                                      lVecU.x * XMult[3] + lVecU.y * YMult[3], 0.0f, 0.0f };
-        lTransformR.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
-        lTransformR.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+            lTransformR.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            lTransformR.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+            lTransformR.wAxis = lAggregateValue;
+        }
 
         const Matrix44 lTransformT1xR = MultMatrix(lTransformT1, lTransformR); // :1492
         const Vector4  lvCorner       = MultRow(laBestBoxPoints[0], lTransformT1xR);
 
         Matrix44 lTransformS2;                                                 // :1496
-        lTransformS2.xAxis = Vector4{ 1.0f / lvCorner.x, 0.0f, 0.0f, 0.0f };
-        lTransformS2.yAxis = Vector4{ 0.0f, 1.0f / lvCorner.y, 0.0f, 0.0f };
-        lTransformS2.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
-        lTransformS2.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+        {
+            const Vector4 lAggregateValue = { 1.0f / lvCorner.x, 0.0f, 0.0f, 0.0f };
+            lTransformS2.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 1.0f / lvCorner.y, 0.0f, 0.0f };
+            lTransformS2.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            lTransformS2.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+            lTransformS2.wAxis = lAggregateValue;
+        }
 
         lTsmBBInfo.mBestFitMatrix = MultMatrix(lTransformT1xR, lTransformS2);
 
@@ -2230,10 +2334,22 @@ namespace BrnWorld
         if (lTsmBBInfo.mbInvertCullMode)                                       // lbz 0x240(tsm)
         {
             Matrix44 lMirrorX;
-            lMirrorX.xAxis = Vector4{ -1.0f, 0.0f, 0.0f, 0.0f };
-            lMirrorX.yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
-            lMirrorX.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
-            lMirrorX.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+            {
+                const Vector4 lAggregateValue = { -1.0f, 0.0f, 0.0f, 0.0f };
+                lMirrorX.xAxis = lAggregateValue;
+            }
+            {
+                const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                lMirrorX.yAxis = lAggregateValue;
+            }
+            {
+                const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                lMirrorX.zAxis = lAggregateValue;
+            }
+            {
+                const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+                lMirrorX.wAxis = lAggregateValue;
+            }
             lTsmBBInfo.mBestFitMatrix = MultMatrix(lTsmBBInfo.mBestFitMatrix, lMirrorX);
         }
 
@@ -2252,12 +2368,21 @@ namespace BrnWorld
             const f32     lfInvDet  = 1.0f / Dot3(lvX, lvCrossYZ);
 
             Matrix44Affine& lrInv = lTsmBBInfo.mLightToWorldView;
-            lrInv.xAxis = Vector3{ lvCrossYZ.x * lfInvDet, lvCrossZX.x * lfInvDet,
+            {
+                const Vector3 lAggregateValue = { lvCrossYZ.x * lfInvDet, lvCrossZX.x * lfInvDet,
                                    lvCrossXY.x * lfInvDet, lvCrossZX.x * lfInvDet };
-            lrInv.yAxis = Vector3{ lvCrossYZ.y * lfInvDet, lvCrossZX.y * lfInvDet,
+                lrInv.xAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lvCrossYZ.y * lfInvDet, lvCrossZX.y * lfInvDet,
                                    lvCrossXY.y * lfInvDet, lvCrossZX.y * lfInvDet };
-            lrInv.zAxis = Vector3{ lvCrossYZ.z * lfInvDet, lvCrossZX.z * lfInvDet,
+                lrInv.yAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lvCrossYZ.z * lfInvDet, lvCrossZX.z * lfInvDet,
                                    lvCrossXY.z * lfInvDet, lvCrossZX.z * lfInvDet };
+                lrInv.zAxis = lAggregateValue;
+            }
             // translation = -mWorldToLightView.wAxis through the inverse basis
             const f32* lpfNegPos = &lrView.wAxis.x;
             const f32* lapInvRows[3] = { &lrInv.xAxis.x, &lrInv.yAxis.x, &lrInv.zAxis.x };
@@ -2345,7 +2470,10 @@ namespace BrnWorld
             lDebugInfo.mBaseLineStart[1] = TransformPoint(laLinePoints[6], lLightToWorld);
             lDebugInfo.mBaseLineEnd[1]   = TransformPoint(laLinePoints[7], lLightToWorld);
 
-            lDebugInfo.mZOffset = VecFloat{ lZOffset.z, lZOffset.z, lZOffset.z, lZOffset.z };
+            {
+                const VecFloat lAggregateValue = { lZOffset.z, lZOffset.z, lZOffset.z, lZOffset.z };
+                lDebugInfo.mZOffset = lAggregateValue;
+            }
 
             for (u32 luI = 0; luI < 8; ++luI)
             {
@@ -2495,8 +2623,10 @@ namespace BrnWorld
                     laCandidatePlanes[luNumCandidatePlanes].mPlane =
                         Vector3Plus{ lPlane.x, lPlane.y, lPlane.z, lPlane.w };
                     const f32 lfScore = 2.0f - lNDotL;    // vspltisw 2 + vcfsx
-                    laCandidatePlanes[luNumCandidatePlanes].mScore =
-                        VecFloat{ lfScore, lfScore, lfScore, lfScore };
+                    {
+                        const VecFloat lAggregateValue = { lfScore, lfScore, lfScore, lfScore };
+                        laCandidatePlanes[luNumCandidatePlanes].mScore = lAggregateValue;
+                    }
                     ++luNumCandidatePlanes;
                 }
             }
@@ -2511,7 +2641,10 @@ namespace BrnWorld
             const f32 lNearClip = mfShadowMapNearPlane;                        // :1736
             lNearPlane.SetVector3(Vector3{ lLightVector.x, lLightVector.y, lLightVector.z, 0.0f });
             lNearPlane.SetPlus(Dot3(lLightPosWorldSpace, lLightVector) + lNearClip);
-            laCandidatePlanes[luNumCandidatePlanes].mScore = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                laCandidatePlanes[luNumCandidatePlanes].mScore = lAggregateValue;
+            }
             ++luNumCandidatePlanes;
         }
 

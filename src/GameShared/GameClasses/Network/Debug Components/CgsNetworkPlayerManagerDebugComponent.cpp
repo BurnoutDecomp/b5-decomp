@@ -30,6 +30,9 @@ int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText
 
 namespace CgsNetwork
 {
+    const f32 PlayerManagerDebugComponent::KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH = 256.0f;
+    const f32 PlayerManagerDebugComponent::KF_DEFAULT_MAX_BANDWIDTH = 128.0f;
+
     namespace
     {
         // Bandwidth -> kbps conversion factors (X360 float literals): a byte count is scaled by

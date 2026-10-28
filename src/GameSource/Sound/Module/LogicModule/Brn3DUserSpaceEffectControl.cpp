@@ -116,10 +116,13 @@ void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPositio
         value = multiplyAdd(axis.y, apPosition->y, value);
         return multiplyAdd(axis.z, apPosition->z, value);
     };
-    mPositionInUserSpace = Vector3{
+    {
+        const Vector3 lAggregateValue = {
         inverseComponent(mpTransform->xAxis),
         inverseComponent(mpTransform->yAxis),
         inverseComponent(mpTransform->zAxis), 0.0f};
+        mPositionInUserSpace = lAggregateValue;
+    }
     // 82696BD8 stores the stable generated member's address; it does not
     // write mGeneratedPosition until the next UpdateParams.
     CgsSound::Logic::Cgs3dEffectControl::AttachEmitterPosition(&mGeneratedPosition);

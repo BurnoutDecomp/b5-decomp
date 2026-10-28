@@ -360,7 +360,10 @@ namespace BrnPhysics
         }
         else
         {
-            mvCurrentInAirRotations = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mvCurrentInAirRotations = lAggregateValue;
+            }
         }
     }
 
@@ -455,7 +458,10 @@ namespace BrnPhysics
 
             // the finalize branch ALWAYS clears the running roll/spin accumulator at its tail
             // (asm vspltisw v0,0; stvx128 v0,r31,16 -- unconditional).
-            mvStuntRollInProgress = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // +0x10 cleared
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mvStuntRollInProgress = lAggregateValue;
+            }   // +0x10 cleared
         }
     }
 
@@ -477,7 +483,10 @@ namespace BrnPhysics
             mfHandBreakAngleSoFar   = 0.0f;
             mfHandBrakeStabiliseTime = 0.0f;
             mbHandbreakTurnAttempting = true;
-            mvRaceCarPositionLastFrame = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mvRaceCarPositionLastFrame = lAggregateValue;
+            }
         }
 
         if (mbHandbreakTurnAttempting)
@@ -562,7 +571,10 @@ namespace BrnPhysics
         //       mvTakeOffVector(+0x60)=transform.zAxis; mfCleanLandingCheckTimeSoFar(+0x84)=0; return; })
         if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_TAKEN_OFF) != 0)
         {
-            mvLandingVector = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mvLandingVector = lAggregateValue;
+            }
             mbKeepCheckingForCleanLanding = false;
             mvTakeOffVector = lpRaceCarPhysics->GetTransform().zAxis;
             mfCleanLandingCheckTimeSoFar = 0.0f;
@@ -595,8 +607,14 @@ namespace BrnPhysics
                 {
                     mbKeepCheckingForCleanLanding = false;
                     muStuntActionComplete |= E_STUNT_ACTION_COMPLETE_CLEANLANDING;
-                    mvTakeOffVector = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-                    mvLandingVector = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    {
+                        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                        mvTakeOffVector = lAggregateValue;
+                    }
+                    {
+                        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                        mvLandingVector = lAggregateValue;
+                    }
                 }
             }
             // disarm if the check window expires.

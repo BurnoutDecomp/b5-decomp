@@ -288,10 +288,16 @@ void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_P
         const Vector3  lOffset    = Vector3{ 0.0f, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0.0f, 0.0f };
 
         CgsSceneManager::SceneManagerIO::InEventLineTestFine lEvent;
-        lEvent.mLineStart = Vector3{ lrPosition.x + lOffset.x, lrPosition.y + lOffset.y,
+        {
+            const Vector3 lAggregateValue = { lrPosition.x + lOffset.x, lrPosition.y + lOffset.y,
                                      lrPosition.z + lOffset.z, lrPosition.w + lOffset.w };
-        lEvent.mLineEnd   = Vector3{ lrPosition.x - lOffset.x, lrPosition.y - lOffset.y,
+            lEvent.mLineStart = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lrPosition.x - lOffset.x, lrPosition.y - lOffset.y,
                                      lrPosition.z - lOffset.z, lrPosition.w - lOffset.w };
+            lEvent.mLineEnd = lAggregateValue;
+        }
         lEvent.mQueryId            = lSceneQueryID;
         lEvent.mx32EntityTypeFlags = K_ENTITY_TYPE_FLAG_WORLD;
         lEvent.mExcludeEntityId.SetInvalid();
@@ -480,10 +486,16 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     if( lpBestIntersection != 0 )
     {
         // asm: intersection+0x00 -> position, intersection+0x10 -> normal.
-        lResetPosition = Vector3{ lpBestIntersection->mPosition.x, lpBestIntersection->mPosition.y,
+        {
+            const Vector3 lAggregateValue = { lpBestIntersection->mPosition.x, lpBestIntersection->mPosition.y,
                                   lpBestIntersection->mPosition.z, 0.0f };
-        lResetNormal   = Vector3{ lpBestIntersection->mNormal.x, lpBestIntersection->mNormal.y,
+            lResetPosition = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpBestIntersection->mNormal.x, lpBestIntersection->mNormal.y,
                                   lpBestIntersection->mNormal.z, 0.0f };
+            lResetNormal = lAggregateValue;
+        }
 
         // X360 0x822F7250..0x822F7274: `if (mbInCarSelectScreen)` the three vectors go
         // through GetValuesForCarSelect @0x822D3470 -- the junkyard DROP pose (the reset
@@ -525,7 +537,10 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
                 << "    Failed to find valid place on track location - reverting to ring buffer\n";
         }
         lpActiveRaceCar->GetResetCoords( &lResetPosition, &lResetDirection );   // 0x822F73B0
-        lResetNormal = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };                        // unk_82181510
+        {
+            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            lResetNormal = lAggregateValue;
+        }                        // unk_82181510
     }
 
     // 0x822F725C..0x822F7380 -- the console's "Selected reset data" line, printed for BOTH arms
@@ -568,7 +583,10 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         if( CgsDev::Log::gpDebugPrint != 0 )
             *CgsDev::Log::gpDebugPrint
                 << "    Normal and reset direction are too similar - setting normal to y axis\n";
-        lResetNormal = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            lResetNormal = lAggregateValue;
+        }
 
         if( AreVectorsSimilar( lResetNormal, lResetDirection ) )
         {
@@ -576,7 +594,10 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
                 *CgsDev::Log::gpDebugPrint
                     << "    Normal and reset direction are still too similar - setting "
                        "direction to x axis\n";
-            lResetDirection = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                lResetDirection = lAggregateValue;
+            }
         }
     }
 
@@ -691,7 +712,10 @@ void GetRandomVector( CgsNumeric::Random& lrRandom, Vector3& lrOut,
     const f32 lfZ = lrRandom.RandomFloat( -lrRange.z, lrRange.z );
     const f32 lfY = lrRandom.RandomFloat( -lrRange.y, lrRange.y );
     const f32 lfX = lrRandom.RandomFloat( -lrRange.x, lrRange.x );
-    lrOut = Vector3{ lrIn.x + lfX, lrIn.y + lfY, lrIn.z + lfZ, 0.0f };
+    {
+        const Vector3 lAggregateValue = { lrIn.x + lfX, lrIn.y + lfY, lrIn.z + lfZ, 0.0f };
+        lrOut = lAggregateValue;
+    }
 }
 
 } // namespace BrnWorld

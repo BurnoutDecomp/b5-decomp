@@ -138,7 +138,10 @@ namespace Vehicle
         mbIsWedgedInWorld                      = false;                              // stb  0x135F
         mfBeachedTime                          = 0.0f;                               // stfs 0x1408
         mbWroteIntoRWInSlowMo                  = false;                              // stb  0x1435
-        mPropCollisionImpulseSum               = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // stvx128 0x13F0
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mPropCollisionImpulseSum = lAggregateValue;
+        }  // stvx128 0x13F0
         mbAISlowMo                             = false;                              // stb  0x1434
         mbDeformedBeyondDriveTimeLimitsInCrash = false;                              // stb  0x1436
 
@@ -411,7 +414,10 @@ namespace Vehicle
         mbSixaxisTiltApplied = false;   // +0x0A = 0
         mbGoodImpactReport   = false;   // +0x0B = 0
         miOtherEntityId      = 0;       // +0x0C = 0  (stw)
-        mBounceDirection     = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // +0x10 stvx128 v0=0
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mBounceDirection = lAggregateValue;
+        }   // +0x10 stvx128 v0=0
 
         mbDisableShowtime    = false;   // +0x30 = 0
         mbBounceWasGood      = false;   // +0x31 = 0
@@ -432,7 +438,10 @@ namespace Vehicle
         // reader-less: UpdateTargetAssist maintains it every frame and multiplies its .x into
         // the assist force's vertical correction. A 0.0 seed is NOT the identity here -- it
         // kills the vertical intercept pull until the first bounce re-seeds the envelope.
-        mAssistStrength = Vector3{ 0.01f, 0.01f, 0.01f, 0.01f };   // +0x100 splat(flt_82002138)
+        {
+            const Vector3 lAggregateValue = { 0.01f, 0.01f, 0.01f, 0.01f };
+            mAssistStrength = lAggregateValue;
+        }   // +0x100 splat(flt_82002138)
     }
 
     namespace
@@ -710,9 +719,12 @@ namespace Vehicle
             if (mbAISlowMo)
             {
                 const f32 lfScale = 1.0f / KVF_AI_CRASH_SLOWMO_FACTOR;
-                lvfSimTimeStep = VecFloat{
+                {
+                    const VecFloat lAggregateValue = {
                     lvfSimTimeStep.x * lfScale, lvfSimTimeStep.y * lfScale,
                     lvfSimTimeStep.z * lfScale, lvfSimTimeStep.w * lfScale };
+                    lvfSimTimeStep = lAggregateValue;
+                }
             }
 
             mfSlamSteering = 0.0f;          // this->float1404 = 0.0 (flt_82001CC0)
@@ -1665,8 +1677,10 @@ namespace Vehicle
         // toward the floor (asm 0x82620144-98; all three vectors' static-init writers decoded).
         if (MS.mbJustBounced)   // byte_82FB8481
         {
-            MS.mAssistStrength =
-                Vector3{ KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED };
+            {
+                const Vector3 lAggregateValue = { KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED };
+                MS.mAssistStrength = lAggregateValue;
+            }
         }
         else
         {
@@ -1981,7 +1995,10 @@ namespace Vehicle
                 // normalize(-(cameraX*yaw + cameraZ*pitch)), zero when degenerate.
                 Vector3 lvAim = vpu::Add(vpu::Mult(lvCameraX, lfYaw),
                                          vpu::Mult(lvCameraZ, lfPitch));
-                lvAim = Vector3{ -lvAim.x, -lvAim.y, -lvAim.z, -lvAim.w };   // vxor sign flip
+                {
+                    const Vector3 lAggregateValue = { -lvAim.x, -lvAim.y, -lvAim.z, -lvAim.w };
+                    lvAim = lAggregateValue;
+                }   // vxor sign flip
                 const f32 lfAimMagSq = vpu::MagnitudeSquared(lvAim);
                 lvAim = (lfAimMagSq > 0.0f)
                       ? vpu::Mult(lvAim, 1.0f / std::sqrt(lfAimMagSq))

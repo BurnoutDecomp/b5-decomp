@@ -317,8 +317,14 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void AboveGroundTestResult::Reset()
     {
-        mIntersectionPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 v127(0), +0x00
-        mIntersectionNormal   = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 v127(0), +0x10
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mIntersectionPosition = lAggregateValue;
+        }   // stvx128 v127(0), +0x00
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mIntersectionNormal = lAggregateValue;
+        }   // stvx128 v127(0), +0x10
         mfVerticalDistance    = 0.0f;                                // stfs f31(0), +0x20
         // Big-endian halfword pair {hi=0xFFFF, lo=0x8000} packs to the invalid-surface tag word
         // (same packing SetAboveGroundTestResult documents).
@@ -971,7 +977,10 @@ namespace Vehicle
 
         // ---- phase 1: the mass ----------------------------------------------------------------
         const f32 lfMass = lpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
-        mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };   // stvx128 -> +0xE0 (base mfMass)
+        {
+            const VecFloat lAggregateValue = { lfMass, lfMass, lfMass, lfMass };
+            mfMass = lAggregateValue;
+        }   // stvx128 -> +0xE0 (base mfMass)
         CGS_ASSERT(lfMass > 0.0f, "mfMass > 0.0f");            // console line 0xA5
 
         // ---- phase 2: the solid-box inverse inertia --------------------------------------------
@@ -990,9 +999,18 @@ namespace Vehicle
             const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
             const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
             const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
-            mLocalInverseInertia.xAxis = Vector3{ lfIxx, 0.0f, 0.0f, 0.0f };   // -> +0x80
-            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lfIyy, 0.0f, 0.0f };   // -> +0x90
-            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lfIzz, 0.0f };   // -> +0xA0
+            {
+                const Vector3 lAggregateValue = { lfIxx, 0.0f, 0.0f, 0.0f };
+                mLocalInverseInertia.xAxis = lAggregateValue;
+            }   // -> +0x80
+            {
+                const Vector3 lAggregateValue = { 0.0f, lfIyy, 0.0f, 0.0f };
+                mLocalInverseInertia.yAxis = lAggregateValue;
+            }   // -> +0x90
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, lfIzz, 0.0f };
+                mLocalInverseInertia.zAxis = lAggregateValue;
+            }   // -> +0xA0
         }
         CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
                    vpu::IsValid(mLocalInverseInertia.yAxis) &&
@@ -1119,7 +1137,10 @@ namespace Vehicle
         // gpcMessageBuffer and FireAsserts it (console line 0x152); modelled as the assert it
         // fires, with the console's own message text.
         const f32 lfMass = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z;
-        mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };          // stvx128 -> +0xE0
+        {
+            const VecFloat lAggregateValue = { lfMass, lfMass, lfMass, lfMass };
+            mfMass = lAggregateValue;
+        }          // stvx128 -> +0xE0
         CGS_ASSERT(lfMass > 0.0f,
                    "\n\nZero vehicle mass. Please tell Graham D and include the TTY!");
 
@@ -1149,9 +1170,18 @@ namespace Vehicle
             const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
             const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
             const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
-            mLocalInverseInertia.xAxis = Vector3{ lfIxx, 0.0f, 0.0f, 0.0f };   // -> +0x80
-            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lfIyy, 0.0f, 0.0f };   // -> +0x90
-            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lfIzz, 0.0f };   // -> +0xA0
+            {
+                const Vector3 lAggregateValue = { lfIxx, 0.0f, 0.0f, 0.0f };
+                mLocalInverseInertia.xAxis = lAggregateValue;
+            }   // -> +0x80
+            {
+                const Vector3 lAggregateValue = { 0.0f, lfIyy, 0.0f, 0.0f };
+                mLocalInverseInertia.yAxis = lAggregateValue;
+            }   // -> +0x90
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, lfIzz, 0.0f };
+                mLocalInverseInertia.zAxis = lAggregateValue;
+            }   // -> +0xA0
         }
         CGS_ASSERT(vpu::IsValid(mLocalInverseInertia.xAxis) &&
                    vpu::IsValid(mLocalInverseInertia.yAxis) &&
@@ -1325,8 +1355,11 @@ namespace Vehicle
         // times the lane-0 splat of KF_MPS_TO_MPH.
         const f32 lfForwardSpeedMPH =
             vpu::Dot(mTransform.zAxis, mLinearVelocity) * KF_SVP_MPS_TO_MPH;
-        mfSpeedMPH = VecFloat{ lfForwardSpeedMPH, lfForwardSpeedMPH,
+        {
+            const VecFloat lAggregateValue = { lfForwardSpeedMPH, lfForwardSpeedMPH,
                                lfForwardSpeedMPH, lfForwardSpeedMPH };
+            mfSpeedMPH = lAggregateValue;
+        }
 
         mDeformableAABB = lrAABB;                // +0x6D0, four ld/std out of lAABB
         mOriginalAABB   = lrAABB;                // +0x6F0, the SAME source

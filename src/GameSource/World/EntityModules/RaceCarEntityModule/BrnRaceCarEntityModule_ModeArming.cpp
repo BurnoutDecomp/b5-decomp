@@ -1017,7 +1017,10 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         }
         else
         {
-            lPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lPosition = lAggregateValue;
+            }
         }
         lDirection = lLocalDirection;
     }

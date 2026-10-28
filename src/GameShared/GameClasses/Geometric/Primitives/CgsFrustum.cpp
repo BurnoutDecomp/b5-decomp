@@ -648,8 +648,8 @@ namespace CgsGeometric
         // 8 lanes = 0x80. This is the size FrustumJobQueryInfo::operator=
         // block-copies per maFrustum[] element, and the +0x40 batch split every
         // accessor here relies on.
-        CGS_STATIC_ASSERT((sizeof(Frustum::maSwizzledPlanes) == 128), "Frustum plane batch must be 128 bytes");
-        CGS_STATIC_ASSERT((sizeof(Frustum::maSwizzledPlanes) / sizeof(Vector4) == 8), "Frustum must store exactly 8 swizzled lanes");
+        CGS_STATIC_ASSERT((sizeof(((Frustum*)0)->maSwizzledPlanes) == 128), "Frustum plane batch must be 128 bytes");
+        CGS_STATIC_ASSERT((sizeof(((Frustum*)0)->maSwizzledPlanes) / sizeof(Vector4) == 8), "Frustum must store exactly 8 swizzled lanes");
         CGS_STATIC_ASSERT((sizeof(Frustum) == 128), "sizeof(CgsGeometric::Frustum) must be 128 (0x80)");
         CGS_STATIC_ASSERT((__alignof(Frustum) == 16), "Frustum must be 16-byte aligned (lvx128/stvx128)");
 
@@ -657,7 +657,7 @@ namespace CgsGeometric
         // exactly as large as the whole object, so it is necessarily at offset 0.
         // That is what lets CalcVertices/IsSphereInFrustum address the lanes as
         // `this + 0x00 .. this + 0x70` the way the X360 asm does.
-        CGS_STATIC_ASSERT((sizeof(Frustum) == sizeof(Frustum::maSwizzledPlanes)), "maSwizzledPlanes must be the whole object (offset 0)");
+        CGS_STATIC_ASSERT((sizeof(Frustum) == sizeof(((Frustum*)0)->maSwizzledPlanes)), "maSwizzledPlanes must be the whole object (offset 0)");
 
         // The PlaneId numbering is load-bearing: CalcVertices' de-swizzle reads
         // plane k from float lane (k & 3) of batch (k >= 4), so these values ARE

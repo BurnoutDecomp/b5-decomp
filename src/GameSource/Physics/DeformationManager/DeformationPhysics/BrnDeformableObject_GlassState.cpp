@@ -790,10 +790,16 @@ namespace Deformation
         // over maWheelTagPoints[0..1]) were a PC-only overrun that step (4) happened to overwrite.
         const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
         const CgsGeometric::AxisAlignedBox&  lrDeformedAABB = lpVehicle->GetDeformableAABB();
-        lpCarState->mDeformedBBoxMin = Vector3{ lrDeformedAABB.mMin.x, lrDeformedAABB.mMin.y,
-                                                lrDeformedAABB.mMin.z, lrDeformedAABB.mMin.w };   // ld/std +0x00/+0x08
-        lpCarState->mDeformedBBoxMax = Vector3{ lrDeformedAABB.mMax.x, lrDeformedAABB.mMax.y,
-                                                lrDeformedAABB.mMax.z, lrDeformedAABB.mMax.w };   // ld/std +0x10/+0x18
+        {
+            const Vector3 lAggregateValue = { lrDeformedAABB.mMin.x, lrDeformedAABB.mMin.y,
+                                                lrDeformedAABB.mMin.z, lrDeformedAABB.mMin.w };
+            lpCarState->mDeformedBBoxMin = lAggregateValue;
+        }   // ld/std +0x00/+0x08
+        {
+            const Vector3 lAggregateValue = { lrDeformedAABB.mMax.x, lrDeformedAABB.mMax.y,
+                                                lrDeformedAABB.mMax.z, lrDeformedAABB.mMax.w };
+            lpCarState->mDeformedBBoxMax = lAggregateValue;
+        }   // ld/std +0x10/+0x18
 
         // (4) per-wheel CarState tag-point write. UNLIKE GetWheelTagPoints, the asm does NOT transform
         // the tag point here: it writes maTagPoints[tagIndex] (console this+0x3B10+32*idx, LOCAL)
@@ -1006,7 +1012,10 @@ namespace Deformation
                     }
                     lWheelStates.maStates[liWheel].mWorldSpaceTransform       = lWheelTransform;
                     lWheelStates.maStates[liWheel].mWorldSpaceVelocity        = lpPhysWheel->GetLinearVelocity();
-                    lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    {
+                        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                        lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = lAggregateValue;
+                    }
                     lWheelStates.mabWheelExists[liWheel]   = true;    // stb 1, -4
                     lWheelStates.mabWheelAttached[liWheel] = false;   // stb 0,  0
 

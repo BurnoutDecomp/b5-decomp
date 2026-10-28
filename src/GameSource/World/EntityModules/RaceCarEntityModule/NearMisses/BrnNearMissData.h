@@ -56,10 +56,10 @@ namespace BrnWorld
     {
     public:
         // Remember-timer seconds (X360 rodata): 0.5f for near/contacted/crashed/checked
-        // (flt_820147FC), 10.0f for taken-down (flt_820149B0). constexpr so no out-of-line
-        // template-static definition is required to satisfy the odr-uses below.
-        static constexpr f32 KF_NEAR_MISS_REMEMBER_TIME  = 0.5f;
-        static constexpr f32 KF_TAKEN_DOWN_REMEMBER_TIME = 10.0f;
+        // (flt_820147FC), 10.0f for taken-down (flt_820149B0). The C++03 template
+        // definitions below provide their storage.
+        static const f32 KF_NEAR_MISS_REMEMBER_TIME;
+        static const f32 KF_TAKEN_DOWN_REMEMBER_TIME;
 
         // Prepare -- declared at. Empties all seven lists: one `stw 0` into each count word
         // (+0x10, +0x24, +0x48, +0x6C and the three B-sized lists), emitted inline in
@@ -336,4 +336,9 @@ namespace BrnWorld
         Array<VehicleTimePair, B> maTakenDown;           // +0xAC (<4,7>) / +0xB4 (<4,8>)
         Array<VehicleTimePair, B> maChecked;             // +0xE8 (<4,7>) / +0xF8 (<4,8>)
     };
+    template <u32 A, u32 B>
+    const f32 NearMissData<A, B>::KF_NEAR_MISS_REMEMBER_TIME = 0.5f;
+    template <u32 A, u32 B>
+    const f32 NearMissData<A, B>::KF_TAKEN_DOWN_REMEMBER_TIME = 10.0f;
+
 }

@@ -1627,7 +1627,7 @@ namespace Vehicle
         CGS_STATIC_ASSERT((offsetof(VehicleManager, mePrepareStage) == 0),  "mePrepareStage (asm stw 0, 0(r31))");
         CGS_STATIC_ASSERT((offsetof(VehicleManager, meReleaseStage) == 4),  "meReleaseStage (asm stw 3, 4(r31))");
         CGS_STATIC_ASSERT((offsetof(VehicleManager, mRandom)        == 16), "mRandom (asm addi r11, r31, 0x10) -- 16-aligned, NOT +8");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::mRandom) == 48), "CgsNumeric::Random is 44 bytes at align 16 -> sizeof 48");
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mRandom) == 48), "CgsNumeric::Random is 44 bytes at align 16 -> sizeof 48");
 
         CGS_STATIC_ASSERT((sizeof(VehicleDriver)  == 224),  "VehicleDriver stride (asm: addi r25, r25, 0xE0)");
         // The three named bytes are at ABSOLUTE class offsets 224*idx + 123/124/125; with the array
@@ -1670,9 +1670,9 @@ namespace Vehicle
         CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarModelHandles)    == 43616),  "maRaceCarModelHandles (asm 8 * 0x154C; ProcessCreateEvents/ProcessValidationEvents)");
         CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
                           == offsetof(VehicleManager, maRaceCarModelHandles)
-                             + sizeof(VehicleManager::maRaceCarModelHandles)),
+                             + sizeof(((VehicleManager*)0)->maRaceCarModelHandles)),
                       "the two handle arrays abut (console 8 * 0x154C then 8 * 0x1554)");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64),
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->maRaceCarHandlingBodyIDs) == 64),
                       "RigidBodyId is 8 bytes -- the ctor's `std` + `addi r26, r26, 8`, and 43744 + 64 == 43808");
         // RE-SEATED 2026-08-03: the old `maRaceCarEntityIdRemap` sibling at +148128 is really the
         // embedded traffic manager's maTrafficEntityIDs. Same byte, real owner -- and the sum below
@@ -1799,9 +1799,18 @@ void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
         const f32 lfLinearDrag = lPhysicsSurface.LinearDrag();
         const f32 lfGrip       = lPhysicsSurface.Grip();
 
-        KAVF_SURFACE_ROUGHNESS[liSurface]   = VecFloat{lfRoughness, lfRoughness, lfRoughness, lfRoughness};
-        KAVF_SURFACE_GRIP[liSurface]        = VecFloat{lfGrip, lfGrip, lfGrip, lfGrip};
-        KAVF_SURFACE_LINEAR_DRAG[liSurface] = VecFloat{lfLinearDrag, lfLinearDrag, lfLinearDrag, lfLinearDrag};
+        {
+            const VecFloat lAggregateValue = {lfRoughness, lfRoughness, lfRoughness, lfRoughness};
+            KAVF_SURFACE_ROUGHNESS[liSurface] = lAggregateValue;
+        }
+        {
+            const VecFloat lAggregateValue = {lfGrip, lfGrip, lfGrip, lfGrip};
+            KAVF_SURFACE_GRIP[liSurface] = lAggregateValue;
+        }
+        {
+            const VecFloat lAggregateValue = {lfLinearDrag, lfLinearDrag, lfLinearDrag, lfLinearDrag};
+            KAVF_SURFACE_LINEAR_DRAG[liSurface] = lAggregateValue;
+        }
         KAB_SURFACE_IS_WATER[liSurface]     = lGameplaySurface.IsWater();
     }
 

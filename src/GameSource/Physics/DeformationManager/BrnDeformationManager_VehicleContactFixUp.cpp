@@ -241,9 +241,12 @@ namespace Deformation
         if (rw::math::vpu::Dot(lPointOnSide - lCentreA, lRotated) < 0.0f)
         {
             lfSin    = -lfSin;   // sin(-theta); cos unchanged
-            lRotated = Vector3{ lAToBDir.x * lfCos + lAToBDir.z * lfSin,
+            {
+                const Vector3 lAggregateValue = { lAToBDir.x * lfCos + lAToBDir.z * lfSin,
                                 lAToBDir.y,
                                 lAToBDir.z * lfCos - lAToBDir.x * lfSin, 0.0f };
+                lRotated = lAggregateValue;
+            }
         }
 
         // Flatten + normalize the tangent direction, emit the touch points.
@@ -350,9 +353,15 @@ namespace Deformation
             else
             {
                 CgsGeometric::Sphere lSphereA;
-                lSphereA.mPositionRadius = Vector4{ lLocalCentre.x, lLocalCentre.y, lLocalCentre.z, lLocalSphere.w };
+                {
+                    const Vector4 lAggregateValue = { lLocalCentre.x, lLocalCentre.y, lLocalCentre.z, lLocalSphere.w };
+                    lSphereA.mPositionRadius = lAggregateValue;
+                }
                 CgsGeometric::Sphere lSphereB;
-                lSphereB.mPositionRadius = Vector4{ lNeighbourCentre.x, lNeighbourCentre.y, lNeighbourCentre.z, lNeighbourSphere.w };
+                {
+                    const Vector4 lAggregateValue = { lNeighbourCentre.x, lNeighbourCentre.y, lNeighbourCentre.z, lNeighbourSphere.w };
+                    lSphereB.mPositionRadius = lAggregateValue;
+                }
 
                 Vector3 lResultB;   // the neighbour-sphere touch point -- computed, unused (console keeps it stack-only)
                 CalculateTangentPoints(lSphereA, lSphereB, lLocalPosIn,

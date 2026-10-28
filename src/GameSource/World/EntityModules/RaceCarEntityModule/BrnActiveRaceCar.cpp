@@ -102,10 +102,22 @@ namespace
     inline Matrix44Affine MakeIdentityTransform()
     {
         Matrix44Affine lIdentity;
-        lIdentity.xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
-        lIdentity.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
-        lIdentity.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
-        lIdentity.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            lIdentity.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            lIdentity.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            lIdentity.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lIdentity.wAxis = lAggregateValue;
+        }
         return lIdentity;
     }
 
@@ -147,8 +159,14 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mbIsTouchingAnotherRaceCar   = false;                         // 0x772
     mbIsTouchingPlayer           = false;                         // 0x773
     mbIsTouchingWorld            = false;                         // 0x774
-    mDeferredResetPosition       = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // 0x700
-    mDeferredResetDirection      = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // 0x710
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mDeferredResetPosition = lAggregateValue;
+    }  // 0x700
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mDeferredResetDirection = lAggregateValue;
+    }  // 0x710
     muPrevAISection              = 0x7FFF;                        // 0x73C
     muCurrAISection              = 0x7FFF;                        // 0x73E
     mbNotSendingNetworkUpdates      = false;                      // 0x798
@@ -156,7 +174,10 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mbIsInCarSelectOnline           = false;                      // 0x79A
     mbCarSelectOnlineStateChanged   = false;                      // 0x79B
     mbReceivedNetworkDriverControls = false;                      // 0x79C
-    mCurrentInAirRotations       = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // 0x750
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mCurrentInAirRotations = lAggregateValue;
+    }  // 0x750
     mbRenderThisFrame            = true;                          // 0x79D
     mbIsInGameMode               = false;                         // 0x777
     miFlashFrequency             = 0;                             // 0x794
@@ -204,7 +225,10 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mRenderParams.Reset();                                        // 0x7E0
     mfTimeSinceLastStable        = 0.0f;                          // 0x760
     mbCurrentlyRotating          = false;                         // 0x764
-    mCurrentInAirRotations       = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // 0x750 (again, asm order)
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mCurrentInAirRotations = lAggregateValue;
+    }  // 0x750 (again, asm order)
 }
 
 // ----------------------------------------------------------------------------
@@ -227,7 +251,10 @@ bool ActiveRaceCar::Prepare()
 
     mPrevTransforms.Clear();                                       // 0x598/0x59C/0x5A0
     mbUncrashedThisFrame     = false;                              // 0x77A
-    mLastRecordedPosition    = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // 0x6B0
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mLastRecordedPosition = lAggregateValue;
+    }  // 0x6B0
     mbAddedForCollision      = false;                              // 0x78B
     mbComingInRange          = false;                              // 0x775
     mbIsInGameMode           = false;                              // 0x777
@@ -237,7 +264,10 @@ bool ActiveRaceCar::Prepare()
 
     mRenderParams.Reset();                                         // 0x7E0
 
-    mCurrentInAirRotations   = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // 0x750
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mCurrentInAirRotations = lAggregateValue;
+    }  // 0x750
     mfPlaceOnTrackSpeed      = 0.0f;                               // 0x7C0
     mfTimeDriveableInCrash   = 0.0f;                               // 0x72C
     mbToBePlacedOnTrack      = false;                              // 0x7C4
@@ -251,8 +281,14 @@ bool ActiveRaceCar::Prepare()
 
     // 0x7A0 / 0x7B0: both seeded to (-1, -1, -1, 0) from the shared rodata -1.0f
     // (flt_820037C8), i.e. "no place-on-track request pending".
-    mPlaceOnTrackPosition    = Vector3{ -1.0f, -1.0f, -1.0f, 0.0f };
-    mPlaceOnTrackDirection   = Vector3{ -1.0f, -1.0f, -1.0f, 0.0f };
+    {
+        const Vector3 lAggregateValue = { -1.0f, -1.0f, -1.0f, 0.0f };
+        mPlaceOnTrackPosition = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = { -1.0f, -1.0f, -1.0f, 0.0f };
+        mPlaceOnTrackDirection = lAggregateValue;
+    }
 
     meEngineState            = RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING; // 0x768 = 2
     mbEnableEngineSwitchOff  = true;                               // 0x770
@@ -305,7 +341,10 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
 
     // 0x430 == mPhysicsState + 848 == RaceCarState::mHalfExtent. The console's default
     // car box until the physics module publishes a real one.
-    mPhysicsState.mHalfExtent = Vector3{ 1.1f, 0.75f, 1.8f, 0.0f };
+    {
+        const Vector3 lAggregateValue = { 1.1f, 0.75f, 1.8f, 0.0f };
+        mPhysicsState.mHalfExtent = lAggregateValue;
+    }
 
     // 0x540: ten 64-bit zero stores over the 80-byte mCrashData.
     memset(&mCrashData, 0, sizeof(mCrashData));
@@ -1720,14 +1759,23 @@ void ActiveRaceCar::UpdateDeformationState(
                             - std::fabs(lrT.xAxis.y * lrE.x)
                             - std::fabs(lrT.yAxis.y * lrE.y)
                             - std::fabs(lrT.zAxis.y * lrE.z);
-        mvfLowestPointWorldSpace = VecFloat{ lfLowestY, lfLowestY, lfLowestY, lfLowestY };
+        {
+            const VecFloat lAggregateValue = { lfLowestY, lfLowestY, lfLowestY, lfLowestY };
+            mvfLowestPointWorldSpace = lAggregateValue;
+        }
     }
 
     // The deformed-bbox pair (carState+0x640, 32 bytes -- four ld/std on console).
-    mDeformedBBox.mMin = Vector4{ lpCarState->mDeformedBBoxMin.x, lpCarState->mDeformedBBoxMin.y,
+    {
+        const Vector4 lAggregateValue = { lpCarState->mDeformedBBoxMin.x, lpCarState->mDeformedBBoxMin.y,
                                   lpCarState->mDeformedBBoxMin.z, lpCarState->mDeformedBBoxMin.w };
-    mDeformedBBox.mMax = Vector4{ lpCarState->mDeformedBBoxMax.x, lpCarState->mDeformedBBoxMax.y,
+        mDeformedBBox.mMin = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { lpCarState->mDeformedBBoxMax.x, lpCarState->mDeformedBBoxMax.y,
                                   lpCarState->mDeformedBBoxMax.z, lpCarState->mDeformedBBoxMax.w };
+        mDeformedBBox.mMax = lAggregateValue;
+    }
 
     // The four wheel tag points -> the render-side axle rows.
     for (u32 luWheel = 0; luWheel < 4u; ++luWheel)
@@ -2095,7 +2143,10 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
         if( !( mfTimeSinceLastStable < KF_STABLE_TIME_TO_STOP_ROTATING ) )
         {
             mbCurrentlyRotating    = false;
-            mCurrentInAirRotations = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // +0x750, a full 16-byte clear
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mCurrentInAirRotations = lAggregateValue;
+            }  // +0x750, a full 16-byte clear
         }
     }
 

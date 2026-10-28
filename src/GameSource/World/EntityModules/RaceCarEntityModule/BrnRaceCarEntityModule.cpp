@@ -3898,7 +3898,10 @@ void RaceCarEntityModule::HandleSetupNetworkCarAction(
 
     Matrix44Affine lTransform;
     lTransform.zAxis = rw::math::vpu::Normalize( lpSNCAction->mAt );
-    lTransform.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+    {
+        const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+        lTransform.yAxis = lAggregateValue;
+    }
     lTransform.xAxis = rw::math::vpu::Cross( lTransform.yAxis, lTransform.zAxis );
     lTransform.wAxis = lpSNCAction->mWorldSpacePosition;
 

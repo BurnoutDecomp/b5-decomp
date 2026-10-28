@@ -256,16 +256,22 @@ namespace Deformation
                     Vector3 lArmW;
                     if ( lpImpulseParams->mePositionSpace == rw::physics::WORLD_SPACE )
                     {
-                        lArmW = Vector3{ lrContactPosition.x - lPos.x, lrContactPosition.y - lPos.y,
+                        {
+                            const Vector3 lAggregateValue = { lrContactPosition.x - lPos.x, lrContactPosition.y - lPos.y,
                                          lrContactPosition.z - lPos.z, 0.0f };
+                            lArmW = lAggregateValue;
+                        }
                     }
                     else
                     {
-                        lArmW = Vector3{
+                        {
+                            const Vector3 lAggregateValue = {
                             lrT.xAxis.x * lrContactPosition.x + lrT.yAxis.x * lrContactPosition.y + lrT.zAxis.x * lrContactPosition.z,
                             lrT.xAxis.y * lrContactPosition.x + lrT.yAxis.y * lrContactPosition.y + lrT.zAxis.y * lrContactPosition.z,
                             lrT.xAxis.z * lrContactPosition.x + lrT.yAxis.z * lrContactPosition.y + lrT.zAxis.z * lrContactPosition.z,
                             0.0f };
+                            lArmW = lAggregateValue;
+                        }
                     }
                     const Vector3 lJW{
                         lrT.xAxis.x * liImpulse.x + lrT.yAxis.x * liImpulse.y + lrT.zAxis.x * liImpulse.z,

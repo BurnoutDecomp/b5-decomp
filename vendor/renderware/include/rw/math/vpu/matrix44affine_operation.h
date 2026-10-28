@@ -22,7 +22,8 @@
 // include/rw/; it never touches rw/math/vpu/, so this hand-maintained header (like
 // its siblings types.h / vector3_operation.h) is immune to regeneration.
 
-#include <cmath>                           // std::fmaf / std::sqrt (SLerp's console arithmetic)
+#include <cmath>
+#include "SDKs/XboxMath/XMVectorSinCos.h"                           // std::fmaf / std::sqrt (SLerp's console arithmetic)
 #include <limits>                          // SLerpDetail::Dot3's QNaN (ROUNDING_RULE 1 overflow)
 #include "SDKs/XboxMath/XMVectorACos.h"    // XboxMath::XMVectorACos (X360 0x821F0980), SLerp's endpoint angle
 #include "SDKs/XboxMath/XMVectorATan.h"    // XboxMath::XMVectorATan (X360 0x821F0A70), SLerp's rotation angle
@@ -169,45 +170,55 @@ namespace vpu
     // 2026-07 -- whose comment already said "DELETE-WHEN: an rw/math home for the rotation
     // builders lands". This is that home.
     //
-    // FLAG (PC-platform, numeric): the console evaluates sin and cos as one inlined SinCos
-    // minimax over a 2pi-reduced argument; std::sin / std::cos are the exact forms. The same
-    // de-optimisation this family already applies to rsqrt (Normalize) and reciprocal.
+    // Use the native paired SinCos polynomial for the rotation basis.
     inline Matrix44Affine MakeRotationX(f32 lfAngleRads)
     {
-        const f32 lfSin = std::sin(lfAngleRads);
-        const f32 lfCos = std::cos(lfAngleRads);
+        f32 lfSin, lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
 
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{ 1.0f,    0.0f,   0.0f, 0.0f };
-        lResult.yAxis = Vector3{ 0.0f,  lfCos, lfSin, 0.0f };
-        lResult.zAxis = Vector3{ 0.0f, -lfSin, lfCos, 0.0f };
-        lResult.wAxis = Vector3{ 0.0f,    0.0f,   0.0f, 0.0f };
+        const Vector3 lXAxis = { 1.0f,    0.0f,   0.0f, 0.0f };
+        lResult.xAxis = lXAxis;
+        const Vector3 lYAxis = { 0.0f,  lfCos, lfSin, 0.0f };
+        lResult.yAxis = lYAxis;
+        const Vector3 lZAxis = { 0.0f, -lfSin, lfCos, 0.0f };
+        lResult.zAxis = lZAxis;
+        const Vector3 lWAxis = { 0.0f,    0.0f,   0.0f, 0.0f };
+        lResult.wAxis = lWAxis;
         return lResult;
     }
 
     inline Matrix44Affine MakeRotationY(f32 lfAngleRads)
     {
-        const f32 lfSin = std::sin(lfAngleRads);
-        const f32 lfCos = std::cos(lfAngleRads);
+        f32 lfSin, lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
 
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{ lfCos, 0.0f, -lfSin, 0.0f };
-        lResult.yAxis = Vector3{  0.0f, 1.0f,    0.0f, 0.0f };
-        lResult.zAxis = Vector3{ lfSin, 0.0f,  lfCos, 0.0f };
-        lResult.wAxis = Vector3{  0.0f, 0.0f,    0.0f, 0.0f };
+        const Vector3 lXAxis = { lfCos, 0.0f, -lfSin, 0.0f };
+        lResult.xAxis = lXAxis;
+        const Vector3 lYAxis = {  0.0f, 1.0f,    0.0f, 0.0f };
+        lResult.yAxis = lYAxis;
+        const Vector3 lZAxis = { lfSin, 0.0f,  lfCos, 0.0f };
+        lResult.zAxis = lZAxis;
+        const Vector3 lWAxis = {  0.0f, 0.0f,    0.0f, 0.0f };
+        lResult.wAxis = lWAxis;
         return lResult;
     }
 
     inline Matrix44Affine MakeRotationZ(f32 lfAngleRads)
     {
-        const f32 lfSin = std::sin(lfAngleRads);
-        const f32 lfCos = std::cos(lfAngleRads);
+        f32 lfSin, lfCos;
+        XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
 
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{  lfCos, lfSin, 0.0f, 0.0f };
-        lResult.yAxis = Vector3{ -lfSin, lfCos, 0.0f, 0.0f };
-        lResult.zAxis = Vector3{   0.0f,  0.0f, 1.0f, 0.0f };
-        lResult.wAxis = Vector3{   0.0f,  0.0f, 0.0f, 0.0f };
+        const Vector3 lXAxis = {  lfCos, lfSin, 0.0f, 0.0f };
+        lResult.xAxis = lXAxis;
+        const Vector3 lYAxis = { -lfSin, lfCos, 0.0f, 0.0f };
+        lResult.yAxis = lYAxis;
+        const Vector3 lZAxis = {   0.0f,  0.0f, 1.0f, 0.0f };
+        lResult.zAxis = lZAxis;
+        const Vector3 lWAxis = {   0.0f,  0.0f, 0.0f, 0.0f };
+        lResult.wAxis = lWAxis;
         return lResult;
     }
 
@@ -285,16 +296,20 @@ namespace vpu
         const float lfSz = lfSin * lvAxis.z;
 
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{ lfTx * lvAxis.x + lfCos,
+        const Vector3 lXAxis = { lfTx * lvAxis.x + lfCos,
                                  lfTx * lvAxis.y + lfSz,
                                  lfTx * lvAxis.z - lfSy, 0.0f };
-        lResult.yAxis = Vector3{ lfTy * lvAxis.x - lfSz,
+        lResult.xAxis = lXAxis;
+        const Vector3 lYAxis = { lfTy * lvAxis.x - lfSz,
                                  lfTy * lvAxis.y + lfCos,
                                  lfTy * lvAxis.z + lfSx, 0.0f };
-        lResult.zAxis = Vector3{ lfTz * lvAxis.x + lfSy,
+        lResult.yAxis = lYAxis;
+        const Vector3 lZAxis = { lfTz * lvAxis.x + lfSy,
                                  lfTz * lvAxis.y - lfSx,
                                  lfTz * lvAxis.z + lfCos, 0.0f };
-        lResult.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        lResult.zAxis = lZAxis;
+        const Vector3 lWAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lResult.wAxis = lWAxis;
         return lResult;
     }
 
@@ -487,23 +502,35 @@ namespace vpu
         const f32 lfInverseDeterminant = 1.0f / Dot(lrMatrix.xAxis, lvCrossYZ);
 
         Matrix44Affine lInverse;
-        lInverse.xAxis = Vector3{ lvCrossYZ.x * lfInverseDeterminant,
+        {
+            const Vector3 lAggregateValue = { lvCrossYZ.x * lfInverseDeterminant,
                                   lvCrossZX.x * lfInverseDeterminant,
                                   lvCrossXY.x * lfInverseDeterminant, 0.0f };
-        lInverse.yAxis = Vector3{ lvCrossYZ.y * lfInverseDeterminant,
+            lInverse.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lvCrossYZ.y * lfInverseDeterminant,
                                   lvCrossZX.y * lfInverseDeterminant,
                                   lvCrossXY.y * lfInverseDeterminant, 0.0f };
-        lInverse.zAxis = Vector3{ lvCrossYZ.z * lfInverseDeterminant,
+            lInverse.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lvCrossYZ.z * lfInverseDeterminant,
                                   lvCrossZX.z * lfInverseDeterminant,
                                   lvCrossXY.z * lfInverseDeterminant, 0.0f };
+            lInverse.zAxis = lAggregateValue;
+        }
 
         // The inverse translation: -Pos transformed by the inverse rotation just built.
         const Vector3& lrPos = lrMatrix.wAxis;
-        lInverse.wAxis = Vector3{
+        {
+            const Vector3 lAggregateValue = {
             -(lrPos.x * lInverse.xAxis.x + lrPos.y * lInverse.yAxis.x + lrPos.z * lInverse.zAxis.x),
             -(lrPos.x * lInverse.xAxis.y + lrPos.y * lInverse.yAxis.y + lrPos.z * lInverse.zAxis.y),
             -(lrPos.x * lInverse.xAxis.z + lrPos.y * lInverse.yAxis.z + lrPos.z * lInverse.zAxis.z),
             0.0f };
+            lInverse.wAxis = lAggregateValue;
+        }
         return lInverse;
     }
 
@@ -528,6 +555,31 @@ namespace vpu
     // vmaddcfp128 D = A * D + B.
     namespace SLerpDetail
     {
+        inline bool Greater(float a, float b)
+        { return ::XMVector4Greater(::XMVectorReplicate(a), ::XMVectorReplicate(b)) != 0; }
+        inline bool GreaterOrEqual(float a, float b)
+        { return ::XMVector4GreaterOrEqual(::XMVectorReplicate(a), ::XMVectorReplicate(b)) != 0; }
+        inline bool Equal(float a, float b)
+        { return ::XMVector4Equal(::XMVectorReplicate(a), ::XMVectorReplicate(b)) != 0; }
+        inline float Add(float a, float b)
+        { return __vaddfp(::XMVectorReplicate(a), ::XMVectorReplicate(b)).x; }
+        inline float Subtract(float a, float b)
+        { return __vsubfp(::XMVectorReplicate(a), ::XMVectorReplicate(b)).x; }
+        inline float Multiply(float a, float b)
+        { return __vmulfp(::XMVectorReplicate(a), ::XMVectorReplicate(b)).x; }
+
+        inline float MultiplyAdd(float lfA, float lfB, float lfC)
+        {
+            return __vmaddfp(::XMVectorReplicate(lfA), ::XMVectorReplicate(lfB),
+                             ::XMVectorReplicate(lfC)).x;
+        }
+        inline float CopySign(float lfMagnitude, float lfSign)
+        {
+            XMVECTOR mask = __vspltisw(-1);
+            mask = __vslw(mask, mask);
+            return __vsel(::XMVectorReplicate(lfMagnitude), ::XMVectorReplicate(lfSign), mask).x;
+        }
+
         // Rule 1 -- vmsum3fp128: the f32 products exact in f64, summed left to right in f64, cast ONCE; a finite sum
         // that overflows f32 is a QNaN. FLAG (model): vmsum = one rounding of the f64 sum (xenia DOT_PRODUCT_3).
         // ROUNDING_RULE 6 IS MODELLED HERE, and only here: the VMX flushes a denormal vmsum3fp128 result to a zero of
@@ -538,87 +590,70 @@ namespace vpu
         // rounds away against the car position) crosses that window after about 163 frames; the NaN is then sticky.
         inline float Dot3(const Vector3& lrA, const Vector3& lrB)
         {
-            const double ldSum = static_cast<double>(lrA.x) * lrB.x + static_cast<double>(lrA.y) * lrB.y
-                               + static_cast<double>(lrA.z) * lrB.z;
-            const float lfSum = static_cast<float>(ldSum);
-            if (std::isinf(lfSum) && std::isfinite(ldSum))
-            {
-                return std::numeric_limits<float>::quiet_NaN();
-            }
-            if (lfSum != 0.0f && std::fabs(lfSum) < (std::numeric_limits<float>::min)())   // (min): windows.h
-            {
-                return std::copysign(0.0f, lfSum);
-            }
-            return lfSum;
+            return __vmsum3fp(__lvx(&lrA, 0), __lvx(&lrB, 0)).x;
         }
 
         // vnmsubfp lane (rule 3): -(a * c - b) rounded ONCE; a NaN comes back un-negated.
         inline float NegativeMultiplySubtract(float lfA, float lfC, float lfB)
         {
-            const float lfDifference = std::fmaf(lfA, lfC, -lfB);
-            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+            return __vnmsubfp(::XMVectorReplicate(lfA), ::XMVectorReplicate(lfC),
+                              ::XMVectorReplicate(lfB)).x;
         }
 
-        // Rule 5 -- vrsqrtefp refined by liSteps Newton-Raphson steps, each e2 = e * e (vmulfp128), h = e * 0.5
-        // (vmulfp128), r = -(x * e2 - 1) (vnmsubfp), e = h * r + e (vmaddfp). FLAG (model): the estimate is the
-        // correctly rounded 1 / sqrt(x) (+-0 -> +-inf, +inf -> +0, < 0 -> NaN, as vrsqrtefp gives).
+        // Native vrsqrtefp refined by liSteps Newton-Raphson steps, each e2 = e * e (vmulfp128), h = e * 0.5
+        // (vmulfp128), r = -(x * e2 - 1) (vnmsubfp), e = h * r + e (vmaddfp).
         inline float RefinedReciprocalSqrt(float lfValue, int liSteps)
         {
-            float lfEstimate = static_cast<float>(1.0 / std::sqrt(static_cast<double>(lfValue)));
-            for (int liStep = 0; liStep < liSteps; ++liStep)
+            const XMVECTOR value = ::XMVectorReplicate(lfValue);
+            const XMVECTOR one = __vcfsx(__vspltisw(1), 0);
+            const XMVECTOR half = __vcfsx(__vspltisw(1), 1);
+            XMVECTOR estimate = __vrsqrtefp(value);
+            for (int step = 0; step < liSteps; ++step)
             {
-                const float lfEstimateSquared = lfEstimate * lfEstimate;
-                const float lfHalfEstimate    = lfEstimate * 0.5f;
-                lfEstimate = std::fmaf(lfHalfEstimate, NegativeMultiplySubtract(lfValue, lfEstimateSquared, 1.0f),
-                                       lfEstimate);
+                const XMVECTOR squared = __vmulfp(estimate, estimate);
+                const XMVECTOR halfEstimate = __vmulfp(estimate, half);
+                estimate = __vmaddfp(halfEstimate, __vnmsubfp(value, squared, one), estimate);
             }
-            return lfEstimate;
+            return estimate.x;
         }
 
-        // Rule 5 -- vrefp refined by liSteps steps, each e = e * -(e * x - 1) + e (vnmsubfp, vmaddfp). FLAG (model):
-        // the estimate is the correctly rounded 1 / x (+-0 -> +-inf, +-inf -> +-0).
+        // Native vrefp refined by liSteps steps: e = e * -(e * x - 1) + e.
         inline float RefinedReciprocal(float lfValue, int liSteps)
         {
-            float lfEstimate = static_cast<float>(1.0 / static_cast<double>(lfValue));
-            for (int liStep = 0; liStep < liSteps; ++liStep)
-            {
-                lfEstimate = std::fmaf(lfEstimate, NegativeMultiplySubtract(lfEstimate, lfValue, 1.0f), lfEstimate);
-            }
-            return lfEstimate;
+            const XMVECTOR value = ::XMVectorReplicate(lfValue);
+            const XMVECTOR one = __vcfsx(__vspltisw(1), 0);
+            XMVECTOR estimate = __vrefp(value);
+            for (int step = 0; step < liSteps; ++step)
+                estimate = __vmaddfp(estimate, __vnmsubfp(estimate, value, one), estimate);
+            return estimate.x;
         }
 
-        inline Vector3 Scale(const Vector3& lrVector, float lfScale)   // vmulfp128 against a splat, four lanes
+        inline Vector3 Scale(const Vector3& lrVector, float lfScale)
         {
-            { const Vector3 lResult = { lrVector.x * lfScale, lrVector.y * lfScale, lrVector.z * lfScale, lrVector.w * lfScale }; return lResult; }
+            Vector3 result;
+            __stvx(__vmulfp(__lvx(&lrVector, 0), ::XMVectorReplicate(lfScale)), &result, 0);
+            return result;
         }
 
         // vmaxfp / vminfp: a NaN in either operand gives a NaN (vA's when both are), and -0 < +0.
         inline float VectorMax(float lfA, float lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;
-            return (lfA > lfB) ? lfA : lfB;
+            return __vmaxfp(::XMVectorReplicate(lfA), ::XMVectorReplicate(lfB)).x;
         }
         inline float VectorMin(float lfA, float lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
-            return (lfA < lfB) ? lfA : lfB;
+            return __vminfp(::XMVectorReplicate(lfA), ::XMVectorReplicate(lfB)).x;
         }
 
         // The SDK's row transform as a vmaddfp cascade, four lanes: v.x * m.x, then + v.y * m.y, then + v.z * m.z.
         inline Vector3 CascadeTransformVector(const Matrix44Affine& lrMatrix, const Vector3& lrVector)
         {
-            const Vector3& x = lrMatrix.xAxis;
-            const Vector3& y = lrMatrix.yAxis;
-            const Vector3& z = lrMatrix.zAxis;
-            { const Vector3 lResult = {
-                std::fmaf(lrVector.z, z.x, std::fmaf(lrVector.y, y.x, lrVector.x * x.x)),
-                std::fmaf(lrVector.z, z.y, std::fmaf(lrVector.y, y.y, lrVector.x * x.y)),
-                std::fmaf(lrVector.z, z.z, std::fmaf(lrVector.y, y.z, lrVector.x * x.z)),
-                std::fmaf(lrVector.z, z.w, std::fmaf(lrVector.y, y.w, lrVector.x * x.w)) }; return lResult; }
+            XMVECTOR result = __vmulfp(__lvx(&lrMatrix.xAxis, 0), ::XMVectorReplicate(lrVector.x));
+            result = __vmaddfp(__lvx(&lrMatrix.yAxis, 0), ::XMVectorReplicate(lrVector.y), result);
+            result = __vmaddfp(__lvx(&lrMatrix.zAxis, 0), ::XMVectorReplicate(lrVector.z), result);
+            Vector3 vector;
+            __stvx(result, &vector, 0);
+            return vector;
         }
 
         // rw::math::vpu::QueryRotateDegenerateUnitAxis @0x82203768 as SLerp's axis query calls it (the vendor
@@ -633,14 +668,14 @@ namespace vpu
             const float lfM11 = lrMatrix.yAxis.y;
             const float lfM22 = lrMatrix.zAxis.z;
             Vector3 lAxis;
-            if (lfM00 > lfM11 && lfM00 > lfM22)
+            if (Greater(lfM00, lfM11) && Greater(lfM00, lfM22))
             {
                 const float lfDominant = 1.0f + lfM00;
                 lAxis.x = lfDominant * lfDominant;
                 lAxis.y = lrMatrix.xAxis.y + lrMatrix.yAxis.x;
                 lAxis.z = lrMatrix.xAxis.z + lrMatrix.zAxis.x;
             }
-            else if (lfM11 > lfM22)
+            else if (Greater(lfM11, lfM22))
             {
                 const float lfDominant = 1.0f + lfM11;
                 lAxis.x = lrMatrix.yAxis.x + lrMatrix.xAxis.y;
@@ -673,33 +708,36 @@ namespace vpu
         {
             const Vector3 lAntisymmetric = { lrMatrix.yAxis.z - lrMatrix.zAxis.y, lrMatrix.zAxis.x - lrMatrix.xAxis.z,
                                              lrMatrix.xAxis.y - lrMatrix.yAxis.x, 0.0f };
-            const float lfTraceMinusOne = ((lrMatrix.xAxis.x + lrMatrix.yAxis.y) + lrMatrix.zAxis.z) - 1.0f;
+            const float lfTraceMinusOne = Subtract(Add(Add(lrMatrix.xAxis.x, lrMatrix.yAxis.y), lrMatrix.zAxis.z), 1.0f);
 
             const float lfLengthSquared = Dot3(lAntisymmetric, lAntisymmetric);
-            const float lfRoot = lfLengthSquared * RefinedReciprocalSqrt(lfLengthSquared, 2);
-            const float lfSin = (lfLengthSquared == 0.0f) ? 0.0f : lfRoot;          // vcmpeqfp128 / vsel128
+            const float lfRoot = Multiply(lfLengthSquared, RefinedReciprocalSqrt(lfLengthSquared, 2));
+            const float lfSin = Equal(lfLengthSquared, 0.0f) ? 0.0f : lfRoot;          // vcmpeqfp128 / vsel128
 
-            if (lfSin > 0.0f)
+            if (Greater(lfSin, 0.0f))
             {
                 lrAxisOut = Scale(lAntisymmetric, RefinedReciprocal(lfSin, 2) * 1.0f);
             }
             else
             {
-                lrAxisOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                {
+                    const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    lrAxisOut = lAggregateValue;
+                }
             }
 
-            const float lfRatio = std::fmaf(lfSin, RefinedReciprocal(lfTraceMinusOne, 1), 0.0f);   // vmaddcfp128
+            const float lfRatio = SLerpDetail::MultiplyAdd(lfSin, RefinedReciprocal(lfTraceMinusOne, 1), 0.0f);   // vmaddcfp128
             const float lfArcTan = XboxMath::XMVectorATan(lfRatio);
-            const float lfSignedPi     = std::copysign(3.14159274f, lfSin);    // 0x8200174C | sign(s)
-            const float lfSignedHalfPi = std::copysign(1.57079637f, lfSin);    // 0x82001754 | sign(s)
-            float lfAngle = (0.0f > lfTraceMinusOne) ? lfSignedPi + lfArcTan : lfArcTan;
-            if (0.0f == lfTraceMinusOne)
+            const float lfSignedPi     = SLerpDetail::CopySign(3.14159274f, lfSin);    // 0x8200174C | sign(s)
+            const float lfSignedHalfPi = SLerpDetail::CopySign(1.57079637f, lfSin);    // 0x82001754 | sign(s)
+            float lfAngle = Greater(0.0f, lfTraceMinusOne) ? Add(lfSignedPi, lfArcTan) : lfArcTan;
+            if (Equal(0.0f, lfTraceMinusOne))
             {
                 lfAngle = lfSignedHalfPi;
             }
             lrfAngleOut = lfAngle;
 
-            if (0.0f >= lfSin && 0.0f >= lfTraceMinusOne)
+            if (GreaterOrEqual(0.0f, lfSin) && GreaterOrEqual(0.0f, lfTraceMinusOne))
             {
                 lrAxisOut = DegenerateUnitAxis(lrMatrix);
             }
@@ -708,8 +746,7 @@ namespace vpu
 
     // SLerp(from, to, amount, &angleOut) -- X360 0x82216858, the SDK's spherical-linear blend between two affine
     // transforms, ported arm by arm from the console's words (FX-GATE, crash parity 2026-09-25). r3 = the sret,
-    // r4 = lrFrom, r5 = lrTo, v1 = the amount (a splat), r6 = the angle out (every console caller passes a slot;
-    // the PC-only frame interpolation passes null, so the store is guarded).
+    // r4 = lrFrom, r5 = lrTo, v1 = the amount (a splat), r6 = the required angle-out slot.
     //   0x8221688C  0 >= amount (vcmpgefp128.; a NaN falls through): out = from, and *angleOut = the angle between
     //               the two z rows -- each normalised with ONE Newton step (0x822168BC..0x82216900), Dot3, clamped
     //               vmaxfp -1 / vminfp +1, XMVectorACos (bl 0x821F0980).
@@ -729,25 +766,30 @@ namespace vpu
     // degenerate-axis branches (run_fxgate_slerp.py); the previous body missed 239 of them. It evaluated the angle
     // with an exact Normalize for every arm, weighted the rows by std::sin((1 - t) a) / std::sin(a) and
     // std::sin(t a) / std::sin(a), and re-normalised the arc's rows -- not what the console runs.
-    // FLAG (ROUNDING_RULE 6): a denormal amount is flushed to 0 by the VMX (the from endpoint); here it takes the arc.
-    // Other denormal lanes are not flushed either, except vmsum3fp128's result (SLerpDetail::Dot3), where the missing
-    // flush made a NaN out of a converging blend.
+    // Native comparisons retain the VMX non-Java handling of denormals and NaNs.
+    // Keep separate multiply/subtract operations in the three Rodrigues cross terms.
     inline Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
                                 float lfAmount, Vector3* lpvAngleOut)
     {
-        if (0.0f >= lfAmount)
+        if (SLerpDetail::GreaterOrEqual(0.0f, lfAmount))
         {
             const Vector3 lToAt   = SLerpDetail::Scale(lrTo.zAxis, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lrTo.zAxis, lrTo.zAxis), 1));
             const Vector3 lFromAt = SLerpDetail::Scale(lrFrom.zAxis, SLerpDetail::RefinedReciprocalSqrt(SLerpDetail::Dot3(lrFrom.zAxis, lrFrom.zAxis), 1));
             const float lfCos = SLerpDetail::VectorMin(SLerpDetail::VectorMax(SLerpDetail::Dot3(lFromAt, lToAt), -1.0f), 1.0f);
             const float lfAngle = XboxMath::XMVectorACos(lfCos);
-            if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ lfAngle, lfAngle, lfAngle, lfAngle };
+            {
+            const Vector3 lAngles = { lfAngle, lfAngle, lfAngle, lfAngle };
+            *lpvAngleOut = lAngles;
+        }
             return lrFrom;
         }
 
-        if (lfAmount >= 1.0f)
+        if (SLerpDetail::GreaterOrEqual(lfAmount, 1.0f))
         {
-            if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+            const Vector3 lAngles = { 0.0f, 0.0f, 0.0f, 0.0f };
+            *lpvAngleOut = lAngles;
+        }
             return lrTo;
         }
 
@@ -759,17 +801,20 @@ namespace vpu
         lRelative.xAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnX);
         lRelative.yAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnY);
         lRelative.zAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnZ);
-        lRelative.wAxis = Vector3{ std::fmaf(0.0f, lrTo.zAxis.x, std::fmaf(0.0f, lrTo.yAxis.x, std::fmaf(0.0f, lrTo.xAxis.x, lrTo.wAxis.x))),
-                                   std::fmaf(0.0f, lrTo.zAxis.y, std::fmaf(0.0f, lrTo.yAxis.y, std::fmaf(0.0f, lrTo.xAxis.y, lrTo.wAxis.y))),
-                                   std::fmaf(0.0f, lrTo.zAxis.z, std::fmaf(0.0f, lrTo.yAxis.z, std::fmaf(0.0f, lrTo.xAxis.z, lrTo.wAxis.z))),
-                                   std::fmaf(0.0f, lrTo.zAxis.w, std::fmaf(0.0f, lrTo.yAxis.w, std::fmaf(0.0f, lrTo.xAxis.w, lrTo.wAxis.w))) };
+        {
+            const Vector3 lAggregateValue = { SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.x, lrTo.wAxis.x))),
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.y, lrTo.wAxis.y))),
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.z, lrTo.wAxis.z))),
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.w, lrTo.wAxis.w))) };
+            lRelative.wAxis = lAggregateValue;
+        }
 
         Vector3 lAxis;
         float lfAngle;
         SLerpDetail::QueryRotation(lRelative, lAxis, lfAngle);
 
         Matrix44Affine lResult;
-        if (0.03490658476948738f > lfAngle)   // flt_82001764 (0x3D0EFA35), vcmpgtfp.
+        if (SLerpDetail::Greater(0.03490658476948738f, lfAngle))   // flt_82001764 (0x3D0EFA35), vcmpgtfp.
         {
             const Vector3 lX = lrFrom.xAxis + SLerpDetail::Scale(lrTo.xAxis - lrFrom.xAxis, lfAmount);
             const Vector3 lY = lrFrom.yAxis + SLerpDetail::Scale(lrTo.yAxis - lrFrom.yAxis, lfAmount);
@@ -783,38 +828,45 @@ namespace vpu
         {
             float lfSin;
             float lfCos;
-            XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngle * lfAmount);
-            const float lfT  = 1.0f - lfCos;
-            const float lfTX = lfT * lAxis.x;
-            const float lfTY = lfT * lAxis.y;
-            const float lfTZ = lfT * lAxis.z;
-            const float lfSX = lfSin * lAxis.x;
-            const float lfSY = lfSin * lAxis.y;
-            const float lfSZ = lfSin * lAxis.z;
+            XboxMath::XMVectorSinCos(&lfSin, &lfCos, SLerpDetail::Multiply(lfAngle, lfAmount));
+            const float lfT = SLerpDetail::Subtract(1.0f, lfCos);
+            const float lfTX = SLerpDetail::Multiply(lfT, lAxis.x);
+            const float lfTY = SLerpDetail::Multiply(lfT, lAxis.y);
+            const float lfTZ = SLerpDetail::Multiply(lfT, lAxis.z);
+            const float lfSX = SLerpDetail::Multiply(lfSin, lAxis.x);
+            const float lfSY = SLerpDetail::Multiply(lfSin, lAxis.y);
+            const float lfSZ = SLerpDetail::Multiply(lfSin, lAxis.z);
             Matrix44Affine lRotation;
-            lRotation.xAxis.x = std::fmaf(lfTX, lAxis.x, lfCos);
-            lRotation.xAxis.y = std::fmaf(lfTX, lAxis.y, lfSZ);
-            lRotation.xAxis.z = lfTX * lAxis.z - lfSY;
-            lRotation.yAxis.x = lfTY * lAxis.x - lfSZ;
-            lRotation.yAxis.y = std::fmaf(lfTY, lAxis.y, lfCos);
-            lRotation.yAxis.z = std::fmaf(lfTY, lAxis.z, lfSX);
-            lRotation.zAxis.x = std::fmaf(lfTZ, lAxis.x, lfSY);
-            lRotation.zAxis.y = lfTZ * lAxis.y - lfSX;
-            lRotation.zAxis.z = std::fmaf(lfTZ, lAxis.z, lfCos);
+            lRotation.xAxis.x = SLerpDetail::MultiplyAdd(lfTX, lAxis.x, lfCos);
+            lRotation.xAxis.y = SLerpDetail::MultiplyAdd(lfTX, lAxis.y, lfSZ);
+            lRotation.xAxis.z = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTX, lAxis.z), lfSY);
+            lRotation.yAxis.x = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTY, lAxis.x), lfSZ);
+            lRotation.yAxis.y = SLerpDetail::MultiplyAdd(lfTY, lAxis.y, lfCos);
+            lRotation.yAxis.z = SLerpDetail::MultiplyAdd(lfTY, lAxis.z, lfSX);
+            lRotation.zAxis.x = SLerpDetail::MultiplyAdd(lfTZ, lAxis.x, lfSY);
+            lRotation.zAxis.y = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTZ, lAxis.y), lfSX);
+            lRotation.zAxis.z = SLerpDetail::MultiplyAdd(lfTZ, lAxis.z, lfCos);
             lRotation.xAxis.w = lRotation.xAxis.x;   // the packing copies lane x into w
             lRotation.yAxis.w = lRotation.yAxis.x;
             lRotation.zAxis.w = lRotation.zAxis.x;
-            lRotation.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lRotation.wAxis = lAggregateValue;
+            }
             lResult.xAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.xAxis);
             lResult.yAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.yAxis);
             lResult.zAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.zAxis);
             const Vector3 lDelta = lrTo.wAxis - lrFrom.wAxis;
-            lResult.wAxis = Vector3{ std::fmaf(lfAmount, lDelta.x, lrFrom.wAxis.x), std::fmaf(lfAmount, lDelta.y, lrFrom.wAxis.y),
-                                     std::fmaf(lfAmount, lDelta.z, lrFrom.wAxis.z), std::fmaf(lfAmount, lDelta.w, lrFrom.wAxis.w) };
+            const Vector3 lWAxis = { SLerpDetail::MultiplyAdd(lfAmount, lDelta.x, lrFrom.wAxis.x), SLerpDetail::MultiplyAdd(lfAmount, lDelta.y, lrFrom.wAxis.y),
+                                     SLerpDetail::MultiplyAdd(lfAmount, lDelta.z, lrFrom.wAxis.z), SLerpDetail::MultiplyAdd(lfAmount, lDelta.w, lrFrom.wAxis.w) };
+            lResult.wAxis = lWAxis;
         }
 
-        const float lfRemaining = lfAngle - lfAngle * lfAmount;
-        if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ lfRemaining, lfRemaining, lfRemaining, lfRemaining };
+        const float lfRemaining = SLerpDetail::Subtract(lfAngle, SLerpDetail::Multiply(lfAngle, lfAmount));
+        {
+            const Vector3 lAngles = { lfRemaining, lfRemaining, lfRemaining, lfRemaining };
+            *lpvAngleOut = lAngles;
+        }
         return lResult;
     }
 
@@ -922,7 +974,10 @@ namespace vpu
         }
         else
         {
-            lrOutAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lrOutAxis = lAggregateValue;
+            }
         }
 
         float lfAngle;
@@ -961,18 +1016,22 @@ namespace vpu
         const float lfWZ = lrQuat.w * lrQuat.z;
 
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{ 1.0f - 2.0f * (lfYY + lfZZ),
+        const Vector3 lXAxis = { 1.0f - 2.0f * (lfYY + lfZZ),
                                                2.0f * (lfXY + lfWZ),
                                                2.0f * (lfXZ - lfWY), 0.0f };
-        lResult.yAxis = Vector3{        2.0f * (lfXY - lfWZ),
+        lResult.xAxis = lXAxis;
+        const Vector3 lYAxis = {        2.0f * (lfXY - lfWZ),
                                         1.0f - 2.0f * (lfXX + lfZZ),
                                                2.0f * (lfYZ + lfWX), 0.0f };
-        lResult.zAxis = Vector3{        2.0f * (lfXZ + lfWY),
+        lResult.yAxis = lYAxis;
+        const Vector3 lZAxis = {        2.0f * (lfXZ + lfWY),
                                                2.0f * (lfYZ - lfWX),
                                         1.0f - 2.0f * (lfXX + lfYY), 0.0f };
+        lResult.zAxis = lZAxis;
         // The SDK leaves the translation row ZERO (the console's `vspltisw 0`); ::Update
         // overwrites it with the sampled take position before it composes.
-        lResult.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lWAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lResult.wAxis = lWAxis;
         return lResult;
     }
 

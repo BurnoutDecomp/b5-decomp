@@ -851,8 +851,14 @@ namespace Deformation
         {
             // vcfsx(vspltisw 1, 0) == 1.0 @0x82607A20 -- crash / showtime / bounce-eligible gets the
             // whole budget.
-            lParams.mvfAllowedCompressionFactor = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
-            lParams.mvfMaximumAllowedAbsorption = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
+            {
+                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                lParams.mvfAllowedCompressionFactor = lAggregateValue;
+            }
+            {
+                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                lParams.mvfMaximumAllowedAbsorption = lAggregateValue;
+            }
         }
         else if ( kbAllowDriveTimeDeformation )
         {
@@ -862,8 +868,14 @@ namespace Deformation
         else
         {
             // v125 == vspltisw128 0 (@0x82607918) -- drive-time deformation disabled.
-            lParams.mvfAllowedCompressionFactor = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
-            lParams.mvfMaximumAllowedAbsorption = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lParams.mvfAllowedCompressionFactor = lAggregateValue;
+            }
+            {
+                const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lParams.mvfMaximumAllowedAbsorption = lAggregateValue;
+            }
         }
 
         // ⭐⭐ 2026-08-16 (walls leg 9) -- THE SIX PER-DIRECTION LIMIT ROWS (+0x40 mLimitVector).
@@ -990,8 +1002,10 @@ namespace Deformation
             //   separately. Here only the accumulate reading yields a matrix rotation at all.
             const Vector3 lWorldAxis = vpu::TransformVector(lBodyTransform, lDirVec);
             const f32 lfProjection = vpu::Dot(lImpulseVector, lWorldAxis);
-            lParams.mvfImpulseMagnitude =
-                VecFloat{ lfProjection, lfProjection, lfProjection, lfProjection };   // 0x82607C70
+            {
+                const VecFloat lAggregateValue = { lfProjection, lfProjection, lfProjection, lfProjection };
+                lParams.mvfImpulseMagnitude = lAggregateValue;
+            }   // 0x82607C70
 
             ++gChainProbe.muDirsTried;   // [chain] probe
             if ( lfProjection <= 0.0f )   // vcmpgtfp against zero -- skip non-positive directions
@@ -1132,8 +1146,11 @@ namespace Deformation
                     }
                 }
 
-                lParams.mvfImpulseMagnitude = VecFloat{ lfShapedMagnitude, lfShapedMagnitude,
+                {
+                    const VecFloat lAggregateValue = { lfShapedMagnitude, lfShapedMagnitude,
                                                         lfShapedMagnitude, lfShapedMagnitude };
+                    lParams.mvfImpulseMagnitude = lAggregateValue;
+                }
 
                 // ---- [st-mag] PC bring-up instrument -- DELETE WHEN the showtime shaping is banked.
                 // OPT-IN (BRN_SHOWTIME_WATCH), so a default run is byte-identical to a build without
@@ -1407,8 +1424,11 @@ namespace Deformation
                 lfScaledMag = lvfImpulseMagnitude.x * lfClamp;
 
                 lBankLocal = vpu::Mult(lNegDir, lfScaledMag);
-                lBankLocal = Vector3{ lBankLocal.x * lImpulseRow.x, lBankLocal.y * lImpulseRow.y,
+                {
+                    const Vector3 lAggregateValue = { lBankLocal.x * lImpulseRow.x, lBankLocal.y * lImpulseRow.y,
                                       lBankLocal.z * lImpulseRow.z, 0.0f };
+                    lBankLocal = lAggregateValue;
+                }
 
                 const Vector3 lBankImpulse = vpu::Mult(lBankLocal, lvfTimeStep.x);   // v1 = v118 * v117
 
@@ -1475,10 +1495,13 @@ namespace Deformation
                 if ( lParams.mbWorldContact )
                 {
                     const f32 lfMass = lBody.GetMass().x;   // vehicle+0xE0 row (body mfMass)
-                    lLocalForce = Vector3{
+                    {
+                        const Vector3 lAggregateValue = {
                         lNegDir.x * lfTangentialLen * lfMass * lForceRow.x,
                         lNegDir.y * lfTangentialLen * lfMass * lForceRow.y,
                         lNegDir.z * lfTangentialLen * lfMass * lForceRow.z, 0.0f };
+                        lLocalForce = lAggregateValue;
+                    }
                     lBody.AddLocalForce(lLocalForce,
                                         static_cast<rw::physics::InputSpace>(0),
                                         lContact.mPointOnA,
@@ -1629,7 +1652,10 @@ namespace Deformation
             const Vector4& lrWheelSphere =
                 maWorldSensorSpheres[mpDeformationSpec->mu8NumDeformationSensors + lj].mPositionRadius;
             Matrix44Affine lBox = lBodyTransform;
-            lBox.wAxis = Vector3{ lrWheelSphere.x, lrWheelSphere.y, lrWheelSphere.z, lrWheelSphere.w };
+            {
+                const Vector3 lAggregateValue = { lrWheelSphere.x, lrWheelSphere.y, lrWheelSphere.z, lrWheelSphere.w };
+                lBox.wAxis = lAggregateValue;
+            }
             const f32 lfRadius = lrWheelSphere.w;
             lpRender->DrawBox(Vector3{ -lfRadius, -lfRadius, -lfRadius, 0.0f },
                               Vector3{  lfRadius,  lfRadius,  lfRadius, 0.0f }, lBox, KRGBA_WHEEL_SENSOR);

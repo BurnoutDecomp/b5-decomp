@@ -29,7 +29,10 @@ namespace BrnPhysics
     void StuntOffencesManager::Construct()
     {
         mfTimeInTheAirSoFar   = 0.0f;
-        mvStuntRollInProgress = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mvStuntRollInProgress = lAggregateValue;
+        }
         mfLastAirTime         = 0.0f;
         muCurrentRaceCarState = 0;
         mfBearingLastFrame    = 0.0f;
@@ -42,12 +45,24 @@ namespace BrnPhysics
         mbInAirLastFrame      = false;
         mfTimeDriftingLastFrame = 0.0f;
         mbKeepCheckingForSuccessfulLanding = false;
-        mvCurrentInAirRotations = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mvCurrentInAirRotations = lAggregateValue;
+        }
         mbWasDriftingLastFrame  = false;
-        mvRaceCarPositionLastFrame = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mvRaceCarPositionLastFrame = lAggregateValue;
+        }
         miConvoyCount = 0;
-        mvTakeOffVector = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        mvLandingVector = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mvTakeOffVector = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mvLandingVector = lAggregateValue;
+        }
         // seed the 3 parallel convoy arrays: distance = NaN (no link), timer/dist2 = 0
         for (s32 li = 0; li < 8; ++li)
         {

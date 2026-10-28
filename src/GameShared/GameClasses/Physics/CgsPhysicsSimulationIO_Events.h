@@ -802,10 +802,10 @@ namespace PhysicsSimulationIO
     CGS_STATIC_ASSERT((offsetof(InUpdateDriveDynamics, mDriveDynamics) == 16), "DriveDynamics @+0x10");
     // And pin the payload classes themselves at the sizes the drains' lane counts prove --
     // spelled as the MEMBER, so a re-typing of the member cannot leave the gate passing.
-    CGS_STATIC_ASSERT((sizeof(InUpdateJointFrames::mJointFrames)     == 80), "JointFrames 80B  = the FIVE lvx128 lanes at _R17..R20 (0/16/32/48/64) in drain @0x8289F2F0");
-    CGS_STATIC_ASSERT((sizeof(InUpdateDriveFrames::mDriveFrames)     == 64), "DriveFrames 64B  = the FOUR lvx128 lanes at _R26..R28 (0/16/32/48) in drain @0x8289FC28");
-    CGS_STATIC_ASSERT((sizeof(InUpdateJointLimits::mJointLimits)     == 64), "JointLimits 64B  (Vector3 x2 + 6x f32 + SwingType + TwistType)");
-    CGS_STATIC_ASSERT((sizeof(InUpdateDriveDynamics::mDriveDynamics) == 32), "DriveDynamics 32B (two 16-byte Params: mLinear, mAngular)");
+    CGS_STATIC_ASSERT((sizeof(((InUpdateJointFrames*)0)->mJointFrames)     == 80), "JointFrames 80B  = the FIVE lvx128 lanes at _R17..R20 (0/16/32/48/64) in drain @0x8289F2F0");
+    CGS_STATIC_ASSERT((sizeof(((InUpdateDriveFrames*)0)->mDriveFrames)     == 64), "DriveFrames 64B  = the FOUR lvx128 lanes at _R26..R28 (0/16/32/48) in drain @0x8289FC28");
+    CGS_STATIC_ASSERT((sizeof(((InUpdateJointLimits*)0)->mJointLimits)     == 64), "JointLimits 64B  (Vector3 x2 + 6x f32 + SwingType + TwistType)");
+    CGS_STATIC_ASSERT((sizeof(((InUpdateDriveDynamics*)0)->mDriveDynamics) == 32), "DriveDynamics 32B (two 16-byte Params: mLinear, mAngular)");
 
     // ---- task #143: the three drive events promoted from opaque spans to real members -----
     // Same discipline as above: every term is spelled `sizeof(Class::member)` / `offsetof`, so
@@ -817,8 +817,8 @@ namespace PhysicsSimulationIO
     CGS_STATIC_ASSERT((offsetof(InAddDrive, mDriveFrames)     ==  32), "InAddDrive::mDriveFrames @+0x20  (drain `addi r10,r31,0x20` + 4x lvx128)");
     CGS_STATIC_ASSERT((offsetof(InAddDrive, mDriveDynamics)   ==  96), "InAddDrive::mDriveDynamics @+0x60 (drain `ld 0x60/0x68/0x70/0x78(event)`)");
     CGS_STATIC_ASSERT((offsetof(InAddDrive, mbSpy)            == 128), "InAddDrive::mbSpy @+0x80         (drain `lbz 0x80(event)` -> Drive::m_spy)");
-    CGS_STATIC_ASSERT((sizeof(InAddDrive::mDriveFrames)       ==  64), "InAddDrive DriveFrames 64B  (the FOUR lvx128 lanes the drain copies)");
-    CGS_STATIC_ASSERT((sizeof(InAddDrive::mDriveDynamics)     ==  32), "InAddDrive DriveDynamics 32B (the FOUR ld/std pairs the drain copies)");
+    CGS_STATIC_ASSERT((sizeof(((InAddDrive*)0)->mDriveFrames)       ==  64), "InAddDrive DriveFrames 64B  (the FOUR lvx128 lanes the drain copies)");
+    CGS_STATIC_ASSERT((sizeof(((InAddDrive*)0)->mDriveDynamics)     ==  32), "InAddDrive DriveDynamics 32B (the FOUR ld/std pairs the drain copies)");
 
     CGS_STATIC_ASSERT((offsetof(InRemoveDrive, mu64Id)        ==   0), "InRemoveDrive::mId @+0x00        (drain @0x8289FF98 `ld 0(event)`, its only read)");
 
@@ -835,8 +835,8 @@ namespace PhysicsSimulationIO
     CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointFrames)     ==  32), "InAddJoint::mJointFrames @+0x20  (drain `addi r11,r26,0x20` + 5x lvx128)");
     CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointLimits)     == 112), "InAddJoint::mJointLimits @+0x70  (drain `addi r11,r26,0x70` + 8x ld/std)");
     CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy)            == 176), "InAddJoint::mbSpy @+0xB0         (drain `lbz 0xB0(event)` -> Joint::m_spy)");
-    CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointFrames)       ==  80), "InAddJoint JointFrames 80B  (the FIVE lvx128 lanes the drain copies)");
-    CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointLimits)       ==  64), "InAddJoint JointLimits 64B  (the EIGHT ld/std pairs the drain copies)");
+    CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mJointFrames)       ==  80), "InAddJoint JointFrames 80B  (the FIVE lvx128 lanes the drain copies)");
+    CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mJointLimits)       ==  64), "InAddJoint JointLimits 64B  (the EIGHT ld/std pairs the drain copies)");
 
     CGS_STATIC_ASSERT((offsetof(InRemoveJoint, mu64Id)        ==   0), "InRemoveJoint::mId @+0x00        (drain @0x8289F970 `ld 0(event)`, its only read)");
 
@@ -849,18 +849,18 @@ namespace PhysicsSimulationIO
     // load offset, not a re-statement of this header.
     CGS_STATIC_ASSERT((offsetof(InApplyForce, mID)                 ==  0), "InApplyForce::mID @+0x00              (drain @0x828A6B80 `ld 0(event)`)");
     CGS_STATIC_ASSERT((offsetof(InApplyForce, mForce)              == 16), "InApplyForce::mForce @+0x10           (drain `lvx128 v0,r30,0x10`)");
-    CGS_STATIC_ASSERT((sizeof(InApplyForce::mForce)                == 16), "InApplyForce::mForce one 16B lane     (single lvx128, xyz consumed)");
+    CGS_STATIC_ASSERT((sizeof(((InApplyForce*)0)->mForce)                == 16), "InApplyForce::mForce one 16B lane     (single lvx128, xyz consumed)");
 
     CGS_STATIC_ASSERT((offsetof(InChangeRigidBodyInertia, mID)       ==  0), "InChangeRigidBodyInertia::mID @+0x00       (drain @0x828A4A78 `ld 0(event)`)");
     CGS_STATIC_ASSERT((offsetof(InChangeRigidBodyInertia, mInertia)  == 16), "InChangeRigidBodyInertia::mInertia @+0x10  (drain fast path `addi r11,r28,0x10` + 6x ld/std)");
     CGS_STATIC_ASSERT((offsetof(InChangeRigidBodyInertia, mu32Flags) == 64), "InChangeRigidBodyInertia::mu32Flags @+0x40 (drain `lwz 0x40(event)`, every bit test)");
-    CGS_STATIC_ASSERT((sizeof(InChangeRigidBodyInertia::mInertia)    == 48), "InChangeRigidBodyInertia::mInertia 48B     (the SIX ld/std pairs the fast path copies)");
+    CGS_STATIC_ASSERT((sizeof(((InChangeRigidBodyInertia*)0)->mInertia)    == 48), "InChangeRigidBodyInertia::mInertia 48B     (the SIX ld/std pairs the fast path copies)");
 
     CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mID)         ==  0), "InUpdateExternalBody::mID @+0x00          (drain @0x828A3B30 `ld 0(event)`)");
     CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mTransform)  == 16), "InUpdateExternalBody::mTransform @+0x10   (drain `addi r11,r30,0x10` + 4 rows -> SetTransform)");
     CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mVel)        == 80), "InUpdateExternalBody::mVel @+0x50         (drain `lvx128 v13,r30,0x50` -> body mVel +0x20)");
     CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mAngularVel) == 96), "InUpdateExternalBody::mAngularVel @+0x60  (drain `lvx128 v0,r30,0x60` -> body mOmega +0x30)");
-    CGS_STATIC_ASSERT((sizeof(InUpdateExternalBody::mTransform)    == 64), "InUpdateExternalBody::mTransform 64B      (the FOUR w-preserving rows SetTransform copies)");
+    CGS_STATIC_ASSERT((sizeof(((InUpdateExternalBody*)0)->mTransform)    == 64), "InUpdateExternalBody::mTransform 64B      (the FOUR w-preserving rows SetTransform copies)");
 
     CGS_STATIC_ASSERT((offsetof(InRemoveRigidBody, mID)                       == 0), "InRemoveRigidBody::mID @+0x00                       (drain @0x828A2BD0 `ld 0(event)`)");
     CGS_STATIC_ASSERT((offsetof(InRemoveRigidBody, mbFailIfRigidBodyNotFound) == 8), "InRemoveRigidBody::mbFailIfRigidBodyNotFound @+0x08 (drain `lbz 8(event)`)");

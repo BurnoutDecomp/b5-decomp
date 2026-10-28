@@ -636,7 +636,10 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
     // i.e. +Z -- the spawn heading every rival is dropped into the world with.
     // The host Vector3 is the four-lane POD (x, y, z, w), so the aggregate carries the console's
     // w lane (0.0f) as well -- all sixteen bytes the stvx writes.
-    lAction.mSpawnHeading = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };      // stvx -> record +0x10
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+        lAction.mSpawnHeading = lAggregateValue;
+    }      // stvx -> record +0x10
 
     lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
                                 BrnGameState::GameStateModuleIO::E_ACTION_ADD_RIVAL,

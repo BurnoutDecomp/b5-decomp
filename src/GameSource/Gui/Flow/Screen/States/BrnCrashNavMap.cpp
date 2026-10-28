@@ -478,8 +478,11 @@ namespace BrnGui
             mLockedIconInfo.SetIconType(
                 GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR);
             mLockedIconInfo.SetPositionLane(lrv4PlayerWorldPos);
-            mSoundData.mPrevCurPos = Vector3{ lrv4PlayerWorldPos.x, lrv4PlayerWorldPos.y,
+            {
+                const Vector3 lAggregateValue = { lrv4PlayerWorldPos.x, lrv4PlayerWorldPos.y,
                                               lrv4PlayerWorldPos.z, lrv4PlayerWorldPos.w };
+                mSoundData.mPrevCurPos = lAggregateValue;
+            }
 
             lbPlacedOnPlayer = true;
 

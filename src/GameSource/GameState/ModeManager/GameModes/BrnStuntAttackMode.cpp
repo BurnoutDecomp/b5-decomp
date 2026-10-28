@@ -312,7 +312,10 @@ void StuntAttackMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // 0x823321F0..0x82332228 -- ONE authored junction overrides the trigger-data direction.
     if (lpGameModeParams->muJunctionID == KU_HARDCODED_START_DIRECTION_JUNCTION_ID)
     {
-        mStartDir = Vector3{ KF_HARDCODED_START_DIRECTION_X, 0.0f, KF_HARDCODED_START_DIRECTION_Z, 0.0f };
+        {
+            const Vector3 lAggregateValue = { KF_HARDCODED_START_DIRECTION_X, 0.0f, KF_HARDCODED_START_DIRECTION_Z, 0.0f };
+            mStartDir = lAggregateValue;
+        }
     }
 
     // 0x8233222C..0x82332230 -- arm the one-shot "fill the player's boost" post that

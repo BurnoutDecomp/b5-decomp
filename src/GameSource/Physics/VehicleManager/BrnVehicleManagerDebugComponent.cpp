@@ -890,17 +890,23 @@ namespace Vehicle
             mLastTrafficContact_TrafficTransform = lpTrafficBody->GetTransform();
 
             const CgsGeometric::AxisAlignedBox& lrRaceCarAABB = lrRaceCar.GetDeformableAABB();
-            mLastTrafficContact_RaceCarHalfExt = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 (lrRaceCarAABB.mMax.x - lrRaceCarAABB.mMin.x) * 0.5f,
                 (lrRaceCarAABB.mMax.y - lrRaceCarAABB.mMin.y) * 0.5f,
                 (lrRaceCarAABB.mMax.z - lrRaceCarAABB.mMin.z) * 0.5f,
                 (lrRaceCarAABB.mMax.w - lrRaceCarAABB.mMin.w) * 0.5f };
+                mLastTrafficContact_RaceCarHalfExt = lAggregateValue;
+            }
             const CgsGeometric::AxisAlignedBox& lrTrafficAABB = lpTrafficBody->GetDeformableAABB();
-            mLastTrafficContact_TrafficHalfExt = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 (lrTrafficAABB.mMax.x - lrTrafficAABB.mMin.x) * 0.5f,
                 (lrTrafficAABB.mMax.y - lrTrafficAABB.mMin.y) * 0.5f,
                 (lrTrafficAABB.mMax.z - lrTrafficAABB.mMin.z) * 0.5f,
                 (lrTrafficAABB.mMax.w - lrTrafficAABB.mMin.w) * 0.5f };
+                mLastTrafficContact_TrafficHalfExt = lAggregateValue;
+            }
 
             mLastTrafficContact_RaceCarVelocity = lrRaceCar.GetLinearVelocity();
             mLastTrafficContact_TrafficVelocity = lpTrafficBody->GetLinearVelocity();
@@ -987,10 +993,13 @@ namespace Vehicle
         mLastCrashContact_RaceCarTransform = lrRaceCar.GetTransform();                     // rec +0x10 -> +0x370
 
         const CgsGeometric::AxisAlignedBox& lrBox = lrRaceCar.GetDeformableAABB();         // rec +0x6D0 / +0x6E0
-        mLastCrashContact_RaceCarHalfExt = Vector3{ (lrBox.mMax.x - lrBox.mMin.x) / 2.0f,   // -> +0x3B0
+        {
+            const Vector3 lAggregateValue = { (lrBox.mMax.x - lrBox.mMin.x) / 2.0f,   // -> +0x3B0
                                                     (lrBox.mMax.y - lrBox.mMin.y) / 2.0f,
                                                     (lrBox.mMax.z - lrBox.mMin.z) / 2.0f,
                                                     (lrBox.mMax.w - lrBox.mMin.w) / 2.0f };
+            mLastCrashContact_RaceCarHalfExt = lAggregateValue;
+        }
 
         mLastCrashContact_Contact         = *lpPotentialContact;                           // 80 bytes -> +0x3D0
         mLastCrashContact_RaceCarVelocity = lrRaceCar.GetLinearVelocity();                 // rec +0x50 -> +0x3C0

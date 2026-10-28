@@ -3090,8 +3090,10 @@ void CollisionStateManager::SelectCollisionBin(
 
         // The accepted bin (0x826AA73C..0x826AA790): the splatted normalised impulse, sample id
         // 0, the bin's content-spec bank, its priority added.
-        lrOutput.mNormalizedImpulse =
-            VecFloat{lfNormalized, lfNormalized, lfNormalized, lfNormalized};
+        {
+            const VecFloat lAggregateValue = {lfNormalized, lfNormalized, lfNormalized, lfNormalized};
+            lrOutput.mNormalizedImpulse = lAggregateValue;
+        }
         lrOutput.miSampleID = 0;
         lrOutput.meBankType = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
         CGS_ASSERT(lrOutput.meBankType >= E_COLLISION_SPLICE_BANK_COLLISION &&

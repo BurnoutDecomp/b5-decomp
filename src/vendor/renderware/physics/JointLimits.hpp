@@ -70,9 +70,7 @@ namespace physics
         // write the console's 1.0f is this constructor. ⇒ the loop is this body, inlined.
         // Same footing as DriveDynamics::Params::Params() (task #143).
         JointLimits()
-            : mPprism{ 0.0f, 0.0f, 0.0f, 0.0f }
-            , mVprism{ 0.0f, 0.0f, 0.0f, 0.0f }
-            , mVtwist(0.0f)
+            : mVtwist(0.0f)
             , mVswing(0.0f)
             , mSwinga(0.0f)
             , mTwista(0.0f)
@@ -80,7 +78,10 @@ namespace physics
             , mTwistc(1.0f)
             , mSwingf(SWING_LOCKED)
             , mTwistf(TWIST_LOCKED)
-        {}
+        {
+            mPprism.SetZero();
+            mVprism.SetZero();
+        }
 
         const rw::math::vpu::Vector3& GetPositionLimit() const       { return mPprism; }
         const rw::math::vpu::Vector3& GetLinearVelocityLimit() const { return mVprism; }
@@ -140,15 +141,15 @@ namespace physics
         CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistf) == 0x3C), "mTwistf @+0x3C (Build `lwz 0x3C(r28)` -> 3-way switch)");
 
         // Adjacency form -- survives a member WIDENING.
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mVprism) == offsetof(JointLimits, mPprism) + sizeof(JointLimits::mPprism)), "mVprism follows mPprism");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mVtwist) == offsetof(JointLimits, mVprism) + sizeof(JointLimits::mVprism)), "mVtwist follows mVprism");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mVswing) == offsetof(JointLimits, mVtwist) + sizeof(JointLimits::mVtwist)), "mVswing follows mVtwist");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwinga) == offsetof(JointLimits, mVswing) + sizeof(JointLimits::mVswing)), "mSwinga follows mVswing");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwista) == offsetof(JointLimits, mSwinga) + sizeof(JointLimits::mSwinga)), "mTwista follows mSwinga");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingc) == offsetof(JointLimits, mTwista) + sizeof(JointLimits::mTwista)), "mSwingc follows mTwista");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistc) == offsetof(JointLimits, mSwingc) + sizeof(JointLimits::mSwingc)), "mTwistc follows mSwingc");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingf) == offsetof(JointLimits, mTwistc) + sizeof(JointLimits::mTwistc)), "mSwingf follows mTwistc");
-        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistf) == offsetof(JointLimits, mSwingf) + sizeof(JointLimits::mSwingf)), "mTwistf follows mSwingf");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVprism) == offsetof(JointLimits, mPprism) + sizeof(((JointLimits*)0)->mPprism)), "mVprism follows mPprism");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVtwist) == offsetof(JointLimits, mVprism) + sizeof(((JointLimits*)0)->mVprism)), "mVtwist follows mVprism");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVswing) == offsetof(JointLimits, mVtwist) + sizeof(((JointLimits*)0)->mVtwist)), "mVswing follows mVtwist");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwinga) == offsetof(JointLimits, mVswing) + sizeof(((JointLimits*)0)->mVswing)), "mSwinga follows mVswing");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwista) == offsetof(JointLimits, mSwinga) + sizeof(((JointLimits*)0)->mSwinga)), "mTwista follows mSwinga");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingc) == offsetof(JointLimits, mTwista) + sizeof(((JointLimits*)0)->mTwista)), "mSwingc follows mTwista");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistc) == offsetof(JointLimits, mSwingc) + sizeof(((JointLimits*)0)->mSwingc)), "mTwistc follows mSwingc");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingf) == offsetof(JointLimits, mTwistc) + sizeof(((JointLimits*)0)->mTwistc)), "mSwingf follows mTwistc");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistf) == offsetof(JointLimits, mSwingf) + sizeof(((JointLimits*)0)->mSwingf)), "mTwistf follows mSwingf");
 
         // The X360-attested ARRAY STRIDE. ProcessUpdateJointLimitsQueue @0x8289F724 steps
         // JointData::maLimits by `addi r10,r31,0x2D / slwi r10,r10,6` == (i+45)*64, i.e. base

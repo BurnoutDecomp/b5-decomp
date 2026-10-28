@@ -58,21 +58,15 @@ struct Fraction
 // aimed at the inline rows @+0x60, tag @+0xC0, tag bit count @+0xC4). The
 // 0xD0 stride matches the `208 * results` result-list partition of the
 // committed VolumeLineQuery::Initialize (SDKs/EATech/rwcollision/
-// volumelinequery.cpp). The console pointer word `v` is kept as u32 so the
-// stride holds on x64 (same convention as VolRef / PrimitivePairIntersectResult).
-// CORRECTED 2026-09-25 (crash parity FX-FOLLOWUPS): `v` is now HOST width, as VolRef's two pointer words have
-// been since waveQ5 C1 (VolRef.hpp) -- see the member. The stride and every later offset are unchanged.
+// volumelinequery.cpp). Native vector alignment leaves +0x04..+0x0F unwritten
+// after the four-byte input volume pointer.
 // ---------------------------------------------------------------------------
 struct VolumeLineSegIntersectResult
 {
-    // HOST WIDTH: `v` is a pointer. VolumeLineQuery::GetIntersections @0x82BB3470 stores
-    // m_inputVols[m_currInput - 1] here (`stw r11, 0(r30)`); a u32 would truncate the host pointer. The console
-    // leaves +0x04..+0x0F unwritten, so the 8-byte word ends at +0x08 and position stays at +0x10 (pinned below).
     uintptr_t v;        // +0x00  the input volume the query is walking (pointer word)
-    u32    mPad08[2];   // +0x08  unwritten (16-byte alignment of position)
-    Vec4   position;    // +0x10  world-space hit position (out)
-    Vec4   normal;      // +0x20  unit plane normal in / hit normal out
-    Vec4   volParam;    // +0x30  volume-space hit parameter (u, v, w)
+    CGS_ALIGN(16) Vec4 position; // +0x10  world-space hit position (out)
+    CGS_ALIGN(16) Vec4 normal;   // +0x20  unit plane normal in / hit normal out
+    CGS_ALIGN(16) Vec4 volParam; // +0x30  volume-space hit parameter (u, v, w)
     f32    lineParam;   // +0x40  hit parameter along the segment
     u32    mPad44[3];   // +0x44  unwritten
     VolRef vRef;        // +0x50  the hit volume reference (0x80 stride)
@@ -85,6 +79,7 @@ CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, lineParam) == 0x40), "
 CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, vRef)      == 0x50), "VLSIR layout");
 CGS_STATIC_ASSERT((sizeof(VolumeLineSegIntersectResult) == 0xD0),
               "result record must match the X360 208-byte result-list stride");
+CGS_STATIC_ASSERT((__alignof(VolumeLineSegIntersectResult) == 16), "X360 result vector alignment");
 
 // ---------------------------------------------------------------------------
 // Delivered entry points.

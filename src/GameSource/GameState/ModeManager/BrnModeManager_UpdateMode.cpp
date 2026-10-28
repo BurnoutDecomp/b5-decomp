@@ -798,8 +798,14 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     // ModeManager::GetCheckpointPosition does -- with w zeroed as the console zeroes it.
     const Vector3 lCurrentPosition     = lpCurrentLandmark->GetBoxRegion()->GetPosition();
     const Vector3 lDestinationPosition = lpDestinationLandmark->GetBoxRegion()->GetPosition();
-    lRouteRequest.maPositions[0] = Vector3{ lCurrentPosition.x, lCurrentPosition.y, lCurrentPosition.z, 0.0f };
-    lRouteRequest.maPositions[1] = Vector3{ lDestinationPosition.x, lDestinationPosition.y, lDestinationPosition.z, 0.0f };
+    {
+        const Vector3 lAggregateValue = { lCurrentPosition.x, lCurrentPosition.y, lCurrentPosition.z, 0.0f };
+        lRouteRequest.maPositions[0] = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = { lDestinationPosition.x, lDestinationPosition.y, lDestinationPosition.z, 0.0f };
+        lRouteRequest.maPositions[1] = lAggregateValue;
+    }
 
     // `stw r11(0), var_70 / var_6C`: both ends are LANDMARKS, so SendRouteRequestAction resolves
     // their AI sections through ProgressionManager::FindLandmarkAISectionIndex.

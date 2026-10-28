@@ -102,24 +102,8 @@ private:
     const BrnDirector::Camera::BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* mpGamePlayCam;
 
 public:
-    // Default constructor: the eight matrices + the back-pointer are left to their
-    // members' default-init (the real per-frame values are written by Construct / the
-    // copy assignment). Declared because the user-provided copy ctor below otherwise
-    // suppresses the implicit default ctor, and CameraSpaceHandler is embedded by value
-    // (e.g. BrnDirector::ICEWrapper::mCameraSpaceHandler) so it must be default-constructible.
-    CameraSpaceHandler() = default;
-
-    // === Owned by THIS TU =================================================
-    // Copy constructor (@0x821FAA88) and copy-assignment (@0x8252B5A8). The X360
-    // bodies are a flat bitwise copy of the whole object: 32 lvx128/stvx128
-    // 16-byte vector moves over the 512-byte matrix block, then a single word
-    // copy of mpGamePlayCam at +0x200. Because every member (the eight
-    // Matrix44Affine and the pointer) is trivially copyable, the defaulted
-    // special members generate the IDENTICAL flat member-wise (memcpy-shaped)
-    // copy -- exact semantic parity with the lvx/stvx + lwz/stw sequence -- so we
-    // model them as `= default` (cleanest form that reproduces the copy).
-    CameraSpaceHandler(const CameraSpaceHandler& lrOther) = default;
-    CameraSpaceHandler& operator=(const CameraSpaceHandler& lrOther) = default;
+    // Keep default construction and memberwise copying implicit in C++03.
+    // ARTIST 821FAA88 / 8252B5A8 copy the eight matrices and the pointer at +0x200.
 
     // === Owned by OTHER TUs -- DECLARATION-ONLY ===========================
     // FLAG: the entire method set below is declaration-only here; bodies live in

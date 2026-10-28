@@ -157,10 +157,22 @@ void ProgressBarRenderer::RenderQuadUntex(CgsGraphics::Im3dRenderBufferUntex* lp
 
     // Triangle-strip order matching the asm vertex build: TL, BL, TR, BR.
     BasicColouredVertex laVertices[4];
-    laVertices[0].mv3Pos = Vector3{ lfLeft,  lfTop,    0.0f, 0.0f };  // top-left
-    laVertices[1].mv3Pos = Vector3{ lfLeft,  lfBottom, 0.0f, 0.0f };  // bottom-left
-    laVertices[2].mv3Pos = Vector3{ lfRight, lfTop,    0.0f, 0.0f };  // top-right
-    laVertices[3].mv3Pos = Vector3{ lfRight, lfBottom, 0.0f, 0.0f };  // bottom-right
+    {
+        const Vector3 lAggregateValue = { lfLeft,  lfTop,    0.0f, 0.0f };
+        laVertices[0].mv3Pos = lAggregateValue;
+    }  // top-left
+    {
+        const Vector3 lAggregateValue = { lfLeft,  lfBottom, 0.0f, 0.0f };
+        laVertices[1].mv3Pos = lAggregateValue;
+    }  // bottom-left
+    {
+        const Vector3 lAggregateValue = { lfRight, lfTop,    0.0f, 0.0f };
+        laVertices[2].mv3Pos = lAggregateValue;
+    }  // top-right
+    {
+        const Vector3 lAggregateValue = { lfRight, lfBottom, 0.0f, 0.0f };
+        laVertices[3].mv3Pos = lAggregateValue;
+    }  // bottom-right
     for (int i = 0; i < 4; ++i)
     {
         laVertices[i].mv4Colour = lColour;

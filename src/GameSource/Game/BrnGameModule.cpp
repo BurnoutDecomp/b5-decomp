@@ -3174,10 +3174,22 @@ namespace BrnGame
         const CgsGraphics::Camera& lrCamera = mDirectorModule.GetGraphicsCameraForDebug();
         const Matrix44& lrView = lrCamera.mView;
         Matrix44Affine lView;
-        lView.xAxis = Vector3{lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w};
-        lView.yAxis = Vector3{lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w};
-        lView.zAxis = Vector3{lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w};
-        lView.wAxis = Vector3{lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w};
+        {
+            const Vector3 lAggregateValue = {lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w};
+            lView.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w};
+            lView.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w};
+            lView.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w};
+            lView.wAxis = lAggregateValue;
+        }
         const Matrix44Affine lInverseView = rw::math::vpu::Inverse(lView);
         lpDebugManager->Render(lrCamera.GetViewProjectionMatrix(), lInverseView.wAxis,
                                lpIm3dDebug, lpIm2dDebug);

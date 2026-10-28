@@ -208,10 +208,16 @@ namespace BrnNetwork
     // runner-switch message slots.
     void BrnNetworkPlayer::OnRoundStart()
     {
-        mWorldMinPos = rw::math::vpu::Vector3{ -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, -KF_DEFAULT_WORLD_HALF_EXTENT_Y,
+        {
+            const rw::math::vpu::Vector3 lAggregateValue = { -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, -KF_DEFAULT_WORLD_HALF_EXTENT_Y,
                                                -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, 0.0f };
-        mWorldMaxPos = rw::math::vpu::Vector3{ KF_DEFAULT_WORLD_HALF_EXTENT_XZ, KF_DEFAULT_WORLD_HALF_EXTENT_Y,
+            mWorldMinPos = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector3 lAggregateValue = { KF_DEFAULT_WORLD_HALF_EXTENT_XZ, KF_DEFAULT_WORLD_HALF_EXTENT_Y,
                                                KF_DEFAULT_WORLD_HALF_EXTENT_XZ, 0.0f };
+            mWorldMaxPos = lAggregateValue;
+        }
 
         mbIsPaused           = false;
         mu8NumForcedUpdates  = 0;
