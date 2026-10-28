@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"
 
 #include <cstring>   // memcpy
+#include <cstdio>    // snprintf for the scoped failed-event diagnostic
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // CgsGui::EventInterpreterModule -- the 11 X360-attested bodies that live in this TU,
 // reconstructed from BURNOUT_X360_ARTIST.XEX ("ARTIST"/"Breaker", Jan-2008):
@@ -564,6 +566,13 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
             }
             else
             {
+                // FLAG PC-platform leaf: capture the actual queued channel and size
+                // at the existing failed-contract boundary. Do not route or decode it.
+                char lacDiagnostic[128];
+                std::snprintf(lacDiagnostic, sizeof(lacDiagnostic),
+                    "[GUI_OUT_UNEXPECTED] outer_type=%d bytes=%d pre_world=0\n",
+                    liEventType, liEventSize);
+                CgsDev::Log::WriteToLogEmergency(lacDiagnostic);
                 CGS_ASSERT(false,
                     "Unexpected output event type in EventInterpreterModule::ProcessOutEvents");
             }
