@@ -1467,6 +1467,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         u32  TryAllocateParamId();                                   // @0x82723370
         u32  TryAllocateTrailerId();                                 // @0x827234B0
         void UpdateTrailers_UpdatePurgatory();                       // @0x82726620
+        void UpdateTrailers_MoveToCab(u32 luTrailer);                 // @0x82726758
         void InsertParamIntoList(u32 luParam, u32 luHull, u32 luSection, f32 lfParamAlong); // @0x82725CB8
         void RemoveParamFromList(u32 luParam);                       // @0x82726340
         // @0x827261E8 (EXPORT HOLE -- UpdateParams_UpdateLinkedList @0x82739660 calls it
