@@ -3,7 +3,7 @@
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "BrnCommonTypes.h"   // Vector3 (rw::math::vpu alias)
-#include <cstddef>            // offsetof (host layout static_asserts)
+#include <cstddef>            // offsetof (native layout checks)
 
 namespace CgsMemory { class LinearMalloc; }
 
@@ -64,8 +64,7 @@ struct AISection
     };
     CGS_STATIC_ASSERT((sizeof(Vector2) == 8), "AISection::Vector2 is the packed 2-float corner type");
 
-    // X360 (4-byte pointer) offsets in the comments; the host offsets are pinned by the
-    // static_asserts below, and every member is reached BY NAME.
+    // Native pointer and scalar offsets, checked below.
     Portal*       mpaPortals;       // X360 +0   :462
     BoundaryLine* mpaNoGoLines;     // X360 +4   :463
     Vector2*      mpaCorners;       // X360 +8   :464 (KI_AI_SECTION_EDGES packed 2-float corners)
@@ -140,8 +139,6 @@ public:
     // AISectionsResourceType::FixUp @0x8267DB28 (`mr r3,r4; mr r4,r5; b ...`), which forwards
     // the rw::Resource so the body can read the block base out of it. The DWARF signature is
     // MemoryResource-shaped; modelled here as the base pointer, matching the Traffic path.
-    // ⚠️ WIDENED (was `int FixUp(int liDelta)`): an int delta truncates a 64-bit host base to
-    // its low 32 bits -- bug class (a) -- and the widened lane data now carries 64-bit slots.
     void FixUp(const void* lpBaseData);
     void FixDown(const void* lpBaseData);
 
@@ -196,15 +193,17 @@ struct SectionResetPair
     u16 muResetSectionIndex;
 };
 
-// ---- host layout contract with tools/assets/bundles/lane_transcode.py ---------------
+// ---- ARTIST resource layouts -----------------------------------------------------
 // (Portal / BoundaryLine are pinned in their own owning headers,
 //  GameSource/World/AI/BrnAIPortal.h and BrnAIBoundaryLine.h.)
-CGS_STATIC_ASSERT((offsetof(AISection, mpaCorners)  == 0x10), "AISection::mpaCorners");
-CGS_STATIC_ASSERT((offsetof(AISection, mId)         == 0x18), "AISection::mId");
-CGS_STATIC_ASSERT((offsetof(AISection, mx8Flags)    == 0x23), "AISection::mx8Flags");
+CGS_STATIC_ASSERT((offsetof(AISection, mpaCorners)  == 0x08), "AISection::mpaCorners");
+CGS_STATIC_ASSERT((offsetof(AISection, mId)         == 0x0C), "AISection::mId");
+CGS_STATIC_ASSERT((offsetof(AISection, mx8Flags)    == 0x17), "AISection::mx8Flags");
+CGS_STATIC_ASSERT((sizeof(AISection) == 0x18), "X360 AISection stride");
 CGS_STATIC_ASSERT((sizeof(SectionResetPair) == 8), "SectionResetPair stride");
-CGS_STATIC_ASSERT((offsetof(AISectionsData, mafSectionMinSpeeds) == 0x10), "AISectionsData::mafSectionMinSpeeds");
-CGS_STATIC_ASSERT((offsetof(AISectionsData, muNumSections)       == 0x38), "AISectionsData::muNumSections");
+CGS_STATIC_ASSERT((offsetof(AISectionsData, mafSectionMinSpeeds) == 0x08), "AISectionsData::mafSectionMinSpeeds");
+CGS_STATIC_ASSERT((offsetof(AISectionsData, muNumSections)       == 0x30), "AISectionsData::muNumSections");
+CGS_STATIC_ASSERT((sizeof(AISectionsData) == 0x40), "X360 AISectionsData size");
 
 class AISectionsResourceType : public CgsResource::Type
 {

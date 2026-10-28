@@ -9,7 +9,9 @@
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Min (the console's fsel Min)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // BrnGameState::GameStateModuleIO::EGameModeType (Update's by-value param)
 
-#include <cmath>                                     // std::atan / std::fabs / std::copysign
+#include <xtl.h>
+#include <xboxmath.h>
+#include <cmath>                                     // std::fabs
 
 // ============================================================================
 // GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h
@@ -23,8 +25,7 @@
 // The PowerParkingManager LAYOUT is grounded in the X360 ARTIST asm (member offsets pinned
 // by the store displacements in Prepare @0x822C24B8 / Update @0x822F8400 / DetermineOutcome
 // @0x822A74A0 / UpdateScoring @0x822A7140) cross-checked against the DecFIGS DWARF member list.
-// Offsets are the X360 (32-bit) form; on the PC/x64 build the embedded debug component widens
-// (pointer members), so members are accessed BY NAME -- no X360 byte-offset is pinned.
+// Offsets are the native X360 form.
 //
 // NOTE: the struct previously lived (forked, minimal, mis-ordered) inside
 // BrnPowerParkingDebugComponent.h; it is homed here now and that header forward-declares it.
@@ -138,21 +139,24 @@ namespace BrnWorld
         //   vcmpgtfp128(0, b) -> vsel: b <  0 -> base + copysign(pi,   a)   (vand a, 0x80000000 ; vor)
         //   vcmpeqfp128(0, b) -> vsel: b == 0 ->        copysign(pi/2, a)
         // NOT std::atan2: b == 0 answers +/-pi/2 even when a is also 0 (std::atan2(0, 0) is 0).
-        // FLAG (PC-platform, numeric): the vrefp estimate + one Newton-Raphson step and XMVectorATan's
-        // minimax polynomial are de-optimised to the exact divide and std::atan -- the standing
-        // convention of this tree (CameraUtils.cpp's ATan2 transcribes the same SDK helper).
         // MOVE-WHEN: rw/math/vpu gains its trig_operation header; this is the SDK function, not game code.
-        inline f32 ATan2(f32 a, f32 b)
+        inline f32 ATan2(f32 lfA, f32 lfB)
         {
-            if (b == 0.0f)
-                return std::copysign(KF_HALF_PI, a);
-
-            const f32 lfBase = std::atan(a / b);
-
-            if (b < 0.0f)
-                return lfBase + std::copysign(KF_PI, a);
-
-            return lfBase;
+            const XMVECTOR lvA = ::XMVectorReplicate(lfA);
+            const XMVECTOR lvB = ::XMVectorReplicate(lfB);
+            const XMVECTOR lvZero = __vspltisw(0);
+            const XMVECTOR lvOne = __vcfsx(__vspltisw(1), 0);
+            const XMVECTOR lvEstimate = __vrefp(lvB);
+            const XMVECTOR lvResidual = __vnmsubfp(lvEstimate, lvB, lvOne);
+            const XMVECTOR lvReciprocal = __vmaddfp(lvEstimate, lvResidual, lvEstimate);
+            XMVECTOR lvResult = ::XMVectorATan(__vmaddfp(lvA, lvReciprocal, lvZero));
+            XMVECTOR lvSignMask = __vspltisw(-1);
+            lvSignMask = __vslw(lvSignMask, lvSignMask);
+            const XMVECTOR lvSign = __vand(lvA, lvSignMask);
+            const XMVECTOR lvPi = __vor(::XMVectorReplicate(KF_PI), lvSign);
+            const XMVECTOR lvHalfPi = __vor(::XMVectorReplicate(KF_HALF_PI), lvSign);
+            lvResult = __vsel(lvResult, __vaddfp(lvPi, lvResult), __vcmpgtfp(lvZero, lvB));
+            return __vsel(lvResult, lvHalfPi, __vcmpeqfp(lvZero, lvB)).x;
         }
     }
 
@@ -174,8 +178,10 @@ namespace BrnWorld
         // x*x + (z*z) (0x822B1FFC, raw D,A,B,C = v0, v0, v13, v0: ONE rounding, ROUNDING_RULE 3). Height
         // (lane 1) takes no part.
         const Vector3 lPlayerToVehicle = lVehiclePos - lPlayerPos;
-        const f32 lfDistanceSq = std::fmaf(lPlayerToVehicle.x, lPlayerToVehicle.x,
-                                           lPlayerToVehicle.z * lPlayerToVehicle.z);
+        const XMVECTOR lvDelta = __lvx(&lPlayerToVehicle, 0);
+        const XMVECTOR lvX = __vspltw(lvDelta, 0);
+        const XMVECTOR lvZ = __vspltw(lvDelta, 2);
+        const f32 lfDistanceSq = __vmaddfp(lvX, lvX, __vmulfp(lvZ, lvZ)).x;
 
         // 0x822B2010 fcmpu / bgt -> li r3, 0 (0x822B22B0). Not taken on a NaN distance.
         if (lfDistanceSq > KF_POWER_PARK_NEARBY_RADIUS * KF_POWER_PARK_NEARBY_RADIUS)

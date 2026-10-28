@@ -44,11 +44,8 @@ class JunctionLogicBox;
 //   0x820A1520 holds {GetTypeID 0x82752560, GetSerialisedResourceDescriptor 0x82760660,
 //   DeSerialise, FixDown 0x82763E68, FixUp 0x82763E70, ...}.
 //
-// x64 PORT: the shipped data is transcoded to platform 4 with WIDENED 64-bit pointer
-// slots by tools/assets/bundles/lane_transcode.py, so every member below is a REAL host
-// pointer -- no Ptr32<T>, no PointerFromU32. The static_asserts at the bottom pin the
-// host offsets that transcoder writes; they and the porter's own CONSOLE_PIN table are
-// the two ends of the same contract.
+// The native resource keeps the original four-byte pointer slots. Its member
+// offsets and complete header size are checked below.
 // =============================================================================
 struct TrafficData
 {
@@ -172,18 +169,19 @@ struct TrafficData
     const JunctionLogicBox* GetJunctionLogicBoxForTrafficLight(u32 luLightTriggerId) const;
 };
 
-// ---- host layout contract with tools/assets/bundles/lane_transcode.py ---------------
+// ---- ARTIST serialized resource layout -------------------------------------------
 CGS_STATIC_ASSERT((offsetof(TrafficData, muSizeInBytes)         == 0x004), "TrafficData::muSizeInBytes");
 CGS_STATIC_ASSERT((offsetof(TrafficData, mpPvs)                 == 0x008), "TrafficData::mpPvs");
-CGS_STATIC_ASSERT((offsetof(TrafficData, mpapHulls)             == 0x010), "TrafficData::mpapHulls");
-CGS_STATIC_ASSERT((offsetof(TrafficData, mpapFlowTypes)         == 0x018), "TrafficData::mpapFlowTypes");
-CGS_STATIC_ASSERT((offsetof(TrafficData, muNumFlowTypes)        == 0x020), "TrafficData::muNumFlowTypes");
-CGS_STATIC_ASSERT((offsetof(TrafficData, muNumKillZoneRegions)  == 0x028), "TrafficData::muNumKillZoneRegions");
-CGS_STATIC_ASSERT((offsetof(TrafficData, mpaKillZoneIds)        == 0x030), "TrafficData::mpaKillZoneIds");
-CGS_STATIC_ASSERT((offsetof(TrafficData, mpaVehicleTraits)      == 0x060), "TrafficData::mpaVehicleTraits");
-CGS_STATIC_ASSERT((offsetof(TrafficData, mTrafficLights)        == 0x068), "TrafficData::mTrafficLights");
-CGS_STATIC_ASSERT((offsetof(TrafficData, muNumPaintColours)     == 0x1B8), "TrafficData::muNumPaintColours");
-CGS_STATIC_ASSERT((offsetof(TrafficData, mpaPaintColours)       == 0x1C0), "TrafficData::mpaPaintColours");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpapHulls)             == 0x00C), "TrafficData::mpapHulls");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpapFlowTypes)         == 0x010), "TrafficData::mpapFlowTypes");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muNumFlowTypes)        == 0x014), "TrafficData::muNumFlowTypes");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muNumKillZoneRegions)  == 0x01C), "TrafficData::muNumKillZoneRegions");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpaKillZoneIds)        == 0x020), "TrafficData::mpaKillZoneIds");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpaVehicleTraits)      == 0x038), "TrafficData::mpaVehicleTraits");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mTrafficLights)        == 0x03C), "TrafficData::mTrafficLights");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muNumPaintColours)     == 0x168), "TrafficData::muNumPaintColours");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpaPaintColours)       == 0x16C), "TrafficData::mpaPaintColours");
+CGS_STATIC_ASSERT((sizeof(TrafficData) == 0x170), "X360 TrafficData header size");
 
 class TrafficDataResourceType : public CgsResource::Type
 {

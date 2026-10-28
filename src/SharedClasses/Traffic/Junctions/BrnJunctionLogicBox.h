@@ -93,7 +93,7 @@ public:
     // `lwz r11, 0(r27)` @0x8239702C). The X360 emits no standalone symbol for either -- both
     // render as those bare loads -- so they are header-inlines, like GetNumStates above.
     u32     GetID() const                 { return muID; }                 // :83
-    f32     GetTimeInState(u32 luState) const;         // :85
+    __forceinline f32 GetTimeInState(u32 luState) const; // :85
     u8      GetNumLights() const;                      // :86
     const TrafficLightController* GetLight(u32 luLight) const;      // :87
     bool    IsLightRed(u32 luState, u32 luLight) const;             // :88
@@ -175,17 +175,10 @@ inline const TrafficLightController* JunctionLogicBox::GetLight(u32 luLight) con
     return &maTrafficLightControllers[luLight];
 }
 
-   // flt_82004014: a phase is authored in tenths of a second
-
-inline u16 JunctionLogicBox::GetStateTiming(u32 luState) const
+__forceinline f32 JunctionLogicBox::GetTimeInState(u32 luState) const
 {
     CGS_ASSERT(luState < muNumStates, "luState < muNumStates");   // BrnJunctionLogicBox.h:165
-    return mauStateTimings[luState];
-}
-
-inline f32 JunctionLogicBox::GetTimeInState(u32 luState) const
-{
-    return static_cast<f32>(GetStateTiming(luState)) * KF_JUNCTION_STATE_TIMING_UNIT;
+    return static_cast<f32>(mauStateTimings[luState]) * 0.1f;   // flt_82004014
 }
 
 inline bool JunctionLogicBox::IsLightRed(u32 luState, u32 luLight) const
