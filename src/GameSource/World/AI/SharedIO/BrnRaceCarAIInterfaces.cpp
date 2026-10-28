@@ -1,7 +1,7 @@
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::IsValid (SetPlayerActiveRaceCarData)
 
-// Out-of-line bodies of BrnAI::AIModuleIO::RaceCarAIInterface's 17-function TU: the
+// Out-of-line bodies of BrnAI::AIModuleIO::RaceCarAIInterface's 19-function TU: the
 // management-queue producers (Activate/Deactivate/DetachAIControl/SetUpOutOfRange),
 // the player-data setter, and the per-active-car snapshot getters. All index math
 // and bit-array reads are X360-verified store-for-store against the grown layout in
@@ -125,6 +125,36 @@ namespace AIModuleIO
                    "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
 
         return maMatrices[leActiveRaceCarIndex];
+    }
+
+    // @0x8276BC00  The active car's velocity (Vector3 returned through the X360 result slot).
+    Vector3 RaceCarAIInterface::GetActiveRaceCarVelocity(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // X360 :727
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // X360 :728
+        CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < mSetActiveRaceCars.GetCapacity(),
+                   "invalid index : < 8");                                  // CgsBitArray.h:203
+        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");   // X360 :729
+
+        return maVelocities[leActiveRaceCarIndex];                            // X360 +0x200 + 16*i
+    }
+
+    // @0x8276BD90  The active car's scalar speed.
+    f32 RaceCarAIInterface::GetActiveRaceCarSpeed(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // X360 :737
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // X360 :738
+        CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < mSetActiveRaceCars.GetCapacity(),
+                   "invalid index : < 8");                                  // CgsBitArray.h:203
+        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");   // X360 :739
+
+        return mafSpeeds[leActiveRaceCarIndex];                               // X360 +0x280 + 4*i
     }
 
     // @0x8276BF18  The active car's AI section index.
