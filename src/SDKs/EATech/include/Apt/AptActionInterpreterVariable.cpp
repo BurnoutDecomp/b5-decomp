@@ -87,7 +87,6 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
         pLeaf = &ctxName;
     }
 
-    promptDiag.SetContext(pContext);
 
     // The path resolved to just a context (no leaf name): return it (or undefined).
     if (pLeaf->IsEmpty())
@@ -133,6 +132,5 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
             pFound = getVariable(pScope, 0, pName, nAllowSelf, 1, 0);
     }
 
-    promptDiag.SetValue(pFound);
     return pFound;
 }

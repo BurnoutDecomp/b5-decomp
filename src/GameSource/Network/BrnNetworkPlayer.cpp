@@ -1265,7 +1265,7 @@ namespace BrnNetwork
                    "miPastLatenciesCount <= KI_LATENCY_FRAMES_TO_AVERAGE_OVER");
 
         const f32 lfAverageLatency = lfTotalLatency / static_cast<f32>(miPastLatenciesCount);
-        const s32 liLatencyFrames  = static_cast<s32>(fmaf(lfAverageLatency, lfFramesPerSecond, KF_ROUND_TO_NEAREST));
+        const s32 liLatencyFrames  = static_cast<s32>((lfAverageLatency * lfFramesPerSecond + KF_ROUND_TO_NEAREST));
         const s32 liMaxLatencyFrames = static_cast<s32>(lfFramesPerSecond);
         miLatencyFrames = (liLatencyFrames < liMaxLatencyFrames) ? liLatencyFrames : liMaxLatencyFrames;
     }

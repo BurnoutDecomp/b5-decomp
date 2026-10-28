@@ -53,7 +53,6 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
         pContext = pOutContext;
     }
 
-    promptDiag.SetContext(pContext);
 
     if (!pContext)
         return 0;

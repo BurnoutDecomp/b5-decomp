@@ -58,6 +58,7 @@
 
 namespace BrnNetwork
 {
+    typedef CgsNetwork::ServerInterfaceDirtySock NativeServerInterface;
     // ------------------------------------------------------------------------------------
     // Bind to the owning module and its network manager, then put every member except the
     // XUID table (Prepare fills that) into its idle state.
@@ -539,7 +540,7 @@ namespace BrnNetwork
             BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
             if (!mpNetworkManager->GetSuspensionManager()->IsSuspending())
             {
-                if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::IsSuspended())
+                if (mpNetworkManager->GetServerInterface()->NativeServerInterface::IsSuspended())
                 {
                     meState = E_STATE_COUNT;
                 }
@@ -560,7 +561,7 @@ namespace BrnNetwork
             BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
             if (!mpNetworkManager->GetSuspensionManager()->IsSuspending())
             {
-                if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::IsSuspended())
+                if (mpNetworkManager->GetServerInterface()->NativeServerInterface::IsSuspended())
                 {
                     meState = E_STATE_COUNT;
                 }
@@ -586,14 +587,14 @@ namespace BrnNetwork
             break;
 
         case E_STATE_WAIT_MODIFY_GAME:
-            if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
+            if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                 != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_BUSY)
             {
                 const auto leModifyStatus = mpNetworkManager->GetServerInterface()
-                    ->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES);
+                    ->NativeServerInterface::GetStatus(CgsNetwork::E_COMPONENTS_GAMES);
                 if (leModifyStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
                 {
-                    mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
+                    mpNetworkManager->GetServerInterface()->NativeServerInterface::ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
                 }
 
                 CgsGui::GuiEventNetworkInGame lInGameEvent;
@@ -605,13 +606,13 @@ namespace BrnNetwork
             break;
 
         case E_STATE_WAIT_SERVER_INTERFACE_ACTION:
-            if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
+            if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                 != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_BUSY)
             {
-                if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
+                if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                     == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
                 {
-                    mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
+                    mpNetworkManager->GetServerInterface()->NativeServerInterface::ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
                 }
                 meState = E_STATE_COUNT;
                 BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
@@ -686,7 +687,7 @@ namespace BrnNetwork
             }
 
             if (mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame()
-                && mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
+                && mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                        == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE
                 && !mpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
             {

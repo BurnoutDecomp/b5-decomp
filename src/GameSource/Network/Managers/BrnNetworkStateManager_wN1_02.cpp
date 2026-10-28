@@ -1,3 +1,4 @@
+#include <xtl.h>
 // ===================================================================================
 // BrnNetwork::StateManager -- part 2: log-in, launching, news/TOS download, the
 // free-burn lobby helpers and the matchmaking / suspension completion callbacks.
@@ -60,7 +61,6 @@
 #include <cstring>   // std::memcpy / std::strlen / std::strncpy
 
 // Platform sign-in state query (provided by the platform layer).
-extern "C" u32 XUserGetSigninState(u32 luUserIndex);
 
 namespace BrnNetwork
 {

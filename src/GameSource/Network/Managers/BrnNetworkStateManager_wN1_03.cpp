@@ -57,6 +57,7 @@
 
 namespace BrnNetwork
 {
+    typedef CgsNetwork::ServerInterfaceDirtySock NativeServerInterface;
     namespace GsmIO = BrnGameState::GameStateModuleIO;
 
     // ---------------------------------------------------------------------------------
@@ -146,7 +147,7 @@ namespace BrnNetwork
                         CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetGameComponent() != 0,
                                    "mpNetworkManager->GetServerInterface()->GetGameComponent()");
 
-                        if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                        if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                                 CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE &&
                             mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
                             !mpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameLocked())

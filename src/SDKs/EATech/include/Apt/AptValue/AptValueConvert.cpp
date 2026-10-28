@@ -42,7 +42,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"  // GetTypeTag (the CIH toString arm)
 #include "SDKs/EATech/include/Apt/AptArray.h"          // AptArray::toString (the array join arm)
 
-#include <cstdio>    // snprintf (the "[Type=0x%X]" / "%d" / "%f" / "%p" renders)
+#include <cstdio>    // sprintf (the "[Type=0x%X]" / "%d" / "%f" / "%p" renders)
 #include <cstring>   // strcmp (the "_proto__" / "type" key compares)
 #include <cmath>     // fmodf (the float "integral?" test)
 #include <cstdlib>   // strtol
@@ -292,7 +292,7 @@ void AptValue::toString(EAStringC* pOut) const
     case AptVFT_Integer:            // 7
     {
         char szBuf[136];           // X360 v7[136] scratch
-        snprintf(szBuf, sizeof(szBuf), "%d", c_integer()->GetInt());   // unk_8214404C = "%d"
+        sprintf(szBuf, "%d", c_integer()->GetInt());   // unk_8214404C = "%d"
         *pOut = szBuf;
         return;
     }
@@ -305,9 +305,9 @@ void AptValue::toString(EAStringC* pOut) const
         // X360: fmod(value, 1.0) == 0.0 -> the int form ("%d" of (int)value),
         // else the "%f" form.
         if (fmodf(fValue, 1.0f) == 0.0f)
-            snprintf(szBuf, sizeof(szBuf), "%d", static_cast<int>(fValue));   // unk_82144050 = "%d"
+            sprintf(szBuf, "%d", static_cast<int>(fValue));   // unk_82144050 = "%d"
         else
-            snprintf(szBuf, sizeof(szBuf), "%f", static_cast<double>(fValue)); // unk_82144054 = "%f"
+            sprintf(szBuf, "%f", static_cast<double>(fValue)); // unk_82144054 = "%f"
         *pOut = szBuf;
         return;
     }
@@ -324,7 +324,7 @@ void AptValue::toString(EAStringC* pOut) const
     case AptVFT_NativeFunction:     // 9
     {
         char szBuf[136];
-        snprintf(szBuf, sizeof(szBuf), "[native function 0x%p]",
+        sprintf(szBuf, "[native function 0x%p]",
                  static_cast<AptNativeFunction*>(pThis)->GetFunction());
         *pOut = szBuf;
         return;
@@ -444,7 +444,7 @@ void AptValue::toString(EAStringC* pOut) const
     // X360 default (loc_82AF9280): "[Type=0x%X]" of the raw type tag.
     {
         char szBuf[136];
-        snprintf(szBuf, sizeof(szBuf), "[Type=0x%X]", static_cast<int>(eType));   // aType0xX
+        sprintf(szBuf, "[Type=0x%X]", static_cast<int>(eType));   // aType0xX
         *pOut = szBuf;
     }
 }

@@ -1,3 +1,4 @@
+#include <xtl.h>
 // ===================================================================================
 // BrnNetwork::LoginManagerX360 -- behaviour
 //   b5-decomp/src/GameSource/Network/Managers/X360/BrnNetworkLoginManagerX360.cpp
@@ -33,32 +34,13 @@
 
 #include "netconn.h"   // NetConnStatus ('gtag' fills the supplied buffer with the gamertag)
 
-extern "C"
-{
-    // Live sign-in state for a user/controller index: KI_SIGNIN_STATE_LIVE (2) ==
-    // XUserSigninState_SignedInToLive (matches the committed GamerCard / Buddy managers).
-    s32 XUserGetSigninState(u32 luUserIndex);
 
-    // Fill an XUSER_SIGNIN_INFO for the user index. Returns 0 on success (a non-zero result is an
-    // error). The X360 reads the privilege/guest flags word at byte offset +0x08 of the filled
-    // struct. dwFlags is 0 at the call site.
-    s32 XUserGetSigninInfo(u32 luUserIndex, u32 luFlags, void* lpSigninInfo);
-}
 
 namespace BrnNetwork
 {
     namespace
     {
-        // The XUSER_SIGNIN_INFO buffer XUserGetSigninInfo fills (the X360 builds a 48-byte stack
-        // BYREF buffer and reads only the flags word at +0x08). Only the grounded field is named;
-        // the surrounding bytes are reserved as opaque storage rather than fabricated. FLAGGED: the
-        // struct's full Xbox-SDK layout is not reproduced -- only the +0x08 flags word is read.
-        struct XUserSigninInfo
-        {
-            u8  maPad00[0x08];   // +0x00 .. +0x08 (xuid + sign-in state; opaque)
-            u32 muFlags;         // +0x08 -- privilege / guest flags word
-            u8  maPad0C[48 - 0x0C];  // +0x0C .. +0x30 (gamertag etc.; opaque)
-        };
+
     }
 
     // X360 0x8254C0C0 -- chain the base Construct, then mark the platform sub-state idle.
@@ -190,12 +172,12 @@ namespace BrnNetwork
 
         if (meSignInState == E_SIGN_IN_STATE_SUCCESS)
         {
-            XUserSigninInfo lSigninInfo;
+            XUSER_SIGNIN_INFO lSigninInfo;
             const u32 luUserIndex = static_cast<u32>(mpNetworkManager->GetLocalUserControllerPort());
             // A failed query (non-zero) or the guest/privilege flag (bit 1) finishes the flow;
             // a clean signed-in selection advances to the base connect flow.
             if (XUserGetSigninInfo(luUserIndex, 0, &lSigninInfo) != 0 ||
-                (lSigninInfo.muFlags & KU8_SIGNIN_INFO_GUEST_FLAG_MASK) == KU8_SIGNIN_INFO_GUEST_FLAG_MASK)
+                (lSigninInfo.dwInfoFlags & KU8_SIGNIN_INFO_GUEST_FLAG_MASK) == KU8_SIGNIN_INFO_GUEST_FLAG_MASK)
             {
                 Finished(false);
             }

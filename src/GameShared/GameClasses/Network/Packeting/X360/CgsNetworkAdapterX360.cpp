@@ -1,3 +1,4 @@
+#include <xtl.h>
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::NetworkAdapterX360::Construct          @ 0x8287F4D8
 //   CgsNetwork::NetworkAdapterX360::Release            @ 0x8287F5B8
@@ -23,7 +24,6 @@
 
 // XDK signin-state query. XUSER_SIGNIN_STATE_SIGNED_IN_TO_LIVE == 2 (the value the asm
 // compares against). Declared in its XDK shape; provided by the platform layer.
-extern "C" int XUserGetSigninState(int liUserIndex);
 
 // LobbyApiDisconnect (the X360 online-lobby disconnect hook, Demonware/Lobby glue) is
 // declared in the DirtySDK vendor shim "lobbyapi.h" (included above), matching its real
