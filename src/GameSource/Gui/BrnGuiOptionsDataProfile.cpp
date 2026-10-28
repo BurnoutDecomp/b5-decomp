@@ -141,19 +141,22 @@ void OptionsDataProfile::SetTraxRemaining(const EATraxArrayType* lpTraxRemaining
 }
 
 // ---------------------------------------------------------------------------
-// Last-played track index (+0x7344)
-//
-// Declared since this class landed but never DEFINED, so its one caller could not
-// be written -- AlwaysAvailableComponentsManager's EATrax case 502, which records
-// the track the player just moved to. The X360 has no out-of-line symbol for it:
-// the console inlines the store at 0x825099C8 (`stw r11, 0x7344(r31)` on the
-// profile reached as GuiCache+0xB878), which pins both the offset and the
-// semantics. Written in the same shape as every other setter on this class.
+// Last-played track index (+0x7344). ARTIST case 502 inlines a direct store at
+// 0x825099C8 after checking the cache/profile pointers; there is no lock assertion
+// at that site. The source setter preserves the same member store.
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetLastPlayedSongIndex(s32 liIndex)
 {
-    CGS_ASSERT(false == mbIsLocked, "false == mbIsLocked");
     miLastPlayedSongIndex = liIndex;
+}
+
+// Last-played Picture Paradise piece index (+0x7348). ARTIST case 503 inlines
+// the direct store at 0x82509D24 to GuiCache+0x12BC0, which is the profile's
+// +0x7348 member after GuiCache::GetOptionsDataProfile() (+0xB878).
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::SetLastPlayedPictureParadiseMusicIndex(s32 liIndex)
+{
+    miLastPictureParadiseMusicIndex = liIndex;
 }
 
 // ---------------------------------------------------------------------------
