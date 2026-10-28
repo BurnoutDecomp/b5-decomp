@@ -69,8 +69,8 @@ post-world step, independently of the recovered rumble manager's pending transfe
 
 ## INI tuning
 
-Edit **config.ini beside Burnout_PC.exe**, section **[AdaptiveTriggers]**, then
-restart the game. The complete commented section in [config.ini.example](../config.ini.example)
+Edit **config.ini beside Burnout_PC.exe**, section **[AdaptiveTriggers]**; saved
+changes apply within a second while the game runs. The complete commented section in [config.ini.example](../config.ini.example)
 contains every applicable control with its default. Missing keys preserve the
 original Immersive tuning; names and presets are case-insensitive.
 

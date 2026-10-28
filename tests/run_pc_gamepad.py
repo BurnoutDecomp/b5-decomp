@@ -9,7 +9,7 @@ from fxgs_common import WORKFLOW, REPO, STRSTREAM_CPP, settings, definition
 
 def main():
     sdl = REPO / "vendor/sdl3"
-    subprocess.run([os.sys.executable, str(WORKFLOW / "tools/build/fetch_sdl3.py")], check=True)
+    subprocess.run([os.sys.executable, str(WORKFLOW / "tools/build/build_sdl3.py")], check=True)
     with tempfile.TemporaryDirectory(prefix="brn_sdl_gamepad_") as directory:
         output = Path(directory)
         assertion = (REPO / "src/GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.cpp").read_text(encoding="utf-8")
