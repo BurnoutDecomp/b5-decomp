@@ -8186,6 +8186,87 @@ void TrafficEntityModule::UpdateTrailers_UpdatePurgatory()
     }
 }
 
+// ARTIST 0x82726758. Rebuild the nonphysical trailer around its cab's tow bar.
+void TrafficEntityModule::UpdateTrailers_MoveToCab(u32 luTrailer)
+{
+    Vehicle* lpTrailer = GetTrailerVehicle(static_cast<s32>(luTrailer));
+    if (lpTrailer->GetCabIndex() == KU_INVALID_VEHICLE)
+    {
+        return;
+    }
+
+    CGS_ASSERT(luTrailer < KU_MAX_TRAILER_TRAFFIC, "luTrailer < KU_MAX_TRAILER_TRAFFIC");
+    const u32 luTrailerVehicle = KU_TRAILER_TRAFFIC_OFFSET + luTrailer;
+    VehicleAxles* lpAxles = GetVehicleAxles(luTrailerVehicle);
+    Vehicle* lpCab = GetStandardVehicle(lpTrailer->GetCabIndex());
+    CGS_ASSERT(lpCab->GetTrailerIndex() == luTrailerVehicle,
+               "lpCab->GetTrailerIndex() == luTrailerVehicle");
+    Param* lpParam = GetParam(lpTrailer->GetCabIndex());
+    const Matrix44Affine lCabTransform = GetVehicleTransform(lpTrailer->GetCabIndex());
+
+    // These alive checks belong to the original inlined type getters.
+    CGS_ASSERT(lpCab->IsAlive(), "IsAlive()");
+    const u32 luCabType = lpCab->GetVehicleType();
+    CGS_ASSERT(lpTrailer->IsAlive(), "IsAlive()");
+    const u32 luTrailerType = lpTrailer->GetVehicleType();
+    (void)mpData.operator->();
+    (void)mpData.operator->();
+    const VehicleTypeRuntime* lpCabType = GetVehicleTypeRuntime(luCabType);
+    const VehicleTypeRuntime* lpTrailerType = GetVehicleTypeRuntime(luTrailerType);
+
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    const auto RawPlus = [](const Vector3Plus& lValue) {
+        const Vector3 lXYZ = lValue.GetVector3();
+        return Vector3{lXYZ.x, lXYZ.y, lXYZ.z, lValue.GetPlus()};
+    };
+    const auto NormalizeOr = [](Vector3 lValue, Vector3 lFallback) {
+        const f32 lfLengthSquared = Vmx::Dot3(lValue, lValue);
+        const Vector3 lNormalized = Vmx::Scale(lValue, Vmx::RefinedReciprocalSqrt(lfLengthSquared, 2));
+        // Original vcmpeq/not/vsel selects the cab row only for a zero dot3.
+        return lfLengthSquared == 0.0f ? lFallback : lNormalized;
+    };
+    const auto MultiplyAdd = [](Vector3 lA, f32 lfB, Vector3 lC) {
+        return Vector3{std::fmaf(lA.x, lfB, lC.x), std::fmaf(lA.y, lfB, lC.y),
+                       std::fmaf(lA.z, lfB, lC.z), std::fmaf(lA.w, lfB, lC.w)};
+    };
+    const auto Cross = [](Vector3 lA, Vector3 lB) {
+        // vpermwi 0x63, vmul, vnmsub, vpermwi 0x63; preserve the fourth lane too.
+        return Vector3{Vmx::NegativeMultiplySubtract(lA.z, lB.y, lA.y * lB.z),
+                       Vmx::NegativeMultiplySubtract(lA.x, lB.z, lA.z * lB.x),
+                       Vmx::NegativeMultiplySubtract(lA.y, lB.x, lA.x * lB.y),
+                       Vmx::NegativeMultiplySubtract(lA.w, lB.w, lA.w * lB.w)};
+    };
+
+    const Vector3 lTowBar = lpCab->CalcTowBarPos(lCabTransform, lpCabType);
+    const Vector3 lInitialAt = NormalizeOr(lTowBar - RawPlus(lpAxles->mBackAxle.mPosAndWheelRadius),
+                                          lCabTransform.At());
+    const f32 lfNegativePivot = lpTrailerType->GetTrailerPivotDistance() * -1.0f;
+    const Vector3 lInitialPos = MultiplyAdd(lInitialAt, lfNegativePivot, lTowBar);
+    lpAxles->mBackAxle.mPosAndWheelRadius.SetVector3(
+        MultiplyAdd(lInitialAt, lpTrailerType->GetBackAxleOffset(), lInitialPos));
+
+    lpAxles->UpdateRearAxleForRoadCollision(lpParam, mpData->mpapHulls);
+
+    const Vector3 lAt = NormalizeOr(lTowBar - RawPlus(lpAxles->mBackAxle.mPosAndWheelRadius),
+                                   lCabTransform.At());
+    const Vector3 lPos = lTowBar - Vmx::Scale(lAt, lpTrailerType->GetTrailerPivotDistance());
+    const Vector3 lUpBlend = NormalizeOr(lCabTransform.Up() + RawPlus(lpAxles->mBackAxle.mUpAndDebug),
+                                        lCabTransform.Up());
+    const Vector3 lRight = NormalizeOr(Cross(lUpBlend, lAt), lCabTransform.Right());
+    const Vector3 lUp = NormalizeOr(Cross(lAt, lRight), lCabTransform.Up());
+    Matrix44Affine lTransform;
+    lTransform.Right() = lRight;
+    lTransform.Up() = lUp;
+    lTransform.At() = lAt;
+    lTransform.Pos() = lPos;
+    SetVehicleTransform(luTrailerVehicle, lTransform);
+
+    lpAxles->mFrontAxle.mUpAndDebug.SetVector3(lpAxles->mBackAxle.mUpAndDebug.GetVector3());
+    lpAxles->mFrontAxle.mPosAndWheelRadius.SetVector3(
+        MultiplyAdd(lAt, lpTrailerType->GetForwardAxleOffset(), lPos));
+    lpTrailer->SetWheelRot(lpCab->GetWheelRot().x);
+}
+
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::GenerateNewVehicle  @ 0x82736528   (leak :4785)
 //
