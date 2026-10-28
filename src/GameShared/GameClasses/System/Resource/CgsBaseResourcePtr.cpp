@@ -1,135 +1,58 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
-// CgsResource::BaseResourcePtr -- the non-templated base of every CgsResource::ResourcePtr<T>.
-//
-// Four functions in this TU are reconstructed STORE-FOR-STORE from the X360 ARTIST binary
-// (the build emitted them out-of-line); the rest are trivial accessors inlined in the X360 and
-// reconstructed from the member contract in CgsResourcePtr.h:
-//
-//   BaseResourcePtr::BaseResourcePtr   @ 0x82204E20  (ctor -- self-circular list init)
-//   BaseResourcePtr::~BaseResourcePtr  @ 0x821F1E18  (dtor -- inline unlink + re-self-link)
-//   BaseResourcePtr::IsEqual           @ 0x8227D298  (3-dword identity compare)
-//   BaseResourcePtr::AddToNewList      @ 0x828D6230  (insert-before into an alias ring)
-//
-// LAYOUT (X360-authoritative -- see the FLAG in CgsResourcePtr.h):
-//   +0x00 mpResourceMemory   +0x04/+0x08 mHandle (2 ptrs)
-//   +0x0C mpNext             +0x10 mpPrev        +0x14 mpThis   +0x18 muThreadId
-// A "detached" BaseResourcePtr is its own one-element ring: mpNext == mpPrev == this.
 
 namespace CgsResource
 {
-    // @0x82204E20  ctor. asm: stw 0 ->+0,+4,+8 (then a redundant 0 ->+0), stw this ->+0xC,+0x10,+0x14,
-    // stw 0 ->+0x18. So mpResourceMemory + the two mHandle pointers are zeroed, the list is self-circular
-    // (mpNext = mpPrev = this), mpThis = this, muThreadId = 0.
+    // ARTIST82204E20. The last member at1C is not initialized.
     BaseResourcePtr::BaseResourcePtr()
-        : mpResourceMemory(0)
-        , mpNext(this)
-        , mpPrev(this)
-        , mpThis(this)
-        , muThreadId(0)
     {
-        mHandle.mpResourceMemory = 0;
+        mResourceMemory.m_baseResources[0] = 0;
+        mResourceMemory.m_baseResources[1] = 0;
+        mResourceMemory.m_baseResources[2] = 0;
+        mpNext = this;
+        mpPrev = this;
+        mHandle.mpResourceMemory = &mResourceMemory;
         mHandle.mpSourceEntry = 0;
     }
 
-    // @0x821F1E18  dtor. asm inlines the unlink (it does NOT call RemoveFromCurrentList):
-    //   v1 = mpNext;  if (v1) v1->mpPrev = mpPrev;
-    //   v2 = mpPrev;  if (v2) v2->mpNext = mpNext;
-    //   mpNext = this; mpPrev = this;
-    // i.e. splice this out of its ring, then re-make this a one-element ring. The null guards mirror the
-    // asm's beq-on-zero even though a live ring never holds null neighbours.
+    // ARTIST821F1E18.
     BaseResourcePtr::~BaseResourcePtr()
     {
-        BaseResourcePtr* lpNext = mpNext;   // +0xC
-        if (lpNext != 0)
-            lpNext->mpPrev = mpPrev;        // [next+0x10] = prev
-        BaseResourcePtr* lpPrev = mpPrev;   // +0x10
-        if (lpPrev != 0)
-            lpPrev->mpNext = mpNext;        // [prev+0xC]  = next
-        mpNext = this;                      // +0xC  = this
-        mpPrev = this;                      // +0x10 = this
+        BaseResourcePtr* lpNext = mpNext;
+        if (lpNext != 0) lpNext->mpPrev = mpPrev;
+        BaseResourcePtr* lpPrev = mpPrev;
+        if (lpPrev != 0) lpPrev->mpNext = mpNext;
+        mpNext = this;
+        mpPrev = this;
     }
 
-    void BaseResourcePtr::GetResource(void** lppResource) const
+    void BaseResourcePtr::GetResource(SmallResource* lpResource) const
     {
-        *lppResource = mpResourceMemory;   // X360: returns *a1 (offset 0) directly
+        *lpResource = mResourceMemory;
     }
-
-    // ⭐⭐ CORRECTED 2026-08-11 (create-path wave) -- THIS RETURNED A PLAUSIBLE ZERO FOR EVERY
-    // MAIN-MEMORY-ONLY RESOURCE IN THE BUILD, and the create path is where it finally bit.
-    //
-    // It used to `return mHandle` (+0x04/+0x08). That pair is NOT the resource handle: it is the
-    // CACHED IDENTITY of the already-resolved resource, the region IsEqual @0x8227D298 compares,
-    // and CreateFromHandle fills it from `*(SmallResource+4)` / `*(SmallResource+8)`. But
-    // `SmallResource : rw::BaseResources<3>` is {mainResource, graphicsSystemResource,
-    // graphicsLocalResource} (CgsSmallResourcePS3.h:70), so for a resource that lives only in
-    // main memory -- a StreamedDeformationSpec, for instance -- those two words are LEGITIMATELY
-    // NULL and the accessor handed back a null handle for a perfectly resident resource.
-    //
-    // THE HANDLE IS THE +0x14/+0x18 PAIR, and the X360 says so three independent ways:
-    //   1. ActiveRaceCar::OnResourcesLoaded @0x822EB168 passes the SOURCE ptr's +0x14 straight in
-    //      as the ResourceHandle*:
-    //          0x822EB1F0  addi r4, r31, 0x14
-    //          0x822EB1FC  bl   CgsResource::BaseResourcePtr::CreateFromHandle
-    //      -- and CreateFromHandle's first two stores are `+0x14 <- handle[0]`,
-    //      `+0x18 <- handle[1]` (see its own banner below). Store and load agree.
-    //   2. its callers hand it ResourcePtr POINTERS, one register each (0x822FED98 /
-    //      0x822FEDA8), not two-pointer handles by value.
-    //   3. it CreateFromHandle's into ResourcePtrs at +0x1C90 / +0x1CB0, and
-    //      ActiveRaceCar::AddHandlingModel @0x822D3EC8 reads the handle back at +0x1CA4 / +0x1CC4
-    //      == exactly those two plus 0x14.
-    // RUNTIME WITNESS (the create-path wave's PROBE-CREATE3-B, race car 0):
-    //      mem=0x052107D0  hMem=0  hEntry=0  this=0x05217CB4  tid=0x05217C84
-    //      deref(this)=0x052107D0
-    // -- i.e. the +0x14 pair resolves through the console's own double deref
-    // (`lwz r11,handle ; lwz r28,0(r11)`, VehicleManager::ProcessCreateEvents @0x82616CFC) and
-    // the +0x04 pair does not.
-    //
-    // ⚠️ The two members are still SPELLED mpThis/muThreadId because that is how CreateFromHandle
-    // was reconstructed and its banner explains the console's slot reuse; semantically the pair is
-    // the source handle {SmallResource*, Entry*}. Renaming them is a separate, wider change.
     void BaseResourcePtr::GetResourceHandle(ResourceHandle* lpHandle) const
     {
-        lpHandle->mpResourceMemory = reinterpret_cast<void*>(mpThis);
-        lpHandle->mpSourceEntry    = reinterpret_cast<Entry*>(muThreadId);
+        *lpHandle = mHandle;
     }
-
     ResourceHandle BaseResourcePtr::GetResourceHandle() const
     {
-        ResourceHandle lHandle;
-        GetResourceHandle(&lHandle);
-        return lHandle;
+        return mHandle;
     }
 
-    void BaseResourcePtr::SetResource(void* const* lppResource)
+    // Three-word resource assignment followed by propagation is inlined in
+    // ARTIST Pool::ReAllocateMemoryForEntry828F6880 at Entry+28.
+    void BaseResourcePtr::SetResource(const SmallResource* lpResource)
     {
-        // Point this ptr at the new main-memory resource. [follow-on: the X360 also propagates the new
-        // pointer to every alias sharing mpNext/mpPrev via Propogate() -- that path is its own TU.]
-        mpResourceMemory = (lppResource != 0) ? *lppResource : 0;
+        mResourceMemory = *lpResource;
+        Propogate();
     }
 
-    // @0x8227D298  IsEqual. asm walks both objects from offset 0 comparing dwords; returns 1 iff the
-    // first three dwords are pairwise equal (the loop bound is v3 >= 3), else 0. The compared region is
-    // mResourceMemory (+0) followed by the two mHandle pointers (+4,+8) -- a BaseResourcePtr's identity.
-    // ⚠️ x64 WIDTH FIX (race-car streamer wave 2026-07-31). The console's "3 dwords" are
-    // three POINTERS -- mpResourceMemory, mHandle.mpResourceMemory, mHandle.mpSourceEntry --
-    // which are 4 bytes each only because the Xenon is 32-bit. Walking literally 3 x u32 on
-    // the x64 gate compares 12 of the 24 identity bytes (mpResourceMemory plus the LOW HALF
-    // of mHandle.mpResourceMemory), so two pointers differing only in their high halves
-    // compared EQUAL. Size the walk from the identity region itself, per the project's
-    // "never transcribe a console byte-size literal" rule; on X360 this is bit-identical
-    // to the original loop.
+    // ARTIST8227D298 compares only the three cached resource words.
     bool BaseResourcePtr::IsEqual(const void* lpOther) const
     {
-        const u32 KU_IDENTITY_WORDS = static_cast<u32>(
-            (sizeof(void*) + sizeof(ResourceHandle)) / sizeof(void*));   // 3 on both targets
-
-        void* const* lpThis = reinterpret_cast<void* const*>(this);
-        void* const* lpRhs  = reinterpret_cast<void* const*>(lpOther);
-        for (u32 luIndex = 0; luIndex < KU_IDENTITY_WORDS; ++luIndex)
+        void* const* lpResources = static_cast<void* const*>(lpOther);
+        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
         {
-            if (lpThis[luIndex] != lpRhs[luIndex])
+            if (mResourceMemory.m_baseResources[luIndex] != lpResources[luIndex])
                 return false;
         }
         return true;
@@ -137,59 +60,30 @@ namespace CgsResource
 
     void BaseResourcePtr::Reset()
     {
-        mpResourceMemory = 0;
-        mHandle.mpResourceMemory = 0;
-        mHandle.mpSourceEntry = 0;
+        mResourceMemory.m_baseResources[0] = 0;
+        mResourceMemory.m_baseResources[1] = 0;
+        mResourceMemory.m_baseResources[2] = 0;
     }
-
     void BaseResourcePtr::RemoveFromCurrentList()
     {
-        // Splice this ptr out of its alias ring (null-safe). The X360 dtor inlines an equivalent unlink;
-        // this named entry point exists for the explicit detach path.
         if (mpPrev != 0) mpPrev->mpNext = mpNext;
         if (mpNext != 0) mpNext->mpPrev = mpPrev;
         mpNext = this;
         mpPrev = this;
     }
 
-    // @0x828D6230  AddToNewList. asm:
-    //   if (mpNext != this || mpPrev != this) { ASSERT-fire "Must remove from current list before
-    //                                           adding to new list" (CgsResourcePtr.h:384) }
-    //   mpNext        = lpList;                 // +0xC  = list
-    //   mpPrev        = lpList->mpPrev;         // +0x10 = *(list+0x10)
-    //   lpList->mpPrev= this;                   // *(list+0x10) = this
-    //   mpPrev->mpNext= this;                   // *(this->mpPrev + 0xC) = this
-    // i.e. insert THIS immediately before lpList in lpList's ring. The precondition is that THIS is
-    // currently a detached one-element ring (mpNext == mpPrev == this).
+    // ARTIST828D6230 inserts this detached node immediately before lpList.
     void BaseResourcePtr::AddToNewList(BaseResourcePtr* lpList)
     {
         CGS_ASSERT(mpNext == this && mpPrev == this,
             "ERROR: Must remove from current list before adding to new list\n");
-
-        mpNext = lpList;                 // +0xC
-        mpPrev = lpList->mpPrev;         // +0x10
-        lpList->mpPrev = this;           // *(list+0x10) = this
-        mpPrev->mpNext = this;           // *(this->mpPrev + 0xC) = this
+        mpNext = lpList;
+        mpPrev = lpList->mpPrev;
+        lpList->mpPrev = this;
+        mpPrev->mpNext = this;
     }
 
-    // ------------------------------------------------------------------------
-    // The shared "null resource pointer" sentinel -- X360 &dword_82FAD94C.
-    //
-    // ATTESTED USE (race-car streamer wave 2026-07-31): every `slot != NULLResourcePtr`
-    // in game source compiles to `BaseResourcePtr::IsEqual(&dword_82FAD94C, slot)` --
-    // RaceCarStreamer::AddVehicleData @0x822EBE18 does it three times, and the three
-    // RaceCarStreamer::Get*Resource asserts do it once each. IsEqual reads only the
-    // IDENTITY region (mpResourceMemory + the two mHandle pointers), so the only
-    // load-bearing property of this object is that all three are NULL.
-    //
-    // ⚠️ DIVERGENCE, deliberate and behaviourally inert: the console's is a static
-    // all-zero blob, so ITS mpThis/mpNext/mpPrev are 0 too. BaseResourcePtr has a
-    // user-provided default ctor that self-links the alias ring (mpNext = mpPrev =
-    // mpThis = this), and there is no legal way to produce a zero-byte const object of
-    // this type without bypassing that ctor. Nothing reads those three fields of the
-    // SENTINEL: IsEqual ignores them, and the assign-from-sentinel sites are spelled
-    // against CgsResource::NULLResourceHandle (the console's own dword_82FAD960 ==
-    // &NULLResourcePtr + 0x14, i.e. exactly the {mpThis, muThreadId} pair -- which for
-    // the console blob IS {0, 0}). Its dtor unlinks a one-element ring: a no-op.
+    // CRT initializer82C4AFD8 constructs this sentinel with the same zero-value,
+    // self-ring and source-handle stores as the native default constructor.
     const BaseResourcePtr NULLResourcePtr;
 }
