@@ -214,24 +214,18 @@ void ProgressionManager::OnTrophyUnlock(s32 liTrophyType)
     mProfile.GetTotalWinCount(luRankWins, luNonRankWins, luSpecialEventWins);
     const u32 luTotalMedals = luRankWins + luSpecialEventWins;
 
-    const ProgressionData* lpProgressionData = GetProgressionData();
-    if (lpProgressionData == 0)
-    {
-        // The console reaches the table through ResourcePtr<ProgressionData>::operator->,
-        // which asserts internally; there is no null test in this body. Guarding here rather
-        // than dereferencing null is a PC bring-up difference and nothing else -- everything
-        // below is a pure read of a resource that Prepare2's loader binds.
-        return;
-    }
-
-    const u32 luTrophyUnlockCount = lpProgressionData->GetTrophyUnlockCount();
+    // The console calls the const ResourcePtr<ProgressionData>::operator-> once to read the
+    // cached table bound. Its baked null-resource assert is part of the path; do not turn it
+    // into a silent early return through GetProgressionData().
+    const CgsResource::ResourcePtr<ProgressionData>& lrProgressionData = mpProgressionData;
+    const u32 luTrophyUnlockCount = lrProgressionData->GetTrophyUnlockCount();
     bool      lbConditionMet      = false;
 
     for (u32 luIndex = 0; luIndex < luTrophyUnlockCount; ++luIndex)
     {
-        // GetTrophyUnlock inlined: the bound assert is BrnProgressionData.h:302, the
-        // console's own baked location for it.
-        const TrophyUnlockData* lpCurrentTrophyUnlockData = lpProgressionData->GetTrophyUnlock(luIndex);
+        // ARTIST re-fetches the resource pointer on every iteration before the entry-bound
+        // assert (ProgressionData_ @0x82369020, then GetTrophyUnlock @0x823569F0).
+        const TrophyUnlockData* lpCurrentTrophyUnlockData = lrProgressionData->GetTrophyUnlock(luIndex);
         if (lpCurrentTrophyUnlockData == 0)
         {
             CgsDev::Assert::BeginAssert();
