@@ -1,8 +1,6 @@
 #ifndef BRN_TRAFFIC_TRACK_WITNESS_H
 #define BRN_TRAFFIC_TRACK_WITNESS_H
 
-// ============================================================================
-// [FLAG PC witness] BrnTrafficTrackWitness.h -- NOT IN THE X360 BINARY.
 //
 // The `traffic_weird` bug-test lane's oracle: "traffic disappears, teleports above the road
 // and does other weird things" is not an assert, so the case needs a number the bug moves.
@@ -22,11 +20,6 @@
 namespace BrnTraffic
 {
 // One env lookup, latched. Same shape as TrafficDiagEnabled next door.
-inline bool TrafficTrackEnabled()
-{
-    static const bool sbEnabled = (std::getenv("BRN_TRAFFIC_TRACK") != 0);
-    return sbEnabled;
-}
 
 inline CgsDev::StrStreamBase* TrafficTrackStream()
 {

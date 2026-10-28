@@ -109,13 +109,6 @@ namespace BrnDirector
             static_cast<const u8*>(lrCameraDefaults.GetLayoutPointer());
         if (lpData == 0)
         {
-            // [FLAG PC bring-up] The console has no null test here -- its cameradefaults
-            // instance always owns a data area (the ctor calls DefaultDataArea(0x38) when
-            // construction left it without one). Guarded anyway rather than faulting, because
-            // on this build the AttribSys vault a collection resolves from is still a
-            // bring-up variable; a null here means the resource did not load, and that is a
-            // resource bug to find, not a camera bug. DELETE with the bring-up path.
-            lpCamera->mEffects.mfShakeAmplitude = 0.0f;
             return;
         }
 

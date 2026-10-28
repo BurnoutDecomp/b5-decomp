@@ -1,5 +1,4 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
-#include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
@@ -20,14 +19,6 @@ namespace
     // through CgsHash::CalculateHash and stores the result at 83011114.
     const u32 MATERIAL_VERTEX_SHADER_CONSTANT_NAME_HASH = 0x77691959u;
 
-    bool AnimationDiagnosticsEnabled()
-    {
-        static const bool sbEnabled = [] {
-            const char* lpValue = std::getenv("BRN_MATERIAL_ANIM_DIAG");
-            return lpValue && lpValue[0] && lpValue[0] != '0';
-        }();
-        return sbEnabled;
-    }
 }
 
 // The original function is inlined in FixupAnimatedMaterial @827FBB10..30.
@@ -41,14 +32,6 @@ ICPUShader* MaterialAnimationFactory::Create(f32 lfPeriod, f32 lfStepsU, f32 lfS
 
 MaterialAnimationFactory& MaterialAnimationFactory::Instance()
 {
-    // FLAG PC-platform leaf: a native virtual object stored in a serialized
-    // Ptr32 slot must live below 4 GB, just like the material resource itself.
-    // Preserve the console's one factory and three process-lifetime shaders.
-    static MaterialAnimationFactory* spInstance = [] {
-        void* lpStorage = CgsMemory::LowMemory::Reserve(sizeof(MaterialAnimationFactory));
-        CGS_ASSERT(CgsMemory::LowMemory::IsLowAddress(lpStorage), "Animation factory must fit Ptr32");
-        return new (lpStorage) MaterialAnimationFactory;
-    }();
     return *spInstance;
 }
 
@@ -78,10 +61,6 @@ void ICPUShader::SetShaderConstant(const CgsGraphics::MaterialAssembly* lpMateri
         const ShaderConstantHandle& lrHandle = lpTechnique->mpaVertexShaderInternalConstantsHandles[luIndex];
         if (lpConstants->mpauNamesHash[lrHandle.muValueIndex] == luNameHash)
         {
-            // FLAG PC-platform leaf: transport the console's vertex constant
-            // window write through the existing D3D9/cache boundary.
-            renderengine::WorldShaderConstants_Set(false, lrHandle.muProgramIndex,
-                                                    &lrValue, lrHandle.muNumConstants);
             return;
         }
     }
@@ -98,20 +77,6 @@ void UVOffsetAnimationShader::Execute(f32 lfTime,
     SetShaderConstant(lpMaterial, lpTechnique, MATERIAL_VERTEX_SHADER_CONSTANT_NAME_HASH, lOffset);
 
     // Passive witness, once per material per half-second of render time.
-    if (AnimationDiagnosticsEnabled())
-    {
-        struct Sample { u32 muHash; s32 miTick; };
-        static Sample saSamples[128] = {};
-        const u32 luHash = lpMaterial->GetNameHash();
-        const s32 liTick = static_cast<s32>(std::floor(lfTime * 2.0f));
-        Sample& lrSample = saSamples[luHash % 128];
-        if (lrSample.muHash != luHash || lrSample.miTick != liTick)
-        {
-            lrSample = {luHash, liTick};
-            *CgsDev::Log::gpDebugPrint << "[material-anim] draw material=" << luHash
-                << " time=" << lfTime << " u=" << lOffset.x << " v=" << lOffset.y << "\n";
-        }
-    }
 }
 
 // ARTIST 827F0210: fmod is double, then frsp before the single-precision divide.

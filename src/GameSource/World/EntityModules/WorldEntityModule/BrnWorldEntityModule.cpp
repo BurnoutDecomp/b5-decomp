@@ -22,12 +22,6 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
-#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
-#include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
-#include "pc/gcm/renderengine/reflections/SceneSettingsDebug.h"
-#include "pc/math/VmxFloat.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
@@ -50,7 +44,7 @@
 
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"   // [DIAG] BRN_BACKDROP_DIAG plane batch
 
-#include <cmath>   // sqrtf (the [FLAG PC bring-up] loaded-world bounds helper)
+#include <cmath>
 #include <cstdio>  // snprintf (the [skid-bind] surfacelist resolve probe)
 #include <cstdlib> // getenv ([DIAG] BRN_BACKDROP_DIAG opt-in)
 
@@ -92,7 +86,6 @@ static const f32 KF_SURFACE_SANITY_EPSILON = 1.1920928955078125e-07f;
 // three basis vectors, then its magnitude (two rsqrt refinements and zero select).
 static f32 GetMaximumScale( const Matrix44Affine& lrTransform )
 {
-    using namespace CgsPC;
     const Vector3 lRight = lrTransform.Right();
     const Vector3 lUp = lrTransform.Up();
     const Vector3 lAt = lrTransform.At();
@@ -218,18 +211,6 @@ WorldEntityModule::Construct( void )
         lDebugInterface.RegisterVariable( &mbOverrideLodDistances, "World/LODs", "OverrideDistances" );
         lDebugInterface.RegisterVariable( &miEnvironmentMapLOD, "World/LODs", "Environment Map LOD" );
         lDebugInterface.SetRange( &miEnvironmentMapLOD, 0, 2 );
-
-        renderengine::RegisterEnvironmentMapLodSettingsPC(lDebugInterface,
-            renderengine::WorldEnvironmentMapLodSettingsPC(), "World/Reflections/World");
-        CgsPC::Reflections::RegisterSceneSettings(lDebugInterface);
-
-        // FLAG PC-platform leaf: extend reflection culling through the same debug
-        // registry as reflection detail, without changing the main-view distances.
-        lDebugInterface.RegisterVariable( &renderengine::EnvironmentMapDrawDistancePC(),
-            "World/LODs", "Environment Map Draw Distance" );
-        lDebugInterface.SetRange( &renderengine::EnvironmentMapDrawDistancePC(), 0.0f,
-            renderengine::KF_MAX_ENVIRONMENT_MAP_DRAW_DISTANCE_PC );
-        lDebugInterface.SetStep( &renderengine::EnvironmentMapDrawDistancePC(), 25.0f );
 
         lDebugInterface.RegisterVariable( &mauOverrideLodDistances[0], "World/LODs", "LOD0Distance" );
         lDebugInterface.RegisterVariable( &mauOverrideLodDistances[1], "World/LODs", "LOD1Distance" );
@@ -872,28 +853,6 @@ WorldEntityModule::OnWorldGraphicsLoadComplete( const BrnResource::GameDataIO::G
 
         const CgsGraphics::Model* lpModel = ( lpInstance != 0 ) ? lpInstance->mpModel : 0;
         CGS_ASSERT( lpModel, "lpModel" );
-
-        // [FLAG PC boot gate] The console asserts above and dereferences unguarded -- it can,
-        // because its pools never refuse an allocation. Our pool gates refuse resources when a
-        // heap runs out of nodes/space (CgsResourcePool.cpp / CgsResourceHeap.cpp [FLAG PC boot
-        // gate]); the bundle then completes DEGRADED with unresolved imports, and an instance
-        // can reach here with a null model (observed: a long DRIVING run fragmented pool 3
-        // until node exhaustion, and the next unit's load-complete crashed in DoesStateExist).
-        // Skip the instance instead of crashing -- that piece of world geometry stays invisible
-        // until the zone is re-streamed. DELETE when the relocating defragmenter lands and the
-        // pool gates are restored to plain console asserts.
-        if ( lpModel == 0 || !lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 ) )
-        {
-            static bool sbLoggedDegradedInstance = false;
-            if ( !sbLoggedDegradedInstance )
-            {
-                sbLoggedDegradedInstance = true;
-                ( *CgsDev::Log::gpDebugPrint )
-                    << "WorldEntityModule: world instance with no bound model (resource refused"
-                       " earlier) -- skipping scene registration [FLAG PC boot gate]\n";
-            }
-            continue;
-        }
 
         CGS_ASSERT( lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 ), "lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 )" );
 
@@ -1556,18 +1515,6 @@ namespace
     u32               guBackdropDiagNumVisibleEntities = 0;
 }
 
-bool
-WorldEntityModule::BackdropDiagEnabled()
-{
-    static s32 siEnabled = -1;
-    if ( siEnabled < 0 )
-    {
-        const char* lpcEnv = std::getenv( "BRN_BACKDROP_DIAG" );
-        siEnabled = ( lpcEnv != 0 && lpcEnv[ 0 ] != '0' ) ? 1 : 0;
-    }
-    return siEnabled != 0;
-}
-
 void
 WorldEntityModule::BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
                                        u32 luBackdropZoneNumber,
@@ -1578,7 +1525,6 @@ WorldEntityModule::BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
                                        f32 lfMaxDrawDistanceSq,
                                        u32 luEntityFlags )
 {
-    if ( !BackdropDiagEnabled() )
     {
         return;
     }
@@ -1650,7 +1596,6 @@ WorldEntityModule::BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
 void
 WorldEntityModule::BackdropDiagForget( s32 liListIndex, s32 liInstanceIndex )
 {
-    if ( !BackdropDiagEnabled() )
     {
         return;
     }
@@ -1670,7 +1615,6 @@ WorldEntityModule::BackdropDiagForget( s32 liListIndex, s32 liInstanceIndex )
 void
 WorldEntityModule::BackdropDiagBeginDispatch( u32 luNumVisibleEntities )
 {
-    if ( !BackdropDiagEnabled() )
     {
         return;
     }
@@ -1687,7 +1631,6 @@ void
 WorldEntityModule::BackdropDiagNoteVisible( s32 liListIndex, s32 liInstanceIndex,
                                             f32 lfScaledDistanceSq, bool lbDispatched )
 {
-    if ( !BackdropDiagEnabled() )
     {
         return;
     }
@@ -1714,10 +1657,6 @@ WorldEntityModule::BackdropDiagReport( const CgsGeometric::Frustum& lrFrustum,
                                        const Vector3& lCameraPosition,
                                        const Vector3& lCameraForward )
 {
-    if ( !BackdropDiagEnabled() || CgsDev::Log::gpDebugPrint == 0 )
-    {
-        return;
-    }
 
     s32 liLive = 0;
     s32 liIn   = 0;
@@ -2043,9 +1982,6 @@ WorldEntityModule::RenderInstance(
         lpModel->GetRenderable( static_cast<CgsGraphics::Model::State>( luLodState ) );
     if (!lbShadow)
     {
-        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_WORLD, lpModel, luLodState);
-        if (renderengine::GraphicsDiagnosticsEnabledPC())
-            renderengine::GetGraphicsDiagnosticsPC().muWorldBase = mbOverrideLodDistances ? mauOverrideLodDistances[0] : 0;
     }
     CGS_ASSERT( lpRenderable, "Missing renderable in a model" );
     CGS_ASSERT( lpDispatchFrame, "lpDispatchFrame" );
@@ -2132,9 +2068,6 @@ WorldEntityModule::RenderInstance(
                 const f32 lfRadius =
                     lpLodRenderable->mBoundingSphere.GetPlus() * GetMaximumScale( lpInstance->mTransform );
 
-                lDebugInterface.GetRender().DrawCircle(
-                    lCentre, CgsPC::VmxFloat::Normalize3Unconditional(lCameraPosition - lCentre, 2u),
-                    lfRadius, KAU_LOD_COLOURS[ luLodState ] );
             }
         }
     }
@@ -2282,7 +2215,6 @@ WorldEntityModule::GenerateDispatchLists(
 //  feed while the scene manager was an inert gate has no callers left.)
 // =============================================================================
 
-// [FLAG PC bring-up] centre + radius of every loaded world instance (see the header).
 bool
 WorldEntityModule::GetLoadedWorldBounds( Vector3* lpCentreOut, f32* lpfRadiusOut )
 {
@@ -2360,7 +2292,6 @@ WorldEntityModule::GetLoadedWorldBounds( Vector3* lpCentreOut, f32* lpfRadiusOut
     return true;
 }
 
-
 // =============================================================================
 // GenerateDispatchListsForEnvironmentMap  @ 0x822D7298  (cpp:1328)
 //
@@ -2384,9 +2315,6 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
 
     CgsGraphics::DispatchFrame* lpDispatchFrame = lpInputBuffer->GetDispatchFrame();
     const s32 liEnvironmentMapLOD = miEnvironmentMapLOD;
-    const auto& lrReflectionLod = renderengine::WorldEnvironmentMapLodSettingsPC();
-    if (renderengine::GraphicsDiagnosticsEnabledPC())
-        renderengine::GetGraphicsDiagnosticsPC().muEnvLod = liEnvironmentMapLOD;
 
     const u32 luNumEntities = lrVisibleEntities.GetLength();
 
@@ -2406,29 +2334,11 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
         const f32 lfDistanceSq =
             rw::math::vpu::MagnitudeSquared( lCameraPosition - lpInstance->mTransform.Pos() );
 
-        // FLAG PC-platform leaf: the optional backdrop shell has its own resident
-        // feed and distance policy. Keep detailed world meshes inside its LOD2 radius.
-        if (CgsPC::Reflections::Backdrops().mbEnabled)
-        {
-            const f32 lfWorldRadius = renderengine::ExtendEnvironmentMapDrawDistancePC(75.0f);
-            if (lEntityId.GetPartIndex() >= lpList->muNumInstances || lfDistanceSq > lfWorldRadius * lfWorldRadius)
-                continue;
-        }
-
         CgsGraphics::Model* lpModel = lpInstance->mpModel;
         CGS_ASSERT( lpModel, "lpModel" );
 
-        if (renderengine::GraphicsDiagnosticsEnabledPC())
-            ++renderengine::GetGraphicsDiagnosticsPC().muEnvConsidered;
-        // FLAG PC-platform leaf: distance selection is opt-in; default fixed
-        // mode keeps the original state selection and authored cutoff exactly.
-        const s32 liLod = lrReflectionLod.IsDistanceBased()
-            ? renderengine::SelectEnvironmentMapLodPC(lpModel, lfDistanceSq, lrReflectionLod,
-                mbOverrideLodDistances, mauOverrideLodDistances) : liEnvironmentMapLOD;
         if ( liLod < 0 || !lpModel->DoesStateExist( static_cast<CgsGraphics::Model::State>( liLod ) ) )
         {
-            if (renderengine::GraphicsDiagnosticsEnabledPC())
-                ++renderengine::GetGraphicsDiagnosticsPC().muEnvMissing;
             continue;
         }
 
@@ -2436,21 +2346,13 @@ WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
         f32 lfAuthoredDistance = lpModel->GetLodDistance( luCullLod );
         if (lrReflectionLod.IsDistanceBased() && mbOverrideLodDistances && luCullLod < KI_NUM_LODS)
             lfAuthoredDistance = static_cast<f32>(mauOverrideLodDistances[luCullLod]);
-        // FLAG PC-platform leaf: retain the authored cutoff unless an extended
-        // reflection distance is requested. Reflection LOD selection stays separate.
-        const f32 lfLodDistance = renderengine::ExtendEnvironmentMapDrawDistancePC( lfAuthoredDistance );
         if ( lfDistanceSq >= lfLodDistance * lfLodDistance )
         {
-            if (renderengine::GraphicsDiagnosticsEnabledPC())
-                ++renderengine::GetGraphicsDiagnosticsPC().muEnvCulled;
             continue;
         }
 
         const Renderable* lpRenderable =
             lpModel->GetRenderable( static_cast<CgsGraphics::Model::State>( liLod ) );
-        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_ENVMAP, lpModel, liLod);
-        if (renderengine::GraphicsDiagnosticsEnabledPC() && lfDistanceSq >= lfAuthoredDistance * lfAuthoredDistance)
-            ++renderengine::GetGraphicsDiagnosticsPC().muEnvExtended;
         CGS_ASSERT( lpRenderable, "Missing renderable in a model" );
         CGS_ASSERT( lpDispatchFrame, "lpDispatchFrame" );
 

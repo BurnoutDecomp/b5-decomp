@@ -1,5 +1,4 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"
-#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
@@ -148,7 +147,6 @@ bool TrafficStateManager::Prepare()
         // fall through
     case E_PREPARE_FINISHED:
         mePrepareState = E_PREPARE_FINISHED;
-        // [FLAG PC witness] BRN_TRAFFICSND_DIAG
         if ( TrafficSoundDiagTake( guPrepareWitnesses, 1 ) )
         {
             *CgsDev::Log::gpDebugPrint
@@ -271,14 +269,6 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
             break;
         }
 
-        // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-        if ( TrafficSoundDiagTake( guCullWitnesses, 16 ) )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[trafficsnd] cull for entity=" << static_cast<s32>( lrEntity.mu16EntityIndex )
-                << " d2=" << laSortedEntities[luEntry].mfDistance.x << "\n";
-        }
-
         const bool lbAttached = AttachEntity( lrEntity );
         if ( KI_SPEW_TRAFFIC_MANAGEMENT )
             BrnSound::Debug::DebugComponent::mLogCombined << "[Traffic] Successfully Culled. \n";
@@ -306,16 +296,6 @@ bool TrafficStateManager::AttachEntity( Slot::TrafficSoundEntity lEntity )
             lrSlot.mpAttachedState->Attach( &lrSlot.mEntity );
             lrSlot.mbActive = true;
 
-            // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-            if ( TrafficSoundDiagTake( guAttachWitnesses, 24 ) )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[trafficsnd] attach slot=" << static_cast<s32>( luSlot )
-                    << " entity=" << static_cast<s32>( lEntity.mu16EntityIndex )
-                    << " class=" << static_cast<s32>( lEntity.muVehicleClass )
-                    << " engine=" << static_cast<s32>( lEntity.mbIsEngineOn )
-                    << " state=" << lrSlot.mpAttachedState->GetInstanceID() << "\n";
-            }
             return true;
         }
     }
@@ -328,16 +308,6 @@ bool TrafficStateManager::DetachEntity( Slot& lrActiveSlot )
     if ( lrActiveSlot.mpAttachedState )
     {
         const bool lbDetached = lrActiveSlot.mpAttachedState->Detach();
-
-        // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-        if ( TrafficSoundDiagTake( guDetachWitnesses, 64 ) )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[trafficsnd] detach slot=" << static_cast<s32>( &lrActiveSlot - maSlots )
-                << " entity=" << static_cast<s32>( lrActiveSlot.mEntity.mu16EntityIndex )
-                << " state=" << lrActiveSlot.mpAttachedState->GetInstanceID()
-                << " ok=" << ( lbDetached ? 1 : 0 ) << "\n";
-        }
 
         if ( !lbDetached )
             return false;

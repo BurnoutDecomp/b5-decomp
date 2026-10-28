@@ -18,10 +18,7 @@
 // state queued had no consumer at all; the header now includes this class instead.
 
 #include "CgsInputModule.h"
-#include "pc/input/Gamepad.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"   // FLAG PC seat: device scan and output mapping
 #include "rw/rwcore_structs.h"
 
 namespace CgsInput
@@ -67,11 +64,6 @@ void InputModule::PreWorldUpdate(CgsModule::IOBufferStack* /*lpInputBufferStack*
 
     if (lbUpdatePads)
     {
-        // FLAG PC-platform leaf: the original InputPads::Update seat performs the device scan
-        // and output mapping. Keep the existing host implementations together here, under the
-        // output write lock, so the following game/controller queries see this sub-step's edges.
-        InputPadsPC::UpdatePadDevices(&mControllers);
-        InputPadsPC::UpdatePlayer0(lpOutputBuffer);
     }
 
     lpOutputBuffer->GetBindResultQueue()->Append(mOutputBindResultQueue);
@@ -138,9 +130,6 @@ void InputModule::ProcessRumbleRequests(const InputIO::PreWorldInputBuffer* lpPr
 
     const f32 lfTimeStep =
         lpPreWorldInputBuffer->GetTimerStatusInt()->GetGameTimerStatus()->GetCurrentTimeStep();
-    // FLAG PC-platform leaf: adaptive output follows the recovered feedback gate.
-    CgsInput::PCGamepad::SetFeedbackAllowed(lpPreWorldInputBuffer->GetRumbleEnabled() &&
-        !lpPreWorldInputBuffer->GetRumblePaused() && lbUpdatePads);
     mControllers.UpdateRumble(lfTimeStep,
                               lpPreWorldInputBuffer->GetRumblePaused() || !lbUpdatePads,
                               lpPreWorldInputBuffer->GetRumbleEnabled(),

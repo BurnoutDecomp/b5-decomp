@@ -57,17 +57,6 @@ namespace BrnAI
 // 0xB5E330D0_2EC654DA at +0x20 (insrdi at 0x8278A418) and index 0 at +0x28.
 static CgsNumeric::Random mRandom;
 
-// [FLAG PC witness] NOT IN THE X360 BINARY -- the "[route-req]" instrument's budgets.
-// A GLOBAL first-N witness is useless on this path and run6 proved it: the AI roster comes up in
-// STAGES (the player's AICar is live from the junkyard hand-off; the five rivals only from
-// ADD_CAR_TO_MODE about ten seconds later), so a global budget is spent entirely on the player
-// before a rival exists. The first-8 "[route] extrapolated route done" witness in
-// scratch/aiwave/run6/BrnGame.log burned all eight lines by log line 3,028 of 802,050 -- four
-// frames after the first rival appeared -- which is why that run could not say whether the
-// rivals were asking for roads at all. The budget here is therefore PER AI-CAR INDEX, with a
-// hard overall cap so a 35-car roster cannot flood the log.
-// DELETE-WHEN rivals are seen driving their own routes.
-static const s32 KI_ROUTE_REQ_WITNESS_PER_CAR = 4;
 static const s32 KI_ROUTE_REQ_WITNESS_TOTAL   = 96;
 // After the opening burst, one further line per car every N eligible frames (600 == about ten
 // seconds at 60 Hz), until the overall cap is reached.
@@ -208,28 +197,6 @@ u16 RouteRequestManager::ComputeSectionBehind(const AICar* lpAICar, const AISect
                                                    lCarPosition2D, lCarDirection2D);
 
     return lpBestSection->GetPortal(lu8ForwardPortalIndex)->GetLinkSectionIndex();
-}
-
-// [FLAG PC witness] NOT IN THE X360 BINARY. THE QUEUE-BUDGET CONTROL.
-// AddEventSafe (X360 @0x8277AFD8 for the 64-byte ExtrapolatedRouteRequest, @0x8277AF20 for the
-// 128-byte RaceRouteRequest) is the BOUNDS-GATED append: when miLength == miMaxLength it returns
-// false and DROPS the request with no assert and no log line. The transient "Route" input buffer
-// holds EventQueue<ExtrapolatedRouteRequest,12> and EventQueue<RaceRouteRequest,1> (Construct
-// @0x8278A028 / @0x82789FB8), so a six-car Road Rage fits the extrapolated queue with room to
-// spare -- but ONE race-route request per frame is the whole race budget, and a silent drop
-// there looks exactly like "the car never asked". The console ignores the return value; these
-// witnesses only observe it. DELETE-WHEN rivals are seen driving their own routes.
-static void WitnessDroppedRequest(const char* lpcQueue, s32 liRaceCarIndex)
-{
-    static s32 siDropWitnessCount = 0;
-    if (siDropWitnessCount < 8 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        ++siDropWitnessCount;
-        *CgsDev::Log::gpDebugPrint
-            << "[route-req] DROPPED: the " << lpcQueue << " request queue was FULL when car "
-            << liRaceCarIndex << " asked -- AddEventSafe returned false, the request is lost"
-            << " [FLAG PC witness]\n";
-    }
 }
 
 // X360 @0x82791490. The full race route to the car's destination section. Skips entirely when the
@@ -532,10 +499,6 @@ void RouteRequestManager::Update(
     if (lpPlayerCar == nullptr)
         return;
 
-    // [FLAG PC witness] per-AI-car-index budget -- see the banner on KI_ROUTE_REQ_WITNESS_PER_CAR.
-    // saiRouteReqTick counts the frames THIS car was eligible, so the periodic sample below keeps
-    // reporting long after a car's opening burst is spent (a rival that starts fine and then goes
-    // quiet is exactly the failure a burst-only witness cannot see).
     static s32 saiRouteReqWitness[35] = { 0 };
     static s32 saiRouteReqTick[35]    = { 0 };
     static s32 siRouteReqWitnessTotal = 0;
@@ -564,14 +527,6 @@ void RouteRequestManager::Update(
         const bool lbHasSection    = (luBestSection != AICar::KI_INVALID_SECTION_INDEX);
         const bool lbRequesting    = lbStateEligible && lbNeedsNewRoute && lbHasSection;
 
-        // ---- [FLAG PC witness] NOT IN THE X360 BINARY ------------------------------------
-        // One line per car, naming EVERY term of the console's three-part gate, so a run can
-        // never again leave "the rivals asked but were refused" and "the rivals never asked"
-        // indistinguishable. Printed only for cars the console would even look at
-        // (state IN_RANGE/OUT_OF_RANGE), which is at most the six cars in a Road Rage.
-        // DELETE-WHEN rivals are seen driving their own routes.
-        const bool lbWitnessBurst =
-            lbStateEligible && (saiRouteReqWitness[liAICarIndex] < KI_ROUTE_REQ_WITNESS_PER_CAR);
         const bool lbWitnessSample =
             lbStateEligible && ((saiRouteReqTick[liAICarIndex] % KI_ROUTE_REQ_WITNESS_PERIOD) == 0);
 
@@ -597,17 +552,6 @@ void RouteRequestManager::Update(
                 lpcVerdict = "skip: best AND default section are both 0x7FFF (no road under the car)";
             }
 
-            *CgsDev::Log::gpDebugPrint
-                << "[route-req] car " << liAICarIndex
-                << " raceCarIdx " << lpAICar->GetRaceCarIndex()
-                << " state " << static_cast<s32>(leState)
-                << " style " << static_cast<s32>(lpAICar->GetRouteFindingStyle())
-                << " needsNewRoute " << (lbNeedsNewRoute ? 1 : 0)
-                << " best " << static_cast<s32>(lpAICar->muBestSectionIndex)
-                << " default " << static_cast<s32>(lpAICar->muDefaultSectionIndex)
-                << " dest " << static_cast<s32>(lpAICar->GetDestinationSectionIndex())
-                << " hasRoute " << (lpAICar->HasValidRoute() ? 1 : 0)
-                << " -> " << lpcVerdict << " [FLAG PC witness]\n";
         }
 
         if (lbRequesting)

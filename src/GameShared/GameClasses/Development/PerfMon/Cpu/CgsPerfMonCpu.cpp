@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
-#include <Windows.h>   // QueryPerformanceCounter / QueryPerformanceFrequency (high-res timer)
+#include <xtl.h>   // QueryPerformanceCounter / QueryPerformanceFrequency (high-res timer)
 #include "rw/rwcore_structs.h"
 #include <cstring>
 #include <atomic>
@@ -28,14 +28,9 @@ namespace CgsDev
         namespace
         {
             PerfMonCpuInstance* gpMonitorsArray   = nullptr;
-            // FLAG PC-platform leaf: retain the original resource and its producer
-            // for the existing host teardown API. Registry records remain engine data.
-            rw::IResourceAllocator* gpRegistryAllocatorPC = nullptr;
-            rw::Resource        gRegistryResourcePC;
             s32                 giMaxMonitorCount  = 0;
             std::atomic<s32>    giMonitorCount{0};
             std::mutex         gMonitorRegistration;
-            s32*               gpCompletedCallsPC = nullptr;
             s32                 giNumIterations    = 1;
             s64                 gi64TimerFrequency = 0;
             PerfMonGameFrequency geGameFrequency  = E_PMF_60HZ;
@@ -86,9 +81,6 @@ namespace CgsDev
                                 static_cast<u32>(sizeof(PerfMonCpuInstance));
             lDescriptor.m_baseResourceDescriptors[0].m_size = luBytes;
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-            gRegistryResourcePC = lpAllocator->DoAllocate(lDescriptor, nullptr);
-            gpRegistryAllocatorPC = lpAllocator;
-            gpMonitorsArray = static_cast<PerfMonCpuInstance*>(gRegistryResourcePC.m_baseResources[0]);
             if (!gpMonitorsArray)
             {
                 CgsDev::Assert::BeginAssert();
@@ -104,27 +96,7 @@ namespace CgsDev
             mbIgnoreZeroCallsInAverage = false;
 
             std::memset(gpMonitorsArray, 0, luBytes);
-            // FLAG PC-platform leaf: last-completed call counts accompany the
-            // native worker snapshot; this sidecar is not the engine registry.
-            gpCompletedCallsPC = new s32[liMaxMonitorCount]();
             return true;
-        }
-
-        // FLAG PC-platform leaf: existing host-only teardown returns the registry
-        // resource to the allocator that produced it; ARTIST has no Destruct symbol.
-        void Destruct()
-        {
-            delete[] gpCompletedCallsPC;
-            gpCompletedCallsPC = nullptr;
-            if (gpMonitorsArray)
-            {
-                gpRegistryAllocatorPC->DoFree(gRegistryResourcePC);
-                gpMonitorsArray = nullptr;
-            }
-            gpRegistryAllocatorPC = nullptr;
-            gRegistryResourcePC = rw::Resource();
-            giMonitorCount    = 0;
-            giMaxMonitorCount = 0;
         }
 
         void SetGameFrequency(PerfMonGameFrequency leFrequency)
@@ -143,7 +115,6 @@ namespace CgsDev
                 lrInstance.mu64Value            = 0;
                 lrInstance.miFrameCounter       = 0;
                 lrInstance.miNumCalls           = 0;
-                gpCompletedCallsPC[liIndex]      = 0;
                 lrInstance.miMaxCalls           = 0;
                 lrInstance.mfCurrentValue       = 0.0f;
                 lrInstance.mfMinMaxValue        = 0.0f;
@@ -209,7 +180,6 @@ namespace CgsDev
                     lrInstance.miNumCalls /= liIterations;
                     lfCurrent /= static_cast<f32>(liIterations);
                 }
-                gpCompletedCallsPC[liIndex] = lrInstance.miNumCalls;
 
                 lrInstance.mfCurrentValue = lfCurrent;
                 lrInstance.mfAverageAccumulator += lfCurrent;
@@ -236,9 +206,6 @@ namespace CgsDev
 
         s32 AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbScaled)
         {
-            // FLAG PC-platform leaf: lazy monitor registration can occur on
-            // either frame thread. Publish only a completely initialized slot.
-            const std::lock_guard<std::mutex> lRegistrationLock(gMonitorRegistration);
             if (!gpMonitorsArray || giMonitorCount >= giMaxMonitorCount)
                 return -1;
 
@@ -327,10 +294,6 @@ namespace CgsDev
             lpData->mfAverageValue      = lrInstance.mfAverageValue;
             lpData->mfMinMaxValue       = lrInstance.mfMinMaxValue;
             lpData->mfCpuBudget         = lrInstance.mfCpuBudget;
-            // FLAG PC-platform leaf: the overlay reads the last completed
-            // frame, matching mfCurrentValue. Live sync counters may still run
-            // on the update thread while the dispatch thread draws this overlay.
-            lpData->miNumCalls          = gpCompletedCallsPC[liMonitorHandle];
             lpData->miMaxCalls          = lrInstance.miMaxCalls;
             lpData->mbTraced            = lrInstance.mbLibPerfTagged;
             lpData->mfCurrentTraceValue = 0.0f;

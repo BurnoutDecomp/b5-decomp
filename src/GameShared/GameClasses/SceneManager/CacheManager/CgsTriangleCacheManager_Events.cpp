@@ -129,14 +129,6 @@ namespace CgsSceneManager
         const s32 KI_DIAG_PROP_WINDOW_FIRST = 28;   // DWARF BrnTriangleCacheConstants.h:36
         const s32 KI_DIAG_PART_WINDOW_FIRST = 43;   // DWARF BrnTriangleCacheConstants.h:37
 
-        bool DiagEnabled()
-        {
-            // One getenv for the life of the process; a getenv per event would be a syscall on the
-            // per-frame slot-bookkeeping path.
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            return sbPropDiag && ( CgsDev::Log::gpDebugPrint != 0 );
-        }
-
         const char* DiagSlotOwner( s32 liCacheSlot )
         {
             if ( liCacheSlot >= KI_DIAG_PART_WINDOW_FIRST ) { return "part"; }
@@ -343,23 +335,6 @@ namespace CgsSceneManager
                 // Rate-limited to the first 8; the two tallies are what settle "never seated"
                 // (seated=0) versus "already freed" (seated>=1 && freed>=1 == a DOUBLE REMOVE
                 // upstream, which is what the four 2026-08-19 asserts were).
-                if (DiagEnabled())
-                {
-                    static u32 suDiagUnusedRemoves = 0;
-                    if (suDiagUnusedRemoves < 8u)
-                    {
-                        ++suDiagUnusedRemoves;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[Q6-tcache] UNUSED-SLOT REMOVE slot=" << liCacheSlot
-                            << " owner=" << DiagSlotOwner(liCacheSlot)
-                            << " seatedSoFar=" << DiagRead(sauDiagSeatCount, liCacheSlot)
-                            << " freedSoFar=" << DiagRead(sauDiagFreeCount, liCacheSlot)
-                            << " addedThisFrame=" << (lbAddedThisFrame ? 1 : 0)
-                            << " removedEarlierThisFrame=" << (lbRemovedAlready ? 1 : 0)
-                            << " usedNow=" << static_cast<s32>(mUsedCacheSlots.CountSetBits())
-                            << "\n";
-                    }
-                }
 
                 // X360 0x828B2B20 -- UNCONDITIONAL. The two booleans above are consumed only by
                 // the diag line; they exist because the console computes them, not because this
@@ -405,10 +380,6 @@ namespace CgsSceneManager
             mUsedCacheSlots.UnSetBit(static_cast<u32>(liCacheSlot));
 
             // [DIAG] NOT IN THE X360 BINARY -- one bounds-checked increment, no print.
-            if (DiagEnabled())
-            {
-                DiagCount(sauDiagFreeCount, liCacheSlot);
-            }
         }
     }
 
@@ -467,22 +438,6 @@ namespace CgsSceneManager
             // any later "Trying to remove unused triangle cache slot" is an upstream double remove,
             // not a lost add. If it never prints across a drive that breaks props, the add leg IS
             // the hole and the producers in PropManager_wQ2_06.cpp / _wQ2_04.cpp are where to look.
-            if (DiagEnabled())
-            {
-                DiagCount(sauDiagSeatCount, liCacheSlot);
-
-                static bool sbDiagFirstPropSlotReported = false;
-                if (!sbDiagFirstPropSlotReported && (liCacheSlot >= KI_DIAG_PROP_WINDOW_FIRST))
-                {
-                    sbDiagFirstPropSlotReported = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[Q6-tcache] first prop cache slot seated: slot=" << liCacheSlot
-                        << " owner=" << DiagSlotOwner(liCacheSlot)
-                        << " radius=" << lrEvent.mfCacheSphereRadius
-                        << " usedNow=" << static_cast<s32>(mUsedCacheSlots.CountSetBits())
-                        << "\n";
-                }
-            }
         }
     }
 

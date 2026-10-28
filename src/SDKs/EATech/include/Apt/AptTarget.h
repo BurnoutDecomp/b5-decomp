@@ -74,14 +74,6 @@ struct AptTarget
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptTarget, mnConfigF)           == 0x14, "x64 ctor: [rcx+14h]=100h default");
-        static_assert(offsetof(AptTarget, mpAnimationTarget)   == 0x18, "x64 GetAnimationTarget @0x1408381F0");
-        static_assert(offsetof(AptTarget, mpLoader)            == 0x20, "x64 GetLoader @0x140839220");
-        static_assert(offsetof(AptTarget, mpLinker)            == 0x28, "x64 GetLinker @0x140839200");
-        static_assert(offsetof(AptTarget, mpNext)              == 0x30, "x64 GetNext @0x1408394B0");
-        static_assert(offsetof(AptTarget, mpPrevious)          == 0x38, "x64 GetPrevious @0x140839800");
-        static_assert(offsetof(AptTarget, mppRenderRootAnchor) == 0x40, "x64 GetRenderManager @0x140839A20");
-        static_assert(sizeof(AptTarget) == 0x48, "x64: alloc 72 @sub_14082ED90, free 0x48 @sub_14082FBB0");
     }
 
     // GetAnimationTarget @0x82AD5770 -- the active animation director (+0x18).
@@ -94,11 +86,9 @@ struct AptTarget
     void SetPrevious(AptTarget* pPrev) { mpPrevious = pPrev; }    // x64 @0x140842710
     AptTarget* GetPrevious() const { return mpPrevious; }         // x64 @0x140839800
 
-
     // GetLoader @PS3 _ZN9AptTarget9GetLoaderEv @0xF15E60 -- the loader the target
     // holds at +0x1C (`return *(this + 7);`). Body in AptTarget.cpp.
     AptLoader* GetLoader();
-
 
     // ctor @0x82B00160 / Shutdown @0x82B02328 -- the AptTarget lifecycle (allocates /
     // tears down mpAnimationTarget + mpLoader + mpLinker + the render-root anchor).
@@ -134,7 +124,6 @@ extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
 AptTarget* AptCreateTargetInstance(const u32* pParams);
 AptTarget* AptChangeTargetInstance(AptTarget* pTarget);
 bool       AptDestroyTargetInstance(AptTarget* pTarget);
-
 
 // ---------------------------------------------------------------------------
 // The per-frame update drivers (bodies in AptUpdate.cpp).

@@ -143,15 +143,8 @@ void HudMessageDirector::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer
         // scratch/gateui_wave/verify_r3_fix3hud/VERDICT.md.)
         // First-N guarded (the latch is evaluated ONCE) so a busy HUD cannot flood the log.
         {
-            static const bool sbUiGateDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siPrinted    = 0;
             const s32         KI_DIAG_MAX  = 32;
-            if (sbUiGateDiag && CgsDev::Log::gpDebugPrint != 0 && siPrinted < KI_DIAG_MAX)
-            {
-                ++siPrinted;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] hud message sent n=" << liLength << "\n";
-            }
         }
 
         mHudMessageQueue.Clear();

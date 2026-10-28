@@ -1,5 +1,4 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"
-#include "pc/math/VmxFloat.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::CameraRwFrustum (SetFromRwFrustum source)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -83,17 +82,6 @@ namespace CgsGeometric
             return Vector3{ lfX, lfY, lfZ, lfW };
         }
 
-        inline Vector3 AddFrustumDebugVectors(const Vector3& lrA, const Vector3& lrB)
-        {
-            return MakeFrustumDebugVector(CgsPC::VmxFloat::Add(lrA.x, lrB.x), CgsPC::VmxFloat::Add(lrA.y, lrB.y),
-                                          CgsPC::VmxFloat::Add(lrA.z, lrB.z), CgsPC::VmxFloat::Add(lrA.w, lrB.w));
-        }
-
-        inline Vector3 ScaleFrustumDebugVector(const Vector3& lrVector, f32 lfScale)
-        {
-            return CgsPC::VmxFloat::Multiply(lrVector, lfScale);
-        }
-
         // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
         inline Vector3 AverageFrustumDebugFace(const Vector3& lrA, const Vector3& lrB,
                                                const Vector3& lrC, const Vector3& lrD)
@@ -101,13 +89,6 @@ namespace CgsGeometric
             return ScaleFrustumDebugVector(
                 AddFrustumDebugVectors(AddFrustumDebugVectors(AddFrustumDebugVectors(lrA, lrB), lrC), lrD),
                 0.25f);
-        }
-
-        inline Vector3 AddFrustumDebugPlane(const Vector3& lrPoint,
-                                            const rw::collision::Plane& lrPlane)
-        {
-            return MakeFrustumDebugVector(CgsPC::VmxFloat::Add(lrPoint.x, lrPlane.x), CgsPC::VmxFloat::Add(lrPoint.y, lrPlane.y),
-                                          CgsPC::VmxFloat::Add(lrPoint.z, lrPlane.z), CgsPC::VmxFloat::Add(lrPoint.w, lrPlane.w));
         }
 
         // The 8 stored lanes are a struct-of-arrays: maSwizzledPlanes[batch + comp]
@@ -631,8 +612,6 @@ namespace CgsGeometric
 
                         const rw::collision::Plane& lrPlane = laPlanes[luOtherPlane];
                         const Vector3 lPlaneNormal = { lrPlane.x, lrPlane.y, lrPlane.z, 0.0f };
-                        const f32 lfSignedDistance = CgsPC::VmxFloat::Subtract(
-                            CgsPC::VmxFloat::Dot3(lPlaneNormal, lIntersection), lrPlane.w);
 
                         if (-0.001f > lfSignedDistance)
                         {

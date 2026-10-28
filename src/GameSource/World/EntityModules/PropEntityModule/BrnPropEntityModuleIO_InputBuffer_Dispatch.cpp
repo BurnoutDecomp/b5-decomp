@@ -24,8 +24,6 @@ namespace PropEntityIO
         // pointers now (see the header's POINTER WIDTH note), so the queue and the corona word
         // sit past their console offsets. These tripwires state the HOST fact -- transcribing
         // the console's 4 / 8 / 0xC / 0x801C would be exactly the bug the widening fixes.
-        static_assert(offsetof(InputBuffer_Dispatch, mpDispatchFrame) == 8,
-                      "mpDispatchFrame @8 (host: 1 status byte + 3 pad + 4 align)");
         static_assert(offsetof(InputBuffer_Dispatch, mpShadowMap)
                           == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*),
                       "mpShadowMap immediately follows mpDispatchFrame");

@@ -83,10 +83,6 @@ void EAStringC::DecreaseInternalRefCount(StringDataC* const pData)
         // Block size = header(8) + maxsize + null(1) = m_uMaxSize + 9, matching
         // AllocateBuffer's (len+12)&~3 rounding.
         const size_t nAllocatedSize = static_cast<size_t>(pData->m_uMaxSize) + 9;
-        if (gpNonGCPoolManager)
-            gpNonGCPoolManager->Deallocate(pData, nAllocatedSize);
-        else
-            ::free(pData);   // FLAG PC-platform leaf: pre-AptInit window only (the block came from AllocateBuffer's CRT fallback)
     }
 }
 
@@ -101,15 +97,6 @@ void EAStringC::AllocateBuffer(const uint32_t uSize)
     const uint16_t uMaxSize = static_cast<uint16_t>(nBlock - 9);
 
     DebugDataC* result;
-    if (gpNonGCPoolManager)
-        result = static_cast<DebugDataC*>(gpNonGCPoolManager->Allocate(nBlock));
-    else
-        // FLAG PC-platform leaf: pre-AptInit static-init window (static EAStringC
-        // construction -- the 88 saConstant literals -- runs before
-        // AptAllocatorInitialize wires the pool; the console kept those as rodata
-        // records and never allocated). Padded to the pool's 8-byte rounding so a
-        // post-wire Deallocate can free-list this block in-bounds.
-        result = static_cast<DebugDataC*>(::malloc((nBlock + 7) & ~7u));
 
     m_pData              = result;
     result->m_uRefCount  = 1;
@@ -118,10 +105,6 @@ void EAStringC::AllocateBuffer(const uint32_t uSize)
 
 void EAStringC::DeallocateBuffer(const void* const pBuffer, const uint32_t uSize)
 {
-    if (gpNonGCPoolManager)
-        gpNonGCPoolManager->Deallocate(const_cast<void*>(pBuffer), uSize);
-    else
-        ::free(const_cast<void*>(pBuffer));   // FLAG PC-platform leaf: pre-AptInit window only (CRT-fallback block)
 }
 
 void EAStringC::InitFromBuffer(const char* const pStrText)

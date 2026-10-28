@@ -12,31 +12,6 @@
 namespace XCAM
 {
 
-namespace
-{
-    // Program one sampler's 2D texture-dimension bits into the X360 GPU
-    // fetch-constant shadow state carried inside the D3DDevice, and flag the
-    // sampler dirty. This is the inlined body of the XDK sampler-dimension setter:
-    // uSamplerReg is the fetch-constant register offset (0x480/0x498/0x4B0 for
-    // samplers 0/1/2) and uDirtyMask is that sampler's dirty bit
-    // (0x80000000/0x40000000/0x20000000). Raw device-register access is inherent
-    // platform data (opaque XDK D3DDevice), reproduced exactly as the asm stores.
-    // FLAG PC-platform leaf: X360 D3D9 GPU fetch-constant shadow-state poke.
-    void SetSamplerDimension2D(D3DDevice* pDevice, u32 uSamplerReg, u32 uDirtyMask)
-    {
-        u8* pDev = reinterpret_cast<u8*>(pDevice); // FLAG PC-platform leaf: XDK device state
-        u32& rFetch = *reinterpret_cast<u32*>(pDev + uSamplerReg);
-        u64& rDirty = *reinterpret_cast<u64*>(pDev + 0x18); // FLAG PC-platform leaf: sampler dirty mask
-
-        // rlwimi r10,1,11,19,21 : insert 1 into the [12:10] dimension field.
-        rFetch = (rFetch & 0xFFFFE3FFu) | 0x00000800u;
-        rDirty |= static_cast<u64>(uDirtyMask);
-        // rlwimi r10,1,14,16,18 : insert 1 into the [15:13] dimension field.
-        rFetch = (rFetch & 0xFFFF1FFFu) | 0x00004000u;
-        rDirty |= static_cast<u64>(uDirtyMask);
-    }
-}
-
 // @ 0x82985DB0
 int CI420VideoOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
 {

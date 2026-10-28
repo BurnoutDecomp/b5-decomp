@@ -1,7 +1,6 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
         BrnBaseFlow.cpp
-        BrnGuiEventFlowStates_embed_check.cpp
 
     PUBLIC
         BrnBaseFlow.h

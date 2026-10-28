@@ -3,7 +3,7 @@
 // .ida-exports/BURNOUT_X360_ARTIST.XEX/ (X360 asm overrides DWARF).
 // See BrnEAThreadX360.h for the committed-type / vendor-snapshot divergence FLAG.
 
-#include <Windows.h>
+#include <xtl.h>
 #include <process.h>  // _beginthreadex
 #include <string.h>   // strncpy
 #include <new>        // operator new / operator delete
@@ -304,12 +304,6 @@ namespace Thread
     // Rtl* critical-section calls on the embedded section. We model the X360
     // InitializeCriticalSectionAndSpinCount with the host equivalent (the vendor
     // EATHREAD_FUTEX_SPIN_COUNT is 256); functionally identical to the plain init.
-    static_assert(sizeof(Futex) == (sizeof(void*) == 8 ? 40u : 32u),
-                  "EA::Thread::Futex host storage width changed");
-    static_assert(sizeof(Futex) >= sizeof(CRITICAL_SECTION),
-                  "EA::Thread::Futex storage must hold the host CRITICAL_SECTION");
-    static_assert(alignof(Futex) >= alignof(CRITICAL_SECTION),
-                  "EA::Thread::Futex storage must meet host CRITICAL_SECTION alignment");
 
     Futex::Futex()
     {

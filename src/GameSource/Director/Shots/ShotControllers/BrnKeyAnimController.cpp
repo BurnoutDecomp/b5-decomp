@@ -98,42 +98,6 @@ static const f32 KF_LETTERBOX_EFFECT_AMOUNT = 0.15f;
 static const u32 KU_CAMERA_FLAG_CUT         = 6;    // camera +0x140 bit 0x40
 static const u32 KU_CAMERA_FLAG_SCENE_SPACE = 13;   // camera +0x140 bit 0x2000
 
-// [DIAG] NOT IN THE X360 BINARY. BRN_CRASHCAM_DIAG: a take authored in the ICE scene space. On the first frame of each
-// scene-space stretch (and whenever the take changes), one line with the take's guid, both spaces, the scene space's
-// origin in the world and the camera's world eye. It is the witness that the director's scene space
-// (MainDirector::Update 0x82274A28, which follows the published camera) is live rather than the zero matrix. Reads only.
-static void BrnDiag_IceSceneSpace(const ICE::ICETake& lrTake, const ICE::CameraSpaceHandler& lrSpaces,
-                                  ICE::eICESpace leEyeSpace, ICE::eICESpace leLookSpace,
-                                  const rw::math::vpu::Vector3& lrWorldEye)
-{
-    static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
-    static bool sbWasScene = false;
-    static s32  siLastGuid = -1;
-    static s32  siLines    = 0;
-    if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
-        return;
-    const bool lbScene = (leEyeSpace == ICE::eICE_SCENE_SPACE) || (leLookSpace == ICE::eICE_SCENE_SPACE);
-    const s32  liGuid  = (lrTake.GetData() != 0) ? lrTake.GetData()->miGuid : -1;
-    if (lbScene && (!sbWasScene || liGuid != siLastGuid) && siLines < 40)
-    {
-        ++siLines;
-        rw::math::vpu::Vector3 lOrigin;
-        lOrigin.x = 0.0f;
-        lOrigin.y = 0.0f;
-        lOrigin.z = 0.0f;
-        lOrigin.w = 0.0f;
-        const rw::math::vpu::Vector3 lSceneOrigin = lrSpaces.TransformToWorld(lOrigin, ICE::eICE_SCENE_SPACE);
-        *CgsDev::Log::gpDebugPrint
-            << "[ice-scene] take guid " << liGuid
-            << " '" << ((lrTake.GetData() != 0) ? lrTake.GetData()->macTakeName : "?") << "'"
-            << " eye space " << static_cast<s32>(leEyeSpace) << " look space " << static_cast<s32>(leLookSpace)
-            << ": scene origin (" << lSceneOrigin.x << ", " << lSceneOrigin.y << ", " << lSceneOrigin.z
-            << ") world eye (" << lrWorldEye.x << ", " << lrWorldEye.y << ", " << lrWorldEye.z << ")\n";
-    }
-    sbWasScene = lbScene;
-    siLastGuid = liGuid;
-}
-
 // ----------------------------------------------------------------------------
 // The ICE element indices this controller samples. Indices into the engine's
 // ICE::ICEElementDescriptions[48] table (SDKs/Packages/ICE/ICEData.cpp); the names are that
@@ -190,13 +154,6 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
     // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Which take guid the shot
     // reference decoded to, and what the ICE list handed back for it. Remove with the
     // bring-up path.
-    if (getenv("BRN_ICE_TRACE") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[ice] Prepare guid " << liAnimGuid
-            << " -> takeData " << (lpTakeData != 0 ? 1 : 0)
-            << " len " << (lpTakeData != 0 ? lpTakeData->GetLength() : 0.0f) << "\n";
-    }
 
     // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, capped at 8 lines.] Names the take
     // whose SetParameter below trips the ICEData.cpp:1851 key-bounds assert (12 of the 15
@@ -297,7 +254,6 @@ void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpC
         // (That aliasing cost this wave a whole build/boot cycle: the 40 s game-intro take
         // looked as if it never ran.) A short burst catches every live behaviour in one frame.
         static s32 siTraceFrame = 0;
-        sbIceTrace = (getenv("BRN_ICE_TRACE") != 0) && ((siTraceFrame % 300) < 4);
         if (sbIceTrace && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
@@ -362,19 +318,6 @@ void KeyAnimController::UpdateCameraFromICE(const ICE::ICETake& lrTake,
     // branches on mDataType and converts with fcfid. Fixed there; measured here:
     //     [ice-timescale] raw TIME_SCALE=100.000000 -> mfSimTimeScale=1.000000
     // and the director's publish in BrnMainDirector.cpp is now UNGATED and runs at 1.0.
-    if (getenv("BRN_ICE_TIMESCALE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        static f32 sfLastRaw = -1.0f;
-        const f32  lfRaw     = lrTake.GetValueFloat(E_ICE_TIME_SCALE);
-        if (lfRaw != sfLastRaw)
-        {
-            sfLastRaw = lfRaw;
-            *CgsDev::Log::gpDebugPrint
-                << "[ice-timescale] raw TIME_SCALE=" << lfRaw
-                << " -> mfSimTimeScale=" << (lfRaw * KF_PERCENT_TO_UNIT)
-                << " (element default is 100)\n";
-        }
-    }
     lrEffects.mfSimTimeScale = lrTake.GetValueFloat(E_ICE_TIME_SCALE) * KF_PERCENT_TO_UNIT;
 
     // The shake request triple.
@@ -436,7 +379,7 @@ void KeyAnimController::UpdateTransformationMatrix(const ICE::ICETake& lrTake,
     const rw::math::vpu::Vector3 lWorldLookPosition =
         lrSpaces.TransformToWorld(lLookPosition, leLookSpace);
 
-    BrnDiag_IceSceneSpace(lrTake, lrSpaces, leEyeSpace, leLookSpace, lWorldEyePosition);   // [DIAG] NOT X360
+   // [DIAG] NOT X360
 
     // A shot authored against the SCENE space is a world-anchored shot.
     lpCamera->GetState().SetFlag(KU_CAMERA_FLAG_SCENE_SPACE,
@@ -575,37 +518,10 @@ void KeyAnimController::UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* 
         // so a trace-off run does no per-frame work, and the take is null-tested (GetData())
         // before GetLength()'s mpTakeData deref -- a deref the surrounding console code never
         // makes.
-        static const bool sbDofTraceOn = getenv("BRN_DOF_TRACE") != 0;
         static s32 s_iDofReports   = 0;
         static s32 s_iLastOverride = -1;
         static f32 s_fLastBlur     = -1.0f;
 
-        if (sbDofTraceOn && s_iDofReports < 32 && lrTake.GetData() != 0
-            && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const s32 liOverride = lrTake.GetValueInt(E_ICE_RAWFOCUS_OVERRIDE);
-            const bool lbChanged =
-                (liOverride != s_iLastOverride) || (lfBlurriness != s_fLastBlur);
-            s_iLastOverride = liOverride;
-            s_fLastBlur     = lfBlurriness;
-
-            if (lbChanged)
-            {
-            ++s_iDofReports;
-            *CgsDev::Log::gpDebugPrint
-                << "[dof-take] len " << lrTake.GetLength()
-                << " override "  << liOverride
-                << " intensity " << lrTake.GetValueFloat(E_ICE_BLUR_INTENSITY)
-                << " falloff "   << lrTake.GetValueFloat(E_ICE_BLUR_FALLOFF)
-                << " near "      << lrTake.GetValueFloat(E_ICE_NEAR_FOCUS)
-                << " far "       << lrTake.GetValueFloat(E_ICE_FAR_FOCUS)
-                << " -> band "   << lfFocusStartDistanceMeters
-                << " / "         << lfPerfectFocusStartDistanceMeters
-                << " / "         << lfPerfectFocusEndDistanceMeters
-                << " / "         << lfFocusEndDistanceMeters
-                << " blur "      << lfBlurriness << "\n";
-            }
-        }
     }
 
     lpCamera->GetDepthOfField().SetParams(lfFocusStartDistanceMeters,

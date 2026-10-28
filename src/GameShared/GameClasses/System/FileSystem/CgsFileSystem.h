@@ -20,7 +20,6 @@
 // Release 0x82903880, Destruct 0x828E8A88.
 //
 // STATUS: the async device engine (DeviceManager + OperationPool + per-device worker thread +
-// the Win32 DevicePhysicalPC leaf) is reconstructed and LIVE; the bundle loader reads through it.
 // EnsureDeviceManagerUp() does the idempotent bring-up — FileSystem::Prepare calls it, and the
 // bundle loader calls it lazily so EVERY load (incl. the early movie/debug-font bootstrapping,
 // which runs before Prepare) goes through the engine (no CRT fallback). The rw::core::filesys
@@ -82,9 +81,6 @@ namespace CgsFileSystem
 
         // @0x828D6650. True when the stream is OPEN (collapsing outstanding ops to PENDING first).
         bool IsReadStreamOpen(ReadStream lStream);
-        // FLAG PC-platform leaf: distinguish a failed asynchronous open from
-        // an unfinished open, so the native resource shuttle can retire it.
-        bool HasReadStreamFailedPC(ReadStream lStream) const;
 
         // @0x828D6708. True when the read-stream slot `liIndex` is CLOSED.
         bool IsReadStreamClosed(s32 liIndex);
@@ -132,8 +128,5 @@ namespace CgsFileSystem
         DiskLayout*           mpDiskLayout;                                       // :258
         EA::Thread::Futex     mFileSystemFutex;                                   // :259
         DeviceMemFileSystem*  mpMemFileSystem;                                    // :260
-        bool                  mbReleasing; // FLAG PC-platform leaf: serialized close-once latch
-        // (CgsFileSystem.h:261 mDiskCache, :262 mDiskErrorOccured and the
-        //  :365 mDebugComponent are follow-on; the PS3 device block :275-281 is gated out.)
     };
 }

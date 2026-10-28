@@ -98,22 +98,6 @@ namespace BrnGui
         static const u32 KU_MAX_INIT_COMPONENTS_NUM  = 64;
         static const s32 KI_SHOW_TIME_BAR_TEXT_COUNT = 3;
 
-        // @ 0x82508110 -- the state's default constructor (BrnHudFlow::Prepare calls it
-        // through the placement new in NewPoolState). The X360 body is the compiler's own
-        // sub-object initialiser: it stores this class's vtable (off_82075394, whose slot 0
-        // is RaceMainHudState::OnEnter @0x82478EF8) at +0x000 and then the vtable of every
-        // embedded component at its own offset -- i.e. it is the inlined chain of the
-        // members' default constructors and nothing else. Its ONLY non-vtable store is
-        // `li r30, -1 ; stw r30, 0x1204(r3)`, which lands inside mBoostMessageManager's
-        // +0x1078..+0x1208 span and therefore belongs to THAT component's inlined ctor, not
-        // to a RaceMainHudState member: no POD of this class is written on console.
-        // On the host every embedded component runs its own constructor, reproducing the
-        // console effect. FLAG PC defensive: the PODs are additionally zeroed here because
-        // the state is carved out of CgsMemory::LinearMalloc, which is not guaranteed
-        // zeroed on the host; on console every one of them is rewritten before its first
-        // read (OnEnter @0x82478EF8 stores 0 to +0x038, +0x140 and the whole +0x150..+0x168
-        // flag block on entry). Defined inline so that the mounted BrnHudFlow.cpp can
-        // construct the state whether or not BrnRaceMainHudState.cpp is on the build.
         RaceMainHudState()
             : meInternalState(E_RACEINTERNALSTATE_SETUPSTATE)
             , muNumExpectedComponents(0)

@@ -27,15 +27,6 @@ extern "C" D3D::CDevice** VdGlobalDevice;
 namespace D3D
 {
 
-// FLAG PC-platform leaf: X360 CPU-virtual -> GPU-visible physical-mirror address
-// translation. The GPU reads the write-combined physical alias of a CPU buffer;
-// this is the fixed X360 formula the asm inlines (srwi/addi/rlwinm/subf) and is
-// reproduced verbatim. Meaningless off the X360 -- fixed hardware behaviour.
-static inline u32 ToGpuPhysical(u32 uVirtual)
-{
-    return (((uVirtual >> 20) + 512) & 0x1000) + (uVirtual & 0x1FFFFFFFu) - 0x40000000u;
-}
-
 // --- @ 0x8294C3D0 ----------------------------------------------------------
 // Flush the CPU cache over the fixed cached allocation's GPU-visible physical
 // range [start, start+size-1]. The asm reads the size first and does nothing
@@ -180,8 +171,6 @@ s32 CCommandBuffer::GrowableAllocate(s32 iCount, u32* puSize, s32 iAlignment)
 // only checked for ordering / contiguous 4-byte stride.
 void _CCommandBufferAssertLayout()
 {
-    static_assert(offsetof(CCommandBuffer, mpCachedAllocation) == 0x98,
-                  "fixed-allocation pointer @ +0x98 (word[38], first host pointer)");
     static_assert(offsetof(CCommandBuffer, muCachedSize) > offsetof(CCommandBuffer, mpCachedAllocation),
                   "cached size follows the cached-allocation pointer");
     static_assert(offsetof(CCommandBuffer, muReclaimed) < offsetof(CCommandBuffer, muWord47),

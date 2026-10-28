@@ -135,9 +135,6 @@ namespace CrashIO
     void InputBuffer_PreScene::SetGameActionQueue(const GameActionQueue* lpQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        // FLAG PC-platform leaf: rebuild the copied queue's address-dependent alignment
-        // offset for its host address. Event payloads and order remain unchanged.
-        mGameActionQueue.Construct();
         mGameActionQueue.Append(*lpQueue);
     }
 
@@ -164,7 +161,6 @@ namespace CrashIO
     // Crash parity FOLLOWUPS 19: CgsIOBufferStack::CreateIOBuffer<T> calls T::Construct() statically,
     // and with no InputBuffer_PreScene::Construct it bound to the base IOBuffer::Construct -- the
     // status bit only. The crash-side NetworkInputInterface queues and the driver-update queue were
-    // therefore never constructed (the game-action queue only ever got the PC-leaf Construct inside
     // SetGameActionQueue), which is what kept BridgeInputToCrashModule's network leg parked: its
     // operator= Clear()+Append()s into those queues.
     // ====================================================================================

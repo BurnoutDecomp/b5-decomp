@@ -19,19 +19,9 @@
 namespace
 {
     // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the damage-critical / crash-boundary chain.
-    inline bool HudMsgDiag()
-    {
-        static const bool sbDiag = (std::getenv("BRN_HUDMSG_DIAG") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
     // [harness lever, PC only] BRN_DEBUG_RR_DAMCRIT=1: every crash bar arms the road-rage
     // "one more crash to totalled" message, so a free-burn crash fires RRDamCrit through the
     // production path (348 cannot be posted outside a Road Rage / Marked Man).
-    inline bool DebugForceDamCrit()
-    {
-        static const bool sbForce = (std::getenv("BRN_DEBUG_RR_DAMCRIT") != 0);
-        return sbForce;
-    }
 }
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrCpy (the parked-name copy)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // GuiDirtyTrick* payloads + GuiHudMessage
@@ -576,21 +566,6 @@ void HudMessageAnalyzer::HandleTakedown(const GuiTakedownEvent* lpTakedown)
     const EActiveRaceCarIndex leLocalPlayer =
         static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex());
 
-    // [td-msg] PC witness (BRN_TD_DIAG): the GUI event reaching the analyzer, and which of the
-    // three arms it will take. [FLAG PC witness]
-    {
-        static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
-        if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint << "[td-msg] HandleTakedown type=" << static_cast<s32>(lpTakedown->meTakedownType)
-                                       << " aggressor=" << static_cast<s32>(lpTakedown->meAggressorIndex)
-                                       << " victim=" << static_cast<s32>(lpTakedown->meVictimIndex)
-                                       << " player=" << static_cast<s32>(leLocalPlayer)
-                                       << " crashEntryState=" << static_cast<s32>(meCrashEntryState)
-                                       << " [FLAG PC witness]\n";
-        }
-    }
-
     if (leLocalPlayer == lpTakedown->meAggressorIndex)
     {
         // The local player dealt the takedown. Abort an in-progress wreck message.
@@ -691,21 +666,6 @@ void HudMessageAnalyzer::ConstructTakedownMessage(GuiHudMessage* lpHudMessage,
     CGS_ASSERT(lpHudMessage != NULL, "lpHudMessage");
     CGS_ASSERT(lpTakedown != NULL, "lpTakedown");
 
-    // [td-msg] PC witness (BRN_TD_DIAG): which string id this takedown resolves to. [FLAG PC witness]
-    {
-        static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
-        if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const s32 liType = static_cast<s32>(lpTakedown->meTakedownType);
-            *CgsDev::Log::gpDebugPrint << "[td-msg] type=" << liType
-                                       << " chain=" << lpTakedown->miTakedownChainCount
-                                       << " multiple=" << lpTakedown->miMultipleTakedownCount
-                                       << " id="
-                                       << ((liType >= 0 && liType < 13) ? KAPC_TAKEDOWN_TYPES[liType] : "<out-of-range>")
-                                       << " [FLAG PC witness]\n";
-        }
-    }
-
     // Multi-takedowns get their own dedicated message elsewhere.
     if (lpTakedown->miMultipleTakedownCount <= 1)
     {
@@ -762,14 +722,6 @@ void HudMessageAnalyzer::HandleCrashedEvent(
 
     GuiHudMessage lMessage;
 
-    if (HudMsgDiag())
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[hudmsg] analyzer: HandleCrashedEvent state=" << static_cast<s32>(leCrashBarState)
-            << " pending: delayed=" << (mbDelayedForAfterCrashHudMessagePending ? 1 : 0)
-            << " timeExt=" << (mbTimeExtMsgPending ? 1 : 0)
-            << " damCrit=" << (mbRoadOneMoreCrashToTotalledPending ? 1 : 0) << "\n";
-    }
     switch (leCrashBarState)
     {
     case GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_LEAVE_CRASHED:   // 1
@@ -791,10 +743,6 @@ void HudMessageAnalyzer::HandleCrashedEvent(
         {
             mbRoadOneMoreCrashToTotalledPending = false;
             lMessage.Construct("RRDamCrit");
-            if (HudMsgDiag())
-            {
-                *CgsDev::Log::gpDebugPrint << "[hudmsg] analyzer: triggering RRDamCrit\n";
-            }
             TriggerMessage(&lMessage);
         }
         break;
@@ -1147,9 +1095,7 @@ void HudMessageAnalyzer::HandleStartPursuitEvent()
 // No bodies are emitted here so the partfile stays gate-clean; the three functions are
 // reported in funcs_blocked with this exact gap.
 
-namespace BrnGui
-{
-}   // namespace BrnGui
+   // namespace BrnGui
 
 // ============================================================================
 // FOLDED FROM BrnGuiHudMessageAnalyzer_wB_06.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
@@ -1870,11 +1816,6 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                     HandleFailedToStartBurningRoute(reinterpret_cast<const GuiEventFailedToStartEvent*>(lpEvent));
                     break;
                 case 322:
-                    if (HudMsgDiag() && mbRoadOneMoreCrashToTotalledPending)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[hudmsg] analyzer: gui 322 (stop mode) clears the RRDamCrit pending flag\n";
-                    }
                     mbTimeExtMsgPending = false;
                     mbRoadOneMoreCrashToTotalledPending = false;
                     mbRoadRageTargetReached = false;
@@ -1886,14 +1827,6 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                     HandleNewRoadRulesHighScore(reinterpret_cast<const GuiEventRoadRuleNewHighScore*>(lpEvent));
                     break;
                 case 348:   // road-rage "one more crash to totalled" flag (byte @ record+4)
-                    if (HudMsgDiag())
-                    {
-                        const GuiEventRoadRagePlayerDamage* lpDamage =
-                            reinterpret_cast<const GuiEventRoadRagePlayerDamage*>(lpEvent);
-                        *CgsDev::Log::gpDebugPrint
-                            << "[hudmsg] analyzer: gui 348 oneMore=" << static_cast<s32>(lpDamage->maData[4])
-                            << " totalled=" << static_cast<s32>(lpDamage->maData[5]) << "\n";
-                    }
                     if (reinterpret_cast<const GuiEventRoadRagePlayerDamage*>(lpEvent)->maData[4])
                         mbRoadOneMoreCrashToTotalledPending = true;
                     break;

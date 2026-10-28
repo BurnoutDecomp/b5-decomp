@@ -5,8 +5,6 @@
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::OrthoNormalize3x3
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // InChangeRigidBodyInertia (ReadPropertiesFromChangeInertiaEvent)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (CheckState's failure print)
-#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"  // [dv] BRN_FRAME_DUMP_ARM=dv film latch
-
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
 #include <cstdlib> // getenv / atof -- the opt-in [bank] and [dv] bring-up probes only
 #ifdef _MSC_VER
@@ -122,8 +120,6 @@ namespace BrnPhysics
             static s32 siBankProbe = -1;
             if ( siBankProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_BANK_PROBE" );
-                siBankProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             // ⚠️ COUNT ONLY THE NON-ZERO BANKS. The first cut counted every call and capped at 4000:
             // the wheels call this every frame with a zero impulse, so the cap was exhausted during
@@ -409,13 +405,7 @@ namespace BrnPhysics
             static f32  sfThreshold = -1.0f;
             if ( sfThreshold < 0.0f )
             {
-                const char* lpcEnv = getenv( "BRN_DV_PROBE" );
                 sfThreshold = 0.0f;
-                if ( lpcEnv != 0 && lpcEnv[0] != '0' )
-                {
-                    const f32 lfParsed = static_cast<f32>( atof( lpcEnv ) );
-                    sfThreshold = ( lfParsed > 0.0f ) ? lfParsed : 2.0f;   // "1"/"on" -> 2 m/s
-                }
             }
             return sfThreshold;
         }
@@ -473,13 +463,7 @@ namespace BrnPhysics
             static s32 siSteps = -1;
             if ( siSteps < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_WEDGE_PROBE" );
                 siSteps = 0;
-                if ( lpcEnv != 0 && lpcEnv[0] != '0' )
-                {
-                    const s32 liParsed = atoi( lpcEnv );
-                    siSteps = ( liParsed > 1 ) ? liParsed : 240;   // "1"/"on" -> 240 steps (4 s)
-                }
             }
             return siSteps;
         }
@@ -495,26 +479,6 @@ namespace BrnPhysics
             return std::sqrt( lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z );
         }
 
-        // ⭐ THE RVA, NOT THE RAW POINTER. The witness used to print only the ASLR'd return
-        // address, so naming a drain site meant sweeping 64 KB-aligned candidate bases against
-        // build/game/Burnout_PC.map by hand and keeping the base that put every hit inside a
-        // CalculateNewVelocity caller -- a plausibility argument dressed as a lookup, and one
-        // that is unrepeatable next run because the base moves. The module RVA is
-        // ASLR-independent and is the SAME word the engine's own symbolizer stores
-        // (CgsMapFile::Record::mAddress -- "the records store RVAs"), so a [dv] line can now be
-        // resolved against Burnout_PC.cgsmap, or against the linker .map by adding the preferred
-        // load address 0x140000000. Zero if the base could not be taken.
-        u64 DvRva( const void* lpAddress )
-        {
-#ifdef _MSC_VER
-            const u64 luBase = reinterpret_cast<u64>( &__ImageBase );
-            const u64 luAddr = reinterpret_cast<u64>( lpAddress );
-            return ( luAddr >= luBase ) ? ( luAddr - luBase ) : 0u;
-#else
-            (void)lpAddress;
-            return 0u;
-#endif
-        }
 
         DvEntry* DvPush()
         {
@@ -695,13 +659,6 @@ namespace BrnPhysics
             // Raise the film latch on the FIRST step that crosses the threshold, and record which
             // one it was. BRN_FRAME_DUMP_ARM=dv holds the back-buffer writer until this is non-zero,
             // so the strip starts at the drain instead of at boot. Sticky: never cleared.
-            if ( BrnDiag::gFilmLatch.muDvLatched == 0u )
-            {
-                BrnDiag::gFilmLatch.muDvLatchedStep      = guDvStep;
-                BrnDiag::gFilmLatch.muDvLatchedFrame     = luFrame;
-                BrnDiag::gFilmLatch.mfDvLatchedMagnitude = lfStepDv;
-                BrnDiag::gFilmLatch.muDvLatched          = 1u;
-            }
         }
 
         *CgsDev::Log::gpDebugPrint

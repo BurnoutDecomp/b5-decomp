@@ -8,7 +8,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (VideoDefinition::Copy)
-#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"                     // PC EA-XMA movie/stream audio [opt-in leaf]
 #include "GameSource/Sound/Global/BrnMusicEffect.h"                                // MusicEffect::IsCustomSoundtrackActive (Update @0x82507A98)
 
 #include <cstdlib>   // malloc / free
@@ -85,20 +84,13 @@ namespace BrnGui
         }
 
         // The PC movie/stream audio player (single movie at a time -> file-static, no header churn).
-        CgsSystem::MovieAudioPC g_movieAudio;
 
-        // [PC leaf, OPT-IN] BRN_MOVIE_AUDIO_PC=1 restores the pre-2026-09-15 stand-in that
         // decoded SOUND\STREAMS\<video>.SNS in the GUI and played it on its own XAudio2
         // instance. The console plays a movie's sound as the sound module's MENU stream
         // instead -- GuiModule::Update @0x82527A58 posts the VideoDefinition's sound-stream
         // name (GuiEventPlayMusicOnMenuStream) when this manager reaches REQUESTING_AUDIO,
         // MusicEffect queues it on slot 12 and answers GuiOut 504 -- and that path is now
         // live (see Update's PREPARING arm). With the stand-in on, both would play.
-        bool MovieAudioPcLeafEnabled()
-        {
-            static const bool sbEnabled = std::getenv("BRN_MOVIE_AUDIO_PC") != 0;
-            return sbEnabled;
-        }
         char                    g_acSoundStreamPath[260] = { 0 };
 
         // The DEFAULT VIDEO SOUND NAME that VideoDefinition::Prepare seeds +0x18 from.
@@ -204,8 +196,7 @@ namespace BrnGui
         mResourceAllocatorResource = rw::Resource();
         mAllocator.Construct();
         if (MovieAudioPcLeafEnabled())
-            g_movieAudio.Construct();       // [PC leaf, opt-in] EA-XMA movie/stream audio player
-        g_acSoundStreamPath[0] = 0;
+            g_movieAudio.Construct();               g_acSoundStreamPath[0] = 0;
         mPlayingMovie.Prepare();
         mQueuedMovie.Prepare();
         mReceiverQueue.Construct();
@@ -367,7 +358,6 @@ namespace BrnGui
         default:
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Unhandled state [" << static_cast<s32>(meState)
                     << "] in MovieManager::Prepare";
@@ -389,8 +379,7 @@ namespace BrnGui
             DestroyMemoryResourceAndDescriptor();
         }
         if (MovieAudioPcLeafEnabled())
-            g_movieAudio.Release();        // [PC leaf, opt-in] free the decoded movie-audio buffer
-        mPlayingMovie.Release();
+            g_movieAudio.Release();                mPlayingMovie.Release();
         mQueuedMovie.Release();
         mReceiverQueue.Clear(); // Retain the selected host Release queue drain with its real receiver.
         mpVideoDataResource.SetResource(nullptr);
@@ -502,7 +491,6 @@ namespace BrnGui
         default:
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid state " << static_cast<s32>(meState)
                     << " when requesting video stop";
@@ -599,18 +587,11 @@ namespace BrnGui
             // ARTIST 82507E48/7C: the main heap is sixteen MiB, aligned to 128.
             mDescriptor.m_baseResourceDescriptors[0].m_size = 0x1000000;
             mDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
-            // FLAG PC-platform leaf: native descriptor backing replaces the
-            // absent reclaimed car-pool region. D3D owns GPU image allocations;
-            // no graphics lane or completed car-pool reclaim is fabricated.
-            mResourceAllocatorResource.m_baseResources[0] =
-                XPhysicalAlloc(mDescriptor.m_baseResourceDescriptors[0].m_size,
-                    0xFFFFFFFFul, mDescriptor.m_baseResourceDescriptors[0].m_alignment, 4);
             if (mResourceAllocatorResource.m_baseResources[0] == nullptr)
                 return false;
         }
         // Reconstructing the real retained arena is the other native GPU
         // disposal boundary. Decoder release leaves these four owners intact.
-        mMoviePlayer.RetireArenaTexturesPC();
         return mAllocator.Prepare(mResourceAllocatorResource, mDescriptor);
     }
 
@@ -618,7 +599,6 @@ namespace BrnGui
     {
         CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != nullptr,
                    "mResourceAllocatorResource.GetMemoryResource()");
-        mMoviePlayer.RetireArenaTexturesPC();
         XPhysicalFree(mResourceAllocatorResource.m_baseResources[0]);
         mResourceAllocatorResource.m_baseResources[0] = nullptr;
     }
@@ -774,8 +754,7 @@ namespace BrnGui
         case E_MOVIEMANAGERSTATE_STOP_MOVIE:
             mMoviePlayer.Stop();
             if (MovieAudioPcLeafEnabled())
-                g_movieAudio.Stop();       // [PC leaf, opt-in] silence the movie sound stream
-            meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
+                g_movieAudio.Stop();                   meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
             break;
 
         case E_MOVIEMANAGERSTATE_PLAYING_MOVIE:
@@ -791,8 +770,7 @@ namespace BrnGui
             if (!mMoviePlayer.Release())
                 break;
             if (MovieAudioPcLeafEnabled())
-                g_movieAudio.Stop();       // [PC leaf, opt-in] the movie finished -> stop its sound stream
-            mAllocator.Release(); // ARTIST 82507BB4..BBC4, not arena destruction.
+                g_movieAudio.Stop();                   mAllocator.Release(); // ARTIST 82507BB4..BBC4, not arena destruction.
             if (mPlayingMovie.mbKeepMemoryWhenFinished) // original +0xD30 +0x25 == +0xD55.
             {
                 meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
@@ -864,7 +842,6 @@ namespace BrnGui
                 if (!lbPrepared)
                     break;
                 QueueNextMovie();
-                // [PC leaf] Keep the existing optional MovieAudioPC handoff outside the ARTIST
                 // QueueNextMovie body but at its selected PC caller. BuildMoviePath writes the
                 // exact "VIDEOS\\" prefix and copies the selected VideoFile::GetName verbatim,
                 // so this offset recovers that same selected name without a localized-audio
@@ -912,7 +889,6 @@ namespace BrnGui
                     meState = E_MOVIEMANAGERSTATE_REQUESTING_AUDIO;
                     if (MovieAudioPcLeafEnabled())
                     {
-                        // [PC leaf, opt-in] the old stand-in: own decoder, no sound-module hop.
                         if (g_movieAudio.IsLoaded())
                             g_movieAudio.Start();
                         meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
@@ -926,7 +902,6 @@ namespace BrnGui
             else
             {
                 // [diag] the (synchronous) player open failed -> skip rather than spin/retry every frame.
-                // [PC leaf] The selected WAITING_FOR_MEMORY caller loaded this movie's sound
                 // stream before MoviePlayer::Prepare; release it on the skip exactly as the finished
                 // path does, or the never-started stream pins the voice (g_finished stays false)
                 // and the menu-music stream can never reclaim the output afterwards -- the

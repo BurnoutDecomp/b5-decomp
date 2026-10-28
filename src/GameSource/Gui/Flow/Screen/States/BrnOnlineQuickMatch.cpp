@@ -28,7 +28,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [netui] witness lines (LAN / harness only)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventNetworkQuickMatch / GuiEventNetworkCustomMatchResults
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav, GuiFlow
@@ -278,7 +277,6 @@ namespace BrnGui
                     reinterpret_cast<const CgsModule::Event*>(&lHandBack), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lHandBack)));
 
-                BrnNetHarnessPC::WitnessTag("netui", "quick-match", "in game (GUI 50) -> ADVANCE");
                 SendStateEvent(KAC_ADVANCE_EVENT);
                 break;
             }
@@ -292,7 +290,6 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 // A null event still latches (0).
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                BrnNetHarnessPC::WitnessTag("netui", "quick-match", "disconnected (GUI 44) -> DISCONNECT");
                 SendStateEvent(KAC_DISCONNECT_EVENT);
                 break;
 
@@ -351,8 +348,6 @@ namespace BrnGui
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lQuickMatchWire), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lQuickMatchWire)));
-                BrnNetHarnessPC::WitnessTag("netui", "quick-match", "post 251 ranked=%d freeburn=%d",
-                                            lQuickMatch.mbRanked ? 1 : 0, lQuickMatch.mbFreeburn ? 1 : 0);
 
                 meSubState = E_SUBSTATE_SEARCHING;
                 ShowMessage(KAC_SEARCHING_STRING_ID);

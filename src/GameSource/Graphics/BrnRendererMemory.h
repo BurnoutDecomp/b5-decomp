@@ -2,8 +2,6 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"  // rw::Resource, rw::IResourceAllocator
-#include "pc/gcm/renderengine/DeviceParameters.h"  // renderengine::DeviceParameters (by-value Construct param)
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnRendererMemory::Construct       @ 0x823FCA38  (EXECUTED in the boot trace)
 //   BrnRendererMemory::CreateBackBuffer@ 0x823F6F78  (EXECUTED in the boot trace)
@@ -76,22 +74,6 @@ struct BrnRendererMemory
     // front-buffer resolution), realise it through the allocator, then patch its post-fx render
     // target to share the down-sample buffer's depth surface and use the default render-target state.
     void CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u32 luWidth, u32 luHeight);
-
-    // FLAG PC bring-up scope (2026-08-12): NOT an X360 function. Construct() above is the console's
-    // only entry point into the render-target pool, and it is UNLINKABLE on PC today - eight of the
-    // nine Create*Buffer helpers have no body in the tree, BrnResource::Allocators::
-    // GetGlobalGraphicsAllocator() is declaration-only, and the four gacIm2d*BlitProgram microcode
-    // blobs are external generated data with no definition. Rather than fabricate those nine bodies
-    // to satisfy a linker, this entry point does the slice the shadow wave actually needs: clear the
-    // pool and build ONLY the shadow-map target, where Construct's third call would. Delete it (and
-    // call Construct) the moment the rest of the pool exists.
-    //
-    // ONE store differs from CreateShadowmapBuffer's, and is flagged at the definition: the target is
-    // described as ONE section at the COMBINED 1280x1920 rather than three sections of 1280x640,
-    // because PC D3D9 has no EDRAM-surface + resolve pair -- the depth TEXTURE is the render surface,
-    // so the surface is the whole atlas and the per-cascade band is a viewport. Everything else is
-    // CreateShadowmapBuffer's, value for value.
-    void PCBringUpCreateShadowMapBufferOnly(rw::IResourceAllocator* lpAllocator);
 
     // 0x823F4910 -- return one of the shadow-map render targets by index. The X360 asserts the index
     // is in [0,4) and returns mapRenderTarget[liIndex + 1] (slot 0 is the anti-alias buffer; the
@@ -167,54 +149,6 @@ struct BrnRendererMemory
     // replaced by the source render target's OWN depth TextureState (GetDepthTextureState()),
     // which already holds that same texture -- see the definition's banner.
     void BlitDepth(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource);
-
-    // [PC bring-up] Build the QUARTER-RES PARTICLE CHAIN: pool slot 9 (the real
-    // CreateParticleBuffer @0x823F72B8) plus the four blit shader programs Construct @0x823FCA38
-    // compiles into mp{Depth,Composite}Blit{Vertex,Pixel}ProgramBuffer. NOT a console function --
-    // it exists for the two reasons the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names, and
-    // does nothing those five console steps do not do. Idempotent; returns true once the whole
-    // chain is usable. DELETE WITH THE BRING-UP, together with its three siblings.
-    bool PCBringUpCreateParticleCompositeChain(rw::IResourceAllocator* lpAllocator);
-
-    // Is the chain above live this frame? A pure query -- no allocation, no logging. The renderer
-    // asks it before ROUTING the Lion particle pass at all: with no particle buffer the console's
-    // !mbIsInJunkyard arm has nowhere to draw, and the plume would simply disappear.
-    bool PCBringUpParticleCompositeChainReady() const;
-    void PCResizeDisplay();
-
-    // The post-fx spine's two targets, created lazily on the first frame that has a D3D9 device.
-    // See the banner on EnsurePostFxSceneTargets in BrnRendererModule.cpp for why this is a bring-up
-    // entry point and not simply Construct(). DELETE with the bring-up.
-    //
-    // lbEnableMSAA is the console's OWN argument, threaded rather than re-derived: on the X360 it is
-    // BrnRendererModule::mbMultisampledBackbuffer (this+0xC400, set to 1 @0x8240A7C4) copied into
-    // BrnRendererMemory::Construct's `arg_97` (@0x8240A8BC/0x8240A8C8) and forwarded from there to
-    // CreateAntiAliasBuffer @0x823F6B40. Keeping it a parameter is what stops the pool's multisample
-    // format and BeginRenderAntiAliased/ResolveMSAA's tiled branch from being set from two different
-    // places -- a split that would produce a wrong picture with nothing to log.
-    void PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator, bool lbEnableMSAA);
-
-    // The ENVIRONMENT-MAP target, created lazily on the first frame that has a D3D9 device -- the
-    // same bring-up shape, and for the same two reasons, as the pair above (Construct @0x823FCA38 is
-    // gated out, and it would run before the device exists anyway). It is NOT a re-implementation:
-    // the body calls the real CreateEnvmapBuffer @0x823F6C88, which is already bodied in this file.
-    //
-    // It does NOT clear the pool (PCBringUpCreateShadowMapBufferOnly is the one entry point that
-    // does) and it refuses to run twice, so calling it after the shadow + post-fx slices is safe in
-    // either order. DELETE with the other two, when Construct() can be called.
-    void PCBringUpCreateEnvMapBuffer(rw::IResourceAllocator* lpAllocator);
-
-    // The SUN-CORONA target (a 1x1 colour-only surface, pool slot 10), created the same lazy way
-    // and for the same two reasons as its three siblings above: Construct @0x823FCA38 is gated out,
-    // and it would run before the D3D9 device exists anyway. It is NOT a re-implementation -- the
-    // body calls the real CreateSunCoronaBuffer @0x823F73C8, which is already bodied in this file.
-    //
-    // Same two ordering facts as PCBringUpCreateEnvMapBuffer: it must run AFTER
-    // PCBringUpCreateShadowMapBufferOnly (which nulls every pool slot -- asserted), and it must not
-    // run twice (CreateSunCoronaBuffer `new`s a target and publishes it into the slot, so a second
-    // call would leak the first AND hand the flare pass a different object than the one sampler 0
-    // was bound to). DELETE WITH THE BRING-UP, together with its three siblings.
-    void PCBringUpCreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocator);
 
 private:
     // The Create* render-target helpers Construct delegates to. Bodies live in their own (already

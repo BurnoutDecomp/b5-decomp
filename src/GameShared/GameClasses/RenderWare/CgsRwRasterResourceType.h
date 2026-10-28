@@ -29,9 +29,6 @@ namespace CgsResource
         virtual bool                   DeSerialise(void* lpResource) const;
         virtual void                   FixDown(void* lpResource, const rw::Resource& lrResource) const;
         virtual void                   FixUp(void* lpResource, const rw::Resource& lrResource) const;
-        // FLAG PC-platform leaf: native texture objects survive host-memory moves.
-        void ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
-                    ResourceDescriptor& lrSize, s32 liMemType) const override;
         virtual uint32_t               GetImportCount(const void* lpResource) const;
         virtual void                   GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const;
         virtual EDebugResourceCategory GetDebugResourceCategory() const;

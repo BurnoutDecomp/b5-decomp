@@ -183,9 +183,6 @@ void DualGinsuExhaustEffect::ProcessUpdate()
 {
     DualGinsuEffect::ProcessUpdate();
 
-    // [FLAG PC bring-up] the same base-class predicate as the Attach guard above -- with the
-    // AI submix parked there is no mReverseWhineVoice to drive, and driving one aimed at
-    // submix 0 is what fired the ConnectVoice assert cluster. See the banner in Attach.
     if (!mCarSubmix.GetVoiceObject())
         return;
 

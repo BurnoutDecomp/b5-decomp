@@ -19,7 +19,7 @@
 #ifndef NOMINMAX
 #  define NOMINMAX
 #endif
-#include <windows.h>
+#include <xtl.h>
 
 // rw::core::debug::detail::DebugCriticalSection - RenderWare's thin wrapper around a Win32
 // critical section, gated by an "initialised" flag so an un-Created section is a no-op.

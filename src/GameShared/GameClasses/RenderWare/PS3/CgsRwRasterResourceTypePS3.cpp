@@ -16,12 +16,8 @@
 // authoritative. (Mirrors CgsHardwareInitPS3.cpp, which likewise carries the X360 surface
 // on a PS3 path behind CGS_PLATFORM_X360.)
 
-#if defined(CGS_PLATFORM_X360)
-
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
 #include "rw/rwcore_structs.h"                // rw::Resource (m_baseResources[]), rw::ResourceDescriptor
-#include "pc/gcm/renderengine/texture.h"      // renderengine::Texture (runtime resource + descriptor path)
-
 namespace CgsResource
 {
     // ---- FixDown @ 0x828A88E0 --------------------------------------------------------------
@@ -122,5 +118,3 @@ namespace CgsResource
         return lDescriptor;
     }
 }
-
-#endif // CGS_PLATFORM_X360

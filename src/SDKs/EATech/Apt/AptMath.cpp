@@ -1,4 +1,4 @@
-﻿#include "SDKs/EATech/Apt/AptMath.h"
+#include "SDKs/EATech/Apt/AptMath.h"
 
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // gpAptSharedPtrPool (off_8324D808)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager::Allocate

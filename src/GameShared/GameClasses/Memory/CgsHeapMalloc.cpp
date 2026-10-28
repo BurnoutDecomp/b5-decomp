@@ -4,7 +4,6 @@
 // CgsMemory::HeapMalloc - the engine's general-purpose heap. A thin wrapper over an embedded
 // EA::Allocator::GeneralAllocator (vendor/PPMalloc): Construct initialises the allocator over the
 // caller's buffer (adopting it as the allocator's core, with system-alloc growth disabled), and
-// Malloc/Free/ReAlloc/CAlloc delegate to it. (The allocation engine is the user-approved PC-leaf
 // boundary-tag allocator over the adopted buffer - see EAGeneralAllocator - preserving the
 // fixed-memory-budget semantics.)
 //

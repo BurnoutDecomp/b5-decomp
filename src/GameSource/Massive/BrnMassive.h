@@ -118,10 +118,7 @@ namespace BrnMassive
             return reinterpret_cast<BrnMassiveSubscriber*>(maSubscriberPool) + liSlot;
         }
 
-        // The inline subscriber pool: raw storage that Construct zeroes and
-        // CreateSubscriber placement-constructs one slot of at a time. FLAG PC: held as
-        // bytes so no C++ constructor/destructor runs on unused slots.
-        alignas(BrnMassiveSubscriber) u8 maSubscriberPool[KI_MAX_SUBSCRIBERS * sizeof(BrnMassiveSubscriber)]; // +0x000
+ // +0x000
         BrnMassiveSubscriber*    mapSubscribers[KI_MAX_SUBSCRIBERS];               // +0x8E8
         s32                      mnNumActiveSubscribers;                           // +0x924
         MassiveLookupTable*      mpLookupTable;                                    // +0x928

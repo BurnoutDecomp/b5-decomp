@@ -29,11 +29,9 @@
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"             // ICE::CameraSpaceHandler
 #include "SDKs/XboxMath/XMVectorSinCos.h"                          // XboxMath::XMVectorSinCos
 #include "SDKs/XboxMath/XMVectorACos.h"                            // XboxMath::XMVectorACos
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // [FLAG PC witness] BRN_CAMBODY_DIAG
-
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>     // std::signbit
-#include <cstdlib>   // getenv ([FLAG PC witness] BRN_CAMBODY_DIAG)
-
+#include <cstdlib>
 namespace
 {
     using rw::math::vpu::Matrix44Affine;
@@ -91,14 +89,6 @@ namespace
         return lResult;
     }
 
-    // [FLAG PC witness] BRN_CAMBODY_DIAG -- NOT IN THE CONSOLE BUILD. One line per Construct /
-    // Prepare and the first frames of every Update run, capped per session. Prints only.
-    bool CamBodyDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_CAMBODY_DIAG") != 0);
-        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
-    }
-
     s32 siCamBodyDiagLinesLeft = 64;
 }
 
@@ -130,11 +120,6 @@ void BehaviourFailsafe::Construct()
 
     mfRotationOffset = 0.0f;
 
-    if (CamBodyDiagEnabled() && siCamBodyDiagLinesLeft > 0)
-    {
-        --siCamBodyDiagLinesLeft;
-        *CgsDev::Log::gpDebugPrint << "[cambody] Failsafe Construct [FLAG PC witness]\n";
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -163,13 +148,6 @@ bool BehaviourFailsafe::Prepare(const BehaviourSharedPrepareReleaseInfo& lShared
 
     SetPrepared();
 
-    if (CamBodyDiagEnabled() && siCamBodyDiagLinesLeft > 0)
-    {
-        --siCamBodyDiagLinesLeft;
-        *CgsDev::Log::gpDebugPrint << "[cambody] Failsafe Prepare take \"" << lpTakeData->GetName()
-                                   << "\" guid " << lShot.GetAnimGuid()
-                                   << " length " << lpTakeData->GetLength() << " [FLAG PC witness]\n";
-    }
     return true;
 }
 
@@ -240,23 +218,6 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
     lrCamera.SetTransform(Utils::ConsoleVpu::Mult(RotationZ(lfDutch), lUprightTransform));
     lrCamera.ValidateTransformWithDebugInfo();
 
-    if (CamBodyDiagEnabled() && siCamBodyDiagLinesLeft > 0)
-    {
-        static s32 siFrame = 0;
-        if (siFrame < 8 || siFrame % 60 == 0)
-        {
-            --siCamBodyDiagLinesLeft;
-            const Vector3& lrPublished = lrCamera.GetTransform().wAxis;
-            *CgsDev::Log::gpDebugPrint
-                << "[cambody] Failsafe Update frame " << siFrame
-                << " car " << lrCarToWorld.wAxis.x << " " << lrCarToWorld.wAxis.y << " " << lrCarToWorld.wAxis.z
-                << " take " << lTransform.wAxis.x << " " << lTransform.wAxis.y << " " << lTransform.wAxis.z
-                << " cam " << lrPublished.x << " " << lrPublished.y << " " << lrPublished.z
-                << " spin " << mfRotationOffset << " dutch " << lfDutch
-                << " fov " << lrCamera.GetFOV() << " [FLAG PC witness]\n";
-        }
-        ++siFrame;
-    }
     return true;
 }
 

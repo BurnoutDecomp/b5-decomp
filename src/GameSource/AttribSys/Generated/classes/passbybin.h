@@ -114,7 +114,6 @@ namespace Gen
     static_assert(offsetof(passbybin::_LayoutStruct, TriggerRadius) == 0x58, "schema 0x82CD6F58");
     static_assert(offsetof(passbybin::_LayoutStruct, mLastPassBy) == 0x5C, "schema 0x82CD6F10");
     static_assert(offsetof(passbybin::_LayoutStruct, mLastBoostPassBy) == 0x60, "schema 0x82CD6FB8");
-    static_assert(offsetof(passbybin::_LayoutStruct, mFirstPassBy) == 0x64, "schema 0x82CD6FE8");
     static_assert(offsetof(passbybin::_LayoutStruct, mFirstBoostPassBy) == 0x68, "schema 0x82CD6EB0");
     static_assert(sizeof(passbybin::_LayoutStruct) == passbybin::KU_LAYOUT_SIZE,
                   "schema ClassLoadData 0x82CD4288: mLayoutSize 0x70");

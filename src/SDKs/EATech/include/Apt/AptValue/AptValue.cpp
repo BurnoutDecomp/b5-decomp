@@ -38,25 +38,18 @@ bool AptValue::sbSuspendRefcountDeletions = false;
 namespace
 {
     volatile long gAptGCFlagLock = 0;
-    // FLAG PC-platform leaf: single-threaded GC-flag spin lock -- interrupt-masked lwarx/stwcx. modelled as an _InterlockedExchange TAS (threading primitive, not an engine method).
-    inline void AptGCFlagLock_Acquire() { while (_InterlockedExchange(&gAptGCFlagLock, 1) != 0) {} }
-    inline void AptGCFlagLock_Release() { _InterlockedExchange(&gAptGCFlagLock, 0); }
 }
 
 // setGCMark @0x82AD8020 -- set mbHasRegisterReferenceMark under the GC lock.
 void AptValue::setGCMark(bool bMark)
 {
-    AptGCFlagLock_Acquire();
     mValueBitfield.mbHasRegisterReferenceMark = bMark ? 1u : 0u;
-    AptGCFlagLock_Release();
 }
 
 // ClearReleaseAtEnd @0x82AD82A8 -- clear mbIsInDeferredVector under the GC lock.
 void AptValue::ClearReleaseAtEnd()
 {
-    AptGCFlagLock_Acquire();
     mValueBitfield.mbIsInDeferredVector = 0u;
-    AptGCFlagLock_Release();
 }
 
 // incGCRoot @0x82AD8120 -- bump the GC-root count one, under the Apt GC flag
@@ -67,10 +60,8 @@ void AptValue::ClearReleaseAtEnd()
 // manipulates the word inline, and setGCRoot takes this same non-recursive lock).
 void AptValue::incGCRoot()
 {
-    AptGCFlagLock_Acquire();
     if (mValueBitfield.mnGCRootCount < MAX_GCROOT)
         mValueBitfield.mnGCRootCount = mValueBitfield.mnGCRootCount + 1u;
-    AptGCFlagLock_Release();
 }
 
 // decGCRoot @0x82AD81A8 -- drop the GC-root count one (floored at 0), under the
@@ -80,10 +71,8 @@ void AptValue::incGCRoot()
 // Direct field write (see incGCRoot).
 void AptValue::decGCRoot()
 {
-    AptGCFlagLock_Acquire();
     if (mValueBitfield.mnGCRootCount != 0u)
         mValueBitfield.mnGCRootCount = mValueBitfield.mnGCRootCount - 1u;
-    AptGCFlagLock_Release();
 }
 
 // setRefCount @0x82AD7E90 -- store the reference count under the Apt GC flag
@@ -92,23 +81,19 @@ void AptValue::decGCRoot()
 // 0x80`) and clamps to 0xFFF; then insrwi the 12-bit count and release the lock.
 void AptValue::setRefCount(uint32_t n)
 {
-    AptGCFlagLock_Acquire();
     if (n > MAX_REFCOUNT)
     {
         mValueBitfield.mnMaxRefCountHit = 1u;   // X360 ori r10,r10,0x80
         n = MAX_REFCOUNT;                       // X360 li r4,0xFFF
     }
     mValueBitfield.mnReferenceCount = n;        // X360 insrwi r10,r4,12,6
-    AptGCFlagLock_Release();
 }
 
 // setVtblIndex @0x82AD7F20 -- store the 7-bit value-type tag under the Apt GC
 // flag lock (X360 insrwi r9,r4,7,25).
 void AptValue::setVtblIndex(AptVirtualFunctionTable_Indices n)
 {
-    AptGCFlagLock_Acquire();
     mValueBitfield.meValueType = n;
-    AptGCFlagLock_Release();
 }
 
 // setGCRoot @0x82AD80A8 -- store the 6-bit GC-root count under the Apt GC flag
@@ -116,18 +101,14 @@ void AptValue::setVtblIndex(AptVirtualFunctionTable_Indices n)
 // bits); the MAX_GCROOT guard lives in incGCRoot.
 void AptValue::setGCRoot(uint32_t n)
 {
-    AptGCFlagLock_Acquire();
     mValueBitfield.mnGCRootCount = n & MAX_GCROOT;   // the 6-bit field mask
-    AptGCFlagLock_Release();
 }
 
 // SetAllowDelayedDeletion @0x82AD7E08 -- store the delayed-deletion flag under
 // the Apt GC flag lock (X360 insrwi r8,r9,1,5).
 void AptValue::SetAllowDelayedDeletion(bool bAllowed)
 {
-    AptGCFlagLock_Acquire();
     mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
-    AptGCFlagLock_Release();
 }
 
 // SetReleaseAtEnd @0x82AD8230 -- mark this value as queued in the GC deferred-
@@ -137,9 +118,7 @@ void AptValue::SetAllowDelayedDeletion(bool bAllowed)
 // (The "second locked block" in the pseudocode is the lock release itself.)
 void AptValue::SetReleaseAtEnd()
 {
-    AptGCFlagLock_Acquire();
     mValueBitfield.mbIsInDeferredVector = 1u;
-    AptGCFlagLock_Release();
 }
 
 // DeleteThis @ 0x824ED4B8
@@ -189,7 +168,6 @@ void AptValue::ForceDelete()
 extern AptValueVector* gpValuesToRelease;   // off_8324E51C
 extern EA::Thread::ThreadId gAptSimThreadId;      // AptInit.cpp
 extern void*                gAptRenderThreadId;   // AptGlobals.cpp (EA::Thread::ThreadId)
-
 
 // The active script "current target" MovieClips the parent-chain walk stops at
 // (X360 dword_8324D818 = the highlighted/current target, dword_8324D830 = the

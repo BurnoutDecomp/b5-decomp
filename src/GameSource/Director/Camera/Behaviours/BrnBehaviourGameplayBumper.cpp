@@ -43,7 +43,6 @@ namespace BrnDirector
 namespace Camera
 {
 
-
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourGameplayBumper::Parameters::Set @0x821F94C8
 //
@@ -205,7 +204,6 @@ void BehaviourGameplayBumper_SetParametersAnchor(
 {
     lrBehaviour.SetParameters(lpParameters);
 }
-
 
 // ============================================================================================
 // BehaviourGameplayBumper::Update  @0x82226778   (686 insns, 0x82226778..0x8222722C)
@@ -386,19 +384,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The eye's inputs, every 60th call.
     {
-        static const bool sbEyeDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
         static u32 suEyeCalls = 0;
-        if (sbEyeDiag && (suEyeCalls++ % 60) == 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[cam-bumper] lookback " << (lbLookback ? 1 : 0)
-                << " zOff " << mpParameters->mfZOffset << " yOff " << mpParameters->mfYOffset
-                << " halfExt " << lrCar.mHalfExtent.x << "," << lrCar.mHalfExtent.y << "," << lrCar.mHalfExtent.z
-                << " aabbZ " << lrInfo.mPlayerInfo.mAABB.mMin.z << ".." << lrInfo.mPlayerInfo.mAABB.mMax.z
-                << " zReach " << lfZReach << " eyeZ " << lfEyeZ
-                << " fov " << mpParameters->mfFOV << " boostFov " << mpParameters->mfBoostFOV
-                << "\n";
-        }
     }
 
     // @0x82226EB0/0x82226EBC -- the sprung angles are carried forward, and the frame is turned

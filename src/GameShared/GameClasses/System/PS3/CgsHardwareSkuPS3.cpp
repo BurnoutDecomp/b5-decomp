@@ -4,7 +4,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // The selected Windows provider TU owns the ARTIST selector on PC.
-#if !defined(_WIN32)
 namespace CgsSystem
 {
 // ARTIST 0x828D7128: retain every SKU branch and its original language allowlist.
@@ -59,4 +58,3 @@ const CgsLanguage::ELanguage HardwareSku::FindLanguage()
     }
 }
 }
-#endif

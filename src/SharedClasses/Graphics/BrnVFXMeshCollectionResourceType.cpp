@@ -2,8 +2,6 @@
 #include "rw/rwcore_structs.h"                            // rw::Resource / BaseResourceDescriptors complete
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // the stale-asset line (IsUnconvertedPC)
-#include "pc/gcm/renderengine/VertexBuffer.h"             // renderengine::VertexBuffer::Xbox2CheckPhysicalMemoryFlags
-#include "pc/gcm/renderengine/IndexBuffer.h"              // renderengine::IndexBuffer::Xbox2CheckPhysicalMemoryFlags
 #include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -80,46 +78,9 @@ namespace BrnParticle
         return lDescriptor;
     }
 
-    // =====================================================================================
-    // FLAG PC platform leaf -- STALE-ASSET TOLERANCE, not game logic, NOT IN THE X360 BINARY.
-    //
-    // Players convert their own game data with the project's tools. A PARTICLES.BUNDLE converted
-    // before the debris-mesh port (tools/assets/bundles/particles_transcode.py, FX-CRASHVFX C3)
-    // carries its three collections BIG-ENDIAN, and the console's walk below would assert on the
-    // version and then follow a byte-reversed MeshHelper offset into nothing. Such a collection is
-    // recognised by its version word -- E_VERSION_CURRENT byte-reversed -- and REFUSED: FixUp leaves
-    // it untouched, ParticleModule::LoadFXBundle stage 6 does not bind it, and the debris meshes stay
-    // undrawn exactly as they were before the port. One always-on line says so, once per run, with
-    // the command that re-converts the bundle.
-    // =====================================================================================
-    bool BrnVFXMeshCollectionResourceType::IsUnconvertedPC(const void* lpResource)
-    {
-        return lpResource != 0
-            && reinterpret_cast<const u32*>(lpResource)[E_MESHCOLLECTION_VERSION] == KU_VFX_MESH_COLLECTION_VERSION_UNCONVERTED;
-    }
-
-    static void ReportUnconvertedPC()
-    {
-        static bool sbReported = false;
-        if (sbReported)
-            return;
-        sbReported = true;
-        CgsDev::Log::WriteToLog(
-            "[particles] PARTICLES.BUNDLE holds an UNCONVERTED (big-endian) debris mesh collection: it was "
-            "converted before the debris-mesh port, so the debris meshes stay unbound and undrawn. Re-convert "
-            "it with: py tools/assets/build_game_data.py \"<your X360 game folder>\" --only PARTICLES.BUNDLE\n");
-    }
-
     void BrnVFXMeshCollectionResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         u32* lpHeader = reinterpret_cast<u32*>(lpResource);
-
-        // FLAG PC platform leaf (see IsUnconvertedPC): checked before anything is dereferenced.
-        if (IsUnconvertedPC(lpHeader))
-        {
-            ReportUnconvertedPC();
-            return;
-        }
 
         // The rw::Resource arg supplies the rebase bases. The X360 rw::Resource lanes are 4-byte
         // words, and FixUp reads two of them: `lwz r29, 0(r30)` (0x826784A8) and `lwz r9, 8(r30)` /

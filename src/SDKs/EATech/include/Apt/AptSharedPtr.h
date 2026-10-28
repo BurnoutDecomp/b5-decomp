@@ -51,13 +51,6 @@ int AptSharedPtrIncRef(AptFile* pData);
 int AptSharedPtrDecRef(AptFile* pData);
 int AptSharedPtrDelete(AptFile* pData);
 
-// ---------------------------------------------------------------------------
-// Dispose @0x8284D158 brackets its work with two argument-passing `STUB` calls
-// (entry and exit). In the shipped X360 ARTIST build these are a debug/
-// instrumentation thunk (allocation-tracking counter pair) whose body is not in
-// the export set and which carries no engine behaviour; the inline no-op
-// preserves the store/branch ORDER around it without fabricating a body.
-// FLAG PC-platform leaf: X360 debug-instrumentation thunk (no PC counterpart; body absent from the export set).
 inline void AptSharedPtrDisposeDebugHook(const void* /*a1*/, int /*a2*/, const char* /*a3*/) {}
 
 // ---------------------------------------------------------------------------

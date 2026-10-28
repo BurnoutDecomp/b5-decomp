@@ -78,13 +78,5 @@ namespace BrnTraffic
 
         mStreamer.Destruct();
 
-        // [FLAG PC bring-up] the console destructs the module's file-scope
-        // CgsDev::DebugRenderStreamReader here (the same object Construct builds with
-        // DebugRenderStreamReader::Construct(allocator, 500, 0x8000) and UpdateVehicles brackets
-        // with Begin/End). That object has no home in this tree, so Construct never builds it
-        // and there is nothing to destruct; its Destruct folds to an empty body on the console.
-        // DELETE-WHEN the stream reader lands with Construct's leg.
-
-        CgsModule::ModuleSingleBuffered::Destruct();
     }
 }

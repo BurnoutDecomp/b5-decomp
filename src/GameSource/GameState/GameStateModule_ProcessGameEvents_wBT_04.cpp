@@ -74,16 +74,7 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
 
         // [DIAG] harness witness, not console code: BRN_SATNAV_DIAG, first 32, one line per GUI
         // route question (the satnav_route case counts it).
-        static const bool sbSatNavDiag      = (getenv("BRN_SATNAV_DIAG") != 0);
         static s32        siSatNavLinesLeft = 32;
-        if (sbSatNavDiag && siSatNavLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siSatNavLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav] event 84 -> SendRouteRequestAction owner GUI leg "
-                << static_cast<s32>(reinterpret_cast<const GameStateModuleIO::LandmarkRouteRequestEvent*>(lpEvent)->mu16EventID)
-                << "\n";
-        }
         break;
     }
 

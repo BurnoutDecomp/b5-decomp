@@ -47,11 +47,6 @@ namespace BrnAI
 // =================================================================================================
 namespace
 {
-    bool MarkedManDiagOn()
-    {
-        static const bool sbOn = (std::getenv("BRN_MM_DIAG") != 0);
-        return sbOn;
-    }
 
     // DecideToAttack exit tally.  Every call lands in exactly one bucket.
     s32 gsiAttackCalls        = 0;   // total calls
@@ -61,10 +56,7 @@ namespace
     s32 gsiAttackRollYes      = 0;   // die roll beat the aggression level
     s32 gsiAttackRollNo       = 0;   // die roll lost
 
-    f32 gsafDiagClock[35] = { 0.0f };
 }
-
-
 
     // ===== file-local tuning constants (see header note; flagged where unrecovered) =====
 // --- G1-dispatch ---
@@ -982,63 +974,6 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
         return;
 
     // ---- [DIAG] NOT IN THE X360 BINARY -- BRN_MM_DIAG, one line per AI car per second -------
-    if ( MarkedManDiagOn() && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        const s32 liIndex = mpCar->GetRaceCarIndex();
-        if ( liIndex >= 0 && liIndex < 35 )
-        {
-            gsafDiagClock[liIndex] += lfTimeStep;
-            if ( gsafDiagClock[liIndex] >= 1.0f )
-            {
-                gsafDiagClock[liIndex] = 0.0f;
-                const f32 lfDistance = (lpPlayerCar != 0)
-                    ? vpu::Magnitude(lpPlayerCar->GetPosition() - mpCar->GetPosition())
-                    : -1.0f;
-                *CgsDev::Log::gpDebugPrint
-                    << "[mm-ai] car " << liIndex
-                    << " style " << static_cast<s32>(mpCar->meRouteFindingStyle)
-                    << " beh " << static_cast<s32>(mpCar->meBehaviour)
-                    << " carState " << static_cast<s32>(mpCar->meCarState)
-                    << " inMode " << static_cast<s32>(mpCar->mbIsInGameMode ? 1 : 0)
-                    << " suit " << static_cast<s32>(mbIsSuitableForAggression ? 1 : 0)
-                    << " aggr " << mpCar->GetAggressiveness()->DiagAggressionLevel()
-                    << " prox " << mpCar->miProximityIndex
-                    << " aggState " << static_cast<s32>(meAggressionState)
-                    << " stateTime " << mfStateTime
-                    << " tgt " << static_cast<s32>(mpTargetCar != 0 ? 1 : 0)
-                    << " sm " << static_cast<s32>(meSpeedMatchType)
-                    << " dist " << lfDistance
-                    << " spd " << mpCar->GetSpeed()
-                    << " playerSpd " << ((lpPlayerCar != 0) ? lpPlayerCar->GetSpeed() : -1.0f)
-                    << " notSuit " << static_cast<s32>(NotSuitableForAggression() ? 1 : 0)
-                    << "\n";
-                *CgsDev::Log::gpDebugPrint
-                    << "[mm-ai] decide calls " << gsiAttackCalls
-                    << " proxRej " << gsiAttackProxReject
-                    << " mmYes " << gsiAttackMarkedManYes
-                    << " raceRej " << gsiAttackRaceReject
-                    << " rollYes " << gsiAttackRollYes
-                    << " rollNo " << gsiAttackRollNo
-                    << "\n";
-                // The live slam lineup point (last frame's GetPositionNextToTarget result), as
-                // lateral offsets in the TARGET's right-axis frame: pointLat is the signed
-                // alignment (+-4 / +-6 / +-7.5 / +-8), carLat is where our car sits. The console
-                // puts ATTACK_SLAM's -8 on the far side of the target (opposite signs) and the
-                // positive alignments on our side (same sign) -- crash-parity audit G00-D1.
-                if ( mbTargetPosValid && mpTargetCar != 0 )
-                {
-                    const Vector3 lvTargetPosition = mpTargetCar->GetPosition();
-                    const Vector3 lvTargetRight = mpTargetCar->GetRight();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[mm-ai] lineup car " << liIndex
-                        << " aggState " << static_cast<s32>(meAggressionState)
-                        << " pointLat " << vpu::Dot(mTargetPos - lvTargetPosition, lvTargetRight)
-                        << " carLat " << vpu::Dot(mpCar->GetPosition() - lvTargetPosition, lvTargetRight)
-                        << "\n";
-                }
-            }
-        }
-    }
     // ---- end [DIAG] -------------------------------------------------------------------------
 
     CheckForCarVeeringAwayFromPlayer(lfTimeStep);
@@ -1331,13 +1266,6 @@ void BrnAI::AIAggression::UpdateAggressionStateComeSlowFromBehind()
         mfStateTime       = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OVERTAKE_FAST;   // 10
 
-        // [FLAG PC bring-up] the console follows this transition with a dev log line,
-        // 0x8278B5E0..0x8278B604: ld r11, [0x82F31908] and test bit 0, and when it is set
-        // CgsDev::StrStreamBase::operator<< (@0x821F01A8) streams the literal at 0x820C7A20
-        // ("Slow overtake has fallen too far behind ->> drive past like the wind!") into the
-        // stream object at 0x82F31904. Neither global is named in the export set, so the log
-        // is not wired here; behaviour is unaffected either way.
-        // DELETE-WHEN the AI debug-stream globals (0x82F31904 / 0x82F31908) are identified.
     }
 
     if (lfLeadingSeparation > 12.0f || (mfStateTime != -1.0f && !(mfStateTime > 0.0f)))
@@ -1840,7 +1768,6 @@ void BrnAI::AIAggression::UpdateAggressionStateWait()
         meSpeedMatchType        = ESpeedMatch_Disabled;
     }
 }
-
 
 // ====================================================================================
 // BrnAI::AIAggression::Construct @0x8278B390  (called by AIDriver::Construct @0x82792C60)

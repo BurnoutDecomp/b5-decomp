@@ -19,13 +19,6 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"        // Attrib::Instance / Attrib::Collection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribute.h"             // Attrib::Attribute / Attrib::Node
 
-// EASTL allocator routing for the AttribSys containers. The console allocates every EditTable
-// node from the static EASTL package allocator and never consults the map's allocator copy (the
-// table copies an uninitialised default allocator), so the node hooks go straight to that
-// allocator, and frees go back to it the way the AttribSys list nodes do. FLAG PC-platform: the
-// vendor EASTL is newer than the console's and has an over-aligned node branch the console EASTL
-// lacks; it is routed to the same allocator and is unreachable here (see the static_assert after
-// EditTable).
 #define EASTLAlloc(allocator, n) \
     CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Malloc((n), 0);
 #define EASTLAllocAligned(allocator, n, alignment, offset) \
@@ -282,11 +275,6 @@ namespace Attrib
         return 0;
     }
 
-    // Overwrite luSize bytes at lpDest with the hex byte image lpcHex (two digits per byte,
-    // first byte first).
-    // FLAG PC-platform: the bytes land verbatim, so a live-link tool talking to the PC build
-    // must send the PC vault's host-format image (little-endian, host-width pointers -- the
-    // layout the vault transcoder writes), not the console's big-endian one.
     static void ModifyMemory(unsigned char* lpDest, unsigned int luSize, const char* lpcHex)
     {
         CgsCore::SPrintf(sacModifyMemoryMessage, sizeof(sacModifyMemoryMessage),
@@ -536,12 +524,6 @@ namespace Attrib
             const unsigned int luLocation = static_cast<unsigned int>(atoi(lacToken));
             CGS_ASSERT(luLocation < mExtraSize + mTypeSize,
                        "Invalid pointer location specified in live link edit message.\n");
-
-            // FLAG PC-platform: the console stores a 4-byte pointer; the PC build stores a
-            // host-width one, so the tool's fixup locations must be host-layout offsets.
-            unsigned char** lppSlot = (luLocation < mTypeSize)
-                ? reinterpret_cast<unsigned char**>(lpData + luLocation)
-                : reinterpret_cast<unsigned char**>(mExtraImage + (luLocation - mTypeSize));
 
             if (*lpcFixup == '@')
             {

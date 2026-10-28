@@ -5,7 +5,6 @@
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 
@@ -127,8 +126,6 @@ void SpeedStreamEffect::UpdateParams(f32 /*afTimeStep*/)
             BrnSound::Logic::Streaming::StreamRequest(this, 1, 0.1f));
 
         static s32 siDiagPlay = 0;
-        if (SndEnvDiagBudget(siDiagPlay))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] speed-stream play [FLAG PC witness]\n";
     }
     else
     {
@@ -140,8 +137,6 @@ void SpeedStreamEffect::UpdateParams(f32 /*afTimeStep*/)
             BrnSound::Logic::Streaming::StreamStopRequest(this, 0.0f));
 
         static s32 siDiagStop = 0;
-        if (SndEnvDiagBudget(siDiagStop))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] speed-stream stop [FLAG PC witness]\n";
     }
 }
 

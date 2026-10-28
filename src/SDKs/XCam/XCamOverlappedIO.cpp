@@ -29,7 +29,6 @@ u32 COverlappedIO::Setup(XOVERLAPPED* pOverlapped)
     if (pOverlapped->pCompletionRoutine)
     {
         // Completion routine present -> drive completion through a kernel APC.
-        mpApc = static_cast<KAPC*>(ExAllocatePoolWithTag(KU_XCAM_APC_SIZE, KU_XCAM_APC_POOL_TAG));
         if (!mpApc)
             return 8; // ERROR_NOT_ENOUGH_MEMORY
 

@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"  // the render + render-flag callback family
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"       // CgsGui::AptDataHeader (LoadAnimation's FindAptData result)
@@ -599,8 +598,6 @@ namespace CgsGui
     // walk can bounds-check every serialised offset slot (see the header note). Zero => the
     // walk treats every non-zero slot as a live offset (the pre-bounds behaviour). base ==
     // the load base == the AptData resource base (the header sits at the resource start).
-    uintptr_t gAptResourceSpanBase = 0;
-    uint32_t  gAptResourceSpanSize = 0;
 
     // =========================================================================
     // AptCallbackFile::LoadAnimation @0x82853E68 -- the host "load this .apt now" callback.
@@ -617,14 +614,6 @@ namespace CgsGui
     // AptData[1]/AptData[2] are the header's mpAptData / mpConstData; AptData (the header)
     // is threaded as a5 all the way to Fixup (LoadRenderingUnit reads AptData+12 = geometry).
     //
-    // FLAG PC-platform leaf (.apt blob offset access): the console's mpAptData/mpConstData are relocated 32-bit pointers; our
-    // converted header keeps them as raw file OFFSETS in 8-byte fields (the no-op FixUp -- see
-    // CgsAptDataHeader.cpp). The resource base == the header address (the header sits at the
-    // resource start), so they resolve as headerAddr + offset. The reloc base passed as pBase
-    // is mpConstData (== the "Apt Data:1:7:8" aptDataOffset the Fixup relocates against) -- the
-    // converted bundle collapses pBase and pConstFile to that one address (verified), unlike the
-    // console where pBase == mpAptData. The a2-by-reference form matches the asm's `*a2` reads.
-    // =========================================================================
     void AptCallbackFile::LoadAnimation(const char* lpacName, AptFilePtr* lpHandle)
     {
         AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
@@ -652,42 +641,8 @@ namespace CgsGui
         // "Apt constant file" chunk (movieOffset@+0x18 locates the root; itemStart@+0x28 is the
         // constant-record table _parseStream resolves Push/DefineDictionary entries through) --
         // exactly the console's AptData[1]/AptData[2] pair and the XB1 CompleteLoad's a3/a4 pair.
-        const uintptr_t luHeaderBase  = reinterpret_cast<uintptr_t>(lpAptData);
-        const uintptr_t luAptDataOff = static_cast<uintptr_t>(lpAptData->mpAptData);
-        const uintptr_t luConstOff = static_cast<uintptr_t>(lpAptData->mpConstData);
-        void* lpBase = reinterpret_cast<void*>(luHeaderBase + luAptDataOff);
-        void* lpConstFile = reinterpret_cast<void*>(luHeaderBase + luConstOff);
-
-        // Publish the resource span for the native-8 relocation walk's bounds checks
-        // (see the gAptResourceSpan* leaf note in CgsAptAux.h): base = the header (== the resource
-        // start), size = the converted 6-field header's size slot @+0x28. Restored after
-        // the completion so nested loads (the import graph) re-derive their own span.
-        const uintptr_t luPrevSpanBase = gAptResourceSpanBase;
-        const uint32_t  luPrevSpanSize = gAptResourceSpanSize;
-        gAptResourceSpanBase = luHeaderBase;
-        gAptResourceSpanSize = lpAptData->muSizeOfHeader;
-
-        // FLAG PC-platform leaf: the native file owns its loaded blob until
-        // ~AptFile finishes Unresolve/FreeAnimation. Couple that same lifetime to
-        // the PC bank's actual resident list and members before exposing the root.
-        const CgsResource::PCAptOwnership::RetainResult leRetained =
-            CgsResource::PCAptOwnership::Retain(lpAptData, lpHandle->pData);
-        if (leRetained != CgsResource::PCAptOwnership::RetainResult::Acquired)
-        {
-            if (leRetained != CgsResource::PCAptOwnership::RetainResult::AlreadyHeld)
-            {
-                CGS_ASSERT(false, "Apt data has no retainable resident bundle owner");
-                if (lpHandle->pData->mpData == nullptr)
-                    lpHandle->pData->mnState = 0; // failed producer cannot publish a ready movie
-            }
-            // A duplicate callback owns an incoming handle too, but must neither
-            // add another pin nor Resolve an already resolved in-place movie again.
-            AptSharedPtr<AptFile>::Dispose(lpHandle->pData);
-            lpHandle->pData = nullptr;
-            gAptResourceSpanBase = luPrevSpanBase;
-            gAptResourceSpanSize = luPrevSpanSize;
-            return;
-        }
+        void* lpBase = reinterpret_cast<void*>(lpAptData->mpAptData);
+        void* lpConstFile = reinterpret_cast<void*>(lpAptData->mpConstData);
 
         // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
         AptFilePtr laHandle;
@@ -699,9 +654,6 @@ namespace CgsGui
         AptCompleteAnimationAsyncLoad(&laHandle, lpBase,
                                       reinterpret_cast<AptConstFile*>(lpConstFile),
                                       /*pAptDataHeader (a5)*/ lpAptData);
-
-        gAptResourceSpanBase = luPrevSpanBase;
-        gAptResourceSpanSize = luPrevSpanSize;
 
         // XB1 sub_1400C90F0 +0x58: the native x64 state slot is +0x2C.
         lpAptData->meCurrentState = AptDataHeader::E_APTDATASTATE_ACTIVE;

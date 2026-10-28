@@ -36,8 +36,6 @@ public:
     // complete-class + protected-member offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptValueWithHash, mHash) == 0x10, "x64: Lookup/Set thunks 'add rcx,10h' @0x14083C0C0/0x140840C90");
-        static_assert(sizeof(AptValueWithHash) == 0x38, "x64: derived first members land at +0x38 (AptPrototype @0x140839C70, AptObject ctors)");
     }
 
 protected:

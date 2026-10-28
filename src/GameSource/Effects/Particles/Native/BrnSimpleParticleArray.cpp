@@ -139,7 +139,6 @@ namespace Native
         }
 
         const u32 luConsoleSize = luNumParticles * static_cast<u32>(sizeof(CB4Particle));
-        // [FLAG PC memory safety] the ring's own length -- see the banner.
         const u32 luRingSize    = muNumParticles * static_cast<u32>(sizeof(CB4Particle));
         mpaParticles = static_cast<CB4Particle*>(
             lpHeapMalloc->Malloc(static_cast<s32>(luRingSize), KI_PARTICLE_ALIGNMENT));

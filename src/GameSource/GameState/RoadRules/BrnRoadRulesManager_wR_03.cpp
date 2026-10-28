@@ -37,20 +37,6 @@ void RoadRulesManager::OnRoadLimit(CgsID lRoadLimitId, bool lbEntryDirection,
     CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
-    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG), first 32 calls.
-    {
-        static const bool sbDiag = (std::getenv("BRN_ROADRULES_DIAG") != 0);
-        static s32        siLeft = 32;
-        if (sbDiag && siLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[roadrules] limit " << lRoadLimitId << " entry " << static_cast<s32>(lbEntryDirection)
-                << " crashing " << static_cast<s32>(lbIsPlayerCarCrashing) << " lastLimit " << mLastLimitId
-                << " rule " << static_cast<s32>(meActiveRoadRule) << "\n";
-        }
-    }
-
     // The road count is re-read through the street-data resource on every test, as the console does.
     BrnStreetData::RoadIndex liRoadIndex;
     for (liRoadIndex = 0; liRoadIndex < mpStreetManager->GetStreetData()->GetRoadCount(); ++liRoadIndex)

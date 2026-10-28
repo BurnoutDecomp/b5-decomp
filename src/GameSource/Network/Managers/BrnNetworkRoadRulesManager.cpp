@@ -127,21 +127,6 @@ namespace BrnNetwork
             "ROAD_RULES_SKEY", macRoadRulesServerKey, KI_SERVER_KEY_LENGTH );
 
         bool lbHasResetDate = true;
-#if defined(_WIN32) && !defined(_XBOX)
-        // FLAG PC-platform leaf: the native LAN lobby has no downloaded client
-        // config (LobbyApiRefT::strConfig). An absent date passed to the original
-        // TagFieldGetEpoch(..., 0) becomes the current wall-clock time, which would
-        // request a fresh destructive reset on every login. Only a configured
-        // service date is a reset notification; explicit "0" retains its original
-        // meaning and every configured date follows the ARTIST path below.
-        char lacResetDate[64] = {};
-        mpServerInterface->GetServerInfoComponent()->GetStringFromClientConfig(
-            "ROAD_RULES_RESET_DATE", lacResetDate, sizeof(lacResetDate));
-        lbHasResetDate = lacResetDate[0] != '\0';
-        if (!lbHasResetDate && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint
-                << "[roadrules] login has no service reset date; keeping saved scores\n";
-#endif
 
         CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
         CGS_ASSERT( mpNetworkModule->GetNetworkEventQueue() != nullptr,

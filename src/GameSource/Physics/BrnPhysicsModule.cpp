@@ -596,24 +596,7 @@ namespace BrnPhysics
         // 0xFFFFFFFF the prop-contact validator was choking on. Same latch pattern as its
         // siblings -- getenv read ONCE into a function-local static.
         {
-            static const bool sbPropDiag = ( std::getenv( "BRN_PROP_DIAG" ) != 0 );
             static bool       sbFirst    = true;
-            if ( sbPropDiag && sbFirst && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbFirst = false;
-                // The handle is printed as its two 32-bit halves ON PURPOSE. RigidBodyId
-                // carries the EntityId in its HIGH word, so a single `(s32)` cast of the u64
-                // would print 0 whatever the world entity id turned out to be -- a diagnostic
-                // that cannot fail is not a diagnostic.
-                const u64 lu64WorldRigidBodyId = mWorldRigidBodyId;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q6-worldbody] world rigid body created: rbid="
-                    << static_cast<s32>( static_cast<u32>( lu64WorldRigidBodyId >> 32 ) )
-                    << ":" << static_cast<s32>( static_cast<u32>( lu64WorldRigidBodyId ) )
-                    << " entity=" << static_cast<s32>( static_cast<u32>( mWorldEntityId ) )
-                    << " owner=" << static_cast<s32>( mWorldEntityId.GetOwner() )
-                    << "\n";
-            }
         }
 
         return true;   // li r3, 1
@@ -673,7 +656,6 @@ namespace BrnPhysics
 // 23 / 34 / 99 into VehicleManager::OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru.
 // The pre-loop sweep also handles pending deformation-menu resets when no game action is queued.
 // =================================================================================================
-
 
 namespace BrnPhysics
 {
@@ -766,7 +748,6 @@ namespace BrnPhysics
     }
 }
 
-
 // =================================================================================================
 // PhysicsModule::UpdateNetworkCatchup  @0x825A1508  (37 insns)
 //
@@ -794,34 +775,6 @@ namespace BrnPhysics
         const Vehicle::VehicleDriverInputInterface* const lpDriverInterface =
             lpInputBuffer->GetVehicleDriverInterface();
         mVehicleManager.UpdateNetworkCatchup(lpDriverInterface);
-
-        // [FLAG PC witness] BRN_NETCATCHUP_DIAG=1 -- one line, the first time this stage runs: the
-        // driver queue the catch-up just walked and how many NETWORK records it held (offline: 0).
-        // Read under the same read lock; no console counterpart.
-        {
-            static const bool sbDiag = (std::getenv("BRN_NETCATCHUP_DIAG") != 0);
-            static bool sbReported = false;
-            if (sbDiag && !sbReported && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbReported = true;
-                const Vehicle::VehicleDriverInputInterface::UpdateDriverEventQueue* const lpQueue =
-                    lpDriverInterface->GetUpdateDriverQueue();
-                const CgsModule::Event* lpEvent = 0;
-                s32 liSize = 0;
-                s32 liRecords = 0;
-                s32 liNetworkRecords = 0;
-                for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); liId >= 0;
-                     liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
-                {
-                    ++liRecords;
-                    if (liId == Vehicle::E_DRIVER_TYPE_NETWORK)
-                        ++liNetworkRecords;
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[net-catchup] PhysicsModule::UpdateNetworkCatchup LIVE: driver queue "
-                    << liRecords << " record(s), " << liNetworkRecords << " NETWORK [FLAG PC witness]\n";
-            }
-        }
 
         lpInputBuffer->UnlockForRead();
         mVehicleManager.CheckState();

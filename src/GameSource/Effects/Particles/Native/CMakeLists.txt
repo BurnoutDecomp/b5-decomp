@@ -5,7 +5,6 @@ target_sources(${PROJECT_NAME}
         BrnDebrisRenderer.cpp
         BrnIm3dSkidsRenderer.cpp
         BrnIm3dSmokeRenderer.cpp
-        BrnIm3dSmokeRendererProgramsPC.cpp
         BrnIm3dTexPlusLighting.cpp
         BrnLionBlendIm3d.cpp
         BrnLionBlendRenderer.cpp
@@ -40,7 +39,6 @@ target_sources(${PROJECT_NAME}
         BrnLionBlendRenderer.h
         BrnLionBlendVertex.h
         BrnNativeParticleVertex.h
-        BrnSimpleFxDiag.h
         BrnSimpleParticleArray.h
         BrnSimpleParticleBatch.h
         BrnSimpleParticleRenderer.h
@@ -50,7 +48,5 @@ target_sources(${PROJECT_NAME}
         BrnTrailRender.h
         BrnTrailSystem.h
         FXBuckets.h
-        ParticleFramePC.h
         ShadedRotatingRenderMethod.h
-        TrailFramePC.h
 )

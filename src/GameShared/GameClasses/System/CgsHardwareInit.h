@@ -8,49 +8,25 @@ namespace CgsMemory { class HeapMallocCoreAllocator; }
 // toolchain (which defines WIN32) is building the X360 translation unit. The X360
 // .cpp defines it before including this header; the PC build never does, so the
 // WIN32 branch below is unchanged for PC.
-#if defined(WIN32) && !defined(CGS_PLATFORM_X360)
-#include <Windows.h>
-#endif
 
 namespace CgsSystem
 {
     // CgsHardwareInit.h:135; ARTIST loader Construct passes the shared
     // HardwareInit scheduler at830EA650 to DecompressionJobInterface.
     EA::Jobs::JobScheduler* JobManager();
-#if defined(WIN32) && !defined(CGS_PLATFORM_X360)
-    static const s32 knHardwarePathMaxLength = MAX_PATH + 7;
-#else
     static const s32 knHardwarePathMaxLength = 1024;
-#endif
 
     class HardwareInit
     {
     public:
-#if defined(WIN32) && !defined(CGS_PLATFORM_X360)
-        static void InitializeHardware(const char* lpCmdLine);
-
-        // FLAG PC-platform leaf: the host window's close request. The console has no window --
-        // the X360 raises mbHardwareRequestsShutdown from the system notification queue
-        // (dashboard / title-terminate) -- so on PC the window procedure's WM_CLOSE/WM_DESTROY
-        // is the equivalent event source. It sets the SAME flag, so every existing
-        // IsHardwareWantingToShutdown() consumer keeps working, and it gives the modal host
-        // loops (the assert screen) one thing to observe. It also arms the bounded-teardown
-        // watchdog -- see the implementation in CgsHardwareInitPC.cpp.
-        static void RequestShutdown();
-#elif defined(CGS_PLATFORM_X360)
         // X360: argc/argv plus the (always-null on xbox) working-/fopen-dir overrides.
         static void InitializeHardware(s32 lnArgc, char** lapcArgv,
                                        const char* lpcWorkingDirOverride,
                                        const char* lpcFOpenDirOverride);
-#else
-        static void InitializeHardware(s32 lnArgc, char* lapcArgv[]);
-#endif
 
-#if defined(CGS_PLATFORM_X360) || defined(WIN32)
         // ARTIST 0x828D6138: unconditional unsupported assertion on X360; preserve it for PC callers.
         // This declaration does not enable or start job workers.
         static void EnableJobThread();
-#endif
 
         static char* GetWorkingDirectory() { return macRootPath; }
         static char* GetFOPENDirectory() { return macFOPENPath; }

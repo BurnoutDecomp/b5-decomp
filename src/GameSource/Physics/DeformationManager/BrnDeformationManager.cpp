@@ -168,7 +168,6 @@ namespace Deformation
     void DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors();
     void DeformableObject_ConstructPostPhysicsPerformanceMonitors();
 
-
     // -----------------------------------------------------------------------------------
     // Destruct  @0x82603F78
     //
@@ -794,13 +793,6 @@ namespace Deformation
         CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
     }
 
-    // FLAG PC-platform leaf: test-only delivery after the original debug UI
-    // update (GameMain823CB598), before vehicle freezing/contact generation.
-    void DeformationManager::RunMaxPresetProbePCDebugUpdate(f32 lfTimeStep)
-    {
-        mDebugComponent.RunMaxPresetProbePC(lfTimeStep, false);
-    }
-
     void DeformationManager::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                     CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
                                     const PhysicsModuleIO::InputBuffer* lpInputBuffer,
@@ -897,8 +889,6 @@ namespace Deformation
 
         CgsDev::PerfMonCpu::StopMonitor(miUpdatePerfMon);
         CgsDev::PerfMonCpu::StopMonitor(miTotalDeformationPerfMon);
-        if (miPlayerModelIndex >= 0 && mModelsAdded.IsBitSet(static_cast<u32>(miPlayerModelIndex)))
-            mDebugComponent.RunMaxPresetProbePC(lvfTimeStep.x, true);
     }
 
     // =============================================================================================
@@ -1023,7 +1013,6 @@ namespace Deformation
 // no load and no store inside the walk, so whatever per-slot checking the debug build once did
 // left no instruction behind. Do not invent one. In effect this is a no-op sweep.
 // ============================================================================
-
 
 namespace BrnPhysics
 {

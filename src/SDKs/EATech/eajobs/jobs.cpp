@@ -1,7 +1,7 @@
 #include "SDKs/EATech/eajobs/jobs.h"
 
 #include <intrin.h> // _InterlockedExchange (MSVC atomic intrinsic)
-#include <windows.h>
+#include <xtl.h>
 
 // ============================================================================
 // SDKs/EATech/eajobs/jobs.cpp
@@ -50,13 +50,6 @@ namespace Jobs
     // @ 0x82BC9988 -- ticks -> seconds, caching 1.0/freq on first use.
     f32 TicksToSeconds(u64 uTicks)
     {
-        // FLAG PC-platform leaf: native jobs timestamp with QPC. Local-static
-        // initialization publishes its frequency safely to concurrent workers.
-        static const f64 ldSecondsPerTick = [] {
-            LARGE_INTEGER frequency;
-            QueryPerformanceFrequency(&frequency);
-            return 1.0 / static_cast<f64>(frequency.QuadPart);
-        }();
         return static_cast<f32>(static_cast<f64>(uTicks) * ldSecondsPerTick);
     }
 

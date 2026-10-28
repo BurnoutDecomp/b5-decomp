@@ -543,7 +543,6 @@ void AptActionInterpreter::_FunctionAptActionSetTarget(AptActionInterpreter* pIn
     }
 
     pContext->mpPendingReleaseValue = pTarget;
-    pContext->mpPendingReleasePC = nullptr;
     pTarget->AddRef();   // console (**pTarget)(pTarget) -> vtbl[0] AddRef
 }
 
@@ -565,7 +564,6 @@ void AptActionInterpreter::_FunctionAptActionSetTarget2(AptActionInterpreter* pI
         AptValue* const pTarget =
             pInterp->getObject(pContext->mpCIH, pContext->mpPendingReleaseValue, pPath);
         pContext->mpPendingReleaseValue = pTarget;
-        pContext->mpPendingReleasePC = nullptr;
         pTarget->AddRef();   // console (**pTarget)(pTarget) -> vtbl[0] AddRef
     }
     else

@@ -6,12 +6,10 @@ target_sources(${PROJECT_NAME}
         BrnBootLoading.cpp
         BrnBootPreload.cpp
         BrnBootProfile.cpp
-        BrnBootStates_embed_check.cpp
         BrnBootVideos.cpp
         BrnCrashedHudState.cpp
         BrnCrashedStuntHudState.cpp
         BrnFBurnMainHudState.cpp
-        BrnHudStates_embed_check.cpp
         BrnIdleHudState.cpp
         BrnPausedHudState.cpp
         BrnPostTitleScreenLoad.cpp

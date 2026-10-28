@@ -70,5 +70,4 @@ namespace BrnAI
     // the two trailing scalars shift with it. (X360: mpaBoundaryLines +0x0C,
     // mu8NumBoundaryLines +0x12, sizeof 20 -- confirmed by GetBoundaryLine @0x82764480 and
     // AISection::GetPortal @0x8230F5D0's *20 index maths.)
-    static_assert(sizeof(Portal) == 0x20, "Portal host sizeof (X360 20 -> widened 32)");
 }

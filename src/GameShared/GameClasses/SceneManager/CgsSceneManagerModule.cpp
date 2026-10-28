@@ -20,8 +20,6 @@
 // ===========================================================================
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"
-#include "pc/scene/FrustumResults.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsContactGenerationIO.h"
@@ -188,15 +186,6 @@ namespace
         ScopedPerfMon& operator=(const ScopedPerfMon&);
     };
 
-    // [DIAG] NOT IN THE X360 BINARY. Opt-in wave-Q5 bring-up probe (set BRN_PROP_DIAG),
-    // same latch pattern as the prop module's: getenv is read ONCE into a function-local
-    // static, never per frame and never per event. Off by default; when off this is one
-    // predictable branch per call site.
-    inline bool Q5DiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_PROP_DIAG") != 0);
-        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
-    }
 }
 
 // ===========================================================================
@@ -824,26 +813,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     // Fetched once, used by legs 4 / 7 / 13 / 17 only (see the per-leg note above).
     SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
 
-    // FLAG PC (not console): the seven legs that PRODUCE overlap-generation work take the
-    // input buffer by pointer and the console can never see it null. On the host
-    // IOBufferStack::CreateIOBuffer<InputBuffer> CAN fail (the buffer is ~2.4 MB), and the
-    // console's answer to a null -- assert once at the top and then dereference anyway --
-    // would be 1536 asserts and a fault. The single tripwire above is kept; the seven legs
-    // that need the buffer are additionally skipped when it is absent, which is the same
-    // shape as the partition guard and is announced once under BRN_PROP_DIAG.
-    const bool lbHaveGenerationInput = (lpOverlapGenerationInput != NULL);
-    if (!lbHaveGenerationInput && Q5DiagEnabled())
-    {
-        static bool sbLoggedNoGenInput = false;
-        if (!sbLoggedNoGenInput)
-        {
-            sbLoggedNoGenInput = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q5-drain] NO overlap-generation input buffer -- the AddForCollision /"
-                   " RemoveForCollision / transform / padding legs are skipped this frame\n";
-        }
-    }
-
     // ---- leg 1: remove volumes (X360 0x828D2084..0x828D20B0) --------------------------
     {
         const s32 liCount = lpScene->mRemoveVolumeQueue.GetLength();
@@ -906,11 +875,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
             const s32 liIndex = mEntityManager.GetEntityIndexByID(lrEvent.mEntityId);
             if (liIndex < 0)
             {
-                // FLAG PC (not console): the X360 fires its "Entity added and removed on the
-                // same frame" / "0x%X" diagnostic here and then FALLS THROUGH into the
-                // removal with index 0xFFFF (0x828D240C branches to the gate either way).
-                // Reproducing that would hand 0xFFFF to RemoveEntityFromGraph and
-                // RemoveEntity. Kept as the pre-existing skip.
                 continue;   // never registered (or already retired)
             }
             if (lrEvent.muOptions != 0)                                     // 0x828D2784
@@ -1041,35 +1005,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
 
         // [DIAG] NOT IN THE X360 BINARY -- the wave's own "did the middle come alive?"
         // line. One-shot on the first event ever drained, then a per-100 running count.
-        if (liCount > 0 && Q5DiagEnabled())
-        {
-            static s32  siTotalForCollision = 0;
-            static bool sbLoggedFirst       = false;
-            const SceneManagerIO::InEventAddForCollision& lrFirst =
-                lpScene->mAddForCollisionQueue.GetEvent(0);
-            const s32 liPrevTotal = siTotalForCollision;
-            siTotalForCollision += liCount;
-            if (!sbLoggedFirst)
-            {
-                sbLoggedFirst = true;
-                // The id is printed as its two dwords: the HIGH one carries the embedded
-                // EntityId (owner byte + index), the LOW one the per-entity volume index --
-                // truncating to 32 bits would throw the half that identifies the prop away.
-                const u64 lu64Id = lrFirst.mVolumeInstanceId.muId;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q5-drain] first AddForCollision id=" << static_cast<s32>(lu64Id >> 32)
-                    << ":" << static_cast<s32>(lu64Id & 0xFFFFFFFFull)
-                    << " owner=" << static_cast<s32>(lrFirst.mVolumeInstanceId.GetEntityIDOwner())
-                    << " vol=" << mEntityManager.GetVolumeInstanceIndexByID(lrFirst.mVolumeInstanceId)
-                    << " group=" << static_cast<s32>(lrFirst.mCullGroup)
-                    << " batch=" << liCount << "\n";
-            }
-            if ((liPrevTotal / 100) != (siTotalForCollision / 100))
-            {
-                *CgsDev::Log::gpDebugPrint << "[Q5-drain] AddForCollision total "
-                                           << siTotalForCollision << "\n";
-            }
-        }
     }
 
     // ---- leg 11: [lbPrepare] the triangle cache's slot CLAIMS + the static world -------
@@ -1642,11 +1577,6 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
     }
     else
     {
-        // [FLAG PC bring-up] the bring-up dispatch producer has no IO buffer stacks (the
-        // console's BrnGameModule::DoDispatch @0x823DC458 creates them; that spine is not
-        // live yet), so the coarse-result buffer -- a 53 KB frame-local on the console --
-        // is a file static here. Retire with the bring-up producer.
-        static SpatialPartitionIO::OutputBuffer sStandInResultBuffer;
         static bool sbStandInConstructed = false;
         if (!sbStandInConstructed)
         {
@@ -1683,7 +1613,6 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
         u32 luNumResults  = 0;
         const u32 luNumBatches = lpResults->GetNumBatches();
         auto* lpLegacyResults = lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite();
-        auto& lrNativeResults = CgsPC::Scene::BeginFrustumResults(lpLegacyResults);
         bool lbLegacySpace = true;
 
         for (u32 luBatch = 0; luBatch < luNumBatches; ++luBatch)
@@ -2086,18 +2015,6 @@ void SceneManagerModule::RemoveAllEntityVolumeInstances(
         {
             mEntityManager.SetVolumeForCollisionByIndex(liVolumeInstanceIndex, false);  // 0x828CDA00
 
-            // FLAG PC (not console): the console loads the buffer pointer and calls through
-            // it unconditionally. On the host CreateIOBuffer<InputBuffer> can fail (the
-            // buffer is ~2.4 MB) and the drain already announces that once -- see the
-            // lbHaveGenerationInput note in BridgeInputSceneUpdateInterfaceToSubModules.
-            // The guard is on the SWEEPER post ONLY: the unlink/free below must still run,
-            // or a missing IO buffer would turn every entity removal into a permanent
-            // volume-instance leak plus a duplicate-key Insert on the next AddVolumeInstance.
-            if (lpOverlapGenerationInput != NULL)
-            {
-                lpOverlapGenerationInput->RemoveBody(static_cast<u32>(liVolumeInstanceIndex),
-                                                     lVolumeInstanceId);      // 0x828CDA18/0x828CDA20
-            }
         }
 
         mEntityManager.RemoveVolumeInstanceByIndex(lVolumeInstanceId,
@@ -2147,11 +2064,6 @@ void SceneManagerModule::RemoveAllEntityVolumeInstances(
 void SceneManagerModule::RemoveAllOwnerVolumeInstances(
     u8 lu8Owner, OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    // FLAG PC (not console): the console loads module+0x280 and calls straight through it.
-    // Fetched once and tested per use, exactly like the drain's other partition legs -- an
-    // absent entity octree has nothing to do with the volume registry, so it must not
-    // suppress the volume half.
-    SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
 
     for (s32 liEntityIndex = mEntityManager.GetFirstEntityIndex();               // 0x828CDA94
          liEntityIndex != -1;                                                     // 0x828CDA9C
@@ -2248,7 +2160,6 @@ void SceneManagerModule::RemoveAllOwnerVolumeInstances(
 //                                                    inlined GetVolumeInstanceIdByIndex
 // Both match the member map in CgsSceneManagerModule.h:308/309.
 // ===========================================================================
-
 
 namespace CgsSceneManager
 {
@@ -2648,7 +2559,6 @@ void SceneManagerModule::ProcessClearEntityPaddingEvent(const SceneManagerIO::In
 //   flt_82001C98   = 1.0f / flt_820F259C = FLT_MAX  (fine-module constants, not used here)
 // =============================================================================
 
-
 namespace CgsSceneManager
 {
     // The pass monitors, registered by SceneManagerModule::Construct (CgsSceneManagerModule.cpp,
@@ -2785,17 +2695,6 @@ namespace CgsSceneManager
         // The literal zero ids the tri-collision pass stamps (`li r5, 0 ; li r6, 0`).
         inline VolumeInstanceId ZeroVolumeInstanceId() { VolumeInstanceId l; l.muId = 0; return l; }
 
-        // [DIAG] host-only, opt-in (BRN_SCENE_QUERY_DIAG=1): print both sides of every
-        // decision on the nearest-line path. Never on by default; nothing behavioural.
-        bool SceneQueryDiagEnabled()
-        {
-            static const bool sbEnabled = []() {
-                const char* lpcValue = getenv("BRN_SCENE_QUERY_DIAG");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
-            return sbEnabled;
-        }
-
         // [DIAG] host-only, opt-in (BRN_SCENE_QUERY_DIAG=1), capped at 64 lines: what each deepest-volume query
         // answered (ProcessVolumeTestDeepest @0x828D4460). NOT IN THE X360 BINARY; nothing behavioural.
         // world: the world test's result count (-1 = no world bit); cand: the coarse candidates (-1 = a world hit
@@ -2805,10 +2704,6 @@ namespace CgsSceneManager
                                    const SceneManagerIO::OutEventVolumeTestDeepestResult& lrPosted)
         {
             static s32 siLines = 0;
-            if (!SceneQueryDiagEnabled() || siLines >= 64 || CgsDev::Log::gpDebugPrint == 0)
-            {
-                return;
-            }
             ++siLines;
             *CgsDev::Log::gpDebugPrint
                 << "[scene-query] deepest q=" << luQueryId << " flags=" << lx32Flags
@@ -3272,15 +3167,6 @@ namespace CgsSceneManager
             lTriangleTest.mQueryId   = lpQuery->mQueryId;     // stw     +0x20
             lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->AddEvent(lTriangleTest);
 
-            if (SceneQueryDiagEnabled())
-            {
-                *CgsDev::Log::gpDebugPrint << "[scene-query] nearest world-only q="
-                    << lpQuery->mQueryId.mId
-                    << " start=(" << lpQuery->mLineStart.x << "," << lpQuery->mLineStart.y << "," << lpQuery->mLineStart.z
-                    << ") end.y=" << lpQuery->mLineEnd.y
-                    << " -> triCache nearest queue len="
-                    << lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->GetLength() << "\n";
-            }
             return;
         }
 
@@ -3536,23 +3422,11 @@ namespace CgsSceneManager
                 {
                     CgsCollision::CollisionResultList lHitList = lpCollisionGenerator->GetResultList(lu16ResultList);
                     const CgsCollision::CollisionResult* lpHit = lHitList.GetResult(0);
-                    if (SceneQueryDiagEnabled())
-                    {
-                        const f32 lfParam = *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpHit) + 0x50);
-                        const Vector3& lrPos = *reinterpret_cast<const Vector3*>(reinterpret_cast<const u8*>(lpHit) + 0x40);
-                        *CgsDev::Log::gpDebugPrint << "[scene-query] world nearest HIT q=" << lrTest.mQueryId.mId
-                            << " t=" << lfParam << " pos=(" << lrPos.x << "," << lrPos.y << "," << lrPos.z << ")\n";
-                    }
                     lpResultsQueue->AddTriangleCollisionLineTestNearestResult(
                         lrTest.mQueryId, EntityId(0u), ZeroVolumeInstanceId(), lpHit, true);
                 }
                 else
                 {
-                    if (SceneQueryDiagEnabled())
-                    {
-                        *CgsDev::Log::gpDebugPrint << "[scene-query] world nearest MISS q="
-                            << lrTest.mQueryId.mId << " (result list empty)\n";
-                    }
                     lpResultsQueue->AddTriangleCollisionLineTestNearestResult(
                         lrTest.mQueryId, EntityId(0u), ZeroVolumeInstanceId(), 0, false);
                 }
@@ -4492,7 +4366,6 @@ namespace CgsSceneManager
 // stops at the world-module boundary, so it is not accepted here. The whole console
 // function is that one dispatch.
 // ===========================================================================
-
 
 namespace CgsSceneManager
 {

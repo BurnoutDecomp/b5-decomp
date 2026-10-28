@@ -14,7 +14,7 @@
 #include <cstring>   // memcpy
 #include <cstdint>   // intptr_t
 #include <new>       // placement new (Handle construction over allocator storage)
-#include <windows.h> // MemoryBarrier (host mapping of the X360 lwsync)
+#include <xtl.h> // MemoryBarrier (host mapping of the X360 lwsync)
 
 namespace rw
 {

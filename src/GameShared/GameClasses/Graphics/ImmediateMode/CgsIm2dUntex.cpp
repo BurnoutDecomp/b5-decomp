@@ -36,7 +36,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -320,28 +319,6 @@ void ImRenderer<V>::BeginRendering()
     shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
-    shadow::DeviceSetPixelProgram(lpPixelProgram);
-
-    // Shadow-cache the renderer's vertex descriptor (X360 off_83010958): when it differs from the
-    // bound one, mark the vertex-program state dirty (byte_83010A34 = 1) and store the new descriptor.
-    //
-    // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION -- the same defect as the vertex-program shadow
-    // just above, and this half is the one that actually cost the pixels. off_83010958 is
-    // shadow::Device::mpVertexDescriptor (shadowingdevice.h; the ImmediateMode.cpp banner
-    // at DeviceSetVertexDescriptor spells out that these three words are the device's own and
-    // that modelling them TU-locally once left the sky's flush dereferencing null). A
-    // function-local static inside a TEMPLATE body is one object per instantiation, so it said
-    // "already bound" from the second frame on -- while this function's OWN ResetShadowing()
-    // call four lines earlier had just nulled shadow::Device::mpVertexDescriptor. And
-    // Device::FlushVertexProgramState opens with
-    //     if (mpVertexDescriptor == nullptr || mpVertexProgramShadow == nullptr) return;
-    // so from frame two the flush returned before binding anything.
-    //
-    // MEASURED, run17 (spark pass, one draw per frame, eight consecutive frames):
-    //     [lionfx] DrawVertices: ... verts=144 stride=24 vs=1 ps=1 decl=1 ...   frame 1
-    //     [lionfx] DrawVertices: ... verts=376 stride=24 vs=0 ps=1 decl=1 ...   frames 2..8
-    // -- hr=S_OK, the right stride, the right blend, and NO VERTEX SHADER BOUND.
-    shadow::DeviceSetVertexDescriptor(mpVertexDescriptor);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -387,7 +364,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;

@@ -11,9 +11,6 @@
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h" // saDepthStencilStates[1]
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"   // saRasterizerStates[2]
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"    // shadow::Device
-#include "pc/gcm/renderengine/renderstates.h"                            // TextureState / DepthStencilState
-#include "pc/gcm/renderengine/texture.h"                                 // Texture::PCReadBackTexel0 (the one-shot visibility read-back)
-#include "pc/gcm/renderengine/SunCoronaProgramsPC.h"                     // the four authored PC images
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // BlendMaterialState
 
 // =================================================================================================
@@ -174,21 +171,6 @@ namespace
         CgsDev::Log::WriteToLog(lpcMessage);
     }
 
-    // [FLAG PC bring-up gate] The three render-state objects both passes push. On the console
-    // BrnSunCorona's callers run long after CgsBlendStateFactory / CgsRasterizerStateFactory /
-    // CgsDepthStencilStateFactory::Construct; on PC those three run from a deferred bring-up block
-    // near the top of BrnRendererModule::Render (BrnRendererModule.cpp, "the three RENDER-STATE
-    // FACTORIES"), so a table slot can still be NULL and shadow::Device::SetState would dereference
-    // it. Refuse the pass and say so once -- the same refusal, for the same reason, that
-    // BrnCoronaManager::Construct already carries ("the blend / depth-stencil state factories are
-    // not Prepared yet"). DELETE-WHEN BrnRendererModule::Construct constructs the three factories.
-    struct SunCoronaPassStates
-    {
-        renderengine::DepthStencilState*   mpDepthStencil;
-        renderengine::RasterizerState*     mpRasterizer;
-        renderengine::BlendMaterialState*  mpBlend;
-    };
-
     bool AcquirePassStates(u32 luBlendSlot, SunCoronaPassStates* lpStates)
     {
         lpStates->mpDepthStencil = CgsDepthStencilStateFactory::GetState(
@@ -218,12 +200,6 @@ namespace
 // (mounted, build_game_exe.bat:316).
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
-// ⚠ A RE-DECLARATION OF TWO EXISTING GLOBALS, NOT NEW ONES. The PC back-buffer extent is declared at
-// pc/gcm/renderengine/device.h:12-13 and DEFINED at device.cpp, where its semantics live; that
-// header pulls <Windows.h>, so it is declared here instead -- the same one-definition/two-
-// declaration shape pc/gcm/renderengine/Xbox2SurfaceShims.h:129 already uses for gAntiAliasing.
-// READ ONLY, and read ONLY by the [FLAG PC bring-up] line at the end of RenderOccludedFlare: the
-// flare quad itself is built entirely in NDC and does not depend on the display extent.
 namespace renderengine
 {
     extern s32 gDisplayWidth;
@@ -285,14 +261,8 @@ void BrnSunCorona::Construct(rw::IResourceAllocator* lpAllocator)
     mpVertexDescriptor = renderengine::VertexDescriptor::Initialize(0, &lVertexDecl);
 
     // --- the four programs, in the console's order ------------------------------------------------
-    mpOcclusionVertexProgram = renderengine::ProgramBufferPC_Adopt(
-        renderengine::gauSunCoronaOcclusionVertexProgramPC,
-        renderengine::guSunCoronaOcclusionVertexProgramPCSize, 0u);
     CGS_ASSERT(NULL != mpOcclusionVertexProgram, "NULL != mpOcclusionVertexProgram");
 
-    mpOcclusionPixelProgram = renderengine::ProgramBufferPC_Adopt(
-        renderengine::gauSunCoronaOcclusionPixelProgramPC,
-        renderengine::guSunCoronaOcclusionPixelProgramPCSize, 1u);
     CGS_ASSERT(NULL != mpOcclusionPixelProgram, "NULL != mpOcclusionPixelProgram");
 
     mOcclusionPixelVariableHandleUvStartOffset = renderengine::ProgramVariableHandle();
@@ -303,14 +273,8 @@ void BrnSunCorona::Construct(rw::IResourceAllocator* lpAllocator)
             &mOcclusionPixelVariableHandleUvStartOffset);
     }
 
-    mpFlareVertexProgram = renderengine::ProgramBufferPC_Adopt(
-        renderengine::gauSunCoronaFlareVertexProgramPC,
-        renderengine::guSunCoronaFlareVertexProgramPCSize, 0u);
     CGS_ASSERT(NULL != mpFlareVertexProgram, "NULL != mpFlareVertexProgram");
 
-    mpFlarePixelProgram = renderengine::ProgramBufferPC_Adopt(
-        renderengine::gauSunCoronaFlarePixelProgramPC,
-        renderengine::guSunCoronaFlarePixelProgramPCSize, 1u);
     CGS_ASSERT(NULL != mpFlarePixelProgram, "NULL != mpFlarePixelProgram");
 
     mFlarePixelVariableHandleColourAndPower = renderengine::ProgramVariableHandle();
@@ -336,22 +300,6 @@ void BrnSunCorona::Construct(rw::IResourceAllocator* lpAllocator)
         SunCoronaLog(lacMessage);
     }
 
-    // [FLAG PC bring-up gate] A resolved-but-not-found handle reads mu8RegisterCount == 0, and
-    // RenderEngineDeviceBeginShaderStates then routes the row to the discard row -- the constant
-    // never reaches the shader, the occlusion pass samples uv (0,0) forever and the flare draws
-    // black, with nothing erroring. Refuse the whole object instead (AGENTS.md rule 9); the
-    // console cannot be in this state because its programs are the ones its CTAB came from.
-    if (mOcclusionPixelVariableHandleUvStartOffset.mu8RegisterCount == 0u
-        || mFlarePixelVariableHandleColourAndPower.mu8RegisterCount == 0u)
-    {
-        SunCoronaLog("[suncorona] Construct: the authored pixel programs do NOT declare"
-                     " kUvStartAndOffset / kColourAndPower by those exact names - the sun-corona"
-                     " pass stays off\n");
-        mpOcclusionVertexProgram = 0;
-        mpOcclusionPixelProgram  = 0;
-        mpFlareVertexProgram     = 0;
-        mpFlarePixelProgram      = 0;
-    }
 }
 
 // =================================================================================================
@@ -544,12 +492,6 @@ void BrnSunCorona::GenerateOcclusionBuffer(CgsRenderTarget* lpOcclusionRt,
     if (lpDepthRenderTarget == 0)
         return;
 
-    // [FLAG PC bring-up gate] The tap step is mfOcclusionSize/extent; a zero extent is a division
-    // by zero and an infinite uv, and it is reachable on PC in a way it is not on the console (the
-    // pool is built lazily and a target can exist before it is sized -- the "[postfx-rt] target
-    // 0x0" failure PCBringUpCreatePostFxSceneTargets' own banner records). Refuse rather than
-    // sample at infinity.
-    const u32 luSourceWidth  = lpSourceDepthRt->GetWidth();
     const u32 luSourceHeight = lpSourceDepthRt->GetHeight();
     if (luSourceWidth == 0u || luSourceHeight == 0u)
     {
@@ -641,11 +583,6 @@ void BrnSunCorona::GenerateOcclusionBuffer(CgsRenderTarget* lpOcclusionRt,
     lpOcclusionRt->End();
 
     {
-        // [FLAG PC bring-up diagnostic] one line, the first time the measurement runs. It prints
-        // the EXTENTS on both sides and the tap step, because the two silent failures here are a
-        // 0-extent source (refused above) and a tap step so small that all 49 taps land in one
-        // texel -- neither of which changes a pixel on screen. DELETE with the bring-up.
-        static bool sbLoggedFirstOcclusion = false;
         if (!sbLoggedFirstOcclusion)
         {
             sbLoggedFirstOcclusion = true;
@@ -807,21 +744,10 @@ void BrnSunCorona::RenderOccludedFlare(CgsRenderTarget* lpOcclusionRt,
     lpOcclusionRt->End();
 
     {
-        // [FLAG PC bring-up diagnostic] one line, the first flare drawn, PLUS the one number that
-        // says whether the pass works: the occlusion FRACTION, read back ONE-SHOT out of the 1x1
-        // GPU texture (renderengine::Texture::PCReadBackTexel0 -- a GetRenderTargetData stall,
-        // latched so it happens once per boot; verify_suncorona F1). visibility=1.000 with the
-        // sun in the open sky and 0.000 with it behind a building is the acceptance; a
-        // permanent 0.000 means the depth taps never see the far plane (see the .fx's raw-depth
-        // warning). What else is printed is everything the CPU decides -- the screen position,
-        // the NDC extent of the quad, and the exact colour the blend will scale by that fraction.
-        // DELETE with the bring-up.
-        static bool sbLoggedFirstFlare = false;
         if (!sbLoggedFirstFlare)
         {
             sbLoggedFirstFlare = true;
             u32 luTexel = 0u; s32 liFormat = 0; f32 lfVisibility = -1.0f;
-            const bool lbRead = renderengine::Texture::PCReadBackTexel0(lpOcclusionRt->GetTexture(0), &luTexel, &liFormat);
             if (lbRead)
             {
                 // The occlusion PS writes the fraction to every channel; decode the first byte of
@@ -841,13 +767,6 @@ void BrnSunCorona::RenderOccludedFlare(CgsRenderTarget* lpOcclusionRt,
                     lfVisibility = static_cast<f32>(luTexel & 0xFFu) / 255.0f;
                 }
             }
-            // [FLAG PC bring-up] the PIXEL rect, added by the 2026-08-23 "rectangular artifact"
-            // bug wave. The NDC numbers alone cost that wave a frame-forensics detour: the quad is
-            // 4*mfSunSize wide and 4*mfSunSize*KF_FLARE_ASPECT tall, i.e. ~768x768 px at 1280x720,
-            // and it is its CORNERS -- not its centre -- that a screenshot shows when the pixel
-            // program's falloff clamp is wrong. Printing the rect in pixels makes that one
-            // comparison, not an investigation. DELETE with the bring-up.
-            const f32 lfPixelWidth  = static_cast<f32>(renderengine::gDisplayWidth);
             const f32 lfPixelHeight = static_cast<f32>(renderengine::gDisplayHeight);
             const f32 lfPxLeft   = (lfLeft   + 1.0f) * 0.5f * lfPixelWidth;
             const f32 lfPxRight  = (lfRight  + 1.0f) * 0.5f * lfPixelWidth;

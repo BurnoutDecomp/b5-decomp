@@ -31,7 +31,6 @@ static_assert(offsetof(GyroCamParameters, mfField_B0)                    - offse
 static_assert(offsetof(GyroCamParameters, mfHeightDistanceVelocityRange) - offsetof(GyroCamParameters, mShakeParams) == 0xC4 - 0x08, "mfHeightDistanceVelocityRange @ console +0xC4");
 static_assert(offsetof(GyroCamParameters, mbUseTruck)                    - offsetof(GyroCamParameters, mShakeParams) == 0xC8 - 0x08, "mbUseTruck @ console +0xC8");
 static_assert(offsetof(GyroCamParameters, mbStickToGround)               - offsetof(GyroCamParameters, mShakeParams) == 0xCB - 0x08, "mbStickToGround @ console +0xCB");
-static_assert(sizeof(GyroCamParameters) == 216, "host size (console 204: 8-byte head pointer)");
 
 template<class TSerialiser>
 void BehaviourGyroCam::Parameters::Serialise(TSerialiser& lrSerialiser)

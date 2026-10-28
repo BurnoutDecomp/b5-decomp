@@ -41,22 +41,6 @@
 // Behaviour-faithful (semantic parity): the X360 hand-vectorises the geometry over
 // VMX; these bodies reproduce the same math on the named Vector3/Vector4 lanes.
 //
-// ---------------------------------------------------------------------------
-// FLAG PC-platform leaf: THE FRUSTUM TEST RUNS SYNCHRONOUSLY.
-// The console posts the per-frame frustum tests to the EA::Jobs scheduler
-// (StartFrustumTestJobs -> FrustumTestEntry -> FrustumTestJob::Execute on an idle
-// hardware thread) and blocks on them in WaitForFrustumTestJobResults. This host has
-// no job scheduler wired, so StartFrustumTestJobs runs each pending job's queries
-// inline instead of calling JobScheduler::AddJobs -- and only that call is replaced.
-// Everything the results depend on is the real thing and is preserved exactly:
-//   * the 0x800-byte FrustumTestJobData block and its three parallel query arrays,
-//   * the per-job JobCoarseResultBuffer (query offsets / per-query counts / the
-//     shared u16 run pool) and the mabFrustumJobRequested -> mabFrustumJobActive
-//     handshake,
-//   * WaitForFrustumTestJobResults' drain into the shared CoarseQueryResultBuffer,
-//     one BeginResultsBatch/EndResultsBatch pair per query, in query order,
-//   * the traversal itself and the per-entity accept test.
-// The RESULTS and their ORDER are therefore identical to the console's.
 //
 // THE ADAPTIVE DEPTH (2026-09-25, crash parity FX-OCTREE). Update @0x828D0180 runs two passes before the
 // bounds update: AdaptiveDepthUpdateRemoveNodesRecursive merges back any refined sub-tree whose entity count
@@ -143,34 +127,6 @@ namespace CgsSceneManager
         // before b4cc6341, and one exe can A/B a live cell with and without the refinement (as BRN_CULL_OFF does for
         // the frustum test). The console always runs both passes. Unset, it costs one static bool test per flagged
         // Update and changes nothing.
-        bool OctreeAdaptiveOffDiag()
-        {
-            static const bool sbOff = []() {
-                const char* lpcValue = std::getenv("BRN_OCTREE_ADAPTIVE_OFF");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
-            return sbOff;
-        }
-
-        // [DIAG] NOT IN THE X360 BINARY (crash parity FX-OCTREE, 2026-09-25). Opt-in BRN_OCTREE_HIST_DIAG=1: on the
-        // first LooseOctree::Update and every KI_OCTREE_HIST_PERIOD-th one after it, the shape of the tree reachable
-        // from the root -- per depth, how many nodes, how many entities sit on their own chains, the fullest chain
-        // and how many chains hold more than the adaptive split threshold -- and one line that buckets every
-        // reachable node's own chain length. It measures how many entities each octree query must test per node
-        // (the adaptive-depth refinement is what keeps that at the threshold or below on the console). Capped at
-        // KI_OCTREE_HIST_MAX_REPORTS reports; with the variable unset the cost is one static bool test per Update.
-        // The same variable arms a TIMING WITNESS, printed with each report for the window since the previous one:
-        // the wall time of the merge pass, the split pass and UpdateRecursive in the flagged Updates, the node groups
-        // the merge pass returned and the split pass took (pool used-count deltas around each pass, so the recursive
-        // bodies carry no counters), and the frustum walks StartFrustumTestJobs ran (count, time, nodes visited).
-        bool OctreeHistDiagEnabled()
-        {
-            static const bool sbEnabled = []() {
-                const char* lpcValue = std::getenv("BRN_OCTREE_HIST_DIAG");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
-            return sbEnabled;
-        }
 
         struct OctreeTimingWitness
         {
@@ -186,20 +142,10 @@ namespace CgsSceneManager
         };
         OctreeTimingWitness gOctreeTimingWitness;   // zero-initialised (namespace scope)
 
-        inline u64 OctreeDiagNowNs()
-        {
-            return static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count());
-        }
-
         // Adds the wall time of its scope to *lpu64Sink when the witness is armed; a no-op otherwise.
         class OctreeStageTimer
         {
         public:
-            explicit OctreeStageTimer(u64* lpu64Sink)
-                : mpu64Sink(OctreeHistDiagEnabled() ? lpu64Sink : 0), mu64Start(mpu64Sink != 0 ? OctreeDiagNowNs() : 0)
-            {
-            }
             ~OctreeStageTimer()
             {
                 if (mpu64Sink != 0)
@@ -268,10 +214,6 @@ namespace CgsSceneManager
         {
             static s32 siUpdates = 0;
             static s32 siReports = 0;
-            if (!OctreeHistDiagEnabled() || lpNodes == 0 || CgsDev::Log::gpDebugPrint == 0)
-            {
-                return;
-            }
             const s32 liUpdate = siUpdates++;
             if ((liUpdate % KI_OCTREE_HIST_PERIOD) != 0 || siReports >= KI_OCTREE_HIST_MAX_REPORTS)
             {
@@ -320,24 +262,11 @@ namespace CgsSceneManager
             }
 
             const OctreeTimingWitness& lrWitness = gOctreeTimingWitness;
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[octree-hist] #%d   timing since the last report: %u flagged updates; merge pass %.1f us "
-                          "(%u groups back), split pass %.1f us (%u groups out), bounds %.1f us; %u frustum walks "
-                          "%.1f us, %u nodes visited%s\n",
-                          siReports, lrWitness.muFlaggedUpdates, static_cast<double>(lrWitness.mu64MergePassNs) / 1000.0,
-                          lrWitness.muGroupsMerged, static_cast<double>(lrWitness.mu64SplitPassNs) / 1000.0,
-                          lrWitness.muGroupsSplit, static_cast<double>(lrWitness.mu64BoundsNs) / 1000.0,
-                          lrWitness.muFrustumWalks, static_cast<double>(lrWitness.mu64FrustumNs) / 1000.0,
-                          lrWitness.muFrustumNodes, OctreeAdaptiveOffDiag() ? " [BRN_OCTREE_ADAPTIVE_OFF: passes skipped]" : "");
             *CgsDev::Log::gpDebugPrint << lacLine;
             std::memset(&gOctreeTimingWitness, 0, sizeof(gOctreeTimingWitness));
         }
     }
 
-    // 0x828C9718 -- LooseOctree constructor. The base SpatialPartition sub-object is
-    // constructed first (compiler-emitted), then this body default-constructs the four
-    // embedded frustum-test jobs. On this host the EA::Jobs objects are not held (see
-    // the TU banner's FLAG PC-platform leaf note), so the ctor just parks the pointers.
     LooseOctree::LooseOctree()
         : muDepth(0)
         , miNumStaticNodes(0)
@@ -1240,27 +1169,9 @@ namespace CgsSceneManager
             // witness (no-ops when it is unset); the three calls are the console's.
             const u32 luUsedAtStart = mFreeNodeGroupPool.GetNumUsed();
             u32 luUsedAfterMerge    = luUsedAtStart;
-            if (!OctreeAdaptiveOffDiag())   // [DIAG] BRN_OCTREE_ADAPTIVE_OFF=1 (A/B only; unset = the console)
-            {
-                {
-                    OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64MergePassNs);
-                    AdaptiveDepthUpdateRemoveNodesRecursive(0, 0);
-                }
-                luUsedAfterMerge = mFreeNodeGroupPool.GetNumUsed();
-                {
-                    OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64SplitPassNs);
-                    AdaptiveDepthUpdateAddNodesRecursive(0, 0);
-                }
-            }
             {
                 OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64BoundsNs);
                 UpdateRecursive(0);
-            }
-            if (OctreeHistDiagEnabled())
-            {
-                ++gOctreeTimingWitness.muFlaggedUpdates;
-                gOctreeTimingWitness.muGroupsMerged += luUsedAtStart - luUsedAfterMerge;
-                gOctreeTimingWitness.muGroupsSplit  += mFreeNodeGroupPool.GetNumUsed() - luUsedAfterMerge;
             }
         }
 
@@ -1546,100 +1457,6 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
-    // StartFrustumTestJobs @ 0x828B23E0
-    //
-    // For every job with queries pending: clear its result buffer, fill the job data
-    // header (the pointers/counters the job walks the tree with), drop the REQUESTED
-    // flag, raise ACTIVE and dispatch.
-    //
-    // FLAG PC-platform leaf: the JobScheduler::AddJobs call is replaced by running the
-    // job's queries inline (see the TU banner). Everything else -- the buffer reset,
-    // the header, the flag handshake and the per-query result runs -- is the console's.
-    // ===========================================================================
-    void LooseOctree::StartFrustumTestJobs()
-    {
-        for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
-        {
-            if (!mabFrustumJobRequested[luJob])
-            {
-                continue;
-            }
-
-            // JobCoarseResultBuffer::Clear (inlined @0x828B2464..0x828B2488) -- the
-            // mpu16Buffer pointer is deliberately NOT touched.
-            JobCoarseResultBuffer& lrBuffer = maJobResultBuffers[luJob];
-            lrBuffer.muNumQueries = 0;
-            for (u32 luQuery = 0; luQuery < KU_JOB_BUFFER_MAX_NUM_QUERIES; ++luQuery)
-            {
-                lrBuffer.maQueryOffsets[luQuery]    = 0;
-                lrBuffer.maQueryNumResults[luQuery] = 0;
-            }
-            lrBuffer.muCurrentWriteOffset = 0;
-
-            FrustumTestJobData& lrJobData = maFrustumTestJobData[luJob];
-            lrJobData.mpNodes         = mpRootNode;
-            lrJobData.mpNodeTypeMasks = mpNodesEntityInfo;
-            lrJobData.mpEntityLinks   = &GetEntityLink(0);
-            lrJobData.mpEntitySpheres = &GetEntityBoundingSphere(0);
-            lrJobData.muNumNodes      = static_cast<u32>(mFreeNodeGroupPool.GetPoolSize()) << 2;   // lhzx +0x446B4 ; rotlwi 2 (0x828B24BC)
-            lrJobData.muMaxEntities   = static_cast<u32>(KI_MAX_NUM_ENTITIES);
-            lrJobData.mpResultBuffer  = &lrBuffer;
-            lrJobData.muMaxResults    = KU_JOB_RESULT_BUFFER_SIZE;
-
-            mabFrustumJobRequested[luJob] = false;
-            mabFrustumJobActive[luJob]    = true;
-
-            // ---- FLAG PC-platform leaf: run the job body here ----
-            // FrustumTestJob::Execute @0x82BE0158: per query, record the run's start
-            // offset, walk the tree, then publish the run length.
-            const FrustumJobQueryInfo& lrQueryInfo = lrJobData.mQueryInfo;
-            for (u32 luQuery = 0; luQuery < lrQueryInfo.muNumQueries; ++luQuery)
-            {
-                lrBuffer.maQueryOffsets[luQuery]    = lrBuffer.muCurrentWriteOffset;
-                lrBuffer.maQueryNumResults[luQuery] = 0;
-                lrBuffer.muNumQueries               = luQuery;
-
-                FrustumTestParams lParams;
-                lParams.mpFrustum          = &lrQueryInfo.maFrustums[luQuery];
-                lParams.mx32EntityTypeMask = lrQueryInfo.max32EntityTypeMasks[luQuery];
-                lParams.mpResultBuffer     = 0;          // the job writes its OWN run pool
-                lParams.mpJobResultBuffer  = &lrBuffer;
-                lParams.muNumNodesVisited  = 0;
-                lParams.CachePlanes();
-
-                // [DIAG culling wave] BRN_CULL_OFF=1 accepts every type-matching entity
-                // without the frustum test, so the SAME build / SAME resident set can be
-                // measured with culling on and off. Read once; delete with the wave.
-                static s32 siCullOff = -1;
-                if (siCullOff < 0)
-                {
-                    const char* lpcEnv = std::getenv("BRN_CULL_OFF");
-                    siCullOff = (lpcEnv != 0 && lpcEnv[0] == '1') ? 1 : 0;
-                }
-
-                {
-                    OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64FrustumNs);   // [DIAG] BRN_OCTREE_HIST_DIAG
-                    if (siCullOff != 0)
-                    {
-                        TrivialAcceptRecursive(0, &lParams);
-                    }
-                    else
-                    {
-                        FrustumTestVpRecursive(0, &lParams);
-                    }
-                }
-                if (OctreeHistDiagEnabled())   // [DIAG] BRN_OCTREE_HIST_DIAG timing witness
-                {
-                    ++gOctreeTimingWitness.muFrustumWalks;
-                    gOctreeTimingWitness.muFrustumNodes += lParams.muNumNodesVisited;
-                }
-
-                ++lrBuffer.muNumQueries;
-            }
-        }
-    }
-
-    // ===========================================================================
     // WaitForFrustumTestJobResults @ 0x828B2558
     //
     // Block on each ACTIVE job, then drain every per-query result run out of that job's
@@ -1655,10 +1472,6 @@ namespace CgsSceneManager
                 continue;
             }
 
-            // (FLAG PC-platform leaf: the console blocks on maFrustumTestJobs[luJob]
-            //  here; the work already ran inline in StartFrustumTestJobs.)
-
-            FrustumTestJobData&    lrJobData = maFrustumTestJobData[luJob];
             JobCoarseResultBuffer& lrBuffer  = maJobResultBuffers[luJob];
 
             const u32 luNumQueries = lrJobData.mQueryInfo.muNumQueries;
@@ -2155,7 +1968,6 @@ namespace CgsSceneManager
 // unregistered (-1) monitor is inert exactly as an unregistered console monitor would be.
 // =============================================================================
 
-
 namespace CgsSceneManager
 {
     // DWARF CgsLooseOctree.h:120 / X360 dword_82F33F20 -- not yet registered by the tree's
@@ -2252,26 +2064,6 @@ namespace CgsSceneManager
         // the flags, the segment, its length, the arm taken (sphere / gated / walked) and the results
         // attempted. It proves the walk is dispatched; with the variable unset the cost is one static
         // bool test.
-        inline void NoteOctreeLineTest(u32 lx32EntityTypeFlags, const Vector3& lrStart, const Vector3& lrEnd,
-                                       f32 lfLength, const char* lpcArm, s32 liAttempted)
-        {
-            static const bool sbEnabled = []() {
-                const char* lpcValue = std::getenv("BRN_OCTREE_LINE_DIAG");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
-            static u32 suLines = 0;
-            if (!sbEnabled || suLines >= 64 || CgsDev::Log::gpDebugPrint == 0)
-            {
-                return;
-            }
-            ++suLines;
-            char lacLine[256];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[octree-line] #%u flags 0x%X (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) len %.4f arm %s attempted %d\n",
-                          suLines, lx32EntityTypeFlags, lrStart.x, lrStart.y, lrStart.z, lrEnd.x, lrEnd.y, lrEnd.z,
-                          lfLength, lpcArm, liAttempted);
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
 
         // A VMX compare-result lane reads as set when it is not +0.0 -- the console's
         // `vspltw ; vcmpeqfp128. lane, 0.0` skip, which for an all-ones / zero mask is the bit test.

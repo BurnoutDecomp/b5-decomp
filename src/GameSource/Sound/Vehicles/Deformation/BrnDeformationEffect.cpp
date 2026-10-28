@@ -16,7 +16,6 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 #include <cmath>
 #include <limits>
 
@@ -305,26 +304,6 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
             << "\tPitch: " << lfPitch << "\tTime: " << mfTimeDeforming
             << "\tTime-Step: " << afTimeStep << "\t\n";
 
-    // FLAG PC-platform witness: observe live controls without changing them.
-    if (CgsSound::PcmTrace::File())
-    {
-        static s32 liLastFatal = -1, liLastImpact = -1;
-        static u32 luRows = 0;
-        const s32 liFatal = static_cast<s32>(lFrame.meFatality.GetCurrent());
-        const s32 liImpact = static_cast<s32>(lFrame.meImpactTime.GetCurrent());
-        if (luRows < 96 && (liFatal != liLastFatal || liImpact != liLastImpact || lfTarget > 0.0f))
-        {
-            ++luRows;
-            CgsSound::PcmTrace::Log("crumple-control fatal=%d impact=%d active=%d amount=%.9g delta=%.9g lag=%.9g fade=%.9g target=%.9g volume=%.9g dt=%.9g\n",
-                liFatal, liImpact, mbDeforming.GetCurrent() ? 1 : 0,
-                mDeformAmount.GetCurrent(), mDeformDeltaAverage.GetAverage(),
-                mDeformIntensityLagged.GetCurrent(), mFadeOut.GetValueFloat(),
-                lfTarget, lfVolume, afTimeStep);
-        }
-        liLastFatal = liFatal;
-        liLastImpact = liImpact;
-    }
-
     // 826B5BAC passes f31 (target), not the smoothed cache at this+0x60.
     mPatchVoice.SetParameter(2, lfTarget, &luIntensity);
     mPatchVoice.SetParameter(0, lfVolume, &luVolume);
@@ -333,7 +312,6 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
     mPatchVoice.SetGain(0, 1.0f, &luSend01);
     mPatchVoice.SetGain(1, 0.0f, &luReverbSend);
 }
-
 
 void DeformationEffect::ProcessUpdate()
 {

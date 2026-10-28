@@ -35,10 +35,6 @@ namespace core
         static GeneralResourceAllocator* Initialize(const Resource& lrResource,
                                                      const ResourceDescriptor& lrCapacity);
 
-        // FLAG PC-platform leaf: adopt exactly the supplied heap extents into an
-        // already-existing native object. There is no in-region object/header reserve.
-        void AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
-
         // Only lane two belongs to the physical heap. Disposable lanes one/four
         // use the main heap with the original allocation flag set.
         void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);

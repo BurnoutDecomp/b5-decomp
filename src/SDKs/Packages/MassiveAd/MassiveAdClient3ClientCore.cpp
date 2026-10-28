@@ -33,9 +33,6 @@ namespace MassiveAdClient3
 
 namespace
 {
-    // FLAG PC-platform leaf: the console initialises the two hook pointers to the CRT malloc /
-    // free themselves. Their size_t parameter is wider than the hook's 32-bit one on the 64-bit
-    // host, so the defaults are these two adapters over the same CRT calls.
     void* CrtMassiveMalloc(unsigned int nSize) { return std::malloc(nSize); }
     void  CrtMassiveFree(void* pBlock)          { std::free(pBlock); }
 

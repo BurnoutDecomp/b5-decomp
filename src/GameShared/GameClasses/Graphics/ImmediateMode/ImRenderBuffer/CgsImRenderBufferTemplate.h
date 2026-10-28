@@ -354,14 +354,6 @@ namespace CgsGraphics
         void Construct();                                                                    // @0x1EA6F0
         bool Prepare(u32 luCommandBufferSizeBytes, u32 luVertexBufferSizeBytes,
                      rw::IResourceAllocator* lpAllocator, bool lbFailGracefully);            // @0x1EC844
-        // FLAG PC-platform leaf: allocation can fail on the host. Do not record
-        // or publish until both complete banks have been allocated.
-        bool IsPreparedPC() const
-        {
-            return mpWriteBuffer && mpDispatchBuffer
-                && maBuffers[0].mpu8CommandBuffer && maBuffers[0].mpu8VertexBuffer
-                && maBuffers[1].mpu8CommandBuffer && maBuffers[1].mpu8VertexBuffer;
-        }
         bool Release();
         void Destruct();
 

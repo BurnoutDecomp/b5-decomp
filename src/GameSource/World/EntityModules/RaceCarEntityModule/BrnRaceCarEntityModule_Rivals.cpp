@@ -55,8 +55,6 @@
 #include "GameSource/World/AI/BrnAISharedConstants.h"                     // BrnAI::E_RESET_TYPE_STANDARD
 #include "rw/math/vpu/vector3_operation.h"                                // rw::math::vpu::Add (the spawn look-at target)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint (the console's own Deactivate line)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [net] network car removed witness
-
 namespace BrnWorld
 {
 
@@ -74,7 +72,6 @@ static const u8 KU_RIVAL_MEDALS_TO_UNLOCK = 0;
 // unk_82181510, dumped from the ARTIST image (16 bytes @ file offset 0x181510):
 // 00000000 3F800000 00000000 00000000 == {0, 1, 0, 0}. The world UP axis BuildTransform takes.
 static const Vector3 KV_RIVAL_GRID_UP_AXIS = { 0.0f, 1.0f, 0.0f, 0.0f };
-
 
 // ============================================================================================
 // SetUpAIForMode @0x82301620
@@ -198,7 +195,6 @@ void RaceCarEntityModule::SetUpAIForMode(
     }
 }
 
-
 // ============================================================================================
 // RemoveRivals @0x82305E00
 //
@@ -237,7 +233,6 @@ void RaceCarEntityModule::RemoveRivals(
         }
     }
 }
-
 
 // ============================================================================================
 // RemoveAllRivalsFromWorld @0x82305F28 -- game action 195 (E_ACTION_REMOVE_ALL_RIVALS).
@@ -297,9 +292,6 @@ void RaceCarEntityModule::RemoveAllNetworkCarsFromWorld(RaceCarEntityModuleIO::O
         {
             lpNetworkCar->SetInCurrentGameMode(false, false);
 
-            BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
-                                     static_cast<s32>(lpNetworkCar->GetActiveRaceCarIndex()),
-                                     static_cast<s32>(leGlobalRaceCarIndex));
             RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
         }
     }

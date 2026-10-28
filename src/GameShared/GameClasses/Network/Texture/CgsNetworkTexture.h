@@ -1,8 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (mFormat)
-
 // CgsNetwork::NetworkTexture - a network-transmissible texture: a pixel buffer plus its
 // dimensions and pixel format. The image-manager debug component holds two of these by value
 // (the encoded / DXT-compressed mugshot buffers), and the network image converter / unpacker

@@ -22,8 +22,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/renderstates.h"
-#include "pc/gcm/renderengine/texture.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
 #include "rw/rwcore_structs.h"

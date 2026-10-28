@@ -225,7 +225,6 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetDriveThroughOrJun
     return reinterpret_cast<const SatNavIconInfo*>(this);
 }
 
-
 // ===================== [F3 2026-08-29] the map-UI query surface =====================
 // The seven link holes the S2 census measured against the CrashNavMap mount. Each is a
 // real X360 out-of-line body, transcribed store-for-store; all seven were already
@@ -472,7 +471,6 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
     }
 }
 
-
 // ============================ H3b: the owner/update surface ============================
 
 // @ 0x824FA0F0 -- bind the cache and reset the whole selection/flag surface. The X360
@@ -692,8 +690,6 @@ void MapIconManager::Update()
 // count and re-runs the owner's icon pass so the components latch the hidden state.
 void MapIconManager::SetIconsVisible(bool lbVisible)
 {
-    // FLAG PC diagnostic: observe ownership during map/minimap transitions.
-    static const bool sbTraceVisibility = (getenv("BRN_SATNAV_DIAG") != 0);
     static u32 suVisibilityRows = 0;
     if (sbTraceVisibility && CgsDev::Log::gpDebugPrint != 0 &&
         mbIconsVisible != lbVisible && suVisibilityRows < 128)
@@ -1061,7 +1057,6 @@ void MapIconManager::UpdateFreeburnChallengeIcons()
     lrIcon.SetSpeedMph(0.0f);
     ++miNumUsedIcons;
 }
-
 
 // ARTIST 0x824F49E0.
 bool MapIconManager::IsTrackedIcon(const SatNavIconInfo* lpIcon)
@@ -1464,34 +1459,6 @@ void MapIconManager::UpdateSatNavIcons()
 
             lrIcon.SetRotation(mbRotateSatNav ? 0.0f                                  // +0xAA1C
                                               : (KF_PI - lrRecord.GetRotation()));    // pi - rot
-
-            // [FLAG PC witness] `[satnav-arrow] pos=<x>,<z> heading=<rad> apt=<deg> rotate=<0|1>`
-            // -- NOT IN THE X360 BINARY (issue #7, the minimap arrow mirrored on one axis).
-            // Opt-in (BRN_SATNAV_DIAG), every 15th call (~4 Hz), capped at 600 lines a run.
-            // heading = the icon record's mfRotation exactly as the world->GUI bridge posted
-            // it (GameBridgeWorldToGui.cpp, the acos/cross derivation @0x823E5FC0..0x823E6178);
-            // apt = the "_rotation" degrees the arrow sprite receives for it (the pi - rot
-            // above, scaled by SatNavMapIcon::Update's 57.29578). tools/tests/cases/
-            // minimap_player_arrow.ps1 scores apt against the direction the car actually
-            // moves between samples. DELETE-WHEN: the case is retired.
-            {
-                static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
-                static u32 suCalls = 0;
-                static s32 siLeft  = 600;
-                if (sbDiag && CgsDev::Log::gpDebugPrint != 0 && siLeft > 0
-                    && (++suCalls % 15u) == 0u)
-                {
-                    --siLeft;
-                    const Vector4& lv4Pos = lrRecord.GetPositionLane();
-                    const f32 lfApt = (mbRotateSatNav ? 0.0f : (KF_PI - lrRecord.GetRotation()))
-                                      * 57.29578f;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[satnav-arrow] pos=" << lv4Pos.x << "," << lv4Pos.z
-                        << " heading=" << lrRecord.GetRotation()
-                        << " apt=" << lfApt
-                        << " rotate=" << (mbRotateSatNav ? 1 : 0) << "\n";
-                }
-            }
 
             // The LARGE-map event-icon proximity fade (freeburn big map only).
             if (meIconSizeMode == E_ICONSIZE_LARGE && mpGuiCache->GetGameMode() == -1)
@@ -2203,31 +2170,8 @@ void MapIconManager::UpdateCrashNavIcons()
         } lRecord(&mCrashNavIcons[0], miNumUsedIcons);   // lwz +0x990 / addi +0x9A0
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the bank handoff, every 120th post.
         {
-            static const bool sbCnavDiag = (getenv("BRN_SATNAV_DIAG") != 0);
             static s32 siPostTick = 0;
             static s32 siBankRows = 0;
-            if (sbCnavDiag && CgsDev::Log::gpDebugPrint != 0 && (siPostTick++ % 120) == 0 && siBankRows++ < 128)
-            {
-                s32 liPlayers = 0, liRivals = 0, liDrive = 0, liStart = 0, liFinish = 0, liCustom = 0;
-                for (s32 li = 0; li < miMaxNumberIcons; ++li)
-                {
-                    const s32 liState = static_cast<s32>(mCrashNavIcons[li].mIcon.GetState());
-                    liPlayers += (liState >= 1 && liState <= 13) ? 1 : 0;
-                    liRivals += (liState >= 14 && liState <= 25) ? 1 : 0;
-                    liDrive += (liState >= 36 && liState <= 39) ? 1 : 0;
-                    liStart += liState == 48 ? 1 : 0;
-                    liFinish += liState == 49 ? 1 : 0;
-                    liCustom += (liState == 51 || liState == 52) ? 1 : 0;
-                }
-                *CgsDev::Log::gpDebugPrint << "[cnav-bank] player=" << liPlayers << " rivals=" << liRivals
-                    << " drive=" << liDrive << " start48=" << liStart << " finish49=" << liFinish
-                    << " custom=" << liCustom << " inEvent=" << (mpGuiCache->GetInEventColouringGate() ? 1 : 0) << "\n";
-                *CgsDev::Log::gpDebugPrint << "[cnav-diag] 561 post: icons=" << miNumUsedIcons
-                    << " showingDriveThrus=" << (mbShowingDriveThrus ? 1 : 0)
-                    << " eventDisplayType=" << static_cast<s32>(meEventIconDisplayType)
-                    << " visible=" << (mbIconsVisible ? 1 : 0)
-                    << " owner=" << static_cast<s32>(mOwnerId) << "\n";
-            }
         }
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord),

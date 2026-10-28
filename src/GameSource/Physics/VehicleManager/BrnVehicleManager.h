@@ -160,7 +160,6 @@ namespace Vehicle
     // (DWARF :82, full member layout). The declare-only shell that lived here was
     // retired; its method surface moved to the canonical struct additively.
 
-
     // ==========================================================================================
     // KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER -- the ONE place this class stops being byte-pinned.
     //
@@ -1865,7 +1864,6 @@ namespace Vehicle
         // NOT AN EXPORT HOLE, AND EVERY SUB-CONSTRUCTOR IS ALREADY BODIED. From the function's own
         //    `xrefs_from` (`.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8263B7C8.json`), the complete
         //    callee set is twelve symbols, and after 2026-08-03 all six real ones have bodies:
-        //      CgsDev::PerfMonCpu::AddMonitor                @0x82824C30  (declared, PC-leaf)
         //      VehicleManagerDebugComponent::Construct       @0x825B5A78  bodied
         //      VehicleDriver::Construct                      @0x825B83C8  bodied
         //      VehiclePhysics::Construct                     @0x8262DBD0  bodied THIS wave
@@ -2393,8 +2391,8 @@ namespace Vehicle
         // TYPED 2026-08-03 (was `unsigned char mStuntOffencesManager[464]`). This is the ONE
         // contained sub-object of VehicleManager whose real reconstructed class FITS ITS X360 SPAN
         // ON x64 -- measured, not assumed:
-        // sizeof(BrnPhysics::StuntOffencesManager)  == 464   ==  44704 - 44240   
-        // alignof(BrnPhysics::StuntOffencesManager) == 16,  and 44240 % 16 == 0  
+        // sizeof(BrnPhysics::StuntOffencesManager)  == 464   ==  44704 - 44240
+        // alignof(BrnPhysics::StuntOffencesManager) == 16,  and 44240 % 16 == 0
         // and it fits because the class contains NO POINTER MEMBERS at all: its last member ends at
         // 0x1C4 == 452, which its own header pins, and 452 rounds to 464 at align 16 on both ISAs.
         // Nothing in this class moves as a result -- the layout gate in

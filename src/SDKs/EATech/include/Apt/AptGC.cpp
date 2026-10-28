@@ -344,21 +344,6 @@ void AptGC::CleanUnreachable()
     // pinned); marked >> roots means the reference WALK over-reaches; both small with
     // deleted small is a contradiction that would point at the pool walk itself.
     // EVERY pass prints (the rate limit hid exactly the passes that mattered).
-    if (AptLifeDiagEnabled())
-    {
-        static uint32_t suPasses = 0u;
-        ++suPasses;
-        // `pool` is the DOGMA base's OWN live-allocation counter (mnItemsAllocated,
-        // console *(pool+0x28)) -- an independent witness to the walk's `values`.
-        // They must agree; a walk that sees fewer than the pool holds is a walk that
-        // silently exempts most of the heap from collection.
-        char lac[220];
-        std::snprintf(lac, sizeof(lac),
-            "[aptlife] CleanUnreachable pass #%u: %u values, %u roots, %u marked, %u deleted (pool says %d)\n",
-            suPasses, luVisited, luRoots, luMarked, luDeleted,
-            AptValueGCPool_GetAllocatedCount(gpGCPoolManager));
-        CgsDev::Log::WriteToLog(lac);
-    }
 
     // 5. Final flush, then the value free-lists / temporary string pool.
     if (gpValuesToRelease != nullptr)

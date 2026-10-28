@@ -10,7 +10,7 @@
 
 #include "SDKs/EATech/rwcore/filesys/stream.h"
 
-#include <windows.h>  // Enter/LeaveCriticalSection
+#include <xtl.h>  // Enter/LeaveCriticalSection
 #include <cstring>    // strncpy, memcpy
 
 namespace rw

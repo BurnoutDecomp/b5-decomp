@@ -38,11 +38,9 @@
 // GetTickCount / CreateEventA are the kernel's: on the PC build <Windows.h> declares them (it comes in
 // with CgsHardwareInit.h, under the same WIN32 && !CGS_PLATFORM_X360 test, for IsConnected's autotest
 // flag), so the extern "C" forms are only for a build without it. ----
-#if !(defined(WIN32) && !defined(CGS_PLATFORM_X360))
 extern "C" u32 GetTickCount();
 extern "C" void* CreateEventA(void* lpEventAttributes, s32 bManualReset, s32 bInitialState,
                               const char* lpName);
-#endif
 extern "C" u32 XInputSetState(u32 dwUserIndex, void* pVibration);
 extern "C" u32 XInputFFSetRumble(u32 dwUserIndex, void* pVibration, void* pOverlapped);
 extern "C" u32 XInputFFResetDevice(u32 dwUserIndex, void* pOverlapped);

@@ -10,11 +10,6 @@
 
 namespace Attrib
 {
-    // @ 0x82803490 -- the SDK's allocation-accounting counters. That address has
-    // NO entry in the function export set (an export gap, like 0x827C7668), so
-    // the counter layout cannot be reconstructed yet. FLAG PC-platform leaf:
-    // telemetry-only no-op until the body is recovered via headless IDA; both
-    // call sites (Alloc/Free) pass (size, +/-1) and ignore the result.
     void AllocationAccounting(int /*liSize*/, int /*liDirection*/)
     {
     }

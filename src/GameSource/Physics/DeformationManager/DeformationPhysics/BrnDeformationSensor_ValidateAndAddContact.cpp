@@ -397,8 +397,6 @@ namespace Deformation
 			static s32 siLatchProbe = -1;
 			if ( siLatchProbe < 0 )
 			{
-				const char* lpcEnv = getenv( "BRN_LATCH_PROBE" );
-				siLatchProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
 			}
 			static u32 suSeen = 0;
 			static u32 suWall = 0;

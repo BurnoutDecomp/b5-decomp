@@ -77,8 +77,7 @@ namespace LocalBackend
 
         LocalBackend*             mpBackend;    // +0x04
         bool                      mbStarted;    // +0x08
-        // FLAG PC-platform leaf: worker shutdown crosses native threads.
-        std::atomic<bool>         mbQuit;       // +0x09 on console
+       // +0x09 on console
         EA::Thread::Thread        mThread;      // +0x0C
         EA::Jobs::JobThreadParameters mParameters; // +0x10
         void*                     mhEvent;      // native Win32 wake handle

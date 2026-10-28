@@ -47,7 +47,6 @@ namespace BrnWorld
         mfSecondsBeforeCleanup = lfSeconds;   // stfs @0xC
     }
 
-
     // ============================================================================================
     // Construct @ 0x827B14A0
     //
@@ -211,21 +210,6 @@ namespace BrnWorld
                     ++mi8NumCleanupExtensions;
                 }
 
-                // FLAG PC witness (BRN_CRASH_ACTION_DIAG, not console code): the player wreck's
-                // 0.25 s decision edge, with the spin that feeds the "still moving" test above.
-                if (lbCrossedCleanupEdge && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    static const bool sbDiag = (std::getenv("BRN_CRASH_ACTION_DIAG") != 0);
-                    if (sbDiag)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[crash-tick] player wreck edge owner=" << static_cast<s32>(luOwner)
-                            << " spin=" << lfSpin << " speedMPH=" << lfSpeedMPH
-                            << " stationary=" << mfTimeStationary
-                            << " extended=" << (lbGrantedExtension ? 1 : 0)
-                            << " extensions=" << static_cast<s32>(mi8NumCleanupExtensions) << "\n";
-                    }
-                }
             }
         }
 

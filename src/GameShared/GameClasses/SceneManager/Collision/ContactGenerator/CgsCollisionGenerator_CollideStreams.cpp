@@ -45,13 +45,6 @@
 //     CreateNewBatch marks the slot itself.
 //   * batch clamp is 3 on X360 for all three (`li r29, 3`).
 //
-// ⚠️⚠️ FLAG PC-platform leaf: THE DISPATCH, AND ONLY THE DISPATCH. `unk_830EA650` (the global
-// EA::Jobs::JobScheduler) does not exist on this build (CgsHardwareInitPC.cpp:40), so the
-// JobScheduler::AddTree call — and only that call — is replaced by running each batch's entry
-// point inline, per the CgsLooseOctree.cpp:997 precedent and exactly as the two landed
-// dispatchers in CgsCollisionGenerator_LineStream.cpp already do (inline inside the wiring
-// loop, the precedent's own placement). The returned parent job was never submitted, so
-// Job::WaitOn's own null-backend guard makes it safe to wait on — checked on the traction leg.
 //
 // PrepareNewPrimitiveTestResultsList @0x82810798: most of its 114 instructions are the two
 // STREAMED assert-failure messages (BasePriorityQueue::Clear + operator<< bursts); the logic is
@@ -337,8 +330,6 @@ namespace CgsCollision
             lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
             lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);   // li r5, 1
 
-            // ---- FLAG PC-platform leaf: run the job body here (see the file banner) ----
-            // X360: JobScheduler::AddTree(&unk_830EA650, lpParentJob) after the loop.
             ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
                                   EA::Jobs::Param(static_cast<void*>(lpDesc)),
                                   EA::Jobs::Param(),
@@ -400,7 +391,6 @@ namespace CgsCollision
 
             CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
 
-            // ---- FLAG PC-platform leaf: run the job body here (see the file banner) ----
             ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
                                   EA::Jobs::Param(static_cast<void*>(lpDesc)),
                                   EA::Jobs::Param(),
@@ -457,7 +447,6 @@ namespace CgsCollision
 
             CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
 
-            // ---- FLAG PC-platform leaf: run the job body here (see the file banner) ----
             ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
                                   EA::Jobs::Param(static_cast<void*>(lpDesc)),
                                   EA::Jobs::Param(),

@@ -285,10 +285,6 @@ bool InGameMessageRenderer::Release()
         case E_RELEASESTAGE_START:
             meReleaseStage   = E_RELEASESTAGE_START;
             mRoadRulesToShow = CgsContainers::BitArray<64u>();
-            // Console: `if (mpBlendState) (*(*mpHeapAllocator + 20))(mpHeapAllocator,
-            // &mBlendStateResource)` -- the allocator free of the acquired blend state.
-            // [FLAG PC fold] the pair is never acquired on this build (see the member
-            // banner), so the conditional free is a structural no-op here.
             meReleaseStage = E_RELEASESTAGE_DONE;
             return true;
 
@@ -1300,10 +1296,6 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                 lpcRulerName = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacRulerName);
             }
 
-            // The road's best, as a time (milliseconds) or a crash total.
-            // [FLAG PC init] the console leaves the buffer as stack residue when the rule type
-            // is unhandled (the assert path); empty here.
-            char lacScore[16];
             lacScore[0] = 0;
             const f32 lfScore = static_cast<f32>(lpResponse->miOnlineScore);
             switch (lpResponse->meActiveRoadRule)
@@ -1431,21 +1423,6 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
     // The frame's timestep comes off the cache head (GuiEventTimeInfo's delta -- the
     // console reads *(cache + 0) here and decrements the state clock by it).
     f32 lfTimeStep = mpGuiCache->GetTimeStep();
-
-    // FLAG PC divergence: the console renders once per GUI update, so this step is the time
-    // since the last render. With DecoupleSimulation the PC renders every display frame
-    // while the GUI (and its time info) still updates once per 60 Hz simulation step, so the
-    // same step was applied several times between two updates: at 300 Hz the ticker
-    // scrolled -- and every state clock ran -- five times too fast (issue #39). Consume each
-    // GUI update's step once: a render with no new GUI time advances nothing.
-    if (lfTimeStep > 0.0f)   // a step means a time info has arrived, so GetTime is valid
-    {
-        const f32 lfGuiTime = mpGuiCache->GetTime();
-        if (lfGuiTime == mfLastConsumedGuiTimePC)
-            lfTimeStep = 0.0f;
-        else
-            mfLastConsumedGuiTimePC = lfGuiTime;
-    }
 
     mfTimeRemainingInState -= lfTimeStep;
 

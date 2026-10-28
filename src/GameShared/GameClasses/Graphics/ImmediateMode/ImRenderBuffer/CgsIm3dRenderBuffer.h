@@ -7,14 +7,6 @@ namespace CgsGraphics {
 struct Im3d;
 template<class V> struct Im3dBase;
 
-// FLAG PC-platform leaf: native homes of the original immediate-state entries
-// used by buffered3D; the GUI's existing2D identity checks share these pointers.
-void PrepareIm3dStateLibraryPC();
-const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOnPC();
-const renderengine::DepthStencilState* GetIm3dDepthStencilZBufferOffPC();
-const renderengine::TextureState* GetIm3dTextureStateUntexturedPC();
-renderengine::Texture* GetImWhiteTexturePC();
-
 // ARTIST8244FC48/827E1878: one view-projection matrix (command16), or
 // model-to-world plus view-projection (command20). Matrix alignment makes
 // their payload begin at16, as in the console command stream.

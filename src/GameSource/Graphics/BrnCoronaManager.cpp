@@ -1,7 +1,4 @@
 #include "GameSource/Graphics/BrnCoronaManager.h"
-#include "pc/math/VmxFloat.h"
-#include "pc/gcm/renderengine/reflections/LightSubmission.h"
-
 #include <cstdio>   // snprintf (the one-shot bring-up lines)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -10,10 +7,7 @@
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h" // saDepthStencilStates[1]/[2]
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"  // CgsGraphics::ResourceAllocatorCreate
 #include "SDKs/RenderEngineClub/MAIN/components/include/coronas/rwgcoronarenderer.h"
-#include "pc/gcm/renderengine/renderstates.h"        // renderengine::TextureState
-#include "pc/gcm/renderengine/texture.h"             // renderengine::Texture
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::operator-, Dot, MagnitudeSquared
-
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Ledger-tracked, with an address:
 //   BrnCoronaManager::Construct                                                          @ 0x823FCD90
@@ -116,15 +110,12 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(const Vector3& lvPositi
                                                            f32 lfScale, f32 lfOpacity,
                                                            const BrnCoronaTypeParams& lCoronaTypeParams)
 {
-    if (!CgsPC::Reflections::AcceptLight(this, lvPosition,
-        mBufferIterator.GetNumCoronasWritten(), KI_MAX_CORONAS, kfNoFadeDistanceSqrd)) return;
     const Vector3 lvDelta = rw::math::vpu::operator-(lvPosition, mCameraPosition);
 
     // Back-face cull: only submit the corona when it faces toward the camera.
     if (rw::math::vpu::Dot(lvDelta, lvDirection) < 0.0f)
     {
         const f32 lfDistSqr = rw::math::vpu::MagnitudeSquared(lvDelta);
-        const f32 lfFadeDistSqr = CgsPC::Reflections::LightFadeDistanceSquared(this, lfDistSqr, kfNoFadeDistanceSqrd);
 
         f32 lfAlphaScale = 1.0f;
         if (lfFadeDistSqr > kfCoronaFadeDistance)
@@ -150,10 +141,6 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(const Vector3& lvPositi
         // the two unread lanes carry whatever the archetype table holds there, exactly as on the
         // console. Dispatch reads only x/y.)
         Vector2 lvSize;
-        lvSize.x = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.x, lfSizeScale);
-        lvSize.y = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.y, lfSizeScale);
-        lvSize.z = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.z, lfSizeScale);
-        lvSize.w = CgsPC::VmxFloat::Multiply(lCoronaTypeParams.mvSize.w, lfSizeScale);
 
         mBufferIterator.Write(lvPosition, lvDirection, lvSize, lCoronaTypeParams.mfBiasDistance,
                                lColour, lCoronaTypeParams.miTextureID);
@@ -492,16 +479,6 @@ BrnCoronaManager::BrnSubmissionInterface* BrnCoronaManager::GetSubmissionInterfa
     return &mSubmissionInterface[mu8SubmissionSwapIndex];
 }
 
-// [FLAG PC bring-up] -- see the header for the whole reasoning. The console's own SetCameraInfo,
-// aimed at the interface Render reads (mu8SubmissionSwapIndex ^ 1) instead of the one Update writes.
-void BrnCoronaManager::PCBringUpSetRenderCamera(const Matrix44& lViewProj,
-                                                 const Vector3& lCameraPosition,
-                                                 const Vector4& lViewXyScale)
-{
-    mSubmissionInterface[mu8SubmissionSwapIndex ^ 1u].SetCameraInfo(lViewProj, lCameraPosition,
-                                                                     lViewXyScale);
-}
-
 // =================================================================================================
 // BrnCoronaManager::Render @ 0x824075D8
 //
@@ -555,13 +532,6 @@ void BrnCoronaManager::Render(f32 lfWhiteLevel)
     lParams.mViewProjectionMatrix            = lrInterface.mViewProj;
     lParams.mvViewXyScale                    = lrInterface.mViewXyScale;
 
-    // [FLAG PC-platform leaf] The console issues Begin unconditionally (@0x8240768C, before the
-    // `lwz r11,8(r31)` count test). On this backend RenderEngineDeviceBeginShaderStates STAGES rows
-    // that only Dispatch's FlushVertexProgramState drains, so an unconditional Begin on an EMPTY
-    // frame would leak three constant rows into the next subsystem's flush. Begin is therefore
-    // gated on the same count the console gates the batch on. DELETE-WHEN the leaf gains a
-    // per-pass stage.
-    const u32 luNumCoronas = lrInterface.mBufferIterator.GetNumCoronasWritten();
     if (luNumCoronas != 0u)
     {
         renderengine::CoronaRenderer::Begin(lParams);
@@ -648,4 +618,3 @@ void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& lAllocator,
         CgsDev::Log::WriteToLog(lacMessage);
     }
 }
-

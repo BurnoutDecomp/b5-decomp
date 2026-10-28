@@ -3,7 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase
 
-#include <windows.h>   // HANDLE / INVALID_HANDLE_VALUE (the X360 wraps a Win32 file handle; host Win32 on PC)
+#include <xtl.h>   // HANDLE / INVALID_HANDLE_VALUE (the X360 wraps a Win32 file handle; host Win32 on PC)
 
 // CgsDev::Log::LogFile - the simplest log-file stream: a StrStreamBase whose char* sink writes
 // text straight to an open Win32 file handle (no intermediate buffer, unlike its sibling

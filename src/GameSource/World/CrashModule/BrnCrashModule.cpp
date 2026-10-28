@@ -98,17 +98,7 @@ namespace BrnWorld
                 continue;
             }
             // Opt-in witness of the live game-action queue and resulting crash policy.
-            static const bool lbTrace = std::getenv("BRN_CRASH_ACTION_DIAG") != nullptr;
             static u32 luTraceCount = 0;
-            if (lbTrace && luTraceCount++ < 64)
-            {
-                char lacMessage[192];
-                std::snprintf(lacMessage, sizeof(lacMessage),
-                    "[crash-action] id=%d cleanup=%d fastAI=%d extensions=%d playerTime=%.3f online=%d showtime=%d\n",
-                    liAction, mbClearUpEnabled, mbFastCrashesForAI, miNumCrashExtensions,
-                    mfPlayerCrashTime, mbIsOnlineGameMode, mbIsShowtimeGameMode);
-                CgsDev::Log::WriteToLog(lacMessage);
-            }
         }
     }
 

@@ -118,26 +118,6 @@ namespace BrnGui
                 reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 24);
         }
 
-        // ---- GuiCache boundary (un-named cache far fields the X360 pokes) ----------
-        // The same idiom as BrnBootProfile.cpp's cache boundary: each helper stands in
-        // for one X360 cache field that BrnGuiCache.h has not yet named. The offsets
-        // are recorded so the eventual cache-member naming lands here.
-
-        // FLAG PC-platform leaf: the live game-mode word (X360 cache+19256; -1 == no
-        // mode). Un-named in the cache recon; report a live mode so the free-drive HUD
-        // shows instead of bouncing to PAUSE on the PC boot path (the console value is
-        // game-side state the PC world does not populate yet).
-        s32 GuiCache_GetGameModeWord(const GuiCache* /*lpGuiCache*/)
-        {
-            return 0;
-        }
-
-        // FLAG PC-platform leaf: the pause-override word (X360 cache+80784); un-named.
-        bool GuiCache_GetPauseOverride(const GuiCache* /*lpGuiCache*/)
-        {
-            return false;
-        }
-
         // [hud reveal gate 2026-08-25] THE FIX. This leaf used to `return 1;` -- hardcoding
         // E_ENGINE_ON -- on the premise that "with no live vehicle telemetry on the PC boot
         // path yet" the HUD should be shown rather than hidden. Both halves of that premise
@@ -1120,9 +1100,6 @@ namespace BrnGui
                                 reinterpret_cast<const CgsModule::Event*>(&lTrophyCarUnlockRecord),
                                 KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lTrophyCarUnlockRecord)));
 
-                            // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_TROPHY_DIAG),
-                            // first 8 lines: the trophy the scan raised.
-                            static const bool sbTrophyDiag = (getenv("BRN_TROPHY_DIAG") != 0);
                             static s32 siTrophyDiagLinesLeft = 8;
                             if (sbTrophyDiag && siTrophyDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
                             {

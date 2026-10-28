@@ -24,7 +24,6 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsPositionOnlyVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -34,9 +33,7 @@
 // (tools/nushaders/Source/Executable/24.fx and 25.fx).
 namespace renderengine
 {
-    extern const u8  gauIm3dZOnlyVertexProgramPC[];
     extern const u32 guIm3dZOnlyVertexProgramPCSize;
-    extern const u8  gauIm3dZOnlyPixelProgramPC[];
     extern const u32 guIm3dZOnlyPixelProgramPCSize;
 }
 
@@ -129,20 +126,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     // Adopt the canonical D3D9 platform-4 images when supplied by the PC caller.
     // They are compiled from the TUB ZOnly source pair, not the console Xenos blobs.
     // A non-PC image still follows the original console route below.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -291,7 +274,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;
@@ -312,8 +294,6 @@ void ImRenderer<V>::BeginRendering()
     mgpActiveRenderer = static_cast<ImRendererBase*>(this);
     shadow::Device::ResetShadowing();
     mi8CurrentProgram = 0;
-    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
-    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
     shadow::Device::SetVertexDescriptor(
         reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
 }
@@ -402,8 +382,6 @@ void Im3dZOnly::Construct(rw::IResourceAllocator* lpAllocator)
         mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
     }
 
-    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dZOnlyVertexProgramPC };
-    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dZOnlyPixelProgramPC };
     const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dZOnlyVertexProgramPCSize };
     const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dZOnlyPixelProgramPCSize };
     const s8    KI8_PROGRAMS_BUILT        = 1;

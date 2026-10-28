@@ -43,8 +43,6 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
 #include "rw/rwcore_structs.h"                                                      // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                   // Matrix44Affine operator*
-#include "pc/math/VmxFloat.h"
-
 #include <cstring>                                                                  // strlen
 #include <cmath>                                                                    // acosf (Lean angle stat)
 
@@ -102,20 +100,6 @@ namespace BrnWorld
             return lValue;
         }
 
-        // FLAG PC-platform leaf: scalar model of vrefp and the two original
-        // Newton refinements. Exact hardware estimate bits/status are unverified.
-        inline f32 RefinedCellGridReciprocal(f32 lfValue)
-        {
-            using namespace CgsPC::VmxFloat;
-            lfValue = Flush(lfValue);
-            f32 lfEstimate = Flush(1.0f / lfValue);
-            for (u32 luStep = 0; luStep < 2; ++luStep)
-            {
-                const f32 lfError = NegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
-                lfEstimate = MultiplyAdd(lfEstimate, lfError, lfEstimate);
-            }
-            return lfEstimate;
-        }
     }
 
     // @ 0x822A96A8. Run the base DebugComponent ctor, stash the owning module, clear every
@@ -754,8 +738,6 @@ namespace BrnWorld
         mMapDimensions = { lfMapScale, lfMapScale, 0.0f, 0.0f };
         const Vector2 lVirtualSize = lpDisplay->GetVirtualScreenSize();
         mScreenSize = { lVirtualSize.x, lVirtualSize.y, 0.0f, 0.0f };
-        mfAspect = CgsPC::VmxFloat::Multiply(
-            RefinedCellGridReciprocal(mScreenSize.y), mScreenSize.x);
 
         // The result is unused, but the original range assertions still run.
         BrnPhysics::Props::PropZoneData::GetCellId(
@@ -770,9 +752,6 @@ namespace BrnWorld
             const Vector3 lCorner0 = MakeVector3(
                 static_cast<f32>(100 * lId.GetX()) - 5000.0f, 0.0f,
                 static_cast<f32>(100 * lId.GetZ()) - 5000.0f);
-            const Vector3 lCorner1 = CgsPC::VmxFloat::Add(lCorner0, MakeVector3(100.0f, 0.0f, 0.0f));
-            const Vector3 lCorner2 = CgsPC::VmxFloat::Add(lCorner1, MakeVector3(0.0f, 0.0f, 100.0f));
-            const Vector3 lCorner3 = CgsPC::VmxFloat::Add(lCorner2, MakeVector3(-100.0f, 0.0f, 0.0f));
             const Vector2 laPoints[4] = {
                 ToCellGridScreenCoords(lCorner0), ToCellGridScreenCoords(lCorner1),
                 ToCellGridScreenCoords(lCorner2), ToCellGridScreenCoords(lCorner3)
@@ -804,17 +783,9 @@ namespace BrnWorld
     // half its world dimensions, normalise, then scale to the current virtual screen.
     Vector2 PropEntityDebugComponent::ToCellGridScreenCoords(Vector3 lWorldPosition)
     {
-        const Vector3 lRelative = CgsPC::VmxFloat::Subtract(
-            lWorldPosition, mpPropEntityModule->mPlayerPosition);
         // Raw vperm mask82CDA450 selects {x,z,x,x}; later inserts only replace
         // lanes0/1. Preserve the two otherwise unused output lanes as well.
         Vector2 lScreenPosition = { lRelative.x, lRelative.z, lRelative.x, lRelative.x };
-        lScreenPosition.x = CgsPC::VmxFloat::MultiplyAdd(mMapDimensions.x, 0.5f, lScreenPosition.x);
-        lScreenPosition.y = CgsPC::VmxFloat::MultiplyAdd(mMapDimensions.y, 0.5f, lScreenPosition.y);
-        lScreenPosition.x = CgsPC::VmxFloat::Multiply(lScreenPosition.x, RefinedCellGridReciprocal(mMapDimensions.x));
-        lScreenPosition.y = CgsPC::VmxFloat::Multiply(lScreenPosition.y, RefinedCellGridReciprocal(mMapDimensions.y));
-        lScreenPosition.x = CgsPC::VmxFloat::Multiply(lScreenPosition.x, mScreenSize.x);
-        lScreenPosition.y = CgsPC::VmxFloat::Multiply(lScreenPosition.y, mScreenSize.y);
         return lScreenPosition;
     }
 

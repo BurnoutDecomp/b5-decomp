@@ -232,11 +232,6 @@ namespace Vehicle
              liCar >= 0;
              liCar = mUsedRaceCars.GetNextNonZeroBit(liCar))
         {
-            // [FLAG PC hardening] value-initialised. The console builds this record on the
-            // stack and leaves the 15 pad bytes after mxVolumeTypeFlags as whatever was there;
-            // AddEvent block-copies all 64. Nothing reads the pad, so zeroing it is invisible
-            // -- and it keeps an uninitialised read off a shared queue.
-            CgsSceneManager::SceneManagerIO::InEventLineTestNearest lEvent = {};
 
             const Vector3 lStart = maRaceCarVehicles[liCar].GetPosition();
             Vector3 lEnd = lStart;
@@ -498,38 +493,6 @@ namespace Vehicle
         // BRN_CRASH_PLAYER = the number of UpdateVehiclePhysics calls to wait before firing ONCE
         // (default 900 ~= 15 s at 60 Hz, i.e. after the drive is under way). Fires once per boot.
         {
-            static const char* const kspCrashProbe = getenv("BRN_CRASH_PLAYER");
-            if (kspCrashProbe != 0)
-            {
-                static u32 sluProbeFrames = 0;
-                static bool sbProbeFired  = false;
-                const u32 kluProbeAt = (atoi(kspCrashProbe) > 0)
-                                     ? static_cast<u32>(atoi(kspCrashProbe)) : 900u;
-                ++sluProbeFrames;
-                // ⭐ ONE ARM AGAIN (endcrash wave, 2026-08-27). This block used to carry TWO, split
-                // on BRN_ENABLE_CRASH_ENTRY, for one reason: the console's deferred-request block two
-                // blocks below ends in CGS_ASSERT(IsRaceCarCrashing(player)), and with the sink gated
-                // off that assert would fire -- CORRECTLY, the sink really did return early -- and a
-                // dev assert PAUSES the game waiting for END, hanging a run whose author had simply
-                // forgotten to set the flag. The "disabled" arm existed to reach the sink anyway and
-                // witness its suppression, so the flag could be shown to be load-bearing rather than
-                // taken on trust from a stochastic traffic collision that might never happen.
-                // THE FLAG IS GONE, so the sink is always live and the console's own path is the only
-                // one left: set mbCrashPlayerNextUpdate and let the deferred block do the rest,
-                // assert and all.
-                if (!sbProbeFired && sluProbeFrames >= kluProbeAt)
-                {
-                    sbProbeFired = true;
-                    mbCrashPlayerNextUpdate = true;
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[crash-probe] frame " << sluProbeFrames
-                            << ": setting mbCrashPlayerNextUpdate (player slot "
-                            << static_cast<s32>(mePlayerActiveRaceCarIndex) << ")\n";
-                    }
-                }
-            }
         }
 
         // Deferred "crash the player next update" request (asm 0x82645224..0x82645298).
@@ -691,8 +654,6 @@ namespace Vehicle
             static s32 siCrashRespDiag = -1;
             if (siCrashRespDiag < 0)
             {
-                const char* lpcEnv = getenv("BRN_CRASH_RESPONSE_DIAG");
-                siCrashRespDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
             }
             if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex)
             {

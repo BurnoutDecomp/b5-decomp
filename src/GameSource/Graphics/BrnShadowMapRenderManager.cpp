@@ -6,8 +6,6 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h" // RenderTarget::mDepthTarget.Resolve()
-#include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                  // renderengine::gpD3DDevice
-#include "pc/gcm/renderengine/ShadowPass.h"                   // gpShadowDepthStencilState,
                                                                     // ImDeviceSetDepthStencilState,
                                                                     // DeviceClearDepthStencil
 

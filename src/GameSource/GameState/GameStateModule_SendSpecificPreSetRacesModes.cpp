@@ -85,15 +85,6 @@
 // finish-point scan is what then reads such a record at index -1 (documented on its side);
 // "fixing" either half would change which bits the online-finish-point mask carries.
 //
-// [FLAG PC bring-up] THREE NULL GUARDS THE SHIPPED CODE DOES NOT HAVE. It asserts each of the
-// three resources and then dereferences it regardless. It can afford that because all three
-// are resident long before the map menu can be opened; on PC any of them can still be
-// outstanding, and a null here is an AV rather than a degraded table. Publishing an
-// EMPTY-but-valid table would be the silent-drop shape -- the GUI would then resolve nothing
-// and never be told why -- so the message is not sent at all and the valid flag stays false,
-// exactly as it is before the request arrives.
-// DELETE-WHEN the three acquires are proven complete before the map menu can request this.
-// ============================================================================
 
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer + the interface accessor
@@ -174,13 +165,6 @@ namespace
             CgsDev::Assert::EndAssert();
         }
 
-        // [FLAG PC bring-up] THE CLAMP IS NOT IN THE SHIPPED CODE. The assert above is its ONLY
-        // protection for the 32-byte landmark scratch, and CGS_ASSERT does not halt this
-        // build, so an over-long authored event would run the loop off the end of the array --
-        // and then hand the same over-long count to AddEvent, whose Event::Construct copies that
-        // many LandmarkIndex into a 16-slot member. Clamped here, at both the loop bound and the
-        // count that goes into the record, so the two stay consistent.
-        // DELETE-WHEN the assert is a halting one on this build.
         s32 liCount = liNumCheckpoints;
         if (liCount > GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE)
         {
@@ -215,14 +199,6 @@ namespace
                     : 0;
             CGS_ASSERT(lpLandmark != 0, "lpLandmark");   // :6045
 
-            // [FLAG PC bring-up] the shipped code reads the landmark's +0x28 halfword with no
-            // null test and stores whatever comes back. The slot still has to be written -- the
-            // record's
-            // landmark count covers it either way -- so an unresolved landmark records region
-            // index 0 rather than dereferencing a null. A divergence, stated rather than hidden.
-            // DELETE-WHEN the trigger table is proven to resolve every authored checkpoint.
-            laLandmarkIndices[liCheckpoint] =
-                LandmarkIndex((lpLandmark != 0) ? lpLandmark->GetRegionIndex() : 0);
         }
 
         // The record: the event junction id, the packed light-trigger id, the scratch array
@@ -248,7 +224,6 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
     CGS_ASSERT(lpTrafficData     != 0, "lpTrafficData");       // :5993
     CGS_ASSERT(lpTriggerData     != 0, "lpTriggerData");       // :5994
 
-    // [FLAG PC bring-up] NOT IN THE SHIPPED BUILD -- see the banner's THREE NULL GUARDS.
     if (lpOutput == 0 || lpProgressionData == 0 || lpTrafficData == 0 || lpTriggerData == 0)
     {
         static bool sbNoResourcesLogged = false;

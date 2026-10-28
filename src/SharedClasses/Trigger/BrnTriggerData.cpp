@@ -187,7 +187,6 @@ BrnTrigger::TriggerData::FindLandmark( CgsID lId ) const
     return mpLandmarks;
 }
 
-
 // -----------------------------------------------------------------------------
 // RELOCATION VIEWS (FixUp / FixDown).
 //
@@ -215,7 +214,6 @@ namespace
         u8        mu8Flags;
         u8        _pad[4];
     };
-    static_assert(sizeof(LandmarkRelocationView) == 0x40, "Landmark host stride");
 
     struct SignatureStuntRelocationView
     {
@@ -224,7 +222,6 @@ namespace
         s32       miStuntElementCount;  // host +0x18 (console +0x14)
         s32       _pad;
     };
-    static_assert(sizeof(SignatureStuntRelocationView) == 0x20, "SignatureStunt host stride");
 
     struct KillzoneRelocationView
     {
@@ -235,7 +232,6 @@ namespace
         s32       miRegionIdCount;  // host +0x18 (console +0x0C)
         s32       _pad1;
     };
-    static_assert(sizeof(KillzoneRelocationView) == 0x20, "Killzone host stride");
 }
 
 // X360 0x8267F800. Load-time pointer relocation "fix DOWN": converts every stored pointer from

@@ -84,9 +84,6 @@ namespace CgsResource
             if (!IsBufferLockedForWriting())
             {
                 CgsDev::Assert::BeginAssert();
-                // FLAG PC-platform leaf: the existing assertion provider keeps
-                // the original shared buffer on-owner and isolates worker text.
-                CgsDev::Assert::MessageBufferPC lMessage;
                 CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
                 lStream << "Not locked for writing\n";
                 CgsDev::Assert::FireAssert(lMessage.GetBuffer(),

@@ -303,11 +303,7 @@ namespace
             // [diag] BRN_PFX_DIAG: the FX-events layer's weight as it reaches the blend.
             if (lu8Layer == E_EFLAYER_FXEVENTS && lrAltWeight > 0.0f)
             {
-                static const bool sbPfxDiag = (getenv("BRN_PFX_DIAG") != 0);
                 static u32 suPfxDiagCalls = 0;
-                if (sbPfxDiag && (suPfxDiagCalls++ % 100u) == 0 && CgsDev::Log::gpDebugPrint != 0)
-                    *CgsDev::Log::gpDebugPrint << "[postfx-fx] FX-events layer blend: type-size " << static_cast<u32>(sizeof(T))
-                                               << " weight " << lrAltWeight << "\n";
             }
             lRes.SetToBlend(lRes, KF_MAX_LAYER_WEIGHT_SUM - lrAltWeight, lAltData, lrAltWeight);
         }

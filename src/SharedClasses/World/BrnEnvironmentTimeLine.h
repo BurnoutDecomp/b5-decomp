@@ -128,14 +128,6 @@ namespace EnvironmentSettings
                        "TimeLine::LocationData::muKeyframeCnt leads the record on both targets" );
         static_assert( sizeof( f32 ) == 4, "keyframe times stay 4-byte floats" );
         // Host column of the table in the banner.
-        static_assert( offsetof( TimeLine::LocationData, mpfKeyframeTimes ) == 0x08,
-                       "TimeLine::LocationData::mpfKeyframeTimes @0x08 on x64 (console +0x04)" );
-        static_assert( offsetof( TimeLine::LocationData, mppKeyframes ) == 0x10,
-                       "TimeLine::LocationData::mppKeyframes @0x10 on x64 (console +0x08)" );
-        static_assert( sizeof( TimeLine::LocationData ) == 24,
-                       "TimeLine::LocationData stride is 24 on x64 (console 12)" );
-        static_assert( sizeof( Keyframe* ) == 8,
-                       "mppKeyframes elements are 8-byte host pointers (console 4)" );
     }
 
     inline void TimeLine::_AssertLayout()
@@ -144,7 +136,6 @@ namespace EnvironmentSettings
                        "TimeLine::muVersion leads the record on both targets (FixUp reads *a2)" );
         static_assert( offsetof( TimeLine, muLocationCnt )  == 0x04, "TimeLine::muLocationCnt @0x04" );
         static_assert( offsetof( TimeLine, mpLocationDatii ) == 0x08, "TimeLine::mpLocationDatii @0x08" );
-        static_assert( sizeof( TimeLine ) == 16, "TimeLine header is 16 bytes on x64 (console 12)" );
     }
 }
 }

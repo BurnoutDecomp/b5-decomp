@@ -59,9 +59,6 @@ namespace CgsResource
         CompressedData*         mpEntries;       // +4  compressed entry array
         u32                     muNumEntries;    // +8  entry count
         CgsMemory::HeapMalloc*  mpHeapMalloc;    // +12 heap the zlib callbacks allocate through
-        // FLAG PC-platform leaf: native zlib retains the address of its
-        // z_stream. Keep one worker per streaming interface across job threads.
-        Decompressor*          mpNativeWorker;
     };
 
     // The inflate worker. It keeps a working zlib stream (mStream) into which it copies the saved
@@ -75,9 +72,6 @@ namespace CgsResource
         // 0x82ACCB48 -- restore the saved stream, inflate every entry, copy the stream back.
         // Returns the destination of the final snapshot copy (the X360 returns memcpy's result).
         void* Execute(DecompressionJobData* lpJobData);
-        // FLAG PC-platform leaf: retire the native zlib workspace on shutdown
-        // after the owning interface has joined its outstanding job.
-        void CancelStreamPC();
 
     private:
         // 0x82ACC9E0 -- (re)initialise mStream for the current entry and inflateInit_ it.

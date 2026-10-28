@@ -28,8 +28,6 @@
 #include "BrnCommonTypes.h"   // Vector3 / Vector4 (rw::math::vpu)
 // renderengine::VertexDescriptor::Parameters is named (by reference) in the declaration
 // of FillVertexDescriptorParameters below, so the full descriptor type must be visible.
-#include "pc/gcm/renderengine/VertexDescriptor.h"
-
 namespace BrnGraphics
 {
     // BrnSkidVertex.h:45 (DWARF). The skid-trail decal vertex.

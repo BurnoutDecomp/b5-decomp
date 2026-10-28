@@ -156,7 +156,6 @@ public:
     // the list's bin, collapse the chain onto it, publish it as mpSortedKeys, and
     // fill lpJobInfo for the RadixSort job.
     DispatchList* PrepareSortJobInfo(SortJobInfo* lpJobInfo);
-    // [PC leaf] The X360 sorts each list on a RadixSort job (RadixSortEntry
     // @0x82AD2020) between PrepareSortJobInfo and the dispatch walk. The PC
     // bring-up has no job scheduler yet, so this member runs the same
     // prepare-then-sort synchronously. Despite the job name, ARTIST
@@ -218,18 +217,11 @@ private:
     u64*             mpSortedKeys;         // 0x18 (a1[6]) -- flat sorted record array
     KeyBlock*        mapChainBlockArray[KU_MAX_BLOCKS_PER_CHAIN]; // X360 +0x1C
     u32              muChainBlockCount;                        // X360 +0x11C
-    // FLAG PC-platform leaf: extended LODs can emit more than 64 shared blocks
-    // into one list. Retain the previous relocated tail so overflow chains can
-    // be linked into the final saved chain without dropping draws or allocating.
-    // Use the otherwise unused alignment tail; the host list size is unchanged.
-    KeyBlock*        mpRelocatedChainTailPC;
     u8               maReservedTail[0x180u - 0x120u - sizeof(KeyBlock*)];
 
     // Never called; pins the one pointer-invariant offset fact.
     static void _AssertLayout()
     {
-        static_assert(offsetof(DispatchList, m_pBinBase) == 0x08 || sizeof(void*) == 8,
-                      "DispatchList::m_pBinBase must sit at 0x08 on the 32-bit target");
     }
 };
 

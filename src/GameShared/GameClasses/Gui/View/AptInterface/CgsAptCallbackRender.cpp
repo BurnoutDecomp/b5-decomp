@@ -1,4 +1,3 @@
-#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"
 
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"            // AptAuxPointer::mpAptAuxInst (the singleton)
@@ -75,11 +74,6 @@ namespace CgsGui
             reinterpret_cast<CgsResource::GuiGeometryFile*>(lpRenderingUnit);
         Im2dCommandBuffer*            lpBuffer = lrHandler.GetCommandBuffer();
         const CgsGraphics::Im2dTransform& lrTransform = lrHandler.GetVertexTransform();
-
-        // FLAG PC-platform leaf (.apt native-8 blob): 8-byte-strided mesh table + 8-byte mppGeometryMeshes (rebased
-        // offset->pointer by AptFixupGeometryFileNative8), indexed as uintptr_t entries.
-        const uintptr_t* lpMeshTable =
-            reinterpret_cast<const uintptr_t*>(lpFile->mppGeometryMeshes);
 
         for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
         {
@@ -191,39 +185,11 @@ namespace CgsGui
         if (lrHandler.GetVertexTransform().mColourScale.w == 0.0f)
             return;
 
-        // The glyphs ride the SAME dispatched command buffer as the Apt shapes, under this text
-        // item's CURRENT batch transform (PushMatrices -> pfnSetVertexMatrix stamped it into the
-        // handler's mVertexTransform just before this callback; the shape path pushes the same
-        // command at the head of AptRenderHandler::Render). Dispatch folds the transform into
-        // every glyph vertex, so the field's local-space layout box lands exactly where the apt
-        // matrix places it -- and the glyph draw keeps its walk-order depth among the shapes.
-        // FLAG PC-platform leaf (render-backend fold): on the console the Im2dRenderBuffer this path drives IS this buffered
-        // command buffer (RenderStart @0x57E0A0 / RenderEnd @0x57E5DC); the PC debug fold made the
-        // Im2dRenderBuffer typedef the IMMEDIATE Im2d wrapper, so the text renderer is driven
-        // through its buffered entry (TextRenderer::RenderStringBuffered) here.
-        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpBuffer =
-            lrHandler.GetCommandBuffer();
         lpBuffer->SetTransform(lrHandler.GetVertexTransform());
 
         // The pooled CgsAptString's leading member IS the CgsGraphics::TextObject (same address).
         const CgsGraphics::TextObject* lpTextObject =
             reinterpret_cast<const CgsGraphics::TextObject*>(lpSlot);
-
-        if (AptTextLayoutDiagnosticsPC::SampleDraw(liZID))
-        {
-            const auto& transform = lrHandler.GetVertexTransform();
-            char line[768];
-            std::snprintf(line, sizeof(line),
-                "[apt-text-layout] draw id=%d caption='%s' origin=%.6f,%.6f,%.6f rightUp=%.6f,%.6f,%.6f,%.6f box=%.6f,%.6f,%.6f,%.6f align=%d font=%.6f currentFont=%.6f widthEm=%.6f alpha=%.6f",
-                liZID,AptTextLayoutDiagnosticsPC::Caption(AptTextLayoutDiagnosticsPC::Kind(liZID)),
-                transform.mOriginXYZ.x,transform.mOriginXYZ.y,transform.mOriginXYZ.z,
-                transform.mRightUp.x,transform.mRightUp.y,transform.mRightUp.z,transform.mRightUp.w,
-                lpTextObject->mv2TopLeft.mX,lpTextObject->mv2TopLeft.mY,
-                lpTextObject->mv2BottomRight.mX,lpTextObject->mv2BottomRight.mY,
-                static_cast<int>(lpTextObject->meAlignment),lpTextObject->mfFontHeight,
-                *lpTextObject->mpfCurrentFontHeight,lpTextObject->mfStringWidth,transform.mColourScale.w);
-            AptTextLayoutDiagnosticsPC::Emit(line);
-        }
 
         lrHandler.GetTextRenderer()->RenderStringBuffered(lpBuffer, *lpTextObject);
     }
@@ -308,15 +274,6 @@ namespace CgsGui
         return nullptr;
     }
 
-    // -------------------------------------------------------------------------
-    // FreeTexture - PS3 0x5BADFC. FLAG PC-platform leaf: host render-callback shim -- the
-    // resource system owns the texture lifetime, so there is nothing for the Apt free
-    // callback to release (the console body is itself empty).
-    // -------------------------------------------------------------------------
-    void AptCallbackRender::FreeTexture(AptAssetTexture /*lpAssetTexture*/)
-    {
-    }
-
     // The bsearch comparator (PS3 0x5BAE94, CgsGui::_FindGeometryFile): compare the two records'
     // leading id words (`**a - **b`). Both the search key and each table entry are a one-word
     // record whose first word is the file id.
@@ -351,15 +308,6 @@ namespace CgsGui
                                 static_cast<size_t>(lpObject->muNumberOfFiles),
                                 12u, &FindGeometryFileCompare);
         return reinterpret_cast<AptAssetRenderingUnit>(lpFound);
-    }
-
-    // -------------------------------------------------------------------------
-    // FreeRenderingUnit - PS3 0x5BAEEC. FLAG PC-platform leaf: host render-callback shim --
-    // the rendering-unit lifetime is owned by the resource system, so there is nothing for the
-    // Apt free callback to release (the console body is itself empty).
-    // -------------------------------------------------------------------------
-    void AptCallbackRender::FreeRenderingUnit(AptAssetRenderingUnit /*lpRenderingUnit*/)
-    {
     }
 
     // -------------------------------------------------------------------------

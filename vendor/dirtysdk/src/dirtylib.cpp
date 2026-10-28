@@ -10,7 +10,7 @@
 #include <cstdio>
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include <xtl.h>
 
 static void* _NetLib_pDebugParm = NULL;
 static s32 (*_NetLib_pDebugHook)(void* pParm, const char* pText) = NULL;

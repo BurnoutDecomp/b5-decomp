@@ -1,12 +1,8 @@
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"
-#include "pc/gcm/renderengine/FrameProfile.h"
-
 #include <new>                                                                  // placement new (the carved effects)
 #include <cstdio>                                                               // std::snprintf (the seam's sampled diag)
 #include "GameSource/Graphics/BrnRendererMemory.h"                              // the render-target pool
 namespace renderengine { extern u32 guDiagComposites; extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 per-present counters (device.cpp)
-#include "pc/gcm/renderengine/device.h"    // [DIAG] renderengine::DiagTextureMeanLuma
-#include "pc/gcm/renderengine/texture.h"   // [DIAG] renderengine::Texture::mpD3DTexture
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"   // [DIAG] RenderTarget::maColourTargets
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"                     // CgsRenderTarget::GetRenderTarget
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"        // saDepthStencilStates[1] (Render)
@@ -430,22 +426,6 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
 
 void BrnPostFx::Destruct()
 {
-    // ---- the two tint buffers (asm 0x8240814C-0x82408198) ---------------------------------------
-    // The flattened trio per tint is
-    //     renderengine::Texture::Release(m_textureTintMap);            (`lwz r3, 0xC0(r31)`)
-    //     m_allocator->DoFree(m_textureTintMapResource);               (`lwz r3, 0xF0(r31)`, `addi r4, r31, 0xC8`)
-    //     m_allocator->DoFree(m_textureStateTintMapResource);          (`addi r4, r31, 0xDC`)
-    // -- i.e. exactly the three resources rw::graphics::postfx::Tint owns, freed through the Tint's
-    // OWN allocator. That is Tint::Release() (DWARF rwgpfxtint.h:77) inlined; the three offsets
-    // 0xC0 / 0xC8 / 0xDC are the committed rwgpfxtint.h members m_textureTintMap /
-    // m_textureTintMapResource / m_textureStateTintMapResource, and 0xF0 is m_allocator.
-    // Restoring the call also keeps this TU off three private members it has no business reaching.
-    // [FLAG PC bring-up] The five sub-object tests below are NOT the console's -- its carves cannot
-    // fail, so 0x8240814C-0x82408204 dereferences every one straight through -- but Construct above
-    // already tests each carve and leaves the pointer null on a pool shortfall (host sizeof carves
-    // from a bring-up allocator), and a null here would turn a missing effect into a teardown crash.
-    // Mirrors Construct's own conditionals; the console order and calls are unchanged. (Verify pass
-    // 2026-08-15.)
     for (u32 luTint = 0u; luTint < KU_POST_FX_NUM_TINT_BUFFERS; ++luTint)
     {
         if (m_pfxTint[luTint] != nullptr)
@@ -890,9 +870,6 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
     lpDestinationRenderTarget->Resolve(true, true);
 }
 
-// ================================================================================================
-// [FLAG PC bring-up] PCBringUpRenderPostFxComposite -- the seam BrnRendererModule::Render reaches
-// the composite through.  (goes into b5-decomp/src/GameSource/Graphics/PostFx/BrnPostFx.cpp)
 //
 // This is NOT a decompiled function. The console had no such helper: BrnRendererModule::Render calls
 // BrnPostFx::Render directly, in one translation unit. It exists because BrnRendererModule.h used to
@@ -916,171 +893,6 @@ namespace
     // Set by PCBringUpConstructPostFx. The seam's own record, not the object's: BrnPostFx keeps
     // mnActiveLayerCount private and the guard belongs to the PC gate, not to the console class.
     bool sbPostFxConstructed = false;
-}
-
-// [FLAG PC bring-up] The deferred BrnPostFx::Construct -- see its banner in BrnPostFx.h. The console
-// runs it from BrnRendererModule::Construct (`bl BrnPostFx__Construct` @0x8240B78C, r3 = mPostFxVault,
-// r4 = this->mpGraphicsAllocator); on PC the module's Construct has no device and a null graphics
-// allocator, so it runs from the frame that builds the post-fx pool, on the bring-up allocator.
-void PCBringUpConstructPostFx(rw::IResourceAllocator* lpAllocator)
-{
-    if (sbPostFxConstructed || lpAllocator == 0)
-    {
-        return;
-    }
-    msPostFx.Construct(lpAllocator);
-    sbPostFxConstructed = true;
-    CgsDev::Log::WriteToLog("[postfx-composite] BrnPostFx::Construct ran (deferred PC bring-up)\n");
-}
-
-// [FLAG PC bring-up] WILL THE COMPOSITE ACTUALLY RUN THIS FRAME? -- the precondition, factored out
-// of PCBringUpRenderPostFxComposite below so that a SECOND caller can ask it without duplicating it.
-//
-// That second caller is BrnRendererModule::Render's colour-cube tint block. BrnPostFx::BeginTintBlend
-// LOCKS the tint volume texture and the only thing that unlocks it is BrnPostFx::Render's step-1
-// drain -- which lives on the far side of this precondition. On the console both sites sit under one
-// gate (the mbRenderPostFX byte, tested at 0x8240C6A8 and again at 0x8240DC6C), so a lock cannot
-// outlive its frame; on PC the composite has this pool/Construct test as well, and a tint blend
-// scheduled on a frame the composite skips would Lock and never Unlock. One function, one answer.
-//
-// It is a pure query: no logging, no side effect, cheap enough to call twice a frame (five pointer
-// loads and a bool).
-bool PCBringUpPostFxCompositeWillRun(BrnRendererMemory& lrRendererMemory)
-{
-    CgsRenderTarget* const lpSceneTarget = lrRendererMemory.GetDownSampleBuffer();
-    CgsRenderTarget* const lpBackBuffer  = lrRendererMemory.GetBackBuffer();
-    CgsRenderTarget* const lpBloomBuffer = lrRendererMemory.GetBloomBuffer();
-    CgsRenderTarget* const lpDofBuffer   = lrRendererMemory.GetDepthOfFieldBuffer();
-    CgsRenderTarget* const lpWorkBuffer  = lrRendererMemory.GetWorkBuffer();
-
-    return lpSceneTarget != 0 && lpSceneTarget->GetRenderTarget() != 0 &&
-           lpBackBuffer  != 0 && lpBackBuffer->GetRenderTarget()  != 0 &&
-           lpBloomBuffer != 0 && lpBloomBuffer->GetRenderTarget() != 0 &&
-           lpDofBuffer   != 0 && lpDofBuffer->GetRenderTarget()   != 0 &&
-           lpWorkBuffer  != 0 && lpWorkBuffer->GetRenderTarget()  != 0 &&
-           sbPostFxConstructed;
-}
-
-bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
-                                    f32 lfBrightness,
-                                    f32 lfContrast,
-                                    f32 lfFrameWhiteLevel,
-                                    f32 lfAspectCorrection,
-                                    const f32* lpafTint2dColourXYZW,
-                                    bool lbMotionBlurEnabled,
-                                    renderengine::Texture* lpOverrideSourceTexture)
-{
-    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::POSTFX);
-    ++renderengine::guDiagComposites;   // [DIAG] issue #30 per-present counters
-    // The console's own source and destination: BrnRendererModule::Render @0x8240BFA8 loads
-    // `lwz r27, 0x248(r31)` and `lwz r29, 0x24C(r31)` off mAllocatedRenderTargets at this+0x238,
-    // i.e. mapRenderTarget[4] E_RENDER_TARGET_DOWN_SAMPLE and mapRenderTarget[5]
-    // E_RENDER_TARGET_BACK_BUFFER, and passes each slot's +0x108 (GetRenderTarget()).
-    CgsRenderTarget* const lpSceneTarget = lrRendererMemory.GetDownSampleBuffer();
-    CgsRenderTarget* const lpBackBuffer  = lrRendererMemory.GetBackBuffer();
-
-    // ...and the bloom / depth-of-field / work slots the console body samples without a test (asm
-    // 0x8240A560-0x8240A5E8: GetBloomBuffer()->GetRenderTarget()->GetTexture(0) /
-    // GetDepthOfFieldBuffer()->..., plus the WORK buffer PrepareDownSampleBuffers hands the bloom /
-    // DoF passes the moment E_FX_BLOOM or E_FX_DEPTH_OF_FIELD is set). Every slot BrnPostFx::Render
-    // dereferences is tested in PCBringUpPostFxCompositeWillRun above -- once, in one place, so the
-    // console body keeps its unguarded reads and the renderer's tint block can ask the same
-    // question before it schedules a blend only this function's drain can unlock.
-    if (!PCBringUpPostFxCompositeWillRun(lrRendererMemory))
-    {
-        // Nothing drawn, nothing bound, nothing resolved. The caller presents the frame the old way.
-        // The !sbPostFxConstructed arm matters as much as the pool: BrnPostFx::Render's first act is
-        // `if (mnActiveLayerCount == 0) return` and only Construct sets it, so an un-Constructed
-        // singleton would return here having drawn NOTHING while this function reported success --
-        // and the caller would present a black world with the GUI on top.
-        static bool sbReported = false;
-        if (!sbReported)
-        {
-            sbReported = true;
-            CgsDev::Log::WriteToLog(sbPostFxConstructed
-                ? "[postfx-composite] composite SKIPPED: the pool lacks a target it needs "
-                  "(down-sample / bloom / depth-of-field / back buffer) -- presenting via the blit\n"
-                : "[postfx-composite] composite SKIPPED: BrnPostFx::Construct has not run "
-                  "-- presenting via the blit\n");
-        }
-        return false;
-    }
-
-    // [DIAG, sampled] what the composite is fed: the 1st / 100th / 1000th call's brightness,
-    // contrast, white level and aspect correction. The neutral picture needs 0 / 1 / 1 / 1.
-    {
-        static u32 suCalls = 0u;
-        ++suCalls;
-        if (suCalls == 1u || suCalls == 100u || suCalls == 1000u)
-        {
-            char lacMsg[200];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[postfx-composite] call %u: brightness=%g contrast=%g white=%g aspect=%g\n",
-                          static_cast<unsigned>(suCalls), (double)lfBrightness, (double)lfContrast,
-                          (double)lfFrameWhiteLevel, (double)lfAspectCorrection);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-
-    // The 2D tint, now EVALUATED rather than assumed. BrnRendererModule::Render zeroes the vector
-    // (`vspltisw v0, 0` / `stvx128 v0, r0, r11` @0x8240DC80-0x8240DC8C) and overwrites it only when
-    // effects are allowed AND the layer-0 internal frame's mbUseTint2d is set, in which case
-    // EffectsArbitrator::EvalTint2d fills it; that is what arrives here as lpafTint2dColourXYZW. On
-    // this build the shipped tint2d asset ("374388", POSTFXVAULT.BIN) is (0,0,0,0), so the value is
-    // still the pass-through neutral -- but it is now the data's zero, not a hard-coded one.
-    rw::math::vpu::Vector4 lTintColour;
-    if (lpafTint2dColourXYZW != 0)
-    {
-        lTintColour.x = lpafTint2dColourXYZW[0];
-        lTintColour.y = lpafTint2dColourXYZW[1];
-        lTintColour.z = lpafTint2dColourXYZW[2];
-        lTintColour.w = lpafTint2dColourXYZW[3];
-    }
-    else
-    {
-        lTintColour.SetZero();
-    }
-
-    // The motion-blur flag is now READ off the layer-0 effects frame, as the console reads it in r7
-    // (`lbz r7, 0xD40+var_CD0(r1)` @0x8240DE18 -- the byte Render sampled from mMotionBlurData
-    // .mbIsActive at 0x8240C2DC). It is still false on this build, because nothing posts a
-    // motion-blur event and MotionBlurData::Construct @0x821F84E8 seeds mbIsActive = false -- which
-    // is what keeps the permutation index at 0 (index = 4*(mb ? q+1 : 0) + 2*dof + tint), the only
-    // slot with a PC program pair.
-    // Through the file-scope singleton, not BrnPostFx::GetInstance(): the console does the same --
-    // BrnRendererModule::Render loads the global (`_R20 = mPostFxVault;`, pseudocode line 500) and
-    // passes it as r3 at 0x8240DE0C. GetInstance() has no body in this tree, so calling it would
-    // also have added an unresolved external for nothing.
-    // [DIAG] NOT IN THE X360 BINARY -- issue #30: the mean luminance of the composite's SOURCE
-    // (the down-sample buffer's colour texture) on the presents the black-frame watch calls black.
-    {
-        static u32 suSourcePrinted = 0u;
-        if (renderengine::gbDiagLastPresentBlack && suSourcePrinted < 64u)
-        {
-            ++suSourcePrinted;
-            const rw::graphics::postfx::RenderTarget* lpSrcRt = lpSceneTarget->GetRenderTarget();
-            renderengine::Texture* lpSrcTex = (lpSrcRt != 0) ? lpSrcRt->maColourTargets[0].mpTexture : 0;
-            const float lfSrcMean = renderengine::DiagTextureMeanLuma(lpSrcTex != 0 ? static_cast<void*>(lpSrcTex->mpD3DTexture) : 0);
-            renderengine::Texture* lpBbTex = (lpBackBuffer->GetRenderTarget() != 0) ? lpBackBuffer->GetRenderTarget()->maColourTargets[0].mpTexture : 0;
-            const float lfBbMean = renderengine::DiagTextureMeanLuma(lpBbTex != 0 ? static_cast<void*>(lpBbTex->mpD3DTexture) : 0);
-            char lacMsg[200];
-            std::snprintf(lacMsg, sizeof(lacMsg), "[composite-diag] present=%u source(down-sample) mean=%.1f backbuffer-target mean(before composite)=%.1f srcRt=%p\n",
-                          renderengine::guPresentCount, (double)lfSrcMean, (double)lfBbMean, static_cast<const void*>(lpSrcRt));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-    msPostFx.Render(lrRendererMemory,
-                    lpSceneTarget->GetRenderTarget(),
-                    lpBackBuffer->GetRenderTarget(),
-                    lTintColour,
-                    lbMotionBlurEnabled,
-                    lfBrightness,
-                    lfContrast,
-                    lfFrameWhiteLevel,
-                    lfAspectCorrection,
-                    lpOverrideSourceTexture);   // the calibration ramp, or null (BrnRendererModule
-                                                // derives it at the console's 0x8240DD50-0x8240DE08)
-    return true;
 }
 
 // ================================================================================================
@@ -1125,29 +937,6 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
 //     TintBlendParameters::factor[5], the ONE weight slot the loop can never reach given that
 //     assert. Reproduced because it is a real store into a block the job reads.
 //
-// [FLAG PC bring-up] THE DISPATCH, AND ONLY THE DISPATCH. The console ends with
-//     EA::Jobs::Job::SetData(&m_blendJob, params, 128)
-//     EA::Jobs::JobScheduler::AddJobs(&unk_830EA650, &m_blendJob, 1)
-//     m_processTint = true
-// `unk_830EA650` is the process-wide EA::Jobs::JobScheduler singleton, and IT DOES NOT EXIST ON
-// THIS BUILD -- it is `gJobManager`, defined only in CgsHardwareInitPS3.cpp, and the PC variant has
-// it commented out:
-//   $ grep -n "JobManager" b5-decomp/src/GameShared/GameClasses/System/PC/CgsHardwareInitPC.cpp
-//   40://JobScheduler CgsSystem::HardwareInit::mJobManager; // TODO: Implement HardwareInit
-//   42:char CgsSystem::HardwareInit::macJobManagerBuffer[400 * 1024]; // 400 KB buffer for job manager
-//   44://CgsMemory::HeapMallocCoreAllocator CgsSystem::HardwareInit::mJobManagerAllocator; // TODO ...
-//   $ grep -n "CgsHardwareInitPS3" tools/build/build_game_exe.bat
-//   (no output -- the PS3/X360 variant that defines gJobManager is not on the build list)
-// So AddJobs -- and only AddJobs -- is replaced by running the job's OWN entry point inline, which
-// is the precedent this tree already set for the same missing singleton in
-// CgsCollisionGenerator_LineStream.cpp:175-180 and CgsLooseOctree.cpp:997. SetData still runs (it
-// is the job's own state), m_processTint is still set, and Render's `m_blendJob.WaitOn()` is still
-// correct: EA::Jobs::Job::WaitOn @0x82BCB238 opens with the console's own liveness guard on
-// mJobInstanceHandle.mSchedulerBackend, so a job that was never submitted returns immediately --
-// no spin, no hang (job.cpp:233-241). The one consequence, stated plainly: the blend costs its
-// ~131 K texels on the dispatch thread here instead of on a worker, before Render's drain.
-// DELETE WHEN a real job scheduler is brought up on PC.
-// ================================================================================================
 
 void BrnPostFx::BeginTintBlend()
 {
@@ -1168,15 +957,6 @@ void BrnPostFx::BeginTintBlend()
     lrBlendParameters.numSources = m_numCubesToBlend;
     for (u32 luSource = 0u; luSource < m_numCubesToBlend; ++luSource)
     {
-        // [FLAG PC bring-up] THE NULL TEST IS NOT THE CONSOLE'S, and it is one comparison.
-        // The console cannot see a null here: BrnEffects::EffectsModule::PrepareResources
-        // @0x8229DAAC seeds m_numCubesToBlend = 5 AND all five m_colourCubes with the default
-        // cube before anything can set the tint bit, so `lwz r8, 4(r8)` is always on a real
-        // object. On PC that producer is the tintdata half of this wave and may not be live yet,
-        // and GetPixels() on a null would yield the address 16 -- a garbage pointer that is NOT
-        // null, so the blend kernels' own null-source guard could not catch it. Carrying the null
-        // through into src[] is what lets that guard see it.
-        const rw::graphics::postfx::ColourCube* const lpColourCube = m_colourCubes[luSource];
         lrBlendParameters.src[luSource]    = (lpColourCube != 0) ? lpColourCube->GetPixels() : 0;
         lrBlendParameters.factor[luSource] = m_tintFactors[luSource];
     }

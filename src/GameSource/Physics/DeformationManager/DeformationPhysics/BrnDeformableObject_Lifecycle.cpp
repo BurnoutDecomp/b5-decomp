@@ -777,8 +777,6 @@ namespace Deformation
             static s32 siRestRowProbe = -1;
             if ( siRestRowProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_RESTROW_PROBE" );
-                siRestRowProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static s32 siRestRowObjects = 0;
             if ( siRestRowProbe == 1 && siRestRowObjects < 6 && CgsDev::Log::gpDebugPrint != 0 )
@@ -842,8 +840,6 @@ namespace Deformation
             static s32 siRestRowProbe2 = -1;
             if ( siRestRowProbe2 < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_RESTROW_PROBE" );
-                siRestRowProbe2 = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static s32 siRestRowObjects2 = 0;
             if ( siRestRowProbe2 == 1 && siRestRowObjects2 < 6 && CgsDev::Log::gpDebugPrint != 0 )
@@ -1227,8 +1223,6 @@ namespace Deformation
                 static s32 siPasserProbe = -1;
                 if ( siPasserProbe < 0 )
                 {
-                    const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
-                    siPasserProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                 }
                 static u32 suLogged = 0;
                 if ( siPasserProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suLogged < 24u )
@@ -1367,8 +1361,6 @@ namespace Deformation
             static s32 siSphereProbe = -1;
             if ( siSphereProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_SPHERE_PROBE" );
-                siSphereProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static bool sbLoggedSpheres = false;
             if ( siSphereProbe == 1 && !sbLoggedSpheres && CgsDev::Log::gpDebugPrint != 0 )

@@ -147,13 +147,6 @@ namespace
     // == 2.0f (0x40000000, x360rd), stored by ChangeLightState @0x82751958.
     const f32 KF_AMBER_TIME = 2.0f;
 
-    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_LIGHT_DIAG,
-    // capped, reads only: every countdown value the manager receives, and the end of the countdown.
-    CgsDev::StrStreamBase* TrafficLightDiagStream()
-    {
-        static const bool sbEnabled = std::getenv("BRN_TRAFFIC_LIGHT_DIAG") != nullptr;
-        return sbEnabled ? CgsDev::Log::gpDebugPrint : nullptr;
-    }
     s32 giTrafficLightDiagLinesLeft = 32;
 }
 
@@ -216,13 +209,9 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
         meCountdownState         = E_TRAFFICLIGHTSTATE_GREEN;
     }
 
-    CgsDev::StrStreamBase* const lpDiag = TrafficLightDiagStream();
     if (lpDiag != nullptr && giTrafficLightDiagLinesLeft > 0)
     {
         --giTrafficLightDiagLinesLeft;
-        *lpDiag << "[traffic-lights] SetCountdownValue display=" << liCountdownDisplay
-                << " -> countdown=" << (mbCountdownLights ? 1 : 0) << " state=" << meCountdownState
-                << " remaining=" << mfCountdownRemainingTime << " [FLAG PC witness]\n";
     }
 }
 
@@ -293,12 +282,9 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
     mbCountdownLights        = false;
     meCountdownState         = E_TRAFFICLIGHTSTATE_COUNT;
 
-    CgsDev::StrStreamBase* const lpDiag = TrafficLightDiagStream();
     if (lpDiag != nullptr && giTrafficLightDiagLinesLeft > 0)
     {
         --giTrafficLightDiagLinesLeft;
-        *lpDiag << "[traffic-lights] countdown over -> countdown=0 state=" << meCountdownState
-                << " (the lights return to their own phases) [FLAG PC witness]\n";
     }
 }
 
@@ -314,15 +300,6 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
 
 namespace
 {
-    // [FLAG PC witness] (L3 RACEINTRO; NOT console code). BRN_TRAFFIC_LIGHT_CORONA_DIAG=<instance>, capped, reads
-    // only: the active-state mask a renderer hands RenderCoronasForInstance for that ONE light instance, each time
-    // it changes -- e.g. a start light through an event countdown (1 RED, 2 AMBER, 4 GREEN; 0 lights nothing).
-    s32 TrafficLightCoronaDiagInstance()
-    {
-        static const char* const spcValue = std::getenv("BRN_TRAFFIC_LIGHT_CORONA_DIAG");
-        static const s32 siInstance = (spcValue != nullptr) ? std::atoi(spcValue) : -1;
-        return siInstance;
-    }
     u32 guTrafficLightCoronaDiagLastMask  = 0xFFFFFFFFu;
     s32 giTrafficLightCoronaDiagLinesLeft = 48;
 
@@ -333,11 +310,6 @@ namespace
         const u32 luMask = lbSmashed ? 0x80000000u
                                      : (luActiveStates | (lbCountdown ? 0x40000000u : 0u)
                                         | (lbAllLightsRenderer ? 0x20000000u : 0u));
-        if (static_cast<s32>(luInstance) != TrafficLightCoronaDiagInstance() || luMask == guTrafficLightCoronaDiagLastMask
-            || giTrafficLightCoronaDiagLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == nullptr)
-        {
-            return;
-        }
         guTrafficLightCoronaDiagLastMask = luMask;
         --giTrafficLightCoronaDiagLinesLeft;
         *CgsDev::Log::gpDebugPrint << "[tl-corona] instance " << luInstance << " "
@@ -351,7 +323,6 @@ namespace
         {
             *CgsDev::Log::gpDebugPrint << " mask " << luActiveStates;
         }
-        *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
     }
 }
 

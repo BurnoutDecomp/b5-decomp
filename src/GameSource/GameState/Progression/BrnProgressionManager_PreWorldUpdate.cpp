@@ -87,15 +87,6 @@ namespace
     bool gbSaidUpdateRivals = false;
     bool gbSaidTrophyUpdate = false;
 
-    // [FLAG PC witness] the `[odometer] car=<m> offline=<m> online=<m> incar=<s> real=<s>`
-    // line -- NOT IN THE X360 BINARY. Opt-in (BRN_ODOMETER_DIAG), once per second of sim time,
-    // capped at 400 lines a run; tools/tests/cases/progression_odometer.ps1 reads it against
-    // the HUD-side `[odometer] hud=` line and the harness' own [motion] path length.
-    bool OdometerDiagEnabled()
-    {
-        static const bool sbDiag = (getenv("BRN_ODOMETER_DIAG") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -307,16 +298,6 @@ void ProgressionManager::PreWorldUpdate(
         UpdateRivals(lpGameActionQueue);
     }
 
-    // [FLAG PC harness stimulus -- NOT IN THE X360 BINARY] one-shot, default off, and off unless
-    // a test case's DiagEnv sets BRN_PROGRESSION_COMPLETION_SEEDTROPHY=1 (flow_run.ps1 clears
-    // every BRN_* first). It Appends ONE record to the queue below so
-    // tools/tests/cases/progression_completion.ps1 can watch the drain actually drain -- nothing
-    // a 60 s scenario can do earns a trophy car. The default seed changes only the queue;
-    // explicit freeroam:<category> modes exercise the real award on a pinned test profile.
-    // See BrnProgressionManager_Completion.cpp.
-    DEBUG_HarnessSeedTrophyQueue(lfSimTimeStep,
-                                 lpActiveRaceCarInterface->IsPlayerCarActive() && !lbIsInJunkyard);
-
     // `lwz r11, 0xC0(this+0x20808)` -- mQueueOfTrophyCarUnLocks' count word; the CgsArray.h:336
     // "Array used before Construct/Clear was called" assert is GetLength's own (the tree's
     // Array::GetLength fires the identical string on the -1 sentinel), then `> 0`.
@@ -329,28 +310,6 @@ void ProgressionManager::PreWorldUpdate(
     if (mQueueOfTrophyCarUnLocks.GetLength() > 0)
     {
         SendTrophyUnlockUpdate(lpGameActionQueue);
-    }
-
-    // [FLAG PC witness] see OdometerDiagEnabled.
-    if (OdometerDiagEnabled())
-    {
-        static f32 sfSinceLastLine  = 1.0e9f;   // print on the first frame
-        static s32 siPrintedLines   = 0;
-        sfSinceLastLine += lfSimTimeStep;
-        if (sfSinceLastLine >= 1.0f && siPrintedLines < 400)
-        {
-            sfSinceLastLine = 0.0f;
-            ++siPrintedLines;
-            const LiveryData* lpLiveryData = GetCurrentLiveryData();
-            *CgsDev::Log::gpDebugPrint
-                << "[odometer] car="   << ((lpLiveryData != 0) ? lpLiveryData->mfDistanceDriven : -1.0f)
-                << " offline="         << mProfile.GetDistanceDrivenOffline()
-                << " online="          << mProfile.GetDistanceDrivenOnline()
-                << " incar="           << mProfile.GetInCarTimePlayed()
-                << " real="            << mProfile.GetRealTimePlayed()
-                << " active="          << (lpActiveRaceCarInterface->IsPlayerCarActive() ? 1 : 0)
-                << "\n";
-        }
     }
 
     CgsDev::PerfMonCpu::StopMonitor(miPreWorldUpdate);                        // lwz r3, 0(r23)

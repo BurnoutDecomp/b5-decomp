@@ -26,17 +26,9 @@ const f32 KF_INSTANT_INTRO_SECONDS = 1.9999999e-05f;
 void LogModeIntro(const GameMode* lpGameMode, EGameModeType leGameModeType, f32 lfCountdownSeconds,
                   bool lbUseCountdown)
 {
-    static const bool sbOn = (getenv("BRN_INTRO_TIMER_DIAG") != 0);
     static s32 siLines = 0;
     const s32 KI_MODE_INTRO_DIAG_CAP = 32;
-    if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLines >= KI_MODE_INTRO_DIAG_CAP)
-    {
-        return;
-    }
     ++siLines;
-    *CgsDev::Log::gpDebugPrint << "[mode-intro] IntroState::OnEnter mode type " << static_cast<s32>(leGameModeType)
-                               << " '" << lpGameMode->GetName() << "' countdown " << lfCountdownSeconds
-                               << " s timed " << (lbUseCountdown ? 1 : 0) << " [FLAG PC witness]\n";
 }
 }
 

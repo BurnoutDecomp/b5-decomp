@@ -2,7 +2,6 @@ target_sources(${PROJECT_NAME}
     PRIVATE
         BrnParticleDescription.cpp
         BrnParticleResourceAccessors.cpp
-        BrnParticleResourceAccessors_embed_check.cpp
         EffectsVertexBuffer.cpp
         EffectsVertexBufferManager.cpp
         LionParticleRender.cpp
@@ -13,7 +12,6 @@ target_sources(${PROJECT_NAME}
         ParticleModule_InternalAllocator.cpp
         ParticleModule_Lifecycle.cpp
         ParticleModule_SparkEvents.cpp
-        ParticleModuleBringUp.cpp
         ParticleModuleIO.cpp
 
     PUBLIC
@@ -24,7 +22,6 @@ target_sources(${PROJECT_NAME}
         LionParticleRender.h
         ParticleCpuMonitors.h
         ParticleModule.h
-        ParticleModuleBringUp.h
         ParticleModuleIO.h
 )
 

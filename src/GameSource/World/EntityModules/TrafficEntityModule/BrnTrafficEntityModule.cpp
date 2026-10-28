@@ -14,8 +14,6 @@
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
-#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPvsDiag.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
@@ -97,7 +95,6 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnKillzoneAction.h" // KillzoneAction (arm 110)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLogger.h" // Logger (mpLogger)
 #include "GameSource/Resource/BrnResourceAllocator.h"                  // BrnResource::GetDebugAllocator (the Logger allocation)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"          // WitnessTag ([nettraf] lines)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                 // EGameModeType
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
 #include "BrnTrafficEntityModule.h"
@@ -129,9 +126,6 @@ namespace BrnTraffic
 
         bool Enabled()
         {
-            static const char* lpcSetting = std::getenv("BRN_TRAFFIC_PVS_DIAG");
-            static const bool sbEnabled =
-                lpcSetting != nullptr && std::strcmp(lpcSetting, "1") == 0;
             return sbEnabled;
         }
 
@@ -773,7 +767,6 @@ namespace BrnTraffic
 // dark traffic light.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -800,9 +793,6 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[Q7-traffic-leg] TrafficEntityModule::PrePhysicsUpdate leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndAddress << " [FLAG PC partial gate]\n";
         }
     }
 }
@@ -907,27 +897,8 @@ void TrafficEntityModule::HandlePropModuleRequests(
     // accessor; -1 means the id was not in the baked table. Every traffic-light prop posts a
     // restore on load, so the restore ring is normally the one that fires.
     {
-        static const bool sbPropDiag        = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbLoggedFirstFlip = false;
 
-        if ( sbPropDiag && !sbLoggedFirstFlip && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            const PropToTrafficInterface* const lpInterface = lpInput->GetPropToTrafficInterface();
-            const s32 liKnockDowns = lpInterface->GetTrafficLightKnockDownQueue()->GetLength();
-            const s32 liRestores   = lpInterface->GetTrafficLightRestoreQueue()->GetLength();
-
-            if ( liKnockDowns > 0 || liRestores > 0 )
-            {
-                sbLoggedFirstFlip = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q7-tlight] traffic module consumed knockdown " << liKnockDowns
-                    << " restore " << liRestores
-                    << " -> last resolved light instance " << Q7Diag_GetLastResolvedLightIndex()
-                    << ( liKnockDowns > 0 ? " smashed" : " restored" )
-                    << " (instance id " << Q7Diag_GetLastResolvedLightInstanceID()
-                    << ")\n";
-            }
-        }
     }
 }
 
@@ -1129,7 +1100,6 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
 // LogMissingLeg_Q7Stage call in whichever stage stalls.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -1224,9 +1194,6 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[Q7-traffic-leg] TrafficEntityModule stage NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 
@@ -1663,28 +1630,6 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
     {
     case E_PREPARESTAGE_START:
     {
-        // [FLAG PC bring-up] safety net, NOT IN THE CONSOLE BINARY: the console binds
-        // mReceiverQueue inside TrafficEntityModule::Construct, so an unbound queue here means
-        // Construct did not run and mpBuffer would be null when the GameData reply arrives.
-        // This logs and self-heals instead of copying through null.
-        // DELETE WHEN: a boot proves the queue is bound before Prepare stage 0 runs.
-        if ( !ReceiverQueueBinding::IsBound( lrReceiverQueue ) )
-        {
-            lrReceiverQueue.Construct();
-
-            static bool sbLoggedReceiverQueueConstruct = false;
-            if ( !sbLoggedReceiverQueueConstruct
-                 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0
-                 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbLoggedReceiverQueueConstruct = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-traffic-leg] TrafficEntityModule::Prepare stage 0 found an UNBOUND "
-                       "mReceiverQueue -- TrafficEntityModule::Construct did not run. "
-                       "Binding it here as a "
-                       "safety net [FLAG PC bring-up]\n";
-            }
-        }
 
         // The console's own stage-0 body.
         lrReceiverQueue.Clear();                                    // BaseEventReceiverQueue::Clear
@@ -1919,7 +1864,6 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
 // console displacements in the comments only attest which member a line resolves to.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -1936,101 +1880,23 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 
-    // BRN_TRAFFIC_DIAG bring-up probes -- NOT IN THE X360 BINARY. Every surviving probe is
-    // one-shot or capped, so steady state costs one env lookup per call.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::StrStreamBase* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-
-    // FLAG PC witness (crash parity FX-NETCRASH; NOT in the X360 binary). BRN_NETCRASH_DIAG, default
-    // off -- the same switch as the crash module's and the physical traffic manager's [netcrash]
-    // lines: the online traffic hull set's own lines, each hard-capped.
-    CgsDev::StrStreamBase* NetCrashDiagStream()
-    {
-        static const bool sbEnabled = (getenv("BRN_NETCRASH_DIAG") != 0);
-        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
     const s32 KI_NETCRASH_HULL_DIAG_MAX_LINES = 48;
 
-    // FLAG PC witness (crash parity FX-NETCRASH; NOT in the X360 binary). BRN_TRAFFIC_LIGHT_DIAG, default
-    // off -- the same switch as the light manager's [traffic-lights] countdown lines: an event start's
-    // lights around PostPhysicsUpdate's UpdateEventStarts call, capped, reads only.
-    CgsDev::StrStreamBase* EventStartLightsDiagStream()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_LIGHT_DIAG") != 0);
-        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
     s32 giEventStartLightsDiagLinesLeft = 16;
 
-    // FLAG PC witness (crash parity FX-TRAFFICLIGHTS; NOT in the X360 binary). The light cycle's two witnesses,
-    // behind the same BRN_TRAFFIC_LIGHT_DIAG switch (EventStartLightsDiagStream), capped, reads only:
-    // UpdateDecisionFrame watches a few junctions around its UpdateJunctions call, and
-    // UpdateParams_DoTimeSlicedLogic follows the params that stop at a red stop line. The clock is the summed
-    // decision time (mfSimTimeSinceLastDecision), advanced by the first.
-    const u32 KU_TRAFFIC_LIGHT_DIAG_WATCHED = 4;
-    struct TrafficLightDiagWatch_PC
-    {
-        bool mbUsed;
-        u16  muHull;
-        u8   muJunction;
-        u8   muState;
-        u32  muAmber;
-        f32  mfPhaseClock;
-    };
-    TrafficLightDiagWatch_PC gaTrafficLightDiagWatch_PC[KU_TRAFFIC_LIGHT_DIAG_WATCHED] = {};
-    f32 gfTrafficLightDiagClock_PC = 0.0f;
     s32 giTrafficLightCycleDiagLinesLeft = 160;
 
-    struct TrafficLightStopWitness_PC
-    {
-        u8  muPhase;      // 0 none, 1 waiting at a red stop line, 2 released
-        u8  muStopLine;   // the param's cached next stop line when it stopped (0xFE / 0xFF: none on its section)
-        u16 muHull;       // the param's hull when it stopped
-        f32 mfClock;      // when it stopped / was released
-    };
-    TrafficLightStopWitness_PC gaTrafficLightStopWitness_PC[KU_MAX_PARAMS] = {};
     s32 giTrafficLightStopDiagLinesLeft = 90;
 
-    // FLAG PC witness (crash parity FX-NETCRASH, online traffic lockstep; NOT console code). The
-    // per-decision-frame digest UpdateDecisionFrame prints online: FNV-1a over the state every
-    // machine must agree on, so the two halves of a LAN pair can be joined on upd= and compared.
-    const s32 KI_NETCRASH_LOCKSTEP_MAX_LINES = 420;
     const u32 KU_NETCRASH_FNV_BASIS = 2166136261u;
     const u32 KU_NETCRASH_FNV_PRIME = 16777619u;
     // CgsNumeric::Random's live state: the eight-word ring (+0x00), muSeed (+0x20) and
     // muOldestBufferIndex (+0x28); the tail up to the 16-byte alignment is padding.
     const u32 KU_NETCRASH_RANDOM_STATE_BYTES = 0x2C;
 
-    // FLAG PC witness (crash parity FX-NETCRASH, the LAN pair case's calibration; NOT console code):
-    // [netcrash] traffic-near, every KU_NETCRASH_NEAR_PERIOD-th decision frame (1 s) from
-    // KU_NETCRASH_NEAR_FIRST to KU_NETCRASH_NEAR_LAST (30 s .. 120 s after the online restart), the
-    // alive traffic within KF_NETCRASH_NEAR_RADIUS of this machine's camera, positions in decimetres.
-    const u32 KU_NETCRASH_NEAR_FIRST  = 300u;
     const u32 KU_NETCRASH_NEAR_LAST   = 1200u;
     const u32 KU_NETCRASH_NEAR_PERIOD = 10u;
     const s32 KI_NETCRASH_NEAR_MAX_LINES = 91;
@@ -2164,11 +2030,6 @@ void TrafficEntityModule::EnterRunningState()
     const ERunningState leRunningStateToUse = meRunningStateToUseAfterStartup;
 
     meState                         = E_STATE_RUNNING;
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())   // [DIAG] see EnterTearingDownState
-    {
-        *lpDiag << "[traffic-diag] EnterRunningState: STARTING_UP -> RUNNING; densityScale "
-                << mfGameModeDensityScale << " amountScale " << mfTrafficAmountScale << "\n";
-    }
     meRunningState                  = leRunningStateToUse;
     meRunningStateToUseAfterStartup = E_RUNNINGSTATE_NORMAL;
     meStartingUpState               = E_STARTINGUPSTATE_INVALID;
@@ -2193,11 +2054,6 @@ void TrafficEntityModule::EnterTearingDownState()
     // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness for the tear-down / reset chain
     // (BurnoutDecomp/b5-decomp#22). One line per state entry, so a run's log shows whether the
     // wipe reached Reset() and RUNNING again. Siblings in Reset() and EnterRunningState().
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        *lpDiag << "[traffic-diag] EnterTearingDownState: RUNNING -> TEARING_DOWN (WIPING); mode "
-                << meGameMode << " densityScale " << mfGameModeDensityScale << "\n";
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -2615,7 +2471,6 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
             "available now");
     }
 
-
     for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
     {
         StaticTrafficParam& lrParam = maStaticTrafficParams[luStatic];
@@ -2685,32 +2540,9 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
                                       luVehicle,
                                       mVehicleSoaData);
 
-        maRenderPosesPC[luVehicle].Reset(); // New parked vehicle in a reused slot.
+ // New parked vehicle in a reused slot.
         SetVehicleTransform(luVehicle, lOutMatrix);
 
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            // [T4-static] ONE LINE PER CAR, capped, so the conductor can pick a ram target
-            // without a debugger: index, type, seated world position, the transform's zAxis
-            // (the direction the car faces, which is what a -Teleport heading has to match),
-            // and the hull it belongs to. The cap keeps a full junkyard populate from
-            // flooding BrnGame.log. DELETE-WHEN-STABLE.
-            static u32 suT4StaticLogged = 0;
-            const u32 KU_T4_STATIC_LOG_CAP = 64;
-            if (suT4StaticLogged < KU_T4_STATIC_LOG_CAP)
-            {
-                ++suT4StaticLogged;
-                const Vector3& lrPos = lOutMatrix.wAxis;
-                const Vector3& lrAt  = lOutMatrix.zAxis;
-                *lpDiag << "[T4-static] vehicle=" << static_cast<s32>(luVehicle)
-                        << " type=" << static_cast<s32>(luVehicleType)
-                        << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
-                        << " at=(" << lrAt.x << ", " << lrAt.y << ", " << lrAt.z << ")"
-                        << " hull=" << static_cast<s32>(lrParam.GetHull())
-                        << " indexInHull=" << static_cast<s32>(luIndexInHull)
-                        << " [DELETE-WHEN-STABLE]\n";
-            }
-        }
     }
 
     mbDontCreateStaticVehiclesNearAnyPlayers = false;
@@ -3282,20 +3114,6 @@ void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_Pos
                         maaRaceCarHulls[leRaceCar].Append(lrHullPvs[luPvsHull]);
                     }
 
-                    // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
-                    if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-                    {
-                        static s32 siLines = 0;
-                        if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-                        {
-                            ++siLines;
-                            *lpNetDiag << "[netcrash] UpdateRaceCarHulls applied arc=" << static_cast<s32>(leRaceCar)
-                                       << " hull=" << static_cast<s32>(luNewHull)
-                                       << " frame=" << static_cast<s32>(muUpdateCount)
-                                       << " hulls=" << maaRaceCarHulls[leRaceCar].GetLength() << "\n";
-                        }
-                    }
-
                     maPredictedHullChanges.EraseFast(luInfoIndex);
                 }
                 else
@@ -3495,26 +3313,6 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
         mbNeedToBroadcastHullChange = true;
         mHullChangeToBroadcast      = lInfo;
 
-        BrnNetHarnessPC::WitnessTag("nettraf", "hull-predict", "arc=%d hull=%u upd=%u",
-                                    static_cast<s32>(lInfo.meActiveRaceCarIndex),
-                                    static_cast<u32>(lInfo.muNewActiveHull),
-                                    static_cast<u32>(lInfo.muUpdateFrame));
-
-        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
-        if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-        {
-            static s32 siLines = 0;
-            if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-            {
-                ++siLines;
-                *lpNetDiag << "[netcrash] PredictHullChanges arc=" << static_cast<s32>(lePlayerCar)
-                           << " hull=" << static_cast<s32>(luPredictedHull)
-                           << " frame=" << static_cast<s32>(lInfo.muUpdateFrame)
-                           << " now=" << static_cast<s32>(muUpdateCount)
-                           << " pos=(" << lrPosition.x << ", " << lrPosition.z
-                           << ") predicted=(" << lPredicted.x << ", " << lPredicted.z << ")\n";
-            }
-        }
     }
 }
 
@@ -3644,72 +3442,6 @@ void TrafficEntityModule::RecalculateActiveHulls(
     // the same interface UpdateRaceCarHulls read), against the module's own camera latch,
     // plus the hull-set churn and the free-param level. Env-gated BRN_TRAFFIC_DIAG.
     // NOT IN THE X360 BINARY. DELETE-WHEN the anchor bug is closed with an A/B run.
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        static u32 suAnchorSample = 0;
-        if ((suAnchorSample % 10u) == 0u)   // decision frames are 0.1 s -> ~1 line/s
-        {
-            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpCars =
-                lpInput->GetActiveRaceCarOutputInterface();
-            const bool lbActive = (lpCars != 0) && lpCars->IsPlayerCarActive();
-
-            *lpDiag << "[T-anchor] d " << static_cast<s32>(suAnchorSample)
-                    << " divergent " << (mbAllowDivergentBehaviour ? 1 : 0)
-                    << " playerActive " << (lbActive ? 1 : 0);
-            if (lbActive)
-            {
-                const EActiveRaceCarIndex lePlayer = lpCars->GetPlayerActiveRaceCarIndex();
-                const Vector3 lAnchor = lpCars->GetRaceCarState(lePlayer)->mTransform.wAxis;
-                *lpDiag << " idx " << static_cast<s32>(lePlayer)
-                        << " anchor " << lAnchor.x << " " << lAnchor.y << " " << lAnchor.z;
-            }
-            const Vector3 lCamPos = mCameraLastFrame.GetPosition();
-            *lpDiag << " cam " << lCamPos.x << " " << lCamPos.y << " " << lCamPos.z
-                    << " hulls " << mActiveHulls.GetLength()
-                    << " +new " << lpOutNewHulls->GetLength()
-                    << " -old " << lpOutOldHulls->GetLength()
-                    << " freeParams " << mFreeParams.GetLength();
-
-            // The grid mapping itself, through the same public accessor the walk uses:
-            // the anchor box corners' clamped cells, the active hull ids, and (once) the
-            // grid extremes -- two far corner probes expose muNumCells_X/Z via the clamp.
-            if (lbActive && mpData->mpPvs != 0)
-            {
-                const Pvs* lpPvsDiag = mpData->mpPvs;
-                const Vector3 lAnchorDiag =
-                    lpCars->GetRaceCarState(lpCars->GetPlayerActiveRaceCarIndex())->mTransform.wAxis;
-                Vector3 lLo = lAnchorDiag;
-                Vector3 lHi = lAnchorDiag;
-                lLo.x -= mfTrafficSimRadius.x; lLo.y -= mfTrafficSimRadius.y; lLo.z -= mfTrafficSimRadius.z;
-                lHi.x += mfTrafficSimRadius.x; lHi.y += mfTrafficSimRadius.y; lHi.z += mfTrafficSimRadius.z;
-                s32 liLoX = 0, liLoZ = 0, liHiX = 0, liHiZ = 0;
-                lpPvsDiag->GetHullIndexForPoint(lLo, liLoX, liLoZ);
-                lpPvsDiag->GetHullIndexForPoint(lHi, liHiX, liHiZ);
-                *lpDiag << " simR " << mfTrafficSimRadius.x
-                        << " cells x " << liLoX << ".." << liHiX
-                        << " z " << liLoZ << ".." << liHiZ << " ids";
-                for (u32 luH = 0; luH < mActiveHulls.GetLength() && luH < 6u; ++luH)
-                {
-                    *lpDiag << " " << mActiveHulls[luH];
-                }
-                static bool sbGridPrinted = false;
-                if (!sbGridPrinted)
-                {
-                    sbGridPrinted = true;
-                    Vector3 lFarLo; lFarLo.x = -1.0e9f; lFarLo.y = 0.0f; lFarLo.z = -1.0e9f; lFarLo.w = 0.0f;
-                    Vector3 lFarHi; lFarHi.x =  1.0e9f; lFarHi.y = 0.0f; lFarHi.z =  1.0e9f; lFarHi.w = 0.0f;
-                    s32 liMinCX = 0, liMinCZ = 0, liMaxCX = 0, liMaxCZ = 0;
-                    lpPvsDiag->GetHullIndexForPoint(lFarLo, liMinCX, liMinCZ);
-                    const u32 luMaxIdx = lpPvsDiag->GetHullIndexForPoint(lFarHi, liMaxCX, liMaxCZ);
-                    *lpDiag << " GRID cellsX " << (liMaxCX + 1) << " cellsZ " << (liMaxCZ + 1)
-                            << " minClamp " << liMinCX << "," << liMinCZ
-                            << " maxIdx " << static_cast<s32>(luMaxIdx);
-                }
-            }
-            *lpDiag << " [DELETE-WHEN-STABLE]\n";
-        }
-        ++suAnchorSample;
-    }
 
     // ARTIST8274CD08..CD44: only local-player hulls own light-trigger volumes.
     // Accumulate until ManageTriggers drains the arrays in the next pre-scene.
@@ -4329,164 +4061,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             mLocalPlayerPosition  = lpPlayerState->mTransform.wAxis;
             mLocalPlayerDirection = lpPlayerState->mTransform.zAxis;
 
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                // [T4-player] every 60 frames: where the player is, how fast and which way.
-                // Read against [T4-static] it says whether a -Teleport put the car near a parked
-                // one. Seated in PostPhysicsUpdate's local-player refresh tail, the one place that
-                // already holds position, direction AND the RaceCarState the velocity comes from.
-                // DELETE-WHEN-STABLE.
-                static u32 suFrame = 0;
-                if ((suFrame % 60u) == 0u)
-                {
-                    const Vector3& lrVel = lpPlayerState->mLinearVelocity;
-                    *lpDiag << "[T4-player] idx=" << static_cast<s32>(meLocalPlayerIndex)
-                            << " pos=(" << mLocalPlayerPosition.x
-                            << ", " << mLocalPlayerPosition.y
-                            << ", " << mLocalPlayerPosition.z << ")"
-                            << " vel=(" << lrVel.x << ", " << lrVel.y << ", " << lrVel.z << ")"
-                            << " at=(" << mLocalPlayerDirection.x
-                            << ", " << mLocalPlayerDirection.y
-                            << ", " << mLocalPlayerDirection.z << ")"
-                            << " [DELETE-WHEN-STABLE]\n";
-                }
-                ++suFrame;
-            }
         }
         else
         {
             meLocalPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
         }
     }
-
-    // ========================================================================================
-    // [FLAG PC witness] [traffic-track] -- NOT IN THE X360 BINARY, OFF unless BRN_TRAFFIC_TRACK.
-    //
-    // The traffic_weird bug ("traffic disappears, teleports above the road, does other weird
-    // things") is not an assert, so the test needs the numbers it moves. Every 0.5 s of SIM
-    // time this prints, for each ALIVE traffic vehicle inside 120 m of the player: its slot id,
-    // world position, lifecycle state, whether the render pass considered it last frame, its
-    // distance and whether it is in front of the player. Plus one SAMPLE line carrying the
-    // population counts (the collapse check reads those).
-    //
-    // Seated at the very tail of PostPhysicsUpdate, AFTER the local-player refresh above, so
-    // mLocalPlayerPosition / mLocalPlayerDirection are this frame's and every vehicle transform
-    // has already been moved by the frame's update. Bounded three ways: 2 Hz, at most 64
-    // vehicles per sample, and a hard total-line cap -- an unbounded per-frame witness once
-    // flooded a run with 733k lines and aborted the harness at its 128 MB cap.
-    //
-    // ⛔ NO ASSERTING ACCESSOR IS USED HERE: Vehicle::IsCrashing() asserts IsAlive() and then
-    // IsPhysical(), which would turn a diagnostic into an assert storm on the very cars this is
-    // trying to observe. The raw crash-type byte (GetCrashTrafficTypeRaw) is the unasserted read
-    // the console itself uses at sites that may not require IsPhysical().
-    //
-    // DELETE-WHEN: see BrnTrafficTrackWitness.h.
-    // ========================================================================================
-    if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-    {
-        static const f32 KF_TRACK_SAMPLE_PERIOD   = 0.5f;
-        static const f32 KF_TRACK_RADIUS_SQ       = 120.0f * 120.0f;
-        static const u32 KU_TRACK_MAX_PER_SAMPLE  = 64u;
-        static const u32 KU_TRACK_MAX_LINES       = 60000u;
-
-        static f32 sfTrackTime  = 0.0f;
-        static f32 sfNextSample = 0.0f;
-        static u32 suTrackLines = 0u;
-
-        sfTrackTime += mfSimTimeStep;
-
-        if (sfTrackTime >= sfNextSample && suTrackLines < KU_TRACK_MAX_LINES)
-        {
-            sfNextSample = sfTrackTime + KF_TRACK_SAMPLE_PERIOD;
-
-            u32 luAlive    = 0u;
-            u32 luNear     = 0u;
-            u32 luPrinted  = 0u;
-
-            for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle =
-                     mVehicleSoaData.mAliveVehicles.Begin();
-                 lItVehicle != mVehicleSoaData.mAliveVehicles.End();
-                 ++lItVehicle)
-            {
-                const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
-                ++luAlive;
-
-                if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
-                {
-                    continue;
-                }
-
-                const Vector3& lrPos = maVehicleTransforms[luVehicle].Pos();
-
-                const f32 lfDX = lrPos.x - mLocalPlayerPosition.x;
-                const f32 lfDY = lrPos.y - mLocalPlayerPosition.y;
-                const f32 lfDZ = lrPos.z - mLocalPlayerPosition.z;
-                const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
-
-                if (lfDistSq >= KF_TRACK_RADIUS_SQ)
-                {
-                    continue;
-                }
-
-                ++luNear;
-
-                if (luPrinted >= KU_TRACK_MAX_PER_SAMPLE)
-                {
-                    continue;
-                }
-
-                const Vehicle* const lpVehicle = GetVehicle(luVehicle);
-
-                const char* lpcState = "param";
-                if (lpVehicle->IsPhysical())
-                {
-                    // eCrashTrafficType 0 is the crashing type; 255 is "not registered".
-                    lpcState = (lpVehicle->GetCrashTrafficTypeRaw() == 0u) ? "crashed" : "physical";
-                }
-                else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
-                {
-                    lpcState = "static";
-                }
-
-                const f32 lfAlong = lfDX * mLocalPlayerDirection.x
-                                  + lfDY * mLocalPlayerDirection.y
-                                  + lfDZ * mLocalPlayerDirection.z;
-
-                *lpTrack << "[traffic-track] t=" << sfTrackTime
-                         << " id=" << luVehicle
-                         << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
-                         << " state=" << lpcState
-                         << " vis=" << (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle) ? 1 : 0)
-                         << " dist=" << sqrtf(lfDistSq)
-                         << " infront=" << ((lfAlong > 0.0f) ? 1 : 0)
-                         << "\n";
-                ++luPrinted;
-                ++suTrackLines;
-            }
-
-            // mCameraLastFrame is on this line because it is the traffic module's BEHAVIOUR
-            // CENTRE, not a picture: TryClearupOffscreenTraffic / SpawnNewTraffic /
-            // UpdateSympatheticCrashing / UpdateJunctionFUP all measure from it, so a frame on
-            // which it is not where the player is is a frame that deletes and stops spawning
-            // traffic around him.
-            const Vector3 lCamera = mCameraLastFrame.GetPosition();
-
-            *lpTrack << "[traffic-track] SAMPLE t=" << sfTrackTime
-                     << " alive=" << luAlive
-                     << " near=" << luNear
-                     << " printed=" << luPrinted
-                     << " player=(" << mLocalPlayerPosition.x
-                     << ", " << mLocalPlayerPosition.y
-                     << ", " << mLocalPlayerPosition.z << ")"
-                     << " cam=(" << lCamera.x << ", " << lCamera.y << ", " << lCamera.z << ")"
-                     << "\n";
-            ++suTrackLines;
-        }
-    }
-
-    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code): whether an event start's lights were
-    // still to be set up before the call. Reported after GenerateNetworkUpdateEvents, below.
-    const bool lbEventStartLightsPending_PC = mbNeedToSetUpLightsForEventStart;
 
     // 0x8274EE8C..0x8274EE90 `mr r3, r31 ; bl 0x82743B80` -- every frame (crash parity FX-NETCRASH,
     // 2026-09-25): an event start's lights. Body at UpdateEventStarts.
@@ -4497,83 +4077,6 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // It publishes the active hull per race car and the hull-sync state to the network output
     // interface. Body below this function.
     GenerateNetworkUpdateEvents(lpInput, lpOutput);
-
-    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_LIGHT_DIAG, capped, reads
-    // only -- an event start's lights, reported here so that the console's two calls above stay adjacent
-    // (GenerateNetworkUpdateEvents touches neither the lights nor the stop lines):
-    //   the first frame a trigger is seen pending (once per trigger id) -> the trigger, its hull, whether
-    //     that hull is active (UpdateEventStarts waits for it) and mbGameModeClearsTraffic;
-    //   the frame the call consumed the flag -> the start line as UpdateEventStarts left it: the online grid
-    //     clears, the trigger hull's junctions / lights, how many of their stop lines are red (HullRuntime::
-    //     IsStoplineRed) and the light instances' states (RED 0 / AMBER 1 / GREEN 2, ChangeLightState).
-    // Both can print on the same frame: a trigger whose hull is already active is set up at once.
-    {
-        CgsDev::StrStreamBase* const lpEventStartDiag_PC = EventStartLightsDiagStream();
-        static u32 suPendingTriggerLogged_PC = 0xFFFFFFFFu;
-        if (lbEventStartLightsPending_PC && lpEventStartDiag_PC != 0)
-        {
-            const u32 luTriggerId_PC   = mTrafficLightTriggerId;
-            const u32 luTriggerHull_PC = (luTriggerId_PC >> 8) & 0xFFFFu;
-            if (suPendingTriggerLogged_PC != luTriggerId_PC && giEventStartLightsDiagLinesLeft > 0)
-            {
-                suPendingTriggerLogged_PC = luTriggerId_PC;
-                --giEventStartLightsDiagLinesLeft;
-                *lpEventStartDiag_PC
-                    << "[traffic-lights] event start pending: trigger=" << luTriggerId_PC
-                    << " hull=" << luTriggerHull_PC
-                    << " hullActive=" << (mActiveHulls.Contains(static_cast<u16>(luTriggerHull_PC)) ? 1 : 0)
-                    << " clearsTraffic=" << (mbGameModeClearsTraffic ? 1 : 0)
-                    << " [FLAG PC witness]\n";
-            }
-            if (!mbNeedToSetUpLightsForEventStart && giEventStartLightsDiagLinesLeft > 0)
-            {
-                suPendingTriggerLogged_PC = 0xFFFFFFFFu;
-                u32 luLights_PC = 0, luStopLines_PC = 0, luStopLinesRed_PC = 0;
-                u32 luInstances_PC = 0, luRed_PC = 0, luAmber_PC = 0, luGreen_PC = 0;
-                const Hull* const lpHull_PC = GetHull(luTriggerHull_PC);
-                for (u32 luJunction = 0; luJunction < lpHull_PC->muNumJunctions; ++luJunction)
-                {
-                    const JunctionLogicBox* const lpJunction = &lpHull_PC->mpaJunctions[luJunction];
-                    for (u32 luLight = 0; luLight < lpJunction->GetNumLights(); ++luLight)
-                    {
-                        const TrafficLightController* const lpLight = lpJunction->GetLight(luLight);
-                        ++luLights_PC;
-                        for (u32 luStopLine = 0; luStopLine < lpLight->muNumStopLines; ++luStopLine)
-                        {
-                            ++luStopLines_PC;
-                            const HullRuntime* const lpRuntime =
-                                GetHullRuntimeSafe(lpLight->mauStopLineHulls[luStopLine]);
-                            if (lpRuntime != NULL && lpRuntime->IsStoplineRed(lpLight->mauStopLineIds[luStopLine]))
-                            {
-                                ++luStopLinesRed_PC;
-                            }
-                        }
-                        for (u32 luTrafficLight = 0; luTrafficLight < lpLight->muNumTrafficLights; ++luTrafficLight)
-                        {
-                            const TrafficLightRuntimeState* const lpState =
-                                reinterpret_cast<const TrafficLightRuntimeState*>(
-                                    mTrafficLightManager.GetLightState(lpLight->mauTrafficLightIds[luTrafficLight]));
-                            ++luInstances_PC;
-                            luRed_PC   += (lpState->muState == 0) ? 1u : 0u;
-                            luAmber_PC += (lpState->muState == 1) ? 1u : 0u;
-                            luGreen_PC += (lpState->muState == 2) ? 1u : 0u;
-                        }
-                    }
-                }
-                --giEventStartLightsDiagLinesLeft;
-                *lpEventStartDiag_PC
-                    << "[traffic-lights] UpdateEventStarts set up the event start: trigger=" << luTriggerId_PC
-                    << " hull=" << luTriggerHull_PC
-                    << " gridClears=" << (mbAllowDivergentBehaviour ? 0u : static_cast<u32>(muNumberOfParticipantsInCurrentEvent))
-                    << " junctions=" << static_cast<u32>(lpHull_PC->muNumJunctions)
-                    << " lights=" << luLights_PC
-                    << " stoplinesRed=" << luStopLinesRed_PC << "/" << luStopLines_PC
-                    << " lightInstances=" << luInstances_PC
-                    << " amber=" << luAmber_PC << " red=" << luRed_PC << " green=" << luGreen_PC
-                    << " [FLAG PC witness]\n";
-            }
-        }
-    }
 
     // ⭐ [traffic-type wave 2026-09-14] THE TRAFFIC-TYPE QUERY IS ANSWERED HERE, at exactly the
     // console's position: after UpdateEventStarts / GenerateNetworkUpdateEvents and before the
@@ -4615,8 +4118,6 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             "PostPhysicsUpdate replay-serialiser registration/write -- RegisterSerialiser "
             "0x821F34A0 is bodied, but TrafficEntitySerialiser at +0x724C0 is not declared or mounted");
     }
-
-    LatchRenderPosesPC(); // FLAG PC-platform leaf: after every traffic pose producer.
 
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
@@ -4954,26 +4455,6 @@ void TrafficEntityModule::GenerateNetworkUpdateEvents(const BrnTrafficIO::InputB
 
         lpOutput->GetNetworkInterface()->SetActiveHull(leRaceCar, luHull);
 
-        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped: one line each time a
-        // slot's published hull changes, i.e. the table TrafficManager::GetActiveHulls hands the
-        // restart-traffic message.
-        if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-        {
-            static u16 sauLastPublished[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {
-                KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL,
-                KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL, KU_INVALID_HULL };
-            static s32 siLines = 0;
-            if (luHull != sauLastPublished[leRaceCar] && siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-            {
-                ++siLines;
-                *lpNetDiag << "[netcrash] GenerateNetworkUpdateEvents slot=" << static_cast<s32>(leRaceCar)
-                           << " hull=" << static_cast<s32>(luHull)
-                           << " was=" << static_cast<s32>(sauLastPublished[leRaceCar])
-                           << " online=" << (mbAllowDivergentBehaviour ? 0 : 1)
-                           << " state=" << static_cast<s32>(meState) << "\n";
-            }
-            sauLastPublished[leRaceCar] = luHull;
-        }
     }
 
     lpOutput->GetNetworkInterface()->SetDetectedHullSyncDivergence(mbHullSyncDivergence);
@@ -4987,19 +4468,6 @@ void TrafficEntityModule::GenerateNetworkUpdateEvents(const BrnTrafficIO::InputB
                                                           mHullChangeToBroadcast.muUpdateFrame);
             mbNeedToBroadcastHullChange = false;
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
-            if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-            {
-                static s32 siLines = 0;
-                if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-                {
-                    ++siLines;
-                    *lpNetDiag << "[netcrash] GenerateNetworkUpdateEvents broadcast arc="
-                               << static_cast<s32>(mHullChangeToBroadcast.meActiveRaceCarIndex)
-                               << " hull=" << static_cast<s32>(mHullChangeToBroadcast.muNewActiveHull)
-                               << " frame=" << static_cast<s32>(mHullChangeToBroadcast.muUpdateFrame) << "\n";
-                }
-            }
         }
 
         if (IsDecisionFrame())
@@ -5107,7 +4575,6 @@ void TrafficEntityModule::ResetEventData()
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Reset()
 {
-    for (auto& lrRenderPose : maRenderPosesPC) lrRenderPose.Reset();
     // Both generators get the inlined Random::Construct: seed 2413850050 (the default seed),
     // cursor 0, then eight ring slots each written from the current seed's high word before the
     // seed steps. Random::Construct() is exactly that stream -- its stored seed
@@ -5130,12 +4597,6 @@ void TrafficEntityModule::Reset()
     meTearingDownState = E_TEARINGDOWNSTATE_INVALID;
 
     muUpdateCount = 0;
-
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())   // [DIAG] see EnterTearingDownState
-    {
-        *lpDiag << "[traffic-diag] Reset(): -> STARTING_UP; densityScale " << mfGameModeDensityScale
-                << " base " << mfBaseDensityScale << "\n";
-    }
 
     EnterStartingUpState();
 
@@ -5332,23 +4793,6 @@ void TrafficEntityModule::Reset()
             mau16HullsToActivateAfterReset[luSlot] = KU_INVALID_HULL;
         }
 
-        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
-        if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-        {
-            static s32 siLines = 0;
-            if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-            {
-                ++siLines;
-                *lpNetDiag << "[netcrash] Reset replayed the online hull set: local="
-                           << static_cast<s32>(meLocalPlayerIndex)
-                           << " predicted=" << static_cast<s32>(muCurrentlyPredictedHull) << " counts=";
-                for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
-                {
-                    *lpNetDiag << (luSlot ? "," : "") << maaRaceCarHulls[luSlot].GetLength();
-                }
-                *lpNetDiag << "\n";
-            }
-        }
     }
 
     // ---- collidable cache / avoidance -----------------------------------------------------
@@ -5650,10 +5094,6 @@ void TrafficEntityModule::Construct()
     // real; OnActivate now registers the native component's original row. This environment
     // override remains a host-only startup convenience that writes that same member before UI
     // activation, and does not add a new showtime predicate.
-    if (getenv("BRN_TRAFFIC_FAKE_SHOWTIME") != 0)
-    {
-        mbDEBUGFakeShowtime = true;
-    }
     muDEBUGPickedVehicle        = 0xFFFFFFFFu; // 0x72878 stwx r10 (r10 == -1)
     mbDEBUGPick_StopVehicle     = false;   // 0x7287C
     mbDEBUGPick_DontStopForPickedVehicle = false; // 0x7287D
@@ -5828,7 +5268,6 @@ void TrafficEntityModule::Construct()
     mbIsNewModule = true;
 }
 
-
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::GenerateRemovedVehicleEvents  @ 0x827206E8
 //
@@ -5907,8 +5346,6 @@ void TrafficEntityModule::GenerateSlamRecoveryEvents(
 // but the image does: where a leg's slot has been read out of the instruction stream it is
 // placed (see the output-producer run below); the rest stay named gates.
 // ============================================================================
-
-
 
 namespace BrnTraffic
 {
@@ -6255,27 +5692,8 @@ void TrafficEntityModule::HandleIncomingNetworkData(const BrnTrafficIO::InputBuf
         lInfo.muNewActiveHull      = lrEvent.muNewActiveHull;
         lInfo.muUpdateFrame        = static_cast<u16>(lrEvent.muUpdateFrame);
 
-        BrnNetHarnessPC::WitnessTag("nettraf", "hull-in", "arc=%d hull=%u upd=%u",
-                                    static_cast<s32>(lInfo.meActiveRaceCarIndex),
-                                    static_cast<u32>(lInfo.muNewActiveHull),
-                                    static_cast<u32>(lInfo.muUpdateFrame));
-
         AddPredictedHullChange(lInfo);
 
-        // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
-        if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-        {
-            static s32 siLines = 0;
-            if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-            {
-                ++siLines;
-                *lpNetDiag << "[netcrash] HandleIncomingNetworkData arc=" << static_cast<s32>(leRaceCar)
-                           << " hull=" << static_cast<s32>(lInfo.muNewActiveHull)
-                           << " frame=" << static_cast<s32>(lInfo.muUpdateFrame)
-                           << " now=" << static_cast<s32>(muUpdateCount)
-                           << " diverged=" << (mbNetworkHasDetectedDivergence ? 1 : 0) << "\n";
-            }
-        }
     }
 }
 
@@ -6302,7 +5720,6 @@ void TrafficEntityModule::HandleIncomingNetworkData(const BrnTrafficIO::InputBuf
 // TrafficPhysicsInfo, so the X360 asm arbitrates behaviour alone.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -6318,9 +5735,6 @@ namespace
 
         if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-phys] TrafficPhysicsInfo leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 }
@@ -6443,8 +5857,6 @@ void TrafficPhysicsInfo::Destruct()
 // (0x82748944 / 0x82748984 and 0x827489F0), so both are here.
 // ============================================================================
 
-
-
 namespace BrnTraffic
 {
 namespace
@@ -6454,13 +5866,6 @@ namespace
     // BrnGui::GuiEventTrafficPoolEmptied with one `bool mbTrafficPoolEmpty` member
     // (BrnGuiEventTypeDefs.h:234) deriving GuiEvent<502>; 502 is the PS3 id, 512 is the ship's.
     //
-    // The payload is declared here rather than in BrnGuiEventTypeDefs.h because that header's
-    // events derive CgsGui::GuiEvent<N>, which this tree models with three u32 header words
-    // (CgsGuiEvent.h:32). That spelling would be 13+ bytes and the console posts one. Until
-    // CgsGui::GuiEvent<N> is fixed tree-wide, this uses the pattern already used for the same
-    // problem in BrnPaybackManager.cpp:33-42: a local payload over the empty CgsModule::Event
-    // plus a named id. Same bytes on the wire, no fabricated header.
-    // [FLAG PC-platform leaf: local GUI payload spelling; see above.]
     const s32 KI_GUI_EVENT_TRAFFIC_POOL_EMPTIED = 512;   // X360 `li r5, 0x200`
 
     struct GuiEventTrafficPoolEmptied : public CgsModule::Event
@@ -6728,7 +6133,6 @@ void TrafficEntityModule::UpdateStreaming( BrnTrafficIO::OutputBuffer_PostPhysic
 // BrnTrafficEntityModule_wT1_06.cpp.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 
@@ -6804,7 +6208,6 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
 
     CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lVehicles_Alive_And_NoEntity;
     lVehicles_Alive_And_NoEntity.SetAnd(mVehicleSoaData.mAliveVehicles, lVehicles_NoEntity);
-
 
     for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle =
              lVehicles_Alive_And_NoEntity.Begin();
@@ -6888,8 +6291,6 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
 // UpdateLerpedParamTransforms, UpdateParams_DoTimeSlicedLogic and KillTrafficOnStartGridWholeSale
 // (_wW_01.cpp). Still gated: UpdateTrailers, NukeTrafficJams; each gate names its own blocker and cost.
 // ============================================================================
-
-
 
 namespace BrnTraffic
 {
@@ -7080,169 +6481,6 @@ void TrafficEntityModule::UpdateDecisionFrame(
     // light cycle -- phase timers, stop lines, lights.)
     UpdateJunctions();
 
-    // [FLAG PC witness] (crash parity FX-TRAFFICLIGHTS; NOT console code). BRN_TRAFFIC_LIGHT_DIAG, capped, reads
-    // only; UpdateJunctions itself carries no witness. Up to KU_TRAFFIC_LIGHT_DIAG_WATCHED junctions -- the first
-    // found in the active hulls with more than one phase and at least one light -- are watched from here:
-    //   "watching"  a junction adopted: its phase count, its lights, its phase and the time it still holds;
-    //   "phase"     UpdateJunctions moved it on: the phase, the time it now holds, its lights red / total
-    //               (IsLightRed), each stop line (hull:index R / G, - for a hull without a runtime), its light
-    //               instances by state, the witness clock and the time since its last change (the phase the
-    //               console ran; the first after adoption is partial);
-    //   "amber"     its AMBER instances have all run down to RED (UpdateHull -> TrafficLightRuntimeState::Update);
-    //   "left"      its hull left the active set; the slot is reused.
-    if (CgsDev::StrStreamBase* const lpLightsDiag_PC = EventStartLightsDiagStream())
-    {
-        gfTrafficLightDiagClock_PC += mfSimTimeSinceLastDecision;
-
-        u32 luFreeSlots_PC = 0;
-        for (u32 luSlot = 0; luSlot < KU_TRAFFIC_LIGHT_DIAG_WATCHED; ++luSlot)
-        {
-            TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luSlot];
-            if (lrWatch.mbUsed && !mActiveHulls.Contains(lrWatch.muHull))
-            {
-                lrWatch.mbUsed = false;
-                if (giTrafficLightCycleDiagLinesLeft > 0)
-                {
-                    --giTrafficLightCycleDiagLinesLeft;
-                    *lpLightsDiag_PC << "[traffic-lights] left hull=" << static_cast<u32>(lrWatch.muHull)
-                                     << " junction=" << static_cast<u32>(lrWatch.muJunction)
-                                     << " t=" << gfTrafficLightDiagClock_PC << " [FLAG PC witness]\n";
-                }
-            }
-            luFreeSlots_PC += lrWatch.mbUsed ? 0u : 1u;
-        }
-
-        for (u32 luActive = 0; luFreeSlots_PC != 0 && luActive < mActiveHulls.GetLength(); ++luActive)
-        {
-            const u16 luHull_PC = mActiveHulls[luActive];
-            const Hull* const lpHull_PC = GetHull(luHull_PC);
-            HullRuntime* const lpRuntime_PC = GetHullRuntimeSafe(luHull_PC);
-            for (u32 luJunction = 0; lpRuntime_PC != NULL && luFreeSlots_PC != 0
-                                     && luJunction < lpHull_PC->muNumJunctions; ++luJunction)
-            {
-                const JunctionLogicBox* const lpJunction_PC = &lpHull_PC->mpaJunctions[luJunction];
-                if (lpJunction_PC->GetNumStates() < 2 || lpJunction_PC->GetNumLights() == 0)
-                {
-                    continue;
-                }
-                u32 luFree_PC = KU_TRAFFIC_LIGHT_DIAG_WATCHED;
-                bool lbWatched_PC = false;
-                for (u32 luSlot = 0; luSlot < KU_TRAFFIC_LIGHT_DIAG_WATCHED; ++luSlot)
-                {
-                    const TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luSlot];
-                    if (lrWatch.mbUsed)
-                    {
-                        lbWatched_PC = lbWatched_PC || (lrWatch.muHull == luHull_PC && lrWatch.muJunction == luJunction);
-                    }
-                    else if (luFree_PC == KU_TRAFFIC_LIGHT_DIAG_WATCHED)
-                    {
-                        luFree_PC = luSlot;
-                    }
-                }
-                if (lbWatched_PC || luFree_PC == KU_TRAFFIC_LIGHT_DIAG_WATCHED)
-                {
-                    continue;
-                }
-                TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luFree_PC];
-                lrWatch.mbUsed       = true;
-                lrWatch.muHull       = luHull_PC;
-                lrWatch.muJunction   = static_cast<u8>(luJunction);
-                lrWatch.muState      = lpRuntime_PC->GetJunctionCurrentStates()[luJunction];
-                lrWatch.muAmber      = 0;
-                lrWatch.mfPhaseClock = gfTrafficLightDiagClock_PC;
-                --luFreeSlots_PC;
-                if (giTrafficLightCycleDiagLinesLeft > 0)
-                {
-                    --giTrafficLightCycleDiagLinesLeft;
-                    *lpLightsDiag_PC << "[traffic-lights] watching hull=" << static_cast<u32>(luHull_PC)
-                                     << " junction=" << luJunction
-                                     << " states=" << static_cast<u32>(lpJunction_PC->GetNumStates())
-                                     << " lights=" << static_cast<u32>(lpJunction_PC->GetNumLights())
-                                     << " state=" << static_cast<u32>(lrWatch.muState)
-                                     << " holds=" << lpRuntime_PC->GetJunctionStateChangeTimes()[luJunction]
-                                     << " t=" << gfTrafficLightDiagClock_PC << " [FLAG PC witness]\n";
-                }
-            }
-        }
-
-        for (u32 luSlot = 0; luSlot < KU_TRAFFIC_LIGHT_DIAG_WATCHED; ++luSlot)
-        {
-            TrafficLightDiagWatch_PC& lrWatch = gaTrafficLightDiagWatch_PC[luSlot];
-            HullRuntime* const lpRuntime_PC = lrWatch.mbUsed ? GetHullRuntimeSafe(lrWatch.muHull) : NULL;
-            if (lpRuntime_PC == NULL)
-            {
-                continue;
-            }
-            const JunctionLogicBox* const lpJunction_PC = &GetHull(lrWatch.muHull)->mpaJunctions[lrWatch.muJunction];
-            const u8  luState_PC = lpRuntime_PC->GetJunctionCurrentStates()[lrWatch.muJunction];
-            const f32 lfHolds_PC = lpRuntime_PC->GetJunctionStateChangeTimes()[lrWatch.muJunction];
-            u32 lauInstances_PC[3] = { 0, 0, 0 };   // RED 0, AMBER 1, GREEN 2
-            u32 luRedLights_PC = 0;
-            for (u32 luLight = 0; luLight < lpJunction_PC->GetNumLights(); ++luLight)
-            {
-                const TrafficLightController* const lpLight_PC = lpJunction_PC->GetLight(luLight);
-                luRedLights_PC += lpJunction_PC->IsLightRed(luState_PC, luLight) ? 1u : 0u;
-                for (u32 luTrafficLight = 0; luTrafficLight < lpLight_PC->muNumTrafficLights; ++luTrafficLight)
-                {
-                    const u8 luLightState_PC = reinterpret_cast<const TrafficLightRuntimeState*>(
-                        mTrafficLightManager.GetLightState(lpLight_PC->mauTrafficLightIds[luTrafficLight]))->muState;
-                    if (luLightState_PC < 3)
-                    {
-                        ++lauInstances_PC[luLightState_PC];
-                    }
-                }
-            }
-
-            if (luState_PC != lrWatch.muState)
-            {
-                if (giTrafficLightCycleDiagLinesLeft > 0)
-                {
-                    --giTrafficLightCycleDiagLinesLeft;
-                    *lpLightsDiag_PC << "[traffic-lights] phase hull=" << static_cast<u32>(lrWatch.muHull)
-                                     << " junction=" << static_cast<u32>(lrWatch.muJunction)
-                                     << " state=" << static_cast<u32>(luState_PC) << "/"
-                                     << static_cast<u32>(lpJunction_PC->GetNumStates())
-                                     << " holds=" << lfHolds_PC
-                                     << " redLights=" << luRedLights_PC << "/"
-                                     << static_cast<u32>(lpJunction_PC->GetNumLights()) << " stoplines";
-                    u32 luListed_PC = 0;
-                    for (u32 luLight = 0; luLight < lpJunction_PC->GetNumLights(); ++luLight)
-                    {
-                        const TrafficLightController* const lpLight_PC = lpJunction_PC->GetLight(luLight);
-                        for (u32 luStopLine = 0; luStopLine < lpLight_PC->muNumStopLines && luListed_PC < 12;
-                             ++luStopLine, ++luListed_PC)
-                        {
-                            const u32 luStopLineHull_PC = lpLight_PC->mauStopLineHulls[luStopLine];
-                            const u32 luStopLineIndex_PC = lpLight_PC->mauStopLineIds[luStopLine];
-                            const HullRuntime* const lpStopRuntime_PC = GetHullRuntimeSafe(luStopLineHull_PC);
-                            *lpLightsDiag_PC << " " << luStopLineHull_PC << ":" << luStopLineIndex_PC << "="
-                                             << (lpStopRuntime_PC == NULL ? "-"
-                                                 : (lpStopRuntime_PC->IsStoplineRed(luStopLineIndex_PC) ? "R" : "G"));
-                        }
-                    }
-                    *lpLightsDiag_PC << " instances red=" << lauInstances_PC[0] << " amber=" << lauInstances_PC[1]
-                                     << " green=" << lauInstances_PC[2] << " t=" << gfTrafficLightDiagClock_PC
-                                     << " sinceLast=" << (gfTrafficLightDiagClock_PC - lrWatch.mfPhaseClock)
-                                     << " [FLAG PC witness]\n";
-                }
-                lrWatch.muState      = luState_PC;
-                lrWatch.mfPhaseClock = gfTrafficLightDiagClock_PC;
-            }
-
-            if (lrWatch.muAmber != 0 && lauInstances_PC[1] == 0 && giTrafficLightCycleDiagLinesLeft > 0)
-            {
-                --giTrafficLightCycleDiagLinesLeft;
-                *lpLightsDiag_PC << "[traffic-lights] amber hull=" << static_cast<u32>(lrWatch.muHull)
-                                 << " junction=" << static_cast<u32>(lrWatch.muJunction)
-                                 << " ran down to red: instances red=" << lauInstances_PC[0]
-                                 << " green=" << lauInstances_PC[2]
-                                 << " afterPhase=" << (gfTrafficLightDiagClock_PC - lrWatch.mfPhaseClock)
-                                 << " t=" << gfTrafficLightDiagClock_PC << " [FLAG PC witness]\n";
-            }
-            lrWatch.muAmber = lauInstances_PC[1];
-        }
-    }
-
     // The whole lane-param simulation for DRIVING traffic (DWARF :1626, @0x82744A80). It
     // forwards lpInput to UpdateParams_BuildListOfCrashingThings, which asserts on it.
     UpdateParams(lpInput);
@@ -7287,193 +6525,6 @@ void TrafficEntityModule::UpdateDecisionFrame(
         }
     }
 
-    // FLAG PC witness (crash parity FX-NETCRASH, online traffic lockstep; NOT console code). Online,
-    // every machine must run the same traffic sim decision frame for decision frame. With
-    // BRN_NETCRASH_DIAG set, this prints a capped digest of that state on every decision frame of
-    // the first 400 after a reset, and a full per-param dump on frames 90..140. The halves of a LAN
-    // pair can then be joined on upd= and compared. It reads only; nothing the sim uses is touched.
-    if (!mbAllowDivergentBehaviour)
-    {
-        static s32 siLockstepLines = 0;
-        static s32 siParamDumpLines = 0;
-        CgsDev::StrStreamBase* const lpNetDiag = NetCrashDiagStream();
-        if (lpNetDiag != 0 && siLockstepLines < KI_NETCRASH_LOCKSTEP_MAX_LINES && muUpdateCount <= 400u)
-        {
-            ++siLockstepLines;
-
-            const u32 luHulls = mActiveHulls.GetLength();
-            u16 lauSortedHulls[KU_MAX_ACTIVE_HULLS];
-            u32 luHullOrder = KU_NETCRASH_FNV_BASIS;
-            for (u32 luIndex = 0; luIndex < luHulls; ++luIndex)
-            {
-                lauSortedHulls[luIndex] = mActiveHulls.GetItem(luIndex);
-                luHullOrder = NetCrashFnv(luHullOrder, &lauSortedHulls[luIndex], sizeof(u16));
-            }
-            std::sort(lauSortedHulls, lauSortedHulls + luHulls);
-            const u32 luHullSet = NetCrashFnv(KU_NETCRASH_FNV_BASIS, lauSortedHulls, luHulls * sizeof(u16));
-
-            const u32 luRand = NetCrashFnv(KU_NETCRASH_FNV_BASIS, &mRand, KU_NETCRASH_RANDOM_STATE_BYTES);
-
-            u32 luParams = 0;
-            u32 luParamHash = KU_NETCRASH_FNV_BASIS;
-            u32 luLerpHash = KU_NETCRASH_FNV_BASIS;
-            u32 luSlowHash = KU_NETCRASH_FNV_BASIS;
-            u32 luStateHash = KU_NETCRASH_FNV_BASIS;
-            for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
-            {
-                if (mParamSoaData.mAliveParams.IsBitSet(luParam))
-                {
-                    const Vector3 lPos = maParamTransforms[luParam].GetDeterministicPos();
-                    const f32 lafPos[3] = { lPos.x, lPos.y, lPos.z };
-                    const Vector3 lLerp = maParamTransforms[luParam].GetLerpedPos();
-                    const f32 lafLerp[4] = { lLerp.x, lLerp.y, lLerp.z, maParamTransforms[luParam].GetSpeed().x };
-                    const ParamNeedToSlowData& lrSlow = maParamNeedToSlowData[luParam];
-                    const f32 lafSlow[3] = { lrSlow.mfNextParamDist, lrSlow.mfTargetSpeed, lrSlow.mfStopDist };
-                    const Param& lrParam = maParams[luParam];
-                    const f32 lafState[5] = { lrParam.mfParamAlong, lrParam.mfSpeed, lrParam.mfTargetSpeed,
-                                              lrParam.mfStopDist, lrParam.mfAcceleration };
-                    ++luParams;
-                    luParamHash = NetCrashFnv(luParamHash, &luParam, sizeof(luParam));
-                    luParamHash = NetCrashFnv(luParamHash, lafPos, sizeof(lafPos));
-                    luLerpHash = NetCrashFnv(luLerpHash, lafLerp, sizeof(lafLerp));
-                    luSlowHash = NetCrashFnv(luSlowHash, &lrSlow.muParamInFront, sizeof(lrSlow.muParamInFront));
-                    luSlowHash = NetCrashFnv(luSlowHash, &lrSlow.miBehaviour, sizeof(lrSlow.miBehaviour));
-                    luSlowHash = NetCrashFnv(luSlowHash, lafSlow, sizeof(lafSlow));
-                    luStateHash = NetCrashFnv(luStateHash, lafState, sizeof(lafState));
-                    luStateHash = NetCrashFnv(luStateHash, &lrParam.miBehaviour, sizeof(lrParam.miBehaviour));
-                }
-            }
-
-            u32 luVehicles = 0;
-            u32 luVehicleHash = KU_NETCRASH_FNV_BASIS;
-            u32 luVehiclePosHash = KU_NETCRASH_FNV_BASIS;
-            s32 liFirstStandard = -1;
-            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
-            {
-                if (maVehicles[luVehicle].IsAlive())
-                {
-                    const u8 lu8Type = maVehicles[luVehicle].GetVehicleType();
-                    const u8 lu8Flags = maVehicles[luVehicle].GetFlags();
-                    const Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
-                    const f32 lafVehiclePos[3] = { lVehiclePos.x, lVehiclePos.y, lVehiclePos.z };
-                    ++luVehicles;
-                    luVehicleHash = NetCrashFnv(luVehicleHash, &luVehicle, sizeof(luVehicle));
-                    luVehicleHash = NetCrashFnv(luVehicleHash, &lu8Type, sizeof(lu8Type));
-                    luVehicleHash = NetCrashFnv(luVehicleHash, &lu8Flags, sizeof(lu8Flags));
-                    luVehiclePosHash = NetCrashFnv(luVehiclePosHash, lafVehiclePos, sizeof(lafVehiclePos));
-                    if (liFirstStandard < 0 && luVehicle < KU_MAX_PARAMS
-                        && mParamSoaData.mAliveParams.IsBitSet(luVehicle))
-                    {
-                        liFirstStandard = static_cast<s32>(luVehicle);
-                    }
-                }
-            }
-
-            u32 luFreeHash = KU_NETCRASH_FNV_BASIS;
-            for (s32 liIndex = 0; liIndex < mFreeParams.GetLength(); ++liIndex)
-            {
-                const u16 luFreeParam = mFreeParams[liIndex];
-                luFreeHash = NetCrashFnv(luFreeHash, &luFreeParam, sizeof(luFreeParam));
-            }
-
-            *lpNetDiag << "[netcrash] lockstep upd=" << static_cast<u32>(muUpdateCount)
-                       << " state=" << static_cast<s32>(meState) << "/" << static_cast<s32>(meRunningState)
-                       << " hulls=" << luHulls << " order=" << luHullOrder << " set=" << luHullSet
-                       << " rand=" << luRand << " params=" << luParams << " ppos=" << luParamHash
-                       << " pstate=" << luStateHash << " lerp=" << luLerpHash << " slow=" << luSlowHash
-                       << " vehicles=" << luVehicles << " vtype=" << luVehicleHash << " vpos=" << luVehiclePosHash
-                       << " free=" << mFreeParams.GetLength() << "/" << luFreeHash;
-            if (liFirstStandard >= 0)
-            {
-                const Vector3 lFirstPos = maParamTransforms[liFirstStandard].GetDeterministicPos();
-                *lpNetDiag << " first=" << liFirstStandard << "@(" << lFirstPos.x << ", " << lFirstPos.z << ")";
-            }
-            *lpNetDiag << " [FLAG PC witness]\n";
-
-            // The per-vehicle dump: every alive vehicle's transform position as raw f32 bits.
-            if (muUpdateCount == 19u || muUpdateCount == 20u || muUpdateCount == 100u || muUpdateCount == 300u)
-            {
-                *lpNetDiag << "[netcrash] lockstep-vehicles upd=" << static_cast<u32>(muUpdateCount);
-                for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
-                {
-                    if (!maVehicles[luVehicle].IsAlive())
-                    {
-                        continue;
-                    }
-                    const Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
-                    u32 lauPosBits[3];
-                    std::memcpy(&lauPosBits[0], &lVehiclePos.x, sizeof(u32));
-                    std::memcpy(&lauPosBits[1], &lVehiclePos.y, sizeof(u32));
-                    std::memcpy(&lauPosBits[2], &lVehiclePos.z, sizeof(u32));
-                    *lpNetDiag << " " << luVehicle << ":" << static_cast<u32>(maVehicles[luVehicle].GetFlags())
-                               << ":" << lauPosBits[0] << ":" << lauPosBits[1] << ":" << lauPosBits[2];
-                }
-                *lpNetDiag << " [FLAG PC witness]\n";
-            }
-
-            // The per-param dump: every alive param's state as raw f32 bits, one line per frame.
-            if (muUpdateCount >= 90u && muUpdateCount <= 140u && siParamDumpLines < 60)
-            {
-                ++siParamDumpLines;
-                *lpNetDiag << "[netcrash] lockstep-params upd=" << static_cast<u32>(muUpdateCount);
-                for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
-                {
-                    if (!mParamSoaData.mAliveParams.IsBitSet(luParam))
-                    {
-                        continue;
-                    }
-                    const Param& lrParam = maParams[luParam];
-                    const ParamNeedToSlowData& lrSlow = maParamNeedToSlowData[luParam];
-                    u32 lauBits[6];
-                    std::memcpy(&lauBits[0], &lrParam.mfParamAlong, sizeof(u32));
-                    std::memcpy(&lauBits[1], &lrParam.mfSpeed, sizeof(u32));
-                    std::memcpy(&lauBits[2], &lrParam.mfAcceleration, sizeof(u32));
-                    std::memcpy(&lauBits[3], &lrSlow.mfTargetSpeed, sizeof(u32));
-                    std::memcpy(&lauBits[4], &lrSlow.mfStopDist, sizeof(u32));
-                    const f32 lfLerpSpeed = maParamTransforms[luParam].GetSpeed().x;
-                    std::memcpy(&lauBits[5], &lfLerpSpeed, sizeof(u32));
-                    *lpNetDiag << " " << luParam << ":" << static_cast<u32>(lrParam.muHullIndex) << "."
-                               << static_cast<u32>(lrParam.muSectionIndex) << ":" << lauBits[0] << ":" << lauBits[1]
-                               << ":" << lauBits[2] << ":" << static_cast<s32>(lrParam.miBehaviour) << "/"
-                               << static_cast<s32>(lrSlow.miBehaviour) << "/" << static_cast<u32>(lrSlow.muParamInFront)
-                               << ":" << lauBits[3] << ":" << lauBits[4] << ":" << lauBits[5];
-                }
-                *lpNetDiag << " [FLAG PC witness]\n";
-            }
-        }
-
-        // The pair case's calibration witness (see KU_NETCRASH_NEAR_FIRST): which traffic is near
-        // this machine's camera (mCameraLastFrame, TryClearupOffscreenTraffic's reference) each second,
-        // so a layout can be timed against the lockstep traffic. Reads only.
-        static s32 siNearLines = 0;
-        if (lpNetDiag != 0 && siNearLines < KI_NETCRASH_NEAR_MAX_LINES && muUpdateCount >= KU_NETCRASH_NEAR_FIRST
-            && muUpdateCount <= KU_NETCRASH_NEAR_LAST && (muUpdateCount % KU_NETCRASH_NEAR_PERIOD) == 0u)
-        {
-            ++siNearLines;
-            const Vector3 lCamera = mCameraLastFrame.GetPosition();
-            *lpNetDiag << "[netcrash] traffic-near upd=" << static_cast<u32>(muUpdateCount) << " cam="
-                       << static_cast<s32>(lCamera.x * 10.0f) << ":" << static_cast<s32>(lCamera.z * 10.0f)
-                       << " player=" << static_cast<s32>(mLocalPlayerPosition.x * 10.0f) << ":"
-                       << static_cast<s32>(mLocalPlayerPosition.z * 10.0f) << " dm";
-            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
-            {
-                if (!maVehicles[luVehicle].IsAlive())
-                {
-                    continue;
-                }
-                const Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
-                const f32 lfDx = lVehiclePos.x - lCamera.x;
-                const f32 lfDz = lVehiclePos.z - lCamera.z;
-                if (lfDx * lfDx + lfDz * lfDz > KF_NETCRASH_NEAR_RADIUS * KF_NETCRASH_NEAR_RADIUS)
-                {
-                    continue;
-                }
-                *lpNetDiag << " " << luVehicle << ":" << static_cast<s32>(lVehiclePos.x * 10.0f) << ":"
-                           << static_cast<s32>(lVehiclePos.z * 10.0f);
-            }
-            *lpNetDiag << " [FLAG PC witness]\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -7592,22 +6643,10 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
 //
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
 {
-    // [DIAG] NOT IN THE X360 BINARY. Same BRN_TRAFFIC_DIAG switch every sibling partfile
-    // uses; capped so a live showtime session costs one line per top-up, not per candidate.
-    CgsDev::StrStreamBase* ShowtimeDiagStream()
-    {
-        static const bool skbOn = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
 
     // ---- IsParamTooClose tuning (rodata, read per call site) -------------------------
     // 0x82726574 flt_820BA2A8. Minimum clear road in front of a candidate param.
@@ -7923,15 +6962,6 @@ void TrafficEntityModule::SpawnShowtimeTraffic()
     }
 
     // [DIAG] NOT IN THE X360 BINARY. One line per 2 s top-up. DELETE-WHEN-STABLE.
-    if (CgsDev::StrStreamBase* lpDiag = ShowtimeDiagStream())
-    {
-        *lpDiag << "[T1-showtime] top-up hulls=" << static_cast<s32>(mActiveHulls.GetLength())
-                << " densityScale=" << mfShowtimeTrafficDensityScale
-                << " vpm=" << (mfShowtimeTrafficDensityScale * KF_SHOWTIME_VEHICLES_PER_MINUTE)
-                << " candidates=" << static_cast<s32>(luDiagCandidates)
-                << " spawned=" << static_cast<s32>(luDiagSpawned)
-                << " [DELETE-WHEN-STABLE]\n";
-    }
 }
 
 }
@@ -7959,7 +6989,6 @@ void TrafficEntityModule::SpawnShowtimeTraffic()
 // comments only attest which member a line resolves to.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -7975,9 +7004,6 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T2-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 
@@ -8241,19 +7267,6 @@ void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
     lfSpeed.z = lpNewParam->mfSpeed;
     lfSpeed.w = lpNewParam->mfSpeed;
     lpTransform->Initialise(lPos, lDir, lRight, lfSpeed);
-
-    // FLAG PC-platform leaf: opt-in witness for fresh Showtime traffic allocation.
-    if (mbPlayingShowtimeMode)
-    {
-        if (CgsDev::StrStreamBase* lpDiag = ShowtimeDiagStream())
-        {
-            *lpDiag << "[showtime-spawn] param=" << luFreeSlot
-                    << " type=" << luVehicleTypeId
-                    << " class=" << static_cast<u32>(lpVehicleType->muVehicleClass)
-                    << " asset=" << mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId()
-                    << " pos=(" << lPos.x << "," << lPos.y << "," << lPos.z << ")\n";
-        }
-    }
 
     // 0x827368E0. Offline (mbAllowDivergentBehaviour false) a still-alive recycled vehicle is
     // divorced from its param rather than asserted about.
@@ -8665,8 +7678,6 @@ void TrafficEntityModule::KillOutOfAreaTraffic(ActiveHullSet* lpOldHulls)
 // comments only attest which member a line resolves to.
 // ============================================================================
 
-
-
 namespace BrnTraffic
 {
 namespace
@@ -8765,32 +7776,9 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
     // built up ("400" == 40 s) and there is a population to observe.
     // DELETE-WHEN UpdateJunctionFUP and UpdateCrashSlider have bodies.
     {
-        static const s32 skiForceJunctionFUPAt = EnvDecisionFrameDelay("BRN_TRAFFIC_FORCE_AVOID");
-        static const s32 skiForceSympCrashAt   = EnvDecisionFrameDelay("BRN_TRAFFIC_FORCE_SYMPCRASH");
         static s32 siDiagDecisionFrame = 0;
         ++siDiagDecisionFrame;
 
-        if (skiForceJunctionFUPAt > 0 && siDiagDecisionFrame >= skiForceJunctionFUPAt)
-        {
-            if (!mbDEBUGOverrideJunctionFUP && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[T5-force] mbDEBUGOverrideJunctionFUP armed at decision frame "
-                    << siDiagDecisionFrame << " -- the AVOID arm is now reachable, and "
-                    << "SpawnNewTraffic is now off [DELETE-WHEN-STABLE]\n";
-            }
-            mbDEBUGOverrideJunctionFUP = true;
-        }
-        if (skiForceSympCrashAt > 0 && siDiagDecisionFrame >= skiForceSympCrashAt)
-        {
-            if (!mbDEBUGTestSympCrash && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[T5-force] mbDEBUGTestSympCrash armed at decision frame "
-                    << siDiagDecisionFrame << " [DELETE-WHEN-STABLE]\n";
-            }
-            mbDEBUGTestSympCrash = true;
-        }
     }
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateParam);
@@ -9379,24 +8367,10 @@ void TrafficEntityModule::Pressure_PickSplitToTake(const Section* lpSection,
 // comments only attest which member a line resolves to.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
 {
-// (fold: an identical definition of LogMissingLeg_T2 was dropped here -- this TU defines it once, above)
-
-    // [DIAG] NOT IN THE X360 BINARY. Same BRN_TRAFFIC_DIAG switch the crash-surface probes in
-    // _wT2_06.cpp use. DELETE-WHEN-STABLE.
-    CgsDev::StrStreamBase* LaneChangeDiagStream()
-    {
-        static const bool skbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
 
     // .rdata literals this TU reads by value, each named by the expression it appears in.
     const f32 KF_PARAM_MAX_PARAM_IN_SEGMENT = 0.999f;   // flt_82008984
@@ -9834,13 +8808,6 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
                 (lfFacingScale < lfDistanceScale ? lfFacingScale : lfDistanceScale);
             lfMaxSpeed = lfLaneSpeed * lfMinScale;
             // PC diagnostic only: observe this restored arm without changing its inputs.
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                static u32 suSamples = 0;
-                if (suSamples++ < 8)
-                    *lpDiag << "[traffic-accel] showtime param=" << luParam
-                        << " distance=" << lfDistance << " cap=" << lfMaxSpeed << "\n";
-            }
         }
         else
         {
@@ -9868,14 +8835,6 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
                     const f32 KF_CALCACCEL_MAX_SCALED_SPEED = 90.0f * 0.44703999f;
                     lfMaxSpeed = KF_CALCACCEL_MAX_SCALED_SPEED;
                     // PC diagnostic only: confirm that an actual recovering vehicle used this arm.
-                    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-                    {
-                        static u32 suSamples = 0;
-                        if (suSamples++ < 8)
-                            *lpDiag << "[traffic-accel] recovery param=" << luParam
-                                << " distance=" << lfDistance << " scale=" << lfSpeedScale
-                                << " cap=" << lfMaxSpeed << "\n";
-                    }
                 }
             }
         }
@@ -10340,20 +9299,6 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
     // [DIAG] NOT IN THE X360 BINARY, off unless BRN_TRAFFIC_DIAG is set. Capped, because a
     // carry-out that never happens and one that happens constantly are the two failure modes
     // and only a count separates them. DELETE-WHEN-STABLE.
-    if (LaneChangeDiagStream() != 0)
-    {
-        static u32 suLaneChanges = 0;
-        ++suLaneChanges;
-        if (suLaneChanges <= 40u || (suLaneChanges % 50u) == 0u)
-        {
-            *LaneChangeDiagStream()
-                << "[T5-lane] param=" << static_cast<s32>(luParam)
-                << " -> section=" << static_cast<s32>(luNewSectionIndex)
-                << " newAlong=" << lfNewParamAlong
-                << " total=" << static_cast<s32>(suLaneChanges)
-                << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
 
     EatParamsNextPlan(luParam);
 }
@@ -11497,7 +10442,6 @@ u32 TrafficEntityModule::FindNearestParamInFront(u32 luParam, f32 lfMaxDist,
 //   TrafficEntityModule::UpdateLerpedParamTransforms      @0x82739CD8  (EXPORT HOLE)
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -11563,7 +10507,6 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lNoVehicle;
     lNoVehicle.SetInverse(mVehicleSoaData.mAliveVehicles);
     lParamsToCreate.SetAnd(lNoVehicle, lParamsToCreate);
-
 
     for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItParam =
              lParamsToCreate.Begin();
@@ -11644,7 +10587,7 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
                                         mVehicleSoaData,
                                         luTrailerIndex);
 
-        maRenderPosesPC[luParam].Reset(); // New driving vehicle in a reused slot.
+ // New driving vehicle in a reused slot.
         SetVehicleTransform(luParam, lOutMatrix);
     }
 
@@ -11929,81 +10872,6 @@ void TrafficEntityModule::GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_P
         ++luMoved;
     }
 
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        // [T4-clip] player-inside-a-traffic-car witness. NOT IN THE X360 BINARY. Each frame,
-        // test the local player's position against every alive vehicle's OBB (the type
-        // runtime's bbox, offset and expanded 0.5 m) and shout once per vehicle. The two
-        // strings MUST stay different: NON-physical == the car never got a physics slot
-        // (module-side break); PHYSICAL == promotion worked and the CONTACTS failed
-        // (physics-side break). DELETE-WHEN-STABLE.
-        if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
-            mRaceCarState.mabRaceCarActive[meLocalPlayerIndex])
-        {
-            const Vector3 lPlayerPos = mRaceCarState.maActiveRaceCarPositions[meLocalPlayerIndex];
-
-            static bool sabReported[KU_MAX_TOTAL_TRAFFIC] = { false };
-
-            TrafficBitArray lAlivePresent;
-            lAlivePresent.SetAnd(mVehicleSoaData.mVehiclesWithEntities,
-                                 mVehicleSoaData.mAliveVehicles);
-
-            for (TrafficBitArray::Iterator lIt = lAlivePresent.Begin();
-                 lIt != lAlivePresent.End();
-                 ++lIt)
-            {
-                const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
-                if (luVehicle >= KU_MAX_TOTAL_TRAFFIC || sabReported[luVehicle])
-                {
-                    continue;
-                }
-
-                const Vehicle* lpVehicle = GetVehicle(luVehicle);
-                const VehicleTypeRuntime* lpVehicleTypeRuntime =
-                    GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
-
-                const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
-                const Vector3 lCentre = rw::math::vpu::TransformPoint(
-                    lTransform, lpVehicleTypeRuntime->GetBBoxOffset());
-                const Vector3 lHalf = lpVehicleTypeRuntime->GetBBoxHalfSize();
-
-                const Vector3 lToPlayer = lPlayerPos - lCentre;
-                const f32 lfLocalX = rw::math::vpu::Dot(lToPlayer, lTransform.xAxis);
-                const f32 lfLocalY = rw::math::vpu::Dot(lToPlayer, lTransform.yAxis);
-                const f32 lfLocalZ = rw::math::vpu::Dot(lToPlayer, lTransform.zAxis);
-
-                const f32 KF_T4_CLIP_EXPAND = 0.5f;
-                const bool lbInside =
-                    (lfLocalX > -(lHalf.x + KF_T4_CLIP_EXPAND) && lfLocalX < (lHalf.x + KF_T4_CLIP_EXPAND)) &&
-                    (lfLocalY > -(lHalf.y + KF_T4_CLIP_EXPAND) && lfLocalY < (lHalf.y + KF_T4_CLIP_EXPAND)) &&
-                    (lfLocalZ > -(lHalf.z + KF_T4_CLIP_EXPAND) && lfLocalZ < (lHalf.z + KF_T4_CLIP_EXPAND));
-
-                if (!lbInside)
-                {
-                    continue;
-                }
-
-                sabReported[luVehicle] = true;
-
-                if (lpVehicle->IsPhysical())
-                {
-                    *lpDiag << "[T4-clip] player inside PHYSICAL traffic vehicle "
-                            << static_cast<s32>(luVehicle)
-                            << " at " << lPlayerPos.x << "," << lPlayerPos.y << "," << lPlayerPos.z
-                            << " -- promotion WORKED, the CONTACTS failed (physics side)"
-                               " [DELETE-WHEN-STABLE]\n";
-                }
-                else
-                {
-                    *lpDiag << "[T4-clip] player inside NON-physical traffic vehicle "
-                            << static_cast<s32>(luVehicle)
-                            << " at " << lPlayerPos.x << "," << lPlayerPos.y << "," << lPlayerPos.z
-                            << " (collidable=" << (lpVehicle->IsCollidable() ? 1 : 0)
-                            << ") -- no physics slot [DELETE-WHEN-STABLE]\n";
-                }
-            }
-        }
-    }
 }
 
 }
@@ -12018,7 +10886,6 @@ void TrafficEntityModule::GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_P
 //
 //   TrafficEntityModule::UpdateParams_DoTimeSlicedLogic @0x82743FE8  (asm, hole closed wave3 r2)
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -12188,132 +11055,6 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
 
     muLastParamCalculated = luEndParam;
 
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        // [T3-behaviour] first param that reaches DRIVE_AROUND_OBSTRUCTION (miBehaviour 2 --
-        // the ONLY value UpdateVehiclesJob::CalcSwerveAmount @0x8291CF18 turns into a
-        // normal-physical promotion), plus a ~5 s histogram of every behaviour value.
-        // DELETE-WHEN-STABLE.
-        static bool sbFirstBehaviour2 = true;
-        static u32  sauBehaviourCounts[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-        static f32  sfHistogramTimer = 0.0f;
-
-        for (u32 luParam = luBeginParam; luParam < luEndParam && luParam < KU_MAX_PARAMS; ++luParam)
-        {
-            const s8 liBehaviour = maParamNeedToSlowData[luParam].miBehaviour;
-            if (liBehaviour >= 0 && liBehaviour < 8)
-            {
-                ++sauBehaviourCounts[liBehaviour];
-            }
-
-            if (sbFirstBehaviour2 && liBehaviour == 2)
-            {
-                sbFirstBehaviour2 = false;
-                *lpDiag << "[T3-behaviour] param " << static_cast<s32>(luParam)
-                        << " reached miBehaviour 2 (DRIVE_AROUND_OBSTRUCTION); stopDist "
-                        << maParamNeedToSlowData[luParam].mfStopDist
-                        << " targetSpeed " << maParamNeedToSlowData[luParam].mfTargetSpeed
-                        << "\n";
-            }
-        }
-
-        sfHistogramTimer += mfSimTimeStep;
-        if (sfHistogramTimer >= 5.0f)
-        {
-            sfHistogramTimer = 0.0f;
-            *lpDiag << "[T3-behaviour] histogram";
-            for (u32 luBehaviour = 0; luBehaviour < 8; ++luBehaviour)
-            {
-                *lpDiag << " [" << static_cast<s32>(luBehaviour) << "]="
-                        << static_cast<s32>(sauBehaviourCounts[luBehaviour]);
-                sauBehaviourCounts[luBehaviour] = 0;
-            }
-            // physSlots is the module's own 25-slot TrafficPhysicsInfo list, which
-            // StopVehicleBeingPhysical is the ONLY thing that ever frees. A monotonic
-            // physSlots means demotion is unreachable.
-            *lpDiag << " physSlots="
-                    << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
-                    << "\n";
-        }
-    }
-
-    // [FLAG PC witness] (crash parity FX-TRAFFICLIGHTS; NOT console code). BRN_TRAFFIC_LIGHT_DIAG, capped, reads
-    // only: the stop-line CONSUMER. For every param of this slice, the decision UpdateParam_CheckIfNeedToSlow
-    // just made -- maParamNeedToSlowData[p].miBehaviour 4 is STOP AT THE STOPLINE (UpdateParams_PrecalcBehaviour
-    // Params' case 3 @0x82718494, fed by DoesParamNeedToStopForStopline @0x827249F8) -- against its speed:
-    //   "waiting"    behaviour 4 and slower than 0.5 m/s: stopped at a red stop line; its cached next stop line
-    //                (muNextStopLineIndex, in its own hull) and that stop line's IsStoplineRed when it has one;
-    //   "released"   a waiting param whose decision is no longer 4: that stop line's IsStoplineRed now;
-    //   "moved off"  a released param faster than 3 m/s again.
-    // The 0.5 / 3.0 m/s marks are the witness's own; nothing reads them. The clock is UpdateDecisionFrame's.
-    if (CgsDev::StrStreamBase* const lpStopDiag_PC = EventStartLightsDiagStream())
-    {
-        for (u32 luParam = luBeginParam; luParam < luEndParam && luParam < KU_MAX_PARAMS; ++luParam)
-        {
-            TrafficLightStopWitness_PC& lrStop = gaTrafficLightStopWitness_PC[luParam];
-            const Param& lrParam = maParams[luParam];
-            if (!lrParam.IsAlive())
-            {
-                lrStop.muPhase = 0;
-                continue;
-            }
-            const bool lbStopping_PC = (maParamNeedToSlowData[luParam].miBehaviour == 4);
-            const u32  luPhaseBefore_PC = lrStop.muPhase;
-            if (luPhaseBefore_PC == 0 && lbStopping_PC && lrParam.mfSpeed < 0.5f)
-            {
-                lrStop.muPhase    = 1;
-                lrStop.muHull     = lrParam.muHullIndex;
-                lrStop.muStopLine = lrParam.muNextStopLineIndex;
-                lrStop.mfClock    = gfTrafficLightDiagClock_PC;
-            }
-            else if (luPhaseBefore_PC == 1 && !lbStopping_PC)
-            {
-                lrStop.muPhase = 2;
-            }
-            else if (luPhaseBefore_PC == 2 && lbStopping_PC && lrParam.mfSpeed < 0.5f)
-            {
-                lrStop.muPhase = 1;   // stopped again before moving off: still waiting, no line
-                continue;
-            }
-            else if (luPhaseBefore_PC == 2 && lrParam.mfSpeed > 3.0f)
-            {
-                lrStop.muPhase = 0;
-            }
-            else
-            {
-                continue;
-            }
-            if (giTrafficLightStopDiagLinesLeft <= 0)
-            {
-                continue;
-            }
-            --giTrafficLightStopDiagLinesLeft;
-
-            // The recorded stop line's state now: 'R' / 'G', or '-' when there is none to read (none cached on
-            // the param's section, or its hull has no runtime any more).
-            const char* lpcStopLine_PC = "-";
-            const HullRuntime* const lpStopRuntime_PC = GetHullRuntimeSafe(lrStop.muHull);
-            if (lrStop.muStopLine < KU_UNKNOWN_STOPLINE && lpStopRuntime_PC != NULL
-                && lrStop.muStopLine < GetHull(lrStop.muHull)->muNumStoplines)
-            {
-                lpcStopLine_PC = lpStopRuntime_PC->IsStoplineRed(lrStop.muStopLine) ? "R" : "G";
-            }
-            const char* const lpcWhat_PC = (lrStop.muPhase == 1) ? "waiting at a red stop line"
-                                         : (lrStop.muPhase == 2) ? "released" : "moved off";
-            *lpStopDiag_PC << "[traffic-lights] param " << luParam << " " << lpcWhat_PC
-                           << ": stopline=" << static_cast<u32>(lrStop.muHull) << ":"
-                           << static_cast<u32>(lrStop.muStopLine) << "=" << lpcStopLine_PC
-                           << " behaviour=" << static_cast<s32>(maParamNeedToSlowData[luParam].miBehaviour)
-                           << " stopDist=" << maParamNeedToSlowData[luParam].mfStopDist
-                           << " speed=" << lrParam.mfSpeed
-                           << " t=" << gfTrafficLightDiagClock_PC
-                           << " since=" << (gfTrafficLightDiagClock_PC - lrStop.mfClock) << " [FLAG PC witness]\n";
-            if (lrStop.muPhase == 2)
-            {
-                lrStop.mfClock = gfTrafficLightDiagClock_PC;
-            }
-        }
-    }
 }
 
 }
@@ -12375,8 +11116,6 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
 // Layout is host-native: every member is reached by name; the console displacements in the
 // comments only attest which member a line resolves to.
 // ============================================================================
-
-
 
 namespace BrnTraffic
 {
@@ -12624,17 +11363,6 @@ void TrafficEntityModule::UpdateParams_BuildListOfCrashingThings(
     // --- source 3: the showtime crash magnets ---------------------------------------------
     if (!mbPlayingShowtimeMode)   // +0x717DD
     {
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            static u32 suDiagFrame = 0;
-            if ((suDiagFrame++ % 10u) == 0u)   // decision frames are 0.1 s -> ~1 line/s
-            {
-                *lpDiag << "[T5-crash] things=" << static_cast<s32>(luDiagPhysical + luDiagRaceCars)
-                        << " physical=" << static_cast<s32>(luDiagPhysical)
-                        << " racecars=" << static_cast<s32>(luDiagRaceCars)
-                        << " showtime=0 [DELETE-WHEN-STABLE]\n";
-            }
-        }
         return;
     }
 
@@ -12664,19 +11392,6 @@ void TrafficEntityModule::UpdateParams_BuildListOfCrashingThings(
         ++luDiagShowtime;
     }
 
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        static u32 suDiagFrameShowtime = 0;
-        if ((suDiagFrameShowtime++ % 10u) == 0u)
-        {
-            *lpDiag << "[T5-crash] things="
-                    << static_cast<s32>(luDiagPhysical + luDiagRaceCars + luDiagShowtime)
-                    << " physical=" << static_cast<s32>(luDiagPhysical)
-                    << " racecars=" << static_cast<s32>(luDiagRaceCars)
-                    << " showtime=" << static_cast<s32>(luDiagShowtime)
-                    << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -12768,57 +11483,12 @@ void TrafficEntityModule::UpdateParams_TryAvoidCrashing(
         // 0x82716C78: `li r11, 2 ; stb r11, 0x1B(param)`.
         lpParam->miBehaviour = Param::KI_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION;
 
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            static u32 suAvoidLogged = 0;
-            const u32 KU_AVOID_LOG_CAP = 64;
-            if (suAvoidLogged < KU_AVOID_LOG_CAP)
-            {
-                ++suAvoidLogged;
-                const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
-                const Vector3 lToThing  = lrThing.mPosition - lParamPos;
-                *lpDiag << "[T5-avoid] param=" << static_cast<s32>(luParam)
-                        << " thing=" << static_cast<s32>(luThing)
-                        << " ofNThings=" << static_cast<s32>(lpaCrashingThings->GetLength())
-                        << " distSq=" << rw::math::vpu::Dot(lToThing, lToThing)
-                        << " behaviour=DRIVING_AROUND_OBSTRUCTION"
-                        << " [DELETE-WHEN-STABLE]\n";
-            }
-        }
         return;
     }
 
     // [DIAG] NOT IN THE X360 BINARY. A run that swerves nothing has to say WHY, or "0 swerves"
     // is indistinguishable from a dead function. This re-walks the same list and reports the
     // closest miss against the cone's own two thresholds. DELETE-WHEN-STABLE.
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        static u32 suMissSample = 0;
-        if ((suMissSample++ % 2000u) == 0u && lpaCrashingThings->GetLength() != 0)
-        {
-            const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
-            const Vector3 lParamDir = lpParamTransform->GetDirection();
-            f32 lfBestDist = 3.4028235e38f;
-            f32 lfBestCos  = -1.0f;
-            for (u32 luThing = 0; luThing < lpaCrashingThings->GetLength(); ++luThing)
-            {
-                const Vector3 lToThing = (*lpaCrashingThings)[luThing].mPosition - lParamPos;
-                const f32 lfDistSq = rw::math::vpu::Dot(lToThing, lToThing);
-                if (lfDistSq <= 0.0f || lfDistSq >= lfBestDist * lfBestDist)
-                {
-                    continue;
-                }
-                lfBestDist = std::sqrt(lfDistSq);
-                lfBestCos  = rw::math::vpu::Dot(lToThing, lParamDir) / lfBestDist;
-            }
-            *lpDiag << "[T5-miss] param=" << static_cast<s32>(luParam)
-                    << " things=" << static_cast<s32>(lpaCrashingThings->GetLength())
-                    << " nearest=" << lfBestDist << "m cos=" << lfBestCos
-                    << " need dist<=" << kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.y
-                    << " cos>=" << kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.x
-                    << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -12940,25 +11610,6 @@ void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
         lpParam->miBehaviour     = Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH;
         lpParam->mSympCrashTarget = lrThing.mEntityId;
 
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            static u32 suSympLogged = 0;
-            const u32 KU_SYMP_LOG_CAP = 64;
-            if (suSympLogged < KU_SYMP_LOG_CAP)
-            {
-                ++suSympLogged;
-                const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
-                const Vector3 lToThing  = lrThing.mPosition - lParamPos;
-                *lpDiag << "[T5-symp] param=" << static_cast<s32>(luParam)
-                        << " target=" << static_cast<s32>(EntityIdToEntityIndex(lrThing.mEntityId))
-                        << " magnet=" << (lrThing.mbShowtimeCrashMagnet ? 1 : 0)
-                        << " distSq=" << rw::math::vpu::Dot(lToThing, lToThing)
-                        << " camDistSq=" << lfDistFromCameraSq
-                        << " showtime=" << (mbPlayingShowtimeMode ? 1 : 0)
-                        << " recipY=" << lfConeRecipYScale.x
-                        << " [DELETE-WHEN-STABLE]\n";
-            }
-        }
         return;
     }
 }
@@ -12978,7 +11629,6 @@ void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
 //   TrafficEntityModule::GetCarAssetAttribKey            @0x8273EFC8 (59)
 //   TrafficEntityModule::CalculateInitialPhysicalState   @0x8271DD30 (96)
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -13099,7 +11749,6 @@ namespace BrnTraffic
 // None of the five is in the Feb-2007 leak; ARTIST pseudocode + asm are the only sources.
 // Every X360 displacement quoted below is reached BY NAME, never by offset.
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -13538,19 +12187,6 @@ void TrafficEntityModule::AddVehicleToPhysics(
             const bool lbFull   = !(liQueued < lpCreateQueue->GetMaxLength());
             if ((liQueued > siCreateQueueHigh || lbFull) && siCreateQueueDiagLines < 30)
             {
-                if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-                {
-                    ++siCreateQueueDiagLines;
-                    if (liQueued > siCreateQueueHigh)
-                    {
-                        siCreateQueueHigh = liQueued;
-                    }
-                    *lpDiag << "[T-createq] vehicle=" << luVehicle
-                            << " type=" << static_cast<s32>(leTrafficType)
-                            << " queued=" << liQueued << "/" << lpCreateQueue->GetMaxLength()
-                            << (lbFull ? " FULL -> not posted, not marked (0x82742894)" : "")
-                            << "\n";
-                }
             }
         }
 
@@ -13968,7 +12604,6 @@ void TrafficEntityModule::GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffe
 // dispatch site.
 // =================================================================================================
 
-
 namespace BrnTraffic
 {
 namespace
@@ -14265,29 +12900,7 @@ bool TrafficEntityModule::TryClearupOffscreenTraffic(
 
         ++giDemoteFromClearup;   // [T3-demote] census, NOT IN THE X360 BINARY
 
-        // [FLAG PC witness] [traffic-track] CLEARUP. NOT IN THE X360 BINARY, off unless
-        // BRN_TRAFFIC_TRACK. Prints the three numbers the decision above is made of, so a
-        // removal can be checked against the console's rule instead of guessed at: the
-        // BEHAVIOUR CENTRE this measured from (mCameraLastFrame, which is NOT necessarily
-        // where the player is on this build -- see the banner at the consume site in
-        // WorldModule::GenerateDispatchListsBringUp), the squared distance, and the constant.
-        // One line per kill, and kills are events. DELETE-WHEN: see BrnTrafficTrackWitness.h.
-        if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
         {
-            const Vector3 lCamera = mCameraLastFrame.GetPosition();
-            *lpTrack << "[traffic-track] id=" << luVehicle
-                     << " CLEARUP cam=(" << lCamera.x << ", " << lCamera.y
-                     << ", " << lCamera.z << ")"
-                     << " distSq=" << lfDiffSq
-                     << " limitSq=" << KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ
-                     << " far=" << (lbFarFromPlayer ? 1 : 0)
-                     << " showtime=" << (mbPlayingShowtimeMode ? 1 : 0)
-                     << "\n";
-        }
-
-        {
-            // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
-            const TrafficRemoveReasonTag lTag("clearup-offscreen");
             RemoveVehicle(luVehicle);                               // 0x8273CAD0
         }
         return true;                                                // 0x8273CAD4 `li r3, 1`
@@ -14544,18 +13157,6 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
                 // [DIAG] NOT IN THE X360 BINARY. BRN_TRAFFIC_DIAG witness of the wedge arm, capped.
                 {
                     static s32 siWedgeDiagLines = 0;
-                    if (siWedgeDiagLines < KI_DEMOTE_PRINT_CAP && TrafficDiagEnabled()
-                        && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        ++siWedgeDiagLines;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[T-stuck] vehicle=" << liVehicle
-                            << " front=" << lpInfo->mfStuckTimeFront
-                            << " back=" << lpInfo->mfStuckTimeBack
-                            << " flags=" << static_cast<u32>(lpInfo->muContactSideFlags)
-                            << " gas=" << lControls.mfGas << " brake=" << lControls.mfBrake
-                            << " -> gas/brake cut\n";
-                    }
                 }
                 lControls.mfGas   = 0.0f;
                 lControls.mfBrake = 0.0f;
@@ -14644,22 +13245,6 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
                     && !gabStaticClearupDiagSeen[liDiagVehicle])
                 || (giStaticClearupVisits % KI_STATIC_CLEARUP_CENSUS_PERIOD) == 0))
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giStaticClearupDiagLines;
-                if (liDiagVehicle >= 0 && liDiagVehicle < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC))
-                {
-                    gabStaticClearupDiagSeen[liDiagVehicle] = true;
-                }
-                const Vector3 lDiagPos = GetVehicleTransform(static_cast<u32>(liDiagVehicle)).Pos();
-                *lpDiag << "[T-static-clearup] vehicle=" << liDiagVehicle
-                        << " species=" << static_cast<s32>(GetVehicleSpecies(static_cast<u32>(liDiagVehicle)))
-                        << " pos=(" << lDiagPos.x << ", " << lDiagPos.y << ", " << lDiagPos.z << ")"
-                        << " far=" << (mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.IsBitSet(
-                                           static_cast<u32>(liDiagVehicle)) ? 1 : 0)
-                        << " cleared=" << (lbDiagClearedUp ? 1 : 0)
-                        << " visits=" << giStaticClearupVisits << "\n";
-            }
         }
     }
 }
@@ -15277,24 +13862,6 @@ void TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance(
         if (( lbRiskGateMet && giAvoidDiagLines < KI_AVOID_DIAG_CAP) ||
             (!lbRiskGateMet && giAvoidQuietDiagLines < KI_AVOID_QUIET_DIAG_CAP))
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                if (lbRiskGateMet)
-                {
-                    ++giAvoidDiagLines;
-                }
-                else
-                {
-                    ++giAvoidQuietDiagLines;
-                }
-                *lpDiag << "[T-avoid] vehicle=" << luVehicle
-                        << " risk=" << lfOverallRisk.x
-                        << " dist=" << lfDistFromTarget.x
-                        << " packets=" << mCachedCollidableList.GetLength()
-                        << " mode=" << lpcDiagMode
-                        << " dotAvoidTarget=" << lfDiagDotTarget
-                        << " speed=" << GetVehicle(luVehicle)->GetSpeed().x << "\n";
-            }
         }
     }
 
@@ -15461,13 +14028,6 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
         // [DIAG] NOT IN THE X360 BINARY -- see KI_AVOID_HANDBRAKE_DIAG_CAP.
         if (giAvoidHandbrakeDiagLines < KI_AVOID_HANDBRAKE_DIAG_CAP)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giAvoidHandbrakeDiagLines;
-                *lpDiag << "[T-avoid-handbrake] vehicle=" << luVehicle
-                        << " risk=" << lfOverallRisk.x << " dist=" << lfDist
-                        << " speed=" << lfSpeed << " -> mfHandBrake " << KF_AVOIDANCE_HANDBRAKE << "\n";
-            }
         }
     }
 
@@ -15544,12 +14104,6 @@ bool TrafficEntityModule::CheckIfPhysicalVehicleIsStuck(u32 luVehicle)
     // [DIAG] NOT IN THE X360 BINARY -- the first call, once: DriveTowardsTarget reached the test.
     if (!gbStuckDispatchLogged)
     {
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            gbStuckDispatchLogged = true;
-            *lpDiag << "[T-stuck-check] dispatched vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
-                    << " back=" << lpPhysicsInfo->mfStuckTimeBack << "\n";
-        }
     }
 
     if (NeedToTakeActionAgainstJunctionFUP())
@@ -15574,12 +14128,6 @@ bool TrafficEntityModule::CheckIfPhysicalVehicleIsStuck(u32 luVehicle)
         // [DIAG] NOT IN THE X360 BINARY -- see KI_STUCK_DIAG_CAP.
         if (giStuckDiagLines < KI_STUCK_DIAG_CAP)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giStuckDiagLines;
-                *lpDiag << "[T-stuck-check] vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
-                        << " back=" << lpPhysicsInfo->mfStuckTimeBack << " -> GIVE_UP phase=1\n";
-            }
         }
         return true;
     }
@@ -15594,13 +14142,6 @@ bool TrafficEntityModule::CheckIfPhysicalVehicleIsStuck(u32 luVehicle)
         if (giStuckBelowDiagLines < KI_STUCK_NONE_DIAG_CAP && lfLiveTimer > 0.0f
             && lfLiveTimer >= gfStuckBelowDiagHigh + 0.25f)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giStuckBelowDiagLines;
-                gfStuckBelowDiagHigh = lfLiveTimer;
-                *lpDiag << "[T-stuck-check] vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
-                        << " back=" << lpPhysicsInfo->mfStuckTimeBack << " -> below 3.2, drives on\n";
-            }
         }
         return false;
     }
@@ -15624,18 +14165,6 @@ bool TrafficEntityModule::CheckIfPhysicalVehicleIsStuck(u32 luVehicle)
         && (leResponse != Vehicle::E_MANOEUVRE_NONE || giStuckNoneDiagLines < KI_STUCK_NONE_DIAG_CAP
             || (lbFrontStuck && (giStuckRollCount % KI_STUCK_ROLL_CENSUS_PERIOD) == 0)))
     {
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            ++giStuckDiagLines;
-            if (leResponse == Vehicle::E_MANOEUVRE_NONE)
-            {
-                ++giStuckNoneDiagLines;
-            }
-            *lpDiag << "[T-stuck-check] vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
-                    << " back=" << lpPhysicsInfo->mfStuckTimeBack << " roll=" << lfRoll << " -> "
-                    << (leResponse == Vehicle::E_MANOEUVRE_STUCK_REVERSE ? "STUCK_REVERSE" : "NONE")
-                    << " (rolls " << giStuckRollCount << ")\n";
-        }
     }
     return true;
 }
@@ -15707,13 +14236,6 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
             if (giStuckDiagLines < KI_STUCK_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC
                 && gaiStuckReverseDiagPhase[luVehicle] != 1)
             {
-                if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-                {
-                    ++giStuckDiagLines;
-                    gaiStuckReverseDiagPhase[luVehicle] = 1;
-                    *lpDiag << "[T-stuck-reverse] vehicle=" << luVehicle << " phase=0 reversing brake=0.75 steer="
-                            << lfSteering << " speed=" << lpVehicle->GetSpeed().x << "\n";
-                }
             }
             return;
         }
@@ -15724,14 +14246,6 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
         // [DIAG] NOT IN THE X360 BINARY -- the phase change and why.
         if (giStuckDiagLines < KI_STUCK_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giStuckDiagLines;
-                gaiStuckReverseDiagPhase[luVehicle] = 2;
-                *lpDiag << "[T-stuck-reverse] vehicle=" << luVehicle << " phase=0->1 back=" << (lbBackContact ? 1 : 0)
-                        << " turned=" << (lbTurned ? 1 : 0) << " timeout=" << (lbTimedOut ? 1 : 0)
-                        << " steer=" << lfSteering << " speed=" << lpVehicle->GetSpeed().x << "\n";
-            }
         }
     }
     else if (liPhase == 1)
@@ -15751,13 +14265,6 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
         // [DIAG] NOT IN THE X360 BINARY -- the end of the manoeuvre.
         if (giStuckDiagLines < KI_STUCK_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giStuckDiagLines;
-                gaiStuckReverseDiagPhase[luVehicle] = 0;
-                *lpDiag << "[T-stuck-reverse] vehicle=" << luVehicle << " phase=1 end speed=" << lfSpeed
-                        << " time=" << lfEndTime << " -> NONE\n";
-            }
         }
     }
     else
@@ -15848,12 +14355,6 @@ void TrafficEntityModule::UpdateGiveUpManoeuvre(u32 luVehicle,
         // [DIAG] NOT IN THE X360 BINARY -- see KI_GIVE_UP_DIAG_CAP.
         if (giGiveUpDiagLines < KI_GIVE_UP_DIAG_CAP)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giGiveUpDiagLines;
-                *lpDiag << "[T-give-up] vehicle=" << luVehicle << " phase=0->1 stopped speed="
-                        << lpVehicle->GetSpeed().x << "\n";
-            }
         }
     }
     else if (liPhase != 1)
@@ -15899,13 +14400,6 @@ void TrafficEntityModule::UpdateGiveUpManoeuvre(u32 luVehicle,
         if (giGiveUpDiagLines < KI_GIVE_UP_DIAG_CAP
             && (lfDiagWaited < 4.0f + mfSimTimeStep || liDiagManoeuvre != Vehicle::E_MANOEUVRE_GIVE_UP))
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giGiveUpDiagLines;
-                *lpDiag << "[T-give-up] vehicle=" << luVehicle << " phase=1 waited=" << lfDiagWaited
-                        << " front=" << lpPhysInfo->mfStuckTimeFront << " back=" << lpPhysInfo->mfStuckTimeBack
-                        << " manoeuvre=" << liDiagManoeuvre << " -> NORMAL, time-not-driving 0\n";
-            }
         }
     }
 }
@@ -15992,14 +14486,6 @@ void TrafficEntityModule::Update3PointTurnManoeuvre(u32 luVehicle,
         // [DIAG] NOT IN THE X360 BINARY -- the end of the manoeuvre.
         if (gi3PointTurnDiagLines < KI_3_POINT_TURN_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++gi3PointTurnDiagLines;
-                gai3PointTurnDiagState[luVehicle] = 0;
-                *lpDiag << "[T-3pt-turn] vehicle=" << luVehicle << " done dot="
-                        << rw::math::vpu::Dot(GetVehicleTransform(luVehicle).At(), lDirToTarget)
-                        << " speed=" << lpVehicle->GetSpeed().x << " -> NONE\n";
-            }
         }
         return;
     }
@@ -16020,13 +14506,6 @@ void TrafficEntityModule::Update3PointTurnManoeuvre(u32 luVehicle,
             if (gi3PointTurnDiagLines < KI_3_POINT_TURN_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC
                 && gai3PointTurnDiagState[luVehicle] != 1)
             {
-                if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-                {
-                    ++gi3PointTurnDiagLines;
-                    gai3PointTurnDiagState[luVehicle] = 1;
-                    *lpDiag << "[T-3pt-turn] vehicle=" << luVehicle << " phase=0 reversing brake=0.8 steer="
-                            << lfSteering << " speed=" << lpVehicle->GetSpeed().x << "\n";
-                }
             }
             return;
         }
@@ -16036,13 +14515,6 @@ void TrafficEntityModule::Update3PointTurnManoeuvre(u32 luVehicle,
         // [DIAG] NOT IN THE X360 BINARY -- the phase change.
         if (gi3PointTurnDiagLines < KI_3_POINT_TURN_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++gi3PointTurnDiagLines;
-                gai3PointTurnDiagState[luVehicle] = 2;
-                *lpDiag << "[T-3pt-turn] vehicle=" << luVehicle << " phase=0->1 side=" << lfSteering
-                        << " speed=" << lpVehicle->GetSpeed().x << "\n";
-            }
         }
     }
     else if (liPhase != 1)
@@ -16243,18 +14715,6 @@ void TrafficEntityModule::UpdateRecoveringFromSlam(
         const s32 KI_SLAM_WITNESS_CAP = 200;
         if (siSlamWitnessLines < KI_SLAM_WITNESS_CAP)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++siSlamWitnessLines;
-                const TrafficPhysicsInfo* const lpWInfo =
-                    GetTrafficPhysicsInfoForVehicl(luVehicle);
-                *lpDiag << "[T5-slam] veh=" << static_cast<s32>(luVehicle)
-                        << " physTime=" << lpVehicle->GetPhysicalTime()
-                        << " drv=" << (lpWInfo != 0 ? lpWInfo->mfDrivingDirection : 0.0f)
-                        << " steer=" << (lpWInfo != 0 ? lpWInfo->mfSteeringDirection : 0.0f)
-                        << " notDriving=" << (lpWInfo != 0 ? lpWInfo->mfTimeNotDriving : -1.0f)
-                        << "\n";
-            }
         }
     }
 
@@ -16335,29 +14795,6 @@ void TrafficEntityModule::StopVehicleBeingPhysical(u32 luVehicle, bool lbSuppres
 
     // [T3-demote] -- NOT IN THE X360 BINARY. See the census banner at the top of this file.
     ++giDemoteCalls;
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        if (giDemoteCalls <= KI_DEMOTE_PRINT_CAP)
-        {
-            *lpDiag << "[T3-demote] #" << giDemoteCalls
-                    << " vehicle " << static_cast<s32>(luVehicle)
-                    << " slot " << liPartsIndex
-                    << " suppressPhysRemoval " << (lbSuppressPhysicsRemoval ? 1 : 0)
-                    << " physSlots " << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
-                    << " | recycle " << giDemoteFromRecycle
-                    << " return "    << giDemoteFromReturn
-                    << " killDying " << (giDemoteCalls - giDemoteFromRecycle
-                                         - giDemoteFromReturn)
-                    << " (clearupKills " << giDemoteFromClearup << ")"
-                    << " [DELETE-WHEN-STABLE]\n";
-
-            if (giDemoteCalls == KI_DEMOTE_PRINT_CAP)
-            {
-                *lpDiag << "[T3-demote] print cap " << KI_DEMOTE_PRINT_CAP
-                        << " reached -- later demotions still counted, not printed\n";
-            }
-        }
-    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -16419,8 +14856,6 @@ void TrafficEntityModule::HandleRecycledTraffic(
         case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_CRASHING:
         case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_PHYSICAL:
             {
-                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
-                const TrafficRemoveReasonTag lTag("physics-recycled");
                 RemoveVehicle(luVehicle);                                        // 0x827418FC
             }
             break;
@@ -16450,8 +14885,6 @@ void TrafficEntityModule::HandleRecycledTraffic(
                        "BrnPhysics::Vehicle::eCrashTrafficType_Slammed )");      // .cpp 3568
 
             {
-                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
-                const TrafficRemoveReasonTag lTag("physics-recycled-slammed");
                 RemoveVehicle(luVehicle);                                        // 0x82741AB0
             }
             break;
@@ -16522,12 +14955,6 @@ void TrafficEntityModule::ReturnPhysicalVehicleToTraffic(u32 luVehicle)
     // handed back.
     if (!lpVehicle->IsOfTrailerSpecies() && !GetParam(luVehicle)->IsAlive())
     {
-        // 0x8273DFAC..0x8273DFB4 -- UNGATED: RemoveVehicle @0x8272E370 is bodied in
-        // _wT5_01.cpp. (Its park note here named GetVehicleSpecies /
-        // Vehicle::DetachArticulation / StaticTrafficParam::SetShouldBeRemoved as blockers;
-        // all three had already been landed by earlier waves and nobody retired the note.)
-        // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
-        const TrafficRemoveReasonTag lTag("return-to-traffic-deadparam");
         RemoveVehicle(luVehicle);
     }
 }
@@ -16618,7 +15045,6 @@ void TrafficEntityModule::CleanUpCrashedVehiclePhysics(
 //                Vehicle::GetTrailerIndex, which does not exist in this tree.
 //                DELETE-WHEN trailers land.
 // =================================================================================================
-
 
 // [T5-apply] DIAG state, DEFINED in
 // GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
@@ -16955,24 +15381,8 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
             if (BrnPhysics::Vehicle::gT5RamFramesLeft > 0
                 && static_cast<s32>(luVehicle) == BrnPhysics::Vehicle::gT5RamGlobalIndex)
             {
-                static const bool skbT5Diag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
                 static s32 s_iT5ApplyFrame = 0;
                 ++s_iT5ApplyFrame;
-                if (skbT5Diag && CgsDev::Log::gpDebugPrint != 0 && (s_iT5ApplyFrame % 10) == 1)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[T5-apply] f=" << s_iT5ApplyFrame
-                        << " vehicle=" << static_cast<s32>(luVehicle)
-                        << " |delta|=" << lfDeltaLength
-                        << " worldPos=(" << lTransform.wAxis.x << "," << lTransform.wAxis.y
-                        << "," << lTransform.wAxis.z << ")"
-                        << " vel=(" << lrState.mLinearVelocity.x << ","
-                        << lrState.mLinearVelocity.y << "," << lrState.mLinearVelocity.z << ")"
-                        << " frozen=" << static_cast<s32>(lrState.mbFrozen ? 1 : 0)
-                        << " physical=" << static_cast<s32>(lpVehicle->IsPhysical() ? 1 : 0)
-                        << " collidable=" << static_cast<s32>(lpVehicle->IsCollidable() ? 1 : 0)
-                        << "\n";
-                }
             }
         }
     }
@@ -17068,15 +15478,6 @@ void TrafficEntityModule::HandleResetRaceCarEvents(const BrnTrafficIO::InputBuff
             // answers; BRN_TRAFFIC_TRACK tags the removals RemoveVehicle prints.
             if (giResetDiagLines < KI_RESET_DIAG_CAP)
             {
-                if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-                {
-                    ++giResetDiagLines;
-                    *lpDiag << "[T-reset] car=" << static_cast<s32>(lrEvent.meActiveRaceCarIndex)
-                            << " after-wreck clear at (" << lrEvent.mResetPosition.x << ", "
-                            << lrEvent.mResetPosition.y << ", " << lrEvent.mResetPosition.z
-                            << ") r=" << lfRadius << " h=" << KF_RESET_ON_TRACK_KILL_HALFHEIGHT
-                            << " online=" << (lbIsOnlineGameMode ? 1 : 0) << "\n";
-                }
             }
             const TrafficRemoveReasonTag lTag("reset-after-wreck-cylinder");
 
@@ -17208,11 +15609,6 @@ void TrafficEntityModule::HandleContactPoints(const BrnTrafficIO::InputBuffer_Po
         // [DIAG] NOT IN THE X360 BINARY -- see KI_CONTACT_SIDE_DIAG_CAP.
         if (lpTrafficContacts->GetLength() > 0 && giContactPassDiagLines < KI_CONTACT_SIDE_DIAG_CAP)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++giContactPassDiagLines;
-                *lpDiag << "[T-contact-pass] contacts=" << lpTrafficContacts->GetLength() << "\n";
-            }
         }
 
         for (s32 liIndex = 0; liIndex < lpTrafficContacts->GetLength(); ++liIndex)
@@ -17325,15 +15721,6 @@ void TrafficEntityModule::ProcessContactPoint(const BrnPhysics::ContactSpy::Traf
     // [DIAG] NOT IN THE X360 BINARY -- see KI_CONTACT_SIDE_DIAG_CAP.
     if (giContactSideDiagLines < KI_CONTACT_SIDE_DIAG_CAP)
     {
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            ++giContactSideDiagLines;
-            *lpDiag << "[T-contact-side] vehicle=" << luVehicle
-                    << " side=" << (leSide == TrafficPhysicsInfo::E_CONTACT_SIDE_FRONT ? "front" : "back")
-                    << " dir=" << lfDirDot << " halfZ=" << lVehicleHalfSize.z
-                    << " right=" << lfRightDot << " halfX=" << lVehicleHalfSize.x
-                    << " flags=" << static_cast<u32>(lpPhysInfo->muContactSideFlags) << "\n";
-        }
     }
 }
 
@@ -17413,8 +15800,6 @@ void TrafficEntityModule::DEBUG_RenderContactPoint(const BrnPhysics::ContactSpy:
 //   flt_82001CC0 = 0.0f (already attested in-tree).
 // ============================================================================
 
-
-
 namespace BrnTraffic
 {
 namespace
@@ -17430,9 +15815,6 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T4-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 
@@ -17927,14 +16309,6 @@ void TrafficEntityModule::UpdateCollidableVehicles(
         const s32 liFrame = siCollidableDiagFrame++;
         if ((liFrame % 120) < 6 && siCollidableDiagLines < 60)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                ++siCollidableDiagLines;
-                *lpDiag << "[T-collidable] frame=" << liFrame
-                        << " packets=" << mCachedCollidableList.GetLength()
-                        << " cachedCars=" << luCachedDiag
-                        << " carried=" << luCarriedDiag << "\n";
-            }
         }
     }
 }
@@ -17975,7 +16349,6 @@ void TrafficEntityModule::UpdateCollidableVehicles(
 // luVehicle is global too. The 20-slot PHYSICAL index only exists on the far side of
 // PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap. Do not cross them.
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -18193,14 +16566,8 @@ void TrafficEntityModule::HandleHalfPotentialContact(
 // comments only attest which member a line resolves to.
 // ============================================================================
 
-
-
 namespace BrnTraffic
 {
-// [FLAG PC witness] the removal-reason baton declared in BrnTrafficTrackWitness.h. NOT IN THE
-// X360 BINARY -- RemoveVehicle takes no reason argument on the console either; this is how the
-// witness names WHICH of the eleven callers vanished a car. DELETE-WHEN: see that header.
-const char* gpcTrafficRemoveReason = "unknown";
 
 namespace
 {
@@ -18535,46 +16902,6 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
     CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");  // .cpp 4190
 
     Vehicle* const lpVehicle = GetVehicle(luVehicle);
-
-    // ---- [FLAG PC witness] [traffic-track] REMOVED. NOT IN THE X360 BINARY, off unless
-    // BRN_TRAFFIC_TRACK. This is the module's SINGLE kill entry point, so one line here names
-    // every car that vanishes, where it was relative to the player, and which caller did it
-    // (gpcTrafficRemoveReason, parked by the instrumented call sites). Unbounded per call is
-    // safe: removals are events, not frames -- a 160 s drive produces tens, not thousands.
-    // DELETE-WHEN: see BrnTrafficTrackWitness.h.
-    if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-    {
-        // maVehicleTransforms directly, not GetVehicleTransform(): that accessor returns a
-        // Matrix44Affine BY VALUE, so binding a reference to its .Pos() would dangle.
-        const Vector3& lrPos = maVehicleTransforms[luVehicle].Pos();
-
-        const f32 lfDX = lrPos.x - mLocalPlayerPosition.x;
-        const f32 lfDY = lrPos.y - mLocalPlayerPosition.y;
-        const f32 lfDZ = lrPos.z - mLocalPlayerPosition.z;
-        const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
-        const f32 lfAlong  = lfDX * mLocalPlayerDirection.x
-                           + lfDY * mLocalPlayerDirection.y
-                           + lfDZ * mLocalPlayerDirection.z;
-
-        const char* lpcState = "param";
-        if (lpVehicle->IsPhysical())
-        {
-            lpcState = (lpVehicle->GetCrashTrafficTypeRaw() == 0u) ? "crashed" : "physical";
-        }
-        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
-        {
-            lpcState = "static";
-        }
-
-        *lpTrack << "[traffic-track] id=" << luVehicle
-                 << " REMOVED reason=" << gpcTrafficRemoveReason
-                 << " state=" << lpcState
-                 << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
-                 << " vis=" << (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle) ? 1 : 0)
-                 << " dist=" << sqrtf(lfDistSq)
-                 << " infront=" << ((lfAlong > 0.0f) ? 1 : 0)
-                 << "\n";
-    }
 
     // ========================================================================================
     // ARM 1 -- loc_8272E9D4. An ORPHAN: a trailer whose cab has already gone. There is nothing
@@ -18927,15 +17254,7 @@ bool TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical(
     }
 
     // 0x8273F3FC..0x8273F408 -- UNGATED: RemoveVehicle is bodied above in this file.
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
     {
-        *lpDiag << "[T5-kill] TryClearupNonMovingPhysical veh=" << luVehicle
-                << " fatal=" << (lpPhysInfo->mbIsFatallyCrashing ? 1 : 0)
-                << " notDriving=" << lpPhysInfo->mfTimeNotDriving << "\n";
-    }
-    {
-        // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
-        const TrafficRemoveReasonTag lTag("junctionfup-nonmoving");
         RemoveVehicle(luVehicle);
     }
     return true;
@@ -19071,15 +17390,7 @@ void TrafficEntityModule::UpdateJunctionFUP()
             // 0x82745BB4..0x82745BC0 -- UNGATED: RemoveVehicle is bodied above in this file.
             // This is THE RELIEF VALVE: the furthest offender leaves, the score drops below 65
             // next frame, and SpawnNewTraffic comes off its brake.
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
             {
-                *lpDiag << "[T5-kill] UpdateJunctionFUP score=" << mfJunctionFUP
-                        << " killing veh=" << luNextKillVehicle
-                        << " distSq=" << lfFurthestDistance << "\n";
-            }
-            {
-                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
-                const TrafficRemoveReasonTag lTag("junctionfup-jamvalve");
                 RemoveVehicle(luNextKillVehicle);
             }
 
@@ -19095,16 +17406,6 @@ void TrafficEntityModule::UpdateJunctionFUP()
     // threshold there is no jam and pass 2 does not run.
     if (!NeedToTakeActionAgainstJunctionFUP())
     {
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            static u32 suDiagFrame = 0;
-            if ((suDiagFrame++ % 300u) == 0u)
-            {
-                *lpDiag << "[T5-fup] score=" << mfJunctionFUP
-                        << " scored=" << luDiagScored
-                        << " (below " << KF_JUNCTION_FUP_SCORE_NEEDS_ACTION << ", no action)\n";
-            }
-        }
         return;
     }
 
@@ -19148,17 +17449,6 @@ void TrafficEntityModule::UpdateJunctionFUP()
         }
     }
 
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        static u32 suDiagActionFrame = 0;
-        if ((suDiagActionFrame++ % 60u) == 0u)
-        {
-            *lpDiag << "[T5-fup] ACTION score=" << mfJunctionFUP
-                    << " scored=" << luDiagScored
-                    << " offscreen=" << luDiagOffscreen
-                    << " killCand=" << static_cast<s32>(luNextKillVehicle) << "\n";
-        }
-    }
 }
 
 }
@@ -19217,8 +17507,6 @@ void TrafficEntityModule::UpdateJunctionFUP()
 // function's own and is kept.
 // ============================================================================
 
-
-
 namespace BrnTraffic
 {
 namespace
@@ -19274,7 +17562,6 @@ void TrafficEntityModule::NukeTrafficJams()
     //   * the run collector (`stw r24, var_120` == Array<u16,64>::Clear at 0x82735428).
     // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Counters + the A/B suppressor; read
     // once so the env lookup is not in the per-param path.
-    static const bool sbDIAGSuppressFlagging = (getenv("BRN_TRAFFIC_NO_JAM_NUKE") != 0);
     u32 luDIAGJamsFound  = 0;
     u32 luDIAGAliveSeen  = 0;
     u32 luDIAGLongestRun = 0;
@@ -19452,10 +17739,6 @@ void TrafficEntityModule::NukeTrafficJams()
                 // them -- only the flag store is withheld, so the two runs differ in ONE
                 // store and nothing else. That is the point: an A/B built from two different
                 // binaries, or one that also skipped the walk, would not isolate the valve.
-                if (sbDIAGSuppressFlagging)
-                {
-                    continue;
-                }
 
                 // 0x827361BC..0x827361F8. The whole point of the function. UpdateParams
                 // (_wT2_02.cpp) picks the flag up on its next pass and calls KillParam.
@@ -19490,20 +17773,6 @@ void TrafficEntityModule::NukeTrafficJams()
                        || (luDIAGLongestRun >= 2 && luDIAGLongestRun == suDIAGBestEverRun)
                        || ((suDIAGPass % 600u) == 0u);
 
-    if (lbReport && getenv("BRN_TRAFFIC_DIAG") != 0
-        && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[jam-nuke] pass="  << static_cast<s32>(suDIAGPass)
-            << " aliveParams="     << static_cast<s32>(luDIAGAliveSeen)
-            << " longestRun="      << static_cast<s32>(luDIAGLongestRun)
-            << " bestEver="        << static_cast<s32>(suDIAGBestEverRun)
-            << " jams="            << static_cast<s32>(luDIAGJamsFound)
-            << " passedGuards="    << static_cast<s32>(luDIAGWouldFlag)
-            << " flagged="         << static_cast<s32>(luDIAGFlagged)
-            << (sbDIAGSuppressFlagging ? " [SUPPRESSED]" : "")
-            << "\n";
-    }
 }
 
 }
@@ -19559,8 +17828,6 @@ void TrafficEntityModule::NukeTrafficJams()
 // would be the wrong move. Six of the nine are independently confirmed by _wT5_01.cpp's
 // already-committed crash-slider table, derived by a different wave from a different function.
 // ============================================================================
-
-
 
 namespace BrnTraffic
 {
@@ -19829,8 +18096,6 @@ void TrafficEntityModule::HandlePrepareForModeAction(
 // table index as the case label would have wired this handler to action 10.
 // ============================================================================
 
-
-
 namespace BrnTraffic
 {
 
@@ -20015,14 +18280,6 @@ void TrafficEntityModule::HandleExternalRequests(
 
             if (!mbIsOnlineGameMode)
             {
-                // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only: one line per
-                // drive-thru, and the removal reasons RemoveVehicle's [traffic-track] line prints.
-                if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-                {
-                    *lpTrack << "[traffic-track] drive-thru action=" << liType
-                             << " clear-up + cylinder r=" << KF_DRIVE_THRU_TRAFFIC_CLEAR_RADIUS
-                             << " h=" << KF_DRIVE_THRU_TRAFFIC_CLEAR_HEIGHT << "\n";
-                }
 
                 {
                     const TrafficRemoveReasonTag lTag("drivethru-clearup-crashed");
@@ -20106,30 +18363,6 @@ void TrafficEntityModule::HandleExternalRequests(
                     mau16HullsToActivateAfterReset[luSlot] = lpRestartTrafficAction->mau16ActveHulls[luSlot];
                 }
 
-                // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_NETCRASH_DIAG, capped.
-                if (CgsDev::StrStreamBase* lpNetDiag = NetCrashDiagStream())
-                {
-                    static s32 siLines = 0;
-                    if (siLines < KI_NETCRASH_HULL_DIAG_MAX_LINES)
-                    {
-                        ++siLines;
-                        *lpNetDiag << "[netcrash] HandleExternalRequests RESTART_TRAFFIC state="
-                                   << static_cast<s32>(meState) << " hulls=";
-                        for (u32 luSlot = 0; luSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luSlot)
-                        {
-                            *lpNetDiag << (luSlot ? "," : "")
-                                       << static_cast<s32>(mau16HullsToActivateAfterReset[luSlot]);
-                        }
-                        *lpNetDiag << "\n";
-                    }
-                }
-
-                BrnNetHarnessPC::WitnessTag("nettraf", "action236",
-                    "hulls=%04x %04x %04x %04x %04x %04x %04x %04x",
-                    mau16HullsToActivateAfterReset[0], mau16HullsToActivateAfterReset[1],
-                    mau16HullsToActivateAfterReset[2], mau16HullsToActivateAfterReset[3],
-                    mau16HullsToActivateAfterReset[4], mau16HullsToActivateAfterReset[5],
-                    mau16HullsToActivateAfterReset[6], mau16HullsToActivateAfterReset[7]);
             }
             break;
         }
@@ -20161,12 +18394,6 @@ void TrafficEntityModule::HandleExternalRequests(
                 meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_FILLING;
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 13 empty-pool empty=" << (lbEmptyPool ? 1 : 0)
-                         << " -> state " << static_cast<s32>(meEmptyTrafficPoolState) << "\n";
-            }
             break;
         }
 
@@ -20184,7 +18411,6 @@ void TrafficEntityModule::HandleExternalRequests(
         // --------------------------------------------------------------------------------
         case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE_INTRO:
         {
-            u32 luSweptRaceCars = 0;   // FLAG PC witness count only
             if (mbGameModeClearsTraffic && mbAllowDivergentBehaviour)
             {
                 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* const lpRaceCars =
@@ -20207,14 +18433,6 @@ void TrafficEntityModule::HandleExternalRequests(
                 mbAtStartLineSoProtectRaceCarsFromTraffic = false;
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 30 stop-mode-intro clears=" << (mbGameModeClearsTraffic ? 1 : 0)
-                         << " swept race cars=" << luSweptRaceCars << " r=" << KF_START_GRID_CLEAR_RADIUS
-                         << " h=" << KF_START_GRID_CLEAR_HEIGHT << " protect="
-                         << (mbAtStartLineSoProtectRaceCarsFromTraffic ? 1 : 0) << "\n";
-            }
             break;
         }
 
@@ -20245,14 +18463,6 @@ void TrafficEntityModule::HandleExternalRequests(
                 mfRenderCullDistanceSq = KF_CAR_SELECT_RENDER_CULL_DISTANCE_SQ;
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 73 car-select transition-in start=" << (lbStart ? 1 : 0)
-                         << " simRadius=" << mfTrafficSimRadius.x << " maxRender=" << muMaxVehiclesToRender
-                         << " cullDistSq=" << mfRenderCullDistanceSq << " inCarSelect=" << (mbInOfflineCarSelect ? 1 : 0)
-                         << "\n";
-            }
             break;
         }
 
@@ -20271,12 +18481,6 @@ void TrafficEntityModule::HandleExternalRequests(
                 HideAllTraffic();
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 75 car-select ready type=" << lpReady->miCarSelectFlow
-                         << " hidden=" << (mbTrafficIsHidden ? 1 : 0) << "\n";
-            }
             break;
         }
 
@@ -20299,7 +18503,6 @@ void TrafficEntityModule::HandleExternalRequests(
         {
             const BrnGameState::GameStateModuleIO::CarSelectExitAction* const lpExit =
                 reinterpret_cast<const BrnGameState::GameStateModuleIO::CarSelectExitAction*>(lpEvent);
-            const bool lbWasInCarSelect = mbInOfflineCarSelect;   // FLAG PC witness only
             if (lpExit->mbOnlineCarSelect)
             {
                 UnhideAllTraffic();
@@ -20323,21 +18526,6 @@ void TrafficEntityModule::HandleExternalRequests(
                 }
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only. The offline line names the
-            // cylinder's centre: the junkyard's exit spawn location (the producer's record), not the origin.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 77 car-select exit online=" << (lpExit->mbOnlineCarSelect ? 1 : 0);
-                if (!lpExit->mbOnlineCarSelect)
-                {
-                    *lpTrack << " cylinder centre=(" << lpExit->mExitSpawnLocation.x << ","
-                             << lpExit->mExitSpawnLocation.y << "," << lpExit->mExitSpawnLocation.z
-                             << ") r=" << KF_CAR_SELECT_EXIT_CLEAR_RADIUS << " h=" << KF_CAR_SELECT_EXIT_CLEAR_HEIGHT
-                             << " restoredBox=" << (lbWasInCarSelect ? 1 : 0);
-                }
-                *lpTrack << " simRadius=" << mfTrafficSimRadius.x << " maxRender=" << muMaxVehiclesToRender
-                         << " hidden=" << (mbTrafficIsHidden ? 1 : 0) << "\n";
-            }
             break;
         }
 
@@ -20363,28 +18551,9 @@ void TrafficEntityModule::HandleExternalRequests(
                 }
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 110 killzone ids=" << lpKillzone->maRegionIds.GetLength()
-                         << " fired=" << ((mbAllowDivergentBehaviour && mbGameModeAllowsKillzones
-                                           && mbDEBUGEnableKillzones) ? 1 : 0) << "\n";
-            }
             break;
         }
 
-        // --------------------------------------------------------------------------------
-        // 0x8274BC30..0x8274BC80 -- E_ACTION_WAIT_FOR_STREAMING (192, slot 179), WaitForStreamingAction {}.
-        // The game waits for every module's streaming to settle; each module answers with a
-        // StreamingCompleteEvent (game event 9) that names it.
-        //   lwz +0x300 (meState) ; == 2 (E_STATE_TEARING_DOWN) or == 0 (E_STATE_STARTING_UP), and
-        //   lbzx +0x7287E (mbDEBUGTurnTrafficOff) == 0  ->  stbx 1 -> +0x7180E (mbWaitingForStreaming): the
-        //       answer waits for the streamer (PostPhysicsUpdate 0x8274E778 / 0x8274EC94)
-        //   otherwise: answer now -- `stw 0 -> record+0x00` (meModule = E_MODULE_TRAFFIC_ENTITY) ;
-        //       lpOutput->GetGameEventQueue() (0x82711CE8)->AddEvent(record, 9, 16) (0x822E5548)
-        // The console leaves the record's mUserId as stack bytes nobody reads for module 0; the PC record is
-        // value-initialised (FLAG PC: zero). StreamingCompleteEvent is 16 bytes on both.
-        // --------------------------------------------------------------------------------
         case KI_ACTION_WAIT_FOR_STREAMING:
         {
             const bool lbLatch = (meState == E_STATE_TEARING_DOWN || meState == E_STATE_STARTING_UP)
@@ -20405,12 +18574,6 @@ void TrafficEntityModule::HandleExternalRequests(
                                                         sizeof(lStreamingComplete));
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 192 wait-for-streaming state=" << static_cast<s32>(meState)
-                         << (lbLatch ? " latched" : " answered module 0") << "\n";
-            }
             break;
         }
 
@@ -20434,12 +18597,6 @@ void TrafficEntityModule::HandleExternalRequests(
                 mfGameModeDensityScale = mfGameModeDensityScale * KF_FINISH_THINNING_FACTOR;
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] request 244 dist-to-finish d=" << lfDistanceToFinish
-                         << " halved=" << (lbThin ? 1 : 0) << " density=" << mfGameModeDensityScale << "\n";
-            }
             break;
         }
 
@@ -20503,12 +18660,6 @@ void TrafficEntityModule::HandleExternalRequests(
                                          KF_PICTURE_PARADISE_CLEAR_HEIGHT, false);
             }
 
-            // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only.
-            if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-            {
-                *lpTrack << "[traffic-track] picture-paradise exit distSq=" << lfDistanceSq
-                         << " cleared=" << (lbClear ? 1 : 0) << "\n";
-            }
         }
     }
 }
@@ -20671,14 +18822,7 @@ void TrafficEntityModule::FireKillZone(u64 lKillZoneId)
     lFired.miFramesLeftToRemember = KI_FIRED_KILL_ZONE_FRAMES_TO_REMEMBER;
     mDEBUGRecentlyFiredKillZones.Append(lFired);
 
-    // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only (RemoveVehicle prints each removal).
-    if (CgsDev::StrStreamBase* lpTrack = TrafficTrackStream())
-    {
-        *lpTrack << "[traffic-track] kill zone fired id=" << lKillZoneId << " regions="
-                 << static_cast<u32>(lpKillZone->muCount) << "\n";
-    }
 }
-
 
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::HandleStopModeAction  @ 0x82716280  (export hole; image-read)
@@ -20715,7 +18859,6 @@ void TrafficEntityModule::HandleStopModeAction(
 // ============================================================================
 // BrnTrafficEntityModule_wG_Stages.cpp -- TrafficEntityModule::PostSceneUpdate.
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -20838,7 +18981,6 @@ void TrafficEntityModule::PostSceneUpdate( CgsModule::IOBufferStack* /*lpInputBu
 //   AIPostSceneQueryRequests             -- one coarse frustum query per active race car
 //   CreateTrafficAIEntity                -- build one AI-visible traffic record
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -21213,7 +19355,6 @@ void TrafficEntityModule::AIPostSceneQueryRequests(
 // near-miss collections.
 // ============================================================================
 
-
 namespace BrnTraffic
 {
 
@@ -21299,15 +19440,6 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
         if ( lpResults->mQueryId.mId == KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID )
         {
             // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE.
-            if ( !s_bResultBatchLogged && lpResults->miNumResults > 0
-                 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                s_bResultBatchLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T9-nm] results q=" << static_cast<s32>( lpResults->mQueryId.mId )
-                    << " n=" << lpResults->miNumResults
-                    << " [DELETE-WHEN-STABLE]\n";
-            }
 
             const Vector3 lPlayerPosition =
                 lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();
@@ -21542,7 +19674,6 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
 // The collections are filled by ProcessNearbyTrafficSceneQueryResults (the post-physics drain
 // of the player-centred sphere query). This publish is the only reader of them.
 // ============================================================================
-
 
 namespace BrnTraffic
 {
@@ -21926,40 +20057,6 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
         // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Dispatch witness for the live case
         // (tests/FxTraffic2StompeesLive.ps1): the first Showtime frames, then every frame that
         // published a stompee or a Showtime slot, capped.
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            static u32 suDiagShowtimeFrames = 0;
-            static u32 suDiagLines          = 0;
-            s32 liNumStompees = 0;
-            lpOutput->GetTrafficToRaceCarInterface_PreScene()->GetPotentialStompees(&liNumStompees);
-            const s32 liNumScorees = lpOutput->GetPotentialScorees()->GetCount();   // the score leg's output
-            ++suDiagShowtimeFrames;
-            if (suDiagLines < 60u
-                && (suDiagShowtimeFrames <= 3u || liNumStompees > 0 || muShowtimeVehicleInfoCount > 0
-                    || liNumScorees > 0))
-            {
-                ++suDiagLines;
-                u32 luMagnets = 0;
-                for (u32 luInfo = 0; luInfo < muShowtimeVehicleInfoCount; ++luInfo)
-                {
-                    if ((maShowtimeVehicleInfoList[luInfo].muFlags & KU_SHOWTIME_INFO_FLAG_CRASH_MAGNET) != 0)
-                    {
-                        ++luMagnets;
-                    }
-                }
-                *lpDiag << "[T5-stomp] frame=" << static_cast<s32>(suDiagShowtimeFrames)
-                        << " valid=" << (lpPlayerRaceCarState->mAboveGroundTestResult.mbValid ? 1 : 0)
-                        << " h=" << lfGroundHeight
-                        << " t=" << lfTimeUntilLanding
-                        << " minSq=" << lfMinDistSq
-                        << " maxSq=" << lfMaxDistSq
-                        << " stompees=" << liNumStompees
-                        << " infos=" << static_cast<s32>(muShowtimeVehicleInfoCount)
-                        << " magnets=" << static_cast<s32>(luMagnets)
-                        << " scorees=" << liNumScorees
-                        << " misbounce=" << mfShowtimeMisBounceTimer << "\n";
-            }
-        }
     }
 }
 
@@ -22007,18 +20104,6 @@ void TrafficEntityModule::GenerateSympatheticCrasherOutput(const BrnTrafficIO::I
 
     // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Dispatch witness: the first Showtime
     // frames, then every frame that flagged a sympathetic crasher, capped.
-    if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-    {
-        static u32 suDiagShowtimeFrames = 0;
-        static u32 suDiagLines          = 0;
-        ++suDiagShowtimeFrames;
-        if (suDiagLines < 40u && (suDiagShowtimeFrames <= 3u || luNumCrashers > 0u))
-        {
-            ++suDiagLines;
-            *lpDiag << "[T5-sympcrasher] frame=" << static_cast<s32>(suDiagShowtimeFrames)
-                    << " crashers=" << static_cast<s32>(luNumCrashers) << "\n";
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -22140,11 +20225,6 @@ namespace
     // this set, a closed gate still runs the measuring loop on the frames the player car is active and
     // SKIPS THE PUBLISH, so a live run can show this body on real parked cars. Unset (the default),
     // a closed gate is the console's `beq out`.
-    bool ParkedDryRunEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_PARKED_DRYRUN") != 0);
-        return sbEnabled;
-    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -22177,11 +20257,6 @@ void TrafficEntityModule::GenerateNearbyParkedTrafficOutput(const BrnTrafficIO::
         // [DIAG] NOT IN THE X360 BINARY -- see KI_PARKED_DIAG_CAP.
         if (!gbParkedGateLogged)
         {
-            if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-            {
-                gbParkedGateLogged = true;
-                *lpDiag << "[T-parked] dispatched, mbPlayerIsPowerParking=0: nothing published\n";
-            }
         }
 
         // [DIAG] NOT IN THE X360 BINARY -- see ParkedDryRunEnabled. Without it this is the console's
@@ -22239,18 +20314,6 @@ void TrafficEntityModule::GenerateNearbyParkedTrafficOutput(const BrnTrafficIO::
     // changes, so the capped lines follow parked cars in and out of the 15 m radius.
     if (giParkedDiagLines < KI_PARKED_DIAG_CAP && (!lbDryRun || luNearbyStaticVehicleCount != guParkedLastDryRunCount))
     {
-        if (CgsDev::StrStreamBase* lpDiag = TrafficDiagStream())
-        {
-            ++giParkedDiagLines;
-            if (lbDryRun)
-            {
-                guParkedLastDryRunCount = luNearbyStaticVehicleCount;
-            }
-            *lpDiag << (lbDryRun ? "[T-parked] dry-run (not published) count=" : "[T-parked] published count=")
-                    << luNearbyStaticVehicleCount
-                    << " closestSq=" << lfClosestDistanceSq << " secondSq=" << lfSecondClosestDistanceSq
-                    << " angle=" << lfClosestAngleDiff << " perp=" << lfClosestPerpendicularDist << "\n";
-        }
     }
 }
 

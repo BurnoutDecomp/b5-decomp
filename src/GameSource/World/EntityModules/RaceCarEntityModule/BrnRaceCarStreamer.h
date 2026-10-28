@@ -128,61 +128,10 @@ public:
     bool  IsDesiredRaceCarLoadedForCarSelect( s32 liActiveRaceCar ) const;
     CgsID GetCarModelId( s32 liActiveRaceCar ) const;
 
-    // [FLAG PC bring-up] NOT X360 functions. GetGraphicsResource / GetWheelGraphicsResource
-    // below assert IsRaceCarLoaded(), i.e. ALL FIVE resource bits. As of 2026-08-01 a car
-    // gets three of them (LOADEDGFX + LOADEDPHYSICS + LOADEDATTRS); LOADEDWHEELGFX waits on
-    // the deferred `LoadWheel` GameData handler (id 36) and LOADEDAUDIO on the audio
-    // streamer, so the all-resources predicate is still constant-false and the console's
-    // accessors would fire a dev assert on every rendered frame. This trio lets the render
-    // leg ask the narrower question ("is the BODY loaded?") and take the resource without
-    // it. DELETE all three the moment the wheel + audio legs resolve.
-    bool IsGraphicsLoadedBringUp( s32 liActiveRaceCar ) const
-    {
-        return ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_LOADEDGFX ) != 0;
-    }
-    const GraphicsResourcePtr& GetGraphicsResourceBringUp( s32 liActiveRaceCar ) const
-    {
-        return maGraphicsResources[liActiveRaceCar];
-    }
-    const WheelGraphicsResourcePtr& GetWheelGraphicsResourceBringUp( s32 liActiveRaceCar ) const
-    {
-        return maWheelGraphicsResources[liActiveRaceCar];
-    }
     // Same relaxation, for the deformation spec: the wheel-pose stand-in in
     // RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp reads the car's four
     // authored WheelSpecs out of it. LOADEDPHYSICS is one of the three bits a car
     // actually gets on this build, so this is only dropping the all-five predicate.
-    const PhysicsResourcePtr& GetPhysicsResourceBringUp( s32 liActiveRaceCar ) const
-    {
-        return maPhysicsResources[liActiveRaceCar];
-    }
-
-    // [FLAG PC bring-up] NOT an X360 predicate (drivable wave 2026-08-01). THE ONE GATE
-    // RELAXATION IN THE WHOLE ATTACHED -> WAITING -> ACTIVE CHAIN, and it is a DATA gap,
-    // not a code fiction:
-    //
-    //   the console's IsRaceCarLoaded() demands all FIVE resource bits;
-    //   MEASURED on this build (BrnGame.log "STRM: Flags are 0x..." + the three
-    //   "STRM: <kind> loaded: 0" lines) a car gets exactly THREE -- LOADEDGFX,
-    //   LOADEDPHYSICS and LOADEDATTRS. LOADEDWHEELGFX never arrives because the wheel
-    //   asset's GameData `LoadWheel` handler (request id 36) is deferred, and LOADEDAUDIO
-    //   never arrives because the audio streamer is absent.
-    //
-    // Neither missing bit is READ by anything on the promote path: ActiveRaceCar::
-    // OnResourcesLoaded takes the physics + graphics handles only, and AddHandlingModel
-    // forwards those same two. Blocking on them would keep the console's own state machine
-    // permanently at E_STATE_ATTACHED for a car whose body is fully loaded and drawing.
-    //
-    // Used at exactly TWO call sites, both flagged: UpdateStreaming's promote predicate and
-    // ResetActiveRaceCar's IsRaceCarLoaded assert. The console predicate itself is NOT
-    // touched.
-    // DELETE-WHEN the wheel handler and the audio streamer land.
-    bool IsRaceCarLoadedForStateMachineBringUp( s32 liActiveRaceCar ) const
-    {
-        const u8 lxRequired = E_LOADFLAG_LOADEDGFX | E_LOADFLAG_LOADEDPHYSICS
-                            | E_LOADFLAG_LOADEDATTRS;
-        return ( maxLoadFlags[liActiveRaceCar] & lxRequired ) == lxRequired;
-    }
 
     // The two resource HANDLES ActiveRaceCar::OnResourcesLoaded binds (the console reads
     // them off the same ResourcePtrs the getters below return; it never goes through

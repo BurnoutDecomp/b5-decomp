@@ -92,16 +92,6 @@ const f32 KF_COLLISION_PITCH_MIN = 0.8f;
 
 // [DIAG] NOT IN THE X360 BINARY -- BRN_PASSBY_SOUND_DIAG (any value but "0"), the same switch
 // the manager's prepare witnesses use. Every line is capped by its caller.
-bool PassbyEffectDiag()
-{
-    static int siEnabled = -1;
-    if (siEnabled < 0)
-    {
-        const char* lpcEnv = std::getenv("BRN_PASSBY_SOUND_DIAG");
-        siEnabled = (lpcEnv && lpcEnv[0] && lpcEnv[0] != '0') ? 1 : 0;
-    }
-    return siEnabled != 0 && CgsDev::Log::gpDebugPrint != 0;
-}
 } // namespace
 
 u32 PassbyEffect::smuSampleIndex = 0;
@@ -410,24 +400,6 @@ bool PassbyEffect::Attach()
     mbFirstUpdate = true;
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): what the voice was started with.
-    if (PassbyEffectDiag())
-    {
-        static u32 suPrintCount = 0;
-        if (suPrintCount++ < 64u)
-        {
-            char lacLine[224];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[passby-sound] effect attached type=%d sample=%u boost=%d range=%d..%d/%d..%d "
-                          "control=%d ducking=%d volMod=%g relVel=%g\n",
-                          static_cast<s32>(lrPassby.meType), muSampleId, mbPlayerIsBoosting ? 1 : 0,
-                          mAttribs.mFirstPassBy(), mAttribs.mLastPassBy(),
-                          mAttribs.mFirstBoostPassBy(), mAttribs.mLastBoostPassBy(),
-                          lpControl != nullptr ? 1 : 0, KAI_PASSBY_DUCKING_ARRAY[lrPassby.meType],
-                          static_cast<double>(lrPassby.mfVolumeModifier),
-                          static_cast<double>(lrPassby.mfRelativeVelocityMagnitude));
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
-    }
     return true;
 }
 
@@ -639,22 +611,6 @@ void PassbyEffect::ProcessUpdate()
         }
 
         // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): what a playing pass-by sends.
-        if (PassbyEffectDiag())
-        {
-            static u32 suPrintCount = 0;
-            if (suPrintCount++ < 96u)
-            {
-                char lacLine[192];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[passby-sound] playing type=%d sample=%u gain=%g pitch=%g azimuth=%g "
-                              "volScale=%g pitchScale=%g lifetime=%d\n",
-                              static_cast<s32>(lrPassby.meType), muSampleId, static_cast<double>(lfGain),
-                              static_cast<double>(lfPitch), static_cast<double>(lfAzimuth),
-                              static_cast<double>(mfVolumeScale), static_cast<double>(mfPitchScale),
-                              static_cast<s32>(meLifetime));
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
         return;
     }
 
@@ -668,18 +624,6 @@ void PassbyEffect::ProcessUpdate()
                 << AttribSys::Enums::ePassbyTypes::gaNames[lrPassby.meType] << "]\tDetach. \n";
         }
         // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): the voice ended; the state lets go.
-        if (PassbyEffectDiag())
-        {
-            static u32 suPrintCount = 0;
-            if (suPrintCount++ < 64u)
-            {
-                char lacLine[128];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[passby-sound] finished type=%d sample=%u lifetime=%d -> state Detach\n",
-                              static_cast<s32>(lrPassby.meType), muSampleId, static_cast<s32>(meLifetime));
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
         GetStateBase()->Detach();
     }
 }

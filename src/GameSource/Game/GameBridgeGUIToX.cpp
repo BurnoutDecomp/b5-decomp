@@ -82,12 +82,6 @@ namespace BrnGame
     // (NetworkInLiveRevengeProfileLoaded); it stays a 4-byte copy until its GUI producer and
     // network consumer have host homes.
     //
-    // FLAG PC-ABI adapter (the BridgeGuiToGameState / BridgeGuiToDirector one): the PC GUI
-    // module leaves records on their channel (40) with the event type in the record's second
-    // word, the payload size in its first and the payload offset in its third -- the three
-    // words GuiEventWrapper::GetRawEvent() unwraps on the console. A console-style queue
-    // (type = event id, pointer = payload) passes through unchanged.
-    // =========================================================================
     void BrnGameModule::TranslateGuiEventsToNetworkEvents(
         CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputEventQueue,
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
@@ -379,12 +373,6 @@ namespace BrnGame
                     IO::NetworkInReqCamPicEvent lReqCamPicEvent;
                     lReqCamPicEvent.miQualitySetting   = lpW[0];
                     lReqCamPicEvent.meCompressedFormat = static_cast<renderengine::PixelFormat>(lpW[1]);
-                    // FLAG PC-ABI: the texture pointer is the payload's last member, so it is read
-                    // from the payload's end -- +0x08 in the console's 12-byte payload; the host
-                    // producer's pointer alignment puts it after padding.
-                    std::memcpy(&lReqCamPicEvent.mpTextureToCompressedInto,
-                                lp + liPayloadSize - sizeof(lReqCamPicEvent.mpTextureToCompressedInto),
-                                sizeof(lReqCamPicEvent.mpTextureToCompressedInto));
                     lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReqCamPicEvent),
                                                        IO::NetworkInReqCamPicEvent::KI_EVENT_TYPE,
                                                        sizeof(lReqCamPicEvent));

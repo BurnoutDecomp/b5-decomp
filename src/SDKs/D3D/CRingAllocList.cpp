@@ -2,7 +2,7 @@
 #include "SDKs/D3D/CDevice.h"
 
 #include <cstddef> // offsetof (uncalled _CRingAllocListAssertLayout)
-#include <windows.h> // MemoryBarrier (host mapping of the X360 eieio ordering op)
+#include <xtl.h> // MemoryBarrier (host mapping of the X360 eieio ordering op)
 
 // ===========================================================================
 // D3D::CRingAllocList -- reconstructed from BURNOUT_X360_ARTIST.XEX. See
@@ -21,16 +21,6 @@ namespace D3D
 // own TU); declared here as an extern so the bodied methods compile and link
 // against it, mirroring the declaration in CCommandBuffer.h.
 extern s32 FlushCachedMemory(u32 uStartPhys, u32 uEndPhys, s32 iFlags);
-
-// FLAG PC-platform leaf: X360 CPU-virtual -> GPU-visible physical-mirror address
-// translation. The GPU reads the write-combined physical alias of a CPU buffer;
-// this is the fixed X360 formula the asm inlines (srwi/addi/rlwinm/subf) and is
-// reproduced verbatim. Meaningless off the X360 -- fixed hardware behaviour.
-// (Same platform helper as CCommandBuffer.cpp; kept file-local by design.)
-static inline u32 ToGpuPhysical(u32 uVirtual)
-{
-    return (((uVirtual >> 20) + 512) & 0x1000) + (uVirtual & 0x1FFFFFFFu) - 0x40000000u;
-}
 
 // --- @ 0x829468A8 ----------------------------------------------------------
 // Bind the owning device, reset every chain cursor, then serve the first chunk

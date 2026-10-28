@@ -3,8 +3,6 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"                                                  // rw::Resource
-#include "pc/gcm/renderengine/texture.h"                                        // renderengine::Texture
-#include "pc/gcm/renderengine/renderstates.h"                                   // renderengine::TextureState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"     // renderengine::ProgramVariableHandle
 
 // rw::graphics::postfx::Tint -- the post-fx colour-tint effect. It owns a 3D colour-lookup texture

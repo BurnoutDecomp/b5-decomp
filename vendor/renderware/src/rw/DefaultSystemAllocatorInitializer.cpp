@@ -31,11 +31,7 @@
 namespace rw {
 
 // The platform-native allocator has static storage, matching the ARTIST lifetime.
-#if defined(D_PLATFORM_X360)
 static Xbox2NativeSystemAllocator s_systemAllocator;
-#else
-static SystemAllocatorGeneric s_systemAllocator;
-#endif
 
 // X360 0x82BBD160 -- the lazy installer. a1 (r3) is the `this` of the
 // DefaultSystemAllocatorInitializer; the ctor returns it unchanged.

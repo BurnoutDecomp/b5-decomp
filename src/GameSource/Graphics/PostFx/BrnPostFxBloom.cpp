@@ -7,8 +7,6 @@
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"                   // saRasterizerStates[2]   (Render)
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"                        // saBlendStates[0]        (PrepareDownSampleBuffer)
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // rw::graphics::postfx::RenderTarget
-#include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                                    // renderengine::gpD3DDevice
-
 namespace
 {
     // Generated X360 shader packages recovered from the ARTIST executable.
@@ -121,35 +119,12 @@ namespace
 
 namespace renderengine
 {
-    // FLAG PC-platform leaf: realize the original colour-target sampler; the
-    // native low-level TextureState setter does not apply its packed words.
-    void PostFxBloomSampler_ApplyState(u32 luUnit);
 
-    // ---- THE SIX PC PROGRAM IMAGES ---------------------------------------------------------------
-    // [FLAG PC-platform leaf: shader programs] The D3D9 counterparts of the six Xenos packages above,
-    // wrapped as platform-4 ShaderProgramBuffer images by the bloom shader step
-    // (pc/gcm/renderengine/PostFxBloomProgramsPC.cpp -- a GENERATED PC leaf, sibling of
-    // PostFxProgramsPC.cpp which carries the composite pair). Declared here as the minimal external
-    // surface, byte for byte the convention BrnPostFxShader.cpp:122-125 and BrnIm3d.cpp:51-57 already
-    // use for the composite and the sky-dome pairs; there is no header for these generated leaves.
-    //
-    // ⚠ THE SIZES ARE THE *PC IMAGE* SIZES, NOT THE X360 MICROCODE SIZES (348 / 516 / 368 / 420 /
-    // 404 / 424). ProgramBufferPC_Adopt bounds-checks the blob against the size it is handed and
-    // copies exactly that many bytes, so a console size here would either refuse a valid image
-    // ("microcode size is out of range") or read past the array. That is why nothing below hard-codes
-    // a number: each size is read from the generated TU's own published constant, which its
-    // static_assert ties to sizeof() of the array.
-    extern const u8  gauPostFxBloomDSVertexProgramPC[];
     extern const u32 guPostFxBloomDSVertexProgramPCSize;
-    extern const u8  gauPostFxBloomDSPixelProgramPC[];
     extern const u32 guPostFxBloomDSPixelProgramPCSize;
-    extern const u8  gauPostFxBloomBlurVertexProgramPC[];
     extern const u32 guPostFxBloomBlurVertexProgramPCSize;
-    extern const u8  gauPostFxBloomBlurPixelProgramPC[];
     extern const u32 guPostFxBloomBlurPixelProgramPCSize;
-    extern const u8  gauPostFxBloomBlurOldVertexProgramPC[];
     extern const u32 guPostFxBloomBlurOldVertexProgramPCSize;
-    extern const u8  gauPostFxBloomBlurOldPixelProgramPC[];
     extern const u32 guPostFxBloomBlurOldPixelProgramPCSize;
 }
 
@@ -220,313 +195,13 @@ extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 // exactly as no dword_83010F70-named global did on the console.
 namespace renderengine { class DepthStencilState; class RasterizerState; }
 
-namespace
-{
-    // --- the assembly immediates, each traced to its X360 constant --------------------------------
-    // The first four are dumped byte-exact in scratch/postfx_wave1b_dossiers/DATA_DUMP.md:1516 /
-    // :1540 / :1552 / :1564 and carry the same names BrnPostFxShader.cpp:143-146 gives them.
-    const f32 KF_ZERO      =  0.0f;   // flt_82001CC0 == 0x00000000
-    const f32 KF_ONE       =  1.0f;   // flt_82001C98 == 0x3F800000
-    const f32 KF_MINUS_ONE = -1.0f;   // flt_820037C8 == 0xBF800000
-    const f32 KF_HALF      =  0.5f;   // flt_82001DA0 == 0x3F000000
-
-    // --- the down-sample pixel constants ----------------------------------------------------------
-    // Both are RECOVERED, not chosen: IDA decodes the .rdata word at each address and prints the
-    // float, and each decimal below round-trips to exactly one float32 bit pattern (checked).
-    // They are NOT in DATA_DUMP.md (which covers the composite's .rdata, not the bloom chain's), so
-    // the bit pattern is recorded beside each one.
-    //
-    // KF_DOWNSAMPLE_TAP_SCALE is the reciprocal of the DWARF's own local `lfNumTaps`
-    // (BrnPostFxBloom.cpp:311) -- four box taps averaged, then the shader's dot product with the
-    // white level. It is NOT 1.0f/3.0f (that would be 0x3EAAAAAB); the emitted constant is a literal
-    // 0.333333-shaped value, so it is reproduced as the value the binary holds and not as an
-    // arithmetic expression that would drift by one ulp.
-    const f32 KF_DOWNSAMPLE_TAP_SCALE   = 0.33333299f;  // flt_820475FC == 0x3EAAAA9F
-    const f32 KF_THRESHOLD_SCALE_NUMER  = 0.25f;        // flt_82003F40 == 0x3E800000
-
-    // --- the two-pass ("old") Gaussian: five weights and five offsets -----------------------------
-    // The DWARF names these `lafFiveWeightsFromNine[5]` / `lafFiveOffsetsFromNine[5]` and a
-    // `lfTotalWeight` normaliser (BrnPostFxBloom.cpp:570/:571/:572) -- i.e. the ORIGINAL SOURCE
-    // COMPUTED them, reducing a nine-tap Gaussian to five bilinear taps and dividing by the total.
-    // The X360 compiler folded that whole computation to ten .rdata literals, so the folded values
-    // are what this reconstruction carries; re-deriving them here would be inventing an algorithm the
-    // binary does not contain. INDEPENDENT CHECK that the decode is right: the five weights sum to
-    // 0.99999999 -- the normalisation the DWARF's lfTotalWeight performs is visible in the data.
-    const f32 KAF_BLUR_OLD_TAP_WEIGHT[5] =
-    {
-        0.15075992f,   // flt_82047620 == 0x3E1A60CF
-        0.2732667f,    // flt_8204761C == 0x3E8BE99D
-        0.29776809f,   // flt_82047618 == 0x3E98750F
-        0.224264f,     // flt_82047614 == 0x3E65A576
-        0.053941276f   // flt_82047610 == 0x3D5CF187
-    };
-    const f32 KAF_BLUR_OLD_TAP_OFFSET[5] =
-    {
-        -3.357796f,    // flt_8204760C == 0xC056E621
-        -1.4663771f,   // flt_82047608 == 0xBFBBB23F
-         0.48971456f,  // flt_82047604 == 0x3EFABBDE
-         2.4317174f,   // flt_82047600 == 0x401BA142
-         4.0f          // flt_82004EF4 == 0x40800000 (the shared 4.0 pool entry)
-    };
-
-    // --- the quad ---------------------------------------------------------------------------------
-    // `li r4, 6` (PrimitiveType) / `li r5, 4` (VertexCount) / `li r6, 0x14` (stride) -- identical at
-    // all four D3DDevice_BeginVertices call sites in this file (0x82401D10/0x82401D5C,
-    // 0x824020A0/0x82402114, 0x824025A4/0x82402670, 0x824028E4/0x82402968).
-    //
-    // 6 IS A XENOS ENUM VALUE. On the Xenos D3DPRIMITIVETYPE 6 is TRIANGLESTRIP; on PC D3D9 6 is
-    // D3DPT_TRIANGLEFAN and TRIANGLESTRIP is 5. Passing the console's 6 is the FAITHFUL thing to do
-    // and is what every other immediate quad in this tree does -- XenonD3D9Shims.cpp's MapPrimitive()
-    // owns the 6 -> D3DPT_TRIANGLESTRIP translation for all of them, so the value must not be
-    // pre-translated here (that would double-translate it into a fan and drop a diagonal half of
-    // every pass to backface culling).
-    const u32 KU_BLOOM_PRIMITIVE_TYPE = 6;
-    const u32 KU_BLOOM_VERTEX_COUNT   = 4;
-    const u32 KU_BLOOM_VERTEX_STRIDE  = 20;
-
-    // The one sampler unit every bloom pass binds: `li r4, 0` before each sub_8227D158
-    // (@0x82401C7C, @0x82402028, @0x8240255C, @0x8240289C).
-    const u32 KU_SAMPLER_SOURCE = 0;
-
-    // The DWARF's own vertex type for this file:
-    //   typedef VertexIterator2<renderengine::VertexTypeFloat3, renderengine::VertexTypeFloat2>
-    //       PostFxBloomVertexIterator;                                    (BrnPostFxBloom.cpp:31)
-    // Three position floats plus two UV floats == the 0x14 stride the console passes.
-    struct PostFxBloomVertex
-    {
-        f32 mfX;
-        f32 mfY;
-        f32 mfZ;
-        f32 mfU;
-        f32 mfV;
-    };
-    static_assert(sizeof(PostFxBloomVertex) == KU_BLOOM_VERTEX_STRIDE,
-                  "PostFxBloomVertex must match the console's 0x14 vertex stride");
-
-    // ==============================================================================================
-    // THE PROGRAM GATE. [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE] -- NOW ON.
-    //
-    // All six bloom programs (the arrays at the top of this file) are XENOS MICROCODE packages and
-    // can never be bound on D3D9: the console route -- ProgramBuffer::GetResourceDescriptor ->
-    // allocator -> ProgramBuffer::Initialize -- goes through XGGetMicrocodeShaderParts, whose PC stub
-    // returns 0 WITHOUT writing *lpParts (ImmediateMode.cpp:626-646), and whatever those slots
-    // would end up holding is not a D3D9 program.
-    //
-    // SINCE THE BLOOM SHADER WAVE (2026-08-15) ALL SIX HAVE A PC COUNTERPART:
-    // renderengine::gauPostFxBloom{DS,Blur,BlurOld}{Vertex,Pixel}ProgramPC in the generated leaf
-    // pc/gcm/renderengine/PostFxBloomProgramsPC.cpp -- platform-4 ShaderProgramBuffer images built by
-    // disassembling each console package with tools/assets/shaders/xenos.py (the decoder proved
-    // instruction-for-instruction against the X360-vs-PC SHADERS.BNDL pair), re-expressing each in
-    // HLSL as tools/assets/shaders/brn_postfx_bloom.fx against the CTAB names interned in the console
-    // packages, and wrapping the fxc output with shader_transcode.py::build_pc_program_buffer. THE
-    // ELEVEN CONSTANT NAMES Construct BINDS BELOW ARE EXACTLY THE ELEVEN THE SIX CONSOLE CTABs
-    // DECLARE -- checked name for name, no orphan on either side -- so every
-    // GetVariableHandleByName call below resolves against the PC images unchanged.
-    //
-    // The six CreateProgram call sites therefore hand it the PC IMAGES (with the images' own
-    // published sizes), the same way BrnPostFxShader::Construct hands Shader::Construct the composite
-    // pair. The console blobs stay on the page as the recovered ground truth and as the console
-    // route's operands; their sizes are still asserted above.
-    //
-    // WHAT THE GATE IS FOR NOW: it is a MEASUREMENT SWITCH, not a bring-up hole. Build with
-    // /DBRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE=0 and every program slot is left null and all three
-    // passes return BEFORE their RenderTarget::Begin, so each target keeps exactly what it held and
-    // the composite samples that -- which is how a bloom-caused regression is isolated from the rest
-    // of the composite in a single build.
-    //
-    // It stays a `const bool` tested at RUN TIME, not an `#if`, on purpose: everything below it is
-    // COMPILED and type-checked in BOTH positions. This campaign has already shipped a batch of
-    // C2039s that hid behind a dead `#if` (BrnPostFxShader.cpp:130-133 records that).
-    // ==============================================================================================
-#ifndef BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE
-#define BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE 1
-#endif
-    const bool KB_BLOOM_PROGRAMS_PC_AVAILABLE = (BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE != 0);
-
-    // Report a disclosed bring-up condition exactly once (BrnPostFxShader.cpp:274, same shape).
-    void ReportOnce(bool& lrbAlreadyReported, const char* lpcText)
-    {
-        if (!lrbAlreadyReported)
-        {
-            lrbAlreadyReported = true;
-            CgsDev::Log::WriteToLog(lpcText);
-        }
-    }
-
-    // One shader-constant write: open the row for lrHandle and put the float4 in it. The X360 spells
-    // this inline per constant --
-    //     renderengine::Device::BeginShaderStates(this + handleOffset, &cursor);
-    //     stfs x,0(cursor); stfs y,4(cursor); stfs z,8(cursor); stfs w,0xC(cursor);
-    //     cursor += 0x10;
-    // -- with ONE FloatShaderStateIterator (the DWARF's `lIterator`, BrnPostFxBloom.cpp:303/:595/:614)
-    // threaded across the writes. Re-fetching the cursor per row is what the committed
-    // BrnIm3d.cpp::PushShaderConstant and ImRenderer<V>::SetTransform already do, and it leaves the
-    // observable stores identical.
-    void PushShaderConstant(renderengine::ProgramVariableHandle& lrHandle,
-                            f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
-    {
-        void* lpShaderState = nullptr;
-        RenderEngineDeviceBeginShaderStates(&lrHandle, &lpShaderState);
-        if (lpShaderState != nullptr)
-        {
-            f32* const lpfRow = static_cast<f32*>(lpShaderState);
-            lpfRow[0] = lfX;
-            lpfRow[1] = lfY;
-            lpfRow[2] = lfZ;
-            lpfRow[3] = lfW;
-        }
-    }
-
-    // ==============================================================================================
-    // The full-screen quad every bloom pass draws, restored as the call the original source made.
-    //
-    // The X360 compiler emitted FOUR instruction-for-instruction identical copies of it -- one in
-    // PrepareDownSampleBuffer (0x82401CB8-0x82401F20), one in Generate1PassBlurredBloomBuffer
-    // (0x82402064-0x824022D8) and two in Generate2PassBlurredBloomBuffer (0x8240257C-0x82402800 and
-    // 0x824028BC-0x82402B14) -- differing only in which render target supplies the dimensions. The
-    // DWARF confirms it was one source construct at each site: a PostFxBloomVertexIterator over a
-    // renderengine::Device::DirectDraw batch, with `lHalfPixelOffset4` / `lHalfPixelOffset` locals
-    // (BrnPostFxBloom.cpp:405-416). Re-rolled here per AGENTS.md's inlining-reversal rule.
-    //
-    // lpSampledRt IS THE TARGET BEING SAMPLED, NOT THE ONE BEING WRITTEN. Every copy reads
-    // `4(rSource)` / `8(rSource)` off the texture source, which is why Generate2Pass's second pass
-    // switches from the bloom target to the work target. Getting this backwards would soften or
-    // sharpen the blur by the ratio of the two sizes.
-    //
-    // ⚠ NO GUARD ON A ZERO-SIZED TARGET. The console divides 1.0 by the width and the height with no
-    // test, and this reproduces that. A zero-sized render target here yields an infinite half-texel
-    // and a quad whose UVs are not finite -- see the report's risk section.
-    // ==============================================================================================
-    void DrawFullScreenQuad(const rw::graphics::postfx::RenderTarget* lpSampledRt)
-    {
-        // half texel = 0.5 * (1/width, 1/height). The asm builds it as `stfs 0.5 -> var_90` +
-        // `vspltw v0,v0,0`, `stfs 1/w -> var_A0` / `stfs 1/h -> var_9C`, `vmulfp128 v0, v13, v0`
-        // @0x82401D50, then `vperm128 v127, v0, v0, v7` through unk_82CDA350 ==
-        // {00010203, 14151617, 00010203, 00010203} (DATA_DUMP.md:1698), which lands (du, dv, du, du).
-        // Only lanes 0 and 1 are ever read -- the UVs are two floats -- so the du splat into lanes
-        // 2/3 is documented rather than modelled.
-        const f32 lfHalfPixelOffsetU =
-            KF_HALF * (KF_ONE / static_cast<f32>(lpSampledRt->muWidth));
-        const f32 lfHalfPixelOffsetV =
-            KF_HALF * (KF_ONE / static_cast<f32>(lpSampledRt->muHeight));
-
-        // Four vertices in CLIP space in triangle-strip order: bottom-left, bottom-right, top-left,
-        // top-right, with V running the other way from Y (the render target's origin is top-left).
-        // Read straight off the four stvewx groups -- x/y/z at cursor+0/+4/+8, u/v at +12/+16, the
-        // xy pair loaded from var_A0/var_9C and the uv pair from var_B0/var_B0+4 before the
-        // `vaddfp128 v13, v127, v13` that adds the half texel.
-        PostFxBloomVertex laVertices[KU_BLOOM_VERTEX_COUNT];
-        laVertices[0].mfX = KF_MINUS_ONE;                 // 0x82401D88/0x82401D90 (flt_820037C8 twice)
-        laVertices[0].mfY = KF_MINUS_ONE;
-        laVertices[0].mfZ = KF_ZERO;
-        laVertices[0].mfU = KF_ZERO + lfHalfPixelOffsetU; // 0x82401D70/0x82401D74 -> (0.0, 1.0)
-        laVertices[0].mfV = KF_ONE  + lfHalfPixelOffsetV;
-
-        laVertices[1].mfX = KF_ONE;                       // 0x82401DEC/0x82401DF4 -> (1.0, -1.0)
-        laVertices[1].mfY = KF_MINUS_ONE;
-        laVertices[1].mfZ = KF_ZERO;
-        laVertices[1].mfU = KF_ONE  + lfHalfPixelOffsetU; // 0x82401E04/0x82401E08 -> (1.0, 1.0)
-        laVertices[1].mfV = KF_ONE  + lfHalfPixelOffsetV;
-
-        laVertices[2].mfX = KF_MINUS_ONE;                 // 0x82401E64/0x82401E6C -> (-1.0, 1.0)
-        laVertices[2].mfY = KF_ONE;
-        laVertices[2].mfZ = KF_ZERO;
-        laVertices[2].mfU = KF_ZERO + lfHalfPixelOffsetU; // 0x82401E54/0x82401E58 -> (0.0, 0.0)
-        laVertices[2].mfV = KF_ZERO + lfHalfPixelOffsetV;
-
-        laVertices[3].mfX = KF_ONE;                       // 0x82401ED4/0x82401ED8 -> (1.0, 1.0)
-        laVertices[3].mfY = KF_ONE;
-        laVertices[3].mfZ = KF_ZERO;
-        laVertices[3].mfU = KF_ONE  + lfHalfPixelOffsetU; // 0x82401EC4/0x82401EC8 -> (1.0, 0.0)
-        laVertices[3].mfV = KF_ZERO + lfHalfPixelOffsetV;
-
-        // off_83271608 == renderengine::gpD3DDevice, the same global every sibling immediate-mode
-        // renderer passes; the PC shim ignores it (XenonD3D9Shims.cpp:2396) and resolves the live
-        // device itself.
-        D3DDevice* const lpDevice = reinterpret_cast<D3DDevice*>(renderengine::gpD3DDevice);
-        void* const lpRing = D3DDevice_BeginVertices(lpDevice, KU_BLOOM_PRIMITIVE_TYPE,
-                                                     KU_BLOOM_VERTEX_COUNT,
-                                                     KU_BLOOM_VERTEX_STRIDE);
-        if (lpRing != nullptr)
-        {
-            PostFxBloomVertex* const lpDst = static_cast<PostFxBloomVertex*>(lpRing);
-            for (u32 luVertex = 0; luVertex < KU_BLOOM_VERTEX_COUNT; ++luVertex)
-            {
-                lpDst[luVertex] = laVertices[luVertex];
-            }
-        }
-        D3DDevice_EndVertices(lpDevice);
-    }
-
-    // The one-shot text each gated pass reports. Named per pass so a log line says WHICH pass was
-    // skipped, not just that bloom did nothing.
-    const char* const KPC_NO_PROGRAMS_DOWNSAMPLE =
-        "[postfx-bloom] PrepareDownSampleBuffer SKIPPED -- BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE=0,"
-        " so the down-sample program pair (gauPostFxBloomDS{Vertex,Pixel}ProgramPC) was never"
-        " adopted. The target is left untouched."
-        " [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n";
-    const char* const KPC_NO_PROGRAMS_BLUR_1PASS =
-        "[postfx-bloom] Generate1PassBlurredBloomBuffer SKIPPED --"
-        " BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE=0, so the one-pass blur program pair"
-        " (gauPostFxBloomBlur{Vertex,Pixel}ProgramPC) was never adopted. The target is left"
-        " untouched. [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n";
-    const char* const KPC_NO_PROGRAMS_BLUR_2PASS =
-        "[postfx-bloom] Generate2PassBlurredBloomBuffer SKIPPED --"
-        " BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE=0, so the two-pass blur program pair"
-        " (gauPostFxBloomBlurOld{Vertex,Pixel}ProgramPC) was never adopted. Both targets are left"
-        " untouched. [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n";
-}
-
 renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
     const void* lpMicrocode, u32 luSize, bool lbPixelProgram)
 {
-    // [FLAG PC-platform leaf: program buffers] THE MICROCODE WALL, at the one funnel every bloom
-    // program goes through. The six embedded blobs at the top of this file are Xenos microcode; the
-    // console route below -- ProgramBuffer::GetResourceDescriptor -> allocator ->
-    // ProgramBuffer::Initialize -- reaches XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT
-    // writing *lpParts (ImmediateMode.cpp:626-646), and the body then feeds a truncated 64-bit
-    // pointer to Xbox2CreateConstantTable: a crash. So since the bloom shader wave (2026-08-15) the
-    // six call sites in Construct hand this function the PC ShaderProgramBuffer IMAGES from the
-    // generated leaf, and the adopt below takes them: ProgramBufferPC_Adopt validates the D3D9 SM3
-    // token and the declared shader type, copies the image into the low-4 GB arena and rebases the
-    // descriptors' name offsets from FILE offsets to absolute addresses, so GetVariableHandleByName
-    // works unchanged. Identical shape to BrnPostFxShader::Shader::Construct and
-    // PfxHelper::CreateProgram.
-    //
-    // ⚠ `lbPixelProgram` MUST agree with the image's own +0 muShaderType word -- the adopt refuses
-    // the pair outright otherwise ("program blob shader type does not match the requested stage").
-    // All six call sites below are checked against their images: DS/Blur/BlurOld vertex pass false
-    // against a type-0 image, the three pixel ones pass true against a type-1 image.
-    if (renderengine::ProgramBufferData* const lpAdopted =
-            renderengine::ProgramBufferPC_Adopt(lpMicrocode, luSize, lbPixelProgram ? 1u : 0u))
-    {
-        return lpAdopted;
-    }
-    if (!KB_BLOOM_PROGRAMS_PC_AVAILABLE)
     {
         // The measurement gate is OFF, so Construct never reached here at all (its own early-out
         // fires first); kept as the belt-and-braces refusal to enter the console route.
         static bool sbReported = false;
-        ReportOnce(sbReported,
-                   "[postfx-bloom] CreateProgram: the PC program gate is OFF -- slot left EMPTY"
-                   " (the console microcode route would crash on this backend)."
-                   " [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n");
-        return nullptr;
-    }
-
-    // [FLAG PC bring-up] THE CONSOLE ROUTE IS UNREACHABLE ON THIS BACKEND, BY CONSTRUCTION. With the
-    // gate ON, an adopt that FAILS (a caller handing console bytes, a corrupt image) used to fall
-    // through into the block below, which XGGetMicrocodeShaderParts' PC stub turns into a crash
-    // (ImmediateMode.cpp:626-646). The rung-5 verifier flagged that as silent-until-crash, so a
-    // failed adopt now leaves the slot HONESTLY EMPTY (null program -> the six CGS_ASSERTs in
-    // Construct name the slot; the passes' own gates keep them from drawing) and reports once. The
-    // console body stays on the page below as the fallthrough it can never take here.
-    {
-        static bool sbAdoptRefused = false;
-        ReportOnce(sbAdoptRefused,
-                   "[postfx-bloom] CreateProgram: ProgramBufferPC_Adopt REFUSED an image with the PC gate"
-                   " ON -- slot left EMPTY rather than entering the console microcode route."
-                   " [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n");
         return nullptr;
     }
 
@@ -570,43 +245,6 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
     mpBloomVertexDescriptor = renderengine::VertexDescriptor::Initialize(
         &mBloomVertexDescriptorResource, &lVertexParameters);
 
-    // [FLAG PC bring-up: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE] THE MEASUREMENT-OFF ARM. Not taken
-    // on a normal build any more -- the gate defaults to 1 and the six PC images exist. It survives
-    // for the one job the gate now has: /DBRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE=0 builds a binary
-    // in which bloom cannot draw, to isolate a bloom-caused regression from the rest of the
-    // composite. On that arm every program pointer is left null and every handle at count 0 (which
-    // is what makes the three passes' own gate refuse to draw and PushShaderConstant route to the
-    // discard row), one line is logged, and the six `NULL != mp*Program` asserts below -- which are
-    // the console's and FAITHFUL -- are never reached. DELETE-WHEN: the measurement switch is no
-    // longer wanted, i.e. when bloom has shipped stable long enough that nobody needs a
-    // bloom-disabled build.
-    if (!KB_BLOOM_PROGRAMS_PC_AVAILABLE)
-    {
-        mpBloomDSVertexProgram      = nullptr;
-        mpBloomDSPixelProgram       = nullptr;
-        mpBloomBlurVertexProgram    = nullptr;
-        mpBloomBlurPixelProgram     = nullptr;
-        mpBloomBlurOldVertexProgram = nullptr;
-        mpBloomBlurOldPixelProgram  = nullptr;
-        mBloomDSVertexVariableHandleUvOffset_00_01       = renderengine::ProgramVariableHandle();
-        mBloomDSVertexVariableHandleUvOffset_02_03       = renderengine::ProgramVariableHandle();
-        mBloomDSPixelVariableHandleDot                   = renderengine::ProgramVariableHandle();
-        mBloomDSPixelVariableHandleThresholdScale        = renderengine::ProgramVariableHandle();
-        mBloomBlurVertexVariableHandleUvOffset_00_01     = renderengine::ProgramVariableHandle();
-        mBloomBlurVertexVariableHandleUvOffset_02_03     = renderengine::ProgramVariableHandle();
-        mBloomBlurOldVertexVariableHandleUvOffset_00_01  = renderengine::ProgramVariableHandle();
-        mBloomBlurOldVertexVariableHandleUvOffset_02_03  = renderengine::ProgramVariableHandle();
-        mBloomBlurOldVertexVariableHandleUvOffset_04_05  = renderengine::ProgramVariableHandle();
-        mBloomBlurOldPixelVariableHandleTapWeights_0_to_3 = renderengine::ProgramVariableHandle();
-        mBloomBlurOldPixelVariableHandleTapWeights_4      = renderengine::ProgramVariableHandle();
-        static bool sbReported = false;
-        ReportOnce(sbReported,
-                   "[postfx-bloom] Construct: BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE=0 -- every"
-                   " bloom program slot left EMPTY, no pass can draw. [FLAG PC bring-up:"
-                   " BRN_POSTFX_BLOOM_PROGRAMS_PC_AVAILABLE]\n");
-        return;
-    }
-
     // ⚠ WHAT EACH CALL PASSES, AND WHY IT IS NOT THE CONSOLE'S ARGUMENT. The X360 passes the Xenos
     // microcode package and its microcode size (the `gacBloom*` array and `sizeof - 1` this used to
     // spell, carried in the trailing comment on each call). A PC build cannot bind Xenos microcode at
@@ -614,16 +252,10 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
     // generated leaf's PC image WITH THAT IMAGE'S OWN PUBLISHED SIZE -- never a console size, which
     // the adopt would bounds-check the image against and refuse. Same convention as
     // BrnPostFxShader::Construct's slot-0 call.
-    mpBloomDSVertexProgram =
-        CreateProgram(renderengine::gauPostFxBloomDSVertexProgramPC,
-                      renderengine::guPostFxBloomDSVertexProgramPCSize, false);
                                                  // console operand: gacBloomDSVertexProgram,
                                                  // X360 0x8203E6F8, 348 B
     CGS_ASSERT(mpBloomDSVertexProgram, "NULL != mpBloomDSVertexProgram");
 
-    mpBloomDSPixelProgram =
-        CreateProgram(renderengine::gauPostFxBloomDSPixelProgramPC,
-                      renderengine::guPostFxBloomDSPixelProgramPCSize, true);
                                                  // console operand: gacBloomDSPixelProgram,
                                                  // X360 0x8203E858, 516 B
     CGS_ASSERT(mpBloomDSPixelProgram, "NULL != mpBloomDSPixelProgram");
@@ -641,16 +273,10 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
         mpBloomDSPixelProgram, reinterpret_cast<const u8*>("kThresholdAndScale"),
         &mBloomDSPixelVariableHandleThresholdScale);
 
-    mpBloomBlurVertexProgram =
-        CreateProgram(renderengine::gauPostFxBloomBlurVertexProgramPC,
-                      renderengine::guPostFxBloomBlurVertexProgramPCSize, false);
                                                  // console operand: gacBloomBlurVertexProgram,
                                                  // X360 0x8203EA60, 368 B
     CGS_ASSERT(mpBloomBlurVertexProgram, "NULL != mpBloomBlurVertexProgram");
 
-    mpBloomBlurPixelProgram =
-        CreateProgram(renderengine::gauPostFxBloomBlurPixelProgramPC,
-                      renderengine::guPostFxBloomBlurPixelProgramPCSize, true);
                                                  // console operand: gacBloomBlurPixelProgram,
                                                  // X360 0x8203EBD0, 420 B
     CGS_ASSERT(mpBloomBlurPixelProgram, "NULL != mpBloomBlurPixelProgram");
@@ -662,16 +288,10 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
         mpBloomBlurVertexProgram, reinterpret_cast<const u8*>("kUvOffset_02_03"),
         &mBloomBlurVertexVariableHandleUvOffset_02_03);
 
-    mpBloomBlurOldVertexProgram =
-        CreateProgram(renderengine::gauPostFxBloomBlurOldVertexProgramPC,
-                      renderengine::guPostFxBloomBlurOldVertexProgramPCSize, false);
                                                  // console operand: gacBloomBlurOldVertexProgram,
                                                  // X360 0x8203ED78, 404 B
     CGS_ASSERT(mpBloomBlurOldVertexProgram, "NULL != mpBloomBlurOldVertexProgram");
 
-    mpBloomBlurOldPixelProgram =
-        CreateProgram(renderengine::gauPostFxBloomBlurOldPixelProgramPC,
-                      renderengine::guPostFxBloomBlurOldPixelProgramPCSize, true);
                                                  // console operand: gacBloomBlurOldPixelProgram,
                                                  // X360 0x8203EF10, 424 B
     CGS_ASSERT(mpBloomBlurOldPixelProgram, "NULL != mpBloomBlurOldPixelProgram");
@@ -778,9 +398,7 @@ void BrnPostFxBloom::Render(
 void BrnPostFxBloom::PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget* lpDestRt,
                                              rw::graphics::postfx::RenderTarget* lpSourceRt)
 {
-    if (!KB_BLOOM_PROGRAMS_PC_AVAILABLE)
     {
-        // [FLAG PC bring-up] Return BEFORE Begin, so lpDestRt keeps whatever it held.
         static bool sbReportedNoPrograms = false;
         ReportOnce(sbReportedNoPrograms, KPC_NO_PROGRAMS_DOWNSAMPLE);
         return;
@@ -840,7 +458,6 @@ void BrnPostFxBloom::PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget*
     // 4-byte-pointer image (+0x20 array base, +0x0C into the first Target); reached BY NAME here, so
     // no guest offset survives to the host.
     shadow::Device::SetState(lpSourceRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
-    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
 
     // asm 0x82401C98-0x82401CB0: the vertex-descriptor bind, open-coded (compare off_83010958, set
     // the byte_83010A34 dirty flag, cache) == shadow::Device::SetVertexDescriptor.
@@ -893,9 +510,7 @@ void BrnPostFxBloom::PrepareDownSampleBuffer(rw::graphics::postfx::RenderTarget*
 void BrnPostFxBloom::Generate1PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpBloomRt,
                                                      rw::graphics::postfx::RenderTarget* lpWorkRt)
 {
-    if (!KB_BLOOM_PROGRAMS_PC_AVAILABLE)
     {
-        // [FLAG PC bring-up] Return BEFORE Begin, so lpBloomRt keeps whatever it held.
         static bool sbReportedNoPrograms = false;
         ReportOnce(sbReportedNoPrograms, KPC_NO_PROGRAMS_BLUR_1PASS);
         return;
@@ -923,7 +538,6 @@ void BrnPostFxBloom::Generate1PassBlurredBloomBuffer(rw::graphics::postfx::Rende
 
     // asm 0x8240203C-0x82402040 / 0x82402044-0x8240205C / 0x82402060.
     shadow::Device::SetState(lpWorkRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
-    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
     shadow::Device::SetVertexDescriptor(mpBloomVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
 
@@ -974,12 +588,7 @@ void BrnPostFxBloom::Generate2PassBlurredBloomBuffer(rw::graphics::postfx::Rende
     CGS_ASSERT(lpWorkRt->muHeight == lpBloomRt->muHeight,
                "lpWorkRt->GetHeight() == lpBloomRt->GetHeight()");    // BrnPostFxBloom.cpp:552
 
-    if (!KB_BLOOM_PROGRAMS_PC_AVAILABLE)
     {
-        // [FLAG PC bring-up] Return BEFORE either Begin, so both targets keep what they held. The two
-        // asserts above run first on purpose: they are pure reads of the caller's own arguments, they
-        // are the console's, and a mismatched pair is a caller bug worth catching whether or not the
-        // pass can draw.
         static bool sbReportedNoPrograms = false;
         ReportOnce(sbReportedNoPrograms, KPC_NO_PROGRAMS_BLUR_2PASS);
         return;
@@ -1027,7 +636,6 @@ void BrnPostFxBloom::Generate2PassBlurredBloomBuffer(rw::graphics::postfx::Rende
 
     // asm 0x82402570-0x82402574 / 0x82402578: sample the BLOOM target.
     shadow::Device::SetState(lpBloomRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
-    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
     shadow::Device::FlushVertexProgramState();
 
     // asm 0x8240257C-0x82402800: the quad, half-texel-offset by the target being SAMPLED.
@@ -1057,7 +665,6 @@ void BrnPostFxBloom::Generate2PassBlurredBloomBuffer(rw::graphics::postfx::Rende
     // asm 0x824028B0-0x824028B4 / 0x824028B8: sample the WORK target this time. The pixel constants,
     // the programs and the vertex descriptor are NOT re-bound -- the console re-binds neither.
     shadow::Device::SetState(lpWorkRt->maColourTargets[0].mpTextureState, KU_SAMPLER_SOURCE);
-    renderengine::PostFxBloomSampler_ApplyState(KU_SAMPLER_SOURCE);
     shadow::Device::FlushVertexProgramState();
 
     // asm 0x824028BC-0x82402B14: the quad, half-texel-offset by lpWorkRt (`lwz r11, var_150` /

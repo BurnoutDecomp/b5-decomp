@@ -30,8 +30,7 @@
 // was everything ABOVE it.
 // =================================================================================================
 
-#include <cstdlib>                                                          // getenv (the [FLAG PC bring-up] progression-gate switch)
-
+#include <cstdlib>
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                      // EGameModeType, EGameModeState, IsOnlineFreeBurnLobby
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                      // PreWorldInputBuffer / OutputBuffer / ControllerInput
@@ -67,17 +66,6 @@ namespace
     // ProcessContacts half uses (BRN_SHOWTIME_WATCH). One line per pop / answer / miss / toggle,
     // capped, so a run can COUNT the hand-off's hops: ProcessContacts' `[showtime-crash]` pushes
     // -> `pop` (action 116) -> `answer` (DealWithScoreForVehicleClass + action 140) or `MISS`.
-    bool ShowtimeScoreWitness()
-    {
-        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
-        static s32        siLinesLeft = 160;
-        if (!sbWatch || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
-        {
-            return false;
-        }
-        --siLinesLeft;
-        return true;
-    }
     // [DIAG] NOT IN THE X360 BINARY. Names the gate that refused a both-bumpers press. It exists
     // because the defect this file closes was reported by a player as "the buttons do nothing",
     // and a gate stack with ten terms has ten ways to look exactly like a dead button.
@@ -179,7 +167,6 @@ namespace
         mModeManager.StartGameMode(lpOutput, &lStartGameModeParams);
     }
 
-
     // =============================================================================================
     // GameStateModule::ShouldStartShowtimeMode  @0x82356B18  (166 insns)
     //
@@ -221,40 +208,6 @@ namespace
         const bool lbOnlineModeRunning =
             (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
 
-        // @0x82356B5C..0x82356BB0. Offline, the whole function is gated on road rules being
-        // available. The console inlines ProgressionManager::AreRoadRulesAvailable @0x82311520
-        // here -- the identical three-term test, term for term and register for register
-        // (`>= 4u` on the Profile medal count, then the two road-rule tallies) -- and that body is
-        // already committed and mounted, so it is reached BY NAME rather than re-open-coded.
-        // ⚠️ THIS IS A REAL PROGRESSION GATE, not a bring-up artefact: on a profile that has never
-        // won four events and has never ruled a road, showtime does not start offline. That is the
-        // console's behaviour and it is reproduced, not softened.
-        //
-        // [FLAG PC bring-up gate 2026-08-29, NOT in the X360 binary] BRN_SHOWTIME_IGNORE_PROGRESSION.
-        // ⛔ WHY IT EXISTS, and why it is a *gate* rather than a poke at the progression state.
-        // The only two things that open AreRoadRulesAvailable are four medals
-        // (ProgressionManager::AwardMedal -> Profile::SetMedalCountFromTheStart,
-        // BrnProgressionManager_EventFinish.cpp:496) and a ruled road
-        // (miNumberOfParCrash/ParTimeRoadRulesRuledByPlayer, which have NO writer on this build --
-        // ProgressionManager::Construct zeroes them and nothing else touches them). Neither is
-        // reachable today: finishing four offline events end-to-end is not something this build
-        // can do yet. So a wave that wants to see the showtime SCORE cannot get into showtime at
-        // all, and the score half of the feature would stay unverifiable indefinitely.
-        // ⭐ WHAT IT DELIBERATELY DOES NOT DO. It does NOT write the medal count, does NOT write
-        // either road-rule tally, and does NOT touch the save. Those words feed
-        // ProgressionManager::GetPercentageComplete (BrnProgressionManager_Completion.cpp:261/:267)
-        // and the unlock predicates (BrnProgressionManager_Unlocks.cpp:321/:325); forging them
-        // would make a completion percentage and an unlock condition read differently, i.e. a
-        // value that renders and is WRONG. This flag is scoped to THIS ONE DECISION -- every other
-        // reader of progression still sees the true, empty profile -- and the nine gates below it
-        // still run unchanged, so a run under it is still a real gate-stack pass.
-        // ⚠️ OFF BY DEFAULT and CLEARED by tools/diagnostics/flow_run.ps1 on every run, on the same
-        // CAPABILITY discipline as BRN_EVENT_FSM / BRN_START_EVENT: it changes what the game DOES.
-        // A run taken under it is NOT comparable with a default run and must say so.
-        // DELETE-WHEN: the offline event flow can award a medal (then four wins open the gate the
-        // console's way and this flag is a lie).
-        static const bool sbIgnoreProgressionGate = (getenv("BRN_SHOWTIME_IGNORE_PROGRESSION") != 0);
-
         if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable() &&
             sbIgnoreProgressionGate && lbCrashModePressed)
         {
@@ -265,19 +218,6 @@ namespace
             {
                 sbSaidSo = true;
                 const BrnProgression::Profile* const lpcProfile = mProgressionManager.GetProfile();
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime] ⚠ BRN_SHOWTIME_IGNORE_PROGRESSION is set: the console's road-rules"
-                       " gate REFUSED and is being ignored for this decision only. True state:"
-                       " medalsFromTheStart="
-                    << ((lpcProfile != 0)
-                            ? static_cast<s32>(lpcProfile->GetMedalCountFromTheStart()) : -1)
-                    << " parCrashRoadsRuled="
-                    << static_cast<s32>(
-                           mProgressionManager.GetNumberOfParCrashRoadRulesRuledByPlayer())
-                    << " parTimeRoadsRuled="
-                    << static_cast<s32>(
-                           mProgressionManager.GetNumberOfParTimeRoadRulesRuledByPlayer())
-                    << ". This run is NOT comparable with a default run. [FLAG PC bring-up]\n";
             }
         }
 
@@ -536,12 +476,6 @@ namespace
                 static_cast<s32>(sizeof(lToggleAction)));
             mbToggleShowtimeBehaviour = false;
 
-            if (ShowtimeScoreWitness())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime-score] toggle -> meShowtimeBehaviour " << static_cast<s32>(meShowtimeBehaviour)
-                    << " -> action 138\n";
-            }
         }
 
         // ---- 2. the answer to the outstanding request (0x82380F7C..0x82381084) ----------------
@@ -576,32 +510,10 @@ namespace
                     GameStateModuleIO::E_ACTION_VEHICLE_HIT,
                     static_cast<s32>(sizeof(lHitAction)));
 
-                if (ShowtimeScoreWitness())
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[showtime-score] answer traffic car " << static_cast<s32>(lResponse.muVehicleIndex)
-                        << " class " << static_cast<s32>(lResponse.meType)
-                        << " -> DealWithScoreForVehicleClass: carsCrashed " << lHitAction.miTotalVehiclesCrashed
-                        << " (class tally " << lHitAction.miVehicleTypeCrashed << ")"
-                        << " base " << lHitAction.miVehicleBaseScore
-                        << " category " << static_cast<s32>(lHitAction.meVehicleScoreCategory)
-                        << " mult +" << lHitAction.miScoreMultiplierEarned
-                        << " (total " << lHitAction.miTotalScoreMultiplier << ")"
-                        << " chain " << lHitAction.miComboBonusEarned
-                        << " -> action 140\n";
-                }
-
                 muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
                 break;
             }
 
-            if (muShowtimeRequestedTrafficIndex != K_INVALID_VEHICLE_INDEX && ShowtimeScoreWitness())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime-score] MISS: no answer for traffic car "
-                    << static_cast<s32>(muShowtimeRequestedTrafficIndex)
-                    << " among " << lpResponseQueue->GetLength() << " responses (assert :1611)\n";
-            }
             CGS_ASSERT(muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX,
                        "muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX");   // :1611 (li r5, 0x64B)
             muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
@@ -627,13 +539,6 @@ namespace
                 mShowtimePendingTrafficIndexStack.Pop();
                 miShowtimePendingFrameDelay = KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES;
 
-                if (ShowtimeScoreWitness())
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[showtime-score] pop traffic car " << static_cast<s32>(lRequest.muTrafficVehicleIndex)
-                        << " -> action 116 (still pending " << mShowtimePendingTrafficIndexStack.GetLength()
-                        << ")\n";
-                }
             }
         }
 

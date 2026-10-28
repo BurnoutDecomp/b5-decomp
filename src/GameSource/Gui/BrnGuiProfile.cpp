@@ -78,10 +78,6 @@ namespace
     // ---- CgsGui::SaveLoadSystem boundary (un-reconstructed X360 entry points /
     //      private state; see the banner) -------------------------------------------
 
-    // FLAG PC-platform leaf: SaveLoadSystem's autosave-enabled word (X360 system+0x180,
-    // read by the manager at manager+4584 and by GuiModule::Update at module+686280) is
-    // private un-accessored state of the committed recon; the X360 Construct defaults it
-    // TRUE, so the PC leaf reports storage-always-writable until the memcard TU lands.
     bool SaveLoadSystem_AutosaveIsEnabled(const CgsGui::SaveLoadSystem& /*lrSystem*/)
     {
         return true;
@@ -153,53 +149,26 @@ namespace
 
     // ---- CgsGui::SystemUserProfile boundary (private members the X360 pokes) -------
 
-    // FLAG PC-platform leaf: the current user index (X360 reads mpSystemUserProfile->+0)
-    // is private in the committed CgsGuideIntegration.h; PC single local user == 0.
     u32 SystemUserProfile_GetUserIndex(const CgsGui::SystemUserProfile* /*lpProfile*/)
     {
         return 0;
     }
 
-    // The X360 sign-out path stamps KU_USERINDEX_NONE(4) into the profile watcher and
-    // re-runs its (private) UpdateUserSigninState; both are committed-private, and the
-    // PC build never signs its single user out. No-op.
-    // FLAG PC-platform leaf: console sign-out path (see above).
     void SystemUserProfile_ClearSignedInUser(CgsGui::SystemUserProfile* /*lpProfile*/)
     {
     }
 
     // ---- BrnGui::GuiCache boundary (unnamed far bytes the X360 pokes) --------------
 
-    // GuiCache byte +77577 mirrors the autosave-icon visibility for the view side; that
-    // far byte is not yet named in BrnGuiCache.h. No-op (the event-355 post below is the
-    // real observable).
-    // FLAG PC-platform leaf: un-named GuiCache far byte (see above).
     void GuiCache_SetAutosaveIconVisible(GuiCache* /*lpGuiCache*/, bool /*lbVisible*/)
     {
     }
 
-    // FLAG PC-platform leaf: the sign-in notification gate (X360 GuiCache byte +19285)
-    // is not yet named in BrnGuiCache.h; the PC user never re-signs-in mid-session.
     bool GuiCache_SignedInEventWanted(const GuiCache* /*lpGuiCache*/)
     {
         return false;
     }
 
-    // After a validated load the X360 mirrors the loaded progression profile's licence
-    // byte (+118033, inside the serialised image) into GuiCache+19320; both offsets are
-    // un-named interiors of foreign TUs. No-op.
-    // FLAG PC-platform leaf: un-named GuiCache/profile-image interiors (see above).
-    // ⭐⭐ [profile-save 2026-08-27] THIS IS THE INTRO-VIDEO GATE, and the prior empty leaf is
-    // why a returning player watched the intro again. X360 ReportTaskCompleted @0x82514024,
-    // the PROFILE_LOADED arm's LAST store:
-    //     a7 = this->mpGuiCache;
-    //     *(a7 + 19320) = *(*v9 + 118033);       // stb r11, 0x4B78(r9)
-    // i.e. `mpGuiCache->mbPlayIntroVideo = mpProgressionProfile->mbIsNewProfile`. (+118033 is
-    // BrnProgression::Profile::mbIsNewProfile, the same byte BrnGui::InGame::Update reads to
-    // fire "TO_INTRO" and BrnGui::Intro::OnLeave clears; +0x4B78 is what
-    // PostTitleScreenLoad::Update tests before playing "intro".) The leaf's old name said
-    // "licence flag", which is what a consumer-side guess called it -- the store is the
-    // new-profile byte, so the name is corrected here rather than kept.
     void GuiCache_MirrorIsNewProfileToIntroVideoGate(GuiCache* lpGuiCache,
                                                      const BrnProgression::Profile* lpProfile)
     {
@@ -279,18 +248,11 @@ namespace
                                lpSaveImageDLC1);
     }
 
-    // FLAG PC-platform leaf: the PROFILEUPG availability gate is the un-recovered
-    // DLC/entitlement rodata test ((dword_82FFA7F4 & dword_82FFA7F8[dword_82FFA86C]) ==
-    // the mask -- same family BrnEventScoresManager documents); no upgrade content on PC.
     bool ProfileUpgradeFeatureIsEnabled()
     {
         return false;
     }
 
-    // Binding the acquired PROFILEUPG handle out of the acquire-response payload goes
-    // through CgsResource::BaseResourcePtr's protected CreateFromHandle (and the
-    // response's handle layout); deferred with the (PC-disabled) upgrade feature.
-    // FLAG PC-platform leaf: PROFILEUPG handle bind (see above).
     void ProfileUpgradeResource_BindFromEvent(CgsResource::BaseResourcePtr& /*lrResourcePtr*/,
                                               const CgsModule::Event* /*lpEvent*/)
     {
@@ -566,10 +528,6 @@ void ProfileManager::Update()
     mSaveLoadSystem.Update();
 }
 
-// ---------------------------------------------------------------------------
-// ProfileManager::AutosaveIsEnabled  (BrnGuiProfile.h:570)
-// FLAG PC-platform leaf: reads the save/load system's private autosave word
-// (X360 manager+4584) through the boundary helper above.
 bool ProfileManager::AutosaveIsEnabled() const
 {
     return SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem);

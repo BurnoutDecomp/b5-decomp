@@ -4,7 +4,6 @@ target_sources(${PROJECT_NAME}
         BrnDLCManagerMonitor.cpp
         BrnGameDataModule.cpp
         BrnGameDataModuleIO.cpp
-        BrnGameDataModuleIO_embed_check.cpp
         BrnGameDataModuleIO_ResourceInputBufferHelper.cpp
         BrnResourceAllocator.cpp
         BrnResourceDebugComponent.cpp

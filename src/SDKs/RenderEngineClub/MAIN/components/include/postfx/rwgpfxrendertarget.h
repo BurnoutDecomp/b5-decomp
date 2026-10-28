@@ -2,7 +2,6 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"                  // rw::IResourceAllocator (the render-target's allocator)
-#include "pc/gcm/renderengine/texture.h"        // renderengine::Texture / PixelBuffer (owned surfaces)
 // renderengine::TextureState is held only by pointer here (mpColourTextureState / Target::mpTextureState);
 // forward-declared below rather than pulling its (header-less) home in, so consumers that re-declare
 // the vendor render-state types locally (e.g. GameSource/Graphics/BrnRendererMemory.cpp) don't ODR-clash.
@@ -169,18 +168,6 @@ namespace postfx
         // straight into its own texture, so there is nothing to copy out.
         void Resolve(u32 luFace);
 
-        // [FLAG PC bring-up probe -- NOT an X360 function] BRN_ENVMAP_STATS witness.
-        // Read one RESOLVED cube face back through a system-memory staging surface
-        // (GetCubeMapSurface -> GetRenderTargetData -> LockRect) and reduce it to four
-        // numbers: the per-channel mean over the whole face and the standard deviation of
-        // its luminance. It STALLS the GPU, so the only caller is the env-map pass's
-        // rate-limited witness (BrnRendererModule.cpp, first N samples, one every N
-        // updates); it returns false for any target that is not a registered cube.
-        // The question it exists to answer is the one no screenshot can: does the cube
-        // hold six DIFFERENT, non-degenerate faces, and is the +Y face sky and the -Y
-        // face ground.
-        // DELETE-WHEN the reflections regression (b5-decomp#5) is closed.
-        bool PCReadBackFaceStats(u32 luFace, f32* lpafMeanRgb, f32* lpfStdLum) const;
     };
 
     // rwgpfxrendertarget.h:502 (DWARF). The fields are owned by this class's own TU; only the
@@ -344,17 +331,6 @@ namespace postfx
         u8                               mu8UsesProvidedState; // +0x95
         u8                               mau8Pad96[2];         // +0x96
 
-        // FLAG PC-platform leaf: the per-section render-target-state ARRAY, given a real name.
-        // The X360 reaches section n's state as `(&mpSection0State)[n]` -- a pointer-array PUN that
-        // walks off mpSection0State (+0x1C) into maColourTargets/mDepthTarget on the 4-byte-pointer
-        // image, where those members happen to line up on a 4-byte grid. That pun CANNOT survive the
-        // x64 widening (the Target records are no longer a whole number of pointers wide), and
-        // CreateBackBuffer legitimately reads/writes section 4, so replicating it would corrupt the
-        // object. The five slots therefore get their own array here; mpSection0State above stays as
-        // the console's documented +0x1C member and mirrors slot 0.
-        // Five slots because the X360 caller set uses 0 (the bind) and 4 (CreateBackBuffer's shared
-        // depth-stencil state).
-        static const u32 KU_NUM_SECTION_STATES = 5;
         renderengine::RenderTargetState* mapSectionState[KU_NUM_SECTION_STATES];
     };
 

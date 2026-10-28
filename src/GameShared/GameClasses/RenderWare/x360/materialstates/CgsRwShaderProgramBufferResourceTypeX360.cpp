@@ -115,20 +115,6 @@ namespace CgsResource
         for (u32 luIndex = 0; luIndex < luNumVariables; ++luIndex, ++lpVariable)
             lpVariable->muNameOffset += luMainBase;
 
-        // FLAG PC-platform leaf: the X360 tail is the Xenos GPU registration --
-        //     block = XPhysicalAlloc(muMicrocodePart3, -1, 32, 1028);
-        //     memcpy(block, muPhysicalPart, muMicrocodePart3); muPhysicalPart = block;
-        //     XGRegister{Vertex,Pixel}Shader(data + 0x14, block);
-        // There is no Xenos microcode on this build: the converted platform-4 program buffer
-        // carries a bare D3D9 SM3 blob at +0x14 (muMicrocodeSize == its byte length) and
-        // muMicrocodePart3 == 0, i.e. no physical part to copy or register
-        // (tools/assets/shaders/FORMAT_MAP.md section 5). The PC set-shader leaf
-        // (D3DDevice_Set{Vertex,Pixel}Shader in pc/gcm/renderengine/XenonD3D9Shims.cpp) creates
-        // the D3D9 shader object straight from data+0x14, which is exactly the pointer
-        // XGRegister*Shader takes here -- so the registration is a no-op on PC and the payload
-        // must stay where it is. The type assert IS kept (it is data validation, not XDK).
-        CGS_ASSERT(lpData->muShaderType == 0 || lpData->muShaderType == 1,
-                   "lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL");
     }
 
     // Faithful to X360 0x828A8D00: the exact inverse of FixUp (the X360 body opens with a

@@ -64,15 +64,6 @@ namespace Gen
         // @0x8227EFC8.
         Collection* ChangeWithDefault(u64 luCollectionKey = 0);
 
-        // [FLAG PC bring-up, additive host helper] expose the private base's collection
-        // pointer so callers can tell a FAILED resolve (FindCollectionWithDefault returned
-        // null: database uninitialised or the class/collection absent) from a real bind.
-        // ReadSurfaceProperties' boot guard needs this -- running the reader on a
-        // collection-less instance trips attribcollection.cpp:221 and then AVs
-        // (boot-drive 2026-08-21 08:57). DELETE-WHEN the attrib database bring-up (gap G5)
-        // guarantees the surfacelist collection resolves at WorldModule::Prepare time.
-        using Instance::GetCollection;
-
         // GetCollection above returns the bound collection's KEY, and key == 0 is not a reliable
         // "no collection" test -- a real bind can carry any key. IsValid (mpCollection != 0) is
         // the predicate ReadSurfaceProperties' boot guard wants. Re-exported like the two above

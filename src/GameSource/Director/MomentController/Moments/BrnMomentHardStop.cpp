@@ -69,15 +69,6 @@ namespace
     // gates while it waits in FOUND_PREPARING (frames since the allocation), the frame it goes VALID, and
     // how long it stays and why it lets go. Default off, hard-capped at KI_HARDSTOP_DIAG_LINES lines.
     const s32 KI_HARDSTOP_DIAG_LINES = 200;
-    bool HardStopDiagLine()
-    {
-        static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
-        static s32 siLinesLeft = KI_HARDSTOP_DIAG_LINES;
-        if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
-            return false;
-        --siLinesLeft;
-        return true;
-    }
     s32 siHardStopDiagFrames = 0;     // [diag] frames since the shots were allocated / since VALID
     s32 siHardStopDiagLastKey = -1;   // [diag] the last printed candidate-gate tuple
 
@@ -352,28 +343,12 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
                 // host timing, so the console-faithful draw varies boot to boot). The draw above still
                 // happens, so the random stream stays the console's. Unset (the default): the draw stands.
                 {
-                    static const char* const spcPinnedScale = getenv("BRN_ULTRA_SLOMO_SCALE");
-                    if (spcPinnedScale != 0)
-                        mfUltraSloMoTimestepScale = static_cast<f32>(atof(spcPinnedScale));
                 }
                 mbForceUltraSloMo = true;
             }
             ++muHighEnergyWorldCrashCount;
         }
 
-        if (HardStopDiagLine())
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[crashcam] hardstop ALLOCATED crashType " << meCrashType
-                << " flags " << static_cast<s32>(mCrashAnalysisUsedAtSelection.mxEventFlags)
-                << " eventType " << MomentSharedInfo_GetCrashModeWord(lSharedInfo)
-                << " forceTopDown " << (MomentSharedInfo_GetFlag1319(lSharedInfo) ? 1 : 0)
-                << " ultra " << (mbForceUltraSloMo ? 1 : 0)
-                << " scale " << mfUltraSloMoTimestepScale
-                << " count " << static_cast<s32>(muHighEnergyWorldCrashCount)
-                << " shotA " << mShotASelectionInfo.miType << "/" << mShotASelectionInfo.miId
-                << " shotB " << mShotBSelectionInfo.miType << "/" << mShotBSelectionInfo.miId << "\n";
-        }
         siHardStopDiagFrames  = 0;
         siHardStopDiagLastKey = -1;
 
@@ -396,14 +371,6 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         ++siHardStopDiagFrames;
         {
             const s32 liKey = HardStopDiagKey(mRigCameraHandleA.GetBehaviour(), mRigCameraHandleB.GetBehaviour());
-            if (liKey != siHardStopDiagLastKey && HardStopDiagLine())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] hardstop PREPARING frame " << siHardStopDiagFrames
-                    << " A{canFrom " << (liKey & 1) << " failed " << ((liKey >> 1) & 1)
-                    << " canTo " << ((liKey >> 2) & 1) << "} B{canFrom " << ((liKey >> 3) & 1)
-                    << " failed " << ((liKey >> 4) & 1) << " canTo " << ((liKey >> 5) & 1) << "}\n";
-            }
             siHardStopDiagLastKey = liKey;
         }
         // ---- per-candidate failure logging (name + validity dump) ----
@@ -461,12 +428,6 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             break;
         }
     }
-        if (HardStopDiagLine())
-        {
-            *CgsDev::Log::gpDebugPrint << "[crashcam] hardstop VALID after " << siHardStopDiagFrames
-                                       << " preparing frames, using " << (mbUsingA ? "A" : "B")
-                                       << (mbForceUltraSloMo ? " (ultra slo-mo)" : "") << "\n";
-        }
         siHardStopDiagFrames = 0;
         // fall through -- the console build runs the VALID body the same frame it picks a winner
 
@@ -514,15 +475,6 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             || (lbActiveCanSwitchFrom && meCrashType != 1)
             || lbCleanEarlyOut)
         {
-            if (HardStopDiagLine())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] hardstop RELEASED after " << siHardStopDiagFrames << " valid frames:"
-                    << " keepGate " << (GetNonConstCamera().mState.IsFlagSet(KU_STATE_FLAG_KEEP_GATE) ? 1 : 0)
-                    << " crashCamActive " << (MomentSharedInfo_IsCrashCameraActive(lSharedInfo) ? 1 : 0)
-                    << " canSwitchFrom " << (lbActiveCanSwitchFrom ? 1 : 0)
-                    << " cleanEarlyOut " << (lbCleanEarlyOut ? 1 : 0) << "\n";
-            }
             Release();   // the live-vtable call (slot 4)
             SetState(E_STATE_INVALID_SEARCHING);
         }

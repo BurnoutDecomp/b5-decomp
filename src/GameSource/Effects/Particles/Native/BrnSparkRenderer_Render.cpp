@@ -41,10 +41,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"           // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"              // shadow::Device
-#include "pc/gcm/renderengine/ShadowPass.h"                                  // LionParticleSampler_ApplyState
 #include <cstring>   // memcpy -- the host-endian-explicit vertex colour word
-#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"   // [diag] BRN_FRAME_DUMP_ARM=spark
-
 // ---- the device surface SparkRenderer::Dispatch binds through -------------------------------
 // The same minimal extern surface the Lion particle dispatch declares
 // (SDKs/.../ParticleRender/ParticleRender.cpp) and the tyre-mark pass declares for its three
@@ -688,7 +685,6 @@ void SparkVertexBufferBuilder::BuildDispatchData(EffectsVertexBufferLocked* lpLo
     }
 }
 
-
 // ===============================================================================================
 // SparkRenderer::Dispatch  @0x8228BBC8  (172 instructions)
 //
@@ -780,7 +776,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     ImDeviceSetBlendState(gpImAdditiveBlendState);            // dword_83010F24
     ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
     ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
-    renderengine::LionParticleSampler_ApplyState(0);          // dword_83010F60 on unit 0
+          // dword_83010F60 on unit 0
 
     mpRenderer->BeginRendering();
     mpRenderer->SetTransform(&lViewProjectionMatrix);
@@ -875,17 +871,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
         static u32 suFilmThreshold = 0u;
         if (suFilmThreshold == 0u)
         {
-            const char* const lpcEnv = std::getenv("BRN_SPARK_FILM_VERTS");
-            const int liValue = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
             suFilmThreshold = (liValue > 0) ? static_cast<u32>(liValue) : 8000u;
-        }
-        if (BrnDiag::gFilmLatch.muSparkDrawLatched == 0u
-            && gauSparkDrawnVertices >= suFilmThreshold)
-        {
-            BrnDiag::gFilmLatch.muSparkDrawArray    = static_cast<u32>(lrBatch.meArrayId);
-            BrnDiag::gFilmLatch.muSparkDrawVertices = gauSparkDrawnVertices;
-            BrnDiag::gFilmLatch.muSparkDrawLatched  = 1u;
-            CgsDev::Log::WriteToLog("[spark] FILM LATCH raised (BRN_FRAME_DUMP_ARM=spark)\n");
         }
     }
 

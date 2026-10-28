@@ -109,12 +109,6 @@ namespace BootLegalCacheBoundary
     // FLAG (PC time source): the X360 reads the GUI cache's frame time. The committed GuiCache
     // has no GetTime; stand in with a monotonic wall clock (seconds since first call) so the
     // legal screen's dwell timers (wait-start 3.0s / attract 25.0s / accept 0.5s) elapse for real.
-    f32 GetTime(const GuiCache* /*lpCache*/)
-    {
-        static const std::chrono::steady_clock::time_point s_start = std::chrono::steady_clock::now();
-        const std::chrono::duration<float> lElapsed = std::chrono::steady_clock::now() - s_start;
-        return lElapsed.count();
-    }
 
     // X360 *(cache+19273) == GuiCache +0x4B49, the high-definition byte GuiModule::Construct
     // writes from the video mode (issue #11). The "HD compatible" composite is revealed only

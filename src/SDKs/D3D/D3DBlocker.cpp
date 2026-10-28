@@ -34,17 +34,6 @@ namespace D3D
 // device in r3 only; returns non-zero when a genuine hang is confirmed.
 s32 DebugGpuDeadlock(CDevice* pDevice);
 
-// --- X360 platform hardware reads with no reconstructable C++ home ----------
-// The live GPU command fence, read on the X360 from the per-thread context block
-// through the PowerPC thread pointer: *(*(r13 + 0x100) + 0x58). This is platform
-// thread-local state with no C++ type to recover, so it is surfaced as a named
-// platform accessor rather than an offset-hack on an unknown type.
-// FLAG PC-platform leaf: X360 per-thread GPU fence register.
-u32 ReadCurrentGpuFence();
-// PowerPC time-base register low word (the `mftb` instruction).
-// FLAG PC-platform leaf: X360 CPU time-base register.
-u32 ReadTimeBase();
-
 // --- @ 0x82947498 ----------------------------------------------------------
 // Record the block's starting state. mpDevice / miType are stored first, then
 // the current readback progress word, the live GPU fence (into both the

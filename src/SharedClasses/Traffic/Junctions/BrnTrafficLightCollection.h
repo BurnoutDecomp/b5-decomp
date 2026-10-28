@@ -145,7 +145,6 @@ namespace BrnTraffic
                           "TrafficLightCollection::mpauInstanceHashTable");
             static_assert(offsetof(TrafficLightCollection, mpauInstanceHashToIndexLookup) == 0x148,
                           "TrafficLightCollection::mpauInstanceHashToIndexLookup");
-            static_assert(sizeof(TrafficLightCollection) == 0x150, "TrafficLightCollection host sizeof");
         }
 
     private:

@@ -21,16 +21,6 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
-#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"   // [DIAG] BRN_DMIX_DIAG witness (opt-in)
-
-namespace
-{
-    // FLAG PC-platform leaf: ARTIST's 32-bit Nicotine/NFSMix objects are carved
-    // from the sound Environment allocator. The native x64 objects and pointer
-    // arrays are wider than that console-sized linear carve, so the PC port uses
-    // the middleware's dedicated aligned allocator at the platform boundary.
-    MixerAllocator gLogicMixerAllocatorPC;
-}
 
 namespace CgsSound
 {
@@ -102,7 +92,6 @@ void Environment::Construct(const EnvironmentSpec& akrSpec)
     Nicotine::IDynamicMixer::MAP_CREATE_PARAMS lCreateParams;
     lCreateParams.mPrintSelect   = 0;
     lCreateParams.NumMixStates   = static_cast<int>(mu32StateManagerCount);
-    lCreateParams.MixerAllocator = &gLogicMixerAllocatorPC;
     mDynamicMixer.CreateInstance(&lCreateParams);
 
     mCpuMonitors.miDynamicMixer      = -1;

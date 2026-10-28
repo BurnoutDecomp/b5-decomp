@@ -10,7 +10,6 @@ target_sources(${PROJECT_NAME}
         BrnDirectorModuleDebugPrinter.cpp
         BrnDirectorModuleIO.cpp
         BrnDirectorModuleIOInputBuffer.cpp
-        BrnDirectorModuleIOInputBuffer_embed_check.cpp
         BrnDirectorModuleIOOutputBuffer.cpp
         BrnDirectorModuleIOSceneQuery.cpp
 

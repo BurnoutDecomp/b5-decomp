@@ -201,7 +201,6 @@ namespace CgsResource
 // -- BeginDefragment, DoFinalAllocations and AddAddressedAllocRequest.
 // ===========================================================================
 
-
 namespace CgsResource
 {
     // -------- AddAddressedAllocRequest --------
@@ -248,12 +247,6 @@ namespace CgsResource
         muRelocationCount     = 0;
         muNumLinearHeapNodes  = mpPool->GenerateLinearHeap(miCurrentMemType, mpLinearHeapNodes,
                                                            static_cast<u16>(muMaxLinearHeapNodes));
-        // FLAG PC-platform leaf: ARTIST GenerateLinearHeap (828ECD18) clears
-        // look-ahead cache lines with dcbz128. Both original planners include
-        // the one-past-last record in their scan. Make that zero-size free
-        // guard explicit on the host, including short heaps and reused arrays.
-        // PoolModule reserves eight extra native records beyond the capacity.
-        mpLinearHeapNodes[muNumLinearHeapNodes] = LinearHeapNode{};
         if (muNumLinearHeapNodes <= 1)
         {
             return true;   // a single node is either an empty or an unfragmented heap

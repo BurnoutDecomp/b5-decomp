@@ -1,6 +1,4 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
-#include "pc/debug/ComponentActivation.h"
-
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"        // GetUI().GetXManager(), SafeStringCat
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"       // DebugManager::ThreadSafeAquire/RegisterComponent
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"// DebugInterface (RAII manager accessor)
@@ -340,7 +338,6 @@ namespace CgsDev
     {
         DebugComponent* lpComponent = static_cast<DebugComponent*>(lpUserData);
         DebugManager* lpManager = DebugManager::GetInstance();
-        CgsPC::Debug::ComponentMenuRequest lMenuRequest;
         lpManager->ActivateComponent(lpComponent);
 
         char lacPath[256];

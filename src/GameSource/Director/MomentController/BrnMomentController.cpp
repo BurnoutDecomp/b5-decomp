@@ -294,19 +294,7 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
     // which moments exist. Behind BRN_CRASHCAM_DIAG (the crash-camera gate, default off) since
     // 2026-09-24 (crash-parity diag hygiene): it used to print whenever a log existed.
     {
-        static const bool sbMomentDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
         static bool sbaLoggedType[Moment::E_MOMENT_COUNT] = { false };
-        if (sbMomentDiag && leMomentType >= 0 && leMomentType < Moment::E_MOMENT_COUNT &&
-            !sbaLoggedType[leMomentType] && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbaLoggedType[leMomentType] = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] [jump-ladder] MomentController::NewMoment allocated type="
-                << static_cast<s32>(leMomentType)
-                << " paramID=" << static_cast<s32>(leMomentParamID)
-                << " allocated=" << (lrMomentHandleInOut.IsAllocated() ? 1 : 0)
-                << "\n";
-        }
     }
 
     return true;

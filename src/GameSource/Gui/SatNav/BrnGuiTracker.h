@@ -251,17 +251,6 @@ namespace BrnGui
         // route-receive state. Called by RecEvent's 233 arm.
         void RegenerateRouteData();
 
-        // Original shape `void Update(CgsGui::CgsGuiModuleIO::OutputBuffer*)`, called
-        // once per GuiModule::Update right after ColourCalibrationScreen::Update. While a route
-        // leg is still owed (mbRouteDataPending) it asks for the next one: a CalculateRoute (GUI
-        // out 494) from tracker record [miNumRouteInfoReceived] to the record after it, stamped
-        // with that leg number, then clears the pending flag until RecEvent re-arms it.
-        // FLAG PC-ABI adapter (the parameter only): the PC GUI module has no live
-        // CgsGuiModuleIO::OutputBuffer; its stand-in for that buffer's mOutEvents member is
-        // GuiModule::mGuiOutQueue, handed here directly as ColourCalibrationScreen::Update is.
-        // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
-        void Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents);
-
         // Inlined by EventInfoComponent::UpdateDestinationText, ARTIST0x82412F78.
         s32 GetCurrentlyTrackedIndex() const { return miCurrentlyTrackedIndex; }
         const BrnGameState::LandmarkIndex* GetActivelyTrackedLandmarks(); // ARTIST 0x824F4358

@@ -112,14 +112,6 @@ namespace CgsResource
                 static_cast<uintptr_t>(*reinterpret_cast<const u32*>(   // serialised blob: mppRenderables[i]
                     lTable + 4u * luRenderable)));
 
-            // [FLAG PC boot gate] The console always has every dependency bundle resident, so
-            // this slot is never null there. On this build a cross-bundle renderable import
-            // can still be unresolved, and Pool::ResolveImportForEntry writes a NULL for it;
-            // the console's unguarded read would be an access violation here. Skip, do not
-            // assert -- the pool already logs the unresolved id.
-            if (lpRenderable == 0)
-                continue;
-
             const u32 luNumMeshes = lpRenderable->mu16NumMeshes;
             for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
             {
@@ -127,12 +119,6 @@ namespace CgsResource
                 if (lpMesh == 0)
                     continue;
 
-                // CgsModelResourceType.cpp:261 -- "THIS ASSERT IS WANTED DEAD OR ALIVE."
-                // [FLAG PC boot gate] guarded on the assembly pointer for the same reason
-                // DrawRenderable::Interpret guards it: a mesh whose Material import lives in a
-                // bundle the pool refused keeps a null assembly, and reading GetLength() off
-                // null is an access violation. The assert itself is NOT downgraded.
-                const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
                 if (lpAssembly != 0)
                 {
                     CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),

@@ -163,8 +163,6 @@ void GenericRwacVoice::Update(rw::audio::core::System* apSystem, Voice& arVoice)
                     static int siDiag = -1;
                     if (siDiag < 0)
                     {
-                        const char* lpcEnv = std::getenv("BRN_RWAC_PARAM_DIAG");
-                        siDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
                     }
                     if (siDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
                     {

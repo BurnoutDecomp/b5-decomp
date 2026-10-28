@@ -67,7 +67,7 @@
 //             whole image (grep the tree: nothing else assigns those fields).
 //       So while the park stood, a stunt run could never score a DRIFT or a HANDBRAKE TURN, at
 //       all, ever: both gates compared against a permanent 0.0. MEASURED, not argued --
-//       scratchugtestuns\stunt_run_lifecycle60906_094030 (pre-fix): 80 sampled
+//       scratchugtestuns\stunt_run_lifecycle60906_094030 (pre-fix): 80 sampled
 //       [stunt] feed lines, every one `drift=0.000000 hb=0.000000 mask=0`, and ZERO
 //       [stunt] award lines across a full 120 s stunt run driven into handbrake spins and
 //       sustained full-lock drifts on purpose.
@@ -76,17 +76,7 @@
 //       has no drain -- if you are here about event 120, nothing changed.
 //
 
-// THE CONSOLE'S OWN ASSERTS ARE KEPT AS ASSERTS, with one exception, named. The
-// "Player car stuck in world. Resetting." tripwire at :7269 fires on a PC-only precondition (the
-// stuck-in-collision test chain that sets mbPlayerCarStuckInCollision is
-// DoPlayerStuckLineTests, still gated, so the flag's producer is not the console's), and it is a
-// PER-FRAME assert inside a per-frame publish, so it is degraded to a log-once
-// [FLAG PC bring-up] gate. The other three asserts
-// (:7251 null check, :7286 null state, :7294 IsValid steering) are cheap and are kept.
-// =================================================================================================
-
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
-#include "pc/input/EngineFeedback.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"          // [teleport] the reset queue
@@ -171,19 +161,9 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 
         if (lbPlayerStuck)
         {
-            // [FLAG PC bring-up] the console fires a full assert here (BrnVehicleManager.cpp:7269),
-            // streaming the car's transform into the message. Degraded to a log-once: its
-            // precondition (mbPlayerCarStuckInCollision) is produced by DoPlayerStuckLineTests,
-            // which is still a conductor gate on this build, so a per-frame dialog here would be
-            // reporting the absence of a producer rather than a stuck car.
-            // DELETE-WHEN the player-stuck traction-line pair lands.
-            static bool sbLoggedPlayerStuck = false;
             if (!sbLoggedPlayerStuck)
             {
                 sbLoggedPlayerStuck = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] WriteOutVehicleStats: player car stuck in world "
-                       "(BrnVehicleManager.cpp:7269 assert degraded to log-once)\n";
             }
         }
 
@@ -199,13 +179,8 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 
         if (lbIsLocalPlayer)
         {
-            // FLAG PC-platform leaf: bind the limiter sidecar to the actual
-            // local player, without adding fields to the recovered snapshot.
-            CgsInput::AdaptiveTriggers::EngineFeedback::BindPlayer(
-                reinterpret_cast<std::uintptr_t>(&lpRaceCar->mEngine), maRaceCarEntityIDs[liRaceCar].muValue);
             RaceCarState* lpPlayerRaceCarState = lpOutputInterface->GetRaceCarState(liRaceCar);
             CGS_ASSERT(lpPlayerRaceCarState != 0, "lpPlayerRaceCarState != NULL");
-
 
             // 0x8263F764..0x8263F774. THE PARK IS RETIRED (stunt lane, 2026-09-06) -- see the
             // banner above. The callee's argument types are now the committed ones, so this is the
@@ -216,62 +191,6 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
             mStuntOffencesManager.OutputStuntsInProgress(lpPlayerRaceCarState,
                                                          lpOutputInterface->GetGameEventQueue());
 
-            // [FLAG PC witness] [stunt] THE PUBLISH RUNG. NOT IN THE X360 BINARY. Opt-in behind
-            // BRN_STUNT_DIAG, budgeted (see below) -- this is a per-frame site, so an unbounded
-            // line here is exactly the 128 MB flood the harness aborts on. It prints the six
-            // in-progress stunt scalars AS THE SCORER READS THEM (RaceCarState, not the manager's
-            // own copy), because that is where the feed was severed:
-            // StuntModeScoring::UpdateDriftStunts @0x8232CAE0 gates on mfInProgressDriftTime > 1.0
-            // and UpdateDrivingStunts @0x8232CD70 on mfInProgressHandbreakTurnAngle >= 160.0, and
-            // both fields have exactly one writer -- the OutputStuntsInProgress call above.
-            //
-            // ⛔ IT MUST SIT *AFTER* THAT CALL, AND THAT IS NOT CODE-STYLE TIDINESS. The first
-            // version read the state BEFORE the publish and reported `mask=0` on a run whose
-            // scorer awarded twelve HANDBRAKE_TURNs from these very fields (20260906_115233):
-            // VehicleOutputInterface::UpdateRaceCarState, three statements up, REBUILDS this
-            // record from the physics car every frame, so between it and the publish the six
-            // fields are always the wipe value. Read a published field after its publisher.
-            // DELETE-WHEN the stunt-run scoring feeds have a standing regression case that does
-            // not need the log to see them.
-            {
-                static const bool sbStuntDiag = (getenv("BRN_STUNT_DIAG") != 0);
-                static s32        siFeedCalls  = 0;
-                static s32        siZeroLines  = 0;   // periodic "still nothing" heartbeat
-                static s32        siLiveLines  = 0;   // frames the feed actually carries something
-                // Period 300 x 60 lines == 18,000 player publishes, i.e. the whole of a 235 s run.
-                // At 60 x 20 the heartbeat ran out at IN_PROGRESS (run 20260906_113310, log line
-                // 5294 of 44,026) and said nothing about the event it was there to watch.
-                const s32         KI_FEED_SAMPLE_PERIOD = 300;
-                const s32         KI_ZERO_LINE_MAX      = 60;
-                const s32         KI_LIVE_LINE_MAX      = 60;
-                // TWO budgets, and the split is the point: a purely PERIODIC sample answers "is the
-                // feed dead?" only by luck -- the first version of this rung ran its 80-line budget
-                // out at log line 18310 of run 20260906_100601, exactly 400 lines before the first
-                // drift, and reported all-zeros on a build whose scorer awarded 200 DRIFTs. So the
-                // heartbeat (zeros, every 60th publish, 20 lines) proves the rung is armed, and a
-                // SEPARATE budget prints the frames that carry a value, which cannot be missed.
-                const bool lbFeedLive =
-                    lpPlayerRaceCarState != 0
-                    && (lpPlayerRaceCarState->muStuntActionInProgress != 0u
-                        || lpPlayerRaceCarState->mfInProgressDriftTime != 0.0f
-                        || lpPlayerRaceCarState->mfInProgressHandbreakTurnAngle != 0.0f);
-                const bool lbHeartbeat = ((siFeedCalls % KI_FEED_SAMPLE_PERIOD) == 0);
-                ++siFeedCalls;
-                if (sbStuntDiag && lpPlayerRaceCarState != 0 && CgsDev::Log::gpDebugPrint != 0
-                    && ((lbFeedLive && siLiveLines < KI_LIVE_LINE_MAX)
-                        || (!lbFeedLive && lbHeartbeat && siZeroLines < KI_ZERO_LINE_MAX)))
-                {
-                    if (lbFeedLive) { ++siLiveLines; } else { ++siZeroLines; }
-                    *CgsDev::Log::gpDebugPrint
-                        << "[stunt] feed drift=" << lpPlayerRaceCarState->mfInProgressDriftTime
-                        << " dist=" << lpPlayerRaceCarState->mfInProgressDriftDistance
-                        << " hb=" << lpPlayerRaceCarState->mfInProgressHandbreakTurnAngle
-                        << " roll=" << lpPlayerRaceCarState->mfInProgressBarrelRollAngle
-                        << " spin=" << lpPlayerRaceCarState->mfInProgressAirSpinAngle
-                        << " mask=" << static_cast<s32>(lpPlayerRaceCarState->muStuntActionInProgress)
-                        << "\n";
-                }
-            }
         }
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG, one line per race-car slot,
@@ -285,21 +204,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         // if muValue is non-zero here the break is downstream of SetEntityID; if it is 0 the
         // break is in the create path (ProcessCreateEvents' luEntityWord).
         {
-            static const bool sbIdDiag = (getenv("BRN_AI_SOUND_DIAG") != 0);
             static bool sabIdSeen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { false };
-            if (sbIdDiag && !sabIdSeen[liRaceCar] && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sabIdSeen[liRaceCar] = true;
-                const CgsSceneManager::EntityId lId(maRaceCarEntityIDs[liRaceCar].muValue);
-                *CgsDev::Log::gpDebugPrint
-                    << "[racecar-id] slot " << liRaceCar
-                    << " entityWord " << CgsDev::E_PRINTMODE_HEXONCE
-                    << static_cast<u32>(maRaceCarEntityIDs[liRaceCar].muValue)
-                    << " owner " << static_cast<s32>(lId.GetOwner())
-                    << " entityIndex " << static_cast<s32>(lId.GetEntityIndex())
-                    << " isPlayer " << (lbIsLocalPlayer ? 1 : 0)
-                    << "\n";
-            }
         }
         lpOutputInterface->SetEntityID(liRaceCar, maRaceCarEntityIDs[liRaceCar]);
         lpOutputInterface->SetRaceCarHidden(liRaceCar, IsRaceCarHidden(liRaceCar));

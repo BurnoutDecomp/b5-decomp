@@ -3,7 +3,6 @@ target_sources(${PROJECT_NAME}
         BaseEventQueue_DirtyTrickEvent_GetEvent.cpp
         BaseEventQueue_RoadRulesDownloadEvent_AppendAddEvent.cpp
         BrnNetworkModuleGameStateIOInterfaces.cpp
-        BrnNetworkModuleGameStateIOInterfaces_embed_check.cpp
         BrnNetworkModuleInGamePlayerStatusInterface.cpp
         BrnNetworkModuleStatsIOInterface.cpp
         BrnNetworkOutGameParamsChanged.cpp

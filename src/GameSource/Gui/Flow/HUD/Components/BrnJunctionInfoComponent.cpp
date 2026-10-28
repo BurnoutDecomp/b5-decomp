@@ -280,23 +280,6 @@ namespace BrnGui
                 SetEventNameText();
                 TransitionInMainClip();
 
-                // [FLAG PC diag 2026-08-27, NOT in the X360 binary] One-shot witness that the
-                // panel actually ran its transition-in with these inputs -- the S4 audit's gap:
-                // without this line, "the panel got the event" and "the event never arrived"
-                // are both silence in the log. BRN_PROP_DIAG-gated, 8 lines per run.
-                static s32 siPanelDiagLeft = 8;
-                if ( siPanelDiagLeft > 0 && getenv("BRN_PROP_DIAG") != 0 &&
-                     CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siPanelDiagLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[junction-panel] transin: event " << mJunctionInfo.miEventID
-                        << " mode " << static_cast<s32>(mJunctionInfo.meGameModeType)
-                        << " icon '" << lpIconFrameName
-                        << "' medal " << static_cast<s32>(mJunctionInfo.mi8MedalAchieved)
-                        << " canEnter " << static_cast<s32>(mJunctionInfo.mbCanEnterEvent)
-                        << " startHint " << (mbShowingStartHint ? 1 : 0) << "\n";
-                }
             }
         }
         else if (mbInJunction)

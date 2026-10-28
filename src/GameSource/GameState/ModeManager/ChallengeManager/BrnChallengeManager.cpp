@@ -54,7 +54,6 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface::SetPlayerInFreeburnChallenge
 #include "GameSource/Network/BrnNetworkModuleIO.h"                // BrnNetworkModuleIO::E_CHALLENGE_EVENT_* (values 0..3)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"      // CgsDev::StrStream (runtime-value assert message)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"     // [net] fburn status witness (PC harness)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<8> (case-6 rank scratch)
 #include "SharedClasses/DataLists/VehicleList.h"                 // BrnResource::VehicleList::GetVehicleIndex / GetVehicleData
 #include "SharedClasses/DataLists/VehicleListEntry.h"            // BrnResource::VehicleListEntry::GetCarType
@@ -209,16 +208,6 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
     // ⛔ NO SIDE EFFECTS: prints the two back-pointers' non-nullness and nothing else.
     // DELETE-WHEN the freeburn bring-up is done.
     {
-        static const bool sbFburnDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-        if (sbFburnDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[fburn] ChallengeManager::Construct DONE"
-                << " modeMgr "    << (mpModeManager != 0 ? 1 : 0)
-                << " gameState "  << (mpGameStateModule != 0 ? 1 : 0)
-                << " roadRules "  << (mpRoadRulesManager != 0 ? 1 : 0)
-                << " triggerQry " << (mpTriggerQueryManager != 0 ? 1 : 0) << "\n";
-        }
     }
 }
 
@@ -583,7 +572,6 @@ void ChallengeManager::_AssertLayout()
 // EFreeburnSkill operator++ (which reproduces the inlined h:113 count assert).
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -748,7 +736,6 @@ bool ChallengeManager::UpdateLocationOKStatusChange(bool lbWasLocationOk, bool l
 //   liNumPlayers / lbIsOnline. Bodying it against the 5-param decl would drop or fabricate
 //   that logic; the header cannot be edited, so the function is skipped.
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -925,7 +912,6 @@ namespace BrnGameState
 // player loop drives the committed EActiveRaceCarIndex operator++ (its own count assert).
 // ============================================================================
 
-
 namespace BrnGameState
 {
     // ------------------------------------------------------------------------
@@ -1039,7 +1025,6 @@ namespace BrnGameState
 // The manager's own state is reached exclusively through named members. All offsets quoted in
 // comments are X360-asm-attested (see the frozen header BrnChallengeManager.h).
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -1157,15 +1142,6 @@ bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChall
     // ⛔ NO SIDE EFFECTS: re-reads the already-cached list pointer and the histogram just built.
     // DELETE-WHEN the freeburn bring-up is done.
     {
-        static const bool sbFburnDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-        if (sbFburnDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[fburn] ChallengeManager::Prepare DONE challenges "
-                << mpFreeburnChallengeList->GetChallengeCount()
-                << " onePlayer " << maChallengePlayerCounts[0]
-                << " twoPlayer " << maChallengePlayerCounts[1] << "\n";
-        }
     }
 
     return true;
@@ -1204,7 +1180,6 @@ void ChallengeManager::UnHackAllChallenges()
 //   CheckForOnlineChallengeUnlocks  @ 0x82333100
 //   OnProfileLoaded                 @ 0x82334B00
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -1380,7 +1355,6 @@ void ChallengeManager::OnProfileLoaded()
 // not edit the header, so the function cannot be bodied faithfully here (see funcs_blocked).
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -1490,7 +1464,6 @@ void ChallengeManager::UpdateBurnouts(
 //   the wave report for the exact field layout the keystone needs to add.
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -1590,7 +1563,6 @@ void ChallengeManager::UpdateFreeburnSkillsThisFrame(
 // only ever posts the empty id-154 end-not-active action, so it IS bodiable here.
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -1668,7 +1640,6 @@ void ChallengeManager::CancelFreeburnChallenge(TGameActionQueue* lpActionQueue)
 //   itself; RemoteEndChallenge only ever posts the empty id-154 end-not-active action. Both are
 //   therefore bodiable here.
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -1797,7 +1768,6 @@ void ChallengeManager::Disconnected(TGameActionQueue* lpActionQueue)
 //     Network/Skillz classes). Cannot call it without editing that header (out of scope).
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -1885,7 +1855,6 @@ void ChallengeManager::NetworkPlayerAdded(BrnNetwork::NetworkPlayerID lPlayerID,
 // (Both are called by name from UpdateRemotePlayerSuccessStatus below / declared in the
 // frozen header, so this file compiles against the declarations alone.)
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -1994,7 +1963,6 @@ void ChallengeManager::UpdateRemotePlayerSuccessStatus(
 // range-assert scaffolding); per spec pitfall 5 the committed container methods are called
 // directly and the assert/StrStream machinery is intentionally not reproduced (benign).
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -2236,8 +2204,6 @@ void ChallengeManager::HandleWorldStunt(StuntElementType leStuntElementType, Cgs
                 maBillboardsCollected.Append(lStuntID);
             }
 
-            // [FLAG PC witness] opt-in BRN_COLLECT_DIAG, first 16 only. Read-only.
-            static const bool sbCollectDiag = (getenv("BRN_COLLECT_DIAG") != 0);
             static s32        siCollectDiagLines = 0;
             if (sbCollectDiag && siCollectDiagLines < 16 && CgsDev::Log::gpDebugPrint != 0)
             {
@@ -2277,7 +2243,6 @@ void ChallengeManager::HandleWorldStunt(StuntElementType leStuntElementType, Cgs
 // committed DeveloperChallengeManager pattern). The active-race-car loops are reconstructed as
 // plain counted loops over the raw X360 register counter (the inlined EActiveRaceCarIndex
 // operator++ range guard is a non-behavioural debug assert).
-
 
 namespace BrnGameState
 {
@@ -2669,7 +2634,6 @@ void ChallengeManager::UpdateRemoteRequests(TGameActionQueue* lpActionQueue,
 // funcs_blocked report so a keystone follow-up can add the struct and unblock them.
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -2905,7 +2869,6 @@ void ChallengeManager::UpdateActionSuccess(const BrnResource::ChallengeListEntry
 //   be edited here (see funcs_blocked).
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -2958,10 +2921,6 @@ void ChallengeManager::PreWorldUpdate(
     static s32 siWitnessedStatus = E_CHALLENGE_MANAGER_STATUS_NONE;
     if (static_cast<s32>(meChallengeManagerStatus) != siWitnessedStatus)
     {
-        BrnNetHarnessPC::Witness("fburn", "status %d -> %d id=%llu host=%d frame=%d",
-                                 siWitnessedStatus, static_cast<s32>(meChallengeManagerStatus),
-                                 static_cast<unsigned long long>(GetCurrentFreeburnChallengeID()),
-                                 lbIsOnline ? 1 : 0, liFramesSinceNetworkStart);
         siWitnessedStatus = static_cast<s32>(meChallengeManagerStatus);
     }
 }
@@ -3113,7 +3072,6 @@ void ChallengeManager::UpdateRunning(
 // r10=lbLargerScoresAreBetter). Every callsite below passes the seven attested register
 // values 1:1 (r6 always carries this caller's lbIsOnline; r7 is the GetTargetValue index).
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -3606,7 +3564,6 @@ namespace BrnGameState
 // E_CHALLENGE_EVENT_ENDED(4) / E_CHALLENGE_EVENT_RESULTS_FINISHED(5).
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -3857,7 +3814,6 @@ void ChallengeManager::UpdateResults(f32 lfTimeStep, TGameActionQueue* lpActionQ
 //    `leEnumIndex <= E_FREEBURN_SKILL_COUNT` asserts are the inlined enum operator++ guards
 //    (BurnoutConstants.h:39 / BrnChallengeManager.h:113) -- the committed operators are used.
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -4386,7 +4342,6 @@ bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQu
 // Construct/NetworkPlayerAdded shape (BrnChallengeManager.cpp / _wB_09.cpp).
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -4574,7 +4529,6 @@ void ChallengeManager::SetRemotePlayersChallengeCompleted(s32 liChallengeIndex)
 // SOURCE-OF-TRUTH: the X360 asm is authoritative for every store/branch/early-out. No header
 // is edited by this file; every foreign field is reached through its committed accessor.
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -4814,7 +4768,6 @@ bool ChallengeManager::IsSkillScoreCurrentlySuccessful(f32 lfScore,
 //   * `vmsum3fp128 v0, v0, v0` == rw::math::vpu::MagnitudeSquared (xyz lanes).
 //   * the `fsel` pairs are the two-step max() chain over the box dimensions.
 // ============================================================================
-
 
 namespace BrnGameState
 {
@@ -5257,7 +5210,6 @@ void ChallengeManager::UpdateLeaptCars(
 // status interface.
 // ============================================================================
 
-
 namespace BrnGameState
 {
 
@@ -5417,7 +5369,6 @@ void ChallengeManager::PostWorldUpdate(
 // CGS_ASSERT; the ones that stream runtime values use the committed local-StrStream idiom
 // (X360 file/line noted in a comment, __FILE__/__LINE__ used by the committed macro machinery).
 // ============================================================================
-
 
 namespace BrnGameState
 {

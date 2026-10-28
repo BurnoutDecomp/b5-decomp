@@ -91,28 +91,6 @@ namespace
     // [DIAG] NOT IN THE console BINARY. The jump moment's tick witness, behind BRN_CRASHCAM_DIAG (the moment diag
     // gate, default off): the first SEARCHING tick, the 300th, and the first that sees the jump action flag -- each
     // with the three gates, so a log shows the moment allocated, ticked and (on retail) shut. Reads only.
-    void JumpMomentTickDiag(const GameState& lrGameState, const MomentSharedInfo& lrSharedInfo)
-    {
-        static const bool sbDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
-        static s32 siTicks = 0;
-        static bool sbSawJump = false;
-        if (!sbDiag)
-        {
-            return;
-        }
-        ++siTicks;
-        const bool lbJump = (lrGameState.miThisFramesActionFlags & KI_ACTION_FLAG_JUMP) != 0;
-        const bool lbFirstJump = lbJump && !sbSawJump;
-        sbSawJump = sbSawJump || lbJump;
-        if (siTicks == 1 || siTicks == 300 || lbFirstJump)
-        {
-            char lacLine[128];
-            snprintf(lacLine, sizeof(lacLine),
-                     "[pjump] SEARCHING tick %d: jumpFlag=%d canUseSlomo=%d allowJumpMoment=%d\n", siTicks,
-                     lbJump ? 1 : 0, lrGameState.mbCanUseSlomo ? 1 : 0, lrSharedInfo.mbAllowJumpMoment ? 1 : 0);
-            CgsDev::Log::WriteToLog(lacLine);
-        }
-    }
 }
 
 // ============================================================================
@@ -478,7 +456,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
         }
 
         const GameState& lrGameState = *lrSharedInfo.mpGameState;
-        JumpMomentTickDiag(lrGameState, lrSharedInfo);   // [DIAG] NOT IN THE console BINARY (BRN_CRASHCAM_DIAG)
+   // [DIAG] NOT IN THE console BINARY (BRN_CRASHCAM_DIAG)
         if ((lrGameState.miThisFramesActionFlags & KI_ACTION_FLAG_JUMP) != 0
             && lrGameState.mbCanUseSlomo
             && lrSharedInfo.mbAllowJumpMoment)

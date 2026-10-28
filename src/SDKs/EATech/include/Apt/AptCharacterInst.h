@@ -75,11 +75,6 @@ struct AptCharacterInst
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptCharacterInst, mpVTable_unused) == 0x00, "x64: vptr slot (ctors stamp off_140C17D88 here)");
-        static_assert(offsetof(AptCharacterInst, mpRenderItem)    == 0x08, "x64: GetRenderItem 'mov rax,[rcx+8]' @0x140839860");
-        static_assert(offsetof(AptCharacterInst, mTypeFlags)      == 0x10, "x64: AptCIH::IsSpriteInst reads [charInst+10h] & 0x3F @0x14083B370");
-        static_assert(offsetof(AptCharacterInst, mpProperties)    == 0x18, "x64: DestroyGCPointers frees [this+18h] @0x1408360C0");
-        static_assert(sizeof(AptCharacterInst) == 0x20, "x64: factory Allocate(0x20) for leaf insts @0x140835410");
     }
 
     explicit AptCharacterInst(AptCharacter* pCharacter);   // @0x81431C

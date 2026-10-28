@@ -671,20 +671,6 @@ void RaceCarStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreScene*
 // (mfTimeSinceLastLoad > KF threshold), sweep slots 7..0 looking for a desired id to action.
 void RaceCarStreamer::UpdateDesiredCars()
 {
-    // FLAG PC-platform leaf: the host has no car-audio bundle completion response.
-    // Use the same four-resource readiness as IsDesiredRaceCarLoadedForCarSelect;
-    // the unrelated audio wait must not block every junkyard prefetch indefinitely.
-    // Body graphics, wheels, physics and attributes must all be loaded.
-    for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
-    {
-        CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-
-        if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0
-            && !IsFlagSet( liActiveRaceCar, E_LOADFLAG_ALL_EXCEPT_AUDIO ) )
-        {
-            return;
-        }
-    }
 
     // Pick the highest-priority (lowest non-negative value) pending desired slot.
     s32 liHighestPrioritySlot = -1;

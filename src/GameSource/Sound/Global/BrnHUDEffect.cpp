@@ -13,7 +13,6 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"      // GetPresentationSpliceBank
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
-#include "GameSource/Sound/Global/BrnHudSoundDiag.h"            // [DIAG] NOT IN THE X360 BINARY
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot + operator-(Vec,Vec) + operator*(Vec,float)
 #include <cmath>                              // std::sqrt
 
@@ -253,7 +252,6 @@ f64 HUDEffect::GetSlipstreamAmount( Vector3 lCarInFrontVelocity,
 
     return static_cast<f64>((lfDistanceFactor * gfSlipstreamScale) * lfSpeedFactor);
 }
-
 
 // =============================================================================
 // THE GUI-STING LANE -- Attach / Detach / ProcessUpdate / Notify and the three

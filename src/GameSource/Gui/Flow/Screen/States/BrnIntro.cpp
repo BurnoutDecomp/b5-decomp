@@ -307,13 +307,6 @@ namespace BrnGui
         // uses -- until the GuiCache TU grows the members.
         // ================================================================================
 
-        // GuiCache +0x4B38 is the signed-in Xbox `dwUserIndex`: 24 image-wide readers, of
-        // which 9 feed it straight into XUser*/XShow* as their dwUserIndex argument
-        // (OnlinePlay::ShowFriendsMenu, OnlineQuickCustomCreate::Update,
-        // CrashNavEnterOnlineX360::Update, CrashNavSettings::HandleControllerInput);
-        // GuiCache::Construct and GuiCache::RecEvent are the writers. Intro compares it
-        // against -1, i.e. "is anybody signed in".
-        // FLAG PC-platform leaf: PC has no Xbox sign-in; the local player is always present.
         bool CacheIsUserSignedIn(const GuiCache* lpCache) { return lpCache != 0; }
 
     }

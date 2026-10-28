@@ -3,9 +3,6 @@
 #include "SDKs/EATech/eajobs/job.h"
 #include "GameShared/Jobs/MovieTexture/MovieTexture.h"
 #include "rw/rwcore_structs.h"
-#include "pc/gcm/renderengine/texture.h"
-#include "pc/gcm/renderengine/renderstates.h"
-
 namespace BrnGui { class MovieManager; }
 namespace CgsGraphics
 {

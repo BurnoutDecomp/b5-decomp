@@ -1,10 +1,6 @@
 #include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"
 #include "types.hpp"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Add
-#include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
-#include "pc/gcm/renderengine/reflections/SceneSettings.h"
-#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGraphics::EnvironmentMap::Construct @ 0x827B40D0
 //   BrnGraphics::EnvironmentMap::Prepare   @ 0x827B4188
@@ -212,12 +208,6 @@ namespace BrnGraphics
     {
         mCameraPosition = lCameraPosition;
 
-        // FLAG PC-platform leaf: extend the actual capture/query frusta with the
-        // reflection cutoff. Recompute from the original far plane so live edits
-        // back to zero restore the original range on all six faces.
-        const f32 lfFarClipPlane = CgsPC::Reflections::CaptureDistance(
-            renderengine::ExtendEnvironmentMapDrawDistancePC( KF_ENVMAP_FAR_CLIP_PLANE ));
-
         for (u32 luEnvMapFace = 0; luEnvMapFace < E_FACE_NUM; ++luEnvMapFace)
         {
             const rw::math::vpu::Vector3 lTargetPosition =
@@ -228,17 +218,6 @@ namespace BrnGraphics
                 KAV_ENV_MAP_UP_DIRECTIONS[luEnvMapFace],
                 lTargetPosition);
 
-            // FLAG PC-platform leaf: publish D3D depth and native cube orientation.
-            // The original ends on SetPerspectiveProjectionMatrixRightHanded
-            // @0x827EC698. D3D9 needs a forward-facing [0,1] projection plus clip-X
-            // compensation for LookAt's original cross(dir,up) horizontal basis.
-            // Ordinary projection alone fixed the antipodal faces but left each
-            // face mirrored, producing discontinuities at cube boundaries.
-            // Both sky far-clip
-            // rebuilds reapply it, and BeginRenderEnvironmentMapFace uses the
-            // original CULL FRONT state for the resulting screen winding.
-            maEnvMapCameras[luEnvMapFace].SetFarClipPlane(lfFarClipPlane);
-            renderengine::SetEnvironmentMapProjectionPC(maEnvMapCameras[luEnvMapFace]);
         }
     }
 }

@@ -168,15 +168,6 @@ namespace
     // that does not start with '0', read once per process), capped. DELETE-WHEN-STABLE. The live witness of the tyre
     // smoke (FX-CRASHVFX C1): one line per HandleSmokeLayer call that spawned (48 lines), one per wheel the crash gate
     // silenced (8 lines), and a running per-car tally (below). Reads only.
-    bool WheelSmokeDiagArmed()
-    {
-        static const bool sbArmed = []()
-        {
-            const char* const lpcValue = std::getenv("BRN_WHEEL_SMOKE_DIAG");
-            return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
-        }();
-        return sbArmed;
-    }
 
     // [DIAG] the running tally, per race car (CarState::muRaceCarIndex, 0..7): particles spawned and wheel-frames the
     // crash gate silenced, cumulative, at most one line per second of effects time (and again when the time runs
@@ -318,25 +309,6 @@ void WheelStateMachine::HandleSmokeLayer(u32 luLayer, CarState& lCarState,
 
     // [DIAG] BRN_WHEEL_SMOKE_DIAG -- NOT IN THE X360 BINARY, default OFF, 48 detail lines + the tally.
     // DELETE-WHEN-STABLE.
-    if (WheelSmokeDiagArmed())
-    {
-        const u32 luCar = lCarState.muRaceCarIndex & 7u;
-        Tally().mauSpawned[luCar] += (lfNumToSpawn < 4.0e9f) ? static_cast<u32>(lfNumToSpawn) : 0xFFFFFFFFu;
-        static u32 suLines = 0;
-        if (suLines < 48u)
-        {
-            ++suLines;
-            char lacLine[256];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[wheel-smoke] t=%.3f car %u wheel %u layer %u type %u spawned %d skid=%.3f travel=%.4f "
-                          "perMetre=%.3f owed=%.3f at (%.1f, %.1f, %.1f)\n",
-                          lfCurrentTime, lCarState.muRaceCarIndex, mWheelIndex, luLayer, leParticleType,
-                          static_cast<s32>(lfNumToSpawn), lfSkidFactor, lfMaxWheelTravel, lfParticlesPerMetre,
-                          lrfAccumulator, lWheelPos.x, lWheelPos.y, lWheelPos.z);
-            CgsDev::Log::WriteToLog(lacLine);
-        }
-        WheelSmokeTallyLine(lfCurrentTime);
-    }
 }
 
 // =============================================================================
@@ -361,23 +333,6 @@ void WheelStateMachine::Update(CarState& lCarState,
     if ((lEffectHelper.ActiveRaceCar()->GetFlags() & ActiveRaceCarData::eARDFlagIsCrashing) != 0)
     {
         // [DIAG] BRN_WHEEL_SMOKE_DIAG -- NOT IN THE X360 BINARY, default OFF, 8 lines + the tally. DELETE-WHEN-STABLE.
-        if (WheelSmokeDiagArmed())
-        {
-            ++Tally().mauGated[lCarState.muRaceCarIndex & 7u];
-            static u32 suGateLines = 0;
-            if (suGateLines < 8u)
-            {
-                ++suGateLines;
-                char lacLine[160];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[wheel-smoke] t=%.3f car %u crash gate: wheel %u silenced "
-                              "(ActiveRaceCarData::mFlags=0x%04X, eARDFlagIsCrashing)\n",
-                              lCarState.GetTime(), lCarState.muRaceCarIndex, mWheelIndex,
-                              static_cast<u32>(lEffectHelper.ActiveRaceCar()->GetFlags()));
-                CgsDev::Log::WriteToLog(lacLine);
-            }
-            WheelSmokeTallyLine(lCarState.GetTime());
-        }
         return;
     }
 
@@ -457,7 +412,6 @@ void WheelStateMachine::Update(CarState& lCarState,
                          ReadU32(lpVfx, KU_VFX_LAYER1_PARTICLE_TYPE));
     }
 }
-
 
 // =====================================================================================
 // FireNativeParticle  @0x82288C30 (DWARF WheelStateMachine.h:87) -- 129 instructions; ONE tyre-smoke

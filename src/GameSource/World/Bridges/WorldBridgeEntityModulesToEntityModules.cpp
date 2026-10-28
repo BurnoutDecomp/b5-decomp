@@ -14,17 +14,6 @@
 
 namespace
 {
-    // ---- [DIAG] NOT IN THE X360 BINARY. OFF unless BRN_TRAFFIC_DIAG is set. ----------------
-    // Same opt-in switch the traffic partfiles already use
-    // (BrnPhysicalTrafficManager_Remove.cpp:56). This is the runtime witness that the
-    // traffic->trigger hand-off actually reaches the trigger module now that this TU is
-    // mounted: the source's two queue lengths and the destination's, taken just before the
-    // merge. Budgeted, because the bridge runs every frame. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     const s32 KI_TRIGGER_MERGE_WITNESS_BUDGET = 24;
     s32       giTriggerMergeWitnessLinesLeft  = KI_TRIGGER_MERGE_WITNESS_BUDGET;
@@ -106,42 +95,6 @@ void BridgeTrafficToTrigger_PreScene(
     // DELETE-WHEN-STABLE.
     const s32 liSourceAdds    = lpSource->GetAddTriggerEventQueue().GetLength();
     const s32 liSourceRemoves = lpSource->GetRemoveTriggerEventQueue().GetLength();
-    if (TrafficDiagEnabled() &&
-        (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        if (liSourceAdds != 0 || liSourceRemoves != 0)
-        {
-            if (giTriggerMergeWitnessLinesLeft > 0)
-            {
-                --giTriggerMergeWitnessLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T-trigmerge] traffic->trigger PreScene merge: src add=" << liSourceAdds
-                    << " remove=" << liSourceRemoves
-                    << " dest before add="
-                    << lpTriggerManagementInput->GetAddTriggerEventQueue().GetLength()
-                    << " remove="
-                    << lpTriggerManagementInput->GetRemoveTriggerEventQueue().GetLength()
-                    << "\n";
-            }
-        }
-        else
-        {
-            // One-shot, so a run can tell "this bridge never executed" (no line at all, i.e.
-            // this TU is not in the link) apart from "it executed
-            // and the traffic module had nothing queued". The latter is the EXPECTED state until
-            // the traffic pre-scene producer that writes BrnTrafficIO::OutputBuffer_PreScene's
-            // trigger-management interface lands: the non-const writer accessor (X360 0x82710E78)
-            // has no caller in this tree yet.
-            static bool sbLoggedEmptySource = false;
-            if (!sbLoggedEmptySource)
-            {
-                sbLoggedEmptySource = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T-trigmerge] bridge LIVE, traffic source empty (no traffic trigger "
-                       "events queued this frame)\n";
-            }
-        }
-    }
 
     lpTriggerManagementInput->Append(*lpSource);
 }

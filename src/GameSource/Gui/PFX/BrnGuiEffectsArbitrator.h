@@ -77,26 +77,8 @@ namespace BrnGui
         // (then the colour cubes are requested), 229..234 the cubes.
         void ResourceUpdate(CgsGui::ModelIO::InputBuffer* lpGuiModelInputBuffer,
                             const CgsGui::ModelIO::OutputBuffer* lpGuiModelOutputBuffer);
-        // :75 @0x825125C0 -- the GUI events (64 cache, 495..500 hooks), then UpdateHooks.
-        // [FLAG PC bring-up] the console hands its CgsGuiModuleIO::OutputBuffer (AddGuiOutEvent);
-        // the PC GuiModule posts its out-events on the bare 18432-byte queue the game bridge
-        // drains (mGuiOutQueue), so that queue is what arrives here. Same record, same id 501.
-        void EventUpdate(BrnUpdateSet leUpdateSet,
-                         const CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
-                         CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
         // :81 @0x82503060 -- fill the renderer's two FX-events effects frames.
         void GenerateEffectFrameEvents(RendererIO::OutputBuffer* lpRenderOutput);
-        // [FLAG PC bring-up] the same body on the two FX-events frames themselves. The console
-        // reaches them through the renderer output buffer above; on this build that buffer
-        // set is not live (BrnRendererModule::Update never runs with real IO buffers), so
-        // BrnGameModule::DoDispatch hands the arbitrator's external FX-events frames across
-        // directly, beside the world layer's (GetFXEventsEffectsFrameBringUp).
-        // DELETE-WHEN the RendererIO buffers are real on PC.
-        void GenerateEffectFrameEvents(BrnEffectsFrame* lpFrame1, BrnEffectsFrame* lpFrame2);
-        // [FLAG PC bring-up] the GuiCache hand-over GUI event 64 performs on the console; the PC
-        // GuiModule::Update synthesises that event outside the module-input queue, so it calls
-        // this instead. Same store, same one-shot guard as EventUpdate's case 64.
-        void SetGuiCache(GuiCache* lpGuiCache);
 
     private:
         const PFXHook* GetHookFromName(const char* lpcName);          // :87  @0x82502C78

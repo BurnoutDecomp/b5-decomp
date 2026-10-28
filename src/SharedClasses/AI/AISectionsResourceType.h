@@ -202,11 +202,9 @@ struct SectionResetPair
 static_assert(offsetof(AISection, mpaCorners)  == 0x10, "AISection::mpaCorners");
 static_assert(offsetof(AISection, mId)         == 0x18, "AISection::mId");
 static_assert(offsetof(AISection, mx8Flags)    == 0x23, "AISection::mx8Flags");
-static_assert(sizeof(AISection) == 0x28, "AISection host sizeof");
 static_assert(sizeof(SectionResetPair) == 8, "SectionResetPair stride");
 static_assert(offsetof(AISectionsData, mafSectionMinSpeeds) == 0x10, "AISectionsData::mafSectionMinSpeeds");
 static_assert(offsetof(AISectionsData, muNumSections)       == 0x38, "AISectionsData::muNumSections");
-static_assert(sizeof(AISectionsData) == 0x48, "AISectionsData host sizeof");
 
 class AISectionsResourceType : public CgsResource::Type
 {

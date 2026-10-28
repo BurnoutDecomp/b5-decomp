@@ -323,70 +323,6 @@ struct BystanderLookDiag
     f32         mfFovBefore;
 };
 
-static BystanderLookDiag& BrnDiag_BystanderLookState()
-{
-    static BystanderLookDiag sDiag = { getenv("BRN_CRASHCAM_DIAG") != 0, 0, -1, 0u, 0.0f, 0.0f };
-    return sDiag;
-}
-
-static f32 BrnDiag_BystanderDistance(const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
-{
-    const f32 lfX = lrTarget.wAxis.x - lrCamera.mTransform.wAxis.x;
-    const f32 lfY = lrTarget.wAxis.y - lrCamera.mTransform.wAxis.y;
-    const f32 lfZ = lrTarget.wAxis.z - lrCamera.mTransform.wAxis.z;
-    return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
-}
-
-static f32 BrnDiag_BystanderAimDegrees(const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
-{
-    const rw::math::vpu::Vector3& lrForward = lrCamera.mTransform.zAxis;
-    const f32 lfForward = sqrtf(lrForward.x * lrForward.x + lrForward.y * lrForward.y + lrForward.z * lrForward.z);
-    const f32 lfDistance = BrnDiag_BystanderDistance(lrCamera, lrTarget);
-    if (!(lfForward > 0.0f) || !(lfDistance > 0.0f))
-        return -1.0f;
-    f32 lfCos = ((lrTarget.wAxis.x - lrCamera.mTransform.wAxis.x) * lrForward.x
-                 + (lrTarget.wAxis.y - lrCamera.mTransform.wAxis.y) * lrForward.y
-                 + (lrTarget.wAxis.z - lrCamera.mTransform.wAxis.z) * lrForward.z) / (lfForward * lfDistance);
-    lfCos = (lfCos > 1.0f) ? 1.0f : ((lfCos < -1.0f) ? -1.0f : lfCos);
-    return acosf(lfCos) * 57.2957795f;
-}
-
-static void BrnDiag_BystanderLookBefore(const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
-{
-    BystanderLookDiag& lrDiag = BrnDiag_BystanderLookState();
-    if (!lrDiag.mbOn)
-        return;
-    lrDiag.mfAimBefore = BrnDiag_BystanderAimDegrees(lrCamera, lrTarget);
-    lrDiag.mfFovBefore = lrCamera.GetFOV();
-}
-
-static void BrnDiag_BystanderLookAfter(const void* lpBehaviour, const KeyAnimController& lrController,
-                                       const Camera& lrCamera, const rw::math::vpu::Matrix44Affine& lrTarget)
-{
-    BystanderLookDiag& lrDiag = BrnDiag_BystanderLookState();
-    if (!lrDiag.mbOn)
-        return;
-    const ICE::ICETakeData* lpTake = lrController.GetTake().GetData();
-    const s32 liGuid = (lpTake != 0) ? lpTake->miGuid : -1;
-    if (lpBehaviour != lrDiag.mpBehaviour || liGuid != lrDiag.miGuid)
-    {
-        lrDiag.mpBehaviour = lpBehaviour;
-        lrDiag.miGuid      = liGuid;
-        lrDiag.muFrame     = 0u;
-    }
-    const u32 luFrame = lrDiag.muFrame++;
-    if (luFrame >= 4u && (luFrame % 30u) != 0u)
-        return;
-    char lacLine[320];
-    snprintf(lacLine, sizeof(lacLine),
-             "[iceanim] bystander look take %d '%s' frame %u: aim %.2f -> %.2f deg, fov %.4f -> %.4f, "
-             "bystander (%.1f, %.1f, %.1f) at %.1f m\n",
-             liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, lrDiag.mfAimBefore,
-             BrnDiag_BystanderAimDegrees(lrCamera, lrTarget), lrDiag.mfFovBefore, lrCamera.GetFOV(),
-             lrTarget.wAxis.x, lrTarget.wAxis.y, lrTarget.wAxis.z, BrnDiag_BystanderDistance(lrCamera, lrTarget));
-    CgsDev::Log::WriteToLog(lacLine);
-}
-
 // [DIAG] NOT IN THE X360 BINARY. The line budget of the two FX-LASTFIX witnesses below (L3, 2026-09-28): a flat
 // 96-line cap was used up by the junkyard's three CarSelect takes, which re-prepare every few seconds, before a run
 // reached the take its case waits for (fxlastfix_ice_spaces/20260928_072030: 3 x 32 lines, no Takendown line).
@@ -403,29 +339,6 @@ struct DiagTakeBudget
     u32 muGuids;
     u32 muLines;
 };
-
-// Whether one more line of this take fits the budget; counts it when it does.
-static bool BrnDiag_TakeBudgetAllows(DiagTakeBudget& lrBudget, s32 liGuid)
-{
-    if (lrBudget.muLines >= KU_DIAG_LINES_PER_RUN)
-        return false;
-    u32 luSlot = 0u;
-    while (luSlot < lrBudget.muGuids && lrBudget.maiGuid[luSlot] != liGuid)
-        ++luSlot;
-    if (luSlot == lrBudget.muGuids)
-    {
-        if (lrBudget.muGuids >= KU_DIAG_TAKES)
-            return false;
-        lrBudget.maiGuid[luSlot]  = liGuid;
-        lrBudget.mauLines[luSlot] = 0u;
-        ++lrBudget.muGuids;
-    }
-    if (lrBudget.mauLines[luSlot] >= KU_DIAG_LINES_PER_TAKE)
-        return false;
-    ++lrBudget.mauLines[luSlot];
-    ++lrBudget.muLines;
-    return true;
-}
 
 // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The heading space's live witness (FX-LASTFIX): on a take's frames
 // 0..5, how many degrees mHeadingSpaceTransform's forward (its z row) is off the look-at's before and after the SLerp,
@@ -444,71 +357,6 @@ struct HeadingEaseDiag
     f32         mfRemaining;
 };
 
-static HeadingEaseDiag& BrnDiag_HeadingEaseState()
-{
-    static HeadingEaseDiag sDiag = { getenv("BRN_CRASHCAM_DIAG") != 0, 0, -1, 0u, 0u, 0.0f, 0.0f, 0.0f };
-    return sDiag;
-}
-
-static f32 BrnDiag_ForwardDegrees(const rw::math::vpu::Matrix44Affine& lrA, const rw::math::vpu::Matrix44Affine& lrB)
-{
-    const rw::math::vpu::Vector3& lrZA = lrA.zAxis;
-    const rw::math::vpu::Vector3& lrZB = lrB.zAxis;
-    const f32 lfCrossX = lrZA.y * lrZB.z - lrZA.z * lrZB.y;
-    const f32 lfCrossY = lrZA.z * lrZB.x - lrZA.x * lrZB.z;
-    const f32 lfCrossZ = lrZA.x * lrZB.y - lrZA.y * lrZB.x;
-    const f32 lfSin = sqrtf(lfCrossX * lfCrossX + lfCrossY * lfCrossY + lfCrossZ * lfCrossZ);
-    const f32 lfCos = lrZA.x * lrZB.x + lrZA.y * lrZB.y + lrZA.z * lrZB.z;
-    return atan2f(lfSin, lfCos) * 57.2957795f;
-}
-
-static void BrnDiag_HeadingEaseBefore(const rw::math::vpu::Matrix44Affine& lrHeading,
-                                      const rw::math::vpu::Matrix44Affine& lrLookAt)
-{
-    HeadingEaseDiag& lrDiag = BrnDiag_HeadingEaseState();
-    if (lrDiag.mbOn)
-        lrDiag.mfBefore = BrnDiag_ForwardDegrees(lrHeading, lrLookAt);
-}
-
-static void BrnDiag_HeadingEaseAfter(const rw::math::vpu::Matrix44Affine& lrHeading,
-                                     const rw::math::vpu::Matrix44Affine& lrLookAt,
-                                     const rw::math::vpu::Vector3& lrAngleOut)
-{
-    HeadingEaseDiag& lrDiag = BrnDiag_HeadingEaseState();
-    if (!lrDiag.mbOn)
-        return;
-    lrDiag.mfAfter     = BrnDiag_ForwardDegrees(lrHeading, lrLookAt);
-    lrDiag.mfRemaining = lrAngleOut.x * 57.2957795f;
-}
-
-static void BrnDiag_HeadingEaseReport(const void* lpBehaviour, const KeyAnimController& lrController,
-                                      ICE::eICESpace leEyeSpace, ICE::eICESpace leLookSpace)
-{
-    HeadingEaseDiag& lrDiag = BrnDiag_HeadingEaseState();
-    if (!lrDiag.mbOn)
-        return;
-    const ICE::ICETakeData* lpTake = lrController.GetTake().GetData();
-    const s32 liGuid = (lpTake != 0) ? lpTake->miGuid : -1;
-    if (lpBehaviour != lrDiag.mpBehaviour || liGuid != lrDiag.miGuid)
-    {
-        lrDiag.mpBehaviour = lpBehaviour;
-        lrDiag.miGuid      = liGuid;
-        lrDiag.muFrame     = 0u;
-    }
-    const u32 luFrame = lrDiag.muFrame++;
-    static DiagTakeBudget sBudget = {};
-    if (luFrame >= 6u || !BrnDiag_TakeBudgetAllows(sBudget, liGuid))
-        return;
-    ++lrDiag.muLines;
-    char lacLine[256];
-    snprintf(lacLine, sizeof(lacLine),
-             "[iceanim] heading2 ease take %d '%s' frame %u: %.3f -> %.3f deg (slerp remaining %.3f deg), "
-             "eye space %d look space %d\n",
-             liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, lrDiag.mfBefore, lrDiag.mfAfter,
-             lrDiag.mfRemaining, static_cast<s32>(leEyeSpace), static_cast<s32>(leLookSpace));
-    CgsDev::Log::WriteToLog(lacLine);
-}
-
 // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The take's reference spaces (FX-LASTFIX item 1b): on a take's frames
 // 0..5, where the handler the take evaluator reads puts CAR and CAR2 -- metres off the behaviour's primary / secondary
 // vehicle, for the take's copy and for the MainDirector's shared handler (the player / the race car nearest the player)
@@ -522,60 +370,6 @@ struct SpacesDiag
     u32         muFrame;
     u32         muLines;
 };
-
-static f32 BrnDiag_Metres(const rw::math::vpu::Vector3& lrA, const rw::math::vpu::Vector3& lrB)
-{
-    const f32 lfX = lrA.x - lrB.x;
-    const f32 lfY = lrA.y - lrB.y;
-    const f32 lfZ = lrA.z - lrB.z;
-    return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
-}
-
-static f32 BrnDiag_YawDegrees(const rw::math::vpu::Matrix44Affine& lrM)
-{
-    return atan2f(lrM.zAxis.x, lrM.zAxis.z) * 57.2957795f;
-}
-
-static void BrnDiag_SpacesReport(const void* lpBehaviour, const KeyAnimController& lrController,
-                                 ICE::eICESpace leEyeSpace, ICE::eICESpace leLookSpace,
-                                 const ICE::CameraSpaceHandler& lrShared, const ICE::CameraSpaceHandler& lrTake,
-                                 const VehicleInfo& lrPrimary, const VehicleInfo& lrSecondary, bool lbForcedLoose)
-{
-    static SpacesDiag sDiag = { getenv("BRN_CRASHCAM_DIAG") != 0, 0, -1, 0u, 0u };
-    if (!sDiag.mbOn)
-        return;
-    const ICE::ICETakeData* lpTake = lrController.GetTake().GetData();
-    const s32 liGuid = (lpTake != 0) ? lpTake->miGuid : -1;
-    if (lpBehaviour != sDiag.mpBehaviour || liGuid != sDiag.miGuid)
-    {
-        sDiag.mpBehaviour = lpBehaviour;
-        sDiag.miGuid      = liGuid;
-        sDiag.muFrame     = 0u;
-    }
-    const u32 luFrame = sDiag.muFrame++;
-    static DiagTakeBudget sBudget = {};
-    if (luFrame >= 6u || !BrnDiag_TakeBudgetAllows(sBudget, liGuid))
-        return;
-    ++sDiag.muLines;
-    const rw::math::vpu::Vector3& lrPrimaryAt   = lrPrimary.mRaceCarState.mTransform.wAxis;
-    const rw::math::vpu::Vector3& lrSecondaryAt = lrSecondary.mRaceCarState.mTransform.wAxis;
-    char lacLine[400];
-    snprintf(lacLine, sizeof(lacLine),
-             "[iceanim] spaces take %d '%s' frame %u: eye %d look %d | CAR primary id %u: take %.2f m, shared %.2f m"
-             " | CAR2 secondary id %u: take %.2f m, shared %.2f m | HEADING2 yaw take %.2f, shared %.2f, secondary"
-             " %.2f deg | forced loose %d\n",
-             liGuid, (lpTake != 0) ? lpTake->macTakeName : "?", luFrame, static_cast<s32>(leEyeSpace),
-             static_cast<s32>(leLookSpace), lrPrimary.mRaceCarState.mEntityId.muValue,
-             BrnDiag_Metres(lrTake.GetTransformToWorld(ICE::eICE_CAR_SPACE).wAxis, lrPrimaryAt),
-             BrnDiag_Metres(lrShared.GetTransformToWorld(ICE::eICE_CAR_SPACE).wAxis, lrPrimaryAt),
-             lrSecondary.mRaceCarState.mEntityId.muValue,
-             BrnDiag_Metres(lrTake.GetTransformToWorld(ICE::eICE_CAR2_SPACE).wAxis, lrSecondaryAt),
-             BrnDiag_Metres(lrShared.GetTransformToWorld(ICE::eICE_CAR2_SPACE).wAxis, lrSecondaryAt),
-             BrnDiag_YawDegrees(lrTake.GetTransformToWorld(ICE::eICE_HEADING2_SPACE)),
-             BrnDiag_YawDegrees(lrShared.GetTransformToWorld(ICE::eICE_HEADING2_SPACE)),
-             BrnDiag_YawDegrees(lrSecondary.mRaceCarState.mTransform), lbForcedLoose ? 1 : 0);
-    CgsDev::Log::WriteToLog(lacLine);
-}
 
 // The source path string the asserts report.
 static const char* const KPC_SOURCE_FILE =
@@ -930,10 +724,10 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // var_390 -- an angle-out slot Update never reads (the looker block re-uses var_390 as scratch). The four result rows
     // go back into mHeadingSpaceTransform.
     rw::math::vpu::Vector3 lUnusedAngle;
-    BrnDiag_HeadingEaseBefore(mHeadingSpaceTransform, lLookAt);                            // [DIAG] NOT X360
+                            // [DIAG] NOT X360
     mHeadingSpaceTransform =
         rw::math::vpu::SLerp(mHeadingSpaceTransform, lLookAt, KF_HEADING_SPACE_2_SLERP_AMOUNT, &lUnusedAngle);
-    BrnDiag_HeadingEaseAfter(mHeadingSpaceTransform, lLookAt, lUnusedAngle);               // [DIAG] NOT X360
+               // [DIAG] NOT X360
 
     // The take evaluator resolves its reference spaces through its own copy of the shared
     // per-frame handler (through its copy constructor, 0x82247384 into var_2B0).
@@ -1005,10 +799,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // --- Pick the look space + motion-blur amount ---
     const ICE::eICESpace leLookSpace = mKeyAnimController.GetLookSpace();
     const bool lbHasLookSpace = IsLooseHeadingSpace(leLookSpace) || IsLookAtVehicleSpace(leLookSpace);
-    BrnDiag_HeadingEaseReport(this, mKeyAnimController, leEyeSpace, leLookSpace);         // [DIAG] NOT X360
-    BrnDiag_SpacesReport(this, mKeyAnimController, leEyeSpace, leLookSpace,                // [DIAG] NOT X360
-                         *lrSharedInfo.GetCameraSpaceHandler(), lSpaces, *lpPrimaryVehicle, *lpSecondaryVehicle,
-                         mbForceHeadingSpaceToBeLooseHeadingSpace);
+         // [DIAG] NOT X360
 
     // A take anchored to a car gets NO extra motion blur; a free/world take gets it all. The
     // two amounts and both enable flags are one operation on the camera's effects block.
@@ -1066,12 +857,10 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         const VehicleInfo& lrBystanderBox      = mBystanderRef.GetVehicle(lrSharedInfo);
         const VehicleInfo& lrBystanderVelocity = mBystanderRef.GetVehicle(lrSharedInfo);
         const VehicleInfo& lrBystanderPlace    = mBystanderRef.GetVehicle(lrSharedInfo);
-        BrnDiag_BystanderLookBefore(lrCamera, lrBystanderPlace.mRaceCarState.mTransform);   // [DIAG] NOT X360
+   // [DIAG] NOT X360
         mLooker.Update(VecFloat(lfLookerTimeStep), *lrSharedInfo.GetRandom(), lLookerParams, lrCamera,
                        lrBystanderPlace.mRaceCarState.mTransform, lrBystanderVelocity.mRaceCarState.mLinearVelocity,
                        lrBystanderBox.mAABB);
-        BrnDiag_BystanderLookAfter(this, mKeyAnimController, lrCamera,                      // [DIAG] NOT X360
-                                   lrBystanderPlace.mRaceCarState.mTransform);
         (void)lpWorld;
     }
 

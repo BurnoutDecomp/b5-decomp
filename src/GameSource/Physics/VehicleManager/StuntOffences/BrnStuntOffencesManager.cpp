@@ -88,11 +88,7 @@ namespace BrnPhysics
             static f32 sfMinRollDeg = 330.0f;
             if (sfRate < 0.0f)
             {
-                const char* lpcRate = getenv("BRN_STUNT23_ROLL");
-                sfRate = (lpcRate != 0) ? static_cast<f32>(std::atof(lpcRate)) : 0.0f;
                 if (!(sfRate > 0.0f)) { sfRate = 0.0f; }
-                const char* lpcDeg = getenv("BRN_STUNT23_ROLL_DEG");
-                if (lpcDeg != 0 && std::atof(lpcDeg) > 0.0) { sfMinRollDeg = static_cast<f32>(std::atof(lpcDeg)); }
             }
             if (sfRate <= 0.0f || lpCar == 0) { return; }
 
@@ -217,7 +213,7 @@ namespace BrnPhysics
             CheckForConvoy(lpaRaceCarPhysics, lpaRaceCarDrivers, lePlayerActiveRaceCarIndex,
                            lpUsedRaceCars, lfTimeStep);
 
-            StuntProbe(lpCar, lfTimeStep);   // [stuntair] witness -- NOT X360; see its banner
+   // [stuntair] witness -- NOT X360; see its banner
             Stunt23RollLever(lpCar, muCurrentRaceCarState);   // [stunt23] harness lever, off unless BRN_STUNT23_ROLL is set
         }
 
@@ -1014,7 +1010,6 @@ namespace BrnPhysics
         mfInProgressDriftDistance      = 0.0f;
     }
 
-
     // ============================================================================================
     // @0x8263B3E8  OutputStuntsCompleted -- pack + push the completed-stunt record, then reset.
     // ============================================================================================
@@ -1150,205 +1145,4 @@ namespace BrnPhysics
     // axis and in the SAME units as the stunt the console scores, and the two are comparable.
     // DELETE-WHEN the barrel-roll frequency question is closed and banked.
     // ============================================================================================
-    void StuntOffencesManager::StuntProbe(Vehicle::RaceCarPhysics* lpCar, f32 lfTimeStep)
-    {
-        static s32 siArmed = -1;
-        if (siArmed < 0)
-        {
-            const char* lpcEnv = getenv("BRN_ROLL_PROBE");
-            siArmed = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        if (siArmed != 1 || CgsDev::Log::gpDebugPrint == 0 || lpCar == 0) { return; }
-
-        static u32 suFrame = 0u, suAir = 0u, suAirGate = 0u, suCrashFrames = 0u, suReset = 0u;
-        static u32 suTakeoffs = 0u, suLandings = 0u, suCompletedRolls = 0u, suCompletedSpins = 0u;
-        static u32 suBand[5] = { 0u, 0u, 0u, 0u, 0u };   // <35, 35-90, 90-200, 200-360, >=360 deg
-        static f32 safDistinct[16] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-        static u32 suDistinct = 0u;
-        static f32 sfMaxRollDeg = 0.0f, sfMaxSpinDeg = 0.0f, sfMaxCompletedDeg = 0.0f;
-        static f32 sfCrashRollDeg = 0.0f, sfCrashRollThisEpisode = 0.0f, sfMaxCrashEpisodeDeg = 0.0f;
-        static f32 sfLastPrintedRollDeg = 0.0f;
-        static f32 sfPeakAirRollRate = 0.0f, sfPeakCrashRollRate = 0.0f;
-        static u32 suLines = 0u;
-
-        ++suFrame;
-
-        const bool lbCrashing = lpCar->IsCrashing();
-        const s32  liWheelsDown = lpCar->GetNumberOfWheelsOnTheGround();
-        const bool lbHasAir = lpCar->HasAir();
-        const bool lbInAirNow = (muCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) != 0;
-        const bool lbReset = (muCurrentRaceCarState & E_CURRENT_CAR_STATE_CAR_HAS_BEEN_RESET) != 0;
-
-        // roll rate about the car's own long axis -- the SAME axis CheckForRollsAndSpins integrates
-        // (mvCurrentInAirRotations.z == (R^-1 * omega).z == omega . at).
-        const Matrix44Affine& lrT = lpCar->GetTransform();
-        const f32 lfRollRate = vpu::Dot(lpCar->GetAngularVelocity(), lrT.zAxis);
-        const f32 lfAbsRollRate = (lfRollRate < 0.0f) ? -lfRollRate : lfRollRate;
-
-        if (lbInAirNow) { ++suAir; if (lfAbsRollRate > sfPeakAirRollRate) sfPeakAirRollRate = lfAbsRollRate; }
-        if (lbCrashing) { ++suCrashFrames; }
-        if (lbReset)    { ++suReset; }
-
-        // THE GATED SET: no wheels down + the physics says airborne + crashing == a crash tumble.
-        // The console excludes exactly these frames from barrel-roll scoring.
-        if (lbCrashing && liWheelsDown == 0 && lbHasAir)
-        {
-            ++suAirGate;
-            const f32 lfDeg = lfAbsRollRate * KF_RAD_TO_DEG * lfTimeStep;
-            sfCrashRollDeg += lfDeg;
-            sfCrashRollThisEpisode += lfDeg;
-            if (lfAbsRollRate > sfPeakCrashRollRate) sfPeakCrashRollRate = lfAbsRollRate;
-        }
-        if (!lbCrashing && sfCrashRollThisEpisode > 0.0f)
-        {
-            if (sfCrashRollThisEpisode > sfMaxCrashEpisodeDeg) sfMaxCrashEpisodeDeg = sfCrashRollThisEpisode;
-            sfCrashRollThisEpisode = 0.0f;
-        }
-
-        const f32 lfRollDeg = mvStuntRollInProgress.z * KF_RAD_TO_DEG;
-        const f32 lfSpinDeg = mvStuntRollInProgress.y * KF_RAD_TO_DEG;
-        if (lfRollDeg > sfMaxRollDeg) sfMaxRollDeg = lfRollDeg;
-        if (lfSpinDeg > sfMaxSpinDeg) sfMaxSpinDeg = lfSpinDeg;
-        if (lbInAirNow)
-        {
-            const u32 luBand = (lfRollDeg < 35.0f)  ? 0u
-                             : (lfRollDeg < 90.0f)  ? 1u
-                             : (lfRollDeg < 200.0f) ? 2u
-                             : (lfRollDeg < 360.0f) ? 3u : 4u;
-            ++suBand[luBand];
-            bool lbSeen = false;
-            for (u32 lu = 0u; lu < suDistinct; ++lu)
-            {
-                const f32 lfD = safDistinct[lu] - lfRollDeg;
-                if (lfD > -0.5f && lfD < 0.5f) { lbSeen = true; break; }
-            }
-            if (!lbSeen && suDistinct < 16u) { safDistinct[suDistinct++] = lfRollDeg; }
-        }
-
-        // ---- edges -------------------------------------------------------------------------
-        if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_TAKEN_OFF) != 0)
-        {
-            ++suTakeoffs;
-            sfLastPrintedRollDeg = 0.0f;
-            if (++suLines <= 4000u)
-            {
-                // ⭐ THE TAKE-OFF ATTITUDE AND THE FOUR TAKE-OFF ATTRIBS, ON THE SAME LINE, because
-                // VehiclePhysics::UpdateInAirBehaviour @0x825D0C0C decides the whole jump from
-                // exactly these: its take-off arm ramps a roll FACTOR off |right.y| at the instant
-                // the wheels leave (0 .. 0.3 over [0, 0.125], 0.3 .. 1.0 over [0.125, 0.25], then
-                // flat 1.0), damps the roll by (1 - factor), then CLAMPS the surviving roll rate to
-                // GetRollLimitOnTakeOff() turns * 2 * pi. ⇒ a car that takes off LEVEL has its roll
-                // removed by the console's own design, and a rollLimit that read 0 would make every
-                // jump unrollable at every speed. Printing rgty beside the limit is what separates
-                // "the design says no" from "the attribute is empty" -- the two look identical in
-                // any pose trace. The attrib is streamed from the vehicle record at +0x5C
-                // (VehicleAttribs.cpp), default 1.0 turn.
-                const Vehicle::VehicleAttribs* lpA = lpCar->GetAttribs();
-                *CgsDev::Log::gpDebugPrint
-                    << "[stuntair] takeoff n=" << static_cast<s32>(suTakeoffs)
-                    << " f=" << static_cast<s32>(suFrame)
-                    << " mph=" << lpCar->GetSpeedMPH().x
-                    << " upy=" << lrT.yAxis.y
-                    << " rgty=" << lrT.xAxis.y
-                    << " rollRate=" << lfRollRate
-                    << " reverse=" << (mbTookOffInReverse ? 1 : 0);
-                if (lpA != 0)
-                {
-                    const Vector4& lrTO = lpA->mBaseAttribs
-                        .mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff;
-                    *CgsDev::Log::gpDebugPrint
-                        << " pitchDamp=" << lrTO.x << " yawDamp=" << lrTO.y
-                        << " rollDamp=" << lrTO.z << " rollLimitTurns=" << lrTO.w;
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-        }
-        // A live roll, printed as a SERIES, not an extremum. ⛔ THE SERIES IS THE POINT: rollDeg is
-        // mvStuntRollInProgress.z, a running MAX, so it can only ever grow and cannot show a roll
-        // being TAKEN BACK. curDeg is the signed accumulator itself (mvCurrentInAirRotations.z),
-        // and a curDeg that grows and then shrinks WHILE AIRBORNE is a car being righted with no
-        // wheel on the ground -- a completely different claim from "it never rolled", and one no
-        // max can make. Measured on the banked jump ladder: shot 0 reached |right.y| 0.832 and then
-        // snapped back upright inside 10 frames at -6.16 rad/s, and nothing in the log could say
-        // whether a wheel was down when it happened. `wog` is here for exactly that.
-        // Every 12th airborne frame (5 Hz) OR on a 45 deg growth, whichever comes first.
-        if (lbInAirNow && ((suFrame % 12u) == 0u || lfRollDeg - sfLastPrintedRollDeg >= 45.0f)
-            && ++suLines <= 4000u)
-        {
-            sfLastPrintedRollDeg = lfRollDeg;
-            *CgsDev::Log::gpDebugPrint
-                << "[stuntair] rolling f=" << static_cast<s32>(suFrame)
-                << " air=" << mfTimeInTheAirSoFar
-                << " rollDeg=" << lfRollDeg
-                << " curDeg=" << (mvCurrentInAirRotations.z * KF_RAD_TO_DEG)
-                << " spinDeg=" << lfSpinDeg
-                << " rollRate=" << lfRollRate
-                << " wog=" << liWheelsDown
-                << " upy=" << lrT.yAxis.y
-                << " inProg=0x" << static_cast<s32>(muStuntActionInProgress)
-                << "\n";
-        }
-        if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_LANDED) != 0)
-        {
-            ++suLandings;
-            const bool lbRollDone = (muStuntActionComplete & E_STUNT_ACTION_COMPLETE_BARREL_ROLL) != 0;
-            const bool lbSpinDone = (muStuntActionComplete & E_STUNT_ACTION_COMPLETE_AIR_SPIN) != 0;
-            if (lbRollDone)
-            {
-                ++suCompletedRolls;
-                const f32 lfDone = mfCompletedBarrelRollAngle * KF_RAD_TO_DEG;
-                if (lfDone > sfMaxCompletedDeg) sfMaxCompletedDeg = lfDone;
-            }
-            if (lbSpinDone) { ++suCompletedSpins; }
-            if (++suLines <= 4000u)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[stuntair] land n=" << static_cast<s32>(suLandings)
-                    << " f=" << static_cast<s32>(suFrame)
-                    << " air=" << mfLastAirTime
-                    << " dist=" << mfDistanceOfLastJump
-                    << " rollDeg=" << lfRollDeg
-                    << " spinDeg=" << lfSpinDeg
-                    << " completedRollDeg=" << (mfCompletedBarrelRollAngle * KF_RAD_TO_DEG)
-                    << " rolls=" << static_cast<s32>(miCompletedBarrelRolls)
-                    << " complete=0x" << static_cast<s32>(muStuntActionComplete)
-                    << " crashing=" << (lbCrashing ? 1 : 0)
-                    << " upy=" << lrT.yAxis.y
-                    << "\n";
-            }
-        }
-
-        // ---- census ------------------------------------------------------------------------
-        // ⚠️ THE PERIOD IS CHECKED AGAINST THE EVENT RATE. One boot is ~16,000 sim frames and a
-        // sweep fires at most 48 shots, so a 600-frame (10 s) period prints ~27 lines and can
-        // never be slower than the thing it counts. A census whose period exceeds its event rate
-        // reads exactly like a function that never ran.
-        if ((suFrame % 600u) == 0u)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[stuntair] census f=" << static_cast<s32>(suFrame)
-                << " air=" << static_cast<s32>(suAir)
-                << " airGate=" << static_cast<s32>(suAirGate)
-                << " crashFrames=" << static_cast<s32>(suCrashFrames)
-                << " reset=" << static_cast<s32>(suReset)
-                << " takeoffs=" << static_cast<s32>(suTakeoffs)
-                << " landings=" << static_cast<s32>(suLandings)
-                << " | rollBands " << static_cast<s32>(suBand[0])
-                << "/" << static_cast<s32>(suBand[1])
-                << "/" << static_cast<s32>(suBand[2])
-                << "/" << static_cast<s32>(suBand[3])
-                << "/" << static_cast<s32>(suBand[4])
-                << " distinct=" << static_cast<s32>(suDistinct)
-                << " maxRollDeg=" << sfMaxRollDeg
-                << " maxSpinDeg=" << sfMaxSpinDeg
-                << " completedRolls=" << static_cast<s32>(suCompletedRolls)
-                << " completedSpins=" << static_cast<s32>(suCompletedSpins)
-                << " maxCompletedDeg=" << sfMaxCompletedDeg
-                << " | crashRollDeg=" << sfCrashRollDeg
-                << " maxCrashEpisodeDeg=" << sfMaxCrashEpisodeDeg
-                << " peakAirRollRate=" << sfPeakAirRollRate
-                << " peakCrashRollRate=" << sfPeakCrashRollRate
-                << "\n";
-        }
-    }
 }

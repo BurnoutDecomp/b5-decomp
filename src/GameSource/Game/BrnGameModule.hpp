@@ -198,9 +198,6 @@ namespace BrnGame
         // The world module (the loading flow's LoadWorldModule drives its Prepare with
         // the update IO stacks -- X360 vtable +68 dispatch @0x823E72F0).
         WorldModule& GetWorldModule() { return mWorldModule; }
-        // The game-state module. Same shape as the two above: the console reaches its OUTPUT
-        // buffer through DoUpdate's LockBuffersForIO set, but DoUpdate is a PC-platform leaf, so
-        // the live world drive (DriveWorldUpdateFrame) needs it to run BridgeGameStateToWorld.
         BrnGameState::GameStateModule& GetGameStateModule() { return mGameStateModule; }
         // The dispatch-thread input pair (the flow states post the boot loading-screen
         // command onto its write buffer, as the X360 InitialLoadingScreen::Update does
@@ -224,20 +221,6 @@ namespace BrnGame
         //   DoDispatch -- the game module's per-frame render-dispatch spine (MainGameFlowStateInGame::Render)
         int DoUpdate();
         int DoDispatch();
-
-        // @ 0x823EE4D8 -- the SOUND pre-update leg of the per-frame cascade (both the full
-        // spine and LoadingScriptedState::Update @0x823F2714 call it, ahead of the network /
-        // game-state / world drives). Console body, statement for statement:
-        //   StartMonitor(mCpuMonitors.miUT_Sound); StartMonitor(miUT_SoundUpdate);
-        //   mSoundModule.PreUpdate(lpStack, lpPreUpdateOut);
-        //   { W(guiIn) + R(preUpdateOut) lock pair (console helper sub_823B6FE0):
-        //     guiIn->GetGuiEvents()->Append<256,16>(preUpdateOut's GuiOut queue);
-        //     BridgeSoundToTraining(preUpdateOut); unlock pair }
-        //   StopMonitor(miUT_SoundUpdate); StopMonitor(miUT_Sound);
-        // The stack argument is the update-OUTPUT stack (only forwarded into PreUpdate,
-        // which carves its "SoundLogicPreUpdateOutput" scratch from it).
-        BrnSound::Module::Io::RootPreUpdateOutputBuffer* BeginInGameSoundFramePC();
-        void FinishInGameSoundFramePC();
 
         void DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                                BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
@@ -409,10 +392,6 @@ namespace BrnGame
         // BridgeNetworkToWorld.
         BrnNetwork::BrnNetworkModuleIO::OutputBuffer* GetNetworkOutputBuffer() { return mpNetworkOutputBuffer; }
         BrnEffects::EffectsModule& GetEffectsModule() { return mEffectsModule; }
-        // The PC pad fill's output buffer (driving-input wave 2026-08-11): the live world
-        // drive (DriveWorldUpdateFrame) needs it to run BridgeControllerToWorld, exactly as
-        // GetWorldUpdateOutputBuffer above serves the same caller.
-        CgsInput::InputIO::OutputBuffer* GetPcInputOutputBuffer() { return &mPcInputOutputBuffer; }
 
         enum EGameUpdateStage   // h:248
         {
@@ -478,9 +457,6 @@ namespace BrnGame
 
         // IThreadClass implementation (the engine drives these on their threads).
         virtual void Update();                                      // ARTIST 0x823C5480
-        void BeginFramesPC(bool lbAllowParallel);
-        void EndFramesPC();
-        void SynchronizeDispatchPC();
         bool UpdateThread() override;
         void DispatchThread() override;                               // @ BrnGameModule.cpp:1221
         void ResourceUpdateThread(Mutex* lpMutex) override;
@@ -514,14 +490,6 @@ namespace BrnGame
             const CgsGui::ModelIO::OutputBuffer* lpGuiModuleModelOutputBuffer,
             const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer);
 
-        // ⭐ ADDITIVE (faithful-audio-engine phase C4; header-only inlines). The console
-        // computes RootSoundModule::Update's two f32 time steps inline in each spine --
-        // LoadingScriptedState::Update @0x823F2AB0-C4 and DoUpdate_Sound @0x823DCEC0 both
-        // load gameTimer(gm+0x9A0AD4)/simTimer(gm+0x9A0AF0) fields [+0x10]*[+0xC]
-        // (mfScaleCurrent * mfRate) straight off the module. Exposed BY NAME so the live
-        // PC spine reads the same pair without a console byte offset.
-        const BrnShaderConstantsFrame* GetPublishedShaderConstantsFramePC() const
-        { return mRenderModule.GetPublishedShaderConstantsFramePC(); }
         const CgsSystem::Timer& GetGameTimer() const { return mGameTimer; }
         const CgsSystem::Timer& GetSimTimer() const  { return mSimTimer; }
 
@@ -599,15 +567,10 @@ namespace BrnGame
         void BridgeRendererToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
                                  RendererIO::OutputBuffer* lpRendererOutput);
 
-
         // ARTIST 823CD738: the caller owns and write-locks the staged buffer.
         void BridgeControllerToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
                                          const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
                                          bool lbIsPlaying);
-        // Existing native pump: persistent module-owned input and button-only publication.
-        void BridgeControllerToGameStateNativePC(BrnGameState::GameStateModule* lpGameStateModule,
-                                         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
-                                         s32 liActionContext);
 
         // X360 0x823E6B18 -- synthesise GUI events from player-0 (and, when no player-0 controller is
         // assigned, the cross-pad menu-accept scan) and push them through the GUI module's
@@ -724,20 +687,6 @@ namespace BrnGame
         void BridgeWorldImpactInformationToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                                const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
 
-        // [FLAG PC stand-in] Publish the car-select screen's car list to the GUI as events
-        // 406 + 412 -- the two records BridgeGameStateToGui's action-182/184 cases carry on the
-        // console. Full provenance + the DELETE-WHEN condition are on the body in
-        // BrnGameModule.cpp; called from the per-sub-step GUI publish block in Update.
-        void PublishCarSelectionToGui();
-
-        // X360 0x823CB758 -- the GUI->game out-event consumer: walk the GUI module's out
-        // events and latch the flow commands (19/20 loading screen, 70 phase complete,
-        // 71 pre-accept/resume-world, 90 profile-first, 189 sign-out, 86/87/89 quit,
-        // 138/589/590 render modes). FLAG PC-ABI adapter: the console form reads the GUI
-        // module OUTPUT buffer's out-event queue; the PC module publishes the same queue
-        // via BrnGui::GuiModule::GetGuiOutQueue().
-        void BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
-
         // GUI/world -> GameData and GUI -> world staging bridges (source homes
         // GameBridgeGUIToX.cpp and GameBridgeWorldToX.cpp); bodied in the
         // _wBT_01 partfiles beside those homes.
@@ -748,19 +697,6 @@ namespace BrnGame
                               const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
         void BridgeWorldToResource(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
                                    const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
-
-        // ⭐ X360 0x823CBF70 -- the GUI->DIRECTOR out-event consumer. Walks the same GUI
-        // out-event queue BridgeGuiToGame walks and raises the matching published flag on the
-        // director's INPUT buffer, which MainDirector::PostGuiUpdate then folds into the
-        // director GameState. This is the ONLY route from the front-end to the director:
-        // commands 476/477/478 are the new-profile-intro and the GAME-INTRO FLY-BY start/stop.
-        // Called by DoUpdate_DirectorPostGUI @0x823DCE38, between LockBuffersForIO and
-        // DirectorModule::PostGuiUpdate. FLAG PC-ABI adapter, same one BridgeGuiToGame
-        // carries: the console form takes the GUI module OUTPUT buffer and calls
-        // CgsGuiModuleIO::OutputBuffer::GetOutEventQueu on it; the PC module publishes that
-        // same queue directly via BrnGui::GuiModule::GetGuiOutQueue().
-        void BridgeGuiToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
-                                 CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
 
         // ⭐ X360 0x823E3AB0 -- the WORLD->DIRECTOR seam, the ONLY caller of
         // DirectorIO::InputBuffer::SetRaceCarInfo in the whole image and therefore the only
@@ -1170,12 +1106,6 @@ namespace BrnGame
         CgsSystem::TimerRequestInterface mTimerRequestInterface;     // h:281  gm+10095420
         CgsSystem::FrameRateManager      mFrameRateManager;          // h:472
         CgsSystem::EFrameRateManagerType meFrameRateManagerType;     // h:473
-        // ⚠️ FLAG PC quality-of-life (no console counterpart -- the console reads this rate
-        // out of the validated display mode). The FIXED simulation rate, in Hz: the size of
-        // one simulation step, the divisor the frame-rate manager counts real elapsed time
-        // against, and the base of every timestep downstream. See the banner at its use site
-        // in BrnGameModule::Construct.
-        static const u32 KU_SIMULATION_RATE_HZ = 60u;
         // [h:474: frame-rate type request interface - omitted]
         s8   mi8FrameRateMinSteps;                                   // h:475
         s8   mi8FrameRateMaxSteps;                                   // h:476
@@ -1203,30 +1133,11 @@ namespace BrnGame
         CgsGui::ModelIO::OutputBuffer*         mpGuiModelOutputBuffer;// h:495
         CgsGui::CgsGuiModuleIO::OutputBuffer*  mpGuiOutputBuffer;    // h:496
         BrnDirector::DirectorIO::OutputBuffer* mpDirectorOutputBuffer;// h:497
-        // [FLAG PC placement] this sub-step's world UPDATE OUTPUT buffer. On the console it is
-        // a LOCAL of DoUpdate @0x823F0AF8 (created near the top, threaded through every leg,
-        // destroyed at the bottom); DoUpdate is a PC-platform leaf here, so it lives with the
-        // other per-sub-step static IO buffers instead. Same lifetime either way.
-        // See GetWorldUpdateOutputBuffer() above.
-        BrnWorldIO::UpdateOutputBuffer*        mpWorldUpdateOutputBuffer;
         // ⭐ THIS SUB-STEP'S EFFECTS OUTPUT BUFFER. The console's DoUpdate @0x823F0AF8
         // creates ONE EffectsIO::OutputBuffer near the top (pseudocode :387) and destroys it
         // at the very bottom (:1159), threading it through DoUpdate_Effects and (as a
-        // lock-only participant) DoUpdate_Sound. DoUpdate is a PC leaf here, so it lives with
         // the other per-sub-step buffers in CreateStaticIOBuffers.
         BrnEffects::EffectsIO::OutputBuffer*   mpEffectsOutputBuffer;
-        // PC scheduler-owned sound pair; begun before world, completed after effects.
-        BrnSound::Module::Io::RootOutputBuffer* mpInGameSoundRootOutputPC = nullptr;
-        BrnSound::Module::Io::RootPreUpdateOutputBuffer* mpInGameSoundPreUpdateOutputPC = nullptr;
-        // [FLAG PC placement] this sub-step's network OUTPUT buffer. The console's DoUpdate
-        // creates it second, right after the input output buffer, and threads it through
-        // DoUpdate_NetworkPreSim, DoUpdate_GameStatePreWorld, DoUpdate_World and DoUpdate_GUI;
-        // it lives with the other per-sub-step buffers here, and exists only in the sub-steps
-        // whose flow state runs that cascade (null otherwise).
-        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* mpNetworkOutputBuffer;
-        // FLAG PC-platform leaf: by-value retention extends the completed camera
-        // output across zero-substep render frames after its IO-stack lifetime.
-        BrnDirector::Camera::Camera mDispatchCamera;
         bool                        mbDispatchCameraPublished;
         // DecFIGS BrnGameModule.h:524/525; ARTIST Construct 823CB1C4/1D0.
         // The PostSim wrapper registers both with ReplayIO; the PreSim wrapper serialises
@@ -1240,14 +1151,6 @@ namespace BrnGame
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
         CgsSystem::ThreadLayout mThreadLayout;                        // h:530
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
-        // FLAG PC-platform leaf: native initialization and reply pacing while
-        // simulation is decoupled from the render rate.
-        bool mbFrameLayoutInitializedPC = false;
-        bool mbAllowFrameOverlapPC = false;
-        bool mbActiveFrameOverlapPC = false;
-        bool mbInsideUpdatePC = false;
-        bool mbResourceRequestedPC = false;
-        bool mbPrepareResourceRequestedPC = false;
         // The calibration settings the game module OWNS and BridgeGuiToGame @0x823CB758 publishes
         // into the dispatch write buffer every update frame (its unconditional tail:
         // LockForWrite / SetBrightness / SetContrast / SetCalibrationUnfriendlyEnablePostFx /
@@ -1285,8 +1188,6 @@ namespace BrnGame
         CgsMemory::LinearMalloc* mpReusableLoadingScreenAllocator;
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
 
-
-
         // @ +10094132 (0x9A0634). The console's own latch, written as the FIRST statement of
         // BridgeWorldToDirector @0x823E3AB0:
         //   mbPlayerCarCrashing = active->IsPlayerCarActive() && active->IsPlayerCarCrashing()
@@ -1303,21 +1204,12 @@ namespace BrnGame
         // clear it; no writer that raises it has been recovered yet, so it reads false.
         bool mbIsSysMenuShowing = false;
 
-        // [FLAG PC drive point] (no console member): latched once BrnGui::WorldDataController::
-        // Prepare reports done, so ResourceUpdateThread stops re-entering it. On the console
-        // the equivalent latch is GuiModule::Prepare's own stage word reaching 15.
-        bool mbWorldDataPrepared;
         // [event-starts wave 2026-08-27] The done latch for the controller's SECOND acquire
         // machine (WorldDataController::Prepare2 @0x82516CB8 -- mpProgressionData / mpStreetData).
         // Separate from mbWorldDataPrepared because the two machines complete independently and,
         // on this build, one of them never completes at all. See the ⛔ at the driver's call site
         // for why they are pumped mutually exclusively.
         bool mbWorldData2Prepared = false;
-
-        // [FLAG PC stand-in] (no console member): the GUI events 406 + 412 have gone out for the
-        // car-select screen currently on the flow. Cleared when that screen unsubscribes, so a
-        // re-entry republishes. See PublishCarSelectionToGui.
-        bool mbCarSelectionPublished;
 
         // The two per-frame flags BridgeGameStateToSound @0x823CDE50 ORs into the
         // sound UpdateInfo byte (X360 +10094119 / +10094120; writers un-decoded --
@@ -1331,11 +1223,7 @@ namespace BrnGame
         s32  miSecondaryControllerPort; // @ +10094144 (the rumble/debug-controller read port)
         bool mbGuiAcceptsControllerInput;// @ +10094266 (gates the ToGui change-car / menu-accept events)
         bool mbGuiSuppressMenuAccept;    // @ +10095408 (when set, the menu-accept synthesis is skipped)
-        // The ToGui menu-repeat / language-cycle clock pair: an integer-seconds word (the X360
-        // widens it u32->f64 with the LODWORD/HIDWORD idiom) plus a fractional-seconds float
-        // added straight in. Fed once per update frame (FLAG PC time source: the console's
-        // words ride the game module's own timer pass, unreconstructed).
-        s32  miLanguageCycleTimerLo;     // @ +10095388 (whole seconds)
+     // @ +10095388 (whole seconds)
         f32  mfLanguageCycleTimerFrac;   // @ +10095392 (fractional seconds, added as float)
 
         // THE LOOKBACK HOLD TIMER. X360 gm+0x9A12B0 (10097328), read AND WRITTEN every
@@ -1350,12 +1238,6 @@ namespace BrnGame
         // [cam-input] samples across a 120 s run, before and after every bumper press).
         f32  mfLookbackHoldTimer;        // @ +10097328 (X360 gm+0x9A12B0)
 
-        // [PC stand-in] The input module's per-frame OUTPUT buffer the controller bridges read.
-        // On the X360 this comes off the module scheduler's IO stacks and is filled by the
-        // input module's own pass (InputPads::Update -> binding tables); that pass is
-        // unreconstructed, so the game module owns one buffer here and the InputPadsPC
-        // platform leaf fills the player-0 record each update frame.
-        CgsInput::InputIO::OutputBuffer mPcInputOutputBuffer;
         // NOTE: the CgsGui::GuiModule event sink the ToGui bridge targets is embedded at X360
         // +7252512; its AddGuiEvent<T> body never reads `this`, so the bridge calls it without
         // the embed until the CgsGui module object is constructed on PC (GuiFsmController-flow
@@ -1408,12 +1290,4 @@ namespace BrnGame
     // update IO stacks through it, as the X360 loads do off the global.
     BrnGameModule* GetMainGameModule();
 
-    // ⚠️ FLAG PC quality-of-life -- no console counterpart. The simulation-pacing switch,
-    // read from config.ini `[Display] DecoupleSimulation` by BrnMain's LoadConfig and applied
-    // by BrnGameModule::Construct (the module is a static, so its constructor runs first and
-    // cannot see the setting).
-    //   true  -- fixed 60 Hz simulation, free-running renderer, interpolated display poses.
-    //   false -- the console's arrangement: exactly one simulation step per rendered frame.
-    // It exists so the two can be A/B'd in a single edit rather than a rebuild.
-    extern bool gbDecoupleSimulationFromRenderRate;
 }

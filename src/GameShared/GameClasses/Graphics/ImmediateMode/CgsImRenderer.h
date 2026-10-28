@@ -5,8 +5,6 @@
 // are named in the ImRendererBase state-library builder's declarations, so the full render-state home
 // is pulled in (it is already the immediate-mode layer's render-state dependency: CgsIm2d.cpp and the
 // render-buffer template include it too).
-#include "pc/gcm/renderengine/renderstates.h"
-
 // CgsGraphics::ImRenderer - the immediate-mode render layer. ImRendererBase carries
 // the (static) render-state library and the SetState/SetTexture API; ImRenderer<V> is
 // the per-vertex-type batch renderer (Begin/EndRendering + Render). Recovered from the

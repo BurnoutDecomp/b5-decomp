@@ -49,8 +49,6 @@
 #include <cstdlib>   // getenv / atof -- [DIAG] only
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the BRN_SPEECH_DIAG witness only
 
-// The XDK signin probe (PC platform leaf in CgsXboxLivePC.cpp: 1 == signed in locally when
-// offline, 2 == signed in to the service on LAN).
 extern "C" u32 XUserGetSigninState(u32 luUserIndex);
 
 namespace BrnGameState
@@ -118,11 +116,6 @@ namespace
     //    this knob the fix below is unobservable. Absent/unset == the console's 600.0f.
     //    DELETE-WHEN: the chain has a cheaper positive control (e.g. a seeded profile).
     // ---------------------------------------------------------------------------
-    bool TrainingDiagOn()
-    {
-        static const bool sbOn = (getenv("BRN_SPEECH_DIAG") != 0);
-        return sbOn;
-    }
     bool TrainingDiagBudget()
     {
         static const s32 KI_MAX_LINES = 4000;
@@ -157,19 +150,12 @@ namespace
     // [DIAG] one line per rejected / accepted RequestTraining.
     void TrainingWitness(s32 aiType, const char* apcReason)
     {
-        if (TrainingDiagOn() && TrainingDiagNew(aiType, apcReason) && TrainingDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] RequestTraining type=" << aiType
-                                       << " -> " << apcReason << "\n";
     }
 
     f32 AtomikaFreeburnVoInterval()
     {
         static const f32 KF_CONSOLE_INTERVAL = 600.0f;   // X360 Update @0x823937D0
         static const f32 sfInterval = []() -> f32 {
-            const char* lpcValue = getenv("BRN_ATOMIKA_VO_INTERVAL");
-            if (!lpcValue || !*lpcValue)
-                return KF_CONSOLE_INTERVAL;
-            const f32 lfValue = static_cast<f32>(atof(lpcValue));
             return (lfValue > 0.0f) ? lfValue : KF_CONSOLE_INTERVAL;
         }();
         return sfInterval;
@@ -458,16 +444,6 @@ void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInp
                 if (lfSinceLastTip > AtomikaFreeburnVoInterval() && lfFreeBurnTime > 5.0f)
                 {
                     PlayNewAtomikaFreeburnVO();
-                }
-                else if (TrainingDiagOn() &&
-                         TrainingDiagNew(-1 - static_cast<s32>(lfFreeBurnTime),
-                                         "freeburn-vo-gate") &&
-                         TrainingDiagBudget())
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[speech] freeburn-vo gate: sinceLastTip=" << lfSinceLastTip
-                        << " need>" << AtomikaFreeburnVoInterval()
-                        << " freeBurnTime=" << lfFreeBurnTime << " need>5\n";
                 }
             }
 

@@ -278,11 +278,6 @@ public:
     // ARTIST 0x8231E5D8: the inlined ChallengeManager vehicle-list installer.
     void ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList);
 
-    // Retained extracted clock helper for a separate cleanup. No current caller was found in this
-    // source tree; the full PreWorldUpdate is reached through the selected GameState EMM path.
-    // Do not add this helper alongside that full path because it would advance the clocks twice.
-    void PreWorldUpdateClocksBringUp(f32 lfGameTimestep);
-
     // ===============================================================================================
     // PER-FRAME SPINE  (agents 7a / 7b)
     // ===============================================================================================

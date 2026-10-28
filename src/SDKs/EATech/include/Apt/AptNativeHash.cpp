@@ -30,8 +30,6 @@
 #include <cstring>   // memset / strcmp
 #include <cstdio>    // snprintf (the dead-bucket report below)
 
-// ---------------------------------------------------------------------------
-// [FLAG PC bring-up guard -- 2026-08-29, the CrashNav map-screen exit AV]
 //
 // DestroyGCPointers below makes a VIRTUAL call (Release) through every non-null
 // bucket value. On this build a bucket can outlive its value: measured on the map
@@ -48,7 +46,7 @@
 // drops the node's refcount to the list-only value is found (see the wave notes).
 // ---------------------------------------------------------------------------
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include <xtl.h>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 namespace
@@ -57,19 +55,6 @@ namespace
     {
         uintptr_t muBase;
         uintptr_t muEnd;
-        AptHashImageRange() : muBase(0), muEnd(0)
-        {
-            muBase = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
-            if (muBase == 0)
-                return;
-            const IMAGE_DOS_HEADER* lpDos = reinterpret_cast<const IMAGE_DOS_HEADER*>(muBase);
-            if (lpDos->e_magic != IMAGE_DOS_SIGNATURE)
-                return;
-            const IMAGE_NT_HEADERS* lpNt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
-                muBase + static_cast<uintptr_t>(lpDos->e_lfanew));
-            if (lpNt->Signature == IMAGE_NT_SIGNATURE)
-                muEnd = muBase + lpNt->OptionalHeader.SizeOfImage;
-        }
     };
     const AptHashImageRange& AptHashImage()
     {
@@ -627,9 +612,6 @@ void AptNativeHash::RegisterReferences(const AptValue* pOwner)
 // mpValue->Release()), with the "value" and its "vtable" both pointing back into the Apt
 // pool. Re-reading follows the live table the way the console does.
 //
-// The mid-loop `mpTable == 0` break is the one PC-side addition: on the console the reload
-// simply picks up whatever the re-entrant call left, and a null there would fault. [FLAG PC
-// bring-up guard]
 void AptNativeHash::DestroyGCPointers()
 {
     UnsetPrototype();
@@ -641,34 +623,10 @@ void AptNativeHash::DestroyGCPointers()
         for (int i = 0; i < mnCapacity; ++i)      // mnCapacity re-read per iteration
         {
             if (mpTable == nullptr)
-                break;                            // [FLAG PC bring-up guard] see the banner
-
+                break;
             if (mpTable[i].mpValue)
             {
-                // [FLAG PC bring-up guard -- 2026-08-29 map-screen exit AV] the console
-                // calls straight through. On this build a bucket can still hold a value
-                // the Apt GC has already handed back to the pool (measured: the CrashNav
-                // map screen's 'ControlledTextBox_mc' entry, freed by
-                // AptAnimationTarget::CleanRemList's refcount<=1 arm while this hash still
-                // pointed at it) -- and Release() is a virtual call, so a recycled block's
-                // free-list link is executed as code. Validate the vtable before the call,
-                // and report every hit so the missing reference stays visible instead of
-                // becoming a silent crash. See the wave notes for the open root cause.
-                if (!AptHashValueLooksLive(mpTable[i].mpValue))
-                {
-                    AptHashReportDeadValue(this, i, mnCapacity,
-                                           mpTable[i].mKey.c_str(), mpTable[i].mpValue);
-                    mpTable[i].mpValue = nullptr;
-                    if (mpTable[i].mKey.m_pData)
-                    {
-                        EAStringC::DecreaseInternalRefCount(mpTable[i].mKey.m_pData);
-                        mpTable[i].mKey.m_pData = nullptr;
-                    }
-                    continue;
-                }
                 mpTable[i].mpValue->Release();
-                if (mpTable == nullptr)
-                    break;                        // [FLAG PC bring-up guard]
                 mpTable[i].mpValue = nullptr;     // console: reload mpTable, then store
             }
             if (mpTable[i].mKey.m_pData)          // real key or tombstone

@@ -78,26 +78,6 @@ namespace
     const f32 KF_FAN_EDGE_NO_INTERSECTION = -1.0f;
 }
 
-// ============================================================================================
-// [FLAG PC bring-up] THE TWO CONTRIBUTORS THAT NEED THE GENERATOR QUERY STACK ARE GATED.
-// IncludeHardNoGo and the gather half of IncludeRouteEdgeIntersection call
-// RacingLineGenerator::GetLocalSectionID @0x82776280, GetNearSectionID @0x827765A8 and
-// GetSectionPointer @0x827655D0. As this file was written the first two are NOT DECLARED in this
-// tree's BrnRacingLineGenerator.h at all and the third is declared `private`, so this TU cannot
-// name them and still compile; that header belongs to another lane, and the three exact
-// declarations needed are listed in this lane's report under `header_requests`.
-// (The HardNoGoMap half -- IsReady, DistanceToHardNoGoEdge @0x82777D60, GetPreviousLeft /
-// GetPreviousRight / GetCurrentLeft / GetCurrentRight, all four of them console-inlined and so
-// exportless -- IS already present in BrnHardNoGoMap.h and needs nothing.)
-// The gate defaults to the existing BRN_AI_RACINGLINE_STACK_PRESENT, so the moment that flips to
-// 1 -- i.e. the moment the generator query half lands -- these bodies come alive with it.
-// The #else arms are NOT invented: they are the console's own "GetLocalSectionID returned
-// KI_INVALID_SECTION_INDEX" arms (0x82779DF4 zeroes the three HNG rows and returns; 0x8277A3D8
-// zeroes the route-edge row and returns), which is exactly the answer that holds while no
-// section can be resolved at all.
-// FanIntersectsEdge is NOT gated -- it is self-contained 2D geometry and is live now.
-// DELETE-WHEN the header_requests land and the gate goes to 1.
-// ============================================================================================
 #ifndef BRN_AI_STEERINGFAN_HNG_PRESENT
 #define BRN_AI_STEERINGFAN_HNG_PRESENT BRN_AI_RACINGLINE_STACK_PRESENT
 #endif

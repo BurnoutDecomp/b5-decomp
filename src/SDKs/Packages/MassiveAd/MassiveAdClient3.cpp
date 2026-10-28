@@ -8,7 +8,7 @@
 
 // The console calls the Win32-subset kernel services (tick count, system time, critical
 // sections) directly; the PC build binds the same Win32 calls.
-#include <windows.h>
+#include <xtl.h>
 
 // ===========================================================================
 // MassiveAdClient3 -- CMassiveBaseObject + CMassiveListNode.
@@ -593,11 +593,6 @@ int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
 // ===========================================================================
 // CMassiveCriticalSection -- CMassiveBaseObject + one OS critical section.
 // ===========================================================================
-
-// FLAG PC-platform: the embedded section is the host CRITICAL_SECTION, kept in
-// opaque storage so the header does not pull <windows.h>.
-static_assert(sizeof(MassiveCriticalSectionStorage) >= sizeof(CRITICAL_SECTION),
-              "MassiveCriticalSectionStorage must hold a host CRITICAL_SECTION");
 
 CRITICAL_SECTION* CMassiveCriticalSection::GetOsCriticalSection()
 {

@@ -65,7 +65,6 @@ namespace CgsGraphics { class DispatchFrame; }
 // (BrnWorld::ShadowMap is a `struct` -- BrnShadowMap.h:65; never forward-declare it
 //  as `class` here, the class key is part of the MSVC mangling.)
 namespace BrnWorld { struct ShadowMap; }
-namespace CgsPC::Reflections { struct LightCapture; }
 
 // Writable ARTIST tailgate data, shared by detection, boost credit and debug cones.
 namespace BrnWorld
@@ -77,7 +76,6 @@ namespace BrnWorld
     extern f32 KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE;
     extern f32 KF_MIN_TAILGATEE_SPEED;
 }
-
 
 namespace CgsResource { struct ResourceHandle; }
 namespace BrnResource { struct VehicleList; class WheelList; enum ECarType : int; }
@@ -180,7 +178,6 @@ class RaceCarEntityModule
 {
     friend class WorldDebugComponent;
     friend class BoostDebugComponent;
-    friend struct CgsPC::Reflections::LightCapture;
     friend struct RaceCarEntityModuleDebugComponent;   // reads the module's debug switches/members directly
     friend class PlaceOnTrackManager; // writes the embedded diagnostic history
 
@@ -683,21 +680,6 @@ public:
                 CgsID lWheelModelId,
                 const CgsID* lpRivalId,
                 s32 liOpponentIndex );
-
-        // [FLAG PC bring-up] NOT an X360 function. The world module's bring-up tour camera
-        // asks where the spawned car is so it can frame it; false when no slot is active.
-        // DELETE with that camera.
-        bool GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const;
-
-        // [DIAG] const slot access for the frame-pacing probe in BrnWorldModule.
-        const ActiveRaceCar* GetActiveRaceCarConstBringUp( s32 liCar ) const
-        { return ( liCar >= 0 && liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT ) ? &maActiveRaceCars[liCar] : 0; }
-
-        // ⚠️ FLAG PC quality-of-life -- NOT an X360 function. Once per rendered frame,
-        // publish each active car's display pose as the blend of the last two simulation
-        // ticks (the simulation runs at a fixed 60 Hz; the renderer does not). Idempotent.
-        // See ActiveRaceCar::ApplyRenderPoseInterpolation.
-        void ApplyRenderPoseInterpolationBringUp( f32 lfAlpha );
 
         // [RETIRED 2026-08-18, wave Q5 finisher] PublishNewVehicleToDirectorWithoutPhysicsBringUp
         // was declared here. The real leg it stood in for -- ProcessCreateVehicleEvents
@@ -1282,62 +1264,6 @@ private:
     // IsEqual(0) DEREFERENCES its argument -- so the answer is recorded at bind time.
     bool mbCarColoursBound;
 
-    // (RETIRED 2026-08-01: mbBringUpCarRequested + SpawnFirstUnlockedCarBringUp are gone --
-    //  HandleResetPlayerCarAction is the real caller of AttachActiveRaceCar now.)
-
-    // (RETIRED 2026-08-01, drivable wave: PromoteAttachedCarToActiveBringUp is gone. The
-    //  ATTACHED -> WAITING -> ACTIVE walk is the console's own OnRaceCarResourcesLoaded ->
-    //  ActiveRaceCar::OnResourcesLoaded -> PlaceRaceCarOnLoad -> RequestPlaceOnTrack ->
-    //  PlaceOnTrackManager::PrePhysicsUpdate -> ResetActiveRaceCar now. What SURVIVES of
-    //  it is the render-pose publish below, which is a different and much smaller thing.)
-
-    // [FLAG PC bring-up] NOT an X360 function. The console's ONLY producer of
-    // mRenderParams.mBodyTransform is ActiveRaceCar::UpdatePhysicsState @0x822D4418, whose
-    // only caller is ReadUpdatedActiveRaceCarDataFromPhysics -- i.e. the physics READBACK,
-    // which does not exist on this build (no physics module). Without it an ACTIVE car has
-    // no render pose at all and does not draw, so retiring the promote wholesale would have
-    // made the car INVISIBLE rather than drivable. This publishes what UpdatePhysicsState
-    // publishes, using the console's own CalcBodyTransform, from the console's own slot
-    // (PostPhysicsUpdate). DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics lands.
-    void PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
-                                                 s32 liActiveRaceCar );
-
-    // [FLAG PC bring-up] NOT an X360 function. The WHEEL half of the pose stand-in.
-    // ⭐ Since 2026-08-13 the REAL producer is landed (GetWheelsWorldTransfrom @0x825D8878
-    // bodied + WriteOutVehicleStats' SetWheelTransform loop unparked), so this runs ONLY for
-    // slots physics does not own (called from PublishRenderPoseWithoutPhysicsBringUp's tail).
-    // The old DELETE-WHEN's "mabWheelExists writer" clause resolved to: NO SUCH STORE exists
-    // in the XEX -- the console's exists source is the parked deformation leg
-    // (UpdateWheelPhysicsState @0x822B8738); see the .cpp banner.
-    // DELETE-WHEN the body-pose stand-in is deleted (they retire together).
-    void PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
-                                                s32 liActiveRaceCar );
-
-    // [FLAG PC bring-up] NOT an X360 function. The REST-POSE LIGHT LOCATORS.
-    // SubmitCoronasForRaceCar's whole input is mRenderParams' light-locator block, whose
-    // console producer is a three-hop chain that is DEAD end-to-end on this build:
-    //   (1) DeformableObject::PrepareLocators @0x825BA010 copies the streamed spec's light
-    //       tag list into the live VehicleLocatorData -- committed with its source list
-    //       pinned to an EMPTY list (BrnDeformableObject_Lifecycle.cpp, "spec accessors not
-    //       exposed"), so miNumLightLocators is 0;
-    //   (2) DeformationManager::OutputData @0x826225D8 publishes those tables into the
-    //       entity-module output interface -- its committed body emits no locator write at
-    //       all and the TU is not even mounted (BrnGame.log: "conductor gate:
-    //       DeformationManager::OutputData ... inert");
-    //   (3) leg L5 of ReadUpdatedActiveRaceCarDataFromPhysics copies them into RenderParams
-    //       -- PARKED (BrnGame.log: "[physics-readback] PARKED deformation legs ...
-    //       locator-output copy ...").
-    // So with no stand-in the count is 0, the producer's loop runs zero times, and the whole
-    // subsystem draws nothing while looking perfectly healthy. This publishes what
-    // DeformableObject::UpdateLocator @0x825E0EC8 yields for an UNDAMAGED car -- the streamed
-    // spec's own authored locator frames, whose skin-point displacement term is zero at rest
-    // -- through the REAL consumer (RenderParams::SetLightLocators). It invents no position:
-    // every value comes from the car's shipped StreamedDeformationSpec::mLightTags.
-    // DELETE-WHEN leg (3) unparks -- at which point this must go, or it will overwrite the
-    // deformed positions with the rest pose every frame.
-    void PublishRestPoseLightLocatorsBringUp( ActiveRaceCar* lpActiveRaceCar,
-                                              s32 liActiveRaceCar );
-
     // ========================================================================
     // MODELLED members (pose wave 2026-07-31): the three module flags
     // AttachActiveRaceCar reads. All three are named + placed by the SAME DWARF bool run
@@ -1824,12 +1750,6 @@ private:
     // moment the car comes back onto the axis (`stfs flt_82001CC0, 0x228(r31)` @0x822E9F2C).
     f32 mfClippedTime;
 
-    // X360 +0x18354 (99156). DWARF BrnRaceCarEntityModule.h:386. The head gate of
-    // UpdateInAndOutOfRangeCars (`lbzx r11, r23, 0x18354 ; bne` @0x822FF93C).
-    // ⛔ NO WRITER EXISTS ON THIS BUILD -- see the [FLAG PC bring-up] banner on the
-    // E_ACTION_START_PLAYING_MODE arm in BrnRaceCarEntityModule.cpp; the console's writers are
-    // Construct @0x822FDBD4, HandlePrepareForModeAction @0x823095E8 (clear) and
-    // HandleGameActions' action-34 arm @0x8230C7F8 (set).
     bool mbModeStartedPlaying;
 
     // X360 +0x186D4 (100052) / +0x18714 (100116). DWARF BrnRaceCarEntityModule.h:450/:451.

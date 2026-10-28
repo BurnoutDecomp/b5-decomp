@@ -31,35 +31,8 @@ int AptRenderItem::sItemsAllocated = 0;
 // shutdown latch (X360 byte_8324E56C). The base render-item TU is their home;
 // the subtype TUs (e.g. AptRenderItemCustomControl) declare them extern.
 //
-// The console brackets each revision-link swap with the lwarx/stwcx.
-// interrupt-masked test-and-set on unk_8324E7CC; modelled here as an
-// interlocked test-and-set (host-portable, uncontended on the single-threaded
-// bring-up path -- see the PC-platform leaf markers below). byte_8324E56C gates
-// the manager-link teardown in the dtor
-// (true once the render system is shutting down -> skip the revision teardown).
-// ---------------------------------------------------------------------------
 volatile long gAptRenderTreeRevisionLock = 0;   // X360 unk_8324E7CC
 bool          gbRenderItemShuttingDown   = false; // X360 byte_8324E56C
-
-namespace
-{
-    // The console brackets each revision-link swap with an interrupt-masked lwarx/stwcx.
-    // test-and-set on unk_8324E7CC.
-    // FLAG PC-platform leaf: on single-threaded PC this is a plain _InterlockedExchange spin
-    // (a threading primitive, not an engine Class::method).
-    inline void AptRenderTreeLock_Acquire()
-    {
-        while (_InterlockedExchange(&gAptRenderTreeRevisionLock, 1) != 0)
-        {
-            // spin until the previous holder releases (sets it back to 0)
-        }
-    }
-    // FLAG PC-platform leaf: paired release of the single-threaded render-tree spinlock.
-    inline void AptRenderTreeLock_Release()
-    {
-        _InterlockedExchange(&gAptRenderTreeRevisionLock, 0);
-    }
-}
 
 // Base render hooks -- empty (@0x7E49A8/0x7E499C/0x7E49A4/0x7E49A0). The base
 // renderable draws nothing; the character subtypes override Render.
@@ -615,12 +588,10 @@ AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
 // ([c:0x28]), take its reference, and return it.
 AptRenderItem* AptRenderItem::Manager_CloneNewItem(int nTick)
 {
-    AptRenderTreeLock_Acquire();
     AptRenderItem* pNew = Clone(nTick, false);   // (**a1)(a1, a2, 0)
     mpManagerNextRevision = pNew;                // [c:0x28]
     if (pNew)
         pNew->AddReference();                    // atomic ++mRefCount [c:0x24]
-    AptRenderTreeLock_Release();
     return pNew;
 }
 
@@ -628,12 +599,10 @@ AptRenderItem* AptRenderItem::Manager_CloneNewItem(int nTick)
 // the virtual Clone copies the EXTENDED state (mask / depth / manager links).
 AptRenderItem* AptRenderItem::Manager_CreateNewRevision(int nTick)
 {
-    AptRenderTreeLock_Acquire();
     AptRenderItem* pNew = Clone(nTick, true);    // (**a1)(a1, a2, 1)
     mpManagerNextRevision = pNew;                // [c:0x28]
     if (pNew)
         pNew->AddReference();                    // atomic ++mRefCount [c:0x24]
-    AptRenderTreeLock_Release();
     return pNew;
 }
 
@@ -667,7 +636,6 @@ void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
         v2 = nullptr;
     if (v2 != mpManagerNextSibling)                           // [c:0x2C]
     {
-        AptRenderTreeLock_Acquire();
         if (v2)
             v2->AddReference();                               // atomic ++mRefCount
         if (mpManagerNextSibling)
@@ -677,7 +645,6 @@ void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
             pOld->ReleaseReference();
         }
         mpManagerNextSibling = v2;
-        AptRenderTreeLock_Release();
     }
 }
 
@@ -691,7 +658,6 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
         v2 = nullptr;
     if (v2 != mpMask)                                         // [c:0x1C]
     {
-        AptRenderTreeLock_Acquire();
         if (v2)
             v2->AddReference();
         if (mpMask)
@@ -701,7 +667,6 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
             pOld->ReleaseReference();
         }
         mpMask = v2;
-        AptRenderTreeLock_Release();
     }
 }
 
@@ -718,7 +683,6 @@ void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
         v2 = nullptr;
     if (v2 != mpManagerFirstChild)                           // [c:0x30]
     {
-        AptRenderTreeLock_Acquire();
         if (v2)
             v2->AddReference();
         if (mpManagerFirstChild)
@@ -728,7 +692,6 @@ void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
             pOld->ReleaseReference();
         }
         mpManagerFirstChild = v2;
-        AptRenderTreeLock_Release();
     }
 }
 
@@ -792,7 +755,6 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
         }
     }
 
-    AptRenderTreeLock_Acquire();
     result = mpManagerFirstChild;                        // [c:0x30]
     if (result)
     {
@@ -800,7 +762,6 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
         result->ReleaseReference();
     }
     mpManagerFirstChild = pChild;
-    AptRenderTreeLock_Release();
     return result;
 }
 
@@ -858,7 +819,6 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
         }
     }
 
-    AptRenderTreeLock_Acquire();
     result = mpManagerNextSibling;                       // [c:0x2C]
     if (result)
     {
@@ -866,7 +826,6 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
         result->ReleaseReference();
     }
     mpManagerNextSibling = pSibling;
-    AptRenderTreeLock_Release();
     return result;
 }
 
@@ -959,7 +918,6 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
             pMask->PropagateTreeIsVisible(v14);
         }
 
-        AptRenderTreeLock_Acquire();
         result = v3->mpMask;                             // [c:0x1C]
         if (result)
         {
@@ -967,7 +925,6 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
             result->ReleaseReference();
         }
         v3->mpMask = pMask;
-        AptRenderTreeLock_Release();
     }
 
     if (!v3->mpMask)

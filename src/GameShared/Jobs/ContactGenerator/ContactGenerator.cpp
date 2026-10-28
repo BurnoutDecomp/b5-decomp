@@ -42,15 +42,6 @@
 // This one folds the subtraction into a 64-bit constant. Two entries, two encodings, one formula
 // -- which is the cross-check that the fold was decoded right.
 //
-// ⚠️⚠️ FLAG PC-platform leaf: THE SPU ID, and only that.
-// `(EA::Jobs::GetJobThreadId() - 0xF8000088) / 4` is X360 hardware-thread-address arithmetic.
-// There is no such id on this host and EA::Jobs::GetJobThreadId has no body in this tree at all.
-// The console's INTENT is "index this thread's private job context", and on this single-threaded
-// PC build there is exactly one. Only that one computation is replaced; the bounds assert, the
-// six-entry context array, its 0x10300 stride and the Execute call are all the console's. Same
-// precedent, same marker and the same one-line justification as PolygonSoupTester.cpp and
-// CgsLooseOctree.cpp:997.
-// =================================================================================================
 
 #include "GameShared/Jobs/ContactGenerator/ContactGeneratorJob.h"
 
@@ -69,10 +60,6 @@ void ContactGeneratorEntry(EA::Jobs::Param laParam0,
     (void)laParam0;
     (void)laParam2;
     (void)laParam3;
-
-    // ---- FLAG PC-platform leaf: the job-thread index ----
-    // X360: spuId = ((EA::Jobs::GetJobThreadId() & 0xFFFFFFFF) - 0xF8000088) >> 2.
-    const s32 liJobThreadIndex = 0;
 
     CGS_ASSERT(liJobThreadIndex < KI_NUM_CONTACT_GENERATOR_JOBS,
                "SPU Id out of range: ");   // ContactGenerator.cpp:55

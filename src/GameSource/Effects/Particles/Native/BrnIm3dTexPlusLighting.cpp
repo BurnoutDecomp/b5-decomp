@@ -11,13 +11,6 @@
 // "mapPixelProgramBuffer[ li8Program ] != NULL" (CgsImRenderer.h:570 / :554)
 // before every one of the six lookups; hoisted to one check per program.
 //
-// THE PROGRAM PAIR. The original hands ImRenderer<WorldTexturedVertex>::Construct
-// two executable-embedded Xenos programs (728 bytes vertex, 720 bytes pixel).
-// They were disassembled and re-authored as D3D9 vs_3_0 / ps_3_0, compiled and
-// wrapped exactly like the skid pair into
-// pc/gcm/renderengine/WorldTexturedProgramsPC.cpp -- the PC platform leaf this
-// TU binds.
-// ============================================================================
 
 #include "GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
@@ -34,9 +27,7 @@ void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppSh
 
 namespace renderengine
 {
-    extern const u8  gauWorldTexturedVertexProgramPC[];
     extern const u32 guWorldTexturedVertexProgramPCSize;
-    extern const u8  gauWorldTexturedPixelProgramPC[];
     extern const u32 guWorldTexturedPixelProgramPCSize;
 }
 
@@ -44,8 +35,6 @@ namespace BrnGraphics
 {
     void Im3dTexPlusLighting::Construct(rw::IResourceAllocator* lpAllocator)
     {
-        const void* lapVertexProgramBinary[1] = { renderengine::gauWorldTexturedVertexProgramPC };
-        const void* lapPixelProgramBinary[1]  = { renderengine::gauWorldTexturedPixelProgramPC };
         const u32   lauVertexProgramSize[1]   = { renderengine::guWorldTexturedVertexProgramPCSize };
         const u32   lauPixelProgramSize[1]    = { renderengine::guWorldTexturedPixelProgramPCSize };
         CgsGraphics::ImRenderer<WorldTexturedVertex>::Construct(

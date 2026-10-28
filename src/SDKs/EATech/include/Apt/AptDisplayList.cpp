@@ -71,7 +71,6 @@
 // ---------------------------------------------------------------------------
 extern void AptFlushDeferredReleases();
 
-
 // ---------------------------------------------------------------------------
 // The per-node tick / generalised-process hooks the display-list walks
 // (AptCIH::tick @0x82B0BED8 / AptCIH::GeneralisedProcess @0x82AE0228) are
@@ -423,16 +422,6 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
             (luTablePtr >= 0x10000u) && ((luTablePtr >> 47) == 0u);
     }
 
-    // FLAG PC-platform leaf (.apt converter-data guard, mirrored from the live place
-    // path): a fresh ADD whose placement names NO character (an unresolved-import slot,
-    // or a MOVE node whose target depth never composed because ITS import place was
-    // skipped) cannot be instantiated -- the dispatch would create a CIH over a null
-    // character (AV; reproduced on the drive bundles' menu state jumps). Skip the add.
-    // Authored console data never hits this (imports are always resolved by Fixup
-    // pass-3, the follow-on).
-    if (pPlacedChar == nullptr)
-        return nullptr;
-
     if (bAnimSane)
         pAnim->ExecuteInitActions(pParentNode, nCharId);
 
@@ -575,20 +564,6 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     AptClipEventHandlerList* const pHandlers = pSprite->mpClipEventHandlers;
     if (!pHandlers)
         return;
-
-    // FLAG PC-platform leaf (.apt converter-data guard -- the same 4-byte-straddle class as the malformed
-    // frame tables / char[1]): a few clipActions blocks in the apt_convert-produced
-    // bundle put the record-array pointer at the XB1-aligned +0x08 instead of +0x04,
-    // so the +0x04 read straddles {pad, offset} (observed 0x0000A838_00000000). Such a
-    // block was also skipped by resolve64 (its records/streams never relocated/parsed),
-    // so it is unusable: skip it here (the fold + set-cache add + load events).
-    {
-        const uintptr_t luRecs = reinterpret_cast<uintptr_t>(pHandlers->mpHandlers);
-        if (luRecs < 0x10000u || (luRecs >> 47) != 0u ||
-            (luRecs & 0xFFFFFFFFull) == 0u)   // the straddle leaves the low dword zero
-            return;
-    }
-
 
     // Fold each registered handler's event mask into mnClipActionFlags' LOW 24 bits
     // (x64 position; X360 kept the clip copy <<8), and note whether any handler

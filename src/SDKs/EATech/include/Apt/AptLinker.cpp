@@ -101,7 +101,6 @@ void InstallEmptyCharacterInstVtbl(AptCharacterInst* pInst);                    
 void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst);                   // dword_8324E530 lazy init
 void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                         // gAptFuncs +0x2C / +0x18
 
-
 // ---------------------------------------------------------------------
 // AptLinker::AptLinker -- inline body emitted inside AptTarget::AptTarget
 // @0x82B00160 (head=null; mPendingFiles is an empty SBO vector pointing at its
@@ -346,16 +345,6 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
     // An EMPTY name is the UNMOUNT half (StateInterface::PlayAptMovie("", level)), and
     // it is exactly the arm that silently does nothing when the level variable does not
     // resolve -- so print the resolution, not just the request.
-    if (AptLifeDiagEnabled())
-    {
-        char lac[256];
-        std::snprintf(lac, sizeof(lac),
-            "[aptlife] Linker::Load name='%s' target='%s' value=%p\n",
-            pName ? pName->GetBuffer() : "(null)",
-            pFileName ? pFileName->GetBuffer() : "(null)",
-            static_cast<const void*>(pValue));
-        CgsDev::Log::WriteToLog(lac);
-    }
     if (pValue == nullptr)
         goto done;
 
@@ -728,28 +717,6 @@ void AptLinker::Update()
         gpAptTarget->mpAnimationTarget->RunActions();    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
         // ~empty (Strin(v83)) releases the swapped-out elements.
     }
-}
-
-// =====================================================================
-//  Out-of-line helper bodies the linker spine calls (split out by the X360
-//  decompile as small free functions). Homed faithfully here against the X360
-//  ARTIST.XEX + PS3 DecFIGS exports.
-// =====================================================================
-
-// ---------------------------------------------------------------------
-// AptSharedPtrIncRefThingy / AptSharedPtrDecRefThingy -- the intrusive ref-count
-// on an AptLinkerThingy (count at +0x00, mnRefCount). PS3 DecFIGS:
-//   _Z18AptSharedPtrIncRefP15AptLinkerThingy @0xF1F584 (lwarx/+1/stwcx., ret new)
-//   _Z18AptSharedPtrDecRefP15AptLinkerThingy @0xF1F5B4 (lwarx/-1/stwcx., ret new)
-// The console runs a true interrupt-masked load-linked / store-conditional atomic;
-// on the single-threaded x64 Apt gate that folds to a plain ++/-- on the counter.
-// FLAG PC-platform leaf (threading): atomicity dropped (no PC equivalent needed; the
-// Apt runtime is single-thread for the linker pass). Returns the NEW count, exactly
-// as the asm leaves it in r9.
-// ---------------------------------------------------------------------
-int AptSharedPtrIncRefThingy(AptLinkerThingy* pThingy)
-{
-    return ++pThingy->mnRefCount;   // lwarx r9; r9+1; stwcx. -> return r9
 }
 
 int AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy)

@@ -107,8 +107,6 @@ public:
     // consuming the per-column budget left in lpafStretchDistance[32].
     void SpreadHNGIntoPreviousSection(f32* lpafStretchDistance);
 
-    // :103 -- NO IDA export, not reached by any recovered caller.
-    // [FLAG PC bring-up] declared-only; see the banner in the .cpp.
     void CheckForContinuedSpreading(f32* lpafStretchDistance, s32 liSectionIndex);
 
     // ---- queries -----------------------------------------------------------------------
@@ -132,8 +130,6 @@ public:
     // :126 @0x82764898 -- raw bit test, no range clamping (it asserts instead).
     bool MapSquareOccupiedFast(s32 liWidth, s32 liHeight);
 
-    // :75 / :83 / :87 / :94 -- NO IDA export, not reached by any recovered caller.
-    // [FLAG PC bring-up] declared-only; see the banner in the .cpp.
     bool MoveTargetToLegalPosition(Vector2& lTarget, f32 lfRadius);
     bool GetNearestEdges(Vector2 lPos, Vector2& lLeftEdge, Vector2& lRightEdge, f32 lfHeight);
     bool IsSquareOccupied(Vector2 lPos);
@@ -183,8 +179,6 @@ private:
     // solid quad in lColour, plus the section's two side edges at world height lfHeight.
     void RenderHNGSquare(s32 liWidth, s32 liStartHeight, s32 liEndHeight, f32 lfHeight, CgsDev::RGBA lColour);
 
-    // :158 / :186 / :212 / :220 / :226 -- NO IDA export, not reached by any recovered
-    // caller. [FLAG PC bring-up] declared-only; see the banner in the .cpp.
     bool    MapSquareOccupied(f32 lfInterpX, f32 lfInterpY);
     void    SetMapSquare(f32 lfInterpX, f32 lfInterpY);
     bool    IsInRange(f32 lfInterpX, f32 lfInterpY);

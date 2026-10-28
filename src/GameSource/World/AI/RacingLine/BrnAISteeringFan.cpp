@@ -42,26 +42,6 @@ namespace BrnAI
         // ~93 into that array while GetSpeedRatio reads 0 off the SAME object -- so if this is
         // running per-frame rather than once per race entry, it is wiping the fan every frame
         // and pinning every AI car at quarter speed.
-        static const bool sbFanDiag = getenv("BRN_AI_FAN_DIAG") != 0;
-        if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static u32 suPrepCall = 0;
-            ++suPrepCall;
-            if (suPrepCall <= 12 || (suPrepCall % 240) == 0)
-            {
-                f32 lfMaxCumBefore = 0.0f;
-                for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
-                {
-                    const f32 lfA = (mfCumulativeWeighting[liS] < 0.0f) ? -mfCumulativeWeighting[liS]
-                                                                         :  mfCumulativeWeighting[liS];
-                    if (lfA > lfMaxCumBefore) lfMaxCumBefore = lfA;
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[aiprep] fan " << static_cast<s32>(reinterpret_cast<intptr_t>(this) & 0xFFFFFF)
-                    << " Prepare call " << static_cast<s32>(suPrepCall)
-                    << " wiping maxCum " << lfMaxCumBefore << "\n";
-            }
-        }
 
         mfReciprocalSteps = 0.0625f;                  // +2036 (1 / (KI_FAN_STEPS - 1))
         miStateCounter    = 0;                        // +2052
@@ -158,30 +138,6 @@ namespace BrnAI
         // because that scan is "first wins on ties" starting at -FLT_MAX, ray 0 is exactly what
         // an ALL-EQUAL (e.g. all-zero) weighting array yields. So print the array's spread, not
         // just the index. Rate limited to one line per ~2 s across all cars.
-        static const bool sbFanDiag = getenv("BRN_AI_FAN_DIAG") != 0;
-        if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static u32 suCall = 0;
-            if ((suCall++ % 240) == 0)
-            {
-                f32 lfMin = mfCumulativeWeighting[0];
-                f32 lfMax = mfCumulativeWeighting[0];
-                s32 liNonZero = 0;
-                for (s32 li = 0; li < KI_FAN_STEPS; ++li)
-                {
-                    const f32 lfW = mfCumulativeWeighting[li];
-                    if (lfW < lfMin) lfMin = lfW;
-                    if (lfW > lfMax) lfMax = lfW;
-                    if (lfW != 0.0f) ++liNonZero;
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[aifan] fan " << static_cast<s32>(reinterpret_cast<intptr_t>(this) & 0xFFFFFF)
-                    << " best " << liBest << " cube " << lfCube
-                    << " weights min " << lfMin << " max " << lfMax
-                    << " nonzero " << liNonZero << "/" << static_cast<s32>(KI_FAN_STEPS)
-                    << "\n";
-            }
-        }
         if (lfCube >= KF_STEERING_FAN_SPEED_RATIO_KNEE)
             return 1.0f - (lfCube - KF_STEERING_FAN_SPEED_RATIO_KNEE) / (1.0f - KF_STEERING_FAN_SPEED_RATIO_KNEE);
         return 1.0f;

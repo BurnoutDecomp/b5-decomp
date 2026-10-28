@@ -44,7 +44,6 @@
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/ParticleRender.h"
-#include "pc/gcm/renderengine/reflections/RenderContext.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"          // the emitter + the three simulation helpers
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"   // the live-emitter list Render walks
@@ -62,7 +61,6 @@
 #include "GameSource/Effects/Particles/LionParticleRender.h"    // BrnParticle::LionParticleRender
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the one-shot EmitterCubeRender announcement
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"   // shadow::Device
-#include "pc/gcm/renderengine/ShadowPass.h"                 // renderengine::LionParticleSampler_ApplyState
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 
 #include <cstddef>   // offsetof (the layout pins at the foot of this file)
@@ -86,11 +84,6 @@ extern "C"
                                 u32 luStartVertex, u32 luVertexCount);
 }
 
-// The Lion particle path's sampler-state object: Dispatch binds it on sampler 0 through the
-// shadow device before rendering. FLAG PC-platform leaf -- null on this backend because the
-// state's builder, part of the particle module's render init, is not landed.
-void* gpLionParticleSamplerState = nullptr;
-
 // The particle draw primitive type the console passes to D3DDevice_DrawVertices.
 static const u32 KU_PARTICLE_PRIMITIVE_TYPE = 13;
 
@@ -110,9 +103,6 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
                                float32_t afDepthSamplerOffsetV,
                                renderengine::TextureState* apDepthTextureState)
 {
-    // [lionfx] FLAG PC bring-up diagnostic -- the DRAW half's witness (see Render's twin). It
-    // says how many batches actually reached the device this frame; a non-zero Render count with
-    // a zero batch count is a vertex-buffer problem, and the two lines separate those.
     {
         static u32 suLastBatches = 0xFFFFFFFFu;
         const u32 luBatches = arBatchArray.GetLength();
@@ -139,16 +129,6 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
     shadow::Device::ResetShadowing();
     D3DDevice_SetStreamSource(gpD3DDevice, 0, apVertexBuffer, 0, 0, 1);
     shadow::Device::SetState(gpLionParticleSamplerState, 0);
-
-    // FLAG PC-platform leaf, paired 1:1 with the call above and DELETE-WHEN it works.
-    // gpLionParticleSamplerState is null on this backend AND shadow::Device's sampler setter bottoms
-    // out in the documented no-op SetSamplerStateLowLevel, so that call binds nothing twice over and
-    // the pass runs on whatever sampler words the previous pass left on unit 0 (measured by the
-    // [lionbind] probe: ADDRESSU/V = WRAP, the world path's non-cube default). The console's state is
-    // not a mystery -- it is ImRendererBase::ConstructOnceOnly's
-    // ConstructSamplerState(alloc, 1, 0, 2, 2), i.e. min/mag LINEAR, mip NONE, address U/V CLAMP --
-    // and this installs exactly those words. See the banner on LionParticleSampler_ApplyState.
-    renderengine::LionParticleSampler_ApplyState(0);
 
     mpRenderer->BeginRendering(afWhiteLevel, abEnableZFade, afNearPlane, afFarPlane,
                                afDepthFadeDistance, afDepthSamplerOffsetU, afDepthSamplerOffsetV,
@@ -377,7 +357,6 @@ void cParticleRender::_AssertLayout()
                   "its magic-static guard word");
 }
 
-
 // =================================================================================================
 // THE PER-FRAME RENDER DRIVER (landed 2026-09-05, the boost-exhaust wave).
 //
@@ -483,17 +462,6 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
 
     u32 luLive = 0, luCell = 0, luInactive = 0, luCulled = 0, luRendered = 0;   // [lionfx] witness
     u32 luCullRange = 0, luCullFrustum = 0, luCullNear = 0;                    // [lionfx] by stage
-
-    // ---- [lionfx] FLAG PC bring-up: BRN_LIONFX_NOCULL -----------------------------------------
-    // A DIAGNOSTIC BYPASS, not console behaviour. With it set, every emitter that reaches the
-    // cull is drawn. It exists because "nothing on screen" and "everything culled" are the same
-    // picture, and the three tests below all depend on camera data this build publishes through a
-    // bring-up stand-in -- so one run with the bypass on separates "the culler is wrong" from
-    // "the draw chain downstream of it is". DELETE with the boost-exhaust bring-up.
-    static const bool sbNoCull = []() {
-        const char* lpcValue = std::getenv("BRN_LIONFX_NOCULL");
-        return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
-    }();
 
     for (cParticleEmitter* lpEmitter = arEmitterManager.GetpUsed();
          lpEmitter != 0;
@@ -648,31 +616,6 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
         ++luRendered;
     }
 
-    // [lionfx] FLAG PC bring-up diagnostic -- the Lion draw path's own witness, printed only
-    // when the answer CHANGES (so a steady state costs one line, not one per frame). It is the
-    // attribution this subsystem has never had: if nothing appears on screen, this says whether
-    // the emitters were missing, culled, or drawn with zero particles -- three different bugs
-    // that all look identical in a screenshot. DELETE with the boost-exhaust bring-up.
-    {
-        static u32 suLastLive = 0xFFFFFFFFu;
-        static u32 suLastRendered = 0xFFFFFFFFu;
-        static u32 suLastParticles = 0xFFFFFFFFu;
-        if (luLive != suLastLive || luRendered != suLastRendered
-            || mParticlesRenderedCount != suLastParticles)
-        {
-            suLastLive = luLive;
-            suLastRendered = luRendered;
-            suLastParticles = mParticlesRenderedCount;
-            char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[lionfx] Render: emitters live=%u cell=%u inactive=%u culled=%u"
-                          " (range=%u frustum=%u near=%u) drawn=%u particles=%u nocull=%d\n",
-                          luLive, luCell, luInactive, luCulled,
-                          luCullRange, luCullFrustum, luCullNear, luRendered,
-                          mParticlesRenderedCount, (int)sbNoCull);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -745,8 +688,6 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
         LionBatch lBatch;
         const_cast<EffectsVertexBufferLocked&>(arVertexBuffer)
             .BeginBatch(lVertexIterator, lBatch, luVertexStride);
-
-        const bool lbDrawThisWorld = CgsPC::Reflections::AcceptParticleWorld(apEmitter->GetBindings().GetWorldIndex());
 
         if (lpBucket->HasMatrices())
         {

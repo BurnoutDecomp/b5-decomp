@@ -42,47 +42,6 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"   // KU_AptEmbeddedMovieOff ([aptlife] def-base probe)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [aptlife] CgsDev::Log::WriteToLog
 
-// ---------------------------------------------------------------------------
-// [aptlife] -- the movie-lifetime witness. NOT X360; opt-in via BRN_APT_LIFE=1.
-//
-// It exists because an apt bundle can be unloaded and re-loaded under a live
-// AptLoader, and the only way to tell a re-load that RESOLVED from one that
-// silently reused a stale AptFile is to print, at each seat, the three facts
-// that decide it: the file's load state, its mpData, and the movie def base's
-// character table (a POINTER after Fixup, a raw file OFFSET before it).
-// ---------------------------------------------------------------------------
-bool AptLifeDiagEnabled()
-{
-    static const bool sbOn = (std::getenv("BRN_APT_LIFE") != nullptr);
-    return sbOn;
-}
-
-void AptLifeLog(const char* lpacWhat, const char* lpacName, const AptFile* lpFile)
-{
-    if (!AptLifeDiagEnabled())
-        return;
-
-    const void*   lpData      = lpFile ? lpFile->mpData : nullptr;
-    int           liState     = lpFile ? lpFile->mnState : -1;
-    int           liRefs      = lpFile ? lpFile->mnRefCount : -1;
-    long long     lnCharCount = -1;
-    const void*   lpCharTable = nullptr;
-    if (lpData != nullptr)
-    {
-        const AptCharacterAnimation* lpAnim =
-            reinterpret_cast<const AptCharacterAnimation*>(
-                reinterpret_cast<const char*>(lpData) + KU_AptEmbeddedMovieOff);
-        lnCharCount = lpAnim->mnCharacterCount;
-        lpCharTable = lpAnim->mpCharacterTable;
-    }
-
-    char lac[256];
-    std::snprintf(lac, sizeof(lac),
-        "[aptlife] %s '%s' file=%p refs=%d state=%d mpData=%p charCount=%lld charTable=%p\n",
-        lpacWhat, lpacName ? lpacName : "(null)", static_cast<const void*>(lpFile),
-        liRefs, liState, lpData, lnCharCount, lpCharTable);
-    CgsDev::Log::WriteToLog(lac);
-}
 
 // The one global lock for the loader's list. (EA::Thread::Mutex is recursive,
 // which IsLoaded/Load rely on.)
@@ -218,7 +177,6 @@ AptFilePtr AptLoader::Load(const EAStringC& fileName)
         MutexAptLoader.Unlock();
         result.pData = found.pData;
         AptSharedPtrIncRef(found.pData);
-        AptLifeLog("Load HIT   ", fileName.GetBuffer(), found.pData);
     }
     else
     {
@@ -246,7 +204,6 @@ AptFilePtr AptLoader::Load(const EAStringC& fileName)
         AptSharedPtrIncRef(f);                       // 1 -> 2 (returned ref)
         if (AptSharedPtrDecRef(f) == 0)              // 2 -> 1
             AptSharedPtrDelete(f);
-        AptLifeLog("Load NEW   ", fileName.GetBuffer(), f);
         // `found` is null in this branch -> the cleanup below is a no-op.
     }
 
@@ -334,52 +291,11 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
         return;
     }
 
-    // The data root (the movie root CHARACTER HEADER), and the movie's embedded
-    // AptCharacterAnimation def base at root + the pointer-size header.
-    // x64 fork (the committed port rule): the console relocates a4->mnDataRootOffset in place in the 32-bit
-    // file slot (v15 += a3, stored back, then subtracted off again after Resolve); x64
-    // computes the absolute address without the 32-bit write-back. The +pBase relocation is
-    // GUARDED on a nonzero offset (asm @0x82AFFA44 beq): a zero offset leaves the root null.
-    //
-    // The pointer-size discriminator reads the "<n>:<v>:<p>" signature, which lives in the
-    // APT DATA chunk ("Apt Data:1:7:8\x1a") == pBase on both formats (the console file leads
-    // with it; the native-8 bundle's pBase is that chunk). pConstFile is now the REAL
-    // "Apt constant file" chunk (un-collapsed 2026-07-01), which carries no signature.
-    const int liPtrSize = reinterpret_cast<AptConstFile*>(pBase)->GetPointerSizeBytes();
+    if (pConstFile->mnDataRootOffset != 0)
+        pConstFile->mnDataRootOffset += reinterpret_cast<uintptr_t>(pBase);
+    void* pRoot = reinterpret_cast<void*>(pConstFile->mnDataRootOffset);
+    const unsigned int luHdrSize = 16u;
 
-    void* pRoot;
-    unsigned int luHdrSize;
-    if (liPtrSize == 8)
-    {
-        // x64-FAITHFUL root location (XB1 CompleteLoad sub_1408348B0): the const chunk's
-        // movieOffset @const+0x18 (pBase-relative) locates the type-9 movie root directly --
-        // `v9 = *(a4+24); if (v9) v9 += a3` (verified vs TITLE_SCREEN02: 0x48E0 -> the root).
-        // The XB1 writes the absolute back into the slot (in-place relocate); kept, load-once.
-        int64_t* pnMovieOffset =
-            reinterpret_cast<int64_t*>(reinterpret_cast<char*>(pConstFile) + 0x18);
-        const int64_t nMovieOffset = *pnMovieOffset;
-        if (nMovieOffset != 0 && nMovieOffset < 0x10000000)   // still a file offset
-        {
-            pRoot          = static_cast<char*>(pBase) + nMovieOffset;
-            *pnMovieOffset = reinterpret_cast<int64_t>(pRoot);   // xb1 `*(a4+24) = v9`
-        }
-        else if (nMovieOffset != 0)
-        {
-            pRoot = reinterpret_cast<void*>(static_cast<intptr_t>(nMovieOffset));   // already live
-        }
-        else
-        {
-            pRoot = nullptr;   // a zero offset leaves the root null (the console's beq arm)
-        }
-        luHdrSize = 0x20u;
-    }
-    else
-    {
-        pRoot     = pConstFile->mnDataRootOffset
-                        ? static_cast<char*>(pBase) + pConstFile->mnDataRootOffset
-                        : nullptr;
-        luHdrSize = 16u;                                      // console 4-byte header
-    }
     AptCharacterAnimation* pCharAnim =
         reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + luHdrSize);
 
@@ -399,16 +315,8 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     f->mnField12        = f->mnState;   // record the previous state
     f->mnState          = 3;            // loaded / resolved
 
-    AptLifeLog("CompleteLd ", f->mFileName.GetBuffer(), f);
-
-    // FLAG PC-platform leaf: the console then notifies/frees the const-file chunk
-    // through the HOST load-complete hook (dword_8324E840(a4) -- a host-installed
-    // slot beside the start/cancel hooks; its only engine xref is this call). The
-    // PC host's synchronous stream path (BrnGuiAptRuntime.cpp) owns the const-file
-    // lifetime, so the slot stays un-installed and the call is elided.
-
-    // Release the by-value handle the callee owns (asm normal-exit @0x82AFFAC0:
-    // *a2=0 + DecRef + AptSharedPtrDelete), mirroring AllImportsAvailable.
+    if (pConstFile->mnDataRootOffset != 0)
+        pConstFile->mnDataRootOffset -= reinterpret_cast<uintptr_t>(pBase);
     AptSharedPtr<AptFile>::Dispose(filePtr.pData);
     filePtr.pData = nullptr;
 }
@@ -596,7 +504,7 @@ void AptLoader::Update()
                     // the def base is pData + 0x20 (the console 4-byte formula was pData + 0x10; the
                     // struct static_asserts native-8 offsets, so it MUST be +0x20 here). This mirrors
                     // CompleteLoad's `pCharAnim = pRoot + luHdrSize` (0x20 native-8).
-                                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 0x20)->Link(
+                                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 0x10)->Link(
                         pData, pDataBlock);
 
                     AptFilePtr notifyHandle;
@@ -702,14 +610,6 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
     MutexAptLoader.Unlock();
 }
 
-// ---------------------------------------------------------------------------
-// InvalidateLoadedData -- FLAG PC-platform leaf (see the header banner for why the
-// console needs no such entry point). Put every AptFile that was resolved against
-// pDataBlock back into the "requested" state, so the loader's own faithful state
-// machine (Update: 1 -> 2 -> the host stream hook -> AptCallbackFile::LoadAnimation ->
-// AptCompleteAnimationAsyncLoad -> CompleteLoad -> Resolve -> Fixup) re-runs against
-// whatever bytes the next load brings, instead of IsLoaded handing out a file whose
-// mpData points into a block the host has re-filled with un-relocated file offsets.
 //
 // The key is AptFile::mpDataBlock, which CompleteLoad sets to the AptDataHeader the
 // movie resolved from -- so the match is by IDENTITY of the header being un-registered,
@@ -735,7 +635,6 @@ void AptLoader::InvalidateLoadedData(const void* pDataBlock)
             continue;
         }
 
-        AptLifeLog("Orphan     ", pFile->mFileName.GetBuffer(), pFile);
 
         // Cut the file loose from its (gone) data. mpData null also makes the
         // ~AptFile resolved-teardown branch a no-op, so the orphan can never

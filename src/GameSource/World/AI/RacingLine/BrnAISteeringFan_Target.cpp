@@ -164,56 +164,6 @@ SteeringFan* SteeringFan::AccumulateWeightings()
     // it folds are themselves empty. Print the bias mode, how many bias entries are live, and
     // the largest absolute contributor weight -- that separates "never called" from "called
     // with nothing to fold" from "folded but the bias row is zero".
-    static const bool sbFanDiag = getenv("BRN_AI_FAN_DIAG") != 0;
-    if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
-    {
-        static u32 suAccumCall = 0;
-        if ((suAccumCall++ % 240) == 0)
-        {
-            f32 lfMaxRow = 0.0f;
-            s32 liLiveRows = 0;
-            for (s32 liC = 0; liC < E_FAN_CONTRIBUTORS_COUNT; ++liC)
-            {
-                bool lbLive = false;
-                for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
-                {
-                    const f32 lfA = (mfWeighting[liC][liS] < 0.0f) ? -mfWeighting[liC][liS]
-                                                                   :  mfWeighting[liC][liS];
-                    if (lfA > lfMaxRow) lfMaxRow = lfA;
-                    if (lfA != 0.0f)    lbLive = true;
-                }
-                if (lbLive) ++liLiveRows;
-            }
-            s32 liLiveBias = 0;
-            for (s32 liC = 0; liC < E_FAN_CONTRIBUTORS_COUNT; ++liC)
-                if (kfBias[meBiasMode][liC] != 0.0f) ++liLiveBias;
-
-            f32 lfMaxAccum = 0.0f;
-            for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
-            {
-                const f32 lfA = (lafAccumulated[liS] < 0.0f) ? -lafAccumulated[liS] : lafAccumulated[liS];
-                if (lfA > lfMaxAccum) lfMaxAccum = lfA;
-            }
-            *CgsDev::Log::gpDebugPrint
-                << "[aiaccum] fan " << static_cast<s32>(reinterpret_cast<intptr_t>(this) & 0xFFFFFF)
-                << " call " << static_cast<s32>(suAccumCall)
-                << " biasMode " << static_cast<s32>(meBiasMode)
-                << " liveBias " << liLiveBias << "/" << static_cast<s32>(E_FAN_CONTRIBUTORS_COUNT)
-                << " liveRows " << liLiveRows << " maxRow " << lfMaxRow
-                << " maxAccum " << lfMaxAccum;
-            // The POST-LERP cumulative, read back off the object we just wrote. If this is
-            // non-zero here but GetSpeedRatio sees zero, something clears the array between
-            // the two; if it is zero here, the write itself never landed.
-            f32 lfMaxCumNow = 0.0f;
-            for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
-            {
-                const f32 lfA = (mfCumulativeWeighting[liS] < 0.0f) ? -mfCumulativeWeighting[liS]
-                                                                     :  mfCumulativeWeighting[liS];
-                if (lfA > lfMaxCumNow) lfMaxCumNow = lfA;
-            }
-            *CgsDev::Log::gpDebugPrint << " maxCumAfterWrite " << lfMaxCumNow << "\n";
-        }
-    }
 
     return this;
 }
@@ -367,26 +317,6 @@ Vector2 SteeringFan::GetDrivingTarget(AICar* lpCar, RacingLine* lpRacingLine,
     return mTarget[liChosen];
 }
 
-// ========================================================================================
-// [FLAG PC bring-up] The four DEBUG-OVERLAY members below have real X360 bodies, but each one is
-// nothing but calls into the console's on-screen debug layer (CgsDev::DebugInterface /
-// CgsDev::DebugRender::Draw2DTextJustified / DrawLine + CgsCore::SPrintf, over the laFanColours /
-// lContributorNames tables at 0x82F3042C / 0x82F304xx). None of that layer exists on this host
-// build -- exactly as SteeringFan::Prepare already declines to reproduce the six
-// CgsDev::PerfMonCpu monitors it registers. They are presentation-only: not one member of
-// SteeringFan, AICar, RacingLine or the fan tables is written by any of them, so the driving
-// result is bit-identical with them empty. They are BODIED (not omitted) because GetDrivingTarget
-// references all four, and the console only reaches them under
-// `lbRenderThinking && lpCar->IsPlayerCar()` -- and AIDriver::GetTargetPosition passes
-// lbRenderThinking = false, so on this build they are unreachable as well as inert.
-// DELETE-WHEN a CgsDev::DebugRender 2D layer exists on the host.
-//   WriteWeightingValues @0x827691E0 -- prints the bias-mode name and each non-zero contributor's
-//                                       weighting * kfBias down the left of the screen.
-//   RenderEdge           @0x82779770 -- one coloured line from mFanOrigin along mUnitDirection[i].
-//   RenderContributor    @0x82779830 -- one contributor row drawn as a coloured fan.
-//   RenderFanVectors     @0x82779A20 -- every contributor row with a non-zero kfBias, plus the
-//                                       chosen ray.
-// ========================================================================================
 void SteeringFan::WriteWeightingValues(s32 liContributor)
 {
     (void)liContributor;

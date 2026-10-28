@@ -428,16 +428,6 @@ namespace BrnDirector
         // SimpleIceTakedownPlayer::SetIceAnim's class-key assert. The console compares the whole u64 class key
         // (`ld` + `cmpld` against 0x4644E379A997C1EE, 0x821F58F0..0x821F5904); the PC compares two dwords.
         // Follow-up, not fixed here.
-        if (getenv("BRN_ALWAYS_SHUTDOWN_CAM") != 0)
-        {
-            mbAlwaysUseShutdownCam = true;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] HARNESS-ONLY (BRN_ALWAYS_SHUTDOWN_CAM=1): the console's debug toggle "
-                       "'Always do shutdown TD camera' is on\n";
-            }
-        }
     }
 
     // ------------------------------------------------------------------------
@@ -601,20 +591,6 @@ namespace BrnDirector
         return true;
     }
 
-    // [crashcam] BRN_CRASHCAM_DIAG witness (NOT in the console): the ICE takedown player's take going ACTIVE and
-    // ending (FINISHED / FAILED), with the take the bound shot names and the player's active time. Reads only.
-    static void BrnDiag_IceTakedownState(const char* lpcState, const Camera::Camera::ShotReference* lpShot,
-                                         f32 lfActiveTime)
-    {
-        if (getenv("BRN_CRASHCAM_DIAG") == 0 || CgsDev::Log::gpDebugPrint == 0 || lpShot == 0)
-        {
-            return;
-        }
-        const Attrib::Gen::iceanim lDiagShot(*lpShot, 0);
-        *CgsDev::Log::gpDebugPrint << "[crashcam] ice takedown " << lpcState << " take guid " << lDiagShot.GetAnimGuid()
-                                   << " at " << lfActiveTime << " s [FLAG PC witness]\n";
-    }
-
     // ------------------------------------------------------------------------
     // SimpleIceTakedownPlayer::Update @0x8225A1E8 -- drive the output camera from the ICE-anim
     // behaviour's produced camera; once PREPARING succeeds advance to ACTIVE, and once the anim
@@ -637,7 +613,7 @@ namespace BrnDirector
             {
                 mfActiveTime = 0.0f;
                 meState = E_STATE_ACTIVE;
-                BrnDiag_IceTakedownState("ACTIVE", mpIceAnim, mfActiveTime);   // [DIAG] NOT X360
+   // [DIAG] NOT X360
             }
             else
             {
@@ -649,8 +625,6 @@ namespace BrnDirector
             if (mIceCam.GetBehaviour()->HasFinishedOrFailed())
             {
                 meState = E_STATE_FINISHED;
-                BrnDiag_IceTakedownState(mIceCam.GetBehaviour()->HasFailed() ? "FAILED" : "FINISHED",   // [DIAG] NOT X360
-                                         mpIceAnim, mfActiveTime);
             }
             break;
 
@@ -1443,14 +1417,6 @@ namespace BrnDirector
 
                 // [crashcam] BRN_CRASHCAM_DIAG witness (NOT in the console): the shot the rolling index picked and
                 // the ICE take it names (resolved the way BehaviourIceAnim::SetParameters resolves it). Reads only.
-                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    const Attrib::Gen::iceanim lDiagShot(
-                        *static_cast<const Camera::Camera::ShotReference*>(lrTakedown.GetShotListElement(luShotIndex)), 0);
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crashcam] shutdown takedown shot " << luShotIndex << " of " << luShotCount
-                        << " take guid " << lDiagShot.GetAnimGuid() << " [FLAG PC witness]\n";
-                }
 
                 mpCurrentTakedown = &mSimpleIceTakedown;
             }
@@ -1464,23 +1430,6 @@ namespace BrnDirector
                 mpCurrentTakedown = &mClassicTakedown;
             }
 
-            // [crashcam] BRN_CRASHCAM_DIAG witness (NOT in the console) -- the ONE point where this
-            // state latches meTakedownType and picks its player. Which of the three arms ran is
-            // invisible from outside, and a takedown that plays the wrong camera looks exactly like
-            // one that never latched. One line per INACTIVE -> PREPARING edge, behind the existing
-            // crash-cam knob. [FLAG PC witness]
-            // DELETE-WHEN: the organic takedown case goes green and the takedown camera is
-            // confirmed to pick its arm from the game state.
-            if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] takedown latch meTakedownType=" << static_cast<s32>(meTakedownType)
-                    << " (" << ((meTakedownType == E_TYPE_B3CLASSIC) ? "E_TYPE_B3CLASSIC" : "E_NUM_TYPES/unset") << ")"
-                    << " isShutdown=" << (lrGameState.mbIsShutdown ? 1 : 0)
-                    << " alwaysShutdownCam=" << (mbAlwaysUseShutdownCam ? 1 : 0)
-                    << " isRevengeTD=" << (lrGameState.mbIsRevengeTD ? 1 : 0)
-                    << " [FLAG PC witness]\n";
-            }
         }
 
         meState = E_STATE_PREPARING;

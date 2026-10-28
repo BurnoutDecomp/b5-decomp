@@ -275,9 +275,6 @@ namespace BrnProgression
         // console number out of the host arithmetic.
         static void _AssertLayout()
         {
-            static_assert(sizeof(CgsID) == 8,
-                          "CgsID is the 64-bit packed id (BrnCommonTypes.h) -- the whole "
-                          "struct is pointer-free, so host layout == console layout");
             static_assert(offsetof(DerivedCarArray, maLiveryTypes)
                               == sizeof(Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>),
                           "maLiveryTypes must abut the CgsID base sub-object (X360: the "

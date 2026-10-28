@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eathread/eathread_tlsalloc.h"
 
-#include <windows.h>  // TlsAlloc, DWORD, TLS_OUT_OF_INDEXES
+#include <xtl.h>  // TlsAlloc, DWORD, TLS_OUT_OF_INDEXES
 
 // ============================================================================
 // SDKs/EATech/eathread/eathread_tlsalloc.cpp

@@ -13,7 +13,6 @@ target_sources(${PROJECT_NAME}
         BrnCameraSphericalRotationController.cpp
         BrnCameraTweaker.cpp
         BrnDebugController.cpp
-        BrnDebugController_embed_check.cpp
         BrnInterpolater.cpp
         BrnLooker.cpp
         BrnLookerSerialise.cpp

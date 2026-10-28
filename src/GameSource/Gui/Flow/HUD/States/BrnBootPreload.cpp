@@ -221,11 +221,6 @@ namespace BrnGui
     {
         if (lpGuiCache == 0)
             return false;
-        // [FLAG PC bring-up] the language slot the console reads at GuiCache+0xA7F8 is not
-        // homed by name yet, and the PC boot is the western SKU (langid 8), so the western
-        // trio is selected unconditionally. The CJK arm is kept beside it so the selector
-        // is a one-line change the day that member lands (boot audit B-P8a-2).
-        return PreloadResourcesReady(lpGuiCache, KA_PRELOAD_FONTS_WESTERN, 3);
     }
 
     // @ 0x82477F28 -- consume the cache event, then walk the preload stage machine.

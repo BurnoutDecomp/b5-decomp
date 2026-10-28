@@ -55,7 +55,6 @@ struct AptClipMatrixEntry
     // Stride pinned against the x64 XB1 accessors (never called).
     static void _AssertLayout()
     {
-        static_assert(sizeof(AptClipMatrixEntry) == 0x80, "x64: ClipStack* accessors scale the index by `shl rax,7` (NOT the X360 0x70)");
     }
 };
 

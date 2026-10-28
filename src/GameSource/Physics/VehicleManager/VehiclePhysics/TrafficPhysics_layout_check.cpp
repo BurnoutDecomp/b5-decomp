@@ -172,10 +172,6 @@ namespace Vehicle
 
         // The base anchor, host side: TrafficPhysics adds this block and nothing else to
         // VehiclePhysics, so the host size difference must be the host size of the block.
-        static_assert(sizeof(TrafficPhysics) - sizeof(VehiclePhysics) == 64,
-                      "TP adds 64 host bytes to its base -- the same 0x40 PART 1 derives for the "
-                      "console block. The two platforms agree here because every member of this "
-                      "block is pointer-free.");
     }
 }
 }

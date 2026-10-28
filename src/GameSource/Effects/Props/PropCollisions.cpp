@@ -153,20 +153,9 @@ namespace
     // hash, the LION slot's handle and whether its description resolved, where it was placed). It only reads.
     const u32 KU_PROP_VFX_DIAG_MAX_LINES = 64;
 
-    bool PropVfxDiagArmed()
-    {
-        static const bool sbArmed = []() {
-            const char* const lpcValue = std::getenv("BRN_PROP_VFX_DIAG");
-            return lpcValue != 0 && lpcValue[0] == '1';
-        }();
-        return sbArmed;
-    }
-
     void PropVfxDiagLine(const char* lpcFormat, ...)
     {
         static u32 suLines = 0;
-        if (!PropVfxDiagArmed() || suLines >= KU_PROP_VFX_DIAG_MAX_LINES)
-            return;
         ++suLines;
         char lacLine[320];
         va_list lArgs;
@@ -318,20 +307,6 @@ namespace
         VFXRuntimeMaterialLef::Initialise();
         mRandom.Construct();
 
-        if (PropVfxDiagArmed())   // [DIAG] what the table was built from
-        {
-            u32 luUnbroken = 0, luSmashing = 0;
-            for (u32 luType = 0; luType < KU_MAX_PROP_TYPE_MAPPINGS; ++luType)
-            {
-                luUnbroken += (maPropToMaterialMappings[luType].mpUnBrokenVFXMaterial != 0) ? 1u : 0u;
-                luSmashing += (maPropToMaterialMappings[luType].mpSmashingVFXMaterial != 0) ? 1u : 0u;
-            }
-            const BrnParticle::VFXPropCollection* const lpCollection = mVFXPropCollection.GetMemoryResource();
-            PropVfxDiagLine("[prop-vfx] Initialise: collection %p (%u props, version %u), physics data %p; "
-                            "%u prop types with an unbroken material, %u with a smashing one\n",
-                            static_cast<const void*>(lpCollection), lpCollection->GetTableSize(),
-                            lpCollection->muVersion, mPropDataResourceHandle.mpResourceMemory, luUnbroken, luSmashing);
-        }
     }
 
     // -----------------------------------------------------------------------

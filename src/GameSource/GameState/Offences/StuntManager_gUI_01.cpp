@@ -135,8 +135,6 @@ void StuntManager::CompleteAllStuntType(StuntElementType                    leSt
     mpProgressionManager->CheckForSpecialCarUnlocks();
     mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);
 
-    // [FLAG PC witness] opt-in BRN_COLLECT_DIAG, first 8 only. Read-only.
-    static const bool sbCollectDiag = (getenv("BRN_COLLECT_DIAG") != 0);
     static s32        siCompleteAllDiagLines = 0;
     if (sbCollectDiag && siCompleteAllDiagLines < 8 && CgsDev::Log::gpDebugPrint != 0)
     {

@@ -4,8 +4,6 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"                 // EA::Jobs::JobScheduler::AddJobs
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
-#include "pc/gcm/renderengine/MeshJobOwnerWait.h"
-
 
 #include <cstring>   // std::memcpy (models the X360 memcpy intrinsic)
 #include <cstdlib>
@@ -28,19 +26,6 @@ namespace BrnTraffic
 {
 namespace
 {
-    // FLAG PC-platform leaf: enable only after native parity/timing validation.
-    // The old traffic witness writes shared camera state; retain its ordered
-    // owner execution when that diagnostic is requested.
-    bool UseNativeTrafficJobsPC()
-    {
-        static const bool sbEnabled = [] {
-            const char* lpcValue = std::getenv("BRN_TRAFFIC_JOBS");
-            return lpcValue && lpcValue[0] == '1'
-                && !std::getenv("BRN_TRAFFIC_DIAG")
-                && !std::getenv("BRN_WORLD_CAMTRAFFIC");
-        }();
-        return sbEnabled;
-    }
 
     // The fixed descriptor slot SetData is handed (0x100 literal @0x82752D84). Host pointer
     // widening grows TrafficJobData, so pin that it still fits.
@@ -69,10 +54,7 @@ void TrafficJobStub::Destruct()
 void TrafficJobStub::WaitOn()
 {
     CGS_ASSERT(mbRunningJob, "mbRunningJob");
-    // FLAG PC-platform leaf: this join runs on the frame/window owner. Service
-    // dependent native window messages and worker assertions until completion.
-    renderengine::MeshJobOwnerWaitPC lOwnerWait;
-    mJob.WaitOn(&renderengine::MeshJobOwnerWaitPC::Poll, &lOwnerWait);
+    mJob.WaitOn(0, 0, -1);
     mbRunningJob = false;
 }
 
@@ -111,32 +93,9 @@ void TrafficJobStub::Execute(JobParams* lpParams)
 
     mbRunningJob = true;
 
-    if (UseNativeTrafficJobsPC())
-    {
-        CgsSystem::JobManager()->AddJobs(&mJob, 1);
-    }
-
-    else
-    {
-        TrafficJobEntry(EA::Jobs::Param(), EA::Jobs::Param(static_cast<void*>(&mJobData)),
-                        EA::Jobs::Param(), EA::Jobs::Param());
-    }
+    CgsSystem::JobManager()->AddJobs(&mJob, 1);
 }
 
-// X360 @0x829172E0. The console derives the worker id from EA::Thread::GetThreadId (an SPU
-// slot on PS3), asserts it is in range ("SPU Id out of range: ", Traffic.cpp:57) and runs the
-// matching TrafficJob over the params carried in the SECOND job argument.
-void TrafficJobEntry(EA::Jobs::Param,
-                     EA::Jobs::Param lData,
-                     EA::Jobs::Param,
-                     EA::Jobs::Param)
-{
-    // FLAG PC-platform leaf: native thread IDs are not the console's six worker
-    // indices, and Param0 is not a worker ID. Each host thread keeps the original
-    // worker state separately; Initialise resets it for every submitted slice.
-    static thread_local TrafficJob slWorker;
-    slWorker.Execute(static_cast<JobParams*>(lData.mpValue));
-}
 
 // X360 @0x829174B0 (TrafficJob.cpp:51 / :69).
 void TrafficJob::Execute(JobParams* lpData)

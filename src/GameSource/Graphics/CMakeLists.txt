@@ -1,7 +1,6 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
         BrnBlobbyShadowManager.cpp
-        BrnBlobbyShadowManager_embed_check.cpp
         BrnCoronaManager.cpp
         BrnCoronaTypeParams.cpp
         BrnEffectsArbitrator.cpp
@@ -11,7 +10,6 @@ target_sources(${PROJECT_NAME}
         BrnRendererModuleDebugComponent.cpp
         BrnRendererModuleIO.cpp
         BrnRendererModuleIO_Dispatch_IOHelper.cpp
-        BrnRendererModuleIO_embed_check.cpp
         BrnRendererModuleIO_OutputBuffer_Accessors.cpp
         BrnShaderConstantsFrame.cpp
         BrnShadowMapRenderManager.cpp

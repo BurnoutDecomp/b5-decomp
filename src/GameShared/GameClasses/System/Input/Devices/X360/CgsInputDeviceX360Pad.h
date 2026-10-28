@@ -158,12 +158,6 @@ namespace CgsInput
         // mePort = -1 @+0xF0); grant it access instead of forcing a raw-offset write.
         friend class ManagerX360;
 
-        // FLAG PC-platform leaf access: CgsInput::InputPadsPC::UpdatePadDevices (System/Input/PC/
-        // CgsInputPadsPC.cpp) is the PC stand-in for the ManagerX360 device scan inside
-        // InputPads::Update @0x828F8690; it makes the same two UnbindFromPort stores when the host
-        // pad goes away, so it gets the same grant ManagerX360 has.
-        friend class InputPadsPC;
-
         // ---- head ----
         u8  mau8Pad00[4];         // +0x00 .. 0x03  (bind/player head -- not touched by this TU's bodies)
         s32 meType;               // +0x04          device type (Construct = 0; checked == 2 for wheel)

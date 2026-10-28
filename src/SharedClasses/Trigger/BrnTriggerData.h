@@ -189,7 +189,6 @@ private:
         static_assert(offsetof(TriggerData, mpKillzones)          == 0x60, "TriggerData::mpKillzones");
         static_assert(offsetof(TriggerData, mppRegions)           == 0xB0, "TriggerData::mppRegions");
         static_assert(offsetof(TriggerData, miRegionCount)        == 0xB8, "TriggerData::miRegionCount");
-        static_assert(sizeof(TriggerData) == 0xC0, "TriggerData host sizeof");
     }
 };
 

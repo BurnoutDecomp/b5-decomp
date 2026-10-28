@@ -39,10 +39,6 @@ struct AptArray : public AptObject
     // Layout pinned against the x64 XB1 export (never called).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptArray, mpArray)    == 0x40, "x64: ctor zeroes qword [this+40h] @0x140825450");
-        static_assert(offsetof(AptArray, mnCapacity) == 0x48, "x64: ctor zeroes [this+48h]");
-        static_assert(offsetof(AptArray, mnLength)   == 0x4C, "x64: length() mov eax,[rcx+4Ch] @0x140850370");
-        static_assert(sizeof(AptArray) == 0x50, "x64: Create allocates 80 from the GC pool @0x1408353A0");
     }
 
     AptArray();                                  // @0x82D978

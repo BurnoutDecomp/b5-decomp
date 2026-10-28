@@ -1,4 +1,3 @@
-#include "pc/gcm/renderengine/FrameProfile.h"
 #ifdef AddMonitor
 #undef AddMonitor
 #endif
@@ -48,7 +47,6 @@
 // the remaining 79 methods.
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "pc/input/BoostFeedback.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
 
@@ -78,7 +76,6 @@
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                                    // BrnDirector::Camera::Utils::CreateLookAt (action 219)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                                  // [net] witness lines (PC harness)
 namespace renderengine { extern u32 guPresentCount; }   // [net] netcar witness: the frame-dump index
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
@@ -109,10 +106,6 @@ namespace BrnWorld
 // The null CgsID sentinel, spelled exactly as BrnRaceCar.cpp does (a "spawn/reset" record
 // carries 0 for "no car" / "derive the wheel set" / "no rival").
 static const CgsID KU_CGSID_NULL = 0;
-
-// [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceiling for the opt-in witnesses in
-// this TU, so an armed knob still cannot flood the log. DELETE-WHEN those witnesses go.
-static const u32 KU_RACECAR_MODULE_DIAG_MAX_LINES = 128u;
 
 // X360 0x822A47A8. Append one training request to the per-frame ring.
 //
@@ -260,21 +253,8 @@ namespace
         return reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>( lpEvent );
     }
 
-    // [DIAG] BRN_RCEM_ACTION_DIAG gate, defined with HandleGameActions below (the same unnamed
-    // namespace); declared here for UpdateStreaming's audio-wait witness. NOT IN THE X360 BINARY.
-    bool GameActionDiagEnabled();
 }
 
-// The module's Construct. The X360 body (reached by WorldModule::Construct's fleet
-// cascade) brings up the whole interior; the slice bodied here is the state
-// LoadGlobalResources owns -- without the receiver-queue Construct the queue has no
-// backing buffer, so BaseEventReceiverQueue::AddEvent rejects every GameData reply
-// addressed to it and Prepare stage 2 waits forever.
-// [FLAG PC bring-up] the rest of the interior (streamer, boost/near-miss/crash-play/
-// power-parking managers, WorldMap2D, the RaceCar[35]/ActiveRaceCar[8] arrays) is still
-// opaque storage in this header and is NOT constructed here.
-// (Stale in part: the streamer, the crash-play manager, the power-parking manager (2026-09-24)
-// and both car arrays ARE constructed below, each at the console's own position.)
 void RaceCarEntityModule::Construct()
 {
     mePrepareStage             = 0;
@@ -313,20 +293,6 @@ void RaceCarEntityModule::Construct()
     // item 4). Without the back pointer the component's own `mpPowerParkingManager != NULL`
     // tripwire fires on every PowerParkingManager::Update.
     mPowerParkingManager.Construct();
-
-    // [FLAG PC bring-up] mCameraTransform is seeded to IDENTITY rather than left as whatever the
-    // module's raw storage holds. The console never seeds it here -- PreSceneUpdate step 2 latches
-    // it every frame from InputBuffer_PreScene::GetCam...() -- but that latch cannot be
-    // reproduced yet: the source is a BrnDirector::Camera::Camera whose layout is not
-    // reconstructed (the IO header only forward-declares it), so there is nothing to copy FROM.
-    // Identity is not a behaviour guess, it is the value that keeps the CONSOLE'S OWN asserts
-    // quiet: CrashPlayManager::Update asserts MagnitudeSquared(lCameraX) > 0 and
-    // MagnitudeSquared(lCameraZ) > 0 every frame, and on this build an assert BLOCKS. The only
-    // consumer downstream of those two axes is the traffic-stomp air-ram direction, which is
-    // itself unreachable until OnCarCrash lands and sets mbTrafficStomp -- so the deviation is
-    // confined to code nothing can currently execute.
-    // DELETE-WHEN BrnDirector::Camera::Camera has a layout and PreSceneUpdate step 2 lands.
-    mCameraTransform.SetIdentity();
 
     // X360 0x822FD898: the two per-slot Construct sweeps, `ActiveRaceCar::Construct(i)`
     // x8 (asm 0x822FDBxx) and `RaceCar::Construct(i)` x35. Both arrays are real members
@@ -467,11 +433,6 @@ void RaceCarEntityModule::Construct()
 // "Invalid event id received\n" pair (BrnRaceCarEntityModule.cpp:6408/6416 and
 // :6449/:6457) and are non-gating there, so they are non-gating here.
 //
-// [FLAG PC bring-up] The console's stage 0/1 posts the CarColours acquire through the
-// SAME output request interface, as a raw type-4 AcquireResourceRequest built inline
-// (AddEvent(queue, record, 4, 24)); reproduced literally below rather than through
-// RequestInterface::AcquireResource, whose single attested call site packs the pool id
-// into the resource id's top nibble -- a shape this call site does not use.
 bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput )
 {
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // X360 :6324
@@ -636,14 +597,6 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
 //       ScoringMappings, then hand mpVehicleList to the streamer
 //       (BrnRaceCarStreamer.cpp:87 asserts it is non-null).
 //
-// [FLAG PC bring-up] Stages 0 and 3 are NOT reproduced: every call they make reaches an
-// interior this header still models as opaque storage (WorldMap2D / BoostManager /
-// PowerParkingManager, and the RaceCar[35] / ActiveRaceCar[8] arrays are size-only
-// placeholders here). They are deliberately skipped rather than paraphrased. (Stale in part:
-// stage 0 now runs the district-map bind, BoostManager::Prepare and -- 2026-09-24, FX-SCENEMGR
-// item 4 -- PowerParkingManager::Prepare; stage 3 runs both per-car Prepare sweeps.) Stage 2 --
-// the only stage that talks to the outside world, and the one that owns
-// Vehicles/VEHICLETEX.BIN and the two data-list pointers -- is real.
 bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput,
                                    const CgsResource::ResourceHandle& lrDistrictMapHandle )
 {
@@ -658,32 +611,8 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     switch( mePrepareStage )
     {
     case 0:
-        // [FLAG PC bring-up] stage 0 skipped -- see the note above.
-        // ⚠️ ONE EXCEPTION (drivable wave 2026-08-01): mPlaceOnTrackManager.Construct(this).
-        // The console does it in RaceCarEntityModule::Construct @0x822FD898, which is
-        // declaration-only on this build -- the SAME seam that left mePlayerActiveRaceCarIndex
-        // at slot 0 last wave. Without it the manager's mpRaceCarEntityModule is whatever the
-        // module memory held and PrePhysicsUpdate dereferences it. DELETE when Construct lands.
         mPlaceOnTrackManager.Construct( this );
 
-        // ⭐ [H1 district wave 2026-08-25] THE STAGE-0 DISTRICT-MAP BIND, landed (the
-        // member's old "Prepare stage 0 is not reproduced" note is retired for this leg).
-        // X360 Prepare @0x82303E78 case 0, store-for-store (h1_dump5.txt):
-        //     assert lDistrictMapResourceHandle.GetResource()          (:671)
-        //     assert ...->GetMemoryResource()                          (:672)
-        //     *(this+572) = the 8-byte handle
-        //     WorldMap2D::Construct(this+99072, base + *(u32*)(base+4),
-        //                           unk_82FAD520, unk_82FAD8E0)
-        // The two static vectors are the SAME world rect as StuntManager's (their MSVC
-        // dyn-init thunks @0x82C4B3D8/0x82C4B418 build them from the same four floats --
-        // read from the image, h1_dump7.txt): origin {-4208, -3846}, size {8270, 6101}.
-        // The blob pointer is the same serialised-header walk StuntManager::Prepare does
-        // (base + the u32 offset at base+4; AGENTS.md's documented exception).
-        // [FLAG PC bring-up] readiness-GUARDED instead of console-asserted: on PC the pool
-        // can answer the acquire with a null/half-null handle (the StuntManager give-up
-        // precedent). A not-ready handle skips the bind with a one-shot log; the zero-width
-        // map makes GetValue answer KU_INVALID_WORLD_MAP_VALUE and the region tracker stays
-        // inert -- never a crash. DELETE-WHEN the handle is proven always-ready here.
         {
             const bool lbDistrictMapReady =
                 ( lrDistrictMapHandle.mpResourceMemory != 0 ) &&
@@ -727,12 +656,6 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // scalars and two flags zeroed).
         mNearMissManager.Prepare();
 
-        // 0x82303FE8 `addi r3, r3, -0x7DB0` (module + 0x18250) ; 0x82304048 bl
-        // PowerParkingManager::Prepare -- clears the scorer and registers its debug component;
-        // the bool it returns is not tested (crash parity FX-SCENEMGR item 4, 2026-09-24).
-        // [FLAG PC bring-up] the other inlined scalar resets (the air-time and traffic-check
-        // seats) remain separate from this stage. The Boost page (+0x17E50) and Race Car Entity
-        // diagnostic component (+0x17CF0) register below in the original order.
         mPowerParkingManager.Prepare();
         mBoostDebugComponent.Register(); // ARTIST 823040C0
         mRCEntityModuleDebugComponent.Register(); // ARTIST 823040C4..823040CC
@@ -740,10 +663,6 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     // fall through
     case 1:
         mePrepareStage = 1;
-        // [FLAG PC bring-up] ModuleSingleBuffered::Prepare is not reachable from this
-        // minimal header slice (the base is inside maPrecedingState); the console gate is
-        // "advance when it reports done", which is what falling through does.
-    // fall through
     case 2:
     {
         mePrepareStage = 2;
@@ -861,24 +780,6 @@ void RaceCarEntityModule::UpdateStreaming(
             continue;
         }
 
-        // [FLAG PC bring-up] the console's predicate is IsRaceCarLoaded() (all five resource
-        // bits); this build's DATA delivers three. See
-        // RaceCarStreamer::IsRaceCarLoadedForStateMachineBringUp for the measurement and the
-        // DELETE-WHEN. This is the ONE gate relaxation in the whole promote chain.
-        if( mRaceCarStreamer.IsRaceCarLoadedForStateMachineBringUp( liCar )
-            && ( lpActiveRaceCar->IsPlayer()
-              || !lpActiveRaceCar->IsOnRaceStartState(
-                     ActiveRaceCar::E_RACE_START_STATE_ON_START_LINE ) ) )
-        {
-            // ⭐ REAL as of 2026-08-01 (drivable wave). This is the console's own
-            // ATTACHED -> WAITING step and it is what retired the promote fiction.
-            OnRaceCarResourcesLoaded( static_cast<EActiveRaceCarIndex>( liCar ),
-                                      lpOutput->GetVehicleInputInterface() );
-        }
-        else
-        {
-            lbAllLoaded = false;
-        }
     }
     // ARTIST UpdateStreaming: required junkyard prefetch slots participate in the
     // same completion edge as active cars; audio-only waits remain in their own lane.
@@ -911,12 +812,6 @@ void RaceCarEntityModule::UpdateStreaming(
             // [DIAG] BRN_RCEM_ACTION_DIAG -- NOT IN THE X360 BINARY. The junkyard-exit audio wait
             // (armed by action 74) has released: a live run that shows the arm line but never this
             // one is a streaming-complete edge held forever.
-            if (GameActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[rcem-action] 74 audio wait released (all loaded "
-                                           << (lbAllLoaded ? 1 : 0) << ", waiting for streaming "
-                                           << (mbWaitingForStreaming ? 1 : 0) << ")\n";
-            }
         }
     }
     // 0x822FF204..0x822FF210 -- THE READINESS PUBLISH (crash parity FX-RCEM4 2026-09-24, reviewer C):
@@ -931,19 +826,9 @@ void RaceCarEntityModule::UpdateStreaming(
     // [DIAG] BRN_CARS_READY_DIAG -- NOT IN THE X360 BINARY. One capped line per change of the
     // published value, so a run proves the publish is DISPATCHED and shows its 0 -> 1 edges.
     {
-        static const bool sbCarsReadyDiag = ( getenv( "BRN_CARS_READY_DIAG" ) != 0 );
         static s32 siLastPublished = -1;
         static u32 suCarsReadyLines = 0u;
         const s32 liPublished = lbAllLoaded ? 1 : 0;
-        if( sbCarsReadyDiag && CgsDev::Log::gpDebugPrint != 0 && liPublished != siLastPublished
-            && suCarsReadyLines < 32u )
-        {
-            siLastPublished = liPublished;
-            ++suCarsReadyLines;
-            *CgsDev::Log::gpDebugPrint << "[cars-ready] UpdateStreaming SetAllActiveCarsReady("
-                                       << liPublished << ") (waiting for streaming "
-                                       << ( mbWaitingForStreaming ? 1 : 0 ) << ")\n";
-        }
     }
 
     // ARTIST UpdateStreaming's completion edge. Retains the existing PC resource
@@ -975,16 +860,6 @@ void RaceCarEntityModule::UpdateStreaming(
 //   PlaceRaceCarOnLoad(mpRaceCar)
 //   car->mbComingInRange = false; car->mbIsJoiningGameMode = false     (+1909/+1910)
 //
-// [FLAG PC bring-up] ONE leg is not reproduced and is not paraphrased:
-//   * the initial-velocity override. It reads three module members inside maTailPadB1
-//     (+100192 a Vector3, +100208 a float, +100212 a RaceCar*) that this header does not
-//     name. They form a "spawn this specific car moving" hook; the start-of-game path
-//     spawns a stationary car, so zero is the value the console would compute anyway.
-// ⭐ SetupCarColour @0x822F5170 LANDED 2026-09-24 (crash parity CHAIN-RECOLOUR): `mr r4, r25 ;
-//   mr r3, r31 ; bl SetupCarColour` @0x822FEDC8..0x822FEDD0, between ActiveRaceCar::
-//   OnResourcesLoaded (which now reads the car's authored default colour pair) and
-//   PlaceRaceCarOnLoad.
-// ============================================================================
 void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         EActiveRaceCarIndex leActiveRaceCarIndex,
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface )
@@ -1009,8 +884,6 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         mpVehicleList->GetVehicleData( liModelIndex );
     CGS_ASSERT( lpListEntry != 0, "lpListEntry != NULL" );                     // X360 :2217
 
-    // [FLAG PC bring-up] the module's spawn-with-velocity hook (see the banner). The
-    // console's default -- and the value on every path this build drives -- is zero.
     const Vector3 lInitialVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
 
     lpActiveRaceCar->OnResourcesLoaded(
@@ -1137,25 +1010,6 @@ void RaceCarEntityModule::SetupCarColour( EActiveRaceCarIndex leActiveRaceCarInd
         }
     }
 
-    // [FLAG PC witness] BRN_RACECAR_PAINT_DIAG -- NOT IN THE X360 BINARY. One line per car the
-    // console's own colour pick ran for (first-N capped), so a live run shows the rivals now
-    // take their authored/random colour instead of the palette 0 / colour 0 fallback.
-    {
-        static const bool sbPaintDiag = ( getenv( "BRN_RACECAR_PAINT_DIAG" ) != 0 );
-        static u32 suSetupDiagLines = 0u;
-        if( sbPaintDiag && suSetupDiagLines < KU_RACECAR_MODULE_DIAG_MAX_LINES
-            && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++suSetupDiagLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[car-colour] SetupCarColour slot " << static_cast<s32>( leActiveRaceCarIndex )
-                << " player " << ( leActiveRaceCarIndex == mePlayerActiveRaceCarIndex ? 1 : 0 )
-                << " default palette " << lpActiveRaceCar->GetDefaultPaletteIndex()
-                << " colour " << lpActiveRaceCar->GetDefaultColourIndex()
-                << " -> palette " << lpRaceCar->GetColourPalette()
-                << " colour " << lpRaceCar->GetColourIndex() << "\n";
-        }
-    }
 }
 
 // ============================================================================
@@ -1189,77 +1043,11 @@ namespace
     const f32 KF_GRID_BASE_DISTANCE_ROAD_RAGE = -45.0f;
     const f32 KF_GRID_BASE_DISTANCE           = -25.0f;
 
-    // [FLAG PC witness] -- NOT AN X360 FUNCTION.
-    //
-    // One `[ai-attach]` line per non-player car PlaceRaceCarOnLoad decides for, FIRST EIGHT
-    // ONLY, so the next run's log names -- per rival, in order -- which arm the car took and
-    // what it asked for. The chain this rung opens is otherwise invisible: a rival that is
-    // never placed and a rival that is placed badly produce the SAME log today (nothing at
-    // all), and that ambiguity is what let "the rivals never get AI control" sit behind five
-    // landed subsystems.
-    //
-    // Pairs with:
-    //   [ai-attach] mode armed: ...          BrnRaceCarEntityModule_ModeArming.cpp (the inputs)
-    //   [PLACEONTRACK] race car N -> ...     the placement actually completing
-    //   [ai-act] ActivateRaceCar slot N      PreSceneUpdate's activation leg
-    //   [ai-evt] ACTIVATE_RACE_CAR global N  the AI module binding a driver
-    // DELETE-WHEN rivals drive.
-    void WitnessPlaceRaceCarOnLoad( const BrnWorld::RaceCar* lpRaceCar, const char* lpcArm,
-                                    s32 liResetType, f32 lfDistance )
-    {
-        static s32 siWitnessCount = 0;
-
-        if( CgsDev::Log::gpDebugPrint == 0 || siWitnessCount >= 8 || lpRaceCar == 0 )
-        {
-            return;
-        }
-        ++siWitnessCount;
-
-        *CgsDev::Log::gpDebugPrint
-            << "[ai-attach] PlaceRaceCarOnLoad global "
-            << static_cast<s32>( lpRaceCar->GetGlobalRaceCarIndex() )
-            << " type " << static_cast<s32>( lpRaceCar->GetType() )
-            << " opponent " << lpRaceCar->GetOpponentIndex()
-            << " arm " << lpcArm
-            << " resetType " << liResetType
-            << " dist " << lfDistance
-            << " [FLAG PC witness]\n";
-    }
-
     // [DIAG] NOT IN THE X360 BINARY (BRN_BUZZBY_PLACE_DIAG=1, default OFF, first 16 lines).
     // Crash parity FX-AIBUZZ: proves ARM A1 DISPATCHED BuzzBy::MaintainAheadOrBehind for a free-roam
     // rival that streamed in within 250 m of the player, and prints what the console's leaf answered
     // (the request the car is then reset with) next to the inputs that decide it: the player-relative
     // position, its projection on the player's heading (> 0 == ahead) and the two headings' dot.
-    void WitnessBuzzByPlacement( const BrnWorld::RaceCar* lpRaceCar,
-                                 const Vector3& lrCarPosition, const Vector3& lrCarDirection,
-                                 const Vector3& lrPlayerPosition, const Vector3& lrPlayerVelocity,
-                                 const Vector3& lrPlayerDirection,
-                                 const BrnAI::AIModuleIO::ResetOnTrackRequest& lrRequest )
-    {
-        static const bool sbDiag = ( getenv( "BRN_BUZZBY_PLACE_DIAG" ) != 0 );
-        static s32 siLines = 0;
-        if( !sbDiag || CgsDev::Log::gpDebugPrint == 0 || siLines >= 16 )
-        {
-            return;
-        }
-        ++siLines;
-
-        const Vector3 lRelative = { lrCarPosition.x - lrPlayerPosition.x,
-                                    lrCarPosition.y - lrPlayerPosition.y,
-                                    lrCarPosition.z - lrPlayerPosition.z, 0.0f };
-        *CgsDev::Log::gpDebugPrint
-            << "[buzzby-place] MaintainAheadOrBehind global "
-            << static_cast<s32>( lpRaceCar->GetGlobalRaceCarIndex() )
-            << " dist " << std::sqrt( rw::math::vpu::MagnitudeSquared( lRelative ) )
-            << " along " << rw::math::vpu::Dot( lRelative, lrPlayerDirection )
-            << " headingDot " << rw::math::vpu::Dot( lrCarDirection, lrPlayerDirection )
-            << " playerSpeed " << std::sqrt( rw::math::vpu::MagnitudeSquared( lrPlayerVelocity ) )
-            << " -> resetType " << static_cast<s32>( lrRequest.GetResetType() )
-            << " speed " << lrRequest.GetResetSpeed()
-            << " resetDist " << lrRequest.GetResetDistance()
-            << " [DIAG BRN_BUZZBY_PLACE_DIAG]\n";
-    }
 }
 
 // ============================================================================
@@ -1347,16 +1135,6 @@ namespace
 // E_RESET_TYPE_BEHIND_PLAYER_ROAD_RAGE at -50 m. Four independent names landing on four
 // independent asm literals is the fit.
 //
-// ---- [FLAG PC bring-up] flt_82FAD728 -- the A2 arm's SPEED argument ---------------------------
-// It lives in the BurnoutConstants data block (its neighbours flt_82FAD514/518/51C/96C are read
-// by UpdateInAndOutOfRangeCars off the same "..\..\..\GameSource\BurnoutConstants..." assert
-// file string) and reads 0x00000000 out of the image. A whole-image scan of the export set finds
-// EXACTLY TWO references to the symbol -- this one and UpdateInAndOutOfRangeCars' -- so no
-// function in the image writes it, and 0.0f is what the shipped binary runs with. Treated the
-// same way, and for the same reason, as KF_FAILURE_RESET_SPEED_CAP in
-// BrnRaceCarEntityModule_ResetPump.cpp. ⚠ A .data zero is not proof of a console zero (a
-// dynamic initialiser leaves no IDA export); it is proof that nothing in the CODE writes it.
-// DELETE-WHEN a data-driven writer for the BurnoutConstants block is found.
 //
 // ---- ARM A1's BuzzBy leaf -- LANDED 2026-09-24 (crash parity FX-AIBUZZ) ------------------------
 // BrnAI::BuzzBy::MaintainAheadOrBehind @0x82766C40 was declaration-only, so this arm used to be a
@@ -1489,8 +1267,6 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
         WitnessPlaceRaceCarOnLoad( lpRaceCar, "A1-buzzBy",
                                    static_cast<s32>( lRequest.GetResetType() ),
                                    lRequest.GetResetDistance() );
-        WitnessBuzzByPlacement( lpRaceCar, lCarPosition, lCarDirection,
-                                lPlayerPosition, lPlayerVelocity, lPlayerDirection, lRequest );
         return;
     }
 
@@ -1571,14 +1347,6 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 //                  module's reset BitArray and calls ActiveRaceCar::ResetAfterCrash.
 //   muState==2  -- ⭐ the PROMOTE. This is the arm the start-of-game path takes.
 //
-// [FLAG PC bring-up] THE IsActive() ARM IS NOT REPRODUCED, and this is a deliberate slice
-// rather than a silent drop. It needs five module members that live inside maTailPadB1 and
-// maTailPadA0 and are unnamed in this header (+99536/+99544/+99548 the deformation-amount
-// pair and its one-shot flag, +99164 the game-mode flag word, +65760 the reset BitArray),
-// plus ActiveRaceCar::ResetAfterCrash @0x822BF3A0 (the ledger says `reviewed`; the tree has
-// no body -- same drift as BrnMath::BuildTransform last wave). It is UNREACHABLE on this
-// build: nothing re-requests placement for a car that is already ACTIVE.
-// DELETE-WHEN those members are named and ResetAfterCrash lands.
 //
 // ⭐⭐ THIS BANNER IS NOW HISTORY, NOT STATUS (kept because the arm below quotes it, and because
 // a banner that quietly turns into a lie is worse than one that dates itself). Corrections:
@@ -1605,11 +1373,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
     {
         CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
 
-        // ⭐⭐ [teleport] THE ALREADY-ACTIVE RE-RESET ARM, 2026-08-21 (gateui r9). It used to be
-        // a bare `return` with the banner's "[FLAG PC bring-up] ... UNREACHABLE on this build:
-        // nothing re-requests placement for a car that is already ACTIVE". It IS reached now --
-        // the harness teleport (BrnPlaceOnTrackManager.cpp, the [teleport] block) issues exactly
-        // such a request -- and this arm is the ONLY way a live car's transform can be written.
         //
         // WHAT THE CONSOLE DOES HERE (asm 0x822F4990..0x822F4B2C), and what is reproduced:
         //   0x822F4990  lbz r11, 0x52A(car)   -- mPhysicsState.mbCrashing
@@ -1696,31 +1459,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // (deformation beyond drive limits / a wheel off), mbFullyDrivableFromCrash, the fatal
         // collision tag, time in air, the up-vector dot, the front-ray occlusion and the game-mode
         // gate. One line per crash-completion, not per frame. DELETE-WHEN-STABLE.
-        if( lpActiveRaceCar->IsCrashing() && getenv( "BRN_CRASH_VERDICT_DIAG" ) != 0
-            && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            const BrnPhysics::Vehicle::RaceCarState* lpState = lpActiveRaceCar->GetPhysicsState();
-            const Matrix44Affine lTransform = lpActiveRaceCar->GetTransform();
-            const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
-            *CgsDev::Log::gpDebugPrint
-                << "[crash-verdict] car=" << static_cast<s32>( leActiveRaceCarIndex )
-                << " verdict=" << ( lpActiveRaceCar->IsDriveableAfterCrash() ? "DRIVE_AWAY"
-                                   : lpActiveRaceCar->IsDeformationFixedAfterCrash() ? "WRECK_RESET_DEFORM"
-                                   : "RESET_TRANSFORM_ONLY" )
-                << " IsWrecked=" << ( lpActiveRaceCar->IsWrecked() ? 1 : 0 )
-                << " isDriveable=" << ( lpState->mbIsDriveable ? 1 : 0 )
-                << " fullyDrivable=" << ( lpState->mbFullyDrivableFromCrash ? 1 : 0 )
-                << " fatalTag=" << ( ( lpState->mAboveGroundTestResult.mCollisionTag.muValue
-                                       & BrnWorld::KU_COLLISION_FLAG_FATAL ) ? 1 : 0 )
-                << " agValid=" << ( lpState->mAboveGroundTestResult.mbValid ? 1 : 0 )
-                << " timeInAir=" << lpState->mfTimeInAir
-                << " upDot=" << rw::math::vpu::Dot( lTransform.Up(), lWorldUp )
-                << " frontRayOccluded=" << ( lpState->mbIsFrontRayOccluded ? 1 : 0 )
-                << " isPlayer=" << ( lpActiveRaceCar->IsPlayer() ? 1 : 0 )
-                << " canDriveAwayLatch=" << ( lpActiveRaceCar->CanDriveAwayFromCrash() ? 1 : 0 )
-                << " speedMPH=" << lpState->mfSpeedMPH
-                << "\n";
-        }
 
         if( lpActiveRaceCar->IsCrashing() )
         {
@@ -1867,21 +1605,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // Prints BOTH halves of the arm above on every live-car reset, so a run can say whether the
         // console's queued type was 1 (which re-arms the 1.5 s invincibility downstream) or -1
         // (which does not) -- instead of that being inferred from a dent that did not happen.
-        if( getenv( "BRN_CRASH_RESPONSE_DIAG" ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[reset-mirror] car " << static_cast<s32>( leActiveRaceCarIndex )
-                << " isPlayer " << ( lbIsPlayerSlot ? 1 : 0 )
-                << " oneShot " << ( mbPlayerBaseDeformRequestPending ? 1 : 0 )
-                << " mirrorType " << miPlayerBaseDeformationTypeMirror
-                << " mirrorAmount " << mfPlayerBaseDeformAmountMirror
-                << " -> resetType " << static_cast<s32>( leDeformationResetType )
-                << " amount " << lfHowCloseToTotalled
-                << " resetDeform " << ( lbResetDeformation ? 1 : 0 )
-                << " wrecked " << ( lpActiveRaceCar->IsWrecked() ? 1 : 0 )
-                << " crashing " << ( lbIsCrashingReset ? 1 : 0 )
-                << "\n";
-        }
 
         // 0x822F4B0C `vspltisw v2, 0` -- the ANGULAR velocity argument is a hard zero; only the
         // linear velocity this call was handed travels through.
@@ -1976,10 +1699,7 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                     static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) ) == lModelId,
                 "mRaceCarStreamer.GetCarModelId( lpActiveRaceCar->GetActiveRaceCarIndex() ) "
                 "== lpActiveRaceCar->GetGlobalRaceCar()->GetModelId()" );   // X360 :1939
-    // [FLAG PC bring-up] same one gate relaxation as UpdateStreaming's predicate.
-    CGS_ASSERT( mRaceCarStreamer.IsRaceCarLoadedForStateMachineBringUp(
-                    static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) ),
-                "mRaceCarStreamer.IsRaceCarLoaded( lpActiveRaceCar->GetActiveRaceCarIndex() )" ); // :1940
+ // :1940
 
     // G67-D6 (crash parity 2026-09-23): `lis r11,1 ; ori r11,r11,0x86CA ; lbzx r30, r30, r11`
     // @0x822F4D38..0x822F4D48 -- module+0x186CA (100042) == mbInCarModScreen (DWARF :445), passed
@@ -2008,77 +1728,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                                        lrTransform, lrVelocity,
                                        lbResettingPhysicsState, lu8CarStrengthStat );
 
-    // [FLAG PC bring-up] the OTHER half of that create event. AddHandlingModel has just
-    // published lrTransform to the vehicle manager; on the console the next tick's
-    // RaceCarState carries back the transform the create leg PRODUCED -- which is NOT the
-    // raw ground transform: RaceCarPhysics::Prepare @0x82639CB8 runs the ANALYTIC SEAT
-    // (VehiclePhysics::SetTransformFromPositionOnRoad @0x825D1C00) over it, planting the
-    // handling-frame origin `radius1 - localY1 - 0.035` above the road point. Seeding the
-    // RAW transform here (as this build did until the seat wave 2026-08-05) is what put the
-    // car in the ground: the render composition body = COM * physics subtracts 0.740575 from
-    // whatever is seeded, so the body origin sat ~0.74 BELOW the road.
-    //
-    // Now the seat runs at the seam (the create leg's own math over the resident spec's own
-    // data -- see VehiclePhysics::SeatTransformFromCreateLegBringUp), and the SHIPPED
-    // model-space->handling-space matrix (spec+1552) is already in mCentreOfMassTransform --
-    // ActiveRaceCar::OnResourcesLoaded copies it at the console's own slot (0x822EB20C, crash
-    // parity 2026-09-24; the SetCentreOfMassTransformBringUp forward that used to sit here is
-    // retired) -- so the two halves compose: physics ~= ground + 1.4459, body ~= ground + 0.7054
-    // (PUSMC01).
-    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics is wired to a real producer.
-    {
-        const RaceCarStreamer::PhysicsResourcePtr& lrSeatPhysicsResource =
-            mRaceCarStreamer.GetPhysicsResourceBringUp(
-                static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) );
-
-        if( lrSeatPhysicsResource.HasMemoryResource() )
-        {
-            const BrnPhysics::Deformation::StreamedDeformationSpec* lpSeatSpec =
-                lrSeatPhysicsResource.operator->();
-
-            const Matrix44Affine lSeatedTransform =
-                BrnPhysics::Vehicle::VehiclePhysics::SeatTransformFromCreateLegBringUp(
-                    lpSeatSpec, lrTransform );
-
-            // (The four render wheel SCALES this seam used to set -- wheel-transform wave
-            // 2026-08-13 -- are set by ActiveRaceCar::OnResourcesLoaded itself now, at the
-            // console's own slot 0x822EB410..0x822EB470; that stand-in is retired, crash parity
-            // 2026-09-24.)
-
-            lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lSeatedTransform );
-
-            // ---- WITNESS PRINTS (both ends of the seat, every promote) -----------------
-            if( CgsDev::Log::gpDebugPrint != 0 )
-            {
-                const BrnPhysics::Deformation::WheelSpec* lpWheel1 = lpSeatSpec->GetWheelSpec( 1 );
-                const Matrix44Affine& lrM1552 =
-                    lpSeatSpec->mCarModelSpaceToHandlingBodySpaceTransform;
-                *CgsDev::Log::gpDebugPrint
-                    << "[seat] car " << static_cast<s32>( leActiveRaceCarIndex )
-                    << " ground y " << lrTransform.wAxis.y
-                    << " -> physics y " << lSeatedTransform.wAxis.y
-                    << " | radius1 " << 0.5f * lpWheel1->mScale.y
-                    << " specY1 " << lpWheel1->mPosition.y
-                    << " COMeff (" << lpSeatSpec->mMeshOffset.x << ", "
-                    << lpSeatSpec->mMeshOffset.y << ", " << lpSeatSpec->mMeshOffset.z
-                    << ") -M1552.w (" << -lrM1552.wAxis.x << ", " << -lrM1552.wAxis.y
-                    << ", " << -lrM1552.wAxis.z << ")\n";
-            }
-        }
-        else
-        {
-            // Pre-seat behaviour, kept as the loud fallback: without the spec there are no
-            // wheel radii to seat with, so the raw ground transform is seeded and SAID SO.
-            lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lrTransform );
-            if( CgsDev::Log::gpDebugPrint != 0 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[seat] car " << static_cast<s32>( leActiveRaceCarIndex )
-                    << " SPEC NOT RESIDENT -- raw ground transform seeded, car will sit low\n";
-            }
-        }
-    }
-
     if( CgsDev::Log::gpDebugPrint != 0 )
     {
         *CgsDev::Log::gpDebugPrint
@@ -2086,491 +1735,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
             << " -> E_STATE_ACTIVE at (" << lrTransform.wAxis.x << ", "
             << lrTransform.wAxis.y << ", " << lrTransform.wAxis.z << ")\n";
     }
-}
-
-// ============================================================================
-// [FLAG PC bring-up] PublishRenderPoseWithoutPhysicsBringUp -- NOT an X360 function.
-//
-// WHAT SURVIVED OF PromoteAttachedCarToActiveBringUp, and why it had to survive.
-//
-// The console's ONLY producer of mRenderParams.mBodyTransform is
-// ActiveRaceCar::UpdatePhysicsState @0x822D4418, whose only caller is
-// ReadUpdatedActiveRaceCarDataFromPhysics -- the PHYSICS READBACK. There is no physics
-// module on this build, so an ACTIVE car has no render pose, and retiring the promote
-// wholesale would have made the junkyard car INVISIBLE, not drivable. (Measured by
-// inspection before the change: SetBodyTransform and SetLOD had exactly one caller each,
-// the promote.)
-//
-// WHAT IS HONEST ABOUT IT. UpdatePhysicsState stores `CalcBodyTransform()`. Until the
-// physics def is read, mCentreOfMassTransform is the IDENTITY Prepare/Attach left behind,
-// so for a stationary car the console's own CalcBodyTransform here produces bit-for-bit
-// what UpdatePhysicsState would have stored. Nothing about the pose is invented: the maths
-// is the console's and the transform is the one the placement published.
-//
-// ⛔ CORRECTED 2026-08-02 (car-placement wave). This banner used to say the transform was
-// "what Attach seeded from RaceCar::GetTransform()", and treated that as equivalent. It is
-// NOT: Attach seeds the SPAWN ANCHOR, and the console's place-on-track line test then moves
-// the car onto the ground before ResetActiveRaceCar publishes it. Reading the Attach seed
-// rendered the junkyard car 4.534 m above the junkyard floor for as long as this helper has
-// existed. ResetActiveRaceCar now closes the create-event round trip explicitly
-// (ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp), so mPhysicsState.mTransform is
-// the placement's transform, which is what the console's readback would carry.
-//
-// WHAT IS STILL A LIE, stated plainly:
-//   * mLOD is forced to LOD 0. On the console the scene/replay arm sets it via
-//     ShadowMap::CalcOptimisedLod.
-//   * mbDamaged is forced OFF. ActiveRaceCar::Attach sets it from
-//     RaceCar::ToBeRenderedDamaged(), which is true for EVERY player car (console
-//     behaviour, and it stays in Attach). mbDamaged selects RenderRaceCar's DAMAGED
-//     technique, which reads the per-car deformation verlet block out of shader constants
-//     22/23 -- constants this build never uploads, because
-//     ShaderConstantTable::SetShaderConstantArrayData is declaration-only for all five
-//     overloads. The Cavalry renders with metre-long spikes where its doors should be.
-//     DELETE-WHEN SetShaderConstantArrayData is bodied.
-//   * the car still does not MOVE, because nothing simulates it.
-//
-// It runs from PostPhysicsUpdate, which is where the console's own producer runs.
-// DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState land.
-// ============================================================================
-void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
-                                                                  s32 liActiveRaceCar )
-{
-    ActiveRaceCar::RenderParams* lpRenderParams = lpActiveRaceCar->GetRenderParams();
-
-    lpRenderParams->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
-    lpRenderParams->SetDamaged( false );
-
-    Matrix44Affine lBodyTransform;
-    lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
-
-    // ⛔ THE "GRAPHICS-FRAME STEP" IS GONE, 2026-08-17 -- IT WAS THE CAR-WARPING BUG.
-    //
-    // This used to publish `Mult( spec.mCarModelSpaceToHandlingBodySpaceTransform,
-    // lBodyTransform )` -- the shipped +1552 matrix applied ONCE MORE on top of
-    // CalcBodyTransform -- under a FLAG admitting the console mechanism for it "is NOT yet
-    // recovered" and that it was a fit measured against a stationary car ("a 1 mm fit").
-    //
-    // IT IS NOT A CONSOLE MECHANISM. Read off the ARTIST asm, both ends:
-    //
-    //   * ActiveRaceCar::UpdatePhysicsState @0x822D4418 -- the console's ONLY producer of
-    //     mBodyTransform -- calls CalcBodyTransform into a stack matrix (@0x822D47A4) and
-    //     copies its four rows STRAIGHT into `this + 0x7E0` (== &mRenderParams, and
-    //     mBodyTransform is RenderParams+0) at 0x822D47A8-DC. No second factor, no table.
-    //   * RenderRaceCar @0x822CF6A0 composes each part as world = Mult( partLocator,
-    //     mBodyTransform ) -- the vmulfp/vmaddfp cascade at 0x822D0190-0x822D0230, with the
-    //     body's four rows held in v124/v126/v125/v117 and the locator rows loaded from
-    //     spec+20. The GraphicsSpec's mppRigidBodyToSkinMatrixTransforms table (spec+32),
-    //     which the old FLAG offered as the possible carrier, is NOT REFERENCED ANYWHERE in
-    //     that function -- searched: zero loads of spec+32 or spec+28 in all 2008 lines.
-    //
-    // So the console applies the +1552 matrix EXACTLY ONCE, and it applies it as the CENTRE
-    // OF MASS TRANSFORM inside CalcBodyTransform @0x822B8828 (`Mult( mCentreOfMassTransform,
-    // mPhysicsState.mTransform )`). mCentreOfMassTransform already holds that very matrix
-    // (ActiveRaceCar::OnResourcesLoaded copies it, 0x822EB20C; until 2026-09-24 the promote
-    // seam's SetCentreOfMassTransformBringUp did), so the multiply below was applying it a
-    // SECOND time.
-    //
-    // WHY IT LOOKED RIGHT AND WAS STILL WRONG: an extra RIGID factor cannot deform anything,
-    // so on a stationary, axis-aligned car it reads as a small offset -- which is exactly
-    // what the original measurement tuned away. But the WHEELS deliberately did NOT get it
-    // (the old FLAG says so in its own last sentence: "The WHEELS keep composing against the
-    // MODEL frame"). Body and wheels were therefore in two different frames, and the moment
-    // the car ROTATES the extra factor swings the shell against its own wheels -- the car
-    // visibly coming apart. The car-select carousel rotates it continuously.
-    //
-    // Publishing CalcBodyTransform verbatim is what UpdatePhysicsState does, and it puts the
-    // body back in the same frame the wheels have always been composed in.
-    lpRenderParams->SetBodyTransform( lBodyTransform );
-
-    // ---- THE WHEEL POSE -----------------------------------------------------
-    // ⭐ SPLIT OUT 2026-08-12 (carrender wave). It used to be inline here, which meant the
-    // BODY half and the WHEEL half shared one gate -- and that is exactly how the wheels
-    // vanished. See PublishWheelPoseWithoutPhysicsBringUp's banner.
-    PublishWheelPoseWithoutPhysicsBringUp( lpActiveRaceCar, liActiveRaceCar );
-}
-
-// ============================================================================
-// [FLAG PC bring-up] PublishWheelPoseWithoutPhysicsBringUp -- NOT an X360 function.
-//
-// ⭐⭐ WHY THIS IS ITS OWN FUNCTION NOW (carrender wave 2026-08-12) -- A GATE-SCOPE BUG.
-// This code is unchanged; only WHO CALLS IT and WHEN has changed, and that was the whole
-// defect. It used to be the tail of PublishRenderPoseWithoutPhysicsBringUp, so it shared
-// that function's gate: `IsActive() && !mUsedRaceCars.IsBitSet(i)`.
-//
-// PublishRenderPoseWithoutPhysicsBringUp stands in for TWO different console producers:
-//   * the BODY pose  <- ActiveRaceCar::UpdatePhysicsState @0x822D4418   -- LANDED 2026-08-11
-//   * the WHEEL pose <- the SetWheelTransform publish in the physics half -- LANDED 2026-08-13
-// mUsedRaceCars answers "does physics own this race-car slot", which is the right question
-// for the first and the WRONG question for the second. When VehicleManager::ProcessCreateEvents
-// mounted on 2026-08-11 and started setting that bit, the gate correctly retired the body
-// stand-in -- and silently retired the wheel stand-in with it, whose producer had not landed.
-//
-// MEASURED, on the run that motivated this split (BrnGame.log, carrender probe):
-//   [carrender]  wheel 0 exists 0 T (0.000000, 0.000000, 0.000000) scaleDiag (1.000000, 1.000000, 1.000000)
-//   ... identically for wheels 1..3, and
-//   [racecar-wheels] RenderRaceCar wheel block outcome 3 (... 3 no wheel exists ...)
-// i.e. the render leg drew NO WHEELS AT ALL, on a car that had drawn them correctly on
-// 2026-08-05. Two services were lost on that one switch: SetWheelExists AND SetWheelScale
-// (the scale matrix fell back to RenderParams::Reset()'s identity -- see the `scaleDiag`).
-//
-// ⭐⭐ THE REAL PRODUCER LANDED 2026-08-13 (wheel-transform wave):
-// SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 is BODIED and
-// WriteOutVehicleStats' four SetWheelTransform calls are UNPARKED, so every car PHYSICS
-// OWNS gets real per-wheel world matrices (spin + steer + suspension) through
-// UpdatePhysicsState. The old DELETE-WHEN's second condition was resolved by a full-image
-// scan: RaceCarState::mabWheelExists (+0x446) has NO writer anywhere in the XEX (only the
-// copy ctor @0x8220A4C0 propagates it) -- on console the render-side exists comes from the
-// DEFORMATION half (L3 -> UpdateWheelPhysicsState @0x822B8738), still parked, so the
-// readback loop forces exists true for physics-owned cars ([FLAG] at that call site).
-//
-// ⚠️ WHY THIS STAND-IN STILL EXISTS: it now covers ONLY the slots physics does NOT own
-// (called solely from PublishRenderPoseWithoutPhysicsBringUp's tail, whose call sites gate
-// on !mUsedRaceCars / no input buffer) -- a car with no simulation still needs its wheels
-// drawn at the authored rest pose, e.g. before the create drain runs. For physics-owned
-// cars it no longer runs at all.
-// DELETE-WHEN the body-pose stand-in above it is deleted (they retire together).
-// ============================================================================
-void RaceCarEntityModule::PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
-                                                                 s32 liActiveRaceCar )
-{
-    ActiveRaceCar::RenderParams* lpRenderParams = lpActiveRaceCar->GetRenderParams();
-
-    Matrix44Affine lBodyTransform;
-    lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
-
-    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
-        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
-
-    // ⭐ THE FRAME IS UNCHANGED BY THE SPLIT, AND THAT MATTERS. The wheels compose against
-    // CalcBodyTransform()'s MODEL-frame output -- which is bit-for-bit the matrix the inline
-    // version used (its `lBodyTransform` local) AND bit-for-bit what UpdatePhysicsState now
-    // publishes as the body transform (BrnActiveRaceCar.cpp:449-450 stores CalcBodyTransform
-    // directly). So a wheel drawn through the readback path lands in exactly the frame it
-    // landed in on 2026-08-05, when these wheels were last seen seated in their arches.
-
-    // The same stand-in, for the same missing producer. UpdatePhysicsState /
-    // UpdateWheelPhysicsState are the console's ONLY writers of mWheelTransforms[] and
-    // mabWheelExists[], and both read the physics snapshot -- so with no physics module
-    // every wheel reports "does not exist" and RenderRaceCar's wheel block, faithful or
-    // not, draws nothing. (MEASURED: "[racecar-wheels] ... outcome 3" -- no wheel exists.)
-    //
-    // WHAT IS HONEST ABOUT IT. The positions and scales are NOT invented: they are the
-    // car's own authored WheelSpecs, read out of the streamed deformation spec the
-    // streamer already has resident on this build (E_LOADFLAG_LOADEDPHYSICS -- the log's
-    // "STRM: Physics loaded: N"). That is the same table the console feeds the suspension
-    // from, and the same one OnResourcesLoaded @0x822EB2FC reads its four
-    // RenderParams::SetWheelScale arguments out of (spec + 96 + 48*i == maWheelSpecs[i].mScale).
-    // The composition -- wheel world = wheelLocal * bodyTransform -- is the body-part
-    // loop's own, because a WheelSpec position is in the same car model space as a
-    // GraphicsSpec part locator.
-    //
-    // WHAT IS A LIE, stated plainly:
-    //   * NO SUSPENSION, NO STEERING, NO SPIN. The console's wheel transform carries the
-    //     suspension travel, the steer angle and the rolling rotation the vehicle sim
-    //     produces each frame. This publishes the wheel at its rest position with the
-    //     body's own orientation, which is exactly right for a car that is not moving --
-    //     and this car is not moving, because nothing simulates it.
-    //   * mabWheelExists is forced TRUE for all four. On the console that byte is the
-    //     wheel's ON-GROUND flag from the physics snapshot, so a wheel torn off in a crash
-    //     stops drawing. Nothing here can tear a wheel off yet.
-    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdateWheelPhysicsState land,
-    // together with the body-pose stand-in above.
-    // (lrPhysicsResource is fetched above, where the graphics-frame step needs it first.)
-    if ( lrPhysicsResource.HasMemoryResource() )
-    {
-        const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
-            lrPhysicsResource.operator->();
-
-        for ( s32 liWheel = 0; liWheel < 4; ++liWheel )
-        {
-            const BrnPhysics::Deformation::WheelSpec* lpWheelSpec =
-                lpSpec->GetWheelSpec( liWheel );
-            if ( lpWheelSpec == 0 )
-            {
-                continue;
-            }
-
-            Matrix44Affine lWheelLocal;
-            lWheelLocal.SetIdentity();
-            lWheelLocal.wAxis.x = lpWheelSpec->mPosition.x;
-            lWheelLocal.wAxis.y = lpWheelSpec->mPosition.y;
-            lWheelLocal.wAxis.z = lpWheelSpec->mPosition.z;
-
-            // ⭐⭐ THE WHEEL COMPOSES AGAINST THE HANDLING-BODY FRAME, NOT THE MODEL FRAME
-            // (corrected 2026-08-12, carrender wave -- MEASURED, and it is a one-matrix
-            // change, not a tuned offset).
-            //
-            // This used to be Mult(lWheelLocal, lBodyTransform), i.e. against
-            // CalcBodyTransform()'s output == Mult(mCentreOfMassTransform, physicsTransform).
-            // That put every wheel EXACTLY ONE model->handling step below its own arch:
-            //   [carrender-y] bodyDraw y -3.534189 wheel0 y -3.966501 archPartWorldY -3.227483
-            //   arch - wheel = 0.739018, against M1552's own translation 0.740575 -- 1.6 mm.
-            // The car draws its arches at ground + 0.297517 against the seat wave's measured
-            // target of ground + 0.290 (a 7 mm fit), so the BODY is right and the WHEEL was
-            // the thing carrying the spurious step.
-            //
-            // WHY THE HANDLING-BODY FRAME IS THE RIGHT ONE, and not just the one that fits:
-            // a WheelSpec is read out of the StreamedDeformationSpec -- the SAME table the
-            // suspension solver is fed from -- and the suspension works in the handling-body
-            // frame. mPhysicsState.mTransform IS that frame; CalcBodyTransform is that frame
-            // pushed down into the graphics model frame by mCentreOfMassTransform. Using the
-            // undisplaced one removes the step rather than cancelling it with a constant.
-            // CROSS-CHECK, independent of the arch: predicted wheel centre
-            //   -3.534189 + 0.740575 - 0.409029 = -3.202643
-            // against ground + tyre radius = -3.525000 + 0.331333 = -3.193667 -- a 9 mm fit,
-            // the same order as the arch's 7 mm, and the radius itself is confirmed by the
-            // authored scale this loop publishes (0.662665 / 2 == 0.331333).
-            lpRenderParams->GetWheelTransform( static_cast<u32>( liWheel ) ) =
-                rw::math::vpu::Mult( lWheelLocal,
-                                     lpActiveRaceCar->GetPhysicsState()->mTransform );
-            lpRenderParams->SetWheelScale( static_cast<u32>( liWheel ), lpWheelSpec->mScale );
-            lpRenderParams->SetWheelExists( static_cast<u32>( liWheel ), true );
-        }
-
-        // [DIAG wheel wave] the four authored wheel placements, printed once. Latched on
-        // the FIRST WHEEL'S POSITION, not on a "printed once" bool: if the spec pointer
-        // ever resolves to a different car the numbers change and the line reprints, and
-        // a run where the positions are all zero is immediately distinguishable from a
-        // run where this never executed at all.
-        {
-            static f32 sfLastLoggedWheel0X = 1e30f;
-            const BrnPhysics::Deformation::WheelSpec* lpWheel0 =
-                lpSpec->GetWheelSpec( 0 );
-            if ( lpWheel0 != 0 && lpWheel0->mPosition.x != sfLastLoggedWheel0X
-                 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sfLastLoggedWheel0X = lpWheel0->mPosition.x;
-                // [seat wave 2026-08-05] the OTHER end of the seat's witness pair: what the
-                // renderer actually composes. physics = the seeded handling-frame transform,
-                // model = COM * physics (CalcBodyTransform), bodyDraw = M1552 * model (the
-                // graphics-frame step). Expected: model = physics - 0.740575, bodyDraw =
-                // model - 0.740575 (z +0.170226 each step).
-                *CgsDev::Log::gpDebugPrint
-                    << "[seat-pose] car " << liActiveRaceCar
-                    << " physics y " << lpActiveRaceCar->GetPhysicsState()->mTransform.wAxis.y
-                    << " model y " << lBodyTransform.wAxis.y
-                    << " bodyDraw y " << lpRenderParams->GetBodyTransform().wAxis.y << "\n";
-                *CgsDev::Log::gpDebugPrint << "[racecar-wheels] authored WheelSpecs for car "
-                                           << liActiveRaceCar << ":";
-                for ( s32 liLog = 0; liLog < 4; ++liLog )
-                {
-                    const BrnPhysics::Deformation::WheelSpec* lpLog =
-                        lpSpec->GetWheelSpec( liLog );
-                    if ( lpLog == 0 ) { continue; }
-                    *CgsDev::Log::gpDebugPrint
-                        << " pos(" << lpLog->mPosition.x << ", " << lpLog->mPosition.y
-                        << ", " << lpLog->mPosition.z << ") scale(" << lpLog->mScale.x
-                        << ", " << lpLog->mScale.y << ", " << lpLog->mScale.z << ")";
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-        }
-    }
-}
-
-
-// ============================================================================
-// [FLAG PC bring-up] PublishRestPoseLightLocatorsBringUp -- NOT an X360 function.
-// The REST-POSE LIGHT LOCATORS: the input RaceCarEntityModule::SubmitCoronasForRaceCar
-// @0x822D1600 has nothing to do without.
-//
-// ⛔ WHY IT EXISTS -- the console's producer is a THREE-HOP CHAIN AND ALL THREE HOPS ARE
-// DEAD ON THIS BUILD. Each is named, each is already logged at boot, none is guessed at:
-//   (1) DeformableObject::PrepareLocators @0x825BA010 copies the streamed spec's three tag
-//       lists into the car's live VehicleLocatorData. Committed
-//       (BrnDeformableObject_Lifecycle.cpp) with `const u32 luNumLight = 0;   // FLAG:
-//       = mpDeformationSpec->mLightTags.GetNumLocatorPoints()` -- the loop body is exact,
-//       the SOURCE is pinned to an empty list, so miNumLightLocators comes out 0. (That FLAG
-//       is now STALE, by the way: StreamedDeformationSpec's three LocatorPointSpecList
-//       members are PUBLIC, and LocatorPointSpecList::GetNumLocatorPoints/GetLocatorSpec are
-//       public inlines -- the same staleness the 2026-08-14 walls wave already found and
-//       fixed for the tag/driven-point accessors. See the report's CROSS-GROUP list.)
-//   (2) DeformationManager::OutputData @0x826225D8 publishes those tables into the
-//       entity-module output interface. Its committed body's first pass writes NO locator
-//       records ("GROW DEFERRAL ... the three count-bound asserts AND the table writes are
-//       deliberately NOT emitted here"), and its TU is not even mounted:
-//       BrnGame.log:793 "conductor gate: DeformationManager::OutputData @0x826225D8 (339;
-//       real body in the unmounted BrnDeformationManager_Output.cpp) inert".
-//   (3) leg L5 of ReadUpdatedActiveRaceCarDataFromPhysics copies them into RenderParams:
-//       BrnGame.log:808 "[physics-readback] PARKED deformation legs ... locator-output copy
-//       ...".
-// With no stand-in, RenderParams::miNumLightLocators is 0 for every car forever, the corona
-// producer's loop runs zero times, and the whole subsystem looks healthy while drawing
-// nothing -- the exact "the frame looks identical" trap this campaign keeps paying for.
-//
-// WHAT IS HONEST ABOUT IT:
-//   * NOTHING IS INVENTED. Every position and every tag type is read out of the car's own
-//     shipped StreamedDeformationSpec::mLightTags -- the same resource the wheel stand-in
-//     above already reads its WheelSpecs from, resident on this build ("STRM: Physics loaded:
-//     0" and the four real authored wheel scales in BrnGame.log prove the spec parses).
-//   * It publishes what the console's own DeformableObject::UpdateLocator @0x825E0EC8 yields
-//     for an UNDAMAGED car. That function copies the spec's four locator rows verbatim and
-//     then ADDS the car's verlet skin-point displacement to the translation row
-//     (`_R8 = 16 * (*(_R28 + 70) + 270); lvx128 v0, r8, r29; vaddfp; stvx128`) -- which is
-//     zero at rest -- before the detached-part re-basing arm, which needs a detached part.
-//   * It goes through the REAL consumer: RenderParams::SetLightLocators, itself recovered
-//     from L5's own inlined asm. Only the INPUT is stood in for.
-//
-// WHAT IS A LIE, stated plainly: the locators never MOVE. A crushed front wing does not drag
-// its head-lamp flare with it, and a torn-off part keeps its lamp floating where the part
-// used to be, because both of those come from hops (1)-(3).
-// DELETE-WHEN leg (3) unparks -- and it MUST be deleted then, or it will overwrite the
-// deformed positions with the rest pose every single frame.
-// ============================================================================
-void RaceCarEntityModule::PublishRestPoseLightLocatorsBringUp( ActiveRaceCar* lpActiveRaceCar,
-                                                               s32 liActiveRaceCar )
-{
-    // [FLAG PC bring-up] the BringUp resource getter, for the same reason the wheel stand-in
-    // above uses it: the console's GetPhysicsResource asserts IsRaceCarLoaded() (ALL five
-    // resource bits) and would fire a dev assert every frame on this build.
-    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
-        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
-
-    // The table is published on EVERY path (verify_coronaproducer F5): RenderParams::Reset()
-    // does not clear miNumLightLocators, so a slot recycled to a car whose spec is not (yet)
-    // resident would otherwise keep the previous car's lamp inventory. A spec-less car
-    // publishes ZERO locators -- which is what the console's zeroed mLocatorData means.
-    BrnPhysics::Deformation::VehicleLocatorData lLocators;
-    lLocators.miNumCameraLocators  = 0;
-    lLocators.miNumGenericLocators = 0;
-    lLocators.miNumLightLocators   = 0;
-
-    const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
-        lrPhysicsResource.HasMemoryResource() ? lrPhysicsResource.operator->() : 0;
-
-    // The streamed light-tag list. muSlot is the resource's own 32-bit pointer slot, rebased
-    // in place by StreamedDeformationSpec::FixUp @0x82630E18 -- a zero slot means the car
-    // authored no light tags at all, and GetLocatorSpec would then index off null.
-    const u32 luNumSpecLocators =
-        ( lpSpec != 0 && lpSpec->mLightTags.mpaLocatorPoints.muSlot != 0 )
-            ? lpSpec->mLightTags.GetNumLocatorPoints() : 0u;
-
-    for ( u32 luLocator = 0; luLocator < luNumSpecLocators; ++luLocator )
-    {
-        // PrepareLocators' own bound (its assert is "mLocatorData.miNumLightLocators <
-        // KI_MAX_LIGHT_LOCATORS"); a spec with more than 24 light tags is malformed, so stop
-        // rather than run off the fixed array.
-        if ( lLocators.miNumLightLocators >= BrnPhysics::Deformation::KI_NUM_LIGHT_LOCATORS )
-        {
-            break;
-        }
-
-        const BrnPhysics::Deformation::LocatorPointSpec* lpLocatorSpec =
-            lpSpec->mLightTags.GetLocatorSpec( luLocator );
-        if ( lpLocatorSpec == 0 )
-        {
-            continue;
-        }
-
-        lLocators.maLightLocators[ lLocators.miNumLightLocators ]     = lpLocatorSpec->mLocatorMatrix;
-        lLocators.maLightLocatorTypes[ lLocators.miNumLightLocators ] = lpLocatorSpec->meTagPointType;
-        ++lLocators.miNumLightLocators;
-    }
-
-    lpActiveRaceCar->GetRenderParams()->SetLightLocators( &lLocators );
-
-    // [DIAG coronas step 1] the car's authored lamp inventory, printed once per distinct car
-    // (latched on the first locator's X, the same trick the wheel stand-in above uses, so a
-    // run where every position is zero is distinguishable from a run where this never ran).
-    // [FLAG PC witness] OPT-IN (BRN_CORONA_DIAG=1) + hard first-N cap. DELETE-WHEN the corona
-    // work is signed off. The first-locator-X latch is not a bound: it is shared by every car and
-    // the value moves with the car, so it printed 37,352 lines in a 140 s run.
-    {
-        static const bool sbCoronaDiag = ( getenv( "BRN_CORONA_DIAG" ) != 0 );
-        static u32 suCoronaDiagLines = 0u;
-        static f32 sfLastLoggedLocator0X = 1e30f;
-        if ( sbCoronaDiag && suCoronaDiagLines < KU_RACECAR_MODULE_DIAG_MAX_LINES
-             && lLocators.miNumLightLocators > 0
-             && lLocators.maLightLocators[0].wAxis.x != sfLastLoggedLocator0X
-             && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++suCoronaDiagLines;
-            sfLastLoggedLocator0X = lLocators.maLightLocators[0].wAxis.x;
-            *CgsDev::Log::gpDebugPrint
-                << "[corona-locators] car " << liActiveRaceCar << ": "
-                << lLocators.miNumLightLocators << " rest-pose light locators of "
-                << luNumSpecLocators << " authored (type:pos)";
-            for ( s32 liLog = 0; liLog < lLocators.miNumLightLocators; ++liLog )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << " " << static_cast<s32>( lLocators.maLightLocatorTypes[liLog] )
-                    << ":(" << lLocators.maLightLocators[liLog].wAxis.x
-                    << ", " << lLocators.maLightLocators[liLog].wAxis.y
-                    << ", " << lLocators.maLightLocators[liLog].wAxis.z << ")";
-            }
-            *CgsDev::Log::gpDebugPrint << " [FLAG PC bring-up]\n";
-        }
-    }
-}
-
-
-// ============================================================================
-// [RETIRED 2026-08-18, wave Q5 finisher] PublishNewVehicleToDirectorWithoutPhysicsBringUp
-// stood here: a NOT-an-X360 function that published the director NewVehicle event on an
-// invented trigger (a function-local edge latch on the player slot plus an attribute-residency
-// retry) because RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 was parked one
-// declaration wide and published nothing.
-//
-// It is DELETED, not merely unhooked: ProcessCreateVehicleEvents is now complete (see its
-// banner below), and its player arm posts the SAME two values -- VehicleList::GetVehicleData(
-// GetVehicleIndex(RaceCar::GetModelId()))->GetAttribCollectionKeyHash() and that same model
-// index -- through the SAME callee (BrnDirectorVehicleInputInterface::NewVehicle, the real
-// @0x822CBA90 body), in the SAME PostPhysicsUpdate slot, on the CONSOLE's own trigger. Keeping
-// both would post the director a duplicate NewVehicleEvent the console never emits.
-//
-// The stand-in's residency gate is not lost, it is superseded: it existed because the invented
-// trigger fired ~150 log lines BEFORE the car's attribute vault was streamed. The console
-// trigger cannot: the create event is posted by ActiveRaceCar::AddHandlingModel from
-// ResetActiveRaceCar, i.e. downstream of OnRaceCarResourcesLoaded (measured on this build --
-// build/game/BrnGame.log has the vault 109b0d7b00000000 registered well before
-// VehicleManager::ProcessCreateEvents runs).
-//
-// ⚠️ FOR THE CONDUCTOR: five READ-ONLY files still name this function in prose comments and are
-// now stale by one sentence each -- BrnBehaviourGameplayExternal.h:509,
-// BrnDirectorVehicleInputInterface.cpp:23, GameBridgeWorldToX.cpp:207 and
-// BrnPhysicsModuleUpdateFunctions.cpp:70 / :1007 (five sites, four files) -- plus
-// BrnRaceCarEntityModuleIO.cpp:446. Reported, not edited: none of them is this owner's file.
-// (BrnActiveRaceCar_wQ5_01.cpp's reference WAS updated -- that partfile is this owner's.)
-// ============================================================================
-
-
-// ============================================================================
-// ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT an X360 function.
-//
-// ApplyRenderPoseInterpolationBringUp: once per RENDERED frame, before the dispatch pass,
-// write each active car's display pose as the blend of the last two simulation ticks.
-//
-// The simulation is paced at a fixed 60 Hz while the renderer runs free, so without this
-// the car steps 60 times a second inside a 140-frame-a-second stream and shudders against
-// a world that moves smoothly with the camera. Idempotent -- the frame's several dispatch
-// passes (main view, three shadow cascades, the env-map faces) may each call it.
-// ============================================================================
-void RaceCarEntityModule::ApplyRenderPoseInterpolationBringUp( f32 lfAlpha )
-{
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-    {
-        ActiveRaceCar& lrActiveRaceCar = maActiveRaceCars[liCar];
-        if( lrActiveRaceCar.IsActive() )
-        {
-            lrActiveRaceCar.ApplyRenderPoseInterpolation( lfAlpha );
-        }
-    }
-}
-
-// [FLAG PC bring-up] NOT an X360 function -- see the header. Reports the first active
-// slot's render pose so the world module's bring-up tour camera can frame it.
-bool RaceCarEntityModule::GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const
-{
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-    {
-        const ActiveRaceCar& lrActiveRaceCar = maActiveRaceCars[liCar];
-        if( lrActiveRaceCar.IsActive() )
-        {
-            lrPosition = lrActiveRaceCar.GetRenderParams()->GetBodyTransform().wAxis;
-            return true;
-        }
-    }
-    return false;
 }
 
 // ============================================================================
@@ -2874,16 +2038,6 @@ void RaceCarEntityModule::RemoveRaceCar(
 // ids, muType = E_RACE_CAR_TYPE_INACTIVE, the four -1 sentinels, the two colour -1s,
 // mpActiveRaceCar = 0). Written here as the call the inline came from.
 //
-// [FLAG PC bring-up] TWO console legs are dropped rather than paraphrased:
-//   * RaceCar::UpdatePositioningData(lrTransform, &mWorldMap2D) -- the module's own
-//     CgsWorld::WorldMap2D lives inside this header's opaque tail (`this + 99072` in the
-//     asm, inside maTailPadA0), so there is no map to sample and the call would dereference
-//     the middle of a pad. All it adds beyond AddToWorld is mPreviousPosition and
-//     mWorldRegion; nothing on the reconstructed path reads either. Same drop the previous
-//     bring-up spawn made, for the same measured reason.
-//   * the "Vehicle with ID <id> is not in the list" assert's StrStream formatting -- the
-//     predicate IS reproduced, only the message is folded to static text.
-// ============================================================================
 EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
         BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
         const Matrix44Affine& lrTransform,
@@ -2976,7 +2130,6 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
     lpRaceCar->AddToWorld( leType, lrTransform, lRivalId, lModelId, lResolvedWheelId,
                            static_cast<s8>( liGlobal ),   // asm `extsb r9, r29`
                            liOpponentIndex );
-    // [FLAG PC bring-up] UpdatePositioningData -- see the banner.
     lpRaceCar->UpdateVelocity( Vector3{ 0.0f, 0.0f, 0.0f, 0.0f } );   // asm `vmr128 v1, v127` (zero)
 
     CGS_ASSERT( leGlobal >= E_GLOBAL_RACE_CAR_INDEX_0,
@@ -3124,20 +2277,6 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
                 CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // :7535
                 CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // :7536
             }
-            // ⭐ THE GHOST-CAR FIX (2026-08-17). The console removes the OLD player car here,
-            // and this is the call the "[FLAG PC] RemoveRaceCar is not reconstructed" banner
-            // used to stand in for. Asm at the call site:
-            //     0x823052FC  mr r3, r28                 ; r28 == lpOldCar
-            //     0x82305300  bl RaceCar::GetGlobalRaceCarIndex
-            //     0x82305304  mr r4, r3                  ; the returned global index
-            //     0x82305308  mr r3, r22                 ; this
-            //     0x8230530C  mr r5, r25                 ; lpOutput (the pre-scene OUTPUT buffer)
-            //     0x82305310  bl RaceCarEntityModule::RemoveRaceCar
-            // The old banner's premise ("UNREACHED on the start-of-game path -- 
-            // mePlayerActiveRaceCarIndex is still INVALID there") was true for the FIRST
-            // record only. Car Select posts a fresh ResetPlayerCarAction on every car change,
-            // and from the second one onwards the index IS valid, so this branch runs and the
-            // previous slot has to be released here or it stays E_STATE_ACTIVE for ever.
             RemoveRaceCar( lpOldCar->GetGlobalRaceCarIndex(), lpOutput );
         }
 
@@ -3183,13 +2322,6 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
         CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7581
 
-        // G68-D2 (crash parity 2026-09-23): 0x82305534..0x82305544 --
-        //     vmr128 v2, v127   direction = lTransform row +0x20 (zAxis; lvx128 @0x823050D4)
-        //     vmr128 v1, v126   position  = lTransform row +0x30 (wAxis; lvx128 @0x823050D0)
-        //     fmr    f1, f31    flt_82001CC0 == 0.0f
-        //     bl     ActiveRaceCar::RequestPlaceOnTrack
-        // (The old "[FLAG PC bring-up] RequestPlaceOnTrack is not reconstructed" banner was stale:
-        // the body exists and case 7 / HandleStopModeAction already call it.)
         lpActiveRaceCar->RequestPlaceOnTrack( lTransform.wAxis, lTransform.zAxis, 0.0f );
 
         // The console's own debug line, printed after the request under the message filter's
@@ -3371,17 +2503,6 @@ void RaceCarEntityModule::HandleSetBoost(
 // And (crash-parity 2026-09-23, FX-RCEM2): 35 FINISHED_MODE_NOTIFY, 97 BODY_SHOP_DRIVE_THRU,
 // 205 ROAD_RAGE_PLAYER_DAMAGE and the Showtime crash-play five 128/140/144/201/273.
 //
-// [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
-// console dispatches to and that are still un-reconstructed:
-//                                           4   HandleSetPlayerOpponentsAction
-//   73/74/76        the car-select / drive-thru arms
-//   126 SwitchCarColourAction (an AI car's colour; asserts :7393/:7397/:7398)
-//   98/99           the paint-shop / junk-yard drive-thrus     + ~70 more.
-// (The network-car arms 5, 11, 27/41, 219 and 220 are reproduced; 11 is inline code on the
-// console, not a named handler.)
-// Because the walk itself is real, adding any one of them later is a case label, not a
-// re-derivation. DELETE-WHEN the handlers land.
-// ============================================================================
 void RaceCarEntityModule::HandleCarStatsUpdate(BrnResource::ECarType leCarType,
                                                 s32 liBoostLevel,
                                                 s32 liBoostLossLevel)
@@ -3560,33 +2681,6 @@ namespace
                   offsetof(PaintShopDriveThruActionRecord, muPaletteIndex) == 0x84 &&
                   sizeof(PaintShopDriveThruActionRecord) == 144, "X360 action 98 record");
 
-    // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY. The takedown-flow switch shared (by env
-    // name) with TakedownManager's classifier trace: one [td-action] line per consumed takedown
-    // action, so a live run proves the arms below were DISPATCHED, not merely compiled.
-    bool TakedownActionDiagEnabled()
-    {
-        static const bool sbOn = ( getenv( "BRN_TD_DIAG" ) != 0 );
-        return sbOn;
-    }
-
-    // [DIAG] BRN_RCEM_ACTION_DIAG -- NOT IN THE X360 BINARY (crash parity FX-RCEM3, 2026-09-23). One
-    // [rcem-action] line the first time each game-action id reaches HandleGameActions' switch, plus
-    // the outcome of the arms a live run cannot otherwise see (170's bar, 34's donut placement), so
-    // a run proves which arms were DISPATCHED. Opt-in; silent otherwise.
-    bool GameActionDiagEnabled()
-    {
-        static const bool sbOn = ( getenv( "BRN_RCEM_ACTION_DIAG" ) != 0 );
-        return sbOn;
-    }
-
-    // [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY. The latch for the two [intro-timer]
-    // witnesses (case 29 arming the drive-by start, UpdateRaceCars_PreScene releasing it). They
-    // used to print on every run, gated only on gpDebugPrint (reviewer A on 65eadffe, 2026-09-24).
-    bool IntroTimerDiagEnabled()
-    {
-        static const bool sbOn = ( getenv( "BRN_INTRO_TIMER_DIAG" ) != 0 );
-        return sbOn && CgsDev::Log::gpDebugPrint != 0;
-    }
 }
 
 void RaceCarEntityModule::HandleGameActions(
@@ -3612,16 +2706,6 @@ void RaceCarEntityModule::HandleGameActions(
     while( lpEvent != 0 )
     {
         // [DIAG] BRN_RCEM_ACTION_DIAG -- see GameActionDiagEnabled. NOT IN THE X360 BINARY.
-        if( GameActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 && liType >= 0 && liType < 512 )
-        {
-            static u8 sauSeenActionIds[512] = {};
-            if( sauSeenActionIds[liType] == 0 )
-            {
-                sauSeenActionIds[liType] = 1;
-                *CgsDev::Log::gpDebugPrint << "[rcem-action] id " << liType << " size " << liSize
-                                           << " reached HandleGameActions\n";
-            }
-        }
 
         switch( liType )
         {
@@ -3749,10 +2833,6 @@ void RaceCarEntityModule::HandleGameActions(
             SetActiveRaceCarForPlayerScoringIndex(lpPlayerAddedAction->mePlayerScoringIndex,
                                                   lpRaceCar->GetActiveRaceCarIndex());
 
-            BrnNetHarnessPC::Witness("world", "network car spawned for net=%d active=%d global=%d",
-                                     static_cast<s32>(lpPlayerAddedAction->mAddedPlayerNetworkID),
-                                     static_cast<s32>(lpRaceCar->GetActiveRaceCarIndex()),
-                                     static_cast<s32>(leGlobalRaceCarIndex));
             break;
         }
 
@@ -3813,11 +2893,6 @@ void RaceCarEntityModule::HandleGameActions(
 
                 // [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY -- one line per armed intro
                 // (once per mode start).
-                if (IntroTimerDiagEnabled())
-                {
-                    *CgsDev::Log::gpDebugPrint << "[intro-timer] armed " << mfIntroTimer
-                                               << " s (drive-by start)\n";
-                }
             }
             break;
 
@@ -3947,20 +3022,7 @@ void RaceCarEntityModule::HandleGameActions(
                 mBoostManager.OnPlayerAttacksRival(lpHitRival->meImpactType);
 
                 // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-                static const bool sbImpactDiag  = (getenv("BRN_BOOST_TICKER_DIAG") != 0);
                 static s32        siImpactLines = 0;
-                if (sbImpactDiag && siImpactLines < 24 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++siImpactLines;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[hit-rival] impactType "
-                        << static_cast<s32>(lpHitRival->meImpactType)
-                        << " aggressor "
-                        << static_cast<s32>(lpHitRival->meAggressorActiveRaceCarIndex)
-                        << " victim "
-                        << static_cast<s32>(lpHitRival->meVictimActiveRaceCarIndex)
-                        << " -> OnPlayerAttacksRival [DELETE-WHEN-STABLE]\n";
-                }
             }
             break;
         }
@@ -4259,13 +3321,6 @@ void RaceCarEntityModule::HandleGameActions(
                 BrnAI::E_RESET_TYPE_STANDARD,       // li r5, 1
                 0.0f);                              // f2 = f30 = flt_82001CC0
 
-            if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[td-action] 3 RESET_PLAYER_CAR_ON_TRACK player slot "
-                    << static_cast<s32>(mePlayerActiveRaceCarIndex)
-                    << " speed " << lpResetAction->mfSpeed << " -> RequestResetOnTrack\n";
-            }
             break;
         }
 
@@ -4284,13 +3339,6 @@ void RaceCarEntityModule::HandleGameActions(
             GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetInvulnerabilityTime(
                 lpInvulnerable->mfInvulnerableTime);
 
-            if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[td-action] 111 PLAYER_INVULNERABLE player slot "
-                    << static_cast<s32>(mePlayerActiveRaceCarIndex)
-                    << " time " << lpInvulnerable->mfInvulnerableTime << "\n";
-            }
             break;
         }
 
@@ -4317,15 +3365,6 @@ void RaceCarEntityModule::HandleGameActions(
                 lpVictim->GetRenderParams()->SetDamaged(true);                  // stb r23, 0x1BE4
             }
 
-            if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[td-action] 120 SHUTDOWN victim slot "
-                    << static_cast<s32>(lpShutdown->meVictimIndex)
-                    << " aiDriven " << (lbAIDriven ? 1 : 0)
-                    << " -> damaged " << (lpVictim->GetRenderParams()->IsDamaged() ? 1 : 0)
-                    << "\n";
-            }
             break;
         }
 
@@ -4359,20 +3398,6 @@ void RaceCarEntityModule::HandleGameActions(
                     BrnAI::E_RESET_TYPE_STANDARD,   // li r5, 1
                     0.0f);                          // f2 = f30 = flt_82001CC0
 
-                if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[td-action] 121 SHUTDOWN_FINISHED victim slot "
-                        << static_cast<s32>(leVictimIndex)
-                        << " -> RemoveRaceCar(global " << static_cast<s32>(leVictimGlobalIndex)
-                        << ") + player reset speed " << KF_RESET_ON_TRACK_SPEED << "\n";
-                }
-            }
-            else if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[td-action] 121 SHUTDOWN_FINISHED victim slot "
-                    << static_cast<s32>(leVictimIndex) << " not attached -> nothing\n";
             }
             break;
         }
@@ -4784,8 +3809,6 @@ void RaceCarEntityModule::HandleGameActions(
                        "(lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)");
             maActiveRaceCars[lpPlayerDisconnectedAction->meActiveRaceCarIndex].SetDisconnectedFromNetwork();
 
-            BrnNetHarnessPC::Witness("world", "network car disconnected active=%d",
-                                     static_cast<s32>(lpPlayerDisconnectedAction->meActiveRaceCarIndex));
             break;
         }
 
@@ -4822,59 +3845,15 @@ void RaceCarEntityModule::HandleGameActions(
                 lpRaceCar->SetInCurrentGameMode(false, false);
                 lpActiveRaceCar->SetInGameMode(false);
 
-                BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
-                                         static_cast<s32>(lpPlayerRemovedAction->meActiveRaceCarIndex),
-                                         static_cast<s32>(lpRaceCar->GetGlobalRaceCarIndex()));
                 RemoveRaceCar(lpRaceCar->GetGlobalRaceCarIndex(), lpOutput);
             }
             break;
         }
 
         default:
-            break;   // [FLAG PC bring-up] see the banner
-        }
+            break;           }
 
         // [DIAG] BRN_RCEM_ACTION_DIAG -- the outcome of two arms. NOT IN THE X360 BINARY.
-        if( GameActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            if( liType == KI_ACTION_SET_BOOST )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[rcem-action] 170 SetBoost -> player bar "
-                    << mBoostManager.GetBoostStrategy()->GetBoostAmount() << " / "
-                    << mBoostManager.GetBoostStrategy()->GetMaxBoost() << "\n";
-            }
-            else if( liType == BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE
-                     && mbPlayerDonutsOnEventStart )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[rcem-action] 34 donut start -> player RequestPlaceOnTrack at "
-                    << KF_MIN_STUNT_RESET_SPEED << " m/s\n";
-            }
-            else if( liType == KI_ACTION_SET_PLAYER_OPPONENTS )
-            {
-                const SetPlayerOpponentsActionRecord* lpOpponents =
-                    reinterpret_cast<const SetPlayerOpponentsActionRecord*>( lpEvent );
-                *CgsDev::Log::gpDebugPrint << "[rcem-action] 4 player opponents "
-                                           << lpOpponents->maOpponents.GetCount()
-                                           << " -> desired streamer slots 7 down:";
-                for( s32 liOpponent = 0; liOpponent < lpOpponents->maOpponents.GetCount(); ++liOpponent )
-                {
-                    *CgsDev::Log::gpDebugPrint << " "
-                        << lpOpponents->maOpponents.GetItem( static_cast<u32>( liOpponent ) );
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-            else if( liType == KI_ACTION_CAR_SELECT_WAITING_FOR_AUDIO )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[rcem-action] 74 audio wait armed: waiting "
-                    << ( reinterpret_cast<const CarSelectWaitingForAudioActionRecord*>( lpEvent )->mbWaiting ? 1 : 0 )
-                    << ", streamer wait " << ( mRaceCarStreamer.HACK_IsWaitingForAudioAfterCarSelect() ? 1 : 0 )
-                    << ", module latch " << ( mbHACK_ExitingCarSelectWaitForAudio ? 1 : 0 )
-                    << ", waiting for streaming " << ( mbWaitingForStreaming ? 1 : 0 ) << "\n";
-            }
-        }
 
         liType = lpQueue->GetNextEvent( lpEvent, &lpEvent, &liSize );
     }
@@ -4948,9 +3927,6 @@ void RaceCarEntityModule::HandleSetupNetworkCarAction(
     SetActiveRaceCarForPlayerScoringIndex( lpSNCAction->mePlayerScoringIndex,
                                            leNewNetworkActiveRaceCarIndex );
 
-    BrnNetHarnessPC::Witness( "world", "network car changed active=%d global=%d",
-                              static_cast<s32>( leNewNetworkActiveRaceCarIndex ),
-                              static_cast<s32>( leNetworkGlobalRaceCarIndex ) );
 }
 
 // ============================================================================
@@ -5150,40 +4126,6 @@ void RaceCarEntityModule::UpdateActiveRaceCarColours()
         lpActiveRaceCar->GetRenderParams()->SetPaintColour( lPaintColor );
         lpActiveRaceCar->GetRenderParams()->SetPearlescentColour( lPearlColor );
 
-        // [PC diagnostic] print the value at the PRODUCING end. The consuming end
-        // (RenderRaceCar's shader constant 20) prints its own one-shot -- the
-        // RaceCarState::operator= lesson: print BOTH ends of a transfer.
-        // The latch is on the {palette, colour} PAIR, not a plain "logged once" bool: the pair
-        // starts at 0/0 on every fresh spawn and only becomes the car's authored default when
-        // ChangePlayerCarColour runs, several frames later. A one-shot latch would print the
-        // fallback and never the real value.
-        // [FLAG PC witness] OPT-IN (BRN_RACECAR_PAINT_DIAG=1, the same knob as the consuming end
-        // in RenderRaceCar) + hard first-N cap. DELETE-WHEN the paint transfer is signed off. The
-        // {palette, colour} latch is shared by every slot, so two differently painted cars
-        // alternate it forever: 14,971 lines in a 140 s run.
-        {
-            static const bool sbPaintDiag = ( getenv( "BRN_RACECAR_PAINT_DIAG" ) != 0 );
-            static u32 suPaintDiagLines = 0u;
-            static s32 siLastLoggedPalette = -2;
-            static s32 siLastLoggedColour  = -2;
-            if( sbPaintDiag && suPaintDiagLines < KU_RACECAR_MODULE_DIAG_MAX_LINES
-                && ( liPaletteIndex != siLastLoggedPalette || liColourIndex != siLastLoggedColour )
-                && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++suPaintDiagLines;
-                siLastLoggedPalette = liPaletteIndex;
-                siLastLoggedColour  = liColourIndex;
-                *CgsDev::Log::gpDebugPrint
-                    << "[racecar-paint] UpdateActiveRaceCarColours: slot "
-                    << static_cast<s32>( leActiveRaceCarIndex )
-                    << " palette " << liPaletteIndex << " colour " << liColourIndex
-                    << " of " << lrPalette.GetNumColours()
-                    << " -> paint (" << lPaintColor.x << ", " << lPaintColor.y << ", "
-                    << lPaintColor.z << ", " << lPaintColor.w << ")"
-                    << " pearl (" << lPearlColor.x << ", " << lPearlColor.y << ", "
-                    << lPearlColor.z << ", " << lPearlColor.w << ")\n";
-            }
-        }
     }
 }
 
@@ -5356,22 +4298,6 @@ bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourInde
 //
 // REPRODUCED HERE: 2, 3, 4 (minus the deformation-ptr publish -- see below), 5.
 //
-// [FLAG PC bring-up] NOT reproduced, and dropped rather than paraphrased:
-//   * step 1 -- the module's own CgsWorld::WorldMap2D member is inside this header's
-//     opaque attested-offset tail (it has no name here yet), so there is nothing to
-//     copy FROM. Nothing on the reconstructed path reads the published copy.
-//   * step 4's SetDeformationModelResourcePtr -- ⭐ RETIRED 2026-09-03 (boost-exhaust
-//     wave). Both of its reasons went stale: +0x1CA4 is no longer inside maPad1C90 (it is
-//     the named mDeformationModelHandle, and this module is already a friend), and the
-//     published handle DOES have a reader -- ActiveRaceCarData::ExtractTags @0x8229B6C0,
-//     which is where muNumBoostTags comes from and therefore whether any boost effect can
-//     start at all. The publish is bodied in the loop below; see its own banner.
-//   * step 5 -- ⭐ RETIRED (hud H3b tracking slice 2026-08-25): RaceCar::
-//     FillInOutputInterface @0x822BED20 is reconstructed and the per-global-slot loop
-//     below publishes through it; the satnav 199 producer consumes the result.
-//   * steps 6/7 -- replay. The PC has no replay path and RaceCarEntitySerialiser has no
-//     static layout; the console gates both legs on its replay state word anyway.
-// DELETE-WHEN: each named blocker lands.
 //
 // ⚠️ The console asserts "This car should be inactive" for muType == E_RACE_CAR_TYPE_INACTIVE
 // on an ATTACHED slot and then still publishes flags == (IsActive?0x10:0) | 1. Reproduced
@@ -5498,8 +4424,6 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
             static s32 siMotionProbe = -1;
             if( siMotionProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_MOTION_PROBE" );
-                siMotionProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             if( siMotionProbe == 1 && leSlot == mePlayerActiveRaceCarIndex )
             {
@@ -5699,9 +4623,6 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
                 }
             }
 
-            // FLAG PC-platform leaf: this branch is the actual local-player
-            // strategy; other active cars must not supply boost-award feedback.
-            CgsInput::AdaptiveTriggers::BoostFeedback::BindPlayer(reinterpret_cast<std::uintptr_t>(lpStrategy));
             // The boost-lock payback holds the flame on regardless of the strategy.
             lInfo.mbIsBoosting =
                 lpStrategy->IsBoosting() ||
@@ -5751,20 +4672,7 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
             //   button 1, boosting 1, amount falling -> it works; something else ends the mode
             // Once every 120 frames at 60 Hz, behind BRN_SHOWTIME_WATCH, player slot only.
             {
-                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
                 static s32        siCall  = 0;
-                if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siCall++ % 120) == 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[boost-watch] call=" << siCall
-                        << " button="   << (lInfo.mbHoldingBoostButton ? 1 : 0)
-                        << " allowed="  << (lInfo.mbAllowedToBoost ? 1 : 0)
-                        << " boosting=" << (lpStrategy->IsBoosting() ? 1 : 0)
-                        << " amount="   << lInfo.mfBoostAmount
-                        << " max="      << lInfo.mfMaxBoost
-                        << " mode="     << static_cast<s32>(meGameModeType)
-                        << "\n";
-                }
             }
 
             // Both showtime modes hide the boosting flame.
@@ -5854,11 +4762,6 @@ void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::Output
             // [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY. One line per armed intro (at
             // most once per mode start); with the latch set, its silence in a drive-by-start mode
             // IS the defect.
-            if( IntroTimerDiagEnabled() )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[intro-timer] expired -> SetAllCarsOnStartLine(ROLLING_START, excluding the player)\n";
-            }
         }
     }
 }
@@ -5896,18 +4799,7 @@ void RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene( RaceCarEntityModuleI
 
             // [DIAG] BRN_PROP_BOX_DIAG -- NOT IN THE X360 BINARY. Capped proof the replace is
             // DISPATCHED, with its whole key and the deformed box it carries.
-            static const bool sbPropBoxDiag = ( getenv( "BRN_PROP_BOX_DIAG" ) != 0 );
             static u32 suPropBoxDiagLines = 0u;
-            if( sbPropBoxDiag && suPropBoxDiagLines < 64u && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++suPropBoxDiagLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-box] slot " << liSlot
-                    << " key " << static_cast<u32>( lVolumeId.mId >> 32 ) << ":" << static_cast<u32>( lVolumeId.mId )
-                    << " half (" << lpVolume->mBoxData.mfHx << ", " << lpVolume->mBoxData.mfHy << ", "
-                    << lpVolume->mBoxData.mfHz << ") pos (" << lpVolume->maTransform[3].x << ", "
-                    << lpVolume->maTransform[3].y << ", " << lpVolume->maTransform[3].z << ")\n";
-            }
         }
 
         CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -5937,8 +4829,6 @@ void RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene( RaceCarEntityModuleI
 //     WriteUpdatedAIData, UpdatePropBoundingBoxes_PreScene (2026-09-24, CC-3) and the pre-scene
 //     UpdateOutputInterfaces.
 //
-// [FLAG PC bring-up] everything else is dropped, NOT paraphrased.
-// DELETE-WHEN: the interior lands and the full spine is reconstructed.
 void RaceCarEntityModule::PreSceneUpdate(
         RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
@@ -6053,11 +4943,6 @@ void RaceCarEntityModule::PreSceneUpdate(
             lpInput->GetPlayerVehicleControls();
         if( lpPlayerControls != 0 )
         {
-            // [FLAG PC bring-up] the null test is the deviation: the console's getter cannot
-            // return null (it is `this + 496`, an embedded sub-object), but this build's
-            // producer chain is still being assembled and a null here would be a fault, not a
-            // dropped frame. The copy itself is the console's 60-byte memcpy.
-            mPlayerVehicleControls = *lpPlayerControls;
         }
     }
 
@@ -6127,12 +5012,6 @@ void RaceCarEntityModule::PreSceneUpdate(
                 lpActivateCar->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK)
             {
                 const Vector3 lPos = lpActivateCar->GetPosition();
-                BrnNetHarnessPC::Witness("netcar", "present=%u slot %d online=%d received=%d active=%d scene=%d render=%d pos=(%.1f, %.1f, %.1f)",
-                                         renderengine::guPresentCount, liActivateSlot,
-                                         static_cast<s32>(lpActivateCar->GetOnlineState()),
-                                         lpActivateCar->mbReceivedNetworkDriverControls ? 1 : 0,
-                                         lpActivateCar->IsActive() ? 1 : 0, lpActivateCar->mbAddedToScene ? 1 : 0,
-                                         lpActivateCar->mbRenderThisFrame ? 1 : 0, lPos.x, lPos.y, lPos.z);
             }
         }
         if (lpActivateCar != 0 && lpActivateCar->mbAIToBeActivated && lpActivateCar->IsAttached())
@@ -6143,8 +5022,6 @@ void RaceCarEntityModule::PreSceneUpdate(
             lpActivateCar->mbAIToBeActivated = false;
             if (CgsDev::Log::gpDebugPrint != 0)
             {
-                *CgsDev::Log::gpDebugPrint << "[ai-act] ActivateRaceCar slot " << liActivateSlot
-                                           << " [FLAG PC witness]\n";
             }
         }
 
@@ -6311,7 +5188,6 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 
         if( lpActiveRaceCar->IsActive() )
         {
-            // [FLAG PC bring-up] the mUsedRaceCars gate -- see the banner.
             if( lrUsedRaceCars.IsBitSet( static_cast<u32>( liCar ) ) )
             {
                 // ⭐ THE RETURN PATH. `bl ActiveRaceCar::UpdatePhysicsState` @0x822E8844,
@@ -6323,18 +5199,7 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 // the module IO handoff -- so a 0 here puts the loss in the handoff, and a
                 // good value here puts it in the publish below.
                 {
-                    static const bool sbHopDiag = (getenv("BRN_AI_SOUND_DIAG") != 0);
                     static bool sabHopSeen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { false };
-                    if( sbHopDiag && !sabHopSeen[liCar] && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        sabHopSeen[liCar] = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[rc-hop] slot " << liCar
-                            << " inputBuffer entityWord " << CgsDev::E_PRINTMODE_HEXONCE
-                            << static_cast<u32>( lpVehicleOutput->GetRaceCar(
-                                   static_cast<u32>( liCar ) )->mEntityId.muValue )
-                            << "\n";
-                    }
                 }
                 lpActiveRaceCar->UpdatePhysicsState(
                     lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ),
@@ -6373,7 +5238,6 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 
     if( lbSawActiveCarWithoutPhysicsSlot )
     {
-        // [FLAG PC bring-up] the honest consequence of the deferral -- see the banner.
         static bool sbReportedNoPhysicsSlot = false;
         if( !sbReportedNoPhysicsSlot )
         {
@@ -6388,23 +5252,6 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                        "DELETE WHEN VehicleManager::ProcessCreateEvents populates "
                        "maRaceCarStates.\n";
             }
-        }
-    }
-
-    // ---- L5 (the LOCATOR-OUTPUT copy), stood in for -------------------------
-    // [FLAG PC bring-up] at leg L5's own position in the console's body. The rest-pose
-    // locators do NOT depend on physics ownership -- they are authored data in the car's
-    // handling-body frame -- so this runs for every ACTIVE slot, not only the ones the
-    // mUsedRaceCars gate above lets through. See PublishRestPoseLightLocatorsBringUp's
-    // banner for the three dead producer hops it stands in for.
-    // DELETE-WHEN L5 below unparks.
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-    {
-        ActiveRaceCar* lpActiveRaceCar =
-            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
-        if( lpActiveRaceCar->IsActive() )
-        {
-            PublishRestPoseLightLocatorsBringUp( lpActiveRaceCar, liCar );
         }
     }
 
@@ -6662,28 +5509,6 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 // ============================================================================
 // ProcessCreateVehicleEvents  @0x822FF620 (182)
 //
-// ⭐ THE STALE-BANNER RE-VERIFICATION THE WAVE ASKED FOR, AND ITS ANSWER.
-// The now-retired PublishNewVehicleToDirectorWithoutPhysicsBringUp stand-in (its seat, and the
-// record of its deletion, is above) claimed this function's input queue "is permanently empty
-// on this build, and it is not a mount away from being filled". That was true when it was
-// written and is NOT true now. Re-checked 2026-08-18 against the tree and the current boot log:
-//   * BrnVehicleManager_ProcessCreateEvents.cpp exists, is REAL, and IS on
-//     tools/build/build_game_exe.bat;
-//   * its per-car body ends in `lpManagerOutputInterface->AddCreateVehicleResult(lResult)`
-//     with mbSuccess = true;
-//   * build/game/BrnGame.log:883 carries that body's own one-shot line
-//     ("[FLAG PC bring-up] ProcessCreateEvents: race-car debug component vptr is NULL"),
-//     which is emitted INSIDE the per-race-car loop three statements before that Add --
-//     i.e. the queue is written on this build, at least once, on the junkyard drive;
-//   * BrnGame.log:819 records BridgePhysicsModuleToRaceCarModule_PostPhysics legs 1-2
-//     (vehicle output + VEHICLE-MANAGER output) as LIVE, so the written interface really
-//     does reach this module's post-physics input buffer.
-// The ordering worry the stand-in's banner raised (publishing before the car's attribute
-// collection is resident) also resolves by itself: the create event is posted by
-// ActiveRaceCar::AddHandlingModel from ResetActiveRaceCar, which only runs after
-// OnRaceCarResourcesLoaded, so the result lands AFTER the vault load. The log shows exactly
-// that ordering -- vault 109b0d7b00000000 at :853, E_STATE_ACTIVE at :881, ProcessCreateEvents
-// at :883.
 //
 // THE BODY, leg for leg from the asm -- LANDED IN FULL 2026-08-18 (wave Q5 finisher); this
 // list is now a map of the code below, not a transcription waiting to be pasted:
@@ -7129,7 +5954,6 @@ void RaceCarEntityModule::UpdateRaceCarContacts(
     // static world entity over and over), so the run could say nothing at all about the owner-1
     // and owner-2 contacts it was taken to measure. [[diagnostics-that-lie]] -- a witness that
     // starves reports an absence it never observed.
-    static const bool sbContactDiag = ( getenv( "BRN_BOOST_TICKER_DIAG" ) != 0 );
     const s32         KI_CONTACT_DIAG_OWNERS   = 16;
     const s32         KI_CONTACT_DIAG_PER_OWNER = 8;
     static s32        saiContactLines[KI_CONTACT_DIAG_OWNERS] = { 0 };
@@ -7193,21 +6017,6 @@ void RaceCarEntityModule::UpdateRaceCarContacts(
         }
 
         const s32 liDiagSlot = static_cast<s32>( lucOwnerB ) & ( KI_CONTACT_DIAG_OWNERS - 1 );
-        if( sbContactDiag && saiContactLines[liDiagSlot] < KI_CONTACT_DIAG_PER_OWNER
-            && CgsDev::Log::gpDebugPrint != 0
-            && ( liContactIndexA == static_cast<s32>( mePlayerActiveRaceCarIndex )
-                 || lbMarkTouching ) )
-        {
-            ++saiContactLines[liDiagSlot];
-            *CgsDev::Log::gpDebugPrint
-                << "[rc-contact] A idx " << liContactIndexA
-                << " owner " << static_cast<s32>( lContactIdA.GetOwner() )
-                << " | B idx " << liContactIndexB
-                << " owner " << static_cast<s32>( lucOwnerB )
-                << " player " << static_cast<s32>( mePlayerActiveRaceCarIndex )
-                << " touching " << ( lbMarkTouching ? 1 : 0 )
-                << " [DELETE-WHEN-STABLE]\n";
-        }
     }
 }
 
@@ -7255,7 +6064,6 @@ void RaceCarEntityModule::ProcessPropContactQueue(
     CGS_ASSERT( lpPropContactQueue != 0, "lpPropContactQueue != NULL" );        // :5999
 
     // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
-    static const bool sbPropDiag  = ( getenv( "BRN_BOOST_TICKER_DIAG" ) != 0 );
     static s32        siPropLines = 0;
 
     for( s32 liContact = 0; liContact < lpPropContactQueue->GetLength(); ++liContact )
@@ -7276,15 +6084,6 @@ void RaceCarEntityModule::ProcessPropContactQueue(
         {
             mBoostManager.OnPropHit();
 
-            if( sbPropDiag && siPropLines < 24 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++siPropLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-hit] type " << static_cast<s32>( lrPropContact.muType )
-                    << " flags " << static_cast<s32>( lrPropContact.muFlags )
-                    << " state " << static_cast<s32>( lrPropContact.muState )
-                    << " -> OnPropHit [DELETE-WHEN-STABLE]\n";
-            }
         }
     }
 }
@@ -7338,11 +6137,6 @@ void RaceCarEntityModule::ProcessPropContactQueue(
 // const pointer and never writes through it -- so the reference is passed directly here, per the
 // de-optimisation rule.
 //
-// [FLAG PC bring-up] the two sibling legs the console runs immediately before this one at the
-// same slot -- UpdateRaceCarContacts @0x822F5A50 (0x82307664) and ProcessPropContactQueue
-// (0x82307670) -- are still unreconstructed, so only this third leg is called below.
-// DELETE-WHEN either of them lands.
-// =================================================================================================
 void RaceCarEntityModule::UpdateCrashingPlayerContacts(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
 {
@@ -7350,15 +6144,6 @@ void RaceCarEntityModule::UpdateCrashingPlayerContacts(
                 && ( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ),
                 "( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && "
                 "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )" );   // X360 :4718
-
-    // [FLAG PC bring-up] the console indexes maActiveRaceCars unconditionally after its assert,
-    // because its flow guarantees a player slot by now. Same temporary precondition every other
-    // post-physics leg in this file carries -- this build ticks frames before one is attached.
-    // DELETE-WHEN the player car is attached before the world's first post-physics frame.
-    if( static_cast<u32>( mePlayerActiveRaceCarIndex ) >= E_ACTIVE_RACE_CAR_INDEX_COUNT )
-    {
-        return;
-    }
 
     ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
     if( !lpPlayerActiveRaceCar->IsActive() )
@@ -7464,27 +6249,6 @@ void RaceCarEntityModule::SetPaddingForResetRaceCars(
     mabResetThisFrame.UnSetAll();
 }
 
-// X360 0x82307538 -- PARTIAL SLICE. The console body runs the post-physics half of the
-// module (ProcessCreateVehicleEvents, the crash/takedown queues, the director vehicle
-// input, the replay request interface, ...). Three of its 20-odd legs are reproduced, in the
-// console's own relative order:
-//   * UpdateActiveRaceCarColours -- the per-frame PAINT PUBLISH (added 2026-08-02). Nothing
-//     else in the image writes RenderParams::mPaintColour / mPearlescentColour, and
-//     RenderRaceCar uploads both as shader constants 20/21. Without it every car draws with
-//     RenderParams::Reset()'s (1,1,1,1) -- i.e. WHITE, which is what the Hunter Cavalry was.
-//   * UpdateOutputInterfaces -- the per-frame OUTPUT PUBLISH. Nothing else in the image
-//     writes RCEntityActiveRaceCarOutputInterface, so without it every downstream consumer
-//     (the world module's player-position latch, the scoring system, and -- through
-//     BridgeWorldToDirector -- every camera behaviour's VehicleInfo) reads a Clear()ed
-//     interface with mePlayerActiveRaceCarIndex == -1.
-//   * SendStreamerEvents -- the load-bearing streamer drain: InternalBaseStreamer::Update
-//     clears its own request ring at the top of every frame, so a load request that is not
-//     drained in the frame it was posted is silently lost.
-//   ⭐ THREE MORE LEGS LANDED 2026-08-18 (wave Q5, cluster G1 -- the scene-collision middle):
-//     ProcessCreateVehicleEvents (0x823075F8), GenerateSceneUpdateEvents (0x82307658, inside
-//     the paused skip) and SendRaceCarSceneUpdates (0x8230773C). Their bodies and the full
-//     re-derived console call order are in the block banner above them.
-// [FLAG PC bring-up] the rest is dropped, NOT paraphrased. DELETE-WHEN the interior lands.
 //
 // ⭐ THE INPUT READ-LOCK MOVED TO THE CONSOLE'S OWN POSITION (2026-08-18). It used to be
 // taken half-way down, inside the `if (lpInput != 0)` arm around the physics readback. The
@@ -7503,18 +6267,6 @@ void RaceCarEntityModule::SetPaddingForResetRaceCars(
 // GameStateModule::ProcessGameEvents case 115 -> game action 112 ->
 // TranslateGameActionsToGuiEvents -> GUI event 169 -> GuiCache -> FBurnMainHudState.
 //
-// Store-for-store with the X360 asm/decompile (h1_dump4.txt/h1_dump5.txt):
-//   * GetActiveRaceCar(mePlayerActiveRaceCarIndex) -> IsActive gate;
-//   * GetPosition -> the map sample (the X360's vperm builds the w=0 lane the Vector3
-//     GetValue overload models -- the GetTriggerWorldRegion precedent);
-//   * the two handle asserts (:3075/:3076) ride the console's always-bound map;
-//   * value != 255 (KU_INVALID_WORLD_MAP_VALUE) -> WorldRegion::Construct(value);
-//   * district != mCurrentWorldRegion's -> latch + AddEvent({county,district}, 115, 8).
-// [FLAG PC bring-up] the whole body is GATED on the stage-0 bind having succeeded
-// (mDistrictMapResourceHandle non-null) instead of asserting: the give-up arm in Prepare
-// leaves the map unbound on a bad acquire, and the console's asserts here would then
-// BLOCK the sim every frame. The console shape is unreachable on a bound map.
-// ============================================================================
 void RaceCarEntityModule::UpdateCurrentWorldRegion(
         RaceCarEntityModuleIO::GameEventQueue* lpGameEventQueue )
 {
@@ -7524,8 +6276,7 @@ void RaceCarEntityModule::UpdateCurrentWorldRegion(
     }
     if( mDistrictMapResourceHandle.mpResourceMemory == 0 )
     {
-        return;   // [FLAG PC bring-up] stage-0 give-up arm taken -- see the banner.
-    }
+        return;       }
 
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
     if( lpActiveRaceCar == 0 || !lpActiveRaceCar->IsActive() )
@@ -7595,23 +6346,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     }
     lpOutput->LockForWrite();
 
-    // ⚠️ FLAG PC quality-of-life: UN-BLEND BEFORE THIS TICK'S PRODUCERS RUN.
-    // RenderParams currently holds the last rendered frame's interpolated pose; put the real
-    // tick pose back, so the latch at the bottom of this function can only ever capture a
-    // genuine tick pose and never its own blended output. Pairs with the latch loop below --
-    // the two must stay in the same function, bracketing every pose producer.
-    // (Currently changes no value here -- every active slot is written every tick by either
-    // the readback or a stand-in -- but see the scope note on ActiveRaceCar.)
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-    {
-        ActiveRaceCar* lpActiveRaceCar =
-            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
-        if( lpActiveRaceCar->IsActive() )
-        {
-            lpActiveRaceCar->RestoreTickRenderPose();
-        }
-    }
-
     // ⭐⭐⭐ [stuntrace frontier round 3, 2026-08-27] THE PLAYER-SCORING-MAP PUBLISH, at the
     // console's OWN first slot -- `bl CopyActiveRaceCarToPlayerScoringMappingToOutput`
     // @0x823075D8, immediately after LockForRead/LockForWrite and BEFORE
@@ -7646,26 +6380,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     CopyActiveRaceCarToPlayerScoringMappingToOutput(
         lpOutput->GetActiveRaceCarOutputInterface() );
 
-    // ⭐⭐ THE REAL LEG, at its own console position (@0x823075F8 -- early, BEFORE the
-    // physics readback at @0x8230761C). Landed 2026-08-18 (wave Q5); its own banner carries
-    // the re-verification that killed the "the queue is permanently empty" claim.
-    //
-    // ⭐ THE STAND-IN THAT USED TO SIT HERE IS GONE. PublishNewVehicleToDirectorWithoutPhysics-
-    // BringUp published the director NewVehicle event on an invented trigger because this leg
-    // was parked one declaration wide; that declaration landed (wave Q5 finisher,
-    // VehicleManagerOutputInterface::GetCreateVehicleResults) and the loop below now publishes
-    // it on the CONSOLE's trigger -- the create-vehicle result itself, in the player arm, with
-    // the same two values from the same two sources. Keeping both would post the director a
-    // duplicate NewVehicleEvent the console never emits, so the stand-in and its edge latch are
-    // deleted rather than left beside the real leg.
-    //
-    // ⭐ 2026-09-02 (crash wave): THE CRASH-ENTRY CONSUMER, at its own console slot (@0x823075E8,
-    // the `bl` immediately BEFORE ProcessCreateVehicleEvents @0x823075F8). Until now nothing on
-    // the PC read the physics module's RaceCarCrashEvent queue on this side, so the crash-play
-    // manager's mPlayerCarVolumeInstanceID stayed invalid forever (its own [FLAG PC bring-up]
-    // print) and ActiveRaceCar::OnCrash / mCrashData were never written.
-    ProcessRaceCarCrashEvents_PostPhysics( lpInput, lpOutput );
-
     ProcessCreateVehicleEvents( lpInput, lpOutput );
 
     // Console slot 0x82307604 (between ProcessCreateVehicleEvents @0x823075F8 and the physics
@@ -7689,17 +6403,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         // readback must not clear detached-part queues against empty physics output.
         ReadUpdatedActiveRaceCarDataFromPhysics( lpInput );
 
-        // [FLAG PC bring-up] the pose STAND-IN. Until the vehicle manager populates
-        // VehicleOutputInterface::maRaceCarStates / mUsedRaceCars the readback holds back
-        // every active car, and nothing else publishes a render pose at all -- so the
-        // stand-in still runs, for exactly those slots. See
-        // PublishRenderPoseWithoutPhysicsBringUp's banner.
-        // ⚠️ It is deliberately SKIPPED for any slot the readback has just posed, so the
-        // stand-in's rest-pose approximation can never overwrite a real physics pose. The
-        // two are conductor-retired together once the producer lands.
-        const CgsContainers::BitArray<8u>& lrUsedRaceCars =
-            lpInput->GetVehicleOutputInterface()->GetUsedCarsBitArray();
-
         for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
         {
             ActiveRaceCar* lpActiveRaceCar =
@@ -7711,7 +6414,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 // (PublishRenderPoseWithoutPhysicsBringUp calls the wheel half at its own
                 // tail -- the pre-split pairing; the 2026-08-12 wheel-only exists-gate that
                 // used to sit in the else-arm below is retired with the real producer.)
-                PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
             }
             // Physics-owned slots retain L3's real wheel transforms and existence
             // bytes. UpdateWheelPhysicsState has already published them above.
@@ -7719,17 +6421,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     }
     else if( !lbSimPaused )
     {
-        // [FLAG PC bring-up] no input buffer at all -> no readback is possible, so the
-        // stand-in owns every active slot exactly as it did before this wave.
-        for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-        {
-            ActiveRaceCar* lpActiveRaceCar =
-                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
-            if( lpActiveRaceCar->IsActive() )
-            {
-                PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
-            }
-        }
     }
 
     // ⭐⭐ THE CAR'S PER-FRAME SCENE PUBLISH, at the console's own position: the `bl` at
@@ -7875,64 +6566,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         }
     }
 
-    // ⚠️ FLAG PC quality-of-life: LATCH THIS TICK'S RENDER POSE, for every active slot.
-    //
-    // Here and nowhere else, because THIS is the one point in the tick at which every
-    // producer has finished: the physics readback above owns the slots in mUsedRaceCars and
-    // the two stand-ins own the rest, and both have run by now. Latching inside either
-    // producer would double-latch the slots the other one also touches, and a double latch
-    // silently collapses the blend to a no-op -- the judder would come back looking like it
-    // had never been fixed. See ActiveRaceCar::LatchTickRenderPose.
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-    {
-        ActiveRaceCar* lpActiveRaceCar =
-            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
-        if( lpActiveRaceCar->IsActive() )
-        {
-            lpActiveRaceCar->LatchTickRenderPose();
-        }
-    }
-
-    // FLAG PC-platform leaf: opt-in damage publication witness for pause regressions.
-    // Hash the authoritative skin and part rows before per-render interpolation.
-    {
-        static const bool sbPauseDamageDiag = getenv( "BRN_PAUSE_DAMAGE_DIAG" ) != 0;
-        static bool sbPreviousPaused = false;
-        static u32 suDamageFrames = 0;
-        if( sbPauseDamageDiag && CgsDev::Log::gpDebugPrint != 0
-            && static_cast<u32>( mePlayerActiveRaceCarIndex ) < E_ACTIVE_RACE_CAR_INDEX_COUNT )
-        {
-            ActiveRaceCar* lpCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-            if( lpCar->IsActive() && ( lbSimPaused != sbPreviousPaused || suDamageFrames++ % 60u == 0u ) )
-            {
-                const ActiveRaceCar::RenderParams* lpParams = lpCar->GetRenderParams();
-                const auto& lrParts = lpParams->GetDetachedPartQueue();
-                u32 luDetached = 0, luWheels = 0, luSkinHash = 2166136261u, luPartHash = 2166136261u;
-                const auto HashBytes = []( u32& lruHash, const void* lpData, size_t luSize ) {
-                    const u8* lpBytes = static_cast<const u8*>( lpData );
-                    for( size_t luByte = 0; luByte < luSize; ++luByte )
-                        lruHash = ( lruHash ^ lpBytes[luByte] ) * 16777619u;
-                };
-                HashBytes( luSkinHash, lpParams->GetVerletOffsets(),
-                           sizeof( Vector3Plus ) * KU_MAX_RACE_CAR_VERLET_POINTS );
-                for( s32 liPart = 0; liPart < lrParts.GetLength(); ++liPart )
-                {
-                    const DetachedPartRenderEvent& lrPart = lrParts.GetEvent( liPart );
-                    luDetached += !lrPart.mbIsAttached;
-                    HashBytes( luPartHash, &lrPart.miPartIndex, sizeof( lrPart.miPartIndex ) );
-                    HashBytes( luPartHash, &lrPart.mbIsAttached, sizeof( lrPart.mbIsAttached ) );
-                    HashBytes( luPartHash, &lrPart.mTransform, sizeof( lrPart.mTransform ) );
-                }
-                for( u32 luWheel = 0; luWheel < 4u; ++luWheel )
-                    luWheels |= static_cast<u32>( lpParams->GetWheelExists( luWheel ) ) << luWheel;
-                *CgsDev::Log::gpDebugPrint << "[pause-damage] paused " << ( lbSimPaused ? 1 : 0 )
-                    << " parts " << lrParts.GetLength() << " detached " << luDetached
-                    << " wheels " << luWheels << " skin " << luSkinHash << " poses " << luPartHash << "\n";
-            }
-            sbPreviousPaused = lbSimPaused;
-        }
-    }
-
     UpdateActiveRaceCarColours();
 
     // ⭐ [boost-bar 206 wave] the per-frame boost publish -- the console's 0x823076D8 `bl`,
@@ -8055,15 +6688,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     SendStreamerEvents( lpOutput );
 
-    // FLAG PC-platform leaf: the position overlay is submitted by the world render
-    // pass. Its transient queue is consumed per presentation, while this update runs
-    // at the fixed simulation rate (possibly zero or multiple times per presentation).
-
-    // The console's own unlock order: read first (0x82307980), then write (0x82307988).
-    if( lpInput != 0 )
-    {
-        lpInput->UnlockForRead();
-    }
     lpOutput->UnlockForWrite();
 }
 
@@ -8199,8 +6823,6 @@ void RaceCarEntityModule::DebugRenderPosition() const
 //   ⭐ mPlaceOnTrackManager.PrePhysicsUpdate(lpInput, lpOutput)
 //   the eight-slot AI-request sweep, unlock.
 //
-// REPRODUCED: the asserts, the locks and the calls listed above, each at its console slot,
-// except the eight-slot AI-request sweep [FLAG PC bring-up], which is not in the body.
 //
 // ⚠️ THE PLAYER-INDEX ASSERT (X360 :1726) IS THE CONSOLE'S OWN AND IT IS REACHABLE HERE,
 // which the console's own flow guarantees it is not. mePlayerActiveRaceCarIndex stays
@@ -8230,29 +6852,11 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         if( !sbReportedNoPlayerCar )
         {
             sbReportedNoPlayerCar = true;
-            if( CgsDev::Log::gpDebugPrint != 0 )
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] RaceCarEntityModule::PrePhysicsUpdate: "
-                       "( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && "
-                       "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) "
-                       "(X360 BrnRaceCarEntityModule.cpp:1726) -- raised once, not per frame\n";
         }
     }
 
     lpInput->LockForRead();
     lpOutput->LockForWrite();
-
-    // [FLAG PC bring-up] the paused / not-paused split and its EIGHT remaining calls -- see the
-    // banner. ⭐ ProcessPlayerVehicleInput is no longer one of them (player-input wave
-    // 2026-08-11): it sits at the console's own slot in the not-paused arm, between UpdateBoost
-    // and ProcessTakedownEvents (X360 call site 0x8230732C, immediately after the
-    // UpdateBoost @0x82307318 call and immediately before ProcessTakedownEvents @0x82307340).
-    // The console passes the SIM time step in f1 here (`lfs f1, 0(r31)` at 0x82307324, r31 ==
-    // &mfTimeStep); mfTimeStep is the member PreSceneUpdate latches, so it is what we forward.
-    // ⚠️ AND THE ARM IS PAUSE-GATED (verifier catch, 2026-08-11): the console runs the whole
-    // not-paused arm only when bit 0 of lUpdateSet is CLEAR (`clrlwi r30, r31, 31` at insn 14,
-    // tested at 0x82307230) -- an unconditional call would publish a driver-controls event on
-    // PAUSED frames. The gate below is the console's own test, not a PC addition.
 
     if( ( lUpdateSet & 1 ) == 0 )
     {
@@ -8348,12 +6952,6 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 // Every one of those feeds a part of ActiveRaceCar::Update this build has not landed -- see
 // that function's banner for the drop list.
 //
-// ---- [FLAG PC bring-up] DROPPED HERE ------------------------------------------------------
-//  (The stack argument the console calls lpVehicleOutput is the pre-physics output buffer's
-//  VehicleInputInterface -- PrePhysicsUpdate's `GetVehicleInputInterface()` write getter --
-//  asserted non-null on entry, handed to every car's Update (which drains its network-car
-//  collision queue into it) and to the tail call below.)
-// ============================================================================
 void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
                                            f32 lfAcceleration, f32 lfBraking,
                                            RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
@@ -8464,14 +7062,6 @@ void RaceCarEntityModule::SendAddedForCollisionStateToPhysics( BrnPhysics::Vehic
 // showtime. Only the bounce-boost timer decay and BoostStrategy::Update survive, and Update's
 // modifier is a bare flt_82001C98 (1.0f), not the position ratio.
 //
-// [FLAG PC bring-up] the console's `bl BoostManager::DebugRender` at 0x82304810 is dropped, for
-// the same reason the regular arm already drops it: DebugRender (DWARF BrnBoostManager.h:285,
-// private) is a CgsDev::DebugInterface bar overlay whose body is not landed. The regular arm
-// carries the same routine INLINED (the DebugCriticalSection / GetUI / slot-28 / slot-29
-// sequence at the tail of the pseudocode) and drops it identically. No game state depends on it.
-// DELETE-WHEN BoostManager::DebugRender lands.
-// =============================================================================================
-// ARTIST 822A4958. The player and network cars count toward this budget too.
 s32 RaceCarEntityModule::GetDamagedCarCount() const
 {
     s32 liCount = 0;
@@ -8583,9 +7173,6 @@ void RaceCarEntityModule::UpdateBoost(
             mfCurrentTailgateDuration > KF_MIN_TAILGATE_DURATION,
             meIndexOfCarPlayerIsTailgating );
 
-    // FLAG PC-platform leaf: opt-in, bounded observation of the real menu values
-    // and the boost strategy's resulting state. This never changes vehicle state.
-    static const bool sbTailgateDebugTrace = (getenv("BRN_TAILGATE_DEBUG_TRACE") != nullptr);
     if (sbTailgateDebugTrace && CgsDev::Log::gpDebugPrint)
     {
         static u32 suTraceFrames = 0, suTraceLines = 0;
@@ -8619,9 +7206,6 @@ void RaceCarEntityModule::UpdateBoost(
                 == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
         {
             mBoostManager.GetBoostStrategy()->OnTakedown();
-            // FLAG PC-platform leaf: in-memory workload evidence for a scored
-            // player takedown, with no per-frame log traffic during benchmarks.
-            renderengine::FrameProfile::PlayerTakedown(static_cast<s32>(lrEvent.meVictimIndex));
             // FLAG owner-requested original-game bug fix: ARTIST 82304BF4..82304BFC
             // skips this store once GetDamagedCarCount() reaches five (including
             // the player/network cars). Physics and skin readback continue, but
@@ -8634,9 +7218,6 @@ void RaceCarEntityModule::UpdateBoost(
                        "muType < E_RACE_CAR_TYPE_COUNT");
             if( lpVictimCar->IsAIDriven() )
                 lpVictim->GetRenderParams()->SetDamaged(true);
-            // FLAG PC diagnostic: join player credit to that same victim's
-            // physical/deformation readback in ActiveRaceCar::UpdateDeformationState.
-            static const bool sbTraceRivalDamage = getenv("BRN_RIVAL_DAMAGE_DIAG") != 0;
             if (sbTraceRivalDamage && CgsDev::Log::gpDebugPrint)
                 *CgsDev::Log::gpDebugPrint << "[rival-damage] player-takedown victim="
                     << static_cast<s32>(lrEvent.meVictimIndex) << "\n";
@@ -8665,18 +7246,7 @@ void RaceCarEntityModule::UpdateBoost(
         mBoostManager.OnSlammed();
 
         // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
-        static const bool sbSlamDiag  = ( getenv( "BRN_BOOST_TICKER_DIAG" ) != 0 );
         static s32        siSlamLines = 0;
-        if( sbSlamDiag && siSlamLines < 24 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++siSlamLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[slammed] lostSlam "
-                << ( mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame ? 1 : 0 )
-                << " lostGrind "
-                << ( mAggressiveDrivingFlags.mbPlayerLostGrindingThisFrame ? 1 : 0 )
-                << " -> OnSlammed [DELETE-WHEN-STABLE]\n";
-        }
     }
 
     const BrnGameState::GameStateModuleIO::CarScoreData& lrPlayerScore =
@@ -8755,17 +7325,6 @@ void RaceCarEntityModule::UpdateBoost(
 //   flt_820148D0 4.5    flt_820148D4 0.55   flt_82014930 0.8     flt_820037C8 -1.0
 //   flt_8201F7F8 0.1    flt_82005450 0.9
 //
-// ---- DIVERGENCES / FLAGS --------------------------------------------------------------------
-//  1. The default arm of the payback switch streams the offending value into the assert message
-//     on the console (`"Unknown dirty trick type " << meActivePaybackType`); CGS_ASSERT takes a
-//     fixed string, so the value is dropped from the TEXT only -- the assert itself fires at the
-//     same place, on the same condition.
-//  2. The tilt-steering remap is emitted as a VMX sign/deadzone sequence with no console symbol;
-//     it is outlined below as a file-static helper (NOT a console function -- see its banner).
-//  3. [FLAG PC bring-up] a LOUD log-once early-out when there is no attached player car. The
-//     console has no such test -- see the gate's own comment for why the console body would
-//     otherwise index maActiveRaceCars[-1] on this build's first pre-physics frames.
-// ============================================================================
 
 // [FLAG] NOT an X360 symbol. The tilt("sixaxis")-steering remap ProcessPlayerVehicleInput emits
 // inline at 0x823001BC..0x8230025C, outlined here for legibility per the project's
@@ -8816,16 +7375,6 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 
     bool lbControllerActive = lpInput->GetControllerActive();
 
-
-    // ⛔ [FLAG PC bring-up] LOUD GATE, NOT A SILENT NO-OP -- and it is LOAD-BEARING, not
-    // defensive padding. The console's own flow guarantees a valid, attached player slot by the
-    // time PrePhysicsUpdate runs; this build does not (see PrePhysicsUpdate's :1726 banner --
-    // mePlayerActiveRaceCarIndex stays E_ACTIVE_RACE_CAR_INDEX_INVALID == -1 until the junkyard
-    // reset action lands, and the world ticks pre-physics frames before that). Without this gate
-    // the very next line indexes maActiveRaceCars[-1] and the line after dereferences a NULL
-    // mpRaceCar, i.e. the console body would take the process down on frame one. The console has
-    // NO such test; the two CGS_ASSERTs above and below are its whole guarantee.
-    // DELETE-WHEN a player car is attached before the world's first pre-physics frame.
     if( static_cast<u32>( mePlayerActiveRaceCarIndex ) >= E_ACTIVE_RACE_CAR_INDEX_COUNT
         || !GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
     {
@@ -8833,13 +7382,6 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
         if( !sbReportedNoAttachedPlayerCar )
         {
             sbReportedNoAttachedPlayerCar = true;
-            if( CgsDev::Log::gpDebugPrint != 0 )
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] RaceCarEntityModule::ProcessPlayerVehicleInput: no "
-                       "attached player active race car -- the frame's BrnPlayerDriverControls "
-                       "record is NOT published (X360 has no such gate; its asserts at :6041 / "
-                       "BrnActiveRaceCar.h:1089 are the console's only guarantee). "
-                       "Reported once, not per frame\n";
         }
         return;
     }
@@ -9143,28 +7685,6 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
     // VehiclePhysics::Update, so a flag that is true here and false there is a transport
     // defect and a flag that is false in both is a state-machine defect.
     {
-        static const char* const kspSLW = getenv( "BRN_STARTLINE_DIAG" );
-        if( kspSLW != 0 )
-        {
-            static u32 sluSLW = 0;
-            if( ( sluSLW++ % 15u ) == 0u && CgsDev::Log::gpDebugPrint != 0 )
-                *CgsDev::Log::gpDebugPrint
-                    << "[startline-publish] id=" << lControls.miVehicleID
-                    << " onLineState=" << ( lpActiveRaceCar->IsOnRaceStartState(
-                           ActiveRaceCar::E_RACE_START_STATE_ON_START_LINE ) ? 1 : 0 )
-                    << " racingState=" << ( lpActiveRaceCar->IsOnRaceStartState(
-                           ActiveRaceCar::E_RACE_START_STATE_RACING ) ? 1 : 0 )
-                    << " publishedOnLine=" << ( lControls.mbIsOnStartLine ? 1 : 0 )
-                    << " engineState=" << static_cast<s32>( lpActiveRaceCar->GetEngineState() )
-                    << " controllerActive=" << ( lbControllerActive ? 1 : 0 )
-                    << " donutsOnStart=" << static_cast<s32>( mbPlayerDonutsOnEventStart )
-                    << " rollsOnStart=" << static_cast<s32>( mbPlayerRollsOnEventStart )
-                    << " inGameMode=" << ( mbIsInGameMode ? 1 : 0 )
-                    << " gas=" << lControls.mfGas
-                    << " steer=" << lControls.mfSteering
-                    << " boost=" << ( lControls.mbBoost ? 1 : 0 )
-                    << "\n";
-        }
     }
 
     lpOutput->GetVehicleDriverInterface()->GetUpdateDriverQueue()->AddEvent( &lControls, 0 );

@@ -108,7 +108,6 @@ operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
     return leOld;
 }
 
-
 namespace
 {
     // Per-list static save slots (X360 .bss) backing SaveCurrentState/AttemptStateRestore.
@@ -290,7 +289,6 @@ bool FriendsListComponent::MoveHighlightDueToBranchOpen()
     return false;
 }
 
-
 // ===================================================================================
 // [friends wave -- BODY TRANCH 2] data producers + not-connected/no-friends arms.
 // ===================================================================================
@@ -399,12 +397,6 @@ void FriendsListComponent::SetEntryData(s32 liRow, const char* lpcText, s32 leSt
         lrEntry.GetNameField().SetText(lpcText, false);       // @0x82422DFC
     lrEntry.SetEntryStatus(static_cast<FriendsListEntry::EFriendListEntryState>(leStatus));   // @0x82422E08
 }
-
-
-
-
-
-
 
 // ===================================================================================
 // [friends wave -- BODY TRANCH 3] data producers, not-connected arms, specific-show.
@@ -596,7 +588,6 @@ void FriendsListComponent::ShowSpecificFriend(const char* lpcName)
     UpdateAllFriendsEntryData();
 }
 
-
 // ===================================================================================
 // [stuntrace F2 wave, 2026-08-27] the two per-frame/attach leaves the RACE_MAIN mount
 // needs. mbFriendsList is 1 for E_MODE_STUNT_ATTACK, so BOTH of these execute on the
@@ -727,13 +718,6 @@ void FriendsListComponent::UpdateAptVariables()
 
     const s32 leListType = static_cast<s32>(muSnapshotC);        // +0x4110 @0x82423578
     mbDirty = 0;                                                 // @0x82423580
-    if (std::getenv("BRN_EASYDRIVE_TRACE") && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[easydrive-view] panel " << static_cast<s32>(muSnapshotA)
-            << " list " << leListType << " branch " << static_cast<s32>(muSnapshotB)
-            << " selected " << static_cast<s32>(mi8SelectedIndex)
-            << " row " << static_cast<s32>(mi8SelectedRowIndex)
-            << " count " << static_cast<s32>(muNumEntries) << "\n";
-
 
     const char* lpcStringIDToUse;
     if (leListType == 3)                                         // challenges @0x8242357C
@@ -784,7 +768,6 @@ void FriendsListComponent::UpdateAptVariables()
 
     mListTitleField.SetText(lpcStringIDToUse, false);                        // +0xBBC @0x824236F8
 }
-
 
 // @0x8243FF68 ShowFriendsList ------------------------------------------------------
 // Re-open the panel on the FRIENDS list: park the cursor at the top of the list, latch
@@ -1253,10 +1236,6 @@ void FriendsListComponent::HandleControllerInput(const s32* input)
     CGS_ASSERT(input != 0, "lpControllerInput");
     CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
     // Host diagnostic: one record per GUI press, disabled in normal play.
-    if (std::getenv("BRN_EASYDRIVE_TRACE") && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[easydrive-input] action " << input[1]
-            << " ready " << (mpGuiCache->GetGameplayHudReady() ? 1 : 0)
-            << " panel " << mePanelState << " list " << meListType << " mode " << mpGuiCache->GetGameMode() << " data " << meDataState << "\n";
     if (!mpGuiCache->GetGameplayHudReady() || (meListType == 1 && meDataState != 2)) return;
     if (mePanelState == 2 && meBranchState != 0) HandleBranchInteraction(input[1]);
     else HandleTableInteraction(input[1]);

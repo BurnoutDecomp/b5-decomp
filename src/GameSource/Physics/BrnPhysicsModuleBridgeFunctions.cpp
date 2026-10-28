@@ -267,43 +267,10 @@ namespace BrnPhysics
         // ==========================================================================================
         // DELETE-WHEN the traffic contact queue is proven to fill.
         {
-            static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
             static u32        suSpies = 0;
             static s32        siLines = 0;
             static u16        sauPairs[36][36] = { { 0 } };
 
-            if (sbWatch)
-            {
-                const u32 luA = (luEntityTypeA < 36u) ? luEntityTypeA : 35u;
-                const u32 luB = (luEntityTypeB < 36u) ? luEntityTypeB : 35u;
-                if (sauPairs[luA][luB] < 0xFFFFu) { ++sauPairs[luA][luB]; }
-                ++suSpies;
-
-                // ⚠️ 500, not 4000, and the FIRST spy always prints. A 200 s showtime run whose
-                // crash landed in an empty street produced 10 prop frames total and never reached
-                // a 4000-spy threshold at all -- so the histogram printed NOTHING, which reads
-                // identically to "the probe is broken". A witness whose period exceeds the
-                // event rate measures the witness. [[diagnostics-that-lie]]
-                if (CgsDev::Log::gpDebugPrint != 0 && siLines < 30 &&
-                    (suSpies == 1u || (suSpies % 500u) == 0u))
-                {
-                    ++siLines;
-                    *CgsDev::Log::gpDebugPrint << "[spy-owners] spies=" << static_cast<s32>(suSpies) << " pairs:";
-                    for (u32 luI = 0; luI < 36u; ++luI)
-                    {
-                        for (u32 luJ = 0; luJ < 36u; ++luJ)
-                        {
-                            if (sauPairs[luI][luJ] != 0)
-                            {
-                                *CgsDev::Log::gpDebugPrint
-                                    << " " << static_cast<s32>(luI) << "x" << static_cast<s32>(luJ)
-                                    << "=" << static_cast<s32>(sauPairs[luI][luJ]);
-                            }
-                        }
-                    }
-                    *CgsDev::Log::gpDebugPrint << "\n";
-                }
-            }
         }
 
         // Illegal-pair guards (negated conditions; X360 lines 0x454/0x458 == :1108/:1112).
@@ -476,96 +443,6 @@ namespace BrnPhysics
         // Bounded: two 17-entry tables, one line per report period.
         // ============================================================================================
         {
-            static const bool sbVfxFeedProbe = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
-            if ( sbVfxFeedProbe && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                // ⚠️ 5,000 WITH A FIRST LINE AT 1,000, not a flat 20,000. This rung's own first
-                // revision reported every 20,000 stores, and TWO of the three runs it shipped with
-                // (vfxprod_A, vfxprod_B) never reached that threshold, so they printed NOTHING --
-                // not even the ARMED line's follow-up -- which reads identically to "StoreContact
-                // never ran". A witness whose period exceeds the event rate measures the witness.
-                // [[diagnostics-that-lie]] -- the same trap the [spy-owners] histogram above
-                // already carries a banner about after a 4,000-spy threshold silenced a whole run.
-                static const s32 KI_STORE_REPORT_PERIOD = 5000;
-                static const s32 KI_STORE_FIRST_REPORT  = 1000;
-                static const u32 KU_OWNER_BINS = 17;   // 0..15 by value, 16 == "16 or above"
-                static bool sbArmed    = false;
-                static s32  siCalls    = 0;
-                static s32  siRaceCar  = 0;   // cases 1 / 11
-                static s32  siTraffic  = 0;   // case 2
-                static s32  siProp     = 0;   // case 3
-                static s32  siCarPart  = 0;   // cases 6 / 7
-                static s32  siWheel    = 0;   // cases 9 / 10
-                static s32  siDropped  = 0;   // the console's jump-table default
-                static s32  saiOwnerA[KU_OWNER_BINS]   = { 0 };   // EVERY store, by A-side owner
-                static s32  saiDroppedB[KU_OWNER_BINS] = { 0 };   // the default arm only, by B-side owner
-
-                if ( !sbArmed )
-                {
-                    sbArmed = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[storecontact] ARMED -- PhysicsModule::StoreContact is running;"
-                           " reporting every " << KI_STORE_REPORT_PERIOD << " stores.\n";
-                }
-                ++siCalls;
-
-                const u32 luOwnerA = GetIdOwner( lpRawContact->mIDA );
-                const u32 luOwnerB = GetIdOwner( lpRawContact->mIDB );
-                const u32 luBinA   = ( luOwnerA < 16u ) ? luOwnerA : 16u;
-                const u32 luBinB   = ( luOwnerB < 16u ) ? luOwnerB : 16u;
-                ++saiOwnerA[luBinA];
-
-                switch ( luOwnerA )
-                {
-                    case 1u:  case 11u: ++siRaceCar; break;
-                    case 2u:            ++siTraffic; break;
-                    case 3u:            ++siProp;    break;
-                    case 6u:  case 7u:  ++siCarPart; break;
-                    case 9u:  case 10u: ++siWheel;   break;
-                    default:            ++siDropped; ++saiDroppedB[luBinB]; break;
-                }
-                if ( siCalls == KI_STORE_FIRST_REPORT ||
-                     ( siCalls % KI_STORE_REPORT_PERIOD ) == 0 )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[storecontact] calls=" << siCalls
-                        << " racecar="  << siRaceCar
-                        << " traffic="  << siTraffic
-                        << " prop="     << siProp
-                        << " carpart="  << siCarPart
-                        << " wheel="    << siWheel
-                        << " dropped="  << siDropped
-                        << "\n";
-
-                    // The two histograms, non-zero bins only, with a DISTINCT-VALUE COUNT so a
-                    // single crowded owner cannot read like a spread.
-                    s32 liDistinctA = 0;
-                    *CgsDev::Log::gpDebugPrint << "[storecontact] ownerA:";
-                    for ( u32 luBin = 0; luBin < KU_OWNER_BINS; ++luBin )
-                    {
-                        if ( saiOwnerA[luBin] != 0 )
-                        {
-                            ++liDistinctA;
-                            *CgsDev::Log::gpDebugPrint
-                                << " " << static_cast<s32>( luBin ) << "=" << saiOwnerA[luBin];
-                        }
-                    }
-                    *CgsDev::Log::gpDebugPrint << " | distinct=" << liDistinctA << "\n";
-
-                    s32 liDistinctB = 0;
-                    *CgsDev::Log::gpDebugPrint << "[storecontact] droppedB:";
-                    for ( u32 luBin = 0; luBin < KU_OWNER_BINS; ++luBin )
-                    {
-                        if ( saiDroppedB[luBin] != 0 )
-                        {
-                            ++liDistinctB;
-                            *CgsDev::Log::gpDebugPrint
-                                << " " << static_cast<s32>( luBin ) << "=" << saiDroppedB[luBin];
-                        }
-                    }
-                    *CgsDev::Log::gpDebugPrint << " | distinct=" << liDistinctB << "\n";
-                }
-            }
         }
 
         switch (GetIdOwner(lpRawContact->mIDA))
@@ -1012,39 +889,10 @@ namespace BrnPhysics
             // and no bridge inside this file can be the fix.
             // Bounded: a 36x36 u16 table, at most 12 lines for the whole process.
             {
-                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
                 static u32        suSeen  = 0;
                 static s32        siLines = 0;
                 static u16        sauPairs[36][36] = { { 0 } };
 
-                if (sbWatch)
-                {
-                    const u32 luA = (luOwnerA < 36u) ? luOwnerA : 35u;
-                    const u32 luB = (luOwnerB < 36u) ? luOwnerB : 35u;
-                    if (sauPairs[luA][luB] < 0xFFFFu) { ++sauPairs[luA][luB]; }
-                    ++suSeen;
-
-                    if (CgsDev::Log::gpDebugPrint != 0 && siLines < 12 &&
-                        (suSeen == 1u || (suSeen % 2000u) == 0u))
-                    {
-                        ++siLines;
-                        *CgsDev::Log::gpDebugPrint << "[merged-owners] events=" << static_cast<s32>(suSeen)
-                                                   << " pairs:";
-                        for (u32 luI = 0; luI < 36u; ++luI)
-                        {
-                            for (u32 luJ = 0; luJ < 36u; ++luJ)
-                            {
-                                if (sauPairs[luI][luJ] != 0)
-                                {
-                                    *CgsDev::Log::gpDebugPrint
-                                        << " " << static_cast<s32>(luI) << "x" << static_cast<s32>(luJ)
-                                        << "=" << static_cast<s32>(sauPairs[luI][luJ]);
-                                }
-                            }
-                        }
-                        *CgsDev::Log::gpDebugPrint << "\n";
-                    }
-                }
             }
 
             // Pair-legality tripwires (fire-and-continue diagnostics).

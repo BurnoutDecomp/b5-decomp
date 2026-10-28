@@ -175,14 +175,6 @@ namespace TestBed
         }
     }
 
-    // FLAG PC-platform: the console judges a debug pointer plausible when its top address bit is
-    // set (every heap and image address lives in the upper half of its 32-bit space). The host
-    // address space has no such split, so any non-null pointer is plausible here.
-    static bool IsPlausiblePointerPC(const void* lpAddress)
-    {
-        return lpAddress != 0;
-    }
-
     // -------------------------------------------------------------------------------------------
     // Header::SanityCheck - validate this block's start guard, list link and end guard. On a
     // trample, log the block (client address, allocator name, block name, size), dump every
@@ -190,14 +182,7 @@ namespace TestBed
     // -------------------------------------------------------------------------------------------
     void Allocator::Header::SanityCheck(History& lrHistory, const char* lpcAllocatorName)
     {
-        if (mStartGuard.IsValid() && (mpNext == 0 || IsPlausiblePointerPC(mpNext)))
-        {
-            if (GetEndGuard().IsValid())
-                return;
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint << "ERROR END GUARD TRAMPLE:";
-        }
-        else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "ERROR START GUEARD TRAMPLE:";
         }
@@ -205,22 +190,12 @@ namespace TestBed
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "<" << GetClientAddress() << ">";
 
-        if (IsPlausiblePointerPC(lpcAllocatorName))
-        {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint << "[" << lpcAllocatorName << "]";
-        }
-        else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "[" << static_cast<void*>(const_cast<char*>(lpcAllocatorName)) << "]";
         }
 
-        if (IsPlausiblePointerPC(mpcName))
-        {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint << "\"" << mpcName << "\" ";
-        }
-        else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "Name [BadPtr]" << static_cast<void*>(const_cast<char*>(mpcName));
         }
@@ -416,9 +391,6 @@ namespace TestBed
                                                << static_cast<void*>(lpvClientAddress)
                                                << "\n";
                 }
-                // FLAG PC-platform: the console arms its single-step trace trap here; the host
-                // equivalent is a debugger break.
-                __debugbreak();
             }
 
             Header& lHeader = *(reinterpret_cast<Header*>(lpvClientAddress) - 1);
@@ -519,9 +491,6 @@ namespace TestBed
                                                << lpvClientAddress
                                                << "\n";
                 }
-                // FLAG PC-platform: the console arms its single-step trace trap here; the host
-                // equivalent is a debugger break.
-                __debugbreak();
             }
 
             Header& lHeader = *(static_cast<Header*>(lpvClientAddress) - 1);

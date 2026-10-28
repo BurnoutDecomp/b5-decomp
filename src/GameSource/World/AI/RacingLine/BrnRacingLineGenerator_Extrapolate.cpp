@@ -90,23 +90,6 @@ namespace
     // AICar::KI_INVALID_SECTION_INDEX; repeated here so this leaf does not pull BrnAICar.h.
     const u16 KU_INVALID_SECTION_INDEX = 0x7FFF;
 
-    // mx8Flags bit 0x10: the section the stuck-walk-back stops at (`lbz 0x17 ; rlwinm 0,27,27`
-    // at 0x82782770 / 0x82781CD8 / 0x8278221C). A single-portal section is a dead end; the
-    // generators walk their own output back to the last section carrying this bit and block the
-    // section they had taken out of it.
-    // ⚠️ [FLAG PC bring-up] the DWARF accessor NAME for this bit is NOT attested. The
-    // liTrackBack variable-hint blocks (:3130 / :2740 / :2926) list only GetAISection and
-    // operator[], and the six remaining single-bit accessors the DWARF declares for AISection --
-    // IsNoReset (AISectionsData.h:383), IsInAir (:386), IsSplit (:389), IsTerminator (:392),
-    // IsInterstateExit (:395), IsJunction (:398) -- are ALL inlined: none has a named export in
-    // the ARTIST index, so no body exists anywhere in the image to tie a bit to a name.
-    // (IsShortcut = 0x01 / IsAIShortcut = 0x40 are pinned, and IsInterstateExit is 0x80 per the
-    // street manager.) Semantically the walk-back stops at a junction, so 0x10 is very likely
-    // IsJunction -- but the bit, not the name, is what this test needs, and the bit IS attested
-    // (`lbz r11,0x17(r28) ; rlwinm r11,r11,0,27,27` at 0x82782774 / 0x82781CDC / 0x82782220).
-    // DELETE-WHEN an AISection accessor for 0x10 is pinned to a name; replace the raw test.
-    const u8 KX8_SECTION_FLAG_TRACKBACK_STOP = 0x10;
-
     // Stuck budget: the third single-portal dead end ends the walk (`cmpwi cr6, r11, 2 ; bgt`).
     const s32 KI_MAX_STUCK_ITERATIONS = 2;
 

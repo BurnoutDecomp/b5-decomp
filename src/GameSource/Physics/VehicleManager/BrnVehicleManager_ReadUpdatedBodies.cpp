@@ -128,92 +128,6 @@ namespace
         return 6;
     }
 
-    void OrthoProbe(RaceCarPhysics& lrCar, s32 liSlot)
-    {
-        static s32 siArmed = -1;
-        if (siArmed < 0)
-        {
-            const char* lpcEnv = getenv("BRN_ORTHO_PROBE");
-            siArmed = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        if (siArmed != 1 || CgsDev::Log::gpDebugPrint == 0) { return; }
-
-        static bool sbControlPrinted = false;
-        if (!sbControlPrinted)
-        {
-            sbControlPrinted = true;
-            const f32 lfInv = 1.0f / std::sqrt(1.04f);
-            const OrthoMetric lGood = MeasureOrtho(Vector3{ 1.0f, 0.0f, 0.0f, 0.0f },
-                                                   Vector3{ 0.0f, 1.0f, 0.0f, 0.0f },
-                                                   Vector3{ 0.0f, 0.0f, 1.0f, 0.0f });
-            const OrthoMetric lBad  = MeasureOrtho(Vector3{ 1.0f, 0.0f, 0.0f, 0.0f },
-                                                   Vector3{ 0.2f * lfInv, lfInv, 0.0f, 0.0f },
-                                                   Vector3{ 0.0f, 0.0f, 1.0f, 0.0f });
-            *CgsDev::Log::gpDebugPrint
-                << "[ortho] CONTROL identity maxdot " << lGood.mfMaxDot << " det " << lGood.mfDet
-                << " | sheared maxdot " << lBad.mfMaxDot << " det " << lBad.mfDet
-                << "  (expect 0 / 1 then 0.196116 / 0.980581)\n";
-        }
-
-        static u32 suFrame = 0u;
-        static u32 suDotBand[7] = { 0u, 0u, 0u, 0u, 0u, 0u, 0u };
-        static u32 suDetBand[7] = { 0u, 0u, 0u, 0u, 0u, 0u, 0u };
-        static u32 suAirFrames = 0u;
-        static f32 sfMaxDotEver = 0.0f, sfMinDetEver = 2.0f;
-        static u32 suMaxDotFrame = 0u, suMinDetFrame = 0u;
-        static u32 suLines = 0u;
-
-        if (liSlot != 0) { return; }   // slot 0 is the player car in every harness recipe
-        ++suFrame;
-
-        const Matrix44Affine& lrT = lrCar.GetTransform();
-        const OrthoMetric lM = MeasureOrtho(lrT.xAxis, lrT.yAxis, lrT.zAxis);
-        const s32 liWheelsDown = lrCar.GetNumberOfWheelsOnTheGround();
-        const bool lbAir = (liWheelsDown == 0);
-
-        ++suDotBand[OrthoDotBand(lM.mfMaxDot)];
-        ++suDetBand[OrthoDetBand(lM.mfDet)];
-        if (lbAir) { ++suAirFrames; }
-        if (lM.mfMaxDot > sfMaxDotEver) { sfMaxDotEver = lM.mfMaxDot; suMaxDotFrame = suFrame; }
-        if (lM.mfDet    < sfMinDetEver) { sfMinDetEver = lM.mfDet;    suMinDetFrame = suFrame; }
-
-        // A per-frame line while airborne (that is the state under test), else one every 30.
-        if (suLines < 4000u && (lbAir || (suFrame % 30u) == 0u))
-        {
-            ++suLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[ortho] f " << static_cast<s32>(suFrame)
-                << " air " << (lbAir ? 1 : 0) << " wheelsDown " << liWheelsDown
-                << " crash " << (lrCar.IsCrashing() ? 1 : 0)
-                << " maxdot " << lM.mfMaxDot << " det " << lM.mfDet
-                << " len " << lM.mfLenX << "," << lM.mfLenY << "," << lM.mfLenZ
-                << " pos " << lrT.wAxis.x << "," << lrT.wAxis.y << "," << lrT.wAxis.z << "\n";
-        }
-
-        if ((suFrame % 300u) == 0u)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[ortho] CENSUS frames " << static_cast<s32>(suFrame)
-                << " air " << static_cast<s32>(suAirFrames)
-                << " | maxdot bands <1e-4 " << static_cast<s32>(suDotBand[0])
-                << " <1e-3 " << static_cast<s32>(suDotBand[1])
-                << " <1e-2 " << static_cast<s32>(suDotBand[2])
-                << " <0.1 "  << static_cast<s32>(suDotBand[3])
-                << " <0.3 "  << static_cast<s32>(suDotBand[4])
-                << " <0.6 "  << static_cast<s32>(suDotBand[5])
-                << " >=0.6 " << static_cast<s32>(suDotBand[6])
-                << " | det bands >0.999 " << static_cast<s32>(suDetBand[0])
-                << " >0.99 " << static_cast<s32>(suDetBand[1])
-                << " >0.9 "  << static_cast<s32>(suDetBand[2])
-                << " >0.5 "  << static_cast<s32>(suDetBand[3])
-                << " >0.1 "  << static_cast<s32>(suDetBand[4])
-                << " >0.01 " << static_cast<s32>(suDetBand[5])
-                << " <=0.01 " << static_cast<s32>(suDetBand[6])
-                << " | worst maxdot " << sfMaxDotEver << " @f " << static_cast<s32>(suMaxDotFrame)
-                << " worst det " << sfMinDetEver << " @f " << static_cast<s32>(suMinDetFrame) << "\n";
-        }
-    }
-
     // The one shared leg of both bodies, byte-for-byte the same instruction group in each
     // (X360 0x82619AF8..0x82619B30 and 0x825EF914..0x825EF94C):
     //     v13 = <splatted KF_GRAVITY> * <splatted dt>
@@ -278,7 +192,7 @@ void VehicleManager::ReadUpdatedBodies(
 
         ApplyGravityAndIntegrate(lrRaceCar, lvfTimeStep);
 
-        OrthoProbe(lrRaceCar, liRaceCar);   // [ortho] witness -- opt-in, read-only
+   // [ortho] witness -- opt-in, read-only
     }
 
     // The queue is handed on exactly as received -- this function never looked inside it.

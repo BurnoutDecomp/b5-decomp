@@ -32,32 +32,6 @@
 
 namespace BrnGameState
 {
-namespace
-{
-// [FLAG PC witness] BRN_CARSEL_DIAG=1 prints every action-69 carousel request this file posts
-// (first 60). Read once.
-bool IsCarSelDiagEnabled()
-{
-    static const bool sbEnabled = []()
-    {
-        const char* lpcValue = getenv("BRN_CARSEL_DIAG");
-        return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
-    }();
-    return sbEnabled;
-}
-
-// [FLAG PC harness lever] BRN_CARSEL_NOPRESTREAM=1 withholds the carousel post below, so a run can
-// measure the car-change wait with and without the pre-stream on one exe. Read once.
-bool IsCarSelPrestreamWithheld()
-{
-    static const bool sbWithheld = []()
-    {
-        const char* lpcValue = getenv("BRN_CARSEL_NOPRESTREAM");
-        return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
-    }();
-    return sbWithheld;
-}
-}
 
 // ============================================================================
 // GetListOfPlayerSelectableVehicles
@@ -288,28 +262,6 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
 
     lRequestAction.miCount = liCount;
     CGS_ASSERT(liCount <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "liCount <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-
-    if (IsCarSelDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        static s32 siLines = 0;
-        if (siLines < 60)
-        {
-            ++siLines;
-            *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] carousel action69 car=" << lacUncompressedID
-                                       << " listIndex=" << liCurrentVehicleIndex
-                                       << " selectable=" << lCars.GetLength()
-                                       << " count=" << liCount << " entries:";
-            for (s32 liEntry = 0; liEntry < liCount; ++liEntry)
-            {
-                char lacEntryId[KI_CGSID_STRING_LEN];
-                CgsIDConvertToString(lRequestAction.maCars[liEntry], lacEntryId);
-                *CgsDev::Log::gpDebugPrint << " [" << liEntry << "]" << lacEntryId
-                                           << "/f" << static_cast<s32>(lRequestAction.mauExtraInfoFlags[liEntry])
-                                           << "/p" << static_cast<s32>(lRequestAction.maiPriorities[liEntry]);
-            }
-            *CgsDev::Log::gpDebugPrint << "\n";
-        }
-    }
 
     if (IsCarSelPrestreamWithheld())
     {

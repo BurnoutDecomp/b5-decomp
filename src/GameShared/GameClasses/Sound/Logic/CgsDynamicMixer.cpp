@@ -27,8 +27,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
-#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"   // [DIAG] BRN_DMIX_DIAG witness (opt-in)
-
 #include <cstdarg>
 #include <cstdio>
 

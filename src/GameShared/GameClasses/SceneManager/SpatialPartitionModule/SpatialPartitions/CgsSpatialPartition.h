@@ -227,8 +227,6 @@ namespace CgsSceneManager
                   "LineTestRecursiveFuncParams::mfLineLength is at console +0x40");
     static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mx32EntityTypeFlags) == 0x50,
                   "LineTestRecursiveFuncParams::mx32EntityTypeFlags is at console +0x50");
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mpResultBufferOut) == 0x58,
-                  "NOT X360: the 8-byte host pointer aligns to +0x58 (console +0x54)");
     static_assert(sizeof(SpatialPartition::LineTestRecursiveFuncParams) == 0x60,
                   "0x58 of console fields rounded to the 16-byte alignment; the widened pointer still fits");
 }

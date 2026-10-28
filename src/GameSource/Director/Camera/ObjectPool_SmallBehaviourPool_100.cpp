@@ -30,12 +30,6 @@
 // Instantiate AllocateObject/FreeObject per-member (NOT `template class`) so the
 // element type (a raw Vector4 bucket, no operator==) does not force FindObject.
 //
-// HOST NOTE (2026-09-27): the layout above is the CONSOLE's. On this host the bucket is
-// widened for x64 (BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS, a FLAG PC platform leaf:
-// the console's 100 Vector4 is exactly its BehaviourGyroCam, which is 1632 bytes here), so
-// the element is spelled through the manager's SmallBehaviourPool::Bucket -- the literal
-// Vector4[100] would instantiate a pool the manager no longer holds.
-// ===========================================================================
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BehaviourManager::SmallBehaviourPool
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector4 (pool bucket unit_type)

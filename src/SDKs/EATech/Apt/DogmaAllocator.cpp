@@ -10,7 +10,7 @@
 // free lists. Enable only for a diagnosis boot; must be 0 for committed builds.
 #define APT_DOGMA_GUARD 0
 #if APT_DOGMA_GUARD
-#include <windows.h>
+#include <xtl.h>
 // Deferred-revoke ring: pages queue here on Deallocate and get PAGE_NOACCESS'd a
 // few Allocate calls later (the GC free path touches its MemItem header right
 // after the pool free; immediate revocation would fault the freeing code itself).

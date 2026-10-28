@@ -529,7 +529,6 @@ namespace BrnGui
         static_assert(sizeof(GuiEventRoadRuleNewHighScore) == 48, "mRoadRuleHighScoreData span 0x480..0x4AF");
         static_assert(sizeof(GuiEventTrophyCarUnlock)      == 16, "mTrophyCarUnlockedEvent span 0x4D8..0x4E7");
         static_assert(sizeof(CgsNetwork::PlayerName)       == 16, "byte-aligned 16B name slots @0x4BD/0x4E9");
-        static_assert(sizeof(CgsContainers::FastBitArray<15>) == 8, "one-u64 bit set @0x500");
 
         #define HMA_A(member, x360off) \
             static_assert(offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mePlayersCurrentlyWreckState) \

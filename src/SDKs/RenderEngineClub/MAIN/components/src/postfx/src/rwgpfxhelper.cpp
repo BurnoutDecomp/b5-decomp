@@ -13,13 +13,8 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxrendertargetdebugger.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
-#include "pc/gcm/renderengine/VertexBuffer.h"
-#include "pc/gcm/renderengine/renderstates.h"
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // RenderTarget (Blur9 / DownSample)
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"                // shadow::Device::SetState / SetPixelProgram
-#include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                                   // renderengine::gpD3DDevice (RenderQuad's draw)
-
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open a shader-constant row
 // run for a handle and return the write cursor (X360 r3). The shared decl-only surface every
 // immediate-mode TU declares (CgsIm2dColTex.cpp:91, BrnIm3d.cpp:118, BrnPostFxBloom.cpp:134);
@@ -87,8 +82,6 @@ extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 // packages and rwgpfxtint.cpp's are still not dumped and still take arm (b).
 #define RW_GPFX_PROGRAM_MICROCODE_AVAILABLE   0
 
-// ---- THE FULL-SCREEN QUAD -- NOW BUILT, AND WHAT THE PC DEVIATION IS ---------------------------
-// [FLAG PC bring-up: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE] -- NOW ON.
 //
 // THE CONSOLE. PfxHelper::PfxHelper @0x82408380-0x8240855C builds a vertex descriptor (two
 // elements: format 0x2A23B9 FLOAT3 elementType 1 -> POSITION0, format 0x2C23A5 FLOAT2 elementType 6
@@ -142,13 +135,6 @@ extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 #endif
 const bool KB_HELPER_QUAD_GEOMETRY_AVAILABLE = (RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE != 0);
 
-// ---- THE FOUR PC PROGRAM IMAGES ----------------------------------------------------------------
-// [FLAG PC-platform leaf: shader programs] The D3D9 counterparts of the four Xenos packages this TU
-// compiles, wrapped as platform-4 ShaderProgramBuffer images by the generated leaf
-// pc/gcm/renderengine/PostFxHelperProgramsPC.cpp (sibling of PostFxProgramsPC.cpp and
-// PostFxBloomProgramsPC.cpp). Declared here as the minimal external surface -- the same convention
-// BrnPostFxBloom.cpp:121-149 and BrnPostFxShader.cpp already use for their own generated leaves;
-// there is no header for these.
 //
 // ⚠ THE SIZES ARE THE *PC IMAGE* SIZES, NOT THE X360 MICROCODE SIZES (288 / 688 / 948 / 408).
 // ProgramBufferPC_Adopt bounds-checks the blob against the size it is handed and copies exactly
@@ -157,13 +143,9 @@ const bool KB_HELPER_QUAD_GEOMETRY_AVAILABLE = (RW_GPFX_HELPER_QUAD_GEOMETRY_AVA
 // generated TU's own published constant, whose static_assert ties it to sizeof() of the array.
 namespace renderengine
 {
-    extern const u8  gauPostFxHelperQuadVertexProgramPC[];
     extern const u32 guPostFxHelperQuadVertexProgramPCSize;
-    extern const u8  gauPostFxHelperBlur9PixelProgramPC[];
     extern const u32 guPostFxHelperBlur9PixelProgramPCSize;
-    extern const u8  gauPostFxHelperBlur16PixelProgramPC[];
     extern const u32 guPostFxHelperBlur16PixelProgramPCSize;
-    extern const u8  gauPostFxHelperBlur4PixelProgramPC[];
     extern const u32 guPostFxHelperBlur4PixelProgramPCSize;
 }
 
@@ -245,15 +227,12 @@ namespace postfx
     //       to Xbox2CreateConstantTable. That is a crash, so the honest answer is a null program and
     //       one report line -- never a program built from bytes that are not there.
     //
-    // [FLAG PC bring-up: RW_GPFX_PROGRAM_MICROCODE_AVAILABLE]
     renderengine::ProgramBufferData* PfxHelper::CreateProgram(s32 leType, const void* lpMicrocode,
                                                               u32 luSize, rw::IResourceAllocator* lpReserved)
     {
         // (a) a pre-built PC program image, if this blob is one.
         if (lpMicrocode != nullptr)
         {
-            renderengine::ProgramBufferData* const lpAdopted =
-                renderengine::ProgramBufferPC_Adopt(lpMicrocode, luSize, static_cast<u32>(leType));
             if (lpAdopted != nullptr)
             {
                 return lpAdopted;
@@ -264,11 +243,6 @@ namespace postfx
         // (b) no PC image and the console route cannot run here: HONESTLY EMPTY.
         {
             static bool sbReportedNoProgram = false;
-            ReportOnce(sbReportedNoProgram,
-                       "[PfxHelper] no PC program image and the X360 microcode route is unavailable"
-                       " on this backend (XGGetMicrocodeShaderParts is a stub): the post-fx program"
-                       " slot is left EMPTY. [FLAG PC bring-up:"
-                       " RW_GPFX_PROGRAM_MICROCODE_AVAILABLE]\n");
         }
         return nullptr;
 #else
@@ -541,11 +515,6 @@ namespace
         lrHandle.mu8RegisterCount = 0u;
     }
 
-    // The console's `ProgramBuffer::GetVariableHandleByName(program, name, &handle)` plus the ONE
-    // guard the PC bring-up needs: the committed lookup dereferences lpData unconditionally
-    // (programbuffer.cpp:263), so with a gated-off program it would fault. The guard exists only
-    // because the program can be null on this build; it is not a console behaviour.
-    // [FLAG PC bring-up: RW_GPFX_PROGRAM_MICROCODE_AVAILABLE]
     void BindProgramVariable(const renderengine::ProgramBufferData* lpProgram, const char* lpcName,
                              renderengine::ProgramVariableHandle& lrHandle)
     {
@@ -621,14 +590,6 @@ namespace postfx
         m_allocator  = lrParameters.allocator;
         gpPfxHelper  = this;
 
-        // Slots a step below fills. The console leaves nothing uninitialised here, so zeroing them is
-        // a PC bring-up consequence, not a console behaviour -- but it is what makes Release safe and
-        // makes "no program" visible instead of undefined. Two of them are never overwritten on this
-        // backend and the zero is their final value: m_quadVertexBuffer and m_quadMeshState (the
-        // console's vertex-buffer + mesh plumbing, which the immediate-ring draw replaces -- see the
-        // note at the quad block).
-        // [FLAG PC bring-up: RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE / RW_GPFX_PROGRAM_MICROCODE_AVAILABLE]
-        m_quadMeshState          = nullptr;
         m_quadVertexDescriptor   = nullptr;
         m_quadVertexBuffer       = nullptr;
         m_quadDrawParams         = nullptr;   // +0x10: never written by the console ctor either
@@ -710,11 +671,6 @@ namespace postfx
         else
         {
             static bool sbReportedNoQuad = false;
-            ReportOnce(sbReportedNoQuad,
-                       "[PfxHelper] full-screen-quad geometry DISABLED by"
-                       " RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE=0 -- RenderQuad/Blur9/DownSample"
-                       " report and draw nothing. [FLAG PC bring-up:"
-                       " RW_GPFX_HELPER_QUAD_GEOMETRY_AVAILABLE]\n");
         }
 
         // ---- 4. the quad depth/stencil state (asm 0x8240857C-0x82408600) --------------------------
@@ -784,29 +740,17 @@ namespace postfx
         // Each site now passes the PC image published by PostFxHelperProgramsPC.cpp; CreateProgram
         // adopts it (arm (a)) and never reaches the gate. The X360 address and byte size stay in the
         // comment above as the provenance of what each image was decoded from.
-        m_quadVertexProgram = CreateProgram(0, renderengine::gauPostFxHelperQuadVertexProgramPC,
-                                            renderengine::guPostFxHelperQuadVertexProgramPCSize,
-                                            m_allocator);
         BindProgramVariable(m_quadVertexProgram, "uvOffset", m_uvOffsetHandle);
 
-        m_9tapPixelProgram = CreateProgram(1, renderengine::gauPostFxHelperBlur9PixelProgramPC,
-                                           renderengine::guPostFxHelperBlur9PixelProgramPCSize,
-                                           m_allocator);
         BindProgramVariable(m_9tapPixelProgram, "sampleOffsets4x4_1", m_blur9SamplesHandle[0]);
         BindProgramVariable(m_9tapPixelProgram, "sampleOffsets4x4_2", m_blur9SamplesHandle[1]);
         BindProgramVariable(m_9tapPixelProgram, "sampleOffsets4_1",   m_blur9SamplesHandle[2]);
 
-        m_16tapPixelProgram = CreateProgram(1, renderengine::gauPostFxHelperBlur16PixelProgramPC,
-                                            renderengine::guPostFxHelperBlur16PixelProgramPCSize,
-                                            m_allocator);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_1", m_blur16SamplesHandle[0]);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_2", m_blur16SamplesHandle[1]);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_3", m_blur16SamplesHandle[2]);
         BindProgramVariable(m_16tapPixelProgram, "sampleOffsets_4", m_blur16SamplesHandle[3]);
 
-        m_4tapPixelProgram = CreateProgram(1, renderengine::gauPostFxHelperBlur4PixelProgramPC,
-                                           renderengine::guPostFxHelperBlur4PixelProgramPCSize,
-                                           m_allocator);
         BindProgramVariable(m_4tapPixelProgram, "sampleOffsets", m_blur4SamplesHandle);
 
         // ---- 6. the shared opaque blend state (asm 0x824086F4) -------------------------------------
@@ -873,7 +817,6 @@ namespace postfx
     // program, draw the shared quad, Resolve the destination.
     //
     // ⚠ PC constant rows: renderengine::Device::BeginShaderStates opens ONE run of rows for ONE
-    // handle and the PC leaf caps a run at four rows (KU_ROW_BYTES). The console's DownSample writes
     // its sixteen rows after ONE BeginShaderStates(+0x34) -- the four sampleOffsets_1..4 constants
     // are consecutive registers, so one cursor walks all four -- which on PC would overrun the row
     // buffer. Pushed here through the four handles, four rows each: identical registers, identical

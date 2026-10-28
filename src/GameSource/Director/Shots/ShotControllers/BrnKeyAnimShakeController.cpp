@@ -284,8 +284,7 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
     if (luShakeType == 0)
         return;
 
-    if (mpDirectorResourceManager == 0)   // [FLAG PC bring-up] -- see the banner.
-        return;
+    if (mpDirectorResourceManager == 0)           return;
 
     // Gate 3 -- an out-of-range type is silently ignored (the console does NOT assert here;
     // the assert is further down, for a shot of an unsupported CLASS).
@@ -324,25 +323,6 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
             // `mr r4, r3` at 0x8223D5C4 does with no test.
             mShakeTake.SetDataPointers(lpShakeTake, false);
 
-            // [DIAG BRN_DIRECTOR_TRACE] [FLAG PC witness] -- NOT IN THE X360 BINARY. The one
-            // line that proves the take was actually BOUND: it fires on the bind edge only,
-            // so it is naturally budgeted by the shake-type changes themselves, and it is
-            // capped anyway. DELETE-WHEN: the camera-shake bring-up closes.
-            {
-                static const bool sbOn = (getenv("BRN_DIRECTOR_TRACE") != 0);
-                static s32        siLines = 0;
-                if (sbOn && siLines < 16 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++siLines;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[iceshake] bound take guid=" << lShakeAnim.GetAnimGuid()
-                        << " type=" << luShakeType
-                        << " takeData=" << (lpShakeTake != 0 ? 1 : 0)
-                        << " keys=" << static_cast<u32>(
-                               mShakeTake.GetNumKeys(KI_ICE_CHANNEL_SHAKE_DATA))
-                        << "\n";
-                }
-            }
         }
 
         // ---- the shot clock -> a take key ----------------------------------------------
@@ -417,80 +397,12 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
         // 0x8223D928 -- the out-of-line validate the four `stvx128` are paired with.
         lpCamera->ValidateTransformWithDebugInfo();
 
-        // [DIAG BRN_DIRECTOR_TRACE] [FLAG PC witness] -- NOT IN THE X360 BINARY. The one line
-        // that proves the bound take was SAMPLED with real authored data: the key it landed
-        // on, the key count it wrapped against, and the rotation it composed. First 32 only.
-        // DELETE-WHEN: the camera-shake bring-up closes.
-        {
-            static const bool sbOn = (getenv("BRN_DIRECTOR_TRACE") != 0);
-            static s32        siLines = 0;
-            if (sbOn && siLines < 32 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[iceshake] sampled type=" << luShakeType
-                    << " frame=" << liFrame << " key=" << liShakeKey
-                    << "/" << static_cast<u32>(lu16NumKeys)
-                    << " quat=(" << lRotationQuat.x << "," << lRotationQuat.y
-                    << "," << lRotationQuat.z << "," << lRotationQuat.w << ")"
-                    << " pos=(" << lvPosition.x << "," << lvPosition.y
-                    << "," << lvPosition.z << ")"
-                    << " amp=" << lrEffects.GetShakeAmplitude()
-                    << " t=" << mfShotRunningTime << "\n";
-            }
-        }
     }
     else if (lShotRef.GetClassKey() == Attrib::Gen::proceduralshake::KU_PROCEDURALSHAKE_CLASS_KEY)
     {
         const Attrib::Gen::proceduralshake lShakeRecord(lShotRef, 0);
         const u8* const lpData = static_cast<const u8*>(lShakeRecord.GetLayoutPointer());
 
-        // [DIAG BRN_CAMERA_TRACE] [FLAG PC witness] -- NOT IN THE X360 BINARY. The one line
-        // that says the console arm was REACHED with real authored data: the shake type, the
-        // authored method, and the amplitude the camera asked for. First 32 only.
-        // DELETE-WHEN: the camera-shake bring-up closes.
-        {
-            static const bool sbOn = (getenv("BRN_CAMERA_TRACE") != 0);
-            static s32 siLines = 0;
-            if (sbOn && siLines < 32 && CgsDev::Log::gpDebugPrint != 0 && lpData != 0)
-            {
-                ++siLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[cam] shake applied type=" << luShakeType
-                    << " method=" << ReadInt(lpData, KU_PS_SHAKE_METHOD_OFFSET)
-                    << " amp=" << lrEffects.mfShakeAmplitude
-                    << " freq=" << lrEffects.mfShakeFrequency
-                    << " t=" << mfShotRunningTime << "\n";
-            }
-        }
-
-        // The console has no null test: proceduralshake's ctor gives the instance a 0x1C-byte
-        // default data area when the resolve produced none, so lpData is never null there.
-        // [FLAG PC bring-up] guarded anyway -- a null here means the attribute vault did not
-        // load, which is a resource bug to find rather than a fault to take. DELETE with the
-        // bring-up path.
-        if (lpData != 0)
-        {
-            if (ReadInt(lpData, KU_PS_SHAKE_METHOD_OFFSET) == KI_SHAKE_METHOD_PERLIN)
-            {
-                PerlinShakeController::Update(lpCamera, mfShotRunningTime,
-                                              ReadFloat(lpData, KU_PS_ROLL_SCALE_OFFSET),
-                                              ReadFloat(lpData, KU_PS_PITCH_SCALE_OFFSET),
-                                              ReadFloat(lpData, KU_PS_YAW_SCALE_OFFSET),
-                                              ReadFloat(lpData, KU_PS_ROLL_FREQ_SCALE_OFFSET),
-                                              ReadFloat(lpData, KU_PS_PITCH_FREQ_SCALE_OFFSET),
-                                              ReadFloat(lpData, KU_PS_YAW_FREQ_SCALE_OFFSET));
-            }
-            else
-            {
-                // The wobble shake, driven by the camera's OWN request: the frequency
-                // multiplies the timestep, the amplitude scales the resulting angle
-                // (`lfs f0, 0x118(camera)` / `fmuls f1, f0, f30` and `lfs f2, 0x114(camera)`).
-                mProceduralShake.Update(lpCamera->mTransform, mProceduralShakeParams, mRandom,
-                                        lrEffects.mfShakeFrequency * lfTimeStep,
-                                        lrEffects.mfShakeAmplitude);
-            }
-        }
     }
     else
     {

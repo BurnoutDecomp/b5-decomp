@@ -76,8 +76,6 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "pc/math/VmxFloat.h"
-#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // InputBuffer_GenerateDispatchLists
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                    // CgsGraphics::Model / Renderable
@@ -95,8 +93,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
 #include <cmath>   // powf / sqrtf
-#include "pc/gcm/renderengine/reflections/SceneSettings.h"
-#include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include <stdlib.h> // getenv / atoi ([deform-upload] control, host-side diagnostic only)
 
 // The selector backing DeformationDebugComponent::OnActivate's "Render car part" control.
@@ -106,10 +102,6 @@ namespace BrnPhysics { namespace Deformation { extern s32 giDebugOnlyRenderThisC
 // by the CgsShaderConstants TU). Mirrors the committed extern in the sibling TUs.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
-// [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceilings for the opt-in render
-// witnesses in this TU, so an armed knob still cannot flood the log. DELETE-WHEN those
-// witnesses go.
-static const u32 KU_GLASSFX_DIAG_MAX_LINES  = 256u;
 static const u32 KU_RACECAR_DIAG_MAX_LINES  = 128u;
 
 // ============================================================================
@@ -424,11 +416,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                                            DEBUG_mfSelfIlluminationG,
                                            DEBUG_mfSelfIlluminationB,
                                            0.0f };
-    const Vector4 lv4SelfIlluminationMask = {
-        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.x, lv4LightState.x), KF_SELF_ILLUMINATION_INTENSITY),
-        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.y, lv4LightState.y), KF_SELF_ILLUMINATION_INTENSITY),
-        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.z, lv4LightState.z), KF_SELF_ILLUMINATION_INTENSITY),
-        CgsPC::VmxFloat::Multiply(CgsPC::VmxFloat::Maximum(lv4DebugIllumination.w, lv4LightState.w), KF_SELF_ILLUMINATION_INTENSITY) };
 
     // ---- the shadow-pass selector ------------------------------------------
     // v320 = (shadowMap[0] && shadowMap[1]): the two LEADING ShadowMap bytes the asm reads
@@ -479,13 +466,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // than as a plausible-looking white car. (The existing [WorldShader] / [WorldSamplers]
     // tallies cannot answer this -- both saturate at 4096 draws, long before a car exists.)
     {
-        // Latched on the VALUE, not on a "printed once" bool -- the paint starts at the
-        // palette-0/colour-0 fallback and only becomes the car's authored colour once game
-        // action 79 (CarSelectChangeColourAction) has been processed, several frames later.
-        // [FLAG PC witness] OPT-IN (BRN_RACECAR_PAINT_DIAG=1) + hard first-N cap. DELETE-WHEN the
-        // paint transfer is signed off. The colour latch is shared by every car, so two cars with
-        // different paint alternate it forever: 57,912 lines in a 140 s run.
-        static const bool sbPaintDiag = ( getenv( "BRN_RACECAR_PAINT_DIAG" ) != 0 );
         static u32 suPaintDiagLines = 0u;
         static f32 sfLastLoggedPaintX = -1.0f;
         static f32 sfLastLoggedPaintY = -1.0f;
@@ -653,8 +633,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             static s32 siUploadOn = -1;
             if ( siUploadOn < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_DEFORM_TRACE" );
-                siUploadOn = ( lpcEnv != 0 && atoi( lpcEnv ) > 0 ) ? 1 : 0;
             }
             if ( siUploadOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
             {
@@ -723,187 +701,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // two-point offset fit). ARTIST also reads the shared debug selector at
     // dword_82CDB49C here: -1 draws every part; otherwise only the selected mesh index
     // reaches the visibility/model/detached-transform and submission path.
-    if ( mbRenderCarsDuringCrash && !CgsPC::Reflections::IsPlayerWheelCapture() )
-    {
-        const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrDetachedParts =
-            lpRenderParams->GetDetachedPartQueue();
-
-        const CgsGraphics::Model::State leLOD = lpRenderParams->GetLOD();
-
-        // [DIAG racecar-lod] value-latched on the LOD (re-added per the LOD-system memory note):
-        // the wheels drew their LOD-4 box proxy on Car Select because nothing lifted mLOD off
-        // Reset's 4 there -- this line says what LOD each RenderRaceCar walk actually sees.
-        // [FLAG PC witness] OPT-IN (BRN_RACECAR_LOD_DIAG=1) + hard first-N cap. DELETE-WHEN the
-        // LOD ladder is signed off. The value latch is per-process but the LOD alternates between
-        // the cars walked each frame, so it printed 141,780 lines in a 140 s run.
-        {
-            static const bool sbLodDiag = ( getenv( "BRN_RACECAR_LOD_DIAG" ) != 0 );
-            static u32 suLodDiagLines = 0u;
-            static s32 siLastLoggedLod = -1;
-            if ( sbLodDiag && suLodDiagLines < KU_RACECAR_DIAG_MAX_LINES
-                 && static_cast< s32 >( leLOD ) != siLastLoggedLod && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++suLodDiagLines;
-                siLastLoggedLod = static_cast< s32 >( leLOD );
-                *CgsDev::Log::gpDebugPrint << "[racecar-lod] RenderRaceCar sees mLOD "
-                                            << static_cast< s32 >( leLOD )
-                                            << " parts " << static_cast< s32 >( lpCarGraphicsSpec->muPartsCount )
-                                            << "\n";
-            }
-        }
-
-        for ( u32 luPartIdx = 0; luPartIdx < lpCarGraphicsSpec->muPartsCount; ++luPartIdx )
-        {
-            // ARTIST 0x822CFF3C..0x822CFF50: -1 bypasses this gate; otherwise compare
-            // the selected debug mesh id with the loop's part index and skip on mismatch.
-            const s32 liSelectedPart = BrnPhysics::Deformation::giDebugOnlyRenderThisCarPart;
-            if ( liSelectedPart != -1 && liSelectedPart != static_cast< s32 >( luPartIdx ) )
-            {
-                continue;
-            }
-
-            if ( !lpRenderParams->IsPartVisible( static_cast< u8 >( luPartIdx ) ) )
-            {
-                continue;
-            }
-
-            const CgsGraphics::Model* lpModel = lpCarGraphicsSpec->GetPartModel( luPartIdx );
-            if ( lpModel == 0 )
-            {
-                continue;
-            }
-
-            // FLAG PC-platform leaf: cube captures select detail without changing RenderParams.
-            const s32 liPartLod = CgsPC::Reflections::IsVehicleCapture()
-                ? CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::VehicleSettings(), lpModel, lfCameraDistance * lfCameraDistance)
-                : static_cast<s32>(leLOD);
-            const auto lePartLOD = static_cast<CgsGraphics::Model::State>(liPartLod);
-            if ( liPartLod < 0 || !lpModel->DoesStateExist( lePartLOD ) )
-            {
-                continue;
-            }
-
-            // World matrix = partLocator * bodyTransform. The asm broadcasts each locator row
-            // component (vspltw) and accumulates it against the three body rotation rows, seeding
-            // the translation row with the body translation row -- i.e. exactly rw::math::vpu::Mult
-            // with the LOCATOR on the left.
-            Matrix44Affine lPartWorldMatrix =
-                rw::math::vpu::Mult( lpCarGraphicsSpec->GetPartLocators()[ luPartIdx ], lBodyTransform );
-
-            // A part that has been knocked off the car carries its own world transform in the
-            // detached-part queue; the queue entry's mbIsAttached then decides which of the two
-            // draw paths runs. Parts with no queue entry stay attached (r28 seeds to 1).
-            bool lbIsAttached = true;
-            for ( s32 liEvent = 0; liEvent < lrDetachedParts.GetLength(); ++liEvent )
-            {
-                const DetachedPartRenderEvent& lrEvent = lrDetachedParts.GetEvent( liEvent );
-                if ( lrEvent.miPartIndex == static_cast< s32 >( luPartIdx ) )
-                {
-                    lPartWorldMatrix = lrEvent.mTransform;
-                    lbIsAttached     = lrEvent.mbIsAttached;
-                    break;
-                }
-            }
-
-            // An ATTACHED part is drawn only when the caller asked for the attached geometry
-            // (the same bool that gates the glass and the wheels). A DETACHED part is always
-            // drawn. Both paths converge on the submission below; what differs is the state of
-            // shader constant 24.
-            //
-            // ⭐ THE CONSTANT-24 TOGGLE (@0x822D02B4..0x822D0318) -- LANDED 2026-08-17.
-            // The console's shape, branch for branch:
-            //     0x822D02B4  clrlwi r11, r28, 24 ; cmplwi ; beq -> 0x822D02F8
-            //                   r28 == DetachedPartRenderEvent+0x44 == mbIsAttached,
-            //                   seeded 1 for a part with no queue entry
-            //     0x822D02F8    (DETACHED)  if (latch) { SetShaderConstantData(24, ZERO);
-            //                               latch = 0; }
-            //     0x822D02C4  (ATTACHED)  lbz arg_8F ; beq -> 0x822D094C   the `continue`
-            //     0x822D02D0              if (!latch) { SetShaderConstantData(24, emission);
-            //                                          latch = 1; }
-            // A knocked-off panel therefore draws with its lamps DEAD -- which is the
-            // console's own rule, and the reason the register has to be toggled at all
-            // rather than published once per car.
-            if ( !lbIsAttached )
-            {
-                if ( lbSelfIlluminationArmed )
-                {
-                    const Vector4 lv4NoSelfIllumination = { 0.0f, 0.0f, 0.0f, 0.0f };
-                    CgsGraphics::mShaderConstantTable.SetShaderConstantData(
-                        24, lv4NoSelfIllumination );
-                    lbSelfIlluminationArmed = false;
-                }
-            }
-            else
-            {
-                if ( !lbRenderAttachedGeometry )
-                {
-                    continue;
-                }
-                if ( !lbSelfIlluminationArmed )
-                {
-                    CgsGraphics::mShaderConstantTable.SetShaderConstantData(
-                        24, lv4SelfIlluminationMask );
-                    lbSelfIlluminationArmed = true;
-                }
-            }
-
-            // Technique index. Two bits: bit 0 == "not damaged", bit 1 == "shadow pass".
-            // (`v169 = damaged ? (shadow ? 3 : 0) : (shadow ? 2 : 1)`, the console spelling it
-            // with _cntlzw.)
-            u8 lu8Technique;
-            if ( lbDamaged )
-            {
-                lu8Technique = lbShadowPass ? 3u : 0u;
-            }
-            else
-            {
-                lu8Technique = lbShadowPass ? 2u : 1u;
-            }
-
-            const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable( lePartLOD );
-            if (!lbShadowPass)
-                renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_RACECAR, lpModel, leLOD);
-            CGS_ASSERT( lpRenderable != 0, "Missing renderable in a model" );
-
-            CgsGraphics::DispatchList* lpDispatchList = lpDispatchFrame->GetList( liObjectList );
-            CGS_ASSERT( lpDispatchList != 0, "lpDispatchList" );
-
-            // Bind the part's world matrix for this draw's shader constants.
-            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 0, lPartWorldMatrix );
-
-            if (CgsPC::Reflections::IsVehicleCapture())
-            {
-                CgsPC::Reflections::SubmitVehiclePart(lpModel, liPartLod, lfCameraDistance * lfCameraDistance,
-                    *lpDispatchFrame, liObjectList, liOpaqueMeshList, lu8Technique, lpRenderParams->GetRenderDamageFlag());
-                continue;
-            }
-            const bool lbFirstInList = ( lpDispatchList->GetCount() & 0x7F ) == 0;
-
-            lpDispatchFrame->GetBin().BeginPacket();
-            if ( lbShadowPass )
-            {
-                // Shadow variant (@0x822D0724..0x822D0764): both mesh lists are the OPAQUE one
-                // and the draw is Z-only. The trailer bytes are preZList = 0xFF, preZTechnique 0,
-                // instanceCount 0, excludeMeshBits = mu8RenderDamageFlags.
-                CgsGraphics::DrawRenderable::AddToBin(
-                    lpRenderable, lpDispatchFrame, lbFirstInList,
-                    static_cast< s8 >( liOpaqueMeshList ), static_cast< s8 >( liOpaqueMeshList ),
-                    1, lu8Technique, true,
-                    0xFFu, 0u, 0, lpRenderParams->GetRenderDamageFlag() );
-            }
-            else
-            {
-                // Camera variant (@0x822D08E0..0x822D0924).
-                CgsGraphics::DrawRenderable::AddToBin(
-                    lpRenderable, lpDispatchFrame, lbFirstInList,
-                    static_cast< s8 >( liOpaqueMeshList ), static_cast< s8 >( liTransparentMeshList ),
-                    1, lu8Technique, false,
-                    0xFFu, 0u, 0, lpRenderParams->GetRenderDamageFlag() );
-            }
-
-            lpDispatchList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
-        }
-    }
 
     // ---- [DIAG car-lights wave 2026-08-17] THE LIGHT-STATE WITNESS -------------
     // ⛔ DELETE-WHEN the head/brake/reverse lamps are confirmed on a booted run.
@@ -994,24 +791,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // how a driving-state wheel blank hid behind a green boot snapshot.
         // DELETE-WHEN the wheel regression is pinned and fixed.
         {
-            static const bool sbWheelDiag = ( getenv( "BRN_WHEEL_DIAG" ) != 0 );
             static s32 siWheelDiagFrame = 0;
-            if ( sbWheelDiag && ( ( siWheelDiagFrame++ % 60 ) == 0 ) )
-            {
-                for ( u32 luW = 0; luW < 4u; ++luW )
-                {
-                    const Matrix44Affine& lrT = lpRenderParams->GetWheelTransform( luW );
-                    const Matrix44Affine& lrS = lpRenderParams->GetWheelScaleMatrix( luW );
-                    *CgsDev::Log::gpDebugPrint
-                        << "[wheel-diag] f" << siWheelDiagFrame - 1
-                        << " w" << luW
-                        << " exists " << ( lpRenderParams->GetWheelExists( luW ) ? 1 : 0 )
-                        << " T (" << lrT.wAxis.x << ", " << lrT.wAxis.y << ", " << lrT.wAxis.z
-                        << ") row0 (" << lrT.xAxis.x << ", " << lrT.xAxis.y << ", " << lrT.xAxis.z
-                        << ") scale (" << lrS.xAxis.x << ", " << lrS.yAxis.y << ", " << lrS.zAxis.z
-                        << ")\n";
-                }
-            }
         }
 
         static s32 siLastFarParts   = -1;
@@ -1137,242 +917,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // `addi r24, r24, 0x10` per ITERATION (not per drawn pane), so it is indexed by the
     // loop counter.
     // ========================================================================
-    if ( lbRenderAttachedGeometry && !CgsPC::Reflections::IsPlayerWheelCapture() && (!CgsPC::Reflections::IsVehicleCapture()
-        || CgsPC::Reflections::Glass().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
-    {
-        const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrGlassDetachedParts =
-            lpRenderParams->GetDetachedPartQueue();
-
-        const u32 luGlassPartCount = lpCarGraphicsSpec->muShatteredGlassPartsCount;
-        const BrnVehicle::ShatteredGlassPart* const lpGlassParts =
-            lpCarGraphicsSpec->GetShatteredGlassParts();
-
-        // [DIAG glassfx wave] THE OUTCOME CENSUS, not a "did it run" flag. Five different
-        // things can make this loop draw nothing and a boolean could only ever report the
-        // first car's answer, so every pane's outcome is tallied and the tuple is printed once
-        // per DISTINCT value. It walked the whole state machine on its first run --
-        //     seen 6 notDamaged 6 smashed 0 noModel 0 SUBMITTED 0   flags 0x00  (intact)
-        //     seen 6 notDamaged 0 smashed 0 noModel 0 SUBMITTED 6   flags 0x63  (all cracked)
-        //     seen 6 notDamaged 0 smashed 6 noModel 0 SUBMITTED 0   flags 0x63  (all smashed)
-        // -- with noModel 0 at every step. ⛔ DELETE-WHEN the loop stops being new; the film is
-        // already taken (see the banner above), this now only guards regressions.
-        u32 luSeen = 0u, luNotDamaged = 0u, luSmashed = 0u, luNoModel = 0u, luSubmitted = 0u;
-
-        // [PC guard] the console dereferences the table unguarded, because it only reaches
-        // RenderRaceCar for a car whose whole resource set is in. This build renders cars with
-        // PARTIAL sets through the BringUp getters (see the wheel block's own FLAG below), and
-        // a null table with a non-zero count is exactly the shape the 27 rig-less cars carry on
-        // disc. DELETE with the BringUp getters.
-        for ( u32 luGlassIdx = 0;
-              lpGlassParts != 0 && luGlassIdx < luGlassPartCount;
-              ++luGlassIdx )
-        {
-            ++luSeen;
-            const BrnVehicle::ShatteredGlassPart* const lpPart = &lpGlassParts[luGlassIdx];
-            CGS_ASSERT( lpPart != 0, "lpPart != NULL" );
-
-            // `lwz r11, 8(r29) ; addi r30, r11, -0x10` -- the pane index is the part TYPE
-            // minus E_TAGPOINT_GLASS_BASE (16), the same subtraction the L2 drain does.
-            const s32 liPane = static_cast< s32 >( lpPart->muBodyPartType ) - 16;
-            if ( liPane < 0 || liPane >= 8 )
-            {
-                continue;   // [PC guard] the console indexes an 8-slot array unguarded
-            }
-
-            const f32 lfFracture =
-                lpRenderParams->GetCrackedGlassFractureAmountN( static_cast< u32 >( liPane ) );
-
-            // The pane must be DAMAGED and not SMASHED. 2.0f is the drain's smashed literal.
-            if ( ( lpRenderParams->GetRenderDamageFlag() & ( 1u << liPane ) ) == 0 )
-            {
-                ++luNotDamaged;
-                continue;
-            }
-            if ( lfFracture > 1.0f )
-            {
-                ++luSmashed;
-                continue;
-            }
-
-            const f32 lfEqualisation =
-                lpRenderParams->GetCrackedGlassEqualisationFactorN( static_cast< u32 >( liPane ) );
-            const Vector2 lv2Scale =
-                lpRenderParams->GetCrackedGlassScale( static_cast< u32 >( liPane ) );
-
-            // v127 is loaded from the table BEFORE the GetCrackedGlassScale call and carried
-            // across it (`lvx128 v127, r0, r24` @0x822D0A18, `vmr128 v1, v127` @0x822D0A28).
-            SetGlassFractureConstants( lfFracture, lfEqualisation, lv2Scale,
-                                       KAV4_GLASS_FRACTURE_UV_OFFSETS[
-                                           luGlassIdx < 8u ? luGlassIdx : 7u ] );
-
-            // World matrix = the PANE'S BODY PART locator * bodyTransform. `lwz r11, 4(r29)`
-            // is muBodyPartIndex and `slwi r10, r11, 6` is its 64-byte stride into
-            // mpPartLocators -- the same rw::math::vpu::Mult, locator on the left, that the
-            // body-part loop above uses. (Measured on the shipped VEH_PUSMC01_GR.BIN: the six
-            // records name body parts 8, 9, 20, 20, 20, 20 -- four panes share the cabin part,
-            // which is exactly why the exclusion has to be per-MESH and not per-part.)
-            if ( lpPart->muBodyPartIndex >= lpCarGraphicsSpec->muPartsCount )
-            {
-                ++luNoModel;   // [PC guard] out-of-range index; the console indexes unguarded
-                continue;
-            }
-            Matrix44Affine lGlassWorldMatrix =
-                rw::math::vpu::Mult( lpCarGraphicsSpec->GetPartLocators()[lpPart->muBodyPartIndex],
-                                     lBodyTransform );
-
-            // If the pane's body part has been knocked off, follow it: the console searches
-            // the detached queue for an entry whose miPartIndex == muBodyPartIndex and, on a
-            // hit, OVERWRITES all four rows with the queue entry's transform
-            // (@0x822D0B10..0x822D0B70). Note it does NOT consult mbIsAttached here -- unlike
-            // the body-part loop, a detached pane is drawn either way.
-            for ( s32 liEvent = 0; liEvent < lrGlassDetachedParts.GetLength(); ++liEvent )
-            {
-                const DetachedPartRenderEvent& lrEvent = lrGlassDetachedParts.GetEvent( liEvent );
-                if ( lrEvent.miPartIndex == static_cast< s32 >( lpPart->muBodyPartIndex ) )
-                {
-                    lGlassWorldMatrix = lrEvent.mTransform;
-                    break;
-                }
-            }
-
-            // Technique index -- BIT FOR BIT the body-part loop's, and that is an asm fact:
-            // pseudocode lines 1123-1131 (the body loop) and 1421-1429 (this one) are the
-            // SAME two branches over the SAME two values, `if (v351 || *v329)` with
-            // `v351 = mbDamaged || kbAllowDeformationDebug` and `*v329 = module + 100216`,
-            // selecting on `v320` == the shadow byte built at 0x822CFBC0..0x822CFBE4.
-            u8 lu8GlassTechnique;
-            if ( lbDamaged )
-            {
-                lu8GlassTechnique = lbShadowPass ? 3u : 0u;
-            }
-            else
-            {
-                lu8GlassTechnique = lbShadowPass ? 2u : 1u;
-            }
-
-            // The glass model is always drawn at its FIRST state: `lwz r11, 4(r26) ;
-            // lbz r11, 0(r11)` reads mpu8StateRenderableIndices[0], and the two asserts that
-            // follow ("State does not exist" at :400, the null renderable at :403) are
-            // GetRenderable's own. It never consults the car's LOD.
-            const CgsGraphics::Model* const lpGlassModel = lpPart->GetModel();
-            const s32 liGlassLod = CgsPC::Reflections::IsVehicleCapture() && lpGlassModel
-                ? CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::Glass(), lpGlassModel, lfCameraDistance * lfCameraDistance) : 0;
-            if ( lpGlassModel == 0 || liGlassLod < 0 || !lpGlassModel->DoesStateExist( static_cast<CgsGraphics::Model::State>(liGlassLod) ) )
-            {
-                ++luNoModel;
-                continue;   // [PC guard] the console asserts instead; a missing state here
-                            // would fault on this build's partially-streamed cars
-            }
-
-            const CgsGraphics::Renderable* const lpGlassRenderable =
-                lpGlassModel->GetRenderable( static_cast<CgsGraphics::Model::State>(liGlassLod) );
-            CGS_ASSERT( lpGlassRenderable != 0, "lpRenderable" );
-            CGS_ASSERT( !lpGlassModel->GetFlag(
-                            CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ),
-                        "lbInstancing == GetFlag( CgsGraphics::Model::"
-                        "E_FLAG_MODEL_USES_INSTANCE_SHADER )" );
-
-            CgsGraphics::DispatchList* const lpGlassList = lpDispatchFrame->GetList( liObjectList );
-            CGS_ASSERT( lpGlassList != 0, "lpDispatchList" );
-            if ( lpGlassList == 0 )
-            {
-                continue;
-            }
-
-            // Constant 0 is the pane's world matrix, published inside the packet exactly as
-            // the body-part loop does (`addi r5, r1, var_350 ; li r4, 0 ; bl sub_822B33B8`).
-            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 0, lGlassWorldMatrix );
-
-            const bool lbGlassFirstInList = ( lpGlassList->GetCount() & 0x7F ) == 0;
-
-            lpDispatchFrame->GetBin().BeginPacket();
-            if ( lbShadowPass )
-            {
-                // @0x822D0D18..0x822D0D74: both mesh lists are the OPAQUE one, zOnly = 1.
-                CgsGraphics::DrawRenderable::AddToBin(
-                    lpGlassRenderable, lpDispatchFrame, lbGlassFirstInList,
-                    static_cast< s8 >( liOpaqueMeshList ), static_cast< s8 >( liOpaqueMeshList ),
-                    1, lu8GlassTechnique, true,
-                    0xFFu, 0u, 0, 0u );
-            }
-            else
-            {
-                // @0x822D0EC8..0x822D0F28: opaque + transparent, zOnly = 0.
-                CgsGraphics::DrawRenderable::AddToBin(
-                    lpGlassRenderable, lpDispatchFrame, lbGlassFirstInList,
-                    static_cast< s8 >( CgsPC::Reflections::IsVehicleCapture() ? CgsPC::Reflections::GlassMeshList() : liOpaqueMeshList ),
-                    static_cast< s8 >( CgsPC::Reflections::IsVehicleCapture() ? CgsPC::Reflections::GlassMeshList() : liTransparentMeshList ),
-                    1, lu8GlassTechnique, false,
-                    0xFFu, 0u, 0, 0u );
-            }
-            // ⭐ excludeMeshBits is ZERO here (`stb r31, var_521(r1)`, r31 == 0), NOT
-            // mu8RenderDamageFlags. It has to be: the whole point of this draw is the pane the
-            // body walk just excluded.
-
-            lpGlassList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
-            ++luSubmitted;
-
-            // [DIAG glassfx wave] one line per DISTINCT (pane, strength) pair -- a census, not
-            // a peak. "the loop never ran", "it ran and every pane was skipped" and "it ran and
-            // submitted" are three different findings and a bare counter conflates them.
-            // [FLAG PC witness] OPT-IN (BRN_GLASSFX_DIAG=1) + hard first-N cap. DELETE-WHEN the
-            // shattered-glass path is signed off. The (pane, strength) latch is NOT a bound: the
-            // strength is a float that moves every frame and the latch array is shared by every
-            // car, so this census printed 639,936 of 1,002,683 lines in a 140 s run and drove the
-            // harness into its log-size abort before the scenario finished.
-            {
-                static const bool sbGlassFxDiag = ( getenv( "BRN_GLASSFX_DIAG" ) != 0 );
-                static u32 suGlassFxPaneLines = 0u;
-                static u32 sauLoggedPaneKeys[8] = { 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u };
-                const u32 luKey = static_cast< u32 >( lfFracture * 100.0f ) + 1u;
-                if ( sbGlassFxDiag && suGlassFxPaneLines < KU_GLASSFX_DIAG_MAX_LINES
-                     && sauLoggedPaneKeys[liPane] != luKey && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    ++suGlassFxPaneLines;
-                    sauLoggedPaneKeys[liPane] = luKey;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[glassfx] cracked pane " << liPane
-                        << " SUBMITTED  strength " << lfFracture
-                        << " equalisation " << lfEqualisation
-                        << " scale (" << lv2Scale.x << ", " << lv2Scale.y << ")"
-                        << " bodyPart " << static_cast< s32 >( lpPart->muBodyPartIndex )
-                        << " technique " << static_cast< s32 >( lu8GlassTechnique ) << "\n";
-                }
-            }
-        }
-
-        // The outcome tuple, printed once per DISTINCT value. A run where this line never
-        // appears at all means RenderRaceCar was not reached with lbRenderAttachedGeometry;
-        // a run where it reads `seen 6 notDamaged 6` means the drain never set a flag; a run
-        // where it reads `submitted 0 noModel 6` means the spec has no shattered models on
-        // this build. Those are three different bugs and the [glassfx] device probe cannot
-        // tell them apart on its own.
-        // [FLAG PC witness] OPT-IN (BRN_GLASSFX_DIAG=1) + hard first-N cap -- same reason as the
-        // per-pane line above: the census key alternates between the cars on screen, so the
-        // "distinct value" latch is not a bound. DELETE-WHEN the shattered-glass path is signed off.
-        {
-            static const bool sbGlassFxDiag = ( getenv( "BRN_GLASSFX_DIAG" ) != 0 );
-            static u32 suGlassFxCensusLines = 0u;
-            static u32 suLastCensusKey = 0xFFFFFFFFu;
-            const u32 luCensusKey = ( luSeen << 20 ) | ( luNotDamaged << 15 )
-                                  | ( luSmashed << 10 ) | ( luNoModel << 5 ) | luSubmitted;
-            if ( sbGlassFxDiag && suGlassFxCensusLines < KU_GLASSFX_DIAG_MAX_LINES
-                 && luCensusKey != suLastCensusKey && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++suGlassFxCensusLines;
-                suLastCensusKey = luCensusKey;
-                *CgsDev::Log::gpDebugPrint
-                    << "[glassfx] shattered-glass loop: seen " << static_cast< s32 >( luSeen )
-                    << " notDamaged " << static_cast< s32 >( luNotDamaged )
-                    << " smashed " << static_cast< s32 >( luSmashed )
-                    << " noModel " << static_cast< s32 >( luNoModel )
-                    << " SUBMITTED " << static_cast< s32 >( luSubmitted )
-                    << "  (specCount " << static_cast< s32 >( luGlassPartCount )
-                    << " damageFlags 0x" << static_cast< s32 >( lpRenderParams->GetRenderDamageFlag() )
-                    << ")\n";
-            }
-        }
-    }
 
     // ---- the WHEEL block  (@0x822D0F60..0x822D15BC) -------------------------
     // `if (*(this + 99148) && a42)` -- the module's wheel switch and the caller's
@@ -1388,263 +932,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     //   2 no LOD state on the model           3 no wheel reported as existing
     //   4..8 SUBMITTED with 1..5 instances
     s32 liWheelDiagCode = 0;
-
-    if ( mbRenderWheels && lbRenderAttachedGeometry && lpWheelGraphics->HasMemoryResource()
-         && (!CgsPC::Reflections::IsVehicleCapture()
-             || CgsPC::Reflections::WheelSettings().IsVisible(lfCameraDistance * lfCameraDistance, CgsPC::Reflections::sfVehicleDrawDistance)) )
-    {
-        // [FLAG PC boot gate] `HasMemoryResource()` is NOT console. The console reaches
-        // this block only for a car whose whole resource set is in (its own
-        // RaceCarStreamer::GetWheelGraphicsResource asserts IsRaceCarLoaded() before
-        // handing the pointer over), so it dereferences unguarded. This build renders
-        // cars with PARTIAL sets through the BringUp getters -- see GenerateDispatchLists
-        // -- and a car really can go E_STATE_ACTIVE before its wheel graphics reply
-        // lands (measured: car 2 is placed on track and drawn several frames before
-        // "STRM: Wheel graphics loaded: 2"). Without the gate that car fires
-        // ResourcePtr::operator->'s "Can not instance resource pointer" assert on every
-        // frame of the render walk. DELETE with the BringUp getters.
-        const BrnWheel::GraphicsSpec* lpWheelGraphicsSpec = lpWheelGraphics->operator->();
-
-        // `v230 = *(v229 + 4)` -- the spec's wheel model (its calliper twin at +8 is
-        // not drawn by this block).
-        const CgsGraphics::Model* lpWheelModel = lpWheelGraphicsSpec->GetWheelModel();
-
-        // The wheels never draw at LOD 0: `if (v231 <= 1) v231 = 1`.
-        CgsGraphics::Model::State leWheelLOD = lpRenderParams->GetLOD();
-        if (CgsPC::Reflections::IsVehicleCapture() && lpWheelModel)
-            leWheelLOD = static_cast<CgsGraphics::Model::State>(CgsPC::Reflections::SelectVehicleLod(CgsPC::Reflections::WheelSettings(),
-                lpWheelModel, lfCameraDistance * lfCameraDistance));
-        if ( leWheelLOD <= CgsGraphics::Model::E_STATE_LOD_1 )
-        {
-            leWheelLOD = CgsGraphics::Model::E_STATE_LOD_1;
-        }
-
-        liWheelDiagCode = 1;
-
-        if ( lpWheelModel != 0 )
-        {
-            // Fall back to LOD 1 when the requested state is absent, then bail if even
-            // that is missing (the console calls DoesStateExist twice, in that order).
-            if ( !lpWheelModel->DoesStateExist( leWheelLOD ) )
-            {
-                leWheelLOD = CgsGraphics::Model::E_STATE_LOD_1;
-            }
-
-            liWheelDiagCode = 2;
-
-            if ( lpWheelModel->DoesStateExist( leWheelLOD ) )
-            {
-                liWheelDiagCode = 3;
-                // The three console stack arrays. maWheelMatrices / mapWheelMatrices are
-                // four entries because the loop bound tops out at four; the CONSTANTS
-                // array is sized to what the callee reads (see the note on
-                // KU_MAX_INSTANCES_PER_GROUP below).
-                Matrix44Affine        laWheelMatrices[ KU_WHEELS_TO_RENDER_MAX ];
-                const Matrix44Affine* lapWheelMatrices[ KU_WHEELS_TO_RENDER_MAX ] = { 0, 0, 0, 0 };
-
-                // ⚠️ The console declares this array FOUR entries long
-                // (`__vector_constructor_iterator(v389, 16, 4, ...)`) but
-                // SetupShaderConstantsForInstancing reads FIVE
-                // (KU_MAX_INSTANCES_PER_GROUP) -- a 16-byte read off the end of the
-                // caller's stack slot. Sized to the callee's contract and zeroed, which
-                // changes no value the console produces (the loop can never fill a fifth
-                // entry) and removes the overread.
-                Vector4 laWheelConstants[ CgsGraphics::Model::KU_MAX_INSTANCES_PER_GROUP ] =
-                    { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f },
-                      { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
-
-                s32 liInstanceCount = 0;
-
-                // Technique. Seeded 0 (the spinning/blurred variant) OUTSIDE the loop and
-                // only ever raised, so it is sticky across wheels: 1 as soon as any wheel
-                // is turning slower than the blur threshold, 2 for the shadow pass.
-                u8 lu8Technique = 0;
-
-                for ( s32 liWheel = 0; liWheel < giWheelsToRender; ++liWheel )
-                {
-                    if ( !lpRenderParams->GetWheelExists( static_cast< u32 >( liWheel ) ) )
-                    {
-                        continue;
-                    }
-
-                    // ⚠️ GetWheelTransform is ALREADY a world transform -- unlike the body
-                    // parts, the body matrix is NOT re-applied here. The only composition is
-                    // the per-wheel scale matrix on the LEFT:
-                    //   row i = S[i].x*T[0] + S[i].y*T[1] + S[i].z*T[2] (+ T[3] on row 3)
-                    // (the vmulfp128/vmaddfp chain @0x822D10D0..0x822D1134; `vmaddfp` prints
-                    // as vD,vA,vB,vC and computes vA*vC+vB, which is what makes this
-                    // Mult(scale, transform) and not the other order).
-                    const Matrix44Affine lWheelMatrix = rw::math::vpu::Mult(
-                        lpRenderParams->GetWheelScaleMatrix( static_cast< u32 >( liWheel ) ),
-                        lpRenderParams->GetWheelTransform( static_cast< u32 >( liWheel ) ) );
-
-                    // Shader constant 25, "g_wheelConstants": the wheel's spin blur factor
-                    // in lane x and nothing else. `vrlimi128 v0, v13, 8, 0` -- mask 8 is
-                    // lane X, and the vector it merges into (v123) is `vspltisw128 0`, so
-                    // yzw are ZERO. (The previous wave's decode had the lanes the other way
-                    // round; the mask bit settles it, and the fog block eight lines up uses
-                    // mask 1 == lane w for contrast.)
-                    const f32 lfWheelAngularVelocity =
-                        lpRenderParams->GetWheelAngularVelocity( static_cast< u32 >( liWheel ) );
-
-                    // The recovered divisor (30.0f, see the banner on gvWheelBlurConstants).
-                    // [FLAG PC bring-up guard] The console divides unconditionally -- its
-                    // dynamic initialiser has always run by the time a car renders. Guarded
-                    // here because this build can render before/without that seeding and a
-                    // 0/0 quotient is exactly the NaN that shipped the "wheels are always
-                    // blurred" bug. DELETE-WHEN nothing can reach this leaf with a zero
-                    // reference.
-                    const f32 lfBlurReference = gvWheelBlurConstants.x;
-                    CGS_ASSERT( lfBlurReference > 0.0f, "lfBlurReference > 0.0f" );
-
-                    const f32 lfSpin = ( lfBlurReference > 0.0f )
-                        ? ( lfWheelAngularVelocity / lfBlurReference )
-                        : 0.0f;
-                    Vector4 lv4WheelConstants = { lfSpin, 0.0f, 0.0f, 0.0f };
-                    if ( lv4WheelConstants.x > 1.0f )   // vminfp128 against vcsxwfp(1) == 1.0f
-                    {
-                        lv4WheelConstants.x = 1.0f;
-                    }
-                    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 25, lv4WheelConstants );
-
-                    // `vcmpgtfp. v0, v0, v13` + the CR6 "all lanes" bit: a wheel turning
-                    // slower than the threshold selects the non-blurred technique. The console
-                    // compares ALL FOUR lanes of the global against the splatted angular
-                    // velocity; the recovered global is a VecFloat splat (four identical
-                    // 30.0f lanes), so the lane-x test below is the same predicate.
-                    if ( lfBlurReference > lfWheelAngularVelocity )
-                    {
-                        lu8Technique = 1u;
-                    }
-                    if ( lbShadowPass )
-                    {
-                        lu8Technique = 2u;
-                    }
-
-                    // (The four rw::math::IsValid(lWheelMatrix) dev-assert blocks that follow
-                    // in the console are elided, exactly as the body-part loop's
-                    // IsNormal3x3/IsOrthogonal3x3 blocks are -- see the banner.)
-
-                    // Everything is appended at the COMPACTED index, not at liWheel: the
-                    // console advances r28/r26/v237 only when the wheel exists.
-                    laWheelMatrices[ liInstanceCount ]   = lWheelMatrix;
-                    laWheelConstants[ liInstanceCount ]  = lv4WheelConstants;
-                    lapWheelMatrices[ liInstanceCount ]  = &laWheelMatrices[ liInstanceCount ];
-                    ++liInstanceCount;
-                }
-
-                if ( liInstanceCount > 0 )
-                {
-                    liWheelDiagCode = 3 + liInstanceCount;
-
-                    // ================================================================
-                    // ✅ THE GATE NOW PASSES (2026-08-04, task 133). READ THIS FIRST -- the
-                    // history below is kept because its warning still stands, but its
-                    // conclusion ("this is a DATA gap ... fix the wheel model") was WRONG.
-                    //
-                    // The flag was never authored on disc in ANY build (X360 retail, our port
-                    // and the BPR Remaster all carry mu8Flags == 0x00). It is COMPUTED AT LOAD
-                    // by CgsResource::ModelResourceType::PostFixUp @0x828A7A68 -- an override
-                    // b5-decomp simply never declared, so it bound to the empty base and the
-                    // pass ran, did nothing and reported nothing. Declaring and implementing it
-                    // re-opened this gate by itself, with no change here.
-                    //
-                    // The "spike through the roof" was NOT the wheel geometry being undrawable.
-                    // Device::DrawIndexedMeshPC was submitting the FULL index range of a mesh
-                    // whose index buffer holds mu8InstanceCount (=5) slices with the instance
-                    // number in the high bits of every index -- so 4/5 of the index values
-                    // pointed outside the 240-vertex vertex buffer. It now submits slice 0.
-                    // See the banner on Device::DrawIndexedMeshPC.
-                    // ================================================================
-                    //
-                    // ---- history (task 118) ----------------------------------------
-                    // ⛔ THE CONSOLE'S OWN GATE, RE-INSTATED (2026-08-03, task 118).
-                    //
-                    // The console's check here is
-                    //   CGS_ASSERT(lpWheelModel->GetFlag(E_FLAG_MODEL_USES_INSTANCE_SHADER),
-                    //              "lpWheelModel->GetFlag(...)")
-                    // and on the ported WHE_51916650_GR wheel model it FAILS: the model's
-                    // mu8Flags (Model +0x11) reads 0, so bit 0 is clear. It is not a scrambled
-                    // header -- mu8NumStates (+0x12) and mu8NumRenderables (+0x10) in the same
-                    // word both read correctly (DoesStateExist and GetRenderable succeed on
-                    // this very model), which a byte-reversed word could not do.
-                    //
-                    // ⚠️⚠️ The wheel wave downgraded that assert to a one-shot log on the
-                    // reasoning that it "is a NON-GATING assert on the console ... and it has
-                    // no effect on this build at all". THAT REASONING WAS WRONG IN EFFECT, and
-                    // submitting the draw anyway is what destroyed the rendered world for a
-                    // full day. MEASURED, not inferred (task 118, dumped frames, bisected to
-                    // this commit):
-                    //   * with the draw submitted as authored (instanceCount == 4) the frame is
-                    //     screen-filling dark shards from the junkyard chase camera;
-                    //   * with the SAME draw submitted at instanceCount == 1 -- i.e. one copy,
-                    //     under shader constant 0, the car body's own KNOWN-GOOD world matrix
-                    //     that renders the bodyshell correctly in the same frame -- this
-                    //     renderable draws as a single distorted SPIKE through the car's roof.
-                    //     So the matrices are not the fault: THE WHEEL RENDERABLE'S GEOMETRY
-                    //     IS NOT DRAWABLE AS LOADED. Instancing it four times just turns one
-                    //     spike into four screen-filling ones.
-                    //   * a DrawRenderable::Interpret probe over every expansion candidate in a
-                    //     whole run shows this renderable (7 meshes, bounding sphere r 0.837,
-                    //     lists 19/20) is the ONLY object ever expanded -- no world object is
-                    //     touched, so the instancing shim itself is behaving.
-                    //
-                    // So the console's flag is doing exactly the job it exists for: it says
-                    // "this model is fit for the instanced wheel path", and on this data it is
-                    // not. Honour it. This is a DATA gap, not a code one -- the moment the
-                    // ported wheel model carries the flag the wheels submit again with no
-                    // further change here, and the frame is the check that proves it.
-                    // ⛔ Do NOT re-enable this draw by deleting the gate; fix the wheel model.
-                    // ================================================================
-                    if ( !lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ) )
-                    {
-                        liWheelDiagCode = 9;   // "gated: model not fit for the instanced path"
-                        static bool sbLoggedInstanceShaderFlag = false;
-                        if ( !sbLoggedInstanceShaderFlag && CgsDev::Log::gpDebugPrint != 0 )
-                        {
-                            sbLoggedInstanceShaderFlag = true;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[racecar-wheels] WHEEL DRAW GATED OFF: model does not carry"
-                                   " E_FLAG_MODEL_USES_INSTANCE_SHADER (the console asserts here);"
-                                   " renderables " << lpWheelModel->GetNumRenderables()
-                                << " states " << lpWheelModel->GetNumLods()
-                                << " version " << lpWheelModel->GetVersionNumber()
-                                << " -- its geometry draws as spikes, see the banner"
-                                   " [FLAG PC data gap]\n";
-                        }
-                    }
-                    else
-                    {
-                    const CgsGraphics::Renderable* lpWheelRenderable =
-                        lpWheelModel->GetRenderable( leWheelLOD );
-
-                    CgsGraphics::DispatchList* lpWheelList = lpDispatchFrame->GetList( liObjectList );
-                    CGS_ASSERT( lpWheelList != 0, "lpDispatchList" );
-
-                    // Publish constants 6 (the instance matrices) and 7 (the per-instance
-                    // spin vectors) BEFORE the packet opens -- AddToBin drains whatever the
-                    // constant table has marked dirty at that moment.
-                    CgsGraphics::Model::SetupShaderConstantsForInstancing(
-                        liInstanceCount, lapWheelMatrices, laWheelConstants );
-
-                    const bool lbFirstInList = ( lpWheelList->GetCount() & 0x7F ) == 0;
-
-                    lpDispatchFrame->GetBin().BeginPacket();
-                    // @0x822D1584: frustumEnable 0 (the wheels ride inside the body's own
-                    // bounds), preZList 0xFF, preZTechnique 0, excludeMeshBits 0, and the
-                    // instance count that makes this ONE command draw all the wheels.
-                    CgsGraphics::DrawRenderable::AddToBin(
-                        lpWheelRenderable, lpDispatchFrame, lbFirstInList,
-                        static_cast< s8 >( liOpaqueMeshList ), static_cast< s8 >( liTransparentMeshList ),
-                        0, lu8Technique, lbShadowPass,
-                        0xFFu, 0u, liInstanceCount, 0u );
-
-                    lpWheelList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
-                    }
-                }
-            }
-        }
-    }
 
     // [DIAG wheel wave] one line per DISTINCT outcome (a bitmask of codes already seen,
     // so a car that draws wheels and a car whose wheel resource has not arrived each get
@@ -1664,7 +951,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         }
     }
 }
-
 
 // ============================================================================
 // SubmitCoronasForRaceCar  @ X360 0x822D1600  -- ONE race car's LAMP FLARES.
@@ -1988,7 +1274,6 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     }
 }
 
-
 // ============================================================================
 // GenerateDispatchLists  @ 0x822E79F8  (the `else` arm -- see the banner)
 //
@@ -2041,13 +1326,6 @@ RaceCarEntityModule::GenerateDispatchLists(
 
             const bool lbCapturePlayerWheels = lbEnvironmentMapPass
                 && mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>(liCar);
-            if (lbCapturePlayerWheels && !CgsPC::Reflections::PlayerWheels().mbEnabled)
-                continue;
-            // FLAG PC-platform leaf: capture the player's wheels independently
-            // of its shell, including when the main camera hides the player.
-            CgsPC::Reflections::VehicleScope lCaptureScope(lbCapturePlayerWheels
-                ? CgsPC::Reflections::E_CAPTURE_PLAYER_WHEELS : CgsPC::Reflections::seCaptureCategory,
-                CgsPC::Reflections::siVehicleFaceList, CgsPC::Reflections::sfVehicleDrawDistance);
 
             if ( !lrActiveRaceCar.IsActive() )
             {
@@ -2072,17 +1350,7 @@ RaceCarEntityModule::GenerateDispatchLists(
                 && mePlayerActiveRaceCarIndex == static_cast< EActiveRaceCarIndex >( liCar );
             // [cam-hide] BRN_CAM_INPUT_DIAG witness -- the flag as it reaches this consumer.
             {
-                static const bool sbHideDiag = ( getenv( "BRN_CAM_INPUT_DIAG" ) != 0 );
                 static u32 suHideDiagCalls = 0;
-                if ( sbHideDiag && ( suHideDiagCalls++ % 120u ) == 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[cam-hide] car " << liCar << " player " << static_cast< s32 >( mePlayerActiveRaceCarIndex )
-                        << " camera " << ( lpHideCamera != 0 ? 1 : 0 )
-                        << " hideFlag " << ( lpHideCamera != 0 && lpHideCamera->GetState().IsFlagSet( BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER ) ? 1 : 0 )
-                        << " bumperFlag " << ( lpHideCamera != 0 && lpHideCamera->GetState().IsFlagSet( BrnDirector::Camera::CameraState::E_FLAG_BUMPER_CAM ) ? 1 : 0 )
-                        << " hidden " << ( lbPlayerHidden ? 1 : 0 ) << "\n";
-                }
             }
 
             // |camera - car|: the console's vmsum3fp128 / vrsqrtefp / Newton-step / vmulfp
@@ -2094,29 +1362,6 @@ RaceCarEntityModule::GenerateDispatchLists(
             const f32 lfDeltaZ   = lvCameraPosition.z - lCarTransform.wAxis.z;
             const f32 lfLengthSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
             const f32 lfDistance = ( lfLengthSq != 0.0f ) ? sqrtf( lfLengthSq ) : 0.0f;
-            if (lbEnvironmentMapPass && !(lbCapturePlayerWheels ? CgsPC::Reflections::PlayerWheels()
-                : CgsPC::Reflections::Rivals()).IsVisible(lfLengthSq, CgsPC::Reflections::sfVehicleDrawDistance))
-                continue;
-
-            // The console COPIES both ResourcePtrs into stack locals here
-            // (BaseResourcePtr::CreateFromHandle) and unlinks them from the resource's
-            // intrusive alias list right after the call. That round trip only registers a
-            // temporary alias; ResourcePtr's copy constructor has no reconstructed body in
-            // this tree, so the read-only render use takes the streamer's own references.
-            //
-            // [FLAG PC bring-up] ...but through the BringUp getters, not the console's.
-            // GetGraphicsResource / GetWheelGraphicsResource both assert
-            // IsRaceCarLoaded(), i.e. ALL FIVE resource bits, and on this build two of
-            // them (physics + attributes) come from the unported VEH_<id>_AT.bin and a
-            // third (wheel graphics) from a still-deferred GameData handler -- so the
-            // console's own accessors fire a dev assert every single frame for a car that
-            // is otherwise perfectly renderable. The BringUp pair returns the same member
-            // without the all-resources precondition. RESTORE the console accessors the
-            // moment AddVehicleData's attribute + wheel legs resolve.
-            const RaceCarStreamer::GraphicsResourcePtr&      lrCarGraphics =
-                mRaceCarStreamer.GetGraphicsResourceBringUp( liCar );
-            const RaceCarStreamer::WheelGraphicsResourcePtr& lrWheelGraphics =
-                mRaceCarStreamer.GetWheelGraphicsResourceBringUp( liCar );
 
             // RenderRaceCar Submits into the OBJECT list (12); 19/20 are mesh-bin routing
             // ids that the dispatch interpreter fans the packet out to, not lists this
@@ -2248,36 +1493,9 @@ RaceCarEntityModule::GenerateDispatchLists(
                  && !lrActiveRaceCar.GetRenderParams()->IsEngineOff()
                  && !lrActiveRaceCar.GetRenderParams()->IsRaceCarHidden() )
             {
-                // [FLAG PC bring-up gate] NOT in the console. The console asserts the
-                // interface non-null inside the callee and walks on. On this build the slot
-                // is seeded EVERY FRAME by BrnWorldModule::GenerateDispatchListsBringUp
-                // (SetCoronaSubmissionInterface beside SetShadowMap, from the pointer
-                // BrnGameModule::DoDispatch stages out of BrnRendererModule::
-                // GetCoronaSubmissionInterfaceBringUp -- the console's RendererIO ->
-                // GameBridgeRendererToX -> BrnWorldIO copy chain does not exist here, and
-                // GameBridgeRendererToX.cpp is not on tools/build/build_game_exe.bat). That
-                // pointer is never null, but BrnCoronaManager::Construct runs LAZILY inside
-                // BrnRendererModule::Render, so a non-null interface does NOT imply a real
-                // corona buffer -- and AddCorona's tail writes straight through
-                // CoronaBuffer::Iterator::mpData. IsReady() is the manager's own answer to
-                // "is my buffer real"; see CROSS-GROUP S3-A. DELETE the IsReady() term (not
-                // the null check -- that one is this build's) when the corona manager is
-                // constructed unconditionally.
-                BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface =
-                    lpInput->GetCoronaSubmissionInterface();
 
                 if ( lpCoronaSubmissionInterface != 0 && lpCoronaSubmissionInterface->IsReady() )
                 {
-                    // [FLAG PC bring-up] the BringUp resource getter, for the same reason the
-                    // graphics pair above uses it: the console's GetPhysicsResource asserts
-                    // IsRaceCarLoaded() (all five resource bits) and would fire a dev assert
-                    // every frame on this build. RESTORE the console accessor with the pair
-                    // above.
-                    SubmitCoronasForRaceCar(
-                        lpCoronaSubmissionInterface,
-                        mRaceCarStreamer.GetPhysicsResourceBringUp( liCar ),
-                        lrActiveRaceCar.GetRenderParams(),
-                        mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>( liCar ) );
                 }
                 else
                 {
@@ -2285,15 +1503,6 @@ RaceCarEntityModule::GenerateDispatchLists(
                     if ( !sbLoggedNoCoronaInterface && CgsDev::Log::gpDebugPrint != 0 )
                     {
                         sbLoggedNoCoronaInterface = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[corona] race-car coronas SKIPPED: submission interface "
-                            << ( lpCoronaSubmissionInterface != 0 ? "present but NOT READY "
-                                                                    "(BrnCoronaManager::Construct "
-                                                                    "has not run / the corona "
-                                                                    "buffer is null)"
-                                                                  : "is NULL (nothing called "
-                                                                    "SetCoronaSubmissionInterface)" )
-                            << " -- no lamp flares this run [FLAG PC boot gate]\n";
                     }
                 }
             }

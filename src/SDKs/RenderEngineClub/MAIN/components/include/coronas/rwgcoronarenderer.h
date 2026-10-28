@@ -5,8 +5,6 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                              // Vector2, Vector4, Matrix44
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // ProgramBufferData, ProgramVariableHandle
-#include "pc/gcm/renderengine/VertexDescriptor.h"                        // VertexDescriptorData
-
 // =================================================================================================
 // renderengine::CoronaRenderer -- the corona (light-flare) render pass.
 //
@@ -96,12 +94,6 @@ namespace renderengine
         static void Begin(const RenderParameters& lrParameters);                           // :202
         static void End();                                                                 // :235
         static void Dispatch(const BatchParameters& lrParameters, CoronaBuffer* lpBuffer);  // :246
-
-        // Is the pass usable? True only once Initialize adopted BOTH programs and built the
-        // vertex descriptor. NOT an X360 function: on the console Initialize cannot fail, on PC
-        // it can (no device yet / no authored program pair mounted), and the ONLY honest answer
-        // to that is to refuse to draw rather than draw a degenerate pass (AGENTS.md rule 9).
-        static bool IsReady();                                                             // [FLAG PC bring-up]
 
     private:
         static u32                       s_numSubImages;               // :102  dword_82FAB6A8

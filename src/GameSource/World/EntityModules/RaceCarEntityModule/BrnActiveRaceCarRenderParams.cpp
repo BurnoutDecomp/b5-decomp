@@ -349,33 +349,6 @@ void ActiveRaceCar::RenderParams::Reset()
     // [0,0,1,0][0,0,0,0]; SetIdentity is the semantic-parity reset used throughout).
     mBodyTransform.SetIdentity();
 
-    // maVerletOffsets (+0x40..+0x83F) is NOT touched here: the console Reset makes no store in
-    // that range (its full store list, 0x822E6818..0x822E6AD0, is +0x00..+0x3F, +0x840..+0xB3F,
-    // +0xB80/+0xB90, +0xD80..+0xD85, +0xDA0/+0xDA8, +0xDB0..+0xDB8, +0x1400..+0x1437). The rows'
-    // console zeroing point is ActiveRaceCar::ResetVerletOffsets @0x822A4E90, called from
-    // OnResourcesLoaded (`bl` @0x822EB404) and ResetAfterCrash -- both reconstructed (G61-D6,
-    // b5 0cf48673), and every activation passes OnResourcesLoaded -- and the rows are rewritten
-    // every frame by the L4 skinned-model copy (ReadUpdatedActiveRaceCarDataFromPhysics).
-    // ⛔ RETIRED 2026-09-23 (crash-parity FX-RCEM3, G62-D2): the PC-only "[FLAG PC bring-up]
-    // ZERO THE VERLET SCRATCH" loop that used to sit here. Its DELETE-WHEN ("the deformation
-    // system writes this array") is met on both counts above. Between Prepare and the next
-    // OnResourcesLoaded a re-used slot now keeps the previous occupant's rows, as on the console.
-
-    // [FLAG PC bring-up] NOT a console store -- the console Reset never writes +0xD9C; the
-    // member's only console writer is ActiveRaceCar::UpdateDeformationState (store at
-    // 0x822D4AC0, unconditional for every IsActive slot, before render). That writer is LANDED
-    // on PC (BrnActiveRaceCar.cpp), so the old "the deformation leg is parked" premise is
-    // gone -- but PC still has three skips of that store the console does not:
-    //   1. the mUsedRaceCars gate in ReadUpdatedActiveRaceCarDataFromPhysics (L1),
-    //   2. its `lpDeformationState != 0` null guard around the UpdateDeformationState call,
-    //   3. UpdateDeformationState's own `lpCarState == 0` early return.
-    // In those windows the lamp gate (RenderRaceCar constant 24, `>= 0.25` => lamps off) and
-    // the corona gate (`< 0.25`) would otherwise read pre-Reset memory (the DebugMemoryInit
-    // stamp 0x7FFFFFFF -- a NaN, so the corona test fails -- or the previous occupant's value),
-    // a state the console cannot produce. Zero = an undamaged car.
-    // DELETE-WHEN all three PC guards retire (remove this store in the same commit as the last).
-    mfDeformationSquared = 0.0f;
-
     // Identity wheel transforms + scale matrices (console unrolls this 6-iteration
     // loop; re-rolled here).
     for (u32 luWheel = 0; luWheel < 6; ++luWheel)

@@ -560,19 +560,6 @@ WorldDataController::GetEventInfoFromEventId(u32 luEventId) const
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
         "E_WORLDDATACONTROLLERSTATE_READY <= meState");
 
-    // [FLAG PC bring-up guard, 2026-08-26; still live 2026-08-27] Prepare2 IS staged now and
-    // binds mpProgressionData for real (see its banner + the ordering gate in
-    // BrnGameModule::ResourceUpdateThread), so on a healthy boot this arm is not taken. It stays
-    // because the acquire it depends on is ANSWERED even when the resource is absent -- a
-    // "ProgressionData" miss binds a null ResourcePtr rather than failing loudly, and
-    // operator-> would then fire the CONTAINER's assert here instead of the caller's own. The
-    // null answer is "no event info", which every caller already handles (this function returns
-    // NULL on no-match anyway). DELETE-WHEN the acquire reports a miss as a miss.
-    if (!mpProgressionData.HasMemoryResource())
-    {
-        return NULL;
-    }
-
     const u32 luJunctionCount = mpProgressionData->GetEventJunctionCount();
     for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)
     {
@@ -591,13 +578,6 @@ WorldDataController::GetOnlineEventInfoFromEventId(u32 luEventId) const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
         "E_WORLDDATACONTROLLERSTATE_READY <= meState");
-
-    // [FLAG PC bring-up guard, 2026-08-26] Same unbound-mpProgressionData guard as the
-    // offline twin above; DELETE-WHEN the data binding lands.
-    if (!mpProgressionData.HasMemoryResource())
-    {
-        return NULL;
-    }
 
     const u32 luJunctionCount = mpProgressionData->GetEventJunctionCount();
     for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)

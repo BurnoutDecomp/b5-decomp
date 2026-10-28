@@ -94,11 +94,6 @@ struct GuiAudioEventIntrosData
 //   all is a producer/dispatch miss. Bounded so an event storm cannot run the log away.
 // DELETE-WHEN: the Atomika free-burn VOs are audible on a plain -Drive run.
 // ---------------------------------------------------------------------------------
-bool SpeechDiagOn()
-{
-    static const bool sbOn = (getenv("BRN_SPEECH_DIAG") != 0);
-    return sbOn;
-}
 bool SpeechDiagBudget()
 {
     static const s32 KI_MAX_LINES = 2000;
@@ -241,10 +236,6 @@ void SpeechEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
     // place in the effect that proves a VOICE IS ACTUALLY FEEDING: UpdateVoiceParams is
     // driven by the streaming manager once the stream has buffers. "requested" alone
     // cannot distinguish a played line from a stream that never opened.
-    if (SpeechDiagOn() && mePlayState != E_PLAYING && SpeechDiagBudget())
-        *CgsDev::Log::gpDebugPrint << "[speech] VOICE PLAYING cs="
-                                   << static_cast<s32>(mCreateParams.mContentSpecName)
-                                   << " gain=" << afGain << "\n";
     mbSpeechStillPlaying = true;
     mePlayState = E_PLAYING;
 }
@@ -258,9 +249,6 @@ void SpeechEffect::PlayStream(u32 auContentSpec, bool abFirstTimeTip)
 {
     if (!auContentSpec || !mpStreamingManager)
     {
-        if (SpeechDiagOn() && SpeechDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] play DROPPED cs=" << auContentSpec
-                                       << " streamman=" << (mpStreamingManager != 0) << "\n";
         return;
     }
     // X360 @0x8269EAF0: `if (mePlayState) { queue and return; }` -- ANY non-STOPPED
@@ -270,9 +258,6 @@ void SpeechEffect::PlayStream(u32 auContentSpec, bool abFirstTimeTip)
     {
         muQueuedContentSpec = auContentSpec;
         mbQueuedSpeechIsFirstTimeTip = abFirstTimeTip;
-        if (SpeechDiagOn() && SpeechDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] play QUEUED cs=" << auContentSpec
-                                       << " state=" << static_cast<s32>(mePlayState) << "\n";
         return;
     }
     mCreateParams.mContentSpecName = auContentSpec;
@@ -280,9 +265,6 @@ void SpeechEffect::PlayStream(u32 auContentSpec, bool abFirstTimeTip)
     mbSpeechStillPlaying = false;
     mePlayState = E_PLAY_REQUESTED;
     mpStreamingManager->PostStreamRequest(Streaming::StreamRequest(this, 6, 0.1f));
-    if (SpeechDiagOn() && SpeechDiagBudget())
-        *CgsDev::Log::gpDebugPrint << "[speech] play REQUESTED cs=" << auContentSpec
-                                   << " firsttimetip=" << (abFirstTimeTip ? 1 : 0) << "\n";
 }
 
 // X360 @0x8269E918 -- `bool GetSpeechMapping(SoundLogicModule*, Name, RefSpec&)`:
@@ -303,9 +285,6 @@ bool SpeechEffect::PlaySpeechMapping(u32 auMappingName, bool abFirstTimeTip)
     Attrib::RefSpec lConfiguration;
     if (!GetSpeechMapping(auMappingName, lConfiguration))
     {
-        if (SpeechDiagOn() && SpeechDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] mapping MISS name=0x"
-                                       << static_cast<s32>(auMappingName) << "\n";
         return false;
     }
     return PlaySpeech(lConfiguration, abFirstTimeTip);
@@ -326,9 +305,6 @@ bool SpeechEffect::PlaySpeech(const Attrib::Gen::languagestreamconfiguration& ar
     // `luLanguage = *(this+128); if (luLanguage >= Num_ContentSpecs()) -> the shared
     // zeroed default word` -- ContentSpec()'s own bound check does exactly that.
     const u32 luContentSpec = arStream.ContentSpec(static_cast<u32>(meLanguage));
-    if (SpeechDiagOn() && SpeechDiagBudget())
-        *CgsDev::Log::gpDebugPrint << "[speech] resolve lang=" << meLanguage
-                                   << " cs=" << static_cast<s32>(luContentSpec) << "\n";
     if (!luContentSpec)
         return false;
     PlayStream(luContentSpec, abFirstTimeTip);
@@ -372,12 +348,6 @@ bool SpeechEffect::PlayFirstTimeTip(s32 aiTrainingType)
         CGS_ASSERT(luIndex < luCount,
                    "(lpMessage->mData - BrnProgression::E_TRAINING_TYPE_TIMED_TIP_1)"
                    " < static_cast<int32_t>(lAtomikaFreeburnVos.Num_Items())");
-        if (SpeechDiagOn() && SpeechDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] atomika-freeburn type=" << aiTrainingType
-                                       << " idx=" << static_cast<s32>(luIndex)
-                                       << " items=" << static_cast<s32>(luCount)
-                                       << " valid=" << (lAtomikaFreeburnVos.IsValid() ? 1 : 0)
-                                       << "\n";
         if (luIndex >= luCount)
             return false;
         return PlaySpeech(lAtomikaFreeburnVos.Items(luIndex), true);
@@ -402,9 +372,6 @@ bool SpeechEffect::PlayFirstTimeTip(s32 aiTrainingType)
     const u32 luTipIndex = KAE_TRAINING_TYPE_TO_TIP_INDEX[aiTrainingType];
     CGS_ASSERT(luTipIndex <= 0x46u,
                "leTrainingType >= 0 && leTrainingType < AttribSys::Enums::Training::E_TRAINING_COUNT");
-    if (SpeechDiagOn() && SpeechDiagBudget())
-        *CgsDev::Log::gpDebugPrint << "[speech] first-time-tip type=" << aiTrainingType
-                                   << " tipidx=" << static_cast<s32>(luTipIndex) << "\n";
     return PlaySpeech(lSpeechData.FirstTimeTips(luTipIndex), true);
 }
 
@@ -429,11 +396,6 @@ void SpeechEffect::UpdateParams(f32)
 {
     if (mePlayState == E_PLAYING && !mbSpeechStillPlaying)
     {
-        if (SpeechDiagOn() && SpeechDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] VOICE FINISHED cs="
-                                       << static_cast<s32>(mCreateParams.mContentSpecName)
-                                       << " firsttimetip="
-                                       << (mbFirstTimeTipPlaying ? 1 : 0) << "\n";
         mePlayState = E_STOPPED;
         PostSpeechFinished();
         if (muQueuedContentSpec)
@@ -524,9 +486,6 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         return;
 
     const s32 liEventId = static_cast<s32>(apMessage->GetEventId());
-    if (SpeechDiagOn() && SpeechDiagBudget())
-        *CgsDev::Log::gpDebugPrint << "[speech] notify id=" << liEventId
-                                   << " state=" << static_cast<s32>(mePlayState) << "\n";
 
     switch (liEventId)
     {
@@ -748,9 +707,6 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         const CgsSound::Io::Message<s32>* lpMessage =
             static_cast<const CgsSound::Io::Message<s32>*>(apMessage);
         meLanguage = GetLanguage(lpMessage->mData);
-        if (SpeechDiagOn() && SpeechDiagBudget())
-            *CgsDev::Log::gpDebugPrint << "[speech] set-language cgs=" << lpMessage->mData
-                                       << " -> " << meLanguage << "\n";
         break;
     }
 

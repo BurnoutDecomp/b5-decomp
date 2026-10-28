@@ -57,8 +57,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // the game-event queue (event 113)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameSource/World/AI/BrnAIHarnessPad.h"                      // [PC HARNESS] BRN_AI_PAD_PLAYER (HarnessAIPadNoteReset)
-
 namespace BrnAI
 {
 
@@ -92,13 +90,6 @@ AICar* AIModule::GetAICar(u32 luIndex) const
 //               ResetOnTrackRequest (type/speed chosen by the driver's AICar state) and push it
 //               too, then zero the driver's stuck timer.
 //
-// ⛔ [FLAG PC bring-up] THE AI-DRIVER SWEEP IS PARKED and it is UNREACHABLE: it opens with
-// `GetAIDriver(i)->[+7529]`, and neither AIModule::GetAIDriver @0x82765B90 nor AIDriver::IsStuck
-// @0x82766670 nor the eight AIDriver objects exist in this tree (AIDriver::Prepare is the parked
-// leg of AIModule::Prepare stage 4). It is the AI's "an opponent got stuck, put it back" path --
-// nothing to do with the player's crash recovery, which arrives through the queue above.
-// DELETE-WHEN the AIDriver stack lands.
-// =================================================================================================
 void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuffer,
                                        AIModuleIO::OutputBuffer* lpOutputBuffer,
                                        BrnUpdateSet lUpdateSet)
@@ -173,8 +164,6 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
             lpDriver->ResetStuckTime();
             if (CgsDev::Log::gpDebugPrint != 0)
             {
-                *CgsDev::Log::gpDebugPrint << "[resetpump] STUCK sweep: AI car " << lpCar->GetRaceCarIndex()
-                                           << " (slot " << liSlot << ") -> STANDARD reset request [FLAG PC witness]" << "\n";
             }
         }
     }
@@ -198,17 +187,6 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
         return;
     }
 
-    // 0x8279AC10..0x8279AC24: Camera::Camera(stack, this + 0x4EA00) -> r7, i.e. mCamera BY VALUE
-    // as ResetOnTrackManager::Update's 4th argument (crash parity G05-D3).
-
-    // ⚠️ [FLAG PC bring-up] THE RANGE GUARD IS THE DEVIATION, and it exists because the
-    // console's next act is two HALTING asserts. ResetOnTrackManager::Update stores this value
-    // and immediately calls its own GetAICar on it, which asserts 0 <= index < 35. On the
-    // console miRaceCarIndex is .bss-zero until AICar::Construct (an ARTIST export hole) fills
-    // it; AIModule::Construct now seeds it to that same zero, so this guard should never fire.
-    // It is here because a dev assert on the PC blocks the game waiting for END -- an
-    // out-of-range value would hang the run rather than mis-place one car.
-    s32 liPlayer = lpPlayerAICar->GetRaceCarIndex();
     if (liPlayer < 0 || liPlayer >= 35)
     {
         static bool sbReportedBadPlayerIndex = false;
@@ -330,24 +308,6 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
     {
         mePlayerActiveRaceCarIndex = lpRaceCarAI->GetPlayerActiveRaceCarIndex();
 
-        // [FLAG PC bring-up] the arm that writes mePlayerGlobalRaceCarIndex needs the AI driver
-        // chain -- see the member's banner in BrnAIModule.h.
-
-        {
-            // [DIAG resetpump] NOT IN THE X360 BINARY. ONE line, the first time the gate opens.
-            // It is the witness for the exact thing that blocked the previous wave: this body
-            // runs at all only because RCEM::WriteUpdatedAIData now sets mbPlayerDataSet.
-            static bool sbReportedFirstOpen = false;
-            if (!sbReportedFirstOpen && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbReportedFirstOpen = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[resetpump] AIModule::Update: mbPlayerDataSet is SET -- the AI body is "
-                       "running (player active car "
-                    << static_cast<s32>(mePlayerActiveRaceCarIndex) << ")\n";
-            }
-        }
-
         // ================================================================================
         // ⭐ 2026-09-03 (aiwave): THE FULL CONSOLE SPINE, rows 7..37 of scratch/aiwave/A1_update_spine.md
         // (AIModule::Update @0x8279B478). The reset pump (rows 29..31) keeps its place in the order.
@@ -449,7 +409,6 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
     lpInputBuffer->UnlockForRead();
     lpOutputBuffer->UnlockForWrite();
 }
-
 
 // ================================================================================
 // AIModule::PausedUpdate  @0x8279A1E0   -- THE SIM-PAUSED ARM OF Update.

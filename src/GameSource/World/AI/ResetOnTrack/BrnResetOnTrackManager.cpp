@@ -535,14 +535,6 @@ namespace BrnAI
     // to RequestPlaceOnTrack, so writing a zero here would discard the requested reset speed
     // with nothing to show for it -- the recovered car would be placed stationary.
     //
-    // ⛔ [FLAG PC bring-up] THE SUCCESS ARM IS PARKED WHOLE and it is UNREACHABLE (ComputeReset-
-    // OnTrack cannot succeed on this build -- see the pump banner). Its 20-case switch reads
-    // AICar+0x14D0, which lives in one of BrnAICar.h's explicit pads and has no name yet, and its
-    // "not type 1" tail writes four more unnamed members. Landing it would mean minting five
-    // members out of raw offsets for code that cannot execute.
-    // ⛔ [FLAG PC boot gate] ResetOnTrackDebugComponent::PushResetInfo -- the debug component is
-    // `u8[0x870]` here and Construct deliberately never built it (see Construct's flag).
-    // ---------------------------------------------------------------------------------------------
     void ResetOnTrackManager::ProcessResetOnTrackRequest(const AIModuleIO::ResetOnTrackRequest* lpRequest,
                                                         AIModuleResultInterface* lpResults,
                                                         f32 lfTime)
@@ -680,10 +672,6 @@ namespace BrnAI
     // console latches r29 at 0x8279A8CC. Nothing between them changes it, but the order is the
     // console's.
     //
-    // Refresh each active car's recovery section after processing the request queue.
-    // [FLAG PC boot gate] the streamed three-value assert at :138 -- the tree drops streamed
-    // assert payloads by policy; the condition itself is kept as a plain CGS_ASSERT.
-    // ---------------------------------------------------------------------------------------------
     void ResetOnTrackManager::Update(AIModuleResultInterface* lpResults,
                                      EGlobalRaceCarIndex lePlayer,
                                      f32 lfTime,

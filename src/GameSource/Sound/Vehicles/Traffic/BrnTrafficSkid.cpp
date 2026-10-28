@@ -1,6 +1,5 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSkid.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
-#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"   // PhysicalTrafficState
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
@@ -184,14 +183,6 @@ void TrafficSkid::UpdateParams( f32 lfTimeStep )
     {
         mSkidVoice.Play( 0 );
 
-        // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-        if ( TrafficSoundDiagTake( guSkidVoiceWitnesses, 16 ) )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[trafficsnd] voice started type=skid entity="
-                << static_cast<s32>( lpTrafficSoundEntity->mu16EntityIndex )
-                << " physical=" << mfTimeAsPhysical << "\n";
-        }
     }
 
     BrnSound::Module::SoundLogicModule* lpModule =
@@ -225,16 +216,6 @@ void TrafficSkid::ProcessUpdate()
     const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStageBefore = mSkidVoice.GetUpdateStage();
     mSkidVoice.Update();
 
-    // [FLAG PC witness] BRN_TRAFFICSND_DIAG: the skid voice left PLAYING on its own.
-    if ( leStageBefore == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING
-         && mSkidVoice.GetUpdateStage() == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED
-         && TrafficSoundDiagTake( guSkidFinishedWitnesses, 16 ) )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[trafficsnd] voice finished type=skid entity="
-            << static_cast<s32>( lpTrafficSoundEntity->mu16EntityIndex ) << "\n";
-    }
-
     if ( !mSkidVoice.IsAlive() )
         return;
 
@@ -262,7 +243,6 @@ bool TrafficSkid::Detach()
     case E_DETACH_STATE_BEGIN:
         meDetachState = E_DETACH_STATE_BEGIN;
 
-        // [FLAG PC witness] BRN_TRAFFICSND_DIAG
         if ( TrafficSoundDiagTake( guSkidReleaseWitnesses, 64 ) )
         {
             *CgsDev::Log::gpDebugPrint

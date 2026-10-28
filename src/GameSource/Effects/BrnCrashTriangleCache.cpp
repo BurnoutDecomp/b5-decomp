@@ -137,16 +137,6 @@ namespace BrnEffects
         // call otherwise. `skip` counts the lanes the surface / valid-mask test turned away; the
         // counters are this cache's own members after the call.
         // -----------------------------------------------------------------------------------------
-        bool IsCrashTriCacheDiagArmed()
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-                const char* lpcEnv = getenv("BRN_CRASH_TRICACHE_DIAG");
-                siArmed = (lpcEnv != NULL && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
-            }
-            return siArmed == 1;
-        }
 
         void ReportCrashTriCacheFill(u32 luBatches, u32 luSkippedLanes,
                                      u32 luCountBefore, u32 luPackBefore, u32 luComponentBefore,
@@ -266,12 +256,6 @@ namespace BrnEffects
             ++lpIncomingTriangles;                                                                 // +0xE0
         }
 
-        if (IsCrashTriCacheDiagArmed())
-        {
-            ReportCrashTriCacheFill(lnNum4Triangles, luDiagSkippedLanes,
-                                    luDiagCountBefore, luDiagPackBefore, luDiagComponentBefore,
-                                    mnNumberOfPackedTriangles, mnNextPackedTriangleToFill, mnNextComponentToFill);
-        }
     }
 
     // @ 0x822847B0 (DWARF .cpp:343). Seed each incoming triangle's found-mask from its skip byte

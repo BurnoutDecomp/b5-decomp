@@ -48,14 +48,6 @@ namespace BrnReplays
         return reinterpret_cast<PropSerialiserStaticLayout*>(mpStaticBuffer);
     }
 
-    // ------------------------------------------------------------------------
-    // [FLAG PC boot gate] THE STATIC BUFFER IS NEVER HANDED OVER ON THIS BUILD.
-    // ------------------------------------------------------------------------
-    // BaseSerialiser::Construct sets mpStaticBuffer = 0 (faithfully -- the X360 does the
-    // same at 0x8264C280); the pointer is filled in later by the replay manager's
-    // serialiser registration/buffer hand-off, and NOTHING in this tree writes
-    // BaseSerialiser::mpStaticBuffer -- grep it: the only assignment is the `= 0` in
-    // Construct. So GetStaticLayout() returns NULL for every serialiser on this build.
     //
     // That was invisible until 2026-08-12, when the prop streamer first got far enough to
     // actually load a zone: PropEntityModule::LoadZone calls AddLoadedZone unconditionally
@@ -79,9 +71,6 @@ namespace BrnReplays
         if (!sbLoggedOnce && CgsDev::Log::gpDebugPrint != 0)
         {
             sbLoggedOnce = true;
-            *CgsDev::Log::gpDebugPrint
-                << "PropEntitySerialiser: no static buffer -- replay record inert "
-                   "[FLAG PC boot gate]\n";
         }
         return false;
     }
@@ -189,11 +178,6 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
-        // [FLAG PC boot gate] AHEAD of the console's own mbPreviousFrameInitialized tripwire:
-        // with no static layout that flag can never be set (CheckPreviousFrameCleared bails on
-        // the same condition), so leaving the assert in front would storm it once per loaded
-        // zone for a state this build cannot reach. See HasStaticLayout above.
-        if (!HasStaticLayout()) { return 0; }
 
         CGS_ASSERT(mbPreviousFrameInitialized, "mbPreviousFrameInitialized");
 
@@ -214,8 +198,7 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
 
-        if (!HasStaticLayout()) { return; }   // [FLAG PC boot gate] see HasStaticLayout
-
+        if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.RemoveLoadedZone(liZoneId);
     }
 
@@ -226,8 +209,7 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
 
-        if (!HasStaticLayout()) { return; }   // [FLAG PC boot gate] see HasStaticLayout
-
+        if (!HasStaticLayout()) { return; }
         // asm: `stb 0,0x4008(staticBase)` -- the live frame's loaded-zone COUNT (frame +0x5E8).
         // One byte drops all nine records because the array is count-terminated.
         GetStaticLayout()->mLiveFrame.maLoadedZones.muLength = 0;
@@ -240,8 +222,7 @@ namespace BrnReplays
                    meMode != E_MODE_PLAYING_STALLED,
                    "!IsPlaying()");
 
-        if (!HasStaticLayout()) { return; }   // [FLAG PC boot gate] see HasStaticLayout
-
+        if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.SetPropAddedToScene(liArg2, luArg3, liArg4);
     }
 }

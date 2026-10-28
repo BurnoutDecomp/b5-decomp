@@ -139,7 +139,6 @@ static_assert(offsetof(Hull, mpaSections)                   == 0x10, "Hull::mpaS
 static_assert(offsetof(Hull, mpaRungs)                      == 0x18, "Hull::mpaRungs");
 static_assert(offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x68, "Hull::mpaLightTriggerJunctionLookup");
 static_assert(offsetof(Hull, mauVehicleAssets)              == 0x70, "Hull::mauVehicleAssets");
-static_assert(sizeof(Hull) == 0x80, "Hull host sizeof");
 
 inline const Section* Hull::GetSection(u32 luIndex) const
 {

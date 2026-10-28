@@ -23,11 +23,6 @@
 // Camera::Behaviour base, so no C2011/C2371 header-fork collision) and needs to be a
 // COMPLETE type here so the placement-new inside AllocateVoid<T> sees sizeof + a ctor.
 //
-// The pool is spelled through the manager's SmallBehaviourPool typedef: on this host its
-// bucket is widened for x64 (BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS, a FLAG PC
-// platform leaf), so the console's literal <100u,20u> would instantiate a pool the manager no
-// longer holds.
-// ============================================================================
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"                    // BehaviourManager::SmallBehaviourPool
 #include "GameSource/Director/Utils/BrnAbstractPool.h"                       // AbstractPool<>, AbstractPoolVoidHandle

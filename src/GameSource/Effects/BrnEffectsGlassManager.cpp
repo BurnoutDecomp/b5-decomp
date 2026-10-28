@@ -227,15 +227,6 @@ namespace BrnEffects
         const u32 KU_GLASSFX_FIRE_LINES   = 16u;
         const u32 KU_GLASSFX_RESEAT_LINES = 48u;
 
-        bool GlassFxWitnessArmed()
-        {
-            static const bool sbArmed = []() {
-                const char* const lpcValue = std::getenv("BRN_GLASS_DIAG");
-                return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
-            }();
-            return sbArmed;
-        }
-
         bool MatrixFinite(const Matrix44Affine& lrMatrix)
         {
             const Vector3* const lapRows[4] = { &lrMatrix.xAxis, &lrMatrix.yAxis, &lrMatrix.zAxis, &lrMatrix.wAxis };
@@ -254,8 +245,6 @@ namespace BrnEffects
                                 const Matrix44Affine& lrLocal, const Matrix44Affine& lrVehicle, bool lbSeated)
         {
             static u32 suLines = 0;
-            if (!GlassFxWitnessArmed() || suLines >= KU_GLASSFX_FIRE_LINES)
-                return;
             ++suLines;
             char lacMsg[400];
             if (!lbSeated)
@@ -287,8 +276,6 @@ namespace BrnEffects
                                   const Matrix44Affine& lrUpdated, const Matrix44Affine& lrVehicle)
         {
             static u32 suLines = 0;
-            if (!GlassFxWitnessArmed() || suLines >= KU_GLASSFX_RESEAT_LINES)
-                return;
             ++suLines;
             const f64 ldX = static_cast<f64>(lrUpdated.wAxis.x) - lrVehicle.wAxis.x;
             const f64 ldY = static_cast<f64>(lrUpdated.wAxis.y) - lrVehicle.wAxis.y;

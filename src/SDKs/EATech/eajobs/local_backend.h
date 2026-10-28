@@ -228,16 +228,6 @@ namespace LocalBackend
         // X360: `lis r8,0x6000` compared against `clrrwi r9,r9,29` (top-3-bits mask).
         static constexpr u64 KU_SLOT_STATE_MASK = 0xE000000000000000ull;
         static constexpr u64 KU_SLOT_STATE_FREE = 0x6000000000000000ull;
-        // FLAG PC-platform leaf: the original enabler writes the HIGH word
-        // of a packed u64 queue entry. Name both halves on little-endian PC.
-        union SlotWord {
-            u64 mValue;
-            struct { u32 mLow, mHigh; };
-            // FLAG PC-platform leaf: aligned x64 reads are atomic; MSVC volatile
-            // reloads/acquires worker publications instead of caching a queue word.
-            operator u64() const { return *reinterpret_cast<const volatile u64*>(&mValue); }
-            SlotWord& operator=(u64 value) { mValue=value; return *this; }
-        };
         static_assert(sizeof(SlotWord)==sizeof(u64), "packed job slot width");
 
         // @ 0x82BCBCB8 -- bring the backend up: stamp the vtable, default the cursors,

@@ -21,8 +21,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                          // the memory checks' log line
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"                                 // AllocatorList::GetHeapAllocator
 #include "GameSource/Resource/BrnResourceAllocator.h"                                              // PrintConsoleMemory, GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                                        // BrnNetHarnessPC::Observe (the LAN test harness hook)
-
 #include <cstddef>       // offsetof
 #include <type_traits>   // std::is_same
 
@@ -392,7 +390,6 @@ namespace BrnNetwork
         mNetworkManager.ProcessAfterSimulation(lpInputBuffer, lUpdateSet);
         // [PC HARNESS, not console code] the LAN test harness samples the manager's sign-in / game state;
         // inert unless BRN_NET_HOST or BRN_NET_JOIN is set.
-        BrnNetHarnessPC::Observe(&mNetworkManager);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim6PM);
 
         BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);

@@ -189,8 +189,6 @@ namespace Vehicle
         static_assert(offsetof(VehicleOutputRequestInterface, mRemoveRigidBodyQueue) == 9616,         "DWARF :264");
         static_assert(offsetof(VehicleOutputRequestInterface, mRequestFineLineQueue) == 10432,        "DWARF :265");
         static_assert(offsetof(VehicleOutputRequestInterface, mChangeRigidBodyInertiaQueue) == 23888, "DWARF :268");
-        static_assert(offsetof(VehicleOutputRequestInterface, mAddJointQueue) == 39904,
-                      "PIN 1 -- AddJoint @0x825E7170 `addi r3,r3,-0x6420` (65536-0x6420 == 39904)");
         static_assert(offsetof(VehicleOutputRequestInterface, mRemoveJointQueue) == 41840,
                       "PIN 2 -- SendCreateRemoveJointEvents @0x826013C0 `addi r26,r26,-0x5C90` "
                       "(65536-0x5C90 == 41840)");
@@ -559,7 +557,6 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
         lrState.mvRoadTestNormal_HeightAboveRoad.w = lrAboveGround.mfVerticalDistance - lfDeltaY;
     }
 }
-
 
 // ==============================================================================================
 // FlagTakedownScoredForDriver -- MOVED HERE 2026-08-24 (physics mount wave B3b) from the

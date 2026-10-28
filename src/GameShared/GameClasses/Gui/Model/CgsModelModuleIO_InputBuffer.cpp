@@ -61,7 +61,6 @@ namespace ModelIO
         if (!IsBufferLockedForWriting())
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -78,7 +77,6 @@ namespace ModelIO
         if (!IsBufferLockedForWriting())
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),

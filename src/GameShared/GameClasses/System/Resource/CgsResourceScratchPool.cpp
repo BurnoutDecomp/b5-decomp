@@ -57,10 +57,6 @@ namespace CgsResource
         return false;
     }
 
-    // ARTIST 828E2BB8: (20+16+8)*(N+1) + (8+8)*(hashLength+64)
-    // plus the fixed 0x94-byte allowance returned by 82BBCF10. That helper
-    // reads no input: it is not an unknown distribution-buffer size.
-    // FLAG PC-platform leaf: use native sizeof for records containing pointers.
     u32 ScratchPool::GetOverheadMemoryRequired(const InitOptions* lpOptions)
     {
         return static_cast<u32>((sizeof(ScratchEntry) + sizeof(CgsMemory::DistributionStreamEntry) + sizeof(ID))

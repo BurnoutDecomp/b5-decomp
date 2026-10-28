@@ -213,8 +213,6 @@ void TrafficEntityModule::ProcessDeformationData(
                         static s32 siTraceOn = -1;
                         if ( siTraceOn < 0 )
                         {
-                            const char* lpcEnv = getenv( "BRN_DEFORM_TRACE" );
-                            siTraceOn = ( lpcEnv != 0 && atoi( lpcEnv ) > 0 ) ? 1 : 0;
                         }
                         if ( siTraceOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
                         {

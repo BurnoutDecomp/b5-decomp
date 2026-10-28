@@ -1,4 +1,4 @@
-﻿#include "SDKs/EATech/include/Apt/AptActionQueue.h"
+#include "SDKs/EATech/include/Apt/AptActionQueue.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release + sReferenceRegistrationCb
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // AptCIH (the queued action target)

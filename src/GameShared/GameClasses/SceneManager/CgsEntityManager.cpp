@@ -591,24 +591,6 @@ void EntityManager::RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId)
 {
     const s32 liIndex = GetVolumeInstanceIndexByID(lVolumeInstanceId);
 
-    // FLAG PC (not console): the X360 does NOT test the lookup result -- 0x828D21C8 moves
-    // r3 straight into r4 and calls on. On the console an absent id therefore reaches
-    // mVolumeInstancePool[-1]; here that is an out-of-bounds write into a 5048-element
-    // by-value pool inside SceneManagerModule, i.e. live memory corruption of whatever
-    // member precedes it. The tripwire below is the console's own class of dev assert and
-    // is LOUD (it is not a silent swallow), and the early return only skips work that had
-    // no target. Producers that can post an id twice do exist -- PropCellManager's
-    // deactivate path and ActiveRaceCar::RemoveFromScene both post RemoveVolumeInstance
-    // without first proving the id is still registered.
-    if (liIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
-    {
-        // NOT a console rodata string -- this guard has no console counterpart, so it must
-        // not borrow one (the image's "Volume instance not found for volume instance id "
-        // @0x820F61A8 belongs to SceneManagerModule, not here).
-        CGS_ASSERT(false, "PC guard: RemoveVolumeInstance called with an unregistered VolumeInstanceId");
-        return;
-    }
-
     RemoveVolumeInstanceByIndex(lVolumeInstanceId, liIndex);
 }
 

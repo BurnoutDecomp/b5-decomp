@@ -1,4 +1,4 @@
-﻿// ===========================================================================
+// ===========================================================================
 // EATech Apt -- AptAnimationTarget class-static data layer.
 //
 // A small set of FILE-STATIC tables the Apt input/update layer shares across all
@@ -30,7 +30,6 @@
 #include <cstring>   // memset
 #include <cstdint>   // intptr_t (the X360 fastcall `return r3` / array-cookie math)
 #include <new>       // placement new (inline-construct the queue / timers / display list)
-
 
 // The shared Apt fixed-size pool (X360 off_8324D808); defined by the Apt pseudo-data
 // layer (same handle AptActionQueue / AptCharacterSpriteInstBase allocate from).
@@ -112,10 +111,6 @@ int   AptAnimationTarget::DecNewInstSize()           { return snNewInstSize++; }
 // Measured on the crash-nav map (the case that motivated the guard): the capacity
 // path fires exactly once per map open, with drops == 0.
 //
-// [FLAG PC bring-up guard] the capacity TEST has no console counterpart -- the console
-// table is sized by the same max-new-movie-clips count that bounds a console frame's
-// placements, so it never overflows there; the host's map icon clips place more nodes
-// in one frame than SetupStaticData's table holds. The flush RESPONSE is the console's.
 namespace
 {
     // Re-entrancy latch for the capacity flush below (module-static, single-threaded
@@ -1558,12 +1553,9 @@ int AptAnimationTarget::RunActions()
     AptActionQueueC* lpQueue = mpActionQueue;            // v2 = *(this + 12)
     AptAnimationPoolData* lpSlot = lpQueue->mpFront;     // v3 = v2[1]
 
-
     while (lpSlot != lpQueue->mpBack)                    // v3 != v2[2]
     {
         lpQueue->mpCurItem = lpSlot;                     // v2[3] = v3
-
-
 
         if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)   // *v3 == 1
         {
@@ -1927,22 +1919,17 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
 // AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
 // (Callers discard the result -- they invoke the member directly.)
 
-
 // AptAnimationTarget::CleanRemList @0x82AEAB08 is the real static member (declared in
 // AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
-
 
 // AptAnimationTarget::PreDestroy @0x82AFE420 is the real member (declared in
 // AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
 
-
 // AptAnimationTarget::RemoveTimerFunctions @0x82AE4320 is the real member (declared in
 // AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
 
-
 // ~AptAnimationTarget @0x82AFF790 is the real destructor (declared in AptAnimationTarget.h,
 // defined above); AptTarget::Shutdown invokes it explicitly (the AptAnimationTarget_Destruct shim is retired).
-
 
 // ---------------------------------------------------------------------------
 // AptReplaceReferences -- this TU's local name for the free function

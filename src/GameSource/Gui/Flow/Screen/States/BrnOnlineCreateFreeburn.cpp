@@ -25,7 +25,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / OutputViewState
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [netui] witness lines (LAN / harness only)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                    // GameStateModuleIO::EGameModeType
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventShowHideSatNav
@@ -220,7 +219,6 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 // A null event still latches (0).
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "disconnected (GUI 44) -> DISCONNECT");
                 SendStateEvent(KAC_DISCONNECT_EVENT);
                 break;
 
@@ -283,8 +281,6 @@ namespace BrnGui
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lCreateGameWire), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lCreateGameWire)));
-                BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "post 256 mode=%d ranked=%d",
-                                            lCreateGame.meGameMode, lCreateGame.mbRanked ? 1 : 0);
 
                 GuiOverlayRequestWire lEnterGameOverlay;
                 lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
@@ -363,7 +359,6 @@ namespace BrnGui
             reinterpret_cast<const CgsModule::Event*>(&lWaitEnterGame), KI_CHANNEL_GUI_OUT,
             static_cast<s32>(sizeof(lWaitEnterGame)));
 
-        BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "in game (GUI 50) -> ADVANCE");
         SendStateEvent(KAC_ADVANCE_EVENT);
     }
 
@@ -375,7 +370,6 @@ namespace BrnGui
         // The console's text names HandleInGameEvent (the same pooled string).
         CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent");
 
-        BrnNetHarnessPC::WitnessTag("netui", "create-freeburn", "in game failed (GUI 51) -> GO_BACK");
         SendStateEvent(KAC_GO_BACK_EVENT);
     }
 

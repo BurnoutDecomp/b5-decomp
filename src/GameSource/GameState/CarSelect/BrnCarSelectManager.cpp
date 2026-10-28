@@ -38,17 +38,6 @@ static const char* const KAC_CSM_FILE =
 static const char* const KAC_SPAWNLOC_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnSpawnLocation.h";
 
-// [FLAG PC witness] BRN_CARSEL_DIAG=1 prints the action-69 lists this file posts (first 40). Read once.
-static bool IsCarSelDiagEnabled()
-{
-    static const bool sbEnabled = []()
-    {
-        const char* lpcValue = std::getenv("BRN_CARSEL_DIAG");
-        return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
-    }();
-    return sbEnabled;
-}
-
 // ----------------------------------------------------------------------------
 // X360-baked tuning constants (the float rodata the bodies compare against). The DWARF declares the
 // named class-scope KF_* statics at BrnCarSelectManager.cpp:30-41; only the immediates the
@@ -139,9 +128,6 @@ void CarSelectManager::_AssertLayout()
                       == offsetof(CarSelectManager, mDesiredCarId) + sizeof(CgsID),
                   "mCacheDuringChangeCarId is contiguous with mDesiredCarId (CgsID == 8 bytes)");
     // The spawn-location array is exactly KU_CARSELECT_SPAWNLOCATION_COUNT handles wide.
-    static_assert(sizeof(((CarSelectManager*)0)->maSpawnLocations)
-                      == KU_CARSELECT_SPAWNLOCATION_COUNT * sizeof(HostPointer<const BrnTrigger::SpawnLocation>),
-                  "maSpawnLocations holds KU_CARSELECT_SPAWNLOCATION_COUNT entries");
 }
 
 // ============================================================================
@@ -201,20 +187,6 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
     // DPadRight:3 / no taps all left the player on VEH_PUSMC01.  The owner's bug is "every car
     // that is not the Cavalry has no sound", so a one-car profile cannot reproduce it at all.
     // Inert unless the variable is set; a default run is byte-identical.
-    if (const char* lpcUnlock = std::getenv("BRN_DEBUG_UNLOCK_CARS"))
-    {
-        if (lpcUnlock[0] != '\0' && lpcUnlock[0] != '0')
-        {
-            mbDEBUG_UnlockTrophyCarsForTesting   = true;
-            mbDEBUG_UnlockShutdownCarsForTesting = true;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[car-audio] ***** HARNESS-ONLY DEBUG CAR UNLOCK (BRN_DEBUG_UNLOCK_CARS) "
-                    << "***** -- EnterJunkyard will run the console's DEBUG_UnlockCarsForTesting\n";
-            }
-        }
-    }
 }
 
 // ============================================================================
@@ -575,10 +547,6 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         }
         else
         {
-            // [FLAG PC bring-up] the console dereferences mpVehicleList unconditionally. It is
-            // installed on every mounted path; an empty-but-constructed list is the honest
-            // fallback rather than a fault. DELETE-WHEN the install is unconditional.
-            lDerivedCars.Clear();
         }
 
         // 0x823875A4..0x82387650. The console streams "We weren't expecting " << n <<
@@ -615,23 +583,6 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
                 ++lRequestAction.miCount;
             }
             lRequestAction.mauExtraInfoFlags[0] = 5;
-
-            if (IsCarSelDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static s32 siLines = 0;
-                if (siLines < 40)
-                {
-                    ++siLines;
-                    *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] livery action69 car="
-                                               << static_cast<u64>(mDesiredCarId)
-                                               << " count=" << lRequestAction.miCount << " ids:";
-                    for (s32 liEntry = 0; liEntry < lRequestAction.miCount; ++liEntry)
-                    {
-                        *CgsDev::Log::gpDebugPrint << " " << static_cast<u64>(lRequestAction.maCars[liEntry]);
-                    }
-                    *CgsDev::Log::gpDebugPrint << "\n";
-                }
-            }
 
             AsActionQueue(lpActionQueue)->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRequestAction),
@@ -1127,18 +1078,6 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
     if (mbWaitingForStreaming)
         return;
 
-    if (IsCarSelDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        static s32 siLines = 0;
-        if (siLines < 40)
-        {
-            ++siLines;
-            *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] car change done car=" << static_cast<u64>(mDesiredCarId)
-                                       << " modScreen=" << (mbInCarModScreen ? 1 : 0)
-                                       << " secondsSinceRequest=" << mfStateTimer << "\n";
-        }
-    }
-
     mfStateTimer = KF_TIMER_RESET;   // 0.0
     if (mbInCarModScreen)
     {
@@ -1221,27 +1160,6 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 988);
         CgsDev::Assert::EndAssert();
-    }
-
-    // Action 77, GameStateModuleIO::CarSelectExitAction (32 bytes): the junkyard exit, carrying where the car will
-    // come out. Fixed 2026-09-25 (crash parity FX-TRAFFICLIGHTS). This used to post 32 ZERO bytes as an "opaque
-    // AllowBoostEarningAction"; the record's readers need the real payload. The traffic's HandleExternalRequests
-    // arm 77 (0x8274C068) clears the traffic within 150 m of mExitSpawnLocation and hands back the car-select sim
-    // box; the director reads mbOnlineCarSelect. Attested:
-    //   0x82398D40  lwz r29, 0x38(r30)            ; maSpawnLocations[4] (the "lpSpawnLocation" tripwire above)
-    //   0x82398D6C  lvx128 v0, r0, r29            ; its first 16 bytes, SpawnLocation::mPosition
-    //   0x82398D80  stvx128 v0 -> var_A0 +0x00    ; -> mExitSpawnLocation
-    //   0x82398D84  stb r31 (== 0) -> var_90      ; +0x10 -> mbOnlineCarSelect = false (the offline car select)
-    //   0x82398D70 / 0x82398D74 / 0x82398D88      ; li r6, 0x20 ; li r5, 0x4D ; AddEvent: id 77, 32 bytes
-    // The console leaves +0x11..+0x1F as stack bytes nobody reads; the PC record is value-initialised (FLAG PC:
-    // zero). The online manager posts the same record with mbOnlineCarSelect = true.
-    {
-        GameStateModuleIO::CarSelectExitAction lExitAction = {};
-        lExitAction.mExitSpawnLocation = lpExitSpawnLocation->mPosition;
-        lExitAction.mbOnlineCarSelect  = false;
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lExitAction),
-                          GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED,
-                          sizeof(lExitAction));
     }
 
     {

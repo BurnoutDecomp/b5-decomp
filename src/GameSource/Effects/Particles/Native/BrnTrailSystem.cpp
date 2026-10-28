@@ -41,40 +41,10 @@
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::{operator+,operator-,MagnitudeSquared,Normalize,Cross,Dot}
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [diag] CgsDev::Log::WriteToLog
-#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"      // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
-#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"        // [diag] the mark-height latch (issue #21)
-
 #include <cstring>   // memset / memcpy (the X360 calls both by name)
 #include <cstdio>    // [diag] snprintf (the [trailpass] render probe)
 #include <cstdlib>   // [diag] getenv  (BRN_SKID_PROBE gates the render probe too)
 #include <cmath>     // [diag] sqrt    ([trailseg] prints metres beside the console's squared test)
-
-// ============================================================================================
-// [DIAG] NOT IN THE X360 BINARY -- the issue #21 mark-height latch. See BrnDiagTrailHeight.h for
-// why the two halves of "mark y minus road y" cannot see each other without it.
-// DELETE-WHEN-STABLE.
-// ============================================================================================
-namespace BrnDiag
-{
-    TrailHeightHit gaTrailHeightHits[KI_TRAIL_HEIGHT_MAX_CARS][KI_TRAIL_HEIGHT_NUM_WHEELS] = {};
-    u32            guTrailHeightStamp = 0u;
-
-    bool TrailHeightDiagEnabled()
-    {
-        static int siEnabled = -1;
-        if (siEnabled < 0)
-        {
-            const char* lpcValue = std::getenv("BRN_TRAIL_HEIGHT_DIAG");
-            siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
-            if (siEnabled == 1)
-            {
-                CgsDev::Log::WriteToLog("[trailht] BRN_TRAIL_HEIGHT_DIAG=1 ARMED:"
-                                        " mark height vs the traction line test's road hit\n");
-            }
-        }
-        return siEnabled != 0;
-    }
-}
 
 namespace BrnParticle
 {
@@ -121,16 +91,6 @@ namespace Native
 
         // [diag] the [trailpass] render probe's gate -- the same BRN_SKID_PROBE the
         // HandleWheels gate probe reads, so one run carries both halves of the claim.
-        bool TrailProbeEnabled()
-        {
-            static int siEnabled = -1;
-            if (siEnabled < 0)
-            {
-                const char* lpcValue = std::getenv("BRN_SKID_PROBE");
-                siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
-            }
-            return siEnabled != 0;
-        }
 
         // [DIAG] NOT IN THE X360 BINARY. Inert unless BRN_TRAIL_CADENCE names a value.
         // DELETE-WHEN-STABLE.
@@ -150,16 +110,6 @@ namespace Native
         // can put a real gap in a mark. Both are recorded below, per call, with the arithmetic
         // that decided them, so the spacing histogram and the break census come out of the same
         // run.
-        bool TrailCadenceProbeEnabled()
-        {
-            static int siEnabled = -1;
-            if (siEnabled < 0)
-            {
-                const char* lpcValue = std::getenv("BRN_TRAIL_CADENCE");
-                siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
-            }
-            return siEnabled != 0;
-        }
 
         // [diag] one ordinal per TrailSystem::AddTrailSegment call, so a log line can be tied to
         // the [trailseg] line it produced without trusting a float time to be unique.
@@ -264,20 +214,6 @@ namespace Native
                 // dist is the plain distance so the histogram is in metres; d2 is what the
                 // console actually compares, printed beside it so the probe cannot silently
                 // disagree with the binary's own test. DELETE-WHEN-STABLE.
-                if (TrailCadenceProbeEnabled())
-                {
-                    char lacMsg[220];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[trailseg] c=%u e=%p CLOSE  n=%d dist=%.4f d2=%.5f t=%.3f "
-                        "pos=%.3f,%.3f,%.3f\n",
-                        guTrailCadenceCall, static_cast<void*>(this), lnNumSegments,
-                        static_cast<double>(std::sqrt(MagnitudeSquared(lDirectionVec))),
-                        static_cast<double>(MagnitudeSquared(lDirectionVec)),
-                        static_cast<double>(lfCurrentTime),
-                        static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
-                        static_cast<double>(lPosition.z));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
                 return false;
             }
             gfTrailCadenceLastDist = std::sqrt(MagnitudeSquared(lDirectionVec));
@@ -308,20 +244,6 @@ namespace Native
                     mrTimeLastSegmentAdded = lfCurrentTime;
                     // [trailseg] a MERGE moves the strip's tip; it does not lengthen the strip.
                     // DELETE-WHEN-STABLE.
-                    if (TrailCadenceProbeEnabled())
-                    {
-                        char lacMsg[220];
-                        std::snprintf(lacMsg, sizeof(lacMsg),
-                            "[trailseg] c=%u e=%p MERGE  n=%d dist=%.4f cos=%.6f t=%.3f "
-                            "pos=%.3f,%.3f,%.3f\n",
-                            guTrailCadenceCall, static_cast<void*>(this), lnNumSegments,
-                            static_cast<double>(gfTrailCadenceLastDist),
-                            static_cast<double>(Dot(lUnitDirection, lPrevDirectionVec)),
-                            static_cast<double>(lfCurrentTime),
-                            static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
-                            static_cast<double>(lPosition.z));
-                        CgsDev::Log::WriteToLog(lacMsg);
-                    }
                     return true;
                 }
             }
@@ -350,18 +272,6 @@ namespace Native
         // emitter (no previous point exists); every other APPEND must carry dist >= 0.3 or the
         // probe itself is wrong -- that is the probe's own falsifiable check.
         // DELETE-WHEN-STABLE.
-        if (TrailCadenceProbeEnabled())
-        {
-            char lacMsg[220];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[trailseg] c=%u e=%p APPEND n=%d dist=%.4f t=%.3f pos=%.3f,%.3f,%.3f\n",
-                guTrailCadenceCall, static_cast<void*>(this), lnNumSegments,
-                static_cast<double>(lnNumSegments != 0 ? gfTrailCadenceLastDist : 0.0f),
-                static_cast<double>(lfCurrentTime),
-                static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
-                static_cast<double>(lPosition.z));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
         return true;
     }
 
@@ -494,31 +404,6 @@ namespace Native
             // inlined into BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0).
             // `seed=1` means the break was bridged; `seed=0 prev=1` is a REAL GAP.
             // DELETE-WHEN-STABLE.
-            if (TrailCadenceProbeEnabled())
-            {
-                const bool lbSeeded = (lpTrailEmitter != 0 && lbAlreadyHasEmitter
-                                       && lbRunOutOfSegments && !lbChangedTrailType
-                                       && !lbTooMuchTimePassedSinceLastTrail);
-                char lacMsg[320];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[trailseg] c=%u d=%p NEWEMIT prev=%d why=%s%s%s new=%p seed=%d "
-                    "t=%.3f dt=%.5f last=%.3f gate=%.3f pool=%d pos=%.3f,%.3f,%.3f\n",
-                    guTrailCadenceCall, static_cast<void*>(lpTrailEmitterData),
-                    lbAlreadyHasEmitter ? 1 : 0,
-                    (lbAlreadyHasEmitter && lbChangedTrailType) ? "type," : "",
-                    (lbAlreadyHasEmitter && lbTooMuchTimePassedSinceLastTrail) ? "timeout," : "",
-                    (lbAlreadyHasEmitter && lbRunOutOfSegments) ? "full," : "",
-                    static_cast<void*>(lpTrailEmitter), lbSeeded ? 1 : 0,
-                    static_cast<double>(lrCurrentTime),
-                    static_cast<double>(mfCurrentTimeStep),
-                    static_cast<double>(lpTrailEmitterData->mrLastTrailTime),
-                    static_cast<double>(mfCurrentTimeStep * KF_TRAIL_TIMEOUT_TIMESTEPS
-                                        + lpTrailEmitterData->mrLastTrailTime),
-                    mFreeEmitters.GetLength(),
-                    static_cast<double>(lContactPoint.x), static_cast<double>(lContactPoint.y),
-                    static_cast<double>(lContactPoint.z));
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
 
             if (lpTrailEmitter != 0 && lbAlreadyHasEmitter
                 && lbRunOutOfSegments && !lbChangedTrailType && !lbTooMuchTimePassedSinceLastTrail)
@@ -606,17 +491,6 @@ namespace Native
                     // called it -- so the free pool only ever went DOWN. The `free=` number
                     // rising across a run is the falsifiable half of that claim.
                     // DELETE-WHEN-STABLE.
-                    if (TrailCadenceProbeEnabled())
-                    {
-                        char lacMsg[200];
-                        std::snprintf(lacMsg, sizeof(lacMsg),
-                            "[trailseg] RELEASE e=%p type=%d idle=%.3f t=%.3f free=%d active=%d\n",
-                            static_cast<void*>(lpEmitter), lnTrailType,
-                            static_cast<double>(lfIdle),
-                            static_cast<double>(mfCurrentTime),
-                            mFreeEmitters.GetLength(), lrActive.GetSize());
-                        CgsDev::Log::WriteToLog(lacMsg);
-                    }
                 }
             }
         }
@@ -655,11 +529,6 @@ namespace Native
         {
             // [trailpass] the ONE early-out, said once. DELETE-WHEN-STABLE.
             static bool sbLoggedNotReady = false;
-            if (!sbLoggedNotReady && TrailProbeEnabled())
-            {
-                sbLoggedNotReady = true;
-                CgsDev::Log::WriteToLog("[trailpass] TrailSystem::Render EARLY-OUT: mbIsReady == 0\n");
-            }
             return;
         }
 
@@ -672,7 +541,6 @@ namespace Native
         // the WORLD pass's. A correct draw into a surface nobody resolves is exactly "everything
         // succeeds, nothing appears". Paired with the "world-begin" and "resolve-in" call sites
         // in BrnRendererModule.cpp; see BrnDiagBoundSurfaces.h. DELETE-WHEN-STABLE.
-        BrnDiag::LogBoundSurfaces("trail");
 
         for (s32 lnTrailType = 0; lnTrailType < KI_MAX_NUM_TRAIL_TYPES; ++lnTrailType)
         {
@@ -695,30 +563,6 @@ namespace Native
         // with a rising segment count means the segments never reach an ACTIVE emitter; live
         // emitters with zero vertices means the strip build rejected them; vertices with no
         // picture means the fault is below the immediate-mode renderer. DELETE-WHEN-STABLE.
-        if (TrailProbeEnabled())
-        {
-            static u32 suCall = 0;
-            if ((++suCall % 60u) == 0u)
-            {
-                s32 lanCounts[KI_MAX_NUM_TRAIL_TYPES];
-                s32 lnSegments = 0;
-                for (s32 lnTrailType = 0; lnTrailType < KI_MAX_NUM_TRAIL_TYPES; ++lnTrailType)
-                {
-                    lanCounts[lnTrailType] = maActiveEmitters[lnTrailType].GetSize();
-                    for (s32 lnEmitter = 0; lnEmitter < lanCounts[lnTrailType]; ++lnEmitter)
-                        lnSegments += maActiveEmitters[lnTrailType][lnEmitter]->mn8NumSegments;
-                }
-                char lacMsg[300];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[trailpass] render %u: ready=1 tex=%p white=%.3f emitters=%d/%d/%d/%d "
-                    "segments=%d verts=%u draws=%u t=%.3f\n",
-                    suCall, static_cast<void*>(lpTexture), static_cast<double>(lfWhiteLevel),
-                    lanCounts[0], lanCounts[1], lanCounts[2], lanCounts[3], lnSegments,
-                    TrailRenderer::guProbeVertices, TrailRenderer::guProbeDraws,
-                    static_cast<double>(mfCurrentTime));
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
     }
 }
 }

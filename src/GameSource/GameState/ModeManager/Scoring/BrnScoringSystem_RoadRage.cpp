@@ -63,8 +63,6 @@ void ScoringSystem::OnRoadRagePlayerCrashed(GameStateModuleIO::OutputBuffer* lpO
     // [rr] PC witness (NOT X360), one line per crash: proves the crash arm reaches the scorer.
     if (CgsDev::Log::gpDebugPrint != 0)
     {
-        *CgsDev::Log::gpDebugPrint << "[rr] OnRoadRagePlayerCrashed: crashes " << miCurrentPlayerCrashedNumber + 1
-                                   << " of " << miMaximumPlayerCrashedNumber << " [FLAG PC witness]\n";
     }
     CGS_ASSERT(miMaximumPlayerCrashedNumber != 0, "miMaximumPlayerCrashedNumber != 0");   // BrnScoringSystem.cpp:2550
 

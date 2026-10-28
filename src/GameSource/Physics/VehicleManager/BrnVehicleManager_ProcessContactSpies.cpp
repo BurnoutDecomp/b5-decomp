@@ -97,15 +97,6 @@ namespace Vehicle
     {
         (void)lpDeformationManager;   // asm: r9 (the manager) is never read in the 118 instructions.
 
-        // -------------------------------------------------------------------------------------
-        // [td-spies] PC witness (NOT in the console) -- the queue at the HEAD of the takedown
-        // chain. With nothing printing here, "no contact was ever queued" and "contacts were
-        // queued but none of them was car-vs-car" look identical from the log, and every parked
-        // stage downstream gets blamed for a seam that never fired. Bounded: the first 8
-        // non-empty queues, plus one summary line every 600th call. Counters only -- the
-        // histogram accumulation below is two increments and no formatting. [FLAG PC witness]
-        // DELETE-WHEN: the organic takedown case goes green and the race-car contact arm is
-        // confirmed reachable from a scenario run.
         //
         // ⭐ WHAT ownerB == 3 ON EVERY ENTRY MEANS (takedown lane S1, 2026-09-13): it is the
         // FAITHFUL reading of the only race-car contact this tree currently produces, NOT a
@@ -157,7 +148,6 @@ namespace Vehicle
 
             const u8 luOwnerB = static_cast<u8>(lSpy.mEntityIdB.muValue >> 24);   // 0x82646D3C lbz 4(spy)
 
-            // [td-spies] PC witness accumulation (see the block at the top). [FLAG PC witness]
             ++suSpyContactsTotal;
             ++sauSpyOwnerBHistogram[(luOwnerB < 13u) ? luOwnerB : 13u];
 
@@ -189,7 +179,6 @@ namespace Vehicle
             }
         }
 
-        // [td-spies] PC witness read-out (see the block at the top). [FLAG PC witness]
         if (CgsDev::Log::gpDebugPrint != 0
             && ((liNumContacts > 0 && suSpyNonEmptySeen < 8u) || (suSpyCalls % 600u) == 0u))
         {
@@ -210,7 +199,6 @@ namespace Vehicle
                     *CgsDev::Log::gpDebugPrint << ",";
                 }
             }
-            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
         }
 
         ProcessShowtimeShunts(lpContactSpies);                                  // 0x82646E50 @0x82629F20

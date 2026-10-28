@@ -1,7 +1,6 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -134,10 +133,6 @@ void EnclosureControl::UpdateParams(f32 afTimeStep)
                            0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
         lpLogicModule->PostMessage(lMessage);
         static s32 siDiag = 0;
-        if (SndEnvDiagBudget(siDiag))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] enclosure active=" << lrHere.muActiveTriggers
-                << " previous=" << lrHere.muPrevTriggers << " tunnel=" << static_cast<s32>(lMessage.mData)
-                << " [FLAG PC witness]\n";
     }
     if (KB_SHOW_STATIC_ENVIRONMENT)
         DrawDebug();
@@ -183,9 +178,6 @@ void EnclosureControl::ProcessTriggerAction(
     if (KB_SPEW_WHOOSH_INFO)
         BrnSound::Debug::DebugComponent::mLogCombined << "[Whoosh][PASS][Type " << liType << "] Car above velocity threshold.\n";
     static s32 siDiag = 0;
-    if (SndEnvDiagBudget(siDiag))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] enclosure passby type=" << liType
-            << " mph=" << lfSpeed << " [FLAG PC witness]\n";
 }
 
 // ARTIST 8269B1B0; labels are the twelve pointers at 820A3A64..820A3A90.

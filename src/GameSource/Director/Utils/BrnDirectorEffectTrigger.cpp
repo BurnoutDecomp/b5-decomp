@@ -7,11 +7,6 @@
 #include <cstdlib>                                   // [diag] getenv
 
 // [diag] BRN_PFX_DIAG -- the director-side witness of the post-FX hook hand-over.
-static bool PfxDirDiag()
-{
-    static const bool sbOn = (getenv("BRN_PFX_DIAG") != 0);
-    return sbOn && CgsDev::Log::gpDebugPrint != 0;
-}
 
 // BrnDirector::EffectInterface.
 //
@@ -53,7 +48,6 @@ void EffectInterface::Update(s32 liNumHooks, const char* const* lapHookNames,
 }
 
 }
-
 
 // ============================================================================
 // BrnDirector::BackgroundEffectRequest (class TU).
@@ -177,7 +171,6 @@ void EffectInterface::RegisterStoppingBackgroundEffectWithName(const HookNameStr
 
 }
 
-
 // ============================================================================
 // BrnDirector::Camera::EnsureEffectIsPlaying -- a FREE function in namespace
 // BrnDirector::Camera taking (Camera&, const EffectInterface&, const char*, f32); the
@@ -234,13 +227,6 @@ void EnsureEffectIsPlaying(Camera& lrCamera, const EffectInterface& lrSource,
             && lrSource.GetCurrentEffectBlendAmount() != lfBlend))
     {
         lrEffects.SetStartHookName(lpcHook, lfBlend);
-        if (PfxDirDiag())
-        {
-            *CgsDev::Log::gpDebugPrint << "[pfx-dir] EnsureEffectIsPlaying requests '" << lpcHook
-                                       << "' blend " << lfBlend << " (current "
-                                       << (lrSource.HasCurrentEffectName() ? lrSource.GetCurrentEffectName() : "<none>")
-                                       << " gotHooks " << (lrSource.HasGotHooks() ? 1 : 0) << ")\n";
-        }
     }
 }
 

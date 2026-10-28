@@ -59,15 +59,6 @@ void HudMessageAnalyzer::HandleStuntInfo(const GuiEventStuntInfo* lpEvent)
     // switch). Emitted BEFORE TriggerMessage so a line appears even if the director drops
     // the message (IsMessageAllowed can veto it). The latch is evaluated ONCE.
     {
-        static const bool sbUiGateDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-        if ( sbUiGateDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] hud stunt-info type=" << static_cast<s32>(lpEvent->meStuntType)
-                << " count=" << lpEvent->miCurrentCount
-                << "/" << lpEvent->miTotalCount
-                << "\n";
-        }
     }
 
     TriggerMessage(&lMessage);
@@ -93,13 +84,6 @@ void HudMessageAnalyzer::HandleStuntsComplete(const GuiEventStuntAllComplete* lp
 
     // [DIAG] NOT IN THE X360 BINARY -- see HandleStuntInfo.
     {
-        static const bool sbUiGateDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-        if ( sbUiGateDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] hud stunt-all-complete type="
-                << static_cast<s32>(lpEvent->meStuntElementType) << "\n";
-        }
     }
 
     TriggerMessage(&lMessage);
@@ -118,13 +102,6 @@ void HudMessageAnalyzer::HandleSignSmashMessage(const GuiHUDMessageSignSmashed* 
 
     // [DIAG] NOT IN THE X360 BINARY -- see HandleStuntInfo.
     {
-        static const bool sbUiGateDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-        if ( sbUiGateDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] hud SignSmashed handled points=" << lpEvent->miPointsAwarded
-                << "\n";
-        }
     }
 
     TriggerMessage(&lMessage);

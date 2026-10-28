@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsAemsInterfaceImplementation.cpp -- CgsSound::Playback::AemsRWSamplePlayer dtor.
 //
@@ -282,7 +281,6 @@ namespace Playback
         }
 
         lpPlayer->mpSndPlayer = lppMainPlugins[0];
-        CgsSound::PcmTrace::Register(lpPlayer->mpSndPlayer, apParams, lpBaseVoice->GetIdent());
         lpPlayer->mpResample = lppMainPlugins[2];
         lpPlayer->mpGain = lppMainPlugins[3];
         rw::audio::core::PlugIn::SetAttribute(lpPlayer->mpResample, 0, 1.0f);
@@ -300,9 +298,6 @@ namespace Playback
             // ARTIST 826C2D08 leaves mpSendWet null. The dry Send stays
             // local (r30 at 826C2F60), so wet controls cannot mute it.
             rw::audio::core::PlugIn* lpDrySend = lppMainPlugins[5];
-            // FLAG PC-platform witness: real post-gain sample contribution.
-            CgsSound::PcmTrace::Register(lpDrySend, apParams,
-                lpBaseVoice->GetIdent(), "aems-mix");
             if (apOutputs)
             {
                 const f32 lfAzimuth = static_cast<f32>(apOutputs[0]) *
@@ -345,8 +340,6 @@ namespace Playback
                     lpPlayer->mpPannerVoice[luChannel],
                     static_cast<f32>(aiNumOutputs) * 0.01f);
                 lpPlayer->mpPan2D[luChannel] = lppPannerPlugins[1];
-                CgsSound::PcmTrace::Register(lppPannerPlugins[2], apParams,
-                    lpBaseVoice->GetIdent(), "aems-mix");
                 if (apOutputs)
                 {
                     const f32 lfAzimuth = static_cast<f32>(apOutputs[luChannel]) *

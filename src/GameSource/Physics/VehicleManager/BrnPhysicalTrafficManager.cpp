@@ -965,15 +965,7 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
     {
         // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Capped dispatch witness for the
         // G32-D1 arm (tests/FxTraffic2WheelsDetachedLive.ps1). DELETE-WHEN-STABLE.
-        static const bool sbDiag = (getenv("BRN_TRAFFIC_DIAG") != 0);
         static s32 siDiagLinesLeft = 8;
-        if (sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siDiagLinesLeft;
-            *CgsDev::Log::gpDebugPrint << "[T-contact] wheels-detached accept slot="
-                                       << static_cast<s32>(lu8PhysicalIndex)
-                                       << " belowWheelPlane=" << (lbValid ? 0 : 1) << "\n";
-        }
         return true;
     }
 
@@ -1170,15 +1162,8 @@ void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
 // GetEvent(i) call with its result discarded. The walk still runs the queue's three tripwires.
 // =================================================================================================
 
-
 namespace
 {
-    // DIAG, off unless BRN_TRAFFIC_DIAG is set. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     // Budget: without it this fires once per resolved pair per frame.
     const s32 KI_JOINT_WITNESS_BUDGET = 24;
@@ -1188,11 +1173,6 @@ namespace
     // DELETE-WHEN-STABLE.
     void JointResolveWitness(s32 liCab, s32 liTrailer, s32 liJointIndex)
     {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0
-            || giJointWitnessLinesLeft <= 0)
-        {
-            return;
-        }
         --giJointWitnessLinesLeft;
         *CgsDev::Log::gpDebugPrint
             << "[T-joint] resolved cab=" << liCab
@@ -1445,7 +1425,6 @@ void PhysicalTrafficManager::ProcessJointSpys(
 // RaceCarEntityModule::UpdateNearMisses, is not reconstructed yet.
 // =================================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -1456,12 +1435,6 @@ namespace Vehicle
         // shared with several other bodies that also splat it into a vector lane).
         const f32 KF_NEARBY_CRASHING_TRAFFIC_RANGE_SQUARED = 60.0f;
 
-        // DIAG, off unless BRN_TRAFFIC_DIAG is set. DELETE-WHEN-STABLE.
-        bool TrafficDiagEnabled()
-        {
-            static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-            return sbEnabled;
-        }
     }
 
     // lPlayerPosition is the player race car's transform translation row, passed by value by the
@@ -1517,14 +1490,6 @@ namespace Vehicle
         }
 
         // [T-pass] DIAG, not in the shipped binary. DELETE-WHEN-STABLE.
-        if (liDiagPosted > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[T-pass] fineCrashedIdsPosted=" << liDiagPosted
-                << " queueLen="
-                << lpVehicleManagerOutputInterface->GetFineTrafficCrashedEventQueue().GetLength()
-                << "\n";
-        }
     }
 }   // namespace Vehicle
 }   // namespace BrnPhysics

@@ -1760,22 +1760,9 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // chain: this is THE camera the player drives behind, and these are the values it
         // rotates by a few lines below (.cpp:681 / :692). Prints on change only.
         {
-            static const bool sbLookDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
             static s32 siLastLookState = -1;
             const s32 liLookState = (mRotationController.IsLookback() ? 1 : 0)
                                   + (mRotationController.IsRotated()  ? 2 : 0);
-            if (sbLookDiag && liLookState != siLastLookState && CgsDev::Log::gpDebugPrint != 0)
-            {
-                siLastLookState = liLookState;
-                *CgsDev::Log::gpDebugPrint
-                    << "[cam-look] GameplayExternal isLookback "
-                    << (mRotationController.IsLookback() ? 1 : 0)
-                    << " isRotated " << (mRotationController.IsRotated() ? 1 : 0)
-                    << " yawRads " << mRotationController.GetYawRotationAngleRads()
-                    << " pitchRads " << mRotationController.GetPitchRotationAngleRads()
-                    << " sharedLookback " << (lrSharedInfo.mbLookback ? 1 : 0)
-                    << "\n";
-            }
         }
 
         // ---- .cpp:230..:240 -- THE VELOCITY FRAME -------------------------------------
@@ -1969,21 +1956,7 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The pose inputs while looking back.
         {
-            static const bool sbPoseDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
             static u32 suPoseCalls = 0;
-            if (sbPoseDiag && mRotationController.IsLookback() && (suPoseCalls++ % 30) == 0
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const AABBox& lrBox = lrSharedInfo.GetLookTarget();
-                *CgsDev::Log::gpDebugPrint
-                    << "[cam-lookpose] rot " << lRotation.x << "," << lRotation.y << "," << lRotation.z
-                    << " pivot " << lPivot.x << "," << lPivot.y << "," << lPivot.z
-                    << " carOff " << lCarSpaceOffset.x << "," << lCarSpaceOffset.y << "," << lCarSpaceOffset.z
-                    << " centering " << mfCenteringFactor << " drop " << mfDropAmount
-                    << " boxZ " << lrBox.mMin.z << ".." << lrBox.mMax.z
-                    << " frontIn " << mpParameters->mfFrontInAmount << " fov " << lfFOV
-                    << "\n";
-            }
         }
 
         CGS_ASSERT(rw::math::vpu::IsValid(lTargetAngles), "IsValid(lTargetAngles)");         // :399
@@ -2001,18 +1974,7 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
                                  lrCarState.mfSpeedMPH, lfTimestep);
         // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. Where the eye landed, car-relative.
         {
-            static const bool sbEyeDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
             static u32 suEyeCalls = 0;
-            if (sbEyeDiag && mRotationController.IsLookback() && (suEyeCalls++ % 30) == 0
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const Vector3 lEyeDelta = lCameraMatrix.wAxis - lVelocityTransform.wAxis;
-                *CgsDev::Log::gpDebugPrint
-                    << "[cam-lookeye] eye-car " << lEyeDelta.x << "," << lEyeDelta.y << "," << lEyeDelta.z
-                    << " carZ " << lVelocityTransform.zAxis.x << "," << lVelocityTransform.zAxis.y << "," << lVelocityTransform.zAxis.z
-                    << " camZ " << lCameraMatrix.zAxis.x << "," << lCameraMatrix.zAxis.y << "," << lCameraMatrix.zAxis.z
-                    << "\n";
-            }
         }
         CGS_ASSERT(rw::math::vpu::IsValid(lCameraMatrix.xAxis)                               // :411
                    && rw::math::vpu::IsValid(lCameraMatrix.yAxis)

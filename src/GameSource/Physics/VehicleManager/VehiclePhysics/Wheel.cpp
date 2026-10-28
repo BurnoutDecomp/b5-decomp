@@ -484,8 +484,6 @@ namespace Vehicle
             static s32 siWheelLockDiag = -1;
             if (siWheelLockDiag < 0)
             {
-                const char* lpcEnv = getenv("BRN_WHEEL_LOCK_DIAG");
-                siWheelLockDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
             }
             if (siWheelLockDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
             {

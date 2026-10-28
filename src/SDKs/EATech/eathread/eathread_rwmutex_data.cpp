@@ -8,7 +8,7 @@
 
 #include "SDKs/EATech/eathread/eathread_rwmutex_data.h"
 
-#include <windows.h>  // CRITICAL_SECTION, InitializeCriticalSection
+#include <xtl.h>  // CRITICAL_SECTION, InitializeCriticalSection
 
 // ---------------------------------------------------------------------------
 // EARWMutexData::EARWMutexData @ 0x82B43C18

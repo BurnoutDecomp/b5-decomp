@@ -90,7 +90,6 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // sibling slices' ladders. It exists because "the showtime score is now published" is a
     // claim about a drain loop, and a drain loop that never sees an action looks identical to
     // one whose arms are wrong.
-    static const bool sbShowtimeDiag  = ( getenv( "BRN_SHOWTIME_SCORE_DIAG" ) != 0 );
     static s32        siDiagLinesLeft = 24;
 
     switch (liActionType)
@@ -188,17 +187,6 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
             PushGuiEvent(lMultEvent, lpGuiInput);
         }
 
-        if ( sbShowtimeDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            --siDiagLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[showtime-score] action 140 VEHICLE_HIT -> gui 394 base="
-                << lpHitAction->miVehicleBaseScore
-                << " chain=" << lpHitAction->miComboBonusEarned
-                << " carsCrashed=" << lpHitAction->miTotalVehiclesCrashed
-                << " multTotal=" << lpHitAction->miTotalScoreMultiplier
-                << " multEarned=" << lpHitAction->miScoreMultiplierEarned << "\n";
-        }
         break;
     }
 
@@ -229,14 +217,6 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
         lEvent.miShowtimeScore      = lpUpdateAction->miShowtimeScore;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        if ( sbShowtimeDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            --siDiagLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[showtime-score] action 142 SHOWTIME_UPDATE -> gui 396 score="
-                << lEvent.miShowtimeScore
-                << " car=" << static_cast<s32>(lEvent.meActiveRaceCarIndex) << "\n";
-        }
         break;
     }
 
@@ -263,14 +243,6 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
         // posts it when miFramesUntilModeSwitchSend hits 0), so it is the arm that proves the
         // gate, the dispatch and this function are all live. If 140/142 stay silent while THIS
         // speaks, the remaining gap is upstream -- unbodied producers -- and not here.
-        if ( sbShowtimeDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            --siDiagLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[showtime-score] action 143 SHOWTIME_MODE_SWITCH -> gui 397 entering="
-                << (lEvent.mbEnteringShowtime ? 1 : 0)
-                << " finalScore=" << lEvent.miFinalShowtimeScore << "\n";
-        }
         break;
     }
 

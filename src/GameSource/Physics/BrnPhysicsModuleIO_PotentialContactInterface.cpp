@@ -162,11 +162,6 @@ namespace PhysicsModuleIO
     // =================================================================================================
     void PotentialContactInterface::DebugAccumulateQueueLengths() const
     {
-        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
-        if (!sbWatch)
-        {
-            return;
-        }
 
         static s32 saiMax[KI_CUSTOM_QUEUE_COUNT + 1] = { 0 };
         static s32 saiTotal[KI_CUSTOM_QUEUE_COUNT + 1] = { 0 };

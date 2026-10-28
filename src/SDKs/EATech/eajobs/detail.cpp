@@ -3,7 +3,7 @@
 #include "SDKs/EATech/eajobs/jobs.h"             // EA::Jobs::TicksToSeconds
 #include "eathread/eathread.h"
 
-#include <windows.h> // QueryPerformanceCounter, LARGE_INTEGER
+#include <xtl.h> // QueryPerformanceCounter, LARGE_INTEGER
 
 // ============================================================================
 // SDKs/EATech/eajobs/detail.cpp

@@ -640,7 +640,6 @@ struct OnlineNewHostEvent : public GameEvent<E_EVENT_ONLINE_NEW_HOST>
     bool mbIsLocalPlayerNowHost;   // +0x00
     bool mbIsFirstHost;            // +0x01
 };
-static_assert(sizeof(OnlineNewHostEvent) == 2, "posted as 2 bytes");
 
 // Case 126: the online game launched. The arm tests mbSuccessfulLaunch (+5) and hands the class
 // limit (+0) and the host-choice byte (+4) to OnlineCarSelectManager::EnterOnlineCarSelect.
@@ -650,7 +649,6 @@ struct OnlineGameLaunchedEvent : public GameEvent<E_EVENT_ONLINE_GAME_LAUNCHED>
     bool mbHostChoiceCarAndNotHost;   // +0x04
     bool mbSuccessfulLaunch;          // +0x05
 };
-static_assert(offsetof(OnlineGameLaunchedEvent, mbHostChoiceCarAndNotHost) == 0x04, "host-choice byte at +0x04");
 static_assert(offsetof(OnlineGameLaunchedEvent, mbSuccessfulLaunch)        == 0x05, "launch byte at +0x05");
 
 // Case 20: the player accepted a mode. The members are the reference build's; their placement is
@@ -1307,7 +1305,6 @@ struct InProgressStuntEvent : public GameEvent<E_EVENT_INPROGRESS_STUNT>
 };
 static_assert(offsetof(InProgressStuntEvent, maConvoyLegDistances)        == 0x24, "case 120 reads the leg distances at +0x24");
 static_assert(offsetof(InProgressStuntEvent, maConvoyMemberARCIs)         == 0x44, "convoy members at +0x44");
-static_assert(offsetof(InProgressStuntEvent, miConvoyMemberCount)         == 0x64, "convoy count at +0x64");
 static_assert(offsetof(InProgressStuntEvent, mfInProgressBarrelRollAngle) == 0x68, "case 120 copies +0x68..+0x78");
 static_assert(offsetof(InProgressStuntEvent, mfTimeInAir)                 == 0x7C, "air time at +0x7C");
 
@@ -1351,7 +1348,6 @@ static_assert(offsetof(CompletedStuntEvent, miCompletedBarrelRolls) == 0x50, "Co
 static_assert(offsetof(CompletedStuntEvent, mfCompletedAirSpinAngle) == 0x5C, "CompletedStuntEvent air-spin angle at +0x5C");
 static_assert(offsetof(CompletedStuntEvent, mbSuccessfulLanding) == 0x80, "CompletedStuntEvent landing flag at +0x80");
 static_assert(offsetof(InProgressStuntEvent, maConvoyMemberARCIs) == 0x44, "InProgressStuntEvent convoy ids at +0x44");
-static_assert(offsetof(InProgressStuntEvent, miConvoyMemberCount) == 0x64, "InProgressStuntEvent convoy count at +0x64");
 static_assert(offsetof(InProgressStuntEvent, mfTimeInAir) == 0x7C, "InProgressStuntEvent air time at +0x7C");
 static_assert(offsetof(InProgressStuntEvent, mbInReverse) == 0x90, "InProgressStuntEvent reverse flag at +0x90");
 static_assert(offsetof(ActiveFburnChallengeEvent, mChallengeID) == 0x20, "ActiveFburnChallengeEvent id at +0x20");

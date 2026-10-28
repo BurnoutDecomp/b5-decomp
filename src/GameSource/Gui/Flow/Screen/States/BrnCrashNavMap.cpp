@@ -707,11 +707,6 @@ namespace BrnGui
         //  float32_t, uint32_t*, int32_t)` -- so the observed r7 == 0 and r8 == 0 are the
         // last two arguments and flt_82065668 == 0.5f is the float.
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the resolved filter.
-        if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] SetFilterFromPanel: panel=" << static_cast<s32>(lePanelType)
-                << " displayType=" << static_cast<s32>(meEventIconDisplayType)
-                << " iconFilter=" << static_cast<s32>(mpIconManager->meIconFilterMode)
-                << " roadSigns=" << (mbUseRoadSigns ? 1 : 0) << " driveThrus=" << (mbDrawDriveThrus ? 1 : 0) << "\n";
         mpIconManager->SetUseEventIcons(
             static_cast<GuiEventDrawEventIcons::EIconDisplayType>(meEventIconDisplayType),
             mpStateInterface, 0.5f, 0, 0);
@@ -755,7 +750,6 @@ namespace BrnGui
 // GuiEventUpdateSatNav::SatNavIconInfo::GetIconType() call and the CgsDev::StrStream
 // assert chain all check out.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -1047,7 +1041,6 @@ namespace BrnGui
 // the compile gate.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -1088,10 +1081,6 @@ namespace BrnGui
         mpGuiCache->AppendExpectedAptComponentList(E_GUIFLOW_SCREEN, mauComponentHashIds,
                                                    KI_CRASHNAVMAP_NUMICONS);
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the expected icon hash range.
-        if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expected SatNavIcon0 hash " << mauComponentHashIds[0]
-                << " .. SatNavIcon49 hash " << mauComponentHashIds[KI_CRASHNAVMAP_NUMICONS - 1]
-                << " anims '" << mTitleButtonsAnimation.GetName() << "' '" << mButtonPromptsAnimation.GetName() << "'\n";
 
         // cpp:537 -- non-fatal on the X360; the manager is dereferenced either way,
         // exactly as the console does.
@@ -1281,7 +1270,6 @@ namespace BrnGui
 // per-address assembly under .ida-exports/BURNOUT_X360_ARTIST.XEX/). X360 offsets appear
 // only in comments; the host layout is name-based.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -1547,7 +1535,6 @@ namespace BrnGui
 // r8/r9/r10 as MapIconManager::SetOwnerParameters' (useRoadSigns, drawDriveThrus,
 // selectDriveThrus) argument triple.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -1828,7 +1815,6 @@ namespace BrnGui
 // scratchpad/waveJ/g05_strs.txt (the strings IDA truncated) and
 // scratchpad/waveJ/g05_panel.txt (the CrashNavPanel setters).
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -2376,7 +2362,6 @@ namespace BrnGui
 // its gpr slot) and the fsel progress clamp's NaN polarity.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -2657,7 +2642,6 @@ namespace BrnGui
 // 0x6150(r30)` @0x824BF3F0) -- 24880 + 32, i.e. mSoundData's 16-byte Vector3 lane plus its
 // 16-byte-aligned bool tail. The member ORDER is right; only the documented offset is off.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -3110,7 +3094,6 @@ namespace BrnGui
 //   GetProfileEventDisplayInfo}.
 // ===================================================================================
 
-
 // LobbyNameCmp @0x82B10050 -- the DirtySock collation-table string compare (it skips
 // characters whose collation class is 1). No header in the tree declares it and no body
 // exists here, so it is declared per-cpp exactly as
@@ -3317,9 +3300,6 @@ namespace BrnGui
              liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the input events the map screen drains.
-            if ((liEventId == 6 || liEventId == 7) && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[cnav-diag] map input event " << liEventId << " action "
-                    << *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4) << "\n";
             switch (liEventId)
             {
             case KI_EVENT_CONTROLLER_INPUT_PRESSED:
@@ -3456,8 +3436,6 @@ namespace BrnGui
         {
             mbItemsLoaded = true;   // stored BEFORE the virtual call, per the asm
             // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the one-shot wiring frame.
-            if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[cnav-diag] CrashNavMap items loaded -> SetupComponents/SetFilterFromPanel\n";
             SetupComponents();      // vtable +0x30
             SetFilterFromPanel();
             UpdateButtonPrompts();

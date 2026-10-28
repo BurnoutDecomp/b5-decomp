@@ -1,6 +1,5 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnAmbienceControl.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameSource/Sound/BrnMixerData.h"                         // ECameraModes
 #include "GameSource/Sound/Global/BrnCameraControl.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
@@ -107,11 +106,6 @@ void AmbienceControl::UpdateParams(f32 afTimeStep)
             mRegion.Update(lu8MapRegion);
 
         static s32 siDiagSelect = 0;
-        if (SndEnvDiagBudget(siDiagSelect))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] ambience-control select map="
-                                       << static_cast<s32>(lu8MapRegion) << " region="
-                                       << static_cast<s32>(mRegion.GetCurrent())
-                                       << " [FLAG PC witness]\n";
     }
 
     if (KB_AMBIENCE_DRAW_REGION)

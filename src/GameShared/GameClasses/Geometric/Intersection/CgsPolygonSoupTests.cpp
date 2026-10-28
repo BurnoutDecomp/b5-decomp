@@ -305,22 +305,6 @@ namespace CgsGeometric
     // load could, at the tail of a resource, so the three components are read
     // directly. Same bytes, same result, no over-read.
     //
-    // ⭐⭐ FLAG PC-platform leaf -- THE ONE PLACE THIS FUNCTION IS NOT THE CONSOLE.
-    // The console's vperm control assembles each component BIG-endian, because the
-    // X360 bundle is big-endian. WORLDCOL.BIN in this build is a PORTED, platform-4
-    // (little-endian) bundle: tools/assets/bundles/world_support_transcode.py emits
-    // every packed vertex with `struct.pack_into(e + '3h', ...)`, e == '<'. So the
-    // components must be read in HOST order, exactly as CgsPolygonSoup.h:66 already
-    // records for mu16SoupSize ("a two-byte array would have forced that consumer to
-    // hand-assemble the halfword, which on this LITTLE-endian host is the opposite
-    // byte order from the console `lhz` it was copying").
-    // MEASURED, not reasoned: read straight out of build/game/WORLDCOL.BIN, soup 86
-    // poly 3 of resource BF2191AA -- the junkyard floor quad whose four world-space
-    // vertices CgsPolygonSoup.h:27 records from an independent measurement:
-    //   raw 3e04f7009810  host-order -> (2986.305, -3.525, -2005.995)   MATCHES
-    //                     byte-swapped-> (3208.155, 941.250, -1485.795)  garbage
-    // and the same for all four vertices, all twelve components, to the millimetre.
-    // ------------------------------------------------------------------------
     void UnpackPolygonSoupVertices(Vector3* lpOutVertexPositions,
                                    const PolygonSoup& lPolygonSoup)
     {
@@ -343,9 +327,6 @@ namespace CgsGeometric
 
         for (u32 luIndex = 0; luIndex < lu32NumVertices; ++luIndex)
         {
-            // vperm + vand: three u16 ZERO-extended (the mask is 0x0000FFFF, not a
-            // sign extension); lane 3 masked to 0. Host byte order -- see the
-            // PC-platform leaf note above.
             u16 lau16Packed[3];
             std::memcpy(lau16Packed, lpVertex, 3 * sizeof(u16));
 

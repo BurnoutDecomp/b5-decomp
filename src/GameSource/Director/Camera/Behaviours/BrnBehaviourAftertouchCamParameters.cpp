@@ -29,7 +29,6 @@ static_assert(offsetof(AftertouchCamParameters, mfPitch)                       -
 static_assert(offsetof(AftertouchCamParameters, mfFOV)                         - offsetof(AftertouchCamParameters, mShakeParams) == 0x40 - 0x08, "mfFOV @ console +0x40");
 static_assert(offsetof(AftertouchCamParameters, mfHeightDistanceVelocityRange) - offsetof(AftertouchCamParameters, mShakeParams) == 0x54 - 0x08, "mfHeightDistanceVelocityRange @ console +0x54");
 static_assert(offsetof(AftertouchCamParameters, mfTimeBetweenDecisions)        - offsetof(AftertouchCamParameters, mShakeParams) == 0x68 - 0x08, "mfTimeBetweenDecisions @ console +0x68");
-static_assert(sizeof(AftertouchCamParameters) == 120, "host size (console 108: 8-byte head pointer, 8-byte alignment)");
 
 template<class TSerialiser>
 void BehaviourAftertouchCam::Parameters::Serialise(TSerialiser& lrSerialiser)

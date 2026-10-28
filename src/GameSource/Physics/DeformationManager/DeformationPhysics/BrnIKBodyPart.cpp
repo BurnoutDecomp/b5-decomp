@@ -549,8 +549,6 @@ namespace Deformation
             static s32 siBandProbe = -1;
             if ( siBandProbe < 0 )
             {
-                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                siBandProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
             }
             static u32 suBandLines = 0u;
             if ( siBandProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suBandLines < 4000u )

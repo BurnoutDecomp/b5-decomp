@@ -114,7 +114,6 @@ struct AptAnimationPoolData
     static void _AssertLayout()
     {
         static_assert(offsetof(AptAnimationPoolData, mnInput) == 0x04, "B4: 'input' lives OUTSIDE the union");
-        static_assert(sizeof(AptAnimationPoolData) == 0x20, "x64 ring stride: `shl reg,5` in every deque accessor");
     }
 };
 

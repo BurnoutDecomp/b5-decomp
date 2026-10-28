@@ -374,11 +374,7 @@ void PolygonSoupTesterJob::ExecuteFillTriangleCache()
 {
     do { static bool s_bLogged = false;
     if (!s_bLogged) { s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint
-                << "conductor gate: PolygonSoupTesterJob::ExecuteFillTriangleCache @0x82915AE0 "
-                   "(170) not reconstructed -- the SYNCHRONOUS twin of the stream arm; nothing "
-                   "posts a type-2 descriptor today [FLAG PC boot gate]\n"; } } while (0);
+ } } while (0);
 }
 
 // ----------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"               // rw::Resource, rw::BaseResourceDescriptors<5>
-#include "pc/gcm/renderengine/texture.h"     // renderengine::Texture (the runtime resource)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdio>
 
@@ -105,16 +104,6 @@ namespace CgsResource
             }
         }
         renderengine::Texture::Create(lpTexture, &lParameters, lpPixelData);
-    }
-
-    // FLAG PC-platform leaf: the relocator has already copied the header/pixel
-    // lane. A native raster has no pointers into its serialized pixel block:
-    // the DEFAULT texture and its editable CPU shadow retain their own bytes.
-    // Inherited Type::ReBase would pass lane deltas to FixUp, but this backend's
-    // FixUp is an absolute-data upload. Keep the existing native object instead.
-    void RwRasterResourceType::ReBase(void* /*lpResource*/, rw::Resource& /*lrSource*/,
-        rw::Resource& /*lrDest*/, ResourceDescriptor& /*lrSize*/, s32 /*liMemType*/) const
-    {
     }
 
     uint32_t RwRasterResourceType::GetImportCount(const void* /*lpResource*/) const

@@ -965,12 +965,6 @@ void ContactGeneratorJob::ExecuteSphereListWithTriangleList(
         if (!s_bLoggedFirstContacts)
         {
             s_bLoggedFirstContacts = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "⭐ sphere-vs-triangle CONTACTS LIVE: "
-                    << static_cast<s32>(lu16NumResults)
-                    << " PrimitiveTestResult(s) in the command's result list "
-                       "[FLAG PC boot witness]. Reported once, not per frame\n";
         }
     }
 }
@@ -1163,12 +1157,6 @@ void ContactGeneratorJob::ExecuteSweptSphereListWithTriangleList(
         if (!s_bLoggedFirstSweptContacts)
         {
             s_bLoggedFirstSweptContacts = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "⭐ SWEPT sphere-vs-triangle CONTACTS LIVE: "
-                    << static_cast<s32>(lu16NumResults)
-                    << " PrimitiveTestResult(s) in the command's result list "
-                       "[FLAG PC boot witness]. Reported once, not per frame\n";
         }
     }
 }
@@ -1480,18 +1468,7 @@ void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
     // PrimitivePairListBuilder::AddPrimitive leg, not this one.
     if (lu16NumTriangleBatches != 0)
     {
-        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
         static bool       sbFirstPass = true;
-        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbFirstPass = false;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-narrow] first prim-vs-tri batch: prims="
-                << static_cast<s32>(lPairList.mu16NumTests)
-                << " tris=" << static_cast<s32>(lu16NumTriangleBatches)
-                << " results=" << static_cast<s32>(lResultsList.mu16NumResults)
-                << "\n";
-        }
     }
 
     // 0x829265FC..0x82926620 -- the unconditional 16-byte header write-back.
@@ -1717,18 +1694,7 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
     // ContactGeneration problem, not this arm's. results=0 with pairs>0 means the two GP
     // instances never overlapped, which is normal for most frames.
     {
-        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
         static bool       sbFirstPass = true;
-        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbFirstPass = false;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q7-pairs] first primitive-pair batch: headers="
-                << static_cast<s32>(lIterator.GetCurrentTestIndex() + 1)
-                << " pairs=" << static_cast<s32>(lPairList.mu16NumTests)
-                << " results=" << static_cast<s32>(lResultsList.mu16NumResults)
-                << "\n";
-        }
     }
 
     // 0x829258D8..0x829258FC -- the unconditional 16-byte header write-back.
@@ -2307,19 +2273,7 @@ void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpGPInstance0,
         // fall means the contact is generated but not consumed downstream.
         // ---------------------------------------------------------------------------------
         {
-            static const bool sbPropDiag     = (getenv("BRN_PROP_DIAG") != 0);
             static bool       sbFirstContact = true;
-            if (sbPropDiag && sbFirstContact && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbFirstContact = false;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q6-gpi] first GP narrow-phase contact: gp1 type "
-                    << static_cast<s32>(lpGPInstance0->mVolumeType)
-                    << " vs gp2 type " << static_cast<s32>(lpGPInstance1->mVolumeType)
-                    << ", " << static_cast<s32>(lStackResult.numPoints)
-                    << " point pair(s), result slot "
-                    << static_cast<s32>(lpResultsList->mu16NumResults) << "\n";
-            }
         }
     }
 }
@@ -2665,18 +2619,7 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
     // AddSphereListWithSphereListToStream, not at this arm.
     if (lu16NumSpheresA != 0)
     {
-        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
         static bool       sbFirstPass = true;
-        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbFirstPass = false;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q7-ss] first sphere-sphere batch: spheresA="
-                << static_cast<s32>(lu16NumSpheresA)
-                << " spheresB=" << static_cast<s32>(lu16NumSpheresB)
-                << " results=" << static_cast<s32>(lu16NumResults)
-                << "\n";
-        }
     }
 
     // 0x8292187C..0x829218A0 — the unconditional 16-byte header write-back. This is what publishes

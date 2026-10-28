@@ -123,8 +123,6 @@ namespace CgsGui
         u32                         muLoadRequestId; // X360 +0x0C    / PC +0x14
     };
     // PC layout (x64 widths): ResourceHandle is two 8-byte pointers (16) + two 4-byte words.
-    static_assert(sizeof(CgsResource::ResourceHandle) == 16,
-                  "ResourceHandle is two x64 pointers on PC");
     static_assert(sizeof(GuiEventLoadNotification) == 24,
                   "GuiEventLoadNotification PC layout (X360 payload size is 16 with 4-byte ptrs)");
 

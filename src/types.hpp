@@ -1,6 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
+
+#if !defined(_XBOX) || !defined(_M_PPCBE)
+#error This experimental branch requires the Xbox 360 PowerPC toolchain.
+#endif
+
+static_assert(sizeof(void*) == 4, "Xbox 360 uses 32-bit pointers");
 
 typedef uint8_t u8;
 typedef int8_t  s8;

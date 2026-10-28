@@ -8,7 +8,6 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
-#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 #include "GameSource/Sound/BrnDebugComponent.h"
 #include "SDKs/XboxMath/XMVectorACos.h"                     // XboxMath::XMVectorACos (X360 0x821F0980)
 
@@ -267,7 +266,6 @@ static const PhysicsControl::EngRevDataSet KA_START_LINE_REV_SETS[PhysicsControl
     PhysicsControl::EngRevDataSet(31, KA_START_LINE_REV_5, 0.0f, 0),   // 82F2F218
 };
 } // namespace
-
 
 // ---------------------------------------------------------------------------
 // PhysicsControl::PhysicsControl  @ 0x826C8890  (default ctor)
@@ -805,7 +803,6 @@ f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
                          lMap.wAxis.y;
     return (std::max)(0.0f, (std::min)(1.0f, lfMapped));
 }
-
 
 // ---------------------------------------------------------------------------
 // PhysicsControl::PickStartLineRevDataSet  @ 0x82684510

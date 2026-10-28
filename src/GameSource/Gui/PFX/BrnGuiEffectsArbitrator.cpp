@@ -48,11 +48,6 @@ namespace BrnGui
         const s32 KI_ARTIST_RESOURCETYPE_PFX_COLOURCUBE = 22;
         const s32 KI_LOAD_NOTIFICATION_EVENT_ID = 14;
 
-        inline bool PfxDiag()
-        {
-            static const bool sbDiag = (getenv("BRN_PFX_DIAG") != 0);
-            return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -122,10 +117,6 @@ namespace BrnGui
     {
     }
 
-    // [FLAG PC bring-up] GUI event 64 (the GuiCache pointer) is what the console's EventUpdate
-    // latches mpGuiCache from. The PC GuiModule::Update synthesises that event and routes it to
-    // its subscribers directly rather than through the module-input queue EventUpdate walks, so
-    // the module hands the cache over here instead -- the same store, the same one-shot guard.
     void EffectsArbitrator::SetGuiCache(GuiCache* lpGuiCache)
     {
         if (mpGuiCache == 0)
@@ -162,21 +153,11 @@ namespace BrnGui
                 const CgsGui::GuiEventLoadNotification* lpNotification =
                     static_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent);
                 const u32 luRequestId = lpNotification->muLoadRequestId;
-                if (PfxDiag())
-                {
-                    *CgsDev::Log::gpDebugPrint << "[pfx] load notification request " << luRequestId
-                                               << " type " << static_cast<s32>(lpNotification->meRequestType) << "\n";
-                }
                 if (luRequestId == KU_PFX_HOOK_BUNDLE_REQUEST_ID)
                 {
                     mpHookInfo = CgsResource::ResourcePtr<PFXHookBundle>(lpNotification->mResourceHandle);
                     CGS_ASSERT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
                                "mpHookInfo != CgsResource::NULLResourcePtr");           // :198
-                    if (PfxDiag() && !mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr))
-                    {
-                        *CgsDev::Log::gpDebugPrint << "[pfx] hook bundle bound: " << mpHookInfo->miHookCount
-                                                   << " hooks, " << mpHookInfo->miGroupCount << " groups\n";
-                    }
                     Acquire3dTints(lpGuiModelInputBuffer);
                 }
                 else if (luRequestId - KU_PFX_COLOURCUBE_REQUEST_BASE <= 5u)
@@ -197,11 +178,6 @@ namespace BrnGui
                         {
                             maColourCubes[luIndex].mpColourCube =
                                 CgsResource::ResourcePtr<rw::graphics::postfx::ColourCube>(lpNotification->mResourceHandle);
-                            if (PfxDiag())
-                            {
-                                *CgsDev::Log::gpDebugPrint << "[pfx] colour cube " << luIndex << " bound (request "
-                                                           << luRequestId << ")\n";
-                            }
                         }
                     }
                 }
@@ -235,11 +211,6 @@ namespace BrnGui
                 lRequest.muLoadRequestId = mauColourCubeRequestIds[muColourCubeCount];
                 lRequest.muResourceId    = lpGroup->muTint3DResourceId;
                 lpGuiModelInputBuffer->AddResourceRequests(lRequest);
-                if (PfxDiag())
-                {
-                    *CgsDev::Log::gpDebugPrint << "[pfx] colour cube " << muColourCubeCount << " requested (request "
-                                               << lRequest.muLoadRequestId << ")\n";
-                }
                 ++muColourCubeCount;
             }
         }
@@ -312,11 +283,6 @@ namespace BrnGui
             return 0;
         }
         lpHook = GetHookFromName("2dflash");
-        if (PfxDiag())
-        {
-            *CgsDev::Log::gpDebugPrint << "[pfx] " << lpcCaller << ": '" << lpcName << "' / id " << luGuid
-                                       << " not in the bundle -> 2dflash fallback\n";
-        }
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint << "EffectsArbitrator::" << lpcCaller << ": Effect name: \""
@@ -336,26 +302,6 @@ namespace BrnGui
         if (lpHook == 0)
         {
             return;
-        }
-        if (PfxDiag())
-        {
-            *CgsDev::Log::gpDebugPrint << "[pfx] StartHook '" << lpHook->macName << "' priority " << lpHook->miPriority
-                                       << " menu " << (lpHook->IsMenu() ? 1 : 0) << " mode " << lpHook->meTransitionMode << "\n";
-            const PFXHookBundle* lpDiagBundle = mpHookInfo.operator->();
-            for (s32 liNode = 0; liNode < lpHook->miNodeCount; ++liNode)
-            {
-                const PFXHookNode* lpNode  = lpDiagBundle->GetHookNode(*lpHook, liNode);
-                const PFXGroup*    lpGroup = (lpNode != 0) ? lpDiagBundle->GetNodeGroup(*lpNode) : 0;
-                if (lpGroup == 0)
-                    continue;
-                *CgsDev::Log::gpDebugPrint << "[pfx]   node " << liNode << " group " << lpGroup->miID
-                                           << " use b/v/d/bl/t2/t3 " << static_cast<s32>(lpGroup->mbUseBloom)
-                                           << static_cast<s32>(lpGroup->mbUseVignette) << static_cast<s32>(lpGroup->mbUseDepthOfField)
-                                           << static_cast<s32>(lpGroup->mbUseBlur) << static_cast<s32>(lpGroup->mbUseTint2D)
-                                           << static_cast<s32>(lpGroup->mbUseTint3D)
-                                           << " fade " << lpGroup->mfFadeIn << "/" << lpGroup->mfFadeOut
-                                           << " dur " << lpGroup->mfDuration << "\n";
-            }
         }
         const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         PFXHookNodeBlender* lpCurrent  = mpCurrent;
@@ -539,17 +485,6 @@ namespace BrnGui
         CGS_ASSERT(lfTimeNow != -FLT_MAX, "mfTimeNow!=-FLT_MAX");                    // CgsGuiEventTypeDefs.h:250
         const f32 lfTimestep = lfTimeNow - mfLastTime;
         mfLastTime = lfTimeNow;
-        if (PfxDiag())
-        {
-            static u32 suUpdateDiagCalls = 0;
-            if (mpCurrent != 0 && mpCurrent->IsActive() && (suUpdateDiagCalls++ % 60u) == 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[pfx] UpdateHooks state " << static_cast<s32>(meHookState)
-                                           << " current " << (mpCurrent->GetHook() != 0 ? mpCurrent->GetHook()->macName : "-")
-                                           << " dt " << lfTimestep << " now " << lfTimeNow
-                                           << " hookTime " << mpCurrent->GetTime() << "\n";
-            }
-        }
 
         if (mbForceTime)
         {
@@ -658,10 +593,6 @@ namespace BrnGui
                 const PFXHook* lpHook = ResolveHook(lpStop->muGuid, lpStop->macName, "EventUpdate");
                 if (lpHook != 0)
                 {
-                    if (PfxDiag())
-                    {
-                        *CgsDev::Log::gpDebugPrint << "[pfx] StopHook '" << lpHook->macName << "'\n";
-                    }
                     if (!lpHook->IsMenu())
                     {
                         StopHook(lpHook);
@@ -693,10 +624,6 @@ namespace BrnGui
                     {
                         lEnumeration.mapHookNames[liHook] = lpBundle->GetHook(liHook)->macName;
                     }
-                }
-                if (PfxDiag())
-                {
-                    *CgsDev::Log::gpDebugPrint << "[pfx] enumeration answered: " << lEnumeration.miHookNameCount << " hooks\n";
                 }
                 lpGuiOutQueue->AddEvent(&lEnumeration, 501, static_cast<s32>(sizeof(lEnumeration)));   // AddGuiOutEvent<GuiPFXHookEnumeration>
                 break;
@@ -750,16 +677,6 @@ namespace BrnGui
     // console body of @0x82503060 unchanged.
     void EffectsArbitrator::GenerateEffectFrameEvents(BrnEffectsFrame* lpFrame1, BrnEffectsFrame* lpFrame2)
     {
-        if (PfxDiag())
-        {
-            static bool sbSaidFrames = false;
-            if (!sbSaidFrames)
-            {
-                sbSaidFrames = true;
-                *CgsDev::Log::gpDebugPrint << "[pfx] GenerateEffectFrameEvents live: frames "
-                                           << (lpFrame1 != 0 ? 1 : 0) << " " << (lpFrame2 != 0 ? 1 : 0) << "\n";
-            }
-        }
         if (lpFrame1 == 0 || lpFrame2 == 0)
         {
             return;
@@ -911,26 +828,6 @@ namespace BrnGui
             lpFrame1->SetDepthOfFieldData(lDof, lfFrame1DepthOfField);
         }
         lpFrame1->SetTintData2d(lTint2d.GetData(), lfFrame1Tint2d);
-        if (PfxDiag())
-        {
-            static u32 suFrameDiagCalls = 0;
-            if (mpCurrent != 0 && mpCurrent->IsActive() && (suFrameDiagCalls++ % 30u) == 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[pfx] frame state " << static_cast<s32>(leState)
-                                           << " f1w " << lfFrame1Weight << " f2w " << lfFrame2Weight
-                                           << " bloom " << lfFrame1Bloom << " vig " << lfFrame1Vignette
-                                           << " blur " << lfFrame1Blur << " dof " << lfFrame1DepthOfField
-                                           << " tint2d " << lfFrame1Tint2d << " tint3d " << lfFrame1TintWeight
-                                           << " t " << mpCurrent->GetTime() << "\n";
-                const BrnEffects::VignetteData& lrV = lVignette.GetData();
-                *CgsDev::Log::gpDebugPrint << "[pfx]   vignette amount " << lrV.mv2Amount.x << "," << lrV.mv2Amount.y
-                                           << " centre " << lrV.mv2Centre.x << "," << lrV.mv2Centre.y
-                                           << " inner " << lrV.mv4InnerColour.x << "," << lrV.mv4InnerColour.y << "," << lrV.mv4InnerColour.z << "," << lrV.mv4InnerColour.w
-                                           << " outer " << lrV.mv4OuterColour.x << "," << lrV.mv4OuterColour.y << "," << lrV.mv4OuterColour.z << "," << lrV.mv4OuterColour.w
-                                           << " angle " << lrV.mfAngle << " sharp " << lrV.mfSharpness
-                                           << " cube " << (mpCurrent->Get3DTint().GetData().mpColourCube != 0 ? 1 : 0) << "\n";
-            }
-        }
 
         // ---- frame 2: the menu hook, else the background pair ---------------------------------
         const bool lbMenuPhase = (leState == E_FADE_TO_MENU || leState == E_FULL_MENU || leState == E_FADE_FROM_MENU);

@@ -52,37 +52,21 @@ namespace CgsSystem
         bool                  mbPaused;                         // +0x34
         bool                  mbIsSimulationRunningInRealTime;  // +0x35
 
-        // ---- PC additions (past the end of the console object) ---------------------------
-        // ⚠️ FLAG PC quality-of-life: these three exist only for the decoupled 60 Hz
-        // simulation mode described on UpdatePostRenderWait. They are appended AFTER the
-        // console members so the console prefix keeps its layout; nothing on this build
-        // depends on sizeof(FrameRateManager) matching the console's 0x38.
-
-        // The first-pass latch. The console spells this test as
-        // `miNumSimulationSteps + miPrevNumSimulationStepsRequired <= 0` (asm 0x828D77A8);
-        // see UpdatePostRenderWait for why that phrasing cannot survive a zero-step frame
-        // and why this latch is exactly equivalent at console settings.
-        bool                  mbTimingReset;
-
         // The fraction of a simulation step that has elapsed since the last tick, in [0,1].
         // Published to CgsSystem::FrameInterpolation by the game module each rendered frame.
         // Always 1.0 in console-locked pacing, which makes every blend a no-op.
-        f32                   mfInterpolationAlpha;
 
         // Set when the caller asked for a minimum of zero simulation steps per rendered
         // frame, i.e. when the renderer is allowed to outrun the simulation.
-        bool                  mbDecoupledFromRenderRate;
 
         // The platform counter frequency, latched once in Construct. The console converts
         // both Construct arguments to cycles and then never needs the frequency again; this
         // build also reports the real length of the last rendered frame, which does.
-        s64                   mi64PerformanceFrequency;
 
         // Real wall-clock seconds between the last two UpdatePostRenderWait calls, i.e. the
         // length of the last rendered frame. For the PC bring-up stand-ins that advance
         // something per rendered frame and have no simulation tick to hang off. NEVER a
         // simulation timestep -- that is mfRate * mfScaleCurrent off the timers, always.
-        f32                   mfLastFrameSeconds;
 
         // Both parameters are MILLISECONDS, per the DecFIGS DWARF signature
         // (CgsFrameRate.cpp:49 -- `Construct(float32_t lrSimulationTimeStep,
@@ -101,9 +85,5 @@ namespace CgsSystem
         void SetNumSimulationStepsAchieved(s32 liNumSteps);
         bool IsSimulationRunningInRealTime();
 
-        // ⚠️ FLAG PC quality-of-life (no console counterpart).
-        f32  GetInterpolationAlpha() const { return mfInterpolationAlpha; }
-        bool IsDecoupledFromRenderRate() const { return mbDecoupledFromRenderRate; }
-        f32  GetLastFrameSeconds() const { return mfLastFrameSeconds; }
     };
 }

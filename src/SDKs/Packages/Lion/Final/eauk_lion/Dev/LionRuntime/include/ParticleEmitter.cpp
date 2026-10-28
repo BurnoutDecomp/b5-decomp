@@ -36,8 +36,6 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleWaveForm.h"    // ParticleBuild samples the three position wave forms
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "pc/gcm/renderengine/reflections/LionSimulation.h"
-
 #include <cmath>   // floorf / fabsf -- Blend's de-optimised magic-number floor
 
 #include <cstdio>
@@ -539,7 +537,6 @@ bool cParticleEmitter::IsGenerating(cParticleRandomSeed& arSeed,
 // ⚠ ONE HOST DIVERGENCE, STATED: mvfOneOverFrameCount is a `vrefp` + two Newton-Raphson
 // refinements + a multiply by 1.0f on the console (asm 0x8290E240..0x8290E254), i.e. the VMX
 // expansion of `1.0f / x`, correctly rounded to about a ulp rather than exactly. The host
-// writes the true divide. That is the PC leaf diverging by construction; the RESULT is the same
 // reciprocal to within a ulp and nothing downstream compares it for equality.
 //
 // ⚠ WHAT THIS DOES NOT WRITE: slot 0, mvDeltaTimeAndCurrentTime. It is per-frame state, filled
@@ -839,11 +836,6 @@ void cParticleEmitter::Blend()
                     // cParticleEmitter::Init left in it. It exists so the landing can be
                     // FILMED against its own absence on ONE exe, instead of comparing two
                     // builds. Off by default; the console has no such branch.
-                    static const bool sbNoBlend = (std::getenv("BRN_LION_NOBLEND") != nullptr);
-                    if (!sbNoBlend)
-                    {
-                        mpTempBehaviour->Lerp(lpLo, lpHi, lfFraction);
-                    }
                     lpChosen = mpTempBehaviour;
 
                     // ------------------------------------------------------------------
@@ -3395,12 +3387,6 @@ u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
                                                        const cTime& lCurrentLocatorTime,
                                                        const cMatrix& lBindingsLocatorMat)
 {
-    // FLAG PC-platform leaf: extra cameras reuse the first simulation's particles
-    // and transforms. The original kernel below still owns every live-state write.
-    u32 luCachedCount;
-    if (CgsPC::Reflections::LionSimulation::Read(this, lpBucket, lHelper,
-                                               laSimulatedParticles, luCachedCount))
-        return luCachedCount;
 
     if (lpBucket->IsEmpty())
     {
@@ -3485,8 +3471,6 @@ u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
         cParticleBucketManager::Instance().Free(lpBucket);
     }
 
-    CgsPC::Reflections::LionSimulation::Write(this, lpBucket, lHelper,
-                                            laSimulatedParticles, luOutCount);
     return luOutCount;
 }
 

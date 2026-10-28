@@ -26,34 +26,7 @@ extern int gnCurrRenderTickConsumed;   // dword_8324E524 (AptGlobals.cpp; the Re
 #include <intrin.h>   // _InterlockedExchange (the render-tree spin lock)
 #include <new>        // placement new
 
-// ---------------------------------------------------------------------------
-// The Apt render-tree revision lock (X360 unk_8324E7CC) -- a single-word test-and-
-// set spin lock bracketing a render-item revision swap. Defined by the Apt runtime;
-// declared here. The console uses the lwarx/stwcx. interrupt-masked idiom;
-// modelled as an interlocked test-and-set (host-portable; the PC-platform leaf
-// markers sit on the shims below). Uncontended on the single-threaded bring-up path.
-// ---------------------------------------------------------------------------
-extern volatile long gAptRenderTreeRevisionLock;   // X360 unk_8324E7CC
-
-namespace
-{
-    // The console's interrupt-masked lwarx/stwcx. test-and-set on the render-tree revision
-    // lock (unk_8324E7CC).
-    // FLAG PC-platform leaf: modelled as a single-threaded _InterlockedExchange spin
-    // (a threading primitive, not an engine Class::method).
-    inline void AptRenderTreeLock_Acquire()
-    {
-        while (_InterlockedExchange(&gAptRenderTreeRevisionLock, 1) != 0)
-        {
-            // spin until the previous holder releases (sets it back to 0)
-        }
-    }
-    // FLAG PC-platform leaf: paired release of the single-threaded render-tree spinlock.
-    inline void AptRenderTreeLock_Release()
-    {
-        _InterlockedExchange(&gAptRenderTreeRevisionLock, 0);
-    }
-}
+   // X360 unk_8324E7CC
 
 // ---------------------------------------------------------------------------
 // Copy-ctor @0x82AEF460 -- copy another custom control: delegate the base/sprite
@@ -130,7 +103,6 @@ AptRenderItem* AptRenderItemCustomControl::Clone(int nCreatedOnTick, bool bCopyE
 AptRenderItem* AptRenderItemCustomControl::CopyFromSprite(AptRenderItem* pSourceSprite,
                                                           int nCreatedOnTick, bool bCopyExtended)
 {
-    AptRenderTreeLock_Acquire();
 
     void* pMem = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemCustomControl));
     AptRenderItemCustomControl* pNew = pMem
@@ -145,7 +117,6 @@ AptRenderItem* AptRenderItemCustomControl::CopyFromSprite(AptRenderItem* pSource
     if (pNew)
         pNew->AddReference();
 
-    AptRenderTreeLock_Release();
     return pNew;
 }
 

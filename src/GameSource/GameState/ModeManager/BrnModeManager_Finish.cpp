@@ -647,22 +647,6 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
     // silently eat the debug override and change the result it claims to be observing.
     // DELETE-WHEN the event-finish bring-up is done.
     {
-        static const bool sbFinishDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-        if (sbFinishDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
-            *CgsDev::Log::gpDebugPrint
-                << "[evt-finish] FinishCurrentMode ENTERED mode "
-                << static_cast<s32>(meCurrentGameModeType)
-                << " finishType " << liFinishType
-                << " (0..7=1st..8th 8=aborted 9=passed 10=failed 11=unknown)"
-                << " attemptSucceeded " << (lbAttemptSucceeded ? 1 : 0)
-                << " timedOut " << (mbPlayerFinishedTimedOut ? 1 : 0)
-                << " carDestroyed " << (mbPlayerFinishedCarDestroyed ? 1 : 0)
-                << " stuntScore " << lpcStuntScorer->GetCurrentScore()
-                << " stuntTarget " << lpcStuntScorer->GetTargetScore()
-                << " debugFinishPos " << miDebugFinishPosition << "\n";
-        }
     }
 
     // ---- the consecutive-unsuccessful-attempts tally ----------------------------------------
@@ -900,22 +884,6 @@ void ModeManager::ShowModeResults(
     // it reads the stored field rather than re-calling the consume-once getter.
     // DELETE-WHEN the event-finish bring-up is done.
     {
-        static const bool sbResultsDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-        if (sbResultsDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
-            *CgsDev::Log::gpDebugPrint
-                << "[evt-finish] ShowModeResults mode "
-                << static_cast<s32>(meCurrentGameModeType)
-                << " finishPosition " << lAction.miFinishPosition
-                << " (1 == WIN -> medal; anything else -> no medal)"
-                << " hasPlayerWon " << static_cast<s32>(lAction.mu8FieldE0)
-                << " stuntScore " << lpcStuntScorer->GetCurrentScore()
-                << " stuntTarget " << lpcStuntScorer->GetTargetScore()
-                << " eventId " << lpGameModeParams->muEventJunctionID
-                << " medalsBefore " << mpProgressionManager->GetProfile()->GetMedalCountFromTheStart()
-                << "\n";
-        }
     }
 
     // ---- the finish-time field (record+0x0C) ----------------------------------------------------

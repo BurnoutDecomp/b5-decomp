@@ -25,15 +25,6 @@ namespace CgsSceneManager
     // The two buffers hold the HOST descriptors Construct asks for (100 volumes / 100 results each):
     // the VolumeVolumeQuery one at the host size (NOT X360), the VolumeLineQuery one at the console's 67584,
     // which the host descriptor (0x10470) still fits.
-    static_assert(FineIntersectionTestModule::KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE >=
-                      rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100,
-                  "the fine module's VolumeVolumeQuery buffer holds the host descriptor for 100 / 100");
-    static_assert(FineIntersectionTestModule::KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE -
-                      rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 < 0x100,
-                  "the buffer is the host descriptor rounded up to 0x100, not a tuned margin");
-    static_assert(rw::collision::KU_VOLUME_LINE_QUERY_HOST_SIZE_R100 <=
-                      FineIntersectionTestModule::KU_VOLUME_LINE_QUERY_MEM_SIZE,
-                  "the host VolumeLineQuery for 100 / 100 fits the console's 67584-byte VolumeLineQueryMem");
 }
 
 namespace CgsSceneManager

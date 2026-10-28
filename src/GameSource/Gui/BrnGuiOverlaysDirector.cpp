@@ -2,8 +2,7 @@
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"
 
 #include <cstring>   // std::memcpy (the buffered -> current overlay promote)
-#include <cstdlib>   // std::getenv ([FLAG PC witness] BRN_OVERLAY_DIAG)
-
+#include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStreamBase (operator<<)
@@ -49,27 +48,6 @@ namespace
                lOverlayId == CgsIDCompress(KPC_ONLINE_OVERLAYS[1]) ||
                lOverlayId == CgsIDCompress(KPC_ONLINE_OVERLAYS[2]) ||
                lOverlayId == CgsIDCompress(KPC_ONLINE_OVERLAYS[3]);
-    }
-
-    // [FLAG PC witness] NOT CONSOLE CODE. `[overlay] <what> <name> ...`, opt-in behind
-    // BRN_OVERLAY_DIAG=1, first 64 lines per run: the director's request / start / complete
-    // traffic, so an offline or online overlay can be told apart in a log.
-    void OverlayWitness(const char* lpcWhat, CgsID lOverlayId, s32 liValue)
-    {
-        static s32 siEnabled = -1;
-        static s32 siLines   = 0;
-        if (siEnabled < 0)
-        {
-            const char* lpcEnv = std::getenv("BRN_OVERLAY_DIAG");
-            siEnabled = (lpcEnv != NULL && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        if (siEnabled == 0 || siLines >= 64 || CgsDev::Log::gpDebugPrint == NULL)
-            return;
-        ++siLines;
-        char lacName[16];
-        CgsIDConvertToString(lOverlayId, lacName);
-        lacName[12] = 0;
-        *CgsDev::Log::gpDebugPrint << "[overlay] " << lpcWhat << " " << lacName << " " << liValue << "\n";
     }
 
     // Post one 8-byte wait-finish record (188) for the named overlay.
@@ -129,13 +107,11 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpEvent)
             }
         }
         SetUpOverlayInfo(&mBufferedOverlay, lpEvent);
-        OverlayWitness("buffered", mBufferedOverlay.mNameId, static_cast<s32>(mBufferedOverlay.meStyle));
     }
     else
     {
         SetUpOverlayInfo(&mCurrentOverlay, lpEvent);
         StartCurrentOverlay();
-        OverlayWitness("start", mCurrentOverlay.mNameId, static_cast<s32>(mCurrentOverlay.meStyle));
     }
 }
 
@@ -314,8 +290,6 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput
         {
             const GuiOverlayHiddenNotification* lpCompleteEvent =
                 reinterpret_cast<const GuiOverlayHiddenNotification*>(lpEvent);
-            OverlayWitness("complete", lpCompleteEvent->mOverlayId,
-                           lpCompleteEvent->mOverlayId == mCurrentOverlay.mNameId ? 1 : 0);
             if (lpCompleteEvent->mOverlayId == mCurrentOverlay.mNameId)
             {
                 mbInOverlay          = false;

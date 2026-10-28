@@ -30,7 +30,6 @@ namespace CgsModule
     //   * Reconstructions of the console's slot-0 call write it BY NAME
     //     (`mSimulationModule.Construct()`), which is immune to the slot order.
     //   * Deleting it would make `delete` through a `Module*` undefined behaviour. Nothing does
-    //     that today, but a PC-leaf shutdown path plausibly would, and that failure is silent.
     //   * The blast radius is ~28 derived classes across 56 files, for zero behavioural gain.
     //
     // ⛔ THE DIVERGENCE IS ONLY SAFE WHILE BOTH OF THESE HOLD. If either becomes false --

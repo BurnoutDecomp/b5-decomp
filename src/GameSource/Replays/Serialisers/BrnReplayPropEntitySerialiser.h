@@ -28,10 +28,6 @@ namespace BrnReplays
         // @0x822A4090 -- returns the static-layout buffer, asserting it is big enough.
         PropSerialiserStaticLayout* GetStaticLayout();
 
-        // [FLAG PC boot gate] NOT an X360 symbol -- see the long note on the body in
-        // BrnReplayPropEntitySerialiser.cpp. True once the replay manager has handed this
-        // serialiser its static buffer; on this build nothing ever does, so the four
-        // record-side entry points no-op instead of dereferencing a null layout.
         bool HasStaticLayout();
         // @0x8265A8E8 / @0x8265AA40 -- playback / record one frame.
         s32 Read(PropSerialiserStaticLayout* lpStaticLayout);

@@ -35,12 +35,7 @@ namespace CgsInput
     const u32 KU_MAX_NUMBER_OF_JOLT_EFFECTS        = 2;
     const u32 KU_MAX_NUMBER_OF_RUMBLE_EFFECTS      = 2;
 
-    // (FX-RUMBLE3 2026-09-24: the "gbForceRumbleOnDisconnectedPad" global that stood here was an
-    // invented home for byte_83085F80, which is CgsSystem::HardwareInit::mbHasDetectedAutomatic-
-    // TestingFile -- InitializeHardware @0x828E05A0 sets it for autotest runs, and the byte test
-    // UpdatePadRumble inlines is DeviceX360Pad::IsConnected() @0x828DC7E0. Both now read it there.)
-
-    class InputPadsPC;   // the PC pad backend (System/Input/PC/CgsInputPadsPC.h) -- see the friend grant
+   // the PC pad backend (System/Input/PC/CgsInputPadsPC.h) -- see the friend grant
 
     // ---- Per-player bind record. maPlayers[player] indexed by player id. -------------------
     // Construct/Destruct write {mbBound=0/false @+0, miPort=-1 @+4} per record, stride 8.
@@ -160,12 +155,6 @@ namespace CgsInput
 
         // Never-called layout pin so any drift in a member offset is a compile error.
         friend void _InputPads_AssertLayout();
-
-        // FLAG PC-platform leaf access (the OutputBuffer precedent): CgsInput::InputPadsPC::
-        // UpdatePadDevices is the PC stand-in for the device half of InputPads::Update @0x828F8690
-        // (the ManagerX360 scan binding a connected pad to its DeviceX360Pad), so it reaches maPads
-        // the way that console body does.
-        friend class InputPadsPC;
 
         // ---- head (0x00 .. 0x78) ----
         InputPort     maPorts[KU_NUMBER_OF_PADS];   // +0x00  (24B stride; 4 records => +0x60)

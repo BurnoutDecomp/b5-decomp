@@ -1,6 +1,5 @@
 #pragma once
 
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 
 namespace rw

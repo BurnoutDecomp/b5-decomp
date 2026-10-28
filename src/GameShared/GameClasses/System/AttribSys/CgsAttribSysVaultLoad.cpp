@@ -32,30 +32,6 @@ namespace CgsAttribSys
 {
 namespace
 {
-    // The serialised AttribSysVault RESOURCE head (WORLDVAULT.BIN /
-    // SURFACELIST.BIN payloads; CgsAttribSysVaultResourceType's descriptor
-    // reads the same four words): {vltOffset, vltSize, binOffset, binSize}.
-    // [FLAG PC seam] the X360 FixUp for resource type 0x1C rewrites the two
-    // offset words into pointers before DoLoad runs; the PC FixUp override is
-    // not committed yet, so the words still hold the serialised RESOURCE-
-    // RELATIVE offsets and the accessors add the base explicitly. When the real
-    // FixUp lands, switch these to the fixed-up-slot (PointerFromU32) reads.
-    struct AttribSysVaultResource
-    {
-        u32 muVltOffset;   // +0x00
-        u32 muVltSize;     // +0x04
-        u32 muBinOffset;   // +0x08
-        u32 muBinSize;     // +0x0C
-
-        u8* GetVltData() const
-        {
-            return const_cast<u8*>(reinterpret_cast<const u8*>(this)) + muVltOffset;
-        }
-        u8* GetBinData() const
-        {
-            return const_cast<u8*>(reinterpret_cast<const u8*>(this)) + muBinOffset;
-        }
-    };
 
     // Hex form of a 64-bit resource id for the [ATTRIBSYS ...] logs (the X360
     // streams it through CgsResource::operator<<(StrStreamBase&, ID); same
@@ -161,8 +137,6 @@ void VaultSlot::DoUnload()
     static int siStaleDiag = -1;
     if (siStaleDiag < 0)
     {
-        const char* lpcEnv = getenv("BRN_ATTRIB_STALE_DIAG");
-        siStaleDiag = (lpcEnv != 0 && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
     }
     const unsigned int luOwnedBefore = (siStaleDiag == 1) ? Attrib::CollectionExportPolicy::DiagCountCollectionsOwnedBy(mpVault) : 0u;
     Attrib::Vault* lpUnloadingVault = mpVault;

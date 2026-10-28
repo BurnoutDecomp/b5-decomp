@@ -43,11 +43,7 @@ struct AptAction_TryCatchFinallyBlock
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptAction_TryCatchFinallyBlock, muTryCodeSize)     == 0x00, "x64: getCatchBlockBase reads [this+0]");
-        static_assert(offsetof(AptAction_TryCatchFinallyBlock, muCatchCodeSize)   == 0x04, "x64: getFinallyBlockBase reads [this+4]");
-        static_assert(offsetof(AptAction_TryCatchFinallyBlock, muFlags)           == 0x0C, "x64: has*/putCaughtObjectInRegister read byte [this+0Ch]");
         static_assert(offsetof(AptAction_TryCatchFinallyBlock, mpszCaughtVarName) == 0x10, "B4 szCaughtVarName; the widened pointer puts the body at +0x18");
-        static_assert(sizeof(AptAction_TryCatchFinallyBlock) == 0x18, "x64: getTryBlockBase = lea rax,[this+18h]");
     }
 
     // The try block starts immediately after the (x64) 0x18-byte header.

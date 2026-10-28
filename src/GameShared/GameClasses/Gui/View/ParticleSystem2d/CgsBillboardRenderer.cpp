@@ -38,22 +38,6 @@ namespace
 // state-library block + the shared unk_83011090 screen transform), DEFINED here as their PC
 // folds (declared in CgsBillboardRenderer.h for the other GUI-renderer TUs):
 //
-//  * gpGuiBlendStateStandard / gpGuiBlendStateAdditive (dword_83010F20 / dword_83010F24) and
-//    gpBillboardDepthStencilState (dword_83010F54) are entries of the console's GUI render-state
-//    table, populated at boot by the state library. [FLAG PC-platform leaf] renderengine::
-//    BlendState is forward-declared only on this host (the state library is out of scope), so
-//    the two blend entries are opaque SENTINEL identities over static storage: nothing may
-//    dereference them (the command writers store the pointer verbatim; the dispatch's case 3
-//    compares identity against gpGuiBlendStateAdditive to pick additive src-alpha/one over the
-//    standard src-alpha/inv-src-alpha -- the boost-bar fire-overlay/glow fix, 2026-08-25).
-//    The depth-stencil entry stays a null fold (the dispatch runs depth-off).
-//  * gBillboardScreenTransform (unk_83011090) is the shared 2D screen transform the console
-//    stamps ahead of every GUI billboard/quad draw (its producers record positions in 0..1
-//    screen proportions). [FLAG PC-platform leaf] the console object maps proportions to the
-//    GPU's NDC; the PC dispatch consumes logical-screen-pixel transforms, so the fold is the
-//    proportion -> 1280x720 logical-pixel scale with the colour-identity scale (255) the
-//    dispatch's CXForm fold expects. Same observable mapping, PC-shaped target space.
-// ---------------------------------------------------------------------------------------------
 namespace
 {
     // Opaque sentinel storage for the two GUI blend identities (see the block comment above --
@@ -176,7 +160,6 @@ void BillboardRenderer::Construct(rw::IResourceAllocator* lpAllocator, s32 liMax
 
     rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, "BillboardRenderer");
     maVertexList = reinterpret_cast<CgsGraphics::Basic2dColouredTexturedVertex*>(lResource.m_baseResources[0]);
-
 
     SetUVTable(liFramesX, liFramesY, liNumFrames);
 }

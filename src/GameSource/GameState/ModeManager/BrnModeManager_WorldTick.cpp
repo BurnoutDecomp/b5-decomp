@@ -84,8 +84,6 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint ([queue-hwm] diag)
 #include <stdlib.h>                                                        // getenv ([queue-hwm] diag)
-#include "GameSource/Game/BrnHarnessWinTeleport.h"                          // [FLAG PC harness] BRN_WIN_TELEPORT
-
 namespace BrnGameState
 {
 
@@ -283,147 +281,6 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         // behind and the one flow_run.ps1 already records in marks.txt as DIAGENV -- so the rung
         // prints on the next stunt run with no harness change. Delete with the bring-up.
         {
-            static const bool sbFsmDiag = (getenv("BRN_PROP_DIAG") != 0);
-            if (sbFsmDiag && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static s32 siTicks        = 0;
-                static s32 siLastMode     = -2;
-                static s32 siLastState    = -2;
-                static s32 siLastCtrl     = -2;
-                static s32 siLastSecond   = -2;
-
-                ++siTicks;
-
-                const s32 liMode   = static_cast<s32>(meCurrentGameModeType);
-                // -1 == "the mode was torn down earlier in THIS tick" (UpdateCurrentMode's exit
-                // gate can null it). Reading it bare was an access violation waiting for the first
-                // run in which an event actually ended -- see IsGameModeOnline's banner.
-                const s32 liState  = (mpCurrentGameMode != NULL)
-                                         ? mpCurrentGameMode->GetCurrentState()
-                                         : -1;
-                const s32 liCtrl   = (mpGameStateModule != NULL &&
-                                      mpGameStateModule->IsControllerActive()) ? 1 : 0;
-                const s32 liSecond = static_cast<s32>(mfTimeInMode);
-
-                if (liMode != siLastMode || liState != siLastState ||
-                    liCtrl != siLastCtrl || liSecond != siLastSecond)
-                {
-                    siLastMode   = liMode;
-                    siLastState  = liState;
-                    siLastCtrl   = liCtrl;
-                    siLastSecond = liSecond;
-
-                    *CgsDev::Log::gpDebugPrint
-                        << "[mode-fsm] tick " << siTicks
-                        << " mode " << liMode
-                        << " state " << liState
-                        << " (0=countdown 1=intro 2=inprogress 3=outro 4=results 5=quit)"
-                        << " controllerActive " << liCtrl
-                        << " timeInMode " << mfTimeInMode << "\n";
-                }
-            }
-        }
-
-        // ==========================================================================================
-        // [FLAG PC bring-up] HARNESS-ONLY, NOT IN THE X360 BINARY -- the DEBUG FINISH-POSITION hook
-        // (added 2026-08-29, event-finish round). Gated on BRN_DEBUG_FINISH_POS; OFF by default, and
-        // flow_run.ps1 clears it on every run, so it can never ride into a capture silently.
-        // ==========================================================================================
-        // ⛔⛔ WHAT A MEDAL EARNED THROUGH THIS IS, AND IS NOT.
-        //   It is NOT a win. Nothing here scores a point, fabricates a completion percentage, or
-        //   writes a medal. It calls ONE console function --
-        //   ModeManager::FinishCurrentModeNextUpdateWithFinishPosition (DWARF :250, bodied at
-        //   BrnModeManager_Accessors.cpp:234) -- with the position the console's own debug member
-        //   carries, and every consumer downstream then runs FOR REAL: FinishCurrentMode's LABEL_39
-        //   reads `miDebugFinishPosition == 1` (BrnModeManager_Finish.cpp:643) exactly as the
-        //   shipped build does, ShowModeResults reads the position back through the consume-once
-        //   GetPlayersFinishPosition, and OnEventFinishUpdateProfile writes the profile.
-        //   ⇒ Any medal that appears with this set was AWARDED THROUGH THE DEBUG FINISH POSITION,
-        //   not by scoring the target. Say so wherever such a result is reported.
-        //
-        // WHY IT EARNS ITS PLACE. Stage 7 (offline stunt run) gates the medal on
-        // `miFinishPosition == 1`, which for mode 7 is `currentScore >= targetScore ? 1 : 4`. The
-        // target is 10,000; the best scripted run this campaign has managed banked 400. The scorer
-        // is demonstrably alive (0 -> 400 observed on the `[evt-score]` rung above), so the gap is
-        // the HARNESS's -- a keyboard-driven car cannot chain 10,000 points of stunts -- not the
-        // game's. Without this hook the entire win half of the finish path is unexercisable, which
-        // is why the console shipped the member in the first place (the same precedent as its
-        // "Fake Showtime" debug checkbox).
-        //
-        // ⚠️ THE VALUE IS THE FINISH POSITION, NOT A BOOLEAN. BRN_DEBUG_FINISH_POS=1 is the win
-        // (1 == first place); 4 reproduces the ordinary stunt-run loss. A value <= 0 is ignored,
-        // because every console consumer gates on `miDebugFinishPosition > 0` and a 0 would arm
-        // mbFinishCurrentModeNextUpdate while reading as "no override" -- a finish with a stale
-        // position, which is precisely the bug PlayerFinishedMode's -1 reset exists to prevent.
-        //
-        // BRN_DEBUG_FINISH_AT is the mode-time in seconds at which it fires (default 20). It is a
-        // HARNESS number, not a console one: it exists so the event start renders and the scorer
-        // initialises before the finish, and so a run is not at the mercy of the 120 s limit.
-        // ONE-SHOT per process, and only while the mode is actually in progress -- arming during
-        // the countdown or the outro would finish a mode that never ran.
-        // DELETE-WHEN a real pad can drive an offline event to its target score in the harness.
-        // IsGameModeInProgress, not a bare deref: UpdateCurrentMode above can have nulled the mode
-        // on this tick (see IsGameModeOnline's banner). The predicate is identical when it is live.
-        if (IsGameModeInProgress(mpCurrentGameMode))
-        {
-            static const char* const spcDebugFinishPos = getenv("BRN_DEBUG_FINISH_POS");
-            static const s32         siDebugFinishPos  =
-                (spcDebugFinishPos != NULL) ? atoi(spcDebugFinishPos) : 0;
-            static const char* const spcDebugFinishAt  = getenv("BRN_DEBUG_FINISH_AT");
-            static const f32         sfDebugFinishAt   =
-                (spcDebugFinishAt != NULL) ? static_cast<f32>(atof(spcDebugFinishAt)) : 20.0f;
-            static bool              sbDebugFinishFired = false;
-
-            if ((siDebugFinishPos > 0) && !sbDebugFinishFired && (mfTimeInMode >= sfDebugFinishAt))
-            {
-                sbDebugFinishFired = true;
-
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[evt-finish] ***** HARNESS DEBUG FINISH POSITION (BRN_DEBUG_FINISH_POS="
-                        << siDebugFinishPos << ") ***** mode "
-                        << static_cast<s32>(meCurrentGameModeType)
-                        << " timeInMode " << mfTimeInMode
-                        << " -- calling the console's own FinishCurrentModeNextUpdateWithFinishPosition("
-                        << siDebugFinishPos << "). NOTHING IS FORGED: no score, no completion "
-                        << "percentage, no medal is written here. Everything downstream is the "
-                        << "console's own path. A medal that follows was awarded through the DEBUG "
-                        << "FINISH POSITION, not by reaching the target score. One-shot.\n";
-                }
-
-                FinishCurrentModeNextUpdateWithFinishPosition(siDebugFinishPos);
-            }
-        }
-
-        // [FLAG PC harness] BRN_WIN_TELEPORT, the guaranteed-win teleport. NOT A CONSOLE PATH and
-        // inert unless the variable is set. It only chooses where the player's car is placed next
-        // (the landmark boxes still to be hit); the checkpoint and finish credit stay
-        // RaceCarTriggersLandmark's. Outside the IN_PROGRESS gate so it can report the state the
-        // mode leaves into. The two region reads are private, hence passed by value; the next
-        // checkpoint is only asked for while one remains (GetNextCheckpointIndex asserts on none).
-        // See GameSource/Game/BrnHarnessWinTeleport.h.
-        if (BrnGame::HarnessWinTeleport::IsEnabled() &&
-            mePlayerGlobalRaceCarIndex > E_GLOBAL_RACE_CAR_INDEX_INVALID &&
-            mePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT)
-        {
-            s32 liNextRegionIndex     = -1;
-            s32 liPreviousRegionIndex = -1;
-            if (CountCheckpointsRemaining(mePlayerGlobalRaceCarIndex) > 0u)
-            {
-                const u32 luNext = static_cast<u32>(GetNextLandmarkIndex(mePlayerGlobalRaceCarIndex));
-                if (luNext < muNumLandmarks)
-                {
-                    liNextRegionIndex = static_cast<s16>(maLandmarkIndices[luNext]);
-                }
-                if (luNext > 0u && (luNext - 1u) < muNumLandmarks)
-                {
-                    liPreviousRegionIndex = static_cast<s16>(maLandmarkIndices[luNext - 1u]);
-                }
-            }
-            BrnGame::HarnessWinTeleport::PreWorldUpdate(*this, mePlayerGlobalRaceCarIndex,
-                                                         liNextRegionIndex, liPreviousRegionIndex,
-                                                         lfSimTimeStep, lpActiveRaceCarOutput);
         }
 
         // ==========================================================================================
@@ -449,60 +306,6 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         // DELETE-WHEN the event-finish bring-up is done.
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK)
         {
-            static const bool sbScoreDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-            if (sbScoreDiag && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static s32 siScoreTicks   = 0;
-                static s32 siLastScore    = -1;
-                static s32 siLastTarget   = -1;
-                static s32 siLastCombo    = -1;
-                static s32 siLastHeartbeat = -1;
-
-                ++siScoreTicks;
-
-                const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
-                const s32 liScore      = lpcStuntScorer->GetCurrentScore();
-                const s32 liTarget     = lpcStuntScorer->GetTargetScore();
-                const s32 liCombo      = lpcStuntScorer->IsComboInProgress() ? 1 : 0;
-                const s32 liHeartbeat  = static_cast<s32>(mfTimeInMode) / 10;
-
-                if (liScore != siLastScore || liTarget != siLastTarget ||
-                    liCombo != siLastCombo || liHeartbeat != siLastHeartbeat)
-                {
-                    siLastScore     = liScore;
-                    siLastTarget    = liTarget;
-                    siLastCombo     = liCombo;
-                    siLastHeartbeat = liHeartbeat;
-
-                    // ⭐ tSinceStunt IS THE DISCRIMINATOR, and it is why this rung carries a
-                    // fourth number rather than just the verdict. Run evtfin_meas2 measured
-                    // comboInProgress latching at timeInMode 110 s and NEVER clearing, and while
-                    // it is set BOTH exits from a stunt run are shut:
-                    // StuntModeScoring::HasStuntModeEnded early-returns false on it, and
-                    // StuntAttackMode::ShouldFinish returns false AND resets the two idle timers.
-                    // The mode then ran 95 s past its own deadline. UpdateCombo (X360 0x82320FF0)
-                    // is what should auto-end it, after mfTimeSinceLastStunt passes 5 s -- but it
-                    // holds that timer at zero while mbStuntInProgress or HasAnyPendingScore(), and
-                    // it only runs at all when UpdateScores sees IsPlayerCarActive(). So:
-                    //   tSinceStunt PINNED AT 0  -> the combo is being held alive (a stunt or a
-                    //                               pending score never resolves), or UpdateScores
-                    //                               is not running at all;
-                    //   tSinceStunt RISING > 5   -> UpdateCombo runs and its auto-end is not
-                    //                               firing, i.e. the defect is in EndCombo's reach.
-                    // Two very different repairs; the number separates them in one run.
-                    // Both members are read through committed PUBLIC const getters
-                    // (BrnStuntModeScoring.h:230 / :252) -- mbStuntInProgress and
-                    // HasAnyPendingScore() are protected and are deliberately NOT reached for.
-                    *CgsDev::Log::gpDebugPrint
-                        << "[evt-score] tick " << siScoreTicks
-                        << " timeInMode " << mfTimeInMode
-                        << " score " << liScore
-                        << " target " << liTarget
-                        << " comboInProgress " << liCombo
-                        << " tSinceStunt " << lpcStuntScorer->GetTimeSinceLastScoringStunt()
-                        << "\n";
-                }
-            }
         }
     }
     else
@@ -762,21 +565,6 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     // silent and the log is one line per genuine escalation; the 50% and 75% lines are the two
     // thresholds worth stopping at (75% of 13312 == 9984, i.e. one action-23 pair from the edge).
     {
-        static const bool sbQueueHwm = (getenv("BRN_MODEMGR_DIAG") != 0);
-        if (sbQueueHwm && lpGameActionQueue != NULL && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siPeakBytes = 0;
-            const s32  liUsedBytes = lpGameActionQueue->GetSizeInBytes();
-            if (liUsedBytes > siPeakBytes)
-            {
-                siPeakBytes = liUsedBytes;
-                *CgsDev::Log::gpDebugPrint
-                    << "[queue-hwm] GameActionQueue peak=" << siPeakBytes
-                    << " of 13312 (" << ((siPeakBytes * 100) / 13312) << "%) mode="
-                    << static_cast<s32>(meCurrentGameModeType)
-                    << " events=" << lpGameActionQueue->GetLength() << "\n";
-            }
-        }
     }
 
     // `stw r27(=0), 0x6D68(r31)` -- the queue pointer never outlives the tick.

@@ -77,9 +77,6 @@ namespace CgsResource
 
         // DecompressionJobInterface.cpp:249 / X360 0x828DB658 -- close the streaming batch.
         void EndStream();
-        // FLAG PC-platform leaf: join before releasing resource destinations and
-        // free an unfinished native inflate stream when the module shuts down.
-        void CancelStreamPC();
 
         // DecompressionJobInterface.cpp:268 / X360 0x828DB760 -- start a new entry with its
         // destination (uncompressed) buffer + size.
@@ -104,8 +101,5 @@ namespace CgsResource
         bool                    mbEntryInProgress;  // +0x4E0 a CreateEntry has not yet been FinishEntry'd
         CgsMemory::HeapMalloc   mHeap;              // +0x4E4 the heap the job's zlib callbacks use
         u8                      macMallocBuffer[KU_COMPRESSION_BUFFER_SIZE]; // +0xA04 the heap's backing buffer
-        // FLAG PC-platform leaf: stable zlib workspace for this stream; the
-        // original selects a console worker-slot context instead.
-        Decompressor            mNativeWorker;
     };
 }

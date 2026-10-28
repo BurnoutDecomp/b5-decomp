@@ -4,7 +4,7 @@
 #include <cstring>  // strlen, strncpy
 #include <new>      // placement new (CLog::Initialize construction over operator new)
 
-#include <windows.h> // CreateThread, ResumeThread, CloseHandle (the console calls them directly)
+#include <xtl.h> // CreateThread, ResumeThread, CloseHandle (the console calls them directly)
 
 // ===========================================================================
 // MassiveAdClient3 -- CLog / CMassiveTime / CMassiveOrder / CAddressIndexPair /
@@ -282,7 +282,6 @@ CFlag::CFlag(const char* pcName)
 CFlag::~CFlag()
 {
 }
-
 
 // ---------------------------------------------------------------------------
 // CMassiveThread::Create

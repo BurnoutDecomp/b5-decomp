@@ -691,8 +691,6 @@ namespace CgsDev
                               Internal::E_INEVENT_2D_LINE, static_cast<s32>(sizeof(lEvent)));
     }
 
-    // FLAG PC-platform leaf: retain the existing native scalar min/max convenience
-    // API; ARTIST/DecFIGS expose the vector position/size publisher above.
     void DebugRender::Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
     {
         Draw2DBox(Vector2{lfMinX, lfMinY, 0, 0},

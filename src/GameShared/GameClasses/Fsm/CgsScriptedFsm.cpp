@@ -88,9 +88,6 @@ void ScriptedFsm::SetState(CgsID lStateId)
         // "the script asked for a state nobody registered" case -- the FSM wants to
         // open a menu that does not exist in the state pool. Named, because the
         // assert text alone does not say WHICH.
-        if (getenv("BRN_SCREEN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[screen] MISSING STATE '" << lacId
-                                       << "' -- the FSM asked for it, the pool has no such state\n";
         CGS_ASSERT(false, "Could not find state with id");   // X360 appends the id (lacId)
         return;
     }
@@ -102,21 +99,6 @@ void ScriptedFsm::SetState(CgsID lStateId)
     // scripted screen transition passes through, so ONE witness names every menu the
     // game actually opens, in order. Used to prove menu coverage against the console's
     // own FSM rather than inferring it from which files exist.
-    if (getenv("BRN_SCREEN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        char lacFrom[KI_CGSID_STRING_LEN];
-        char lacTo[KI_CGSID_STRING_LEN];
-        lacFrom[0] = '\0';
-        // mpCurrentState is declared as the CgsFsm::State base, but within this class it
-        // is only ever assigned nullptr or lpTarget (a ScriptedState*), so the id is
-        // always there to read. Diag-only path.
-        if (mpCurrentState != nullptr)
-            CgsIDUnCompress(static_cast<const ScriptedState*>(mpCurrentState)->GetId(), lacFrom);
-        CgsIDUnCompress(lStateId, lacTo);
-        *CgsDev::Log::gpDebugPrint << "[screen] ENTER '" << lacTo << "' (from '"
-                                   << (mpCurrentState != nullptr ? lacFrom : "-") << "') seq "
-                                   << static_cast<s32>(muSequenceNumber) << "\n";
-    }
 
     if (mpCurrentState != nullptr)
         mpCurrentState->OnLeave();

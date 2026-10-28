@@ -1,7 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/texture.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"
 

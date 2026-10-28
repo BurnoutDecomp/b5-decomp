@@ -369,16 +369,6 @@ namespace Deformation
         // uses, duplicated here (file-local, no ODR surface) so the sim-entry witness is on the SAME
         // switch as the [detach-gate]/[detach-make]/[detach-part] lines it has to be read alongside.
         // DELETE-WHEN the detach question is closed and banked.
-        inline bool DetachProbeOn()
-        {
-            static s32 siProbe = -1;
-            if ( siProbe < 0 )
-            {
-                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                siProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
-            }
-            return (siProbe == 1) && (CgsDev::Log::gpDebugPrint != 0);
-        }
 
         // [DIAG] AddContactSpy's four gate-stage counters. File-local, incremented unconditionally
         // (so the counts are the truth even on a run where the probe is off) and read only under
@@ -1276,32 +1266,6 @@ namespace Deformation
         // @0x826095E0..0x826096D4 -- the contact padding that box earns. A degenerate box is "thin"
         // (min half <= 0.15) and takes the full 0.5 m pad, i.e. a ~0.55 m near-cube collider for a
         // flat panel. DELETE-WHEN the part-box question is closed and banked.
-        if ( DetachProbeOn() )
-        {
-            static s32 siBoxLines = 0;
-            if ( siBoxLines < 400 )
-            {
-                ++siBoxLines;
-                f32 lfMinHalf = lHalf.x;
-                if ( lHalf.y < lfMinHalf ) lfMinHalf = lHalf.y;
-                if ( lHalf.z < lfMinHalf ) lfMinHalf = lHalf.z;
-                const bool lbFatBox = (lfMinHalf > 0.15f);
-                const f32  lfPad = lbFatBox ? ((lfMinHalf < 0.5f) ? lfMinHalf : 0.5f) : 0.5f;
-                *CgsDev::Log::gpDebugPrint
-                    << "[part-box] id " << CgsDev::E_PRINTMODE_HEXONCE
-                    << mRigidBodyId.GetBaseRigidBodyID()
-                    << " type " << static_cast<s32>(mpIKPart->GetPartType())
-                    << " raw (" << lRawHalf.x << ", " << lRawHalf.y << ", " << lRawHalf.z << ")"
-                    << " half (" << lHalf.x << ", " << lHalf.y << ", " << lHalf.z << ")"
-                    << " minHalf " << lfMinHalf
-                    << (lbFatBox ? " FAT" : " THIN")
-                    << " pad " << lfPad
-                    << " effective " << (lfMinHalf + lfPad)
-                    << " ext (" << (lvBoundingBoxMax.x - lvBoundingBoxMin.x) << ", "
-                    << (lvBoundingBoxMax.y - lvBoundingBoxMin.y) << ", "
-                    << (lvBoundingBoxMax.z - lvBoundingBoxMin.z) << ")\n";
-            }
-        }
 
         // centre = (max + min) * 0.5, transformed through the part's OWN mBBoxOrientation rows (the asm
         // reads this+288/+304/+320 and adds the translation row this+336 -- NOT the passed lTransform;
@@ -1866,42 +1830,6 @@ namespace Deformation
         // [jb-exit] line carries for the break test that reads THIS state), and under
         // BRN_JB_EXIT_DIAG=1 the cap rises from 40000 to 250000 so a whole organic run is covered (at
         // 40000 the live_final runs lost everything after their first 2100-3900 presents).
-        if ( DetachProbeOn() )
-        {
-            static s32 siJointLines = 0;
-            static s32 siJointLineCap = -1;
-            if ( siJointLineCap < 0 )
-            {
-                const char* lpcJbExit = getenv("BRN_JB_EXIT_DIAG");
-                siJointLineCap = ( lpcJbExit != 0 && atoi(lpcJbExit) > 0 ) ? 250000 : 40000;
-            }
-            if ( siJointLines < siJointLineCap )
-            {
-                ++siJointLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[joint-int] present " << renderengine::guPresentCount
-                    << " ent " << mGlobalVehicleId.muValue
-                    << " id " << CgsDev::E_PRINTMODE_HEXONCE
-                    << mRigidBodyId.GetBaseRigidBodyID()
-                    << " type " << static_cast<s32>(mpIKPart->GetPartType())
-                    << " rot " << lfJointRotation << " -> " << lfNewJointRotation
-                    << " band [" << lfNegatedMaxJointAngle << ", 0]"
-                    << " vel " << lfJointVelocity
-                    << " accel " << lfAngularAcceleration
-                    << " (sq " << (lfClampedAnchorSpeed * lfClampedAnchorSpeed)
-                    << " g " << (KF_HINGED_PART_GRAVITY * lWorldPanelDirection.y)
-                    << " pivot " << lfPivotAcceleration << ")"
-                    << " resolve " << lfJointResolve
-                    << " stress " << mLocalInitialJointPositionPlusLimitStress.GetPlus()
-                    << " axis (" << lJointAxis.x << ", " << lJointAxis.y << ", " << lJointAxis.z << ")"
-                    << " dirL (" << lLocalPanelDirection.x << ", " << lLocalPanelDirection.y << ", "
-                    << lLocalPanelDirection.z << ")"
-                    << " dirW (" << lWorldPanelDirection.x << ", " << lWorldPanelDirection.y << ", "
-                    << lWorldPanelDirection.z << ")"
-                    << " dt " << lfTimeStep
-                    << " step " << guDiagDeformationStep << "\n";
-            }
-        }
     }
 
     // =========================================================================================
@@ -1982,34 +1910,6 @@ namespace Deformation
         const DeformationJointSpec* lpActiveJoint = mpIKPart->GetActiveJointSpec();
 
         ++gxJbCalls;   // [DIAG] census -- see the counter block at the top of this file.
-        if ( DetachProbeOn() && (gxJbCalls % 600u) == 0u )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[jb-census] calls " << static_cast<s32>(gxJbCalls)
-                << " | exits: neverBreak(g2) " << static_cast<s32>(gxJbNeverBreak)
-                << " rotGate(g3a) " << static_cast<s32>(gxJbRotGate)
-                << " type3(g3b) " << static_cast<s32>(gxJbType3)
-                << " sensorGate(g3c) " << static_cast<s32>(gxJbSensorGate)
-                << " | armA: idle " << static_cast<s32>(gxJbAxisIdle)
-                << " ran " << static_cast<s32>(gxJbArmA)
-                << " breaks " << static_cast<s32>(gxJbBreak)
-                << " | rotProp/gate ["
-                << static_cast<s32>(gxJbRotHist[0]) << " " << static_cast<s32>(gxJbRotHist[1]) << " "
-                << static_cast<s32>(gxJbRotHist[2]) << " " << static_cast<s32>(gxJbRotHist[3]) << " "
-                << static_cast<s32>(gxJbRotHist[4]) << " " << static_cast<s32>(gxJbRotHist[5]) << " "
-                << static_cast<s32>(gxJbRotHist[6]) << "]"
-                << " force/maxStress ["
-                << static_cast<s32>(gxJbForceHist[0]) << " " << static_cast<s32>(gxJbForceHist[1]) << " "
-                << static_cast<s32>(gxJbForceHist[2]) << " " << static_cast<s32>(gxJbForceHist[3]) << " "
-                << static_cast<s32>(gxJbForceHist[4]) << " " << static_cast<s32>(gxJbForceHist[5]) << " "
-                << static_cast<s32>(gxJbForceHist[6]) << "]"
-                << " pen/maxStress ["
-                << static_cast<s32>(gxJbPenHist[0]) << " " << static_cast<s32>(gxJbPenHist[1]) << " "
-                << static_cast<s32>(gxJbPenHist[2]) << " " << static_cast<s32>(gxJbPenHist[3]) << " "
-                << static_cast<s32>(gxJbPenHist[4]) << " " << static_cast<s32>(gxJbPenHist[5]) << " "
-                << static_cast<s32>(gxJbPenHist[6]) << "]"
-                << " (buckets: NEG <1e-4 <1e-3 <1e-2 <0.1 <1 >=1)\n";
-        }
 
         // (2) early "never breaks": detach threshold (asm reads spec+52 == mfJointDetachThreshold)
         // <= -0.9 -> return false. The asm dereferences spec+52 UNCONDITIONALLY (no null guard), so the
@@ -2272,10 +2172,7 @@ namespace Deformation
         // 0x825E7D04 calls the write accessor 0x825BCEB0, then AddEvent at 0x825E4340.
         lpSimInput->GetUpdateExternalBodyQueue()->AddEvent(lEvent);
 
-        static const bool lbTrace = std::getenv("BRN_RIVAL_DAMAGE_DIAG") != nullptr;
         static u32 luTraceCount = 0;
-        if (lbTrace && luTraceCount++ < 8)
-            CgsDev::Log::WriteToLog("[part-motion] simulation update queued\n");
 
         // *(this+487) = 0 -- the part is no longer dirty for RW.
         mbNeedsWritingIntoRenderware = false;
@@ -2490,27 +2387,6 @@ namespace Deformation
         // states, and the row prints even when every counter is zero, so an unarmed probe is
         // distinguishable from an armed one that saw nothing. DELETE-WHEN banked.
         ++gxSpyAppended;
-        if ( DetachProbeOn() )
-        {
-            static const u32 KU_SPY_DETAIL_ROWS   = 12;
-            static const u32 KU_SPY_SUMMARY_EVERY = 500;
-
-            const bool lbDetail  = (gxSpyAppended <= KU_SPY_DETAIL_ROWS);
-            const bool lbSummary = (gxSpyAppended % KU_SPY_SUMMARY_EVERY) == 0;
-
-            if ( lbDetail || lbSummary )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[spy] f " << renderengine::guPresentCount
-                    << " type " << static_cast<s32>(mpIKPart->GetPartType())
-                    << " mag " << lfCollisionMagnitude
-                    << " n (" << lNormal.x << ", " << lNormal.y << ", " << lNormal.z << ")"
-                    << " v (" << lPointVelocity.x << ", " << lPointVelocity.y << ", " << lPointVelocity.z << ")"
-                    << " | calls " << gxSpyCalls << " gate1 " << gxSpyGate1
-                    << " gate2 " << gxSpyGate2 << " appended " << gxSpyAppended
-                    << "\n";
-            }
-        }
     }
 
     // =============================================================================================
@@ -2686,20 +2562,6 @@ namespace Deformation
         // [DIAG] NOT IN THE X360 BINARY. The win-condition witness for this wave, at the site and
         // after the event is built, printing the values that decide whether the part can move at
         // all: a non-ACTIVE state or a zero/NaN inverse mass means it is in the sim and inert.
-        if ( DetachProbeOn() )
-        {
-            const Vector3 lPos = lAddBodyEvent.mRigidBody.mTransform.wAxis;
-            *CgsDev::Log::gpDebugPrint
-                << "[detach-sim] ENTERED SIM id " << CgsDev::E_PRINTMODE_HEXONCE
-                << static_cast<u64>(lAddBodyEvent.mID)
-                << " state " << (lAddBodyEvent.meState == rw::physics::ACTIVE_BODY ? "ACTIVE" : "NOT-ACTIVE")
-                << " invMass " << lAddBodyEvent.mRigidBody.mInertia.GetInverseMass()
-                << " invI (" << lInverseInertia.x << ", " << lInverseInertia.y << ", "
-                << lInverseInertia.z << ")"
-                << " pos (" << lPos.x << ", " << lPos.y << ", " << lPos.z << ")"
-                << " vel (" << lInitialLinearVelocity.x << ", " << lInitialLinearVelocity.y << ", "
-                << lInitialLinearVelocity.z << ")\n";
-        }
     }
 
     void PhysicalBodyPart::PostVehicleUpdate()
@@ -2711,10 +2573,7 @@ namespace Deformation
         mWorldPenetrationPlusCollisionMagnitude.SetZero();
         mAverageCollisionPointPlusNumCollisions.SetZero();
         mRwBody.SetTransform(lTransform);
-        static const bool lbTrace = std::getenv("BRN_RIVAL_DAMAGE_DIAG") != nullptr;
         static u32 luTraceCount = 0;
-        if (lbTrace && luTraceCount++ < 8)
-            CgsDev::Log::WriteToLog("[part-motion] vehicle transform delta applied\n");
     }
 
     void RemoveTriangleCacheSlot(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/, u16 /*lu16TriangleCacheSlot*/)
@@ -2723,11 +2582,8 @@ namespace Deformation
         if ( !sbLoggedRTCS )
         {
             sbLoggedRTCS = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: RemoveTriangleCacheSlot hook reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
         }
-        
+
     }
 
     // ⛔ EmitDetachedPartNotification's GATE IS DELETED (2026-08-27, detach-2 wave), and so is the

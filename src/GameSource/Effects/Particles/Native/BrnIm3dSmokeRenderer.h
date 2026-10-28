@@ -32,7 +32,6 @@
 
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                                                        // Vector2
-#include "pc/gcm/renderengine/VertexDescriptor.h"   // renderengine::VertexDescriptor::Parameters (the vertex header needs it complete)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"               // CgsGraphics::ImRenderer<V>
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"            // renderengine::ProgramVariableHandle

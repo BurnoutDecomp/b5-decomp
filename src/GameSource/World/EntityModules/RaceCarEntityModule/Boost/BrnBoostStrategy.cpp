@@ -16,7 +16,6 @@
 //   flt_820147FC = 0x3F000000 = 0.5f
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"
-#include "pc/input/BoostFeedback.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // EGameModeType
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -321,10 +320,6 @@ void BoostStrategy::AddBoost(f32 lfBoostAmount) // 0x822C0E10
     mfBoostAmount = std::min(
         std::max(mfBoostAmount + lfSpeedMultiplier * lfBoostAmount, 0.0f),
         mfMaxBoost);
-    // FLAG PC-platform leaf: observe this actual award after its original gates
-    // and clamp. A full meter, disallowed earning or a removal generates no cue.
-    if (mfBoostAmount > lfBeforeAward)
-        CgsInput::AdaptiveTriggers::BoostFeedback::Record(reinterpret_cast<std::uintptr_t>(this));
 }
 
 void BoostStrategy::UpdateMaxBoost(bool lbFillToMax) // 0x822C0EB0

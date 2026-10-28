@@ -1,6 +1,5 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficHorn.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
-#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
@@ -156,15 +155,6 @@ void TrafficHorn::ProcessUpdate()
             SetAemsTypeParameter();
             mHornVoice.Play( 0 );
 
-            // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-            if ( TrafficSoundDiagTake( guHornVoiceWitnesses, 16 ) )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[trafficsnd] voice started type="
-                    << ( mfAemsPatchMode == KF_ALARM_PATCH_MODE ? "alarm" : "horn" )
-                    << " entity=" << static_cast<s32>( lpEntity->mu16EntityIndex )
-                    << " size=" << static_cast<s32>( meTrafficSize ) << "\n";
-            }
         }
     }
 
@@ -264,14 +254,6 @@ bool TrafficHorn::Detach()
 {
     if ( !BrnSound::Logic::BrnEffectObject::Detach() )
         return false;
-
-    // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-    if ( TrafficSoundDiagTake( guHornReleaseWitnesses, 64 ) )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[trafficsnd] voice released type=horn stage="
-            << static_cast<s32>( mHornVoice.GetUpdateStage() ) << "\n";
-    }
 
     mHornVoice.Release();
     return true;

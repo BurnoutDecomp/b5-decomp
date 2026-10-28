@@ -103,6 +103,5 @@ namespace CgsInput
         static_assert(offsetof(ManagerX360Device, maState)      == 0x04, "maState @ +0x04");
         static_assert(offsetof(ManagerX360Device, mbConnected)  == 0x14, "mbConnected @ +0x14");
         static_assert(offsetof(ManagerX360, maDevices)    == 0x00, "maDevices @ +0x00");
-        static_assert(offsetof(ManagerX360, mapBoundPads) == 0x60, "mapBoundPads @ +0x60 (X360; host pointers widen this)");
     }
 }

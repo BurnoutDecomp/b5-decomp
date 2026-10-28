@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h"
@@ -1142,9 +1141,6 @@ finish:
             mixer->mpSrcBuffer->mpSamples[
                 channel * mixer->mpSrcBuffer->muStride + produced - 1];
     }
-    // FLAG PC-platform witness: actual decoded streaming buffer, read-only.
-    CgsSound::PcmTrace::Measure(self, mixer->mpSrcBuffer->mpSamples,
-        produced, channels, mixer->mpSrcBuffer->muStride);
     self->mDcOffsetsGathered = 1;
     return 1;
 }

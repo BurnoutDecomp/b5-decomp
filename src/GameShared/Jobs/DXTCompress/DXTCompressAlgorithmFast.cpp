@@ -14,8 +14,6 @@
 #include "GameShared/Jobs/DXTCompress/DXTCompressAlgorithmFast.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "pc/gcm/renderengine/pixelformat.h"         // renderengine::PIXELFORMAT_*
-
 #include <cmath>   // std::fmaf (the fused single-precision multiply-adds of ConvertYUVPixel)
 
 namespace

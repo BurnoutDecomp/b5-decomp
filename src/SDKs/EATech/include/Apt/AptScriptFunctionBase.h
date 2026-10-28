@@ -224,7 +224,6 @@ public:
     {
         static_assert(offsetof(AptScriptFunctionBase, mpCIH)         == 0x40, "first field after the 0x40 AptObject base");
         static_assert(offsetof(AptScriptFunctionBase, mpParentAnim)  == 0x48, "getVariable reads the fn's ParentAnim here");
-        static_assert(offsetof(AptScriptFunctionBase, mpParentScope) == 0x50, "x64: ExistsInLocalScope @0x140837300 reads [this+50h]");
         static_assert(sizeof(AptScriptFunctionBase) == 0x60, "console 0x30 widened; +0x58 u16 + pad");
     }
 

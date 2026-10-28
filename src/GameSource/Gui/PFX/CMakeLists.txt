@@ -2,7 +2,6 @@ target_sources(${PROJECT_NAME}
     PRIVATE
         BrnGuiEffectsArbitrator.cpp
         BrnGuiPFXHooks.cpp
-        BrnGuiPFXHooks_embed_check.cpp
         BrnPfxHookBlender.cpp
         BrnPfxHookBlender_Fader.cpp
         CgsResourcePtr_BrnGui_PFXHookBundle.cpp

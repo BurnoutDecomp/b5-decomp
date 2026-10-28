@@ -22,7 +22,6 @@ target_sources(${PROJECT_NAME}
         BrnPlayerPositionTable.cpp
         BrnPositionIndicator.cpp
         BrnRoadRuleComponent.cpp
-        BrnRoadRuleComponent_embed_check.cpp
         BrnRoadRuleShotComponent.cpp
 
     PUBLIC

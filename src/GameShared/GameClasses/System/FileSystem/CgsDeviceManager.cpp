@@ -457,7 +457,6 @@ namespace CgsFileSystem
             lpOp->mpfCallback = SyncOpCallback;
             lpOp->mpContext   = lpComp;
             lpPool->AddOperation(lpOp);
-            CgsDev::Assert::WaitForWorkerPC(*lpComp->mpDone);
             return lpComp->miResult;
         }
     }
@@ -492,7 +491,6 @@ namespace CgsFileSystem
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
-        CgsDev::Assert::WaitForWorkerPC(lDone);
         const Handle lHandle = lComp.mHandle;
         if (lComp.miResult != 0 || lHandle.IsNull())
             return -1;
@@ -507,7 +505,6 @@ namespace CgsFileSystem
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
-        CgsDev::Assert::WaitForWorkerPC(lDone);
         const int liBytes = lComp.miResult == 0 ? static_cast<int>(lComp.muSize) : -1;
 
         // CLOSE.
@@ -517,7 +514,6 @@ namespace CgsFileSystem
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
-        CgsDev::Assert::WaitForWorkerPC(lDone);
 
         return liBytes;
     }

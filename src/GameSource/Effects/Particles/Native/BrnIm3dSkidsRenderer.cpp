@@ -22,10 +22,6 @@
 //            oTex0  = r1.xy
 //   pixel:   oColour = tfetch(tf0, uv) * interpolated colour
 //
-// and re-authored as D3D9 vs_3_0 / ps_3_0 in tools/assets/shaders/brn_skid.fx,
-// compiled + wrapped exactly like the sky dome's pair (SkyDomeProgramsPC.cpp)
-// into SkidProgramsPC.cpp -- the PC platform leaf this TU binds.
-// ============================================================================
 
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -38,9 +34,7 @@
 // for the two guest .data blobs; see that file's recipe).
 namespace renderengine
 {
-    extern const u8  gauSkidVertexProgramPC[];
     extern const u32 guSkidVertexProgramPCSize;
-    extern const u8  gauSkidPixelProgramPC[];
     extern const u32 guSkidPixelProgramPCSize;
 }
 
@@ -76,8 +70,6 @@ namespace BrnGraphics
     void Im3dSkidsRenderer::Construct(rw::IResourceAllocator* lpAllocator)
     {
         // X360: the two guest .data microcode blobs, 456 / 228 bytes; PC: the converted images.
-        const void* lapVertexProgramBinary[1] = { renderengine::gauSkidVertexProgramPC };
-        const void* lapPixelProgramBinary[1]  = { renderengine::gauSkidPixelProgramPC };
         const u32   lauVertexProgramSize[1]   = { renderengine::guSkidVertexProgramPCSize };
         const u32   lauPixelProgramSize[1]    = { renderengine::guSkidPixelProgramPCSize };
         CgsGraphics::ImRenderer<SkidVertex>::Construct(
@@ -99,7 +91,6 @@ namespace BrnGraphics
                 lpVertexProgram, reinterpret_cast<const u8*>("gEndColour"), &mEndColourStateHandle);
 
             // [DIAG] DID THE THREE CONSTANTS RESOLVE? mu8RegisterCount == 0 is
-            // GetVariableHandleByName's "not found" answer, and the PC leaf's
             // BeginShaderStates sends a zero-count handle to a DISCARD row -- so an
             // unresolved gWorldViewProj means SetTransform writes the matrix into a bin and
             // the strips transform by whatever c0..c3 happen to hold. That is invisible

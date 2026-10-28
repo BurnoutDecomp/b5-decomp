@@ -323,23 +323,6 @@ void ScrapeEffect::UpdateParams(f32 /*afDeltaTime*/)
                 lrLog << "[SCRAPE][" << ((GetId() >> 11) & 0x1F) << "]:Start \n";
             }
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the scrape voice starts.
-            if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
-            {
-                static u32 suStartPrintCount = 0;
-                if (suStartPrintCount++ < 16u)
-                {
-                    char lacLine[192];
-                    std::snprintf(lacLine, sizeof(lacLine),
-                                  "[collision-audio] scrape voice start A=%u:%u B=%u:%u orient=%d material_b=%d "
-                                  "attached=%.3f now=%.3f live=%d\n",
-                                  lrScrape.mEntityIdA.muValue >> 24, (lrScrape.mEntityIdA.muValue >> 10) & 0x3FFFu,
-                                  lrScrape.mEntityIdB.muValue >> 24, (lrScrape.mEntityIdB.muValue >> 10) & 0x3FFFu,
-                                  static_cast<s32>(lrScrape.meOrientation),
-                                  static_cast<s32>(miParam_AEMS_material_b), lpState->GetTimeWeAttached(),
-                                  lpState->GetCurrentTime(), mScrapeVoice.HasLiveVoice() ? 1 : 0);
-                    *CgsDev::Log::gpDebugPrint << lacLine;
-                }
-            }
             mbPlaying = true;
             mfScrapeStartTimeStamp = lpState->GetCurrentTime();
         }

@@ -181,11 +181,6 @@ AptScriptFunctionBase::~AptScriptFunctionBase()
 // aborting. They return a type-appropriate default after the abort so the (never
 // taken) fallthrough type-checks.
 //
-// FLAG PC-platform leaf: _purecall (@0x82C08F60) is a CRT abort handler
-// (_NMSG_WRITE(0x19) -> _set_abort_behavior -> abort, after an optional installed
-// gpPureCallHandler at dword_832BADDC). Modelled here with the PC CRT abort() (the
-// faithful "pure virtual call" terminator); the dword_832BADDC user-handler hook is
-// not wired on PC.
 
 const char* AptScriptFunctionBase::GetName() const
 {

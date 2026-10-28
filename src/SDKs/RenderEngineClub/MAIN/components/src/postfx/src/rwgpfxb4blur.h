@@ -6,9 +6,6 @@
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector2
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // ProgramBufferData / ProgramVariableHandle
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"     // BlendMaterialState
-#include "pc/gcm/renderengine/VertexDescriptor.h"                            // VertexDescriptorData
-#include "pc/gcm/renderengine/renderstates.h"                                // DepthStencilState / RasterizerState
-
 // rw::graphics::postfx::B4Blur::State -- the parameter block for the "B4" (Burnout-4) blur post-fx.
 // It carries the blend/blur amounts and centres (each a SIMD Vector2), plus the scalar opacity,
 // velocity, sharpness MUL/ADD pair, noise and angle controls that the blur shader samples.

@@ -200,7 +200,6 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     lTargetCameraAnglesRandom.z = 0.0f;
     lTargetCameraAnglesRandom.w = 0.0f;
 
-
     // ---- GATE 1 @0x8223F014 / PS3 0x68A88 -----------------------------------
     // `fcmpu cr6, f30, flt_82001CC0` then `beq -> epilogue`. An exact float compare against
     // zero, reproduced as one (not as a magnitude epsilon).
@@ -278,8 +277,6 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     mShakeTake.GetValueFloat(25,current);
     mMatrix.Pos().y -= std::tan(angles.x) * kfShakeFocalDistance;
     mu8ActiveShake = lu8ShakeType;
-    // FLAG PC diagnostic: demonstrate that a nonempty authored take changes the view.
-    static const bool trace = std::getenv("BRN_CAMERA_RIG_DIAG") != 0;
     static u32 lines = 0;
     if (trace && lfShakeAmplitude > 0.1f && lines++ < 32 && CgsDev::Log::gpDebugPrint)
         *CgsDev::Log::gpDebugPrint << "[camera-rig] boost-shake type=" << static_cast<u32>(lu8ShakeType)

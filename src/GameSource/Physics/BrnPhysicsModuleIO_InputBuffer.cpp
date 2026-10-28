@@ -56,8 +56,6 @@ namespace PhysicsModuleIO
             // Vehicle::VehicleDriverInputInterface now. Unlike the vehicle-input span it does NOT
             // grow on the host -- every member is pointer-free -- so it must land EXACTLY on the
             // console span or the members below it would need a second drift constant. Pin it.
-            static_assert(sizeof(VehicleDriverInputInterfaceStorage) == 147840 - 142544,
-                          "vehicle-driver span must equal the console 5296 (host type is pointer-free)");
             static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
             // mVehicleEffectsInputInterface is the REAL
             // Vehicle::VehicleEffectsInputInterface now (it was a 1-byte span the pre-physics

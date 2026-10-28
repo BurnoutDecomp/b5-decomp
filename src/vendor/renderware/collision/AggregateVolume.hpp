@@ -120,9 +120,6 @@ public:
 // --- layout pins (console offsets; the reinterpret in VolumeVTables.cpp rests on these)
 static_assert(offsetof(AggregateVolume, mTransform)   == 0x00, "AggregateVolume::transform");
 static_assert(offsetof(AggregateVolume, muVTableSlot) == 0x40, "AggregateVolume::vTable slot");
-static_assert(offsetof(AggregateVolume, maAggregate)  == 0x44,
-              "the aggregate pointer MUST sit at +0x44 -- a bare Aggregate* member lands "
-              "at +0x48 on x64 and that bug was live until 2026-08-19");
 static_assert(offsetof(AggregateVolume, mfRadius)     == 0x50, "AggregateVolume::radius");
 static_assert(offsetof(AggregateVolume, muFlags)      == 0x5C, "AggregateVolume::m_flags");
 static_assert(sizeof(AggregateVolume) == 96,

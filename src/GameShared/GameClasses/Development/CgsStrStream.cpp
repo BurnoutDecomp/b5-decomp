@@ -27,7 +27,6 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(s32 liValue)
     {
-        PrintMode& leCurrentMode = GetPrintModePC();
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
         if (leCurrentMode == E_PRINTMODE_DECIMAL)
         {
@@ -44,7 +43,6 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(u32 luValue)
     {
-        PrintMode& leCurrentMode = GetPrintModePC();
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
         if (leCurrentMode == E_PRINTMODE_DECIMAL)
         {
@@ -61,7 +59,6 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
     {
-        PrintMode& leCurrentMode = GetPrintModePC();
         if (leCurrentMode == E_PRINTMODE_DECIMAL)
             Append64IntDecimal(luValue);
         else
@@ -89,7 +86,6 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(PrintMode leMode)
     {
-        GetPrintModePC() = leMode;
         return *this;
     }
 
@@ -198,11 +194,6 @@ namespace CgsDev
     // Decimal mode prints two decimals; the hex modes take the base formatting.
     StrStreamBase& SimpleStrStream::operator<<(f32 lfValue)
     {
-        if (GetPrintModePC() == E_PRINTMODE_DECIMAL)
-        {
-            AppendFormat("%.02f", static_cast<double>(lfValue));
-            return *this;
-        }
         return StrStreamBase::operator<<(lfValue);
     }
 }

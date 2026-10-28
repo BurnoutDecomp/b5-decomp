@@ -135,7 +135,6 @@ namespace BrnDirector
         // tick DirectorModule::Prepare reports "still preparing" it read-locks this output
         // buffer and runs `GameDataIO::InputBuffer::AppendRequestInterface<512>` into the
         // frame's GameData input, which the resource pump then services. Both halves are now
-        // real, so nothing here needs a PC leaf.
         //
         // The caller (DirectorModule::Prepare @0x822712D8) holds the output buffer's WRITE
         // lock for the whole call, which is exactly what GetResour() asserted before handing

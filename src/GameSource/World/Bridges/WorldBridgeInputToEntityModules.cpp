@@ -327,20 +327,7 @@ void BridgeInputToEntityModules(
                 {
                     // The env latch is evaluated ONCE (the house idiom -- getenv per event would
                     // be a syscall on a gameplay path).
-                    static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
                     static bool sbLoggedFirstPrepareForMode = false;
-                    if (sbPropDiag && !sbLoggedFirstPrepareForMode
-                        && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLoggedFirstPrepareForMode = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[UI-gate] prepare-for-mode stage=" << liPrepareStage
-                            << " modeType=" << static_cast<s32>(lpGameModeParams->GetGameModeType())
-                            << " online="          << (lbOnlineMode ? 1 : 0)
-                            << " easySmash="       << (lbEasySmashProps ? 1 : 0)
-                            << " propProgression=" << (lbDisablePropProgession ? 0 : 1)
-                            << "\n";
-                    }
                 }
             }
             break;

@@ -150,7 +150,6 @@ void GuiDebugComponent::Construct(GuiModule* lpGuiModule)
     if (!lpGuiModule)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid Gui module passed to GuiDebugComponent::Construct";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -281,7 +280,6 @@ void GuiDebugComponent::Destruct()
     mpGuiModule = 0;
     mInputQueue.Destruct();
 }
-
 
 // ARTIST8250CBC8. This helper has a native typed-input caller in GuiModule::Update, but that
 // caller is not mounted by the selected host no-argument Update path. Keep the real provider
@@ -621,7 +619,6 @@ void GuiDebugComponent::EnterCarSelectCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "EnterCarSelectCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -637,7 +634,6 @@ void GuiDebugComponent::TriggerIntroCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid data pointer sent to GuiDebugComponent::TriggerIntro";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -653,7 +649,6 @@ void GuiDebugComponent::TriggerPostEventCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid data pointer sent to GuiDebugComponent::TriggerPostEventCallback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -669,7 +664,6 @@ void GuiDebugComponent::OpenCrashNavCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "OpenCrashNavCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -685,7 +679,6 @@ void GuiDebugComponent::MiniMapSwitchCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "MiniMapSwitchCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -701,7 +694,6 @@ void GuiDebugComponent::ToggleShow43AreaCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "ToggleShow43AreaCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -717,7 +709,6 @@ void GuiDebugComponent::ToggleShowSafeAreaCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "ToggleShowSafeAreaCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -733,7 +724,6 @@ void GuiDebugComponent::ChangeFontSpacingCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -749,7 +739,6 @@ void GuiDebugComponent::PlayMovieCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "PlayMovieCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -765,7 +754,6 @@ void GuiDebugComponent::RotateThroughFontsCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -781,7 +769,6 @@ void GuiDebugComponent::RotateThroughFontEffectsCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -797,7 +784,6 @@ void GuiDebugComponent::TriggerPFXCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "TriggerPFXCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -813,7 +799,6 @@ void GuiDebugComponent::TriggerClosePFXCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "TriggerPFXCloseCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -829,7 +814,6 @@ void GuiDebugComponent::ToggleGenericHUDPriorityOverrideCallback(void* lpUserDat
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -1001,7 +985,6 @@ void GuiDebugComponent::BootupProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "BootupProfileCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -1017,7 +1000,6 @@ void GuiDebugComponent::AutosaveProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "AutosaveProfileCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -1033,7 +1015,6 @@ void GuiDebugComponent::SaveProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "SaveProfileCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -1049,7 +1030,6 @@ void GuiDebugComponent::LoadProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "LoadProfileCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -1065,7 +1045,6 @@ void GuiDebugComponent::ShowKeyboardCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::MessageBufferPC lMessage;
         CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
         lStream << "ShowKeyboardCallback: Invalid data in the callback";
         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),

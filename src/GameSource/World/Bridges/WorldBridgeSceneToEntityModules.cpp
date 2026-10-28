@@ -6,7 +6,6 @@
 
 #include <cstdlib>   // getenv  ([DIAG] latch only -- not in the X360 binary)
 
-
 // @ 0x827ABAC8 -- append the scene manager's query-results ring (read-locked getter
 // @0x823B1ED0) into the race-car module's pre-physics scene-result queue
 // (write-locked getter @0x8279DB98) through the real instantiated
@@ -125,16 +124,7 @@ void BridgeSceneContactsToRaceCarModule_PrePhysics(
     // through the pointer already fetched above -- no second getter, no second lock
     // tripwire, and no read of the destination (whose const getter has no body in the tree).
     {
-        static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
         static bool sbLoggedFirst = false;
-        if ( sbPropDiag && !sbLoggedFirst && lpSceneQueue != 0
-             && lpSceneQueue->GetLength() > 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedFirst = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-rc] first scene->race-car potential contacts: "
-                << lpSceneQueue->GetLength() << " [DIAG]\n";
-        }
     }
 }
 

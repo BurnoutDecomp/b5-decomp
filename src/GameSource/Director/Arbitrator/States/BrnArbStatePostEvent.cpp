@@ -232,13 +232,6 @@ namespace BrnDirector
             // id MainDirector::ProcessInputQueue case 24 stores; one line per post-event entry is
             // the live witness that it ran (an "Unknown finish line" assert, when the id misses the
             // race ladder, fires inside GetEventCompletionShots just before this line).
-            if (getenv("BRN_FINISHLINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[finish-line] post-event shots: mode " << lrGameState.meEventType
-                    << " finish line " << static_cast<u64>(lrGameState.mFinishLineID)
-                    << " -> " << lrEventCompleteShotGroup.Num_ShotList() << " shot(s)\n";
-            }
 
             CGS_ASSERT(lrEventCompleteShotGroup.Num_ShotList() > 0,
                        "lEventCompleteShotGroup.Num_ShotList()>0");

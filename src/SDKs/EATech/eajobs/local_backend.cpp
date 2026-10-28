@@ -4,7 +4,7 @@
 #include "SDKs/EATech/eajobs/jobs.h"               // EA::Jobs::Allocator / GetAllocator (off_8327F280 Free)
 
 #include <intrin.h>  // _InterlockedCompareExchange / _InterlockedExchange (atomic CAS)
-#include <windows.h> // QueryPerformanceCounter, LARGE_INTEGER
+#include <xtl.h> // QueryPerformanceCounter, LARGE_INTEGER
 #include <cstring>   // std::memcpy (the parameters blob copy)
 #include <cstddef>   // offsetof (the uncalled _AssertLayout layout pins)
 #include <new>       // placement new (conditional semaphore construction)
@@ -603,9 +603,6 @@ namespace LocalBackend
             ? &mpJobInstances[index] : nullptr;
         u32* location=nullptr;u32 value=0;
         GetEnabler(uSubmissionId,uHandleQword,location,value);
-        // FLAG PC-platform leaf: dependency completion may race a later
-        // submission adding another barrier. Pair with Event::Run's decrement.
-        _InterlockedIncrement(reinterpret_cast<volatile long*>(&instance->mStatus));
         return Event(Event::EVENT_TYPE_WRITE,value,location,&instance->mStatus);
     }
 
@@ -839,9 +836,6 @@ namespace LocalBackend
     // (`clrldi r3,r3,32`) before returning it as a job-thread id.
     u64 LocalBackend::GetThreadId(int iIndex) const
     {
-        // FLAG PC-platform leaf: native EAThread::ThreadId is a HANDLE. Export
-        // its system ID, the same identity recorded by JobInstance::Run.
-        return static_cast<u64>(EA::Thread::GetSysThreadId(mThreads[iIndex].mThread.GetId()));
     }
 
     // @ 0x82BCA770 -- GetThreadParameters.
@@ -851,7 +845,6 @@ namespace LocalBackend
     }
 
     // @ 0x82BC9CB8 -- GetEnabler.
-
 
     // @ 0x82BC9E68 -- SetProfilingCallback.
     void LocalBackend::SetProfilingCallback(ProfilerCallback* pCallback)

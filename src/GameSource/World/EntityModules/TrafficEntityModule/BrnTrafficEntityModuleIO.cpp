@@ -685,8 +685,6 @@ namespace BrnTrafficIO
         // Everything after mSceneInputInterface drifts: the aggregate's 25 queues carry an 8-byte
         // mpEvents on the host where the console has 4, so its host sizeof exceeds the console's
         // 818768. Parity from here down is by named member and sequence.
-        static_assert(sizeof(OutputBuffer_PreScene::SceneInputInterface) >= 818768,
-                      "the host scene aggregate must cover the console span [16, 818784)");
     }
 
     // X360 0x82761790 -- run by CreateIOBuffer<OutputBuffer_PreScene> @0x827B6330. Store for
@@ -833,8 +831,6 @@ namespace BrnTrafficIO
         // No offsetof pin on mResourceRequestInterface: the member ahead of it is the real
         // 25-queue aggregate, whose host sizeof exceeds the console's 818,768 because each queue
         // carries an 8-byte mpEvents. What survives is the relation that matters:
-        static_assert(sizeof(OutputBuffer_Prepare::SceneInputInterface) >= 818768,
-                      "the host scene aggregate must cover the console span [16, 818784)");
     }
 
     // X360 0x82761740 -- run by CreateIOBuffer<OutputBuffer_Prepare> @0x827B5C70. Store for

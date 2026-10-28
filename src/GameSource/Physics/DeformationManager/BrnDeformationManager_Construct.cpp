@@ -171,8 +171,6 @@ namespace Deformation
     void DeformationManager::_AssertLayout()
     {
         // mModelsAdded is one 64-bit BitArray field (CgsBitArray.h:22, 28 bits -> 1 field).
-        static_assert(sizeof(DeformationManager::mModelsAdded) == 8u,
-                      "DeformationManager: mModelsAdded is ONE 64-bit BitArray field");
         static_assert(75904u + sizeof(DeformationManager::mModelsAdded) == 75912u,
                       "DeformationManager: maGlobalEntityIDs must abut mModelsAdded at +75912");
 

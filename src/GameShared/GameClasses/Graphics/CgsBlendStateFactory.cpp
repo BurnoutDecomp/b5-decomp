@@ -2,8 +2,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::ResourceDescriptor5
-
 // Reconstructed from the shipped console build of
 //   CgsBlendStateFactory::Construct  (2248 bytes, 562 instructions)
 //
@@ -67,13 +65,6 @@ namespace
         renderengine::ResourceDescriptor5 lDescriptor;
         renderengine::BlendState::GetResourceDescriptor(&lDescriptor, lpParameters);
 
-        // FLAG PC-platform choice: the console leaves the out buffer uninitialised and
-        // copies all five words out of it regardless. The zero-initialisation here is the
-        // convention CgsResourceAllocatorCreate.h documents (the helper writes only the
-        // first KU_CREATE_OUT_LANES lanes, so the lanes past the third stay null rather
-        // than becoming garbage). No observable difference: BlendState::Initialize reads
-        // lane 0 only.
-        renderengine::BlendMaterialState* lapAllocatedHandles[5] = {};
         renderengine::BlendMaterialState* lapStateHandles[5] = {};
 
         lpAllocator->Create(lapAllocatedHandles, lpAllocator, &lDescriptor, 0);
@@ -277,15 +268,4 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
         CreateBlendState(lpAllocatorShim, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST],
                "saBlendStates[ eFactoryBlendState_NoColourWrite_AlphaTest ]");
-}
-
-// FLAG PC-platform leaf: no console body or caller; vtable filler.
-void CgsBlendStateFactory::Destruct()
-{
-}
-
-// FLAG PC-platform leaf: no console body or caller; vtable filler.
-bool CgsBlendStateFactory::Prepare()
-{
-    return true;
 }

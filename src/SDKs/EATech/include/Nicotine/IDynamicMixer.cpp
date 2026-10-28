@@ -109,24 +109,10 @@ void IDynamicMixer::CreateInstance(const MAP_CREATE_PARAMS* lpParams)
     // off_83250004 = the create-params' allocator (asm stores it UNCONDITIONALLY).
     g_pMixerAllocator = lpParams->MixerAllocator;
 
-    // --- NFSMixMaster (0x80 == 128 bytes on X360) ---
-    // The asm GUARDS the construction (`Allocate ? new(block) NFSMixMaster : 0`) --
-    // an earlier revision dropped the ternary and placement-new'd unconditionally
-    // (UB on a null block); restored 2026-08-25 (wave 1). The mNumStates store is
-    // unconditional in the asm (a null master would crash there on console too);
-    // kept under the same guard as the sane host equivalent of that crash path.
-    // FLAG PC-platform leaf: allocate the native object size. Its runtime pointer
-    // members widen on x64; carving ARTIST's 0x80 bytes corrupts the host heap.
-    void* lpMasterMem = g_pMixerAllocator->Allocate(
-        static_cast<unsigned int>(sizeof(NFSMixMaster)), 16, "NFSMixMaster");
     mMixMaster = lpMasterMem ? new (lpMasterMem) NFSMixMaster() : 0;
     if (mMixMaster)
         mMixMaster->mNumStates = lpParams->NumMixStates; // *(v4+8) = *(a2+4)
 
-    // --- SnapshotMixer (0x20 == 32 bytes on X360) ---
-    // FLAG PC-platform leaf: like NFSMixMaster, its pointers widen on x64.
-    void* lpSnapMem = g_pMixerAllocator->Allocate(
-        static_cast<unsigned int>(sizeof(SnapshotMixer)), 16, "SnapshotMixer");
     if (lpSnapMem)
         std::memset(lpSnapMem, 0, sizeof(SnapshotMixer));
     mpSnapshot = static_cast<SnapshotMixer*>(lpSnapMem);

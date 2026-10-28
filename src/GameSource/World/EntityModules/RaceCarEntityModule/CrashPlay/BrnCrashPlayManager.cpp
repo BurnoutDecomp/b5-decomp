@@ -365,16 +365,6 @@ void CrashPlayManager::ClampBoostLevel()
 // =================================================================================================
 namespace
 {
-    bool CrashPlayTraceOn()
-    {
-        static s32 siOn = -1;
-        if( siOn < 0 )
-        {
-            const char* lpcEnv = getenv( "BRN_CRASHPLAY_TRACE" );
-            siOn = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
-        }
-        return siOn == 1;
-    }
 
     struct CrashPlayWitness
     {
@@ -454,10 +444,6 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
             sbReportedInvalidVolumeId = true;
             if( CgsDev::Log::gpDebugPrint != 0 )
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] CrashPlayManager::Update: mPlayerCarVolumeInstanceID."
-                       "IsValid() (X360 BrnCrashPlayManager.cpp:278) -- raised once, not per frame."
-                       " No writer for the member exists in this tree yet.\n";
             }
         }
     }
@@ -514,30 +500,6 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     if( mbIsInShowtime )
     {
         ++gCrashPlayWitness.muShowtimeFrames;
-    }
-    if( CrashPlayTraceOn() && ( gCrashPlayWitness.muFrames % 30u ) == 0u
-        && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[crashplay] frames=" << static_cast<s32>( gCrashPlayWitness.muFrames )
-            << " showtime=" << static_cast<s32>( gCrashPlayWitness.muShowtimeFrames )
-            << " press=" << static_cast<s32>( gCrashPlayWitness.muPresses )
-            << " arm=" << static_cast<s32>( gCrashPlayWitness.muArms )
-            << " charge=" << static_cast<s32>( gCrashPlayWitness.muCharges )
-            << " ground=" << static_cast<s32>( gCrashPlayWitness.muGroundFrames )
-            << " | boost=" << mfBoostPercentage
-            << " bounceTimer=" << mfBounceBoostTimer
-            << " aftertouch=" << mfAftertouchPower
-            << " tInAir=" << mfTimeSinceLastInAir
-            << " tOnGround=" << mfTimeSinceLastOnGround
-            << " crashPlayTime=" << mfCrashPlayTime
-            << " groundSpent=" << gCrashPlayWitness.mfGroundSpent
-            << " chargeSpent=" << gCrashPlayWitness.mfChargeSpent
-            << " | hits=" << static_cast<s32>( gCrashPlayWitness.muHits )
-            << " paid=" << static_cast<s32>( gCrashPlayWitness.muHitsPaid )
-            << " everyN=" << static_cast<s32>( gCrashPlayWitness.muEveryNAwards )
-            << " hitAward=" << gCrashPlayWitness.mfHitAward
-            << "\n";
     }
 
     // ARTIST tail-calls the debug component's vtable slot 0 through `lwz r11,0(r30) / lwz r11,0(r11)
@@ -1185,7 +1147,6 @@ bool CrashPlayManager::IsPlayerInShowtimeOnGround() const
     return IsInShowtime() && !IsBounceBoosting()
         && mfTimeSinceLastInAir > KF_TIME_ON_GROUND_NO_PENALTY;
 }
-
 
 // ----------------------------------------------------------------------------
 // Deactivate -- DWARF BrnCrashPlayManager.h, no out-of-line X360 symbol. The console emits it

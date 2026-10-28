@@ -317,16 +317,6 @@ namespace BrnGui
                 // witness only proves the event was POSTED; this one proves it arrived,
                 // survived the sound->GUI append, and that the chyron was actually asked to
                 // draw with real metadata. Rare by construction (one per track change).
-                if (getenv("BRN_MUSIC_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[trax] GUI 502 song " << lpNewTrack->miSongIndex
-                        << " preview " << static_cast<s32>(lpNewTrack->mbPreview)
-                        << " gate " << static_cast<s32>(mbContainerMovieClipPlaying)
-                        << " artist '" << (lpcArtist ? lpcArtist : "<null>")
-                        << "' song '" << (lpcSong ? lpcSong : "<null>")
-                        << "' album '" << (lpcAlbum ? lpcAlbum : "<null>") << "'\n";
-                }
 
                 // 82509958..82509960 -- an AUDITION stops here; only a real track change
                 // persists to the profile.
@@ -350,13 +340,6 @@ namespace BrnGui
                 break;
             }
 
-            // The online-invite chyron (175/43/105) and the EATrax rich-presence case (503)
-            // drive in-game-only overlays that do not fire on the boot/front-end path. Their
-            // console bodies reach OnlineInviteMessageComponent::ShowMessage (not yet
-            // committed) and BrnGui::OptionsDataProfile / GuiCache far members with no
-            // committed type home. The dispatch is kept; the un-homed accessor calls are
-            // FLAG'd deferrals until those TUs land.
-            // FLAG PC-platform leaf: in-game online-invite overlay + 503 (un-homed callees).
             case 175:
             case 43:
             case 105:
@@ -398,11 +381,5 @@ namespace BrnGui
         // console. This tree declares BrnSaveIconComponent::Update (:42) and defines it
         // nowhere, so the two agree: the slot does nothing.
 
-        // [FLAG PC bring-up] 0x8252A2C8  OnlineInviteMessageComponent::Update @0x82439FF0
-        // (this + 0x100B8) -- the fourth tick under this same gate. OnlineInviteMessage
-        // Component has no Update in this tree (no .cpp), so there is nothing to call and
-        // nothing is invented here. It drives the online-invite toast's own timeout only;
-        // the EATrax and achievement overlays above are unaffected.
-        // DELETE-WHEN OnlineInviteMessageComponent::Update lands.
     }
 }

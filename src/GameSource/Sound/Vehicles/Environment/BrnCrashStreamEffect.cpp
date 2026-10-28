@@ -11,7 +11,6 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
@@ -116,8 +115,6 @@ bool CrashStreamEffect::Prepare(CgsSound::Logic::State* apState)
     mbShowTime.Update(false);
 
     static s32 siDiagPrepared = 0;
-    if (SndEnvDiagBudget(siDiagPrepared))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] crash-stream submix ready [FLAG PC witness]\n";
     return true;
 }
 
@@ -172,18 +169,11 @@ void CrashStreamEffect::UpdateParams(f32 /*afTimeStep*/)
         lpModule->GetBrnInputStructure()->GetVehicleInterface()->IsPlayerCarFatalyCrashing());
 
     static s32 siDiagUpdate = 0;
-    if (SndEnvDiagBudget(siDiagUpdate))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] crash-stream update [FLAG PC witness]\n";
 
     if (!mbIsCrashing.HasChanged() && !mbShowTime.HasChanged())
         return;
 
     static s32 siDiagEdge = 0;
-    if (SndEnvDiagBudget(siDiagEdge))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] crash-stream edge showtime="
-                                   << static_cast<s32>(mbShowTime.GetCurrent())
-                                   << " crashing=" << static_cast<s32>(mbIsCrashing.GetCurrent())
-                                   << " [FLAG PC witness]\n";
 
     BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMgr =
         static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
@@ -211,11 +201,6 @@ void CrashStreamEffect::UpdateParams(f32 /*afTimeStep*/)
         BrnSound::Logic::Streaming::StreamRequest(this, 1, 0.1f));
 
     static s32 siDiagPlay = 0;
-    if (SndEnvDiagBudget(siDiagPlay))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] crash-stream play showtime="
-                                   << static_cast<s32>(lbShowTime) << " content="
-                                   << static_cast<u32>(mParams.mContentSpecName)
-                                   << " [FLAG PC witness]\n";
 }
 
 // ---------------------------------------------------------------------------

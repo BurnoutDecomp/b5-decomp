@@ -169,15 +169,6 @@ static const f32 KF_CROSS_PRODUCT_EPSILON = 1.1920929e-07f;
 // Every draw is the same three instructions -- `ld seed ; srdi hi,32 ; mulld K ; addi 1 ; std`
 // -- which is CgsNumeric::Random::RandomUInt() verbatim (CgsRandom.cpp:52).
 //
-// [FLAG PC bring-up] the console SEEDS it from RaceCarEntityModule::Prepare, which is
-// declaration-only on this build, so it is Construct()ed lazily on first draw here instead.
-// Since 2026-09-24 (CHAIN-RECOLOUR) GetRandomCarColour at the bottom of this TU draws from it
-// too, so the car-colour picks and the wrap draws share one sequence as on the console; only the
-// seeding moment differs. Nothing downstream is order-sensitive beyond which random colour or
-// which of two reset styles a draw picks.
-// DELETE-WHEN RaceCarEntityModule::Prepare's Construct leg lands and this object can move
-// there as a real file-scope member.
-// ============================================================================================
 namespace
 {
     CgsNumeric::Random& GetModuleRandom()
@@ -194,35 +185,6 @@ namespace
         return sModuleRandom;
     }
 
-    // [FLAG PC witness] -- NOT AN X360 FUNCTION.
-    //
-    // One `[range]` line per in->out / out->in transition, FIRST 32 ONLY, so the next run's
-    // BrnGame.log says -- per rival, in order -- which way the loop moved it, how far it was
-    // from the player when it did, and how long the game-state side was asked to hide it for.
-    // Without this rung a loop that never fires and a loop that fires and is undone one frame
-    // later produce the same log (nothing at all), and that ambiguity is exactly what let
-    // "the rivals never touch the player" sit behind five landed subsystems.
-    //
-    // Pairs with: [ai-act] / [ai-attach] / [rot] / [ai-evt] (already in the tree).
-    // DELETE-WHEN rivals stay in contact with the player for a whole Road Rage event.
-    void WitnessRangeTransition(s32 liSlot, const char* lpcTransition,
-                                f32 lfDistance, f32 lfHiddenTime)
-    {
-        static s32 siWitnessCount = 0;
-
-        if (CgsDev::Log::gpDebugPrint == 0 || siWitnessCount >= 32)
-        {
-            return;
-        }
-        ++siWitnessCount;
-
-        *CgsDev::Log::gpDebugPrint
-            << "[range] slot " << liSlot
-            << " " << lpcTransition
-            << " dist " << lfDistance
-            << " hideTime " << lfHiddenTime
-            << " [FLAG PC witness]\n";
-    }
 }
 
 // ============================================================================================
@@ -559,52 +521,6 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
     // "the rivals were never spawned" from "the range loop never ran".
     // DELETE-WHEN issue #24 is closed.
     {
-        static const bool sbMarkedManDiag = (std::getenv("BRN_MM_DIAG") != 0);
-        if (sbMarkedManDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            s32 liInWorldAI = 0, liInMode = 0, liInRangeRival = 0, liOutOfRangeRival = 0,
-                liAllowedRR = 0;
-            for (s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal)
-            {
-                RaceCar* lpCar = GetGlobalRaceCar(static_cast<EGlobalRaceCarIndex>(liGlobal));
-                if (lpCar == 0 || !lpCar->IsInWorld() || !lpCar->IsAIDriven())
-                {
-                    continue;
-                }
-                ++liInWorldAI;
-                if (lpCar->IsInCurrentGameMode())   { ++liInMode; }
-                if (lpCar->IsInRangeRival())        { ++liInRangeRival; }
-                if (lpCar->IsOutOfRangeRival())     { ++liOutOfRangeRival; }
-                if (lpCar->IsAllowedInRoadRage())   { ++liAllowedRR; }
-            }
-            s32 liAttached = 0, liActive = 0;
-            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
-            {
-                ActiveRaceCar* lpActive = GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
-                if (lpActive == 0) { continue; }
-                if (lpActive->IsAttached()) { ++liAttached; }
-                if (lpActive->IsActive())   { ++liActive; }
-            }
-            const char* lpcEarlyOut = "none";
-            if (mbIsInOnlineGameMode)                                        { lpcEarlyOut = "online"; }
-            else if (!mbModeStartedPlaying && mbIsInGameMode)                 { lpcEarlyOut = "mode-not-playing"; }
-            else if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID) { lpcEarlyOut = "no-player-slot"; }
-            *CgsDev::Log::gpDebugPrint
-                << "[mm-rival] mode " << static_cast<s32>(meGameModeType)
-                << " inGameMode " << static_cast<s32>(mbIsInGameMode ? 1 : 0)
-                << " started " << static_cast<s32>(mbModeStartedPlaying ? 1 : 0)
-                << " aiInWorld " << liInWorldAI
-                << " inMode " << liInMode
-                << " inRange " << liInRangeRival
-                << " outOfRange " << liOutOfRangeRival
-                << " allowedRR " << liAllowedRR
-                << " attached " << liAttached
-                << " active " << liActive
-                << " wrapFlag " << static_cast<s32>(GetGameModeFlag(
-                       BrnGameState::GameModeParams::KU_FLAG_WRAP_AI_CARS_WHEN_OUT_OF_RANGE) ? 1 : 0)
-                << " earlyOut " << lpcEarlyOut
-                << "\n";
-        }
     }
     // ---- end [DIAG] --------------------------------------------------------------------------
 

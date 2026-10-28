@@ -231,16 +231,7 @@ namespace CgsCollision
         // The getenv latch is evaluated once; a per-call getenv would be a syscall on the
         // contact-generation path.
         {
-            static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
             static bool       sbLoggedFirstVolume = false;
-            if (sbPropDiag && !sbLoggedFirstVolume && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedFirstVolume = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q6-addprim] first rw::collision::Volume converted: typeID "
-                    << luTypeID << " (1=sphere 2=capsule 3=triangle/UNSUPPORTED 4=box "
-                       "5=cylinder), tag " << static_cast<u32>(lu16PrimitiveTag) << "\n";
-            }
         }
 
         switch (luTypeID)

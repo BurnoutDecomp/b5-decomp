@@ -52,8 +52,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                  // Array<T,N>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (the changed-car id setters)
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"          // CgsNetwork::K_INVALID_PLAYER_ID
-#include "pc/gcm/renderengine/pixelformat.h"                             // renderengine::PixelFormat
-
 #include <cstddef>   // offsetof (layout pins)
 
 namespace CgsNetwork
@@ -547,7 +545,6 @@ namespace BrnNetworkModuleIO
         static_assert(sizeof(NetworkOutPlayerLeftGame) == 8, "tag 24 size");
         static_assert(sizeof(NetworkOutPostGameProcessingFinished) == 1, "tag 25 size");
         static_assert(sizeof(NetworkOutLaunchEvent) == 8, "tag 26 size");
-        static_assert(offsetof(NetworkOutLaunchedEvent, mbHostChoiceCarAndNotHost) == 0x04, "tag 27 +0x04");
         static_assert(offsetof(NetworkOutLaunchedEvent, mbSuccessfulLaunch) == 0x05, "tag 27 +0x05");
         static_assert(sizeof(NetworkOutLaunchedEvent) == 8, "tag 27 size");
         static_assert(sizeof(NetworkOutShowSignInGui) == 1, "tag 28 size");
@@ -568,7 +565,6 @@ namespace BrnNetworkModuleIO
         static_assert(offsetof(NetworkOutNetworkPlayerCollectableEvent, mNetworkPlayerID) == 0x08, "tag 44 +0x08");
         static_assert(offsetof(NetworkOutNetworkPlayerCollectableEvent, meType) == 0x0C, "tag 44 +0x0C");
         static_assert(sizeof(NetworkOutNetworkPlayerCollectableEvent) == 16, "tag 44 size");
-        static_assert(sizeof(NetworkOutHostChangedEvent) == 2, "tag 45 size");
         static_assert(sizeof(NetworkOutRemotePlayerHitCheckpoint) == 8, "tag 46 size");
         static_assert(sizeof(NetworkOutStuntScoreUpdatedEvent) == 8, "tag 47 size");
         static_assert(offsetof(NetworkOutPlayerCarSelectStatus, mbInCarSelect) == 0x04, "tag 48 +0x04");

@@ -32,7 +32,7 @@
 
 #include "types.hpp"
 
-#include <windows.h>   // HANDLE / DWORD / WCHAR (the X360 wraps Win32 file/handle types; host Win32 on PC)
+#include <xtl.h>   // HANDLE / DWORD / WCHAR (the X360 wraps Win32 file/handle types; host Win32 on PC)
 #include <cstddef>     // offsetof
 
 #include "SDKs/Realmc/RealmcCardData.h"       // RealmcIface::CardData (embedded in State at +0x08)

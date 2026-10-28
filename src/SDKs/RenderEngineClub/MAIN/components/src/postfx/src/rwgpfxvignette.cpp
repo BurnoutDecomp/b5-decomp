@@ -8,8 +8,6 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"           // BlendState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"        // ProgramBuffer
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::WriteToLog
-#include "pc/gcm/renderengine/renderstates.h"                                      // DepthStencilState / RasterizerState
-#include "pc/gcm/renderengine/VertexDescriptor.h"                                  // VertexDescriptor
 #include "rw/rwcore_structs.h"                                                     // rw::IResourceAllocator / Resource
 #include "rw/math/vpu/types.h"                                                     // rw::math::vpu::Vector4
 
@@ -59,8 +57,6 @@
 // no table.
 // ==================================================================================================
 
-// --------------------------------------------------------------------------------------------------
-// [FLAG PC bring-up: BRN_POSTFX_VIGNETTE_PROGRAMS_AVAILABLE]
 //
 // The X360 constructor compiles its vertex and pixel programs from XENOS MICROCODE embedded in the
 // executable image (`addi r4, r31, unk_82044E88 - 0x82044FA8` / `li r5, 0x120` @0x8240412C-0x82404128
@@ -343,12 +339,6 @@ namespace postfx
         if (!sbReportedNoVignettePrograms)
         {
             sbReportedNoVignettePrograms = true;
-            CgsDev::Log::WriteToLog(
-                "[postfx-vignette] constructed with NO program pair -- the X360 vertex/pixel programs"
-                " are Xenos microcode (&unk_82044E88, 288 bytes / &unk_82044FA8, 416 bytes) and no PC"
-                " image exists. Both program slots are null and all four constant handles have"
-                " register count 0, so the vignette quad cannot be drawn."
-                " [FLAG PC bring-up: BRN_POSTFX_VIGNETTE_PROGRAMS_AVAILABLE]\n");
         }
 #endif
 
@@ -380,14 +370,6 @@ namespace postfx
     // ============================================================================================
     void Vignette::Release()
     {
-        // [FLAG PC bring-up] The console has no null test here (`lwz r3, 0xA8(r31); bl Release`
-        // straight through) because its programs are never null. On this build the program gate
-        // (BRN_POSTFX_VIGNETTE_PROGRAMS_AVAILABLE 0) makes them CERTAINLY null, and
-        // ProgramBuffer::Release writes through its argument (programbuffer.cpp:311) -- so the honest-
-        // empty gate is exactly what makes the console's assumption false. Same guard the sibling
-        // DepthOfField::Release carries. (Verify pass 2026-08-15.)
-        if (m_pixelProgram != nullptr)
-            renderengine::ProgramBuffer::Release(m_pixelProgram);
         if (m_vertexProgram != nullptr)
             renderengine::ProgramBuffer::Release(m_vertexProgram);
 

@@ -562,62 +562,6 @@ namespace
     };
     static_assert(sizeof(GameCompletedOnlineWire310) == 2, "id 310 size 2");
 
-    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_RACEFLOW_DIAG), first 32 lines, one
-    // line per race / burning-route / post-event action translated by the arms below.
-    // A non-null lpacText is printed in place of liValue (the wrong-car arm names the car).
-    void RaceFlowGuiWitness(s32 liActionType, s32 liGuiEventId, const char* lpacDetail,
-                            s32 liValue, const char* lpacText = 0)
-    {
-        static const bool sbDiag      = (getenv("BRN_RACEFLOW_DIAG") != 0);
-        static s32        siLinesLeft = 32;
-        if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[race-flow] action " << liActionType << " -> gui " << liGuiEventId
-                << " (" << lpacDetail << " ";
-            if (lpacText != 0)
-            {
-                *CgsDev::Log::gpDebugPrint << lpacText;
-            }
-            else
-            {
-                *CgsDev::Log::gpDebugPrint << liValue;
-            }
-            *CgsDev::Log::gpDebugPrint << ")\n";
-        }
-    }
-
-    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG), first 32 lines, one
-    // line per road-rule action translated. Action 279 posts every frame and has its own
-    // witness in the stunt sibling. 282 also prints the new active rule, 277 / 278 the score
-    // type and 278 the score and its valid-attempt flag, so a run shows a rule start and end.
-    void RoadRuleGuiWitness(s32 liActionType, s32 liGuiEventId,
-                            s32 liDetail = 0, f32 lfScore = 0.0f, bool lbValid = false)
-    {
-        static const bool sbDiag      = (getenv("BRN_ROADRULES_DIAG") != 0);
-        static s32        siLinesLeft = 32;
-        if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[roadrules] action " << liActionType << " -> gui " << liGuiEventId;
-            if (liActionType == 282)
-            {
-                *CgsDev::Log::gpDebugPrint << " rule " << liDetail;
-            }
-            if (liActionType == 277 || liActionType == 278)
-            {
-                *CgsDev::Log::gpDebugPrint << " type " << liDetail;
-            }
-            if (liActionType == 278)
-            {
-                *CgsDev::Log::gpDebugPrint << " score " << lfScore << " valid " << (lbValid ? 1 : 0);
-            }
-            *CgsDev::Log::gpDebugPrint << "\n";
-        }
-    }
-
     // ---------------------------------------------------------------------------------------
     // GuiEventRunFsm posts through the raw queue (24-byte controller record, not a PushGuiEvent
     // payload); GetEventType() is 144, corrected from the dead PS3 id 142 on 2026-08-27.
@@ -669,7 +613,6 @@ namespace
 
         // [DIAG] the `[evt-flow]` rung. NOT IN THE X360 BINARY. Same logger, same env guard
         // (BRN_PROP_DIAG) and same first-N latch as the `[UI-gate]` ladder in the stunt TU.
-        static const bool sbDiag          = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static s32        siDiagLinesLeft = 24;
 
         switch (liActionType)
@@ -706,7 +649,6 @@ namespace
             }
             return true;
         }
-
 
         // ---- 201  E_ACTION_EVENT_AT_JUNCTION_AVAILABLE (40 bytes) --------------------------
         // *** THE VISIBLE ORACLE. @0x823EA810..0x823EA874, instruction for instruction: eleven
@@ -764,17 +706,6 @@ namespace
             // filtered on the event id so one line per junction visit, 8 visits per run.
             static s32 siJunctionDiagLeft = 8;
             static s32 siLastDiagEventId  = -1;
-            if ( sbDiag && siJunctionDiagLeft > 0 && lEvent.miEventID != siLastDiagEventId &&
-                 CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siJunctionDiagLeft;
-                siLastDiagEventId = lEvent.miEventID;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 201 -> gui 311 (event " << lEvent.miEventID
-                    << " mode " << static_cast<s32>(lEvent.meGameModeType)
-                    << " onEntry " << static_cast<s32>(lEvent.mbOnEntry)
-                    << " canEnter " << static_cast<s32>(lEvent.mbCanEnterEvent) << ")\n";
-            }
             return true;
         }
 
@@ -905,14 +836,6 @@ namespace
             lEasyDrive.mu8Zero = 0;
             PushGuiEvent(lEasyDrive, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 23 -> gui 93 (mode " << liGameModeType
-                    << " round " << lEvent.miCurrentRound
-                    << ") runEventFsm=" << (lbRunEventFsm ? 1 : 0) << "\n";
-            }
             return true;
         }
 
@@ -977,8 +900,6 @@ namespace
                     PushGuiEvent(lIntro,lpGuiInput);
                 }
             }
-            // FLAG PC diagnostic: bounded producer witness, disabled by default.
-            static const bool sbPreRaceDiag = (getenv("BRN_SATNAV_DIAG") != 0);
             static s32 siPreRaceRows = 0;
             if (sbPreRaceDiag && siPreRaceRows++ < 8 && CgsDev::Log::gpDebugPrint != 0)
                 *CgsDev::Log::gpDebugPrint << "[cnav-prerace] action29 -> gui159 messages="
@@ -1073,17 +994,6 @@ namespace
             // action-201 arm -- a spent shared budget makes later arms BLIND, not quiet).
             {
                 static s32 siStopIntroDiagLeft = 8;
-                if ( sbDiag && siStopIntroDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siStopIntroDiagLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[evt-flow] action 30 -> gui "
-                        << (IsOnlineLobbyOrShowtimeMode(liGameModeType) ? 269 : 164)
-                        << " (mode " << liGameModeType
-                        << " movingBetweenLobbyModes "
-                        << (lpStopIntro->mbMovingBetweenLobbyModes ? 1 : 0)
-                        << ") -- fly-by exit signal\n";
-                }
             }
             return true;
         }
@@ -1101,13 +1011,6 @@ namespace
             lEvent.miCountdownDisplay = lpCountdown->miCountdownDisplay;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 47 -> gui 234 (countdown "
-                    << lEvent.miCountdownDisplay << ")\n";
-            }
             return true;
         }
 
@@ -1150,14 +1053,6 @@ namespace
             // spent the shared budget, and a spent budget makes an arm BLIND, not quiet.
             {
                 static s32 siCarSelectDiagLeft = 8;
-                if ( sbDiag && siCarSelectDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siCarSelectDiagLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[evt-flow] action 75 -> gui 81 (car-select flow "
-                        << lEvent.miCarSelectFlow
-                        << ") -- InGame should now SendStateEvent(\"TO_CSELECT\")\n";
-                }
             }
             return true;
         }
@@ -1193,14 +1088,6 @@ namespace
             }
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 44 -> gui 166 (leaving "
-                    << static_cast<s32>(lEvent.muLeavingStartLocation)
-                    << " id " << static_cast<s32>(lEvent.mu16StartLocationId) << ")\n";
-            }
             return true;
         }
 
@@ -1244,12 +1131,6 @@ namespace
             lEvent.maPad0B[0]     = 0;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 39 -> gui 322 (mode " << lEvent.meGameModeType << ")\n";
-            }
             return true;
         }
 
@@ -1406,15 +1287,6 @@ namespace
             lEasyDrive.mu8Zero = 0;
             PushGuiEvent(lEasyDrive, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 37 -> gui "
-                    << (lpResults->mbIsOnlinePostEvent != 0 ? 320 : 291)
-                    << (lbBuildResultsRecord ? " + 289" : "")
-                    << " (mode " << static_cast<s32>(lpResults->meGameModeType) << ")\n";
-            }
             return true;
         }
 
@@ -1438,11 +1310,6 @@ namespace
             lEvent.mu8Unused = 0;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint << "[evt-flow] action 103 -> gui 168 (road rage target reached)\n";
-            }
             return true;
         }
 
@@ -1458,13 +1325,6 @@ namespace
             lEvent.muExtensiontime = lpExtension->muExtensionTime;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 255 -> gui 427 (time extended "
-                    << lEvent.muExtensiontime << ")\n";
-            }
             return true;
         }
 
@@ -1485,15 +1345,6 @@ namespace
             lEvent.maPad06[1] = 0;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-flow] action 205 -> gui 348 (damage "
-                    << lEvent.mfHowCloseToTotalled
-                    << " oneMore " << static_cast<s32>(lEvent.mbOneMoreCrashToTotalled)
-                    << " totalled " << static_cast<s32>(lEvent.mbPlayerTotalled) << ")\n";
-            }
             return true;
         }
 
@@ -1598,9 +1449,6 @@ namespace
             CGS_ASSERT(lpRRAction, "lpRRAction");
 
             BrnGui::GuiEventRoadRuleUpdateTargetScores lEvent;
-            // [FLAG PC init] the console record is a frame local and a name slot Construct does
-            // not reach (no friend score of that type) carries stack residue; zero here.
-            std::memset(lEvent.maFriendLeader, 0, sizeof(lEvent.maFriendLeader));
             lEvent.Construct(lpRRAction);
             PushGuiEvent(lEvent, lpGuiInput);
             RoadRuleGuiWitness(liActionType, lEvent.GetEventType());

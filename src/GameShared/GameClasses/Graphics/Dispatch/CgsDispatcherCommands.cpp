@@ -1,5 +1,4 @@
 // =============================================================================
-#include "pc/gcm/renderengine/FrameProfile.h"
 #include "GameShared/Jobs/ObjectToMesh/ObjectToMeshJob.h"
 // CgsDispatcherCommands.cpp  (GameShared/GameClasses/Graphics/Dispatch)
 //
@@ -45,7 +44,6 @@
 // =============================================================================
 
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
-#include "pc/gcm/renderengine/InstancedDraw.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"        // DispatchBin / DispatchFrame / DispatchList
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"
@@ -61,11 +59,8 @@
 
 #include <cstring>   // memcpy
 #include <cmath>     // [DIAG] std::sqrt (BRN_OOBB_DIAG, issue #26)
-#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::IsSceneColourPass
 #include <cstdio>    // [diag] snprintf (the [vpcmp] view-projection probe)
 #include <cstdlib>   // [diag] getenv  (BRN_VP_PROBE)
-#include <xmmintrin.h>
-
 namespace CgsGraphics
 {
 
@@ -133,40 +128,6 @@ namespace
     {
         return reinterpret_cast<u32*>(
             reinterpret_cast<u8*>(lpBinBase) + (static_cast<u32>(luRecord) & 0xFFFFFu) * 16u);
-    }
-
-    // FLAG PC-platform leaf: ARTIST 827F29A0..827F2A8C fetches the packet two
-    // draws ahead and the next mesh's first two 128-byte cache lines. x64 uses
-    // 64-byte cache lines and host-width command pointers. These are hints,
-    // never data reads: a short variable-sized mesh may end within the span.
-    inline void PrefetchDispatchSpanPC(const void* lpData, u32 luBytes)
-    {
-        const uintptr_t luAddress = reinterpret_cast<uintptr_t>(lpData);
-        for (u32 luOffset = 0; luOffset < luBytes; luOffset += 64u)
-            _mm_prefetch(reinterpret_cast<const char*>(luAddress + luOffset), _MM_HINT_T0);
-    }
-
-    inline bool MeshPrefetchEnabledPC()
-    {
-        static const bool sbEnabled = [] {
-            const char* lpcValue = std::getenv("BRN_MESH_PREFETCH");
-            return !lpcValue || lpcValue[0] != '0';
-        }();
-        return sbEnabled;
-    }
-
-    inline void PrefetchMeshCommandsPC(DispatchCommand* lpBinBase, const u64* lpuKeys,
-                                       u32 luIndex, u32 luEnd)
-    {
-        if (luIndex >= luEnd || luEnd - luIndex <= 2u) return;
-        const u32* lpCommand2 = PacketFromRecord(lpBinBase, lpuKeys[luIndex + 2u]);
-        const u32* lpCommand1 = PacketFromRecord(lpBinBase, lpuKeys[luIndex + 1u]);
-        CGS_ASSERT(CommandIdOf(lpCommand1[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
-                   "lpCommand1->GetCommandID() == DRAWRENDERABLEMESH");
-        CGS_ASSERT(CommandIdOf(lpCommand2[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
-                   "lpCommand2->GetCommandID() == DRAWRENDERABLEMESH");
-        PrefetchDispatchSpanPC(lpCommand2, 128u);
-        PrefetchDispatchSpanPC(ReadCommandPointer(&lpCommand1[2]), 256u);
     }
 
     // The dirty-constant block size in qwords for `count` constants under the
@@ -288,7 +249,6 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
         lrList.muCount = 0;
         lrList.mpDispatchBin = &m_Bin;
         lrList.muChainBlockCount = 0;
-        lrList.mpRelocatedChainTailPC = nullptr;
         lrList.muWord00 = 0;
         lrList.mpBlockListHead = lrList.mpBlockListTail = nullptr;
         lrList.mpSortedKeys = nullptr;
@@ -701,240 +661,6 @@ static u64 PreZSortKey(const MaterialTechniqueView& lrTechnique)
         | (lrTechnique.mu16VertexProgramHash12 & 0xFFFu);
 }
 
-static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame* lpFrame,
-                                   DispatchObjectContext* lpContext, const u8* lpTrailer,
-                                   u32 luOpaqueListId, u32 luTransparentListId,
-                                   u8 lu8Technique, bool lbFrustumTest, s32 liListBase,
-                                   u8 lu8MeshInstanceCount,
-                                   const rw::math::vpu::Matrix44& lWorldViewProjection,
-                                   const renderengine::WorldInstanceDrawPC* lpInstances = nullptr)
-{
-    const u32 luNumMeshes = lpRenderable->mu16NumMeshes;
-
-    // Object-level bounding-sphere frustum test (only worth it for >= 3 meshes):
-    // when the whole object survives trivially, the per-mesh box tests are
-    // skipped. The X360 tests the sphere's clip-space box: centre transformed by
-    // WVP, extent = radius scaled rows.
-    if (lbFrustumTest && luNumMeshes >= 3)
-    {
-        const f32 lfX = lpRenderable->mBoundingSphere.x;
-        const f32 lfY = lpRenderable->mBoundingSphere.y;
-        const f32 lfZ = lpRenderable->mBoundingSphere.z;
-        const f32 lfR = lpRenderable->mBoundingSphere.w;   // Vector3Plus "plus" lane = the radius
-
-        rw::math::vpu::Matrix44 lClipRows;
-        const rw::math::vpu::Matrix44& lrM = lWorldViewProjection;
-        // axis rows scaled by the radius; translation row = transformed centre.
-        lClipRows.xAxis = { lrM.xAxis.x * lfR, lrM.xAxis.y * lfR, lrM.xAxis.z * lfR, lrM.xAxis.w * lfR };
-        lClipRows.yAxis = { lrM.yAxis.x * lfR, lrM.yAxis.y * lfR, lrM.yAxis.z * lfR, lrM.yAxis.w * lfR };
-        lClipRows.zAxis = { lrM.zAxis.x * lfR, lrM.zAxis.y * lfR, lrM.zAxis.z * lfR, lrM.zAxis.w * lfR };
-        lClipRows.wAxis.x = lfX * lrM.xAxis.x + lfY * lrM.yAxis.x + lfZ * lrM.zAxis.x + lrM.wAxis.x;
-        lClipRows.wAxis.y = lfX * lrM.xAxis.y + lfY * lrM.yAxis.y + lfZ * lrM.zAxis.y + lrM.wAxis.y;
-        lClipRows.wAxis.z = lfX * lrM.xAxis.z + lfY * lrM.yAxis.z + lfZ * lrM.zAxis.z + lrM.wAxis.z;
-        lClipRows.wAxis.w = lfX * lrM.xAxis.w + lfY * lrM.yAxis.w + lfZ * lrM.zAxis.w + lrM.wAxis.w;
-
-        if (FrustumTest(lClipRows) == 0)
-        {
-            // Fully visible -- skip the per-mesh tests.
-            lbFrustumTest = false;
-        }
-    }
-
-    // =====================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_OOBB_DIAG=1 (b5-decomp issue #26).
-    //
-    // MEASURES THE PER-MESH CULL BOX, NOT "is something on screen". For the first
-    // renderables of a boot it decodes every mesh's PackedOobb and compares the box it
-    // yields with the renderable's OWN LOD0 bounding sphere -- which is independently
-    // known good (the world entity module hands the identical sphere to the scene
-    // manager and the coarse query answers correctly with it).
-    //
-    // POSITIVE CONTROL, and it is the whole point: a CORRECT decode puts every mesh's
-    // box centre inside that sphere and its half-extents at or under the sphere radius,
-    // for models of every size. A decode that reads the wrong bytes cannot do that --
-    // it produces the same tiny box near the model origin whatever the model is, so
-    // `posOverR` and `extOverR` come out ~0 on a kilometre-scale mesh and the line says
-    // so without any judgement call. DELETE-WHEN issue #26 is closed.
-    // =====================================================================
-    {
-        static const s32 siOobbDiag = [] {
-            const char* lpcValue = std::getenv("BRN_OOBB_DIAG");
-            return lpcValue && lpcValue[0] && lpcValue[0] != '0' ? 1 : 0;
-        }();
-        static s32 siOobbSamples = 0;
-        if (!lpContext->mpJobState && siOobbDiag != 0 && siOobbSamples < 120 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const f32 lfSphereR = lpRenderable->mBoundingSphere.w;
-            if (lfSphereR > 50.0f)      // only the big meshes -- a backdrop is hundreds of metres
-            {
-                ++siOobbSamples;
-                for (u32 luM = 0; luM < luNumMeshes && luM < 8u; ++luM)
-                {
-                    rw::math::vpu::Matrix44 lBox;
-                    lpRenderable->mppMeshes[luM]->mPackedBoundingBox.ToMatrix(lBox);
-                    const f32 lfEx = std::sqrt(lBox.xAxis.x * lBox.xAxis.x + lBox.xAxis.y * lBox.xAxis.y + lBox.xAxis.z * lBox.xAxis.z);
-                    const f32 lfEy = std::sqrt(lBox.yAxis.x * lBox.yAxis.x + lBox.yAxis.y * lBox.yAxis.y + lBox.yAxis.z * lBox.yAxis.z);
-                    const f32 lfEz = std::sqrt(lBox.zAxis.x * lBox.zAxis.x + lBox.zAxis.y * lBox.zAxis.y + lBox.zAxis.z * lBox.zAxis.z);
-                    const f32 lfDx = lBox.wAxis.x - lpRenderable->mBoundingSphere.x;
-                    const f32 lfDy = lBox.wAxis.y - lpRenderable->mBoundingSphere.y;
-                    const f32 lfDz = lBox.wAxis.z - lpRenderable->mBoundingSphere.z;
-                    const f32 lfPos = std::sqrt(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz);
-                    const f32 lfExt = (lfEx > lfEy ? (lfEx > lfEz ? lfEx : lfEz) : (lfEy > lfEz ? lfEy : lfEz));
-                    *CgsDev::Log::gpDebugPrint
-                        << "[oobb] meshes=" << static_cast<s32>(luNumMeshes)
-                        << " mesh=" << static_cast<s32>(luM)
-                        << " sphC=(" << lpRenderable->mBoundingSphere.x << "," << lpRenderable->mBoundingSphere.y
-                        << "," << lpRenderable->mBoundingSphere.z << ") sphR=" << lfSphereR
-                        << " boxPos=(" << lBox.wAxis.x << "," << lBox.wAxis.y << "," << lBox.wAxis.z << ")"
-                        << " boxExt=(" << lfEx << "," << lfEy << "," << lfEz << ")"
-                        << " posOverR=" << (lfPos / lfSphereR)
-                        << " extOverR=" << (lfExt / lfSphereR)
-                        << "\n";
-                }
-            }
-        }
-    }
-
-    const DrawRenderableDispatchThreadInfo* lpThreadInfo =
-        reinterpret_cast<const DrawRenderableDispatchThreadInfo*>(lpTrailer);
-    DispatchBin& lrBin = lpFrame->GetBin();
-
-    for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
-    {
-        RenderableMesh* lpMesh = lpRenderable->mppMeshes[luMesh];
-
-        // Thread-info exclusion: skip meshes whose flags intersect the exclude set.
-        if ((lpMesh->mu8Flags & lpTrailer[4]) != 0)
-            continue;
-
-        // The sort/pre-Z depth is the transformed MESH centre (the output's
-        // fourth row at stack+var_B0), not the object's WVP translation.
-        // FLAG PC-platform leaf: also initialize it when the coarse frustum
-        // test skips per-mesh tests. The console then reads an unwritten stack
-        // matrix; a native depth sort must never consume indeterminate values.
-        rw::math::vpu::Matrix44 lMeshClipBox;
-        if (lbFrustumTest || lpTrailer[0] != 0 ||
-            (lpContext->mbPreZEnabled && lpTrailer[1] != 255u))
-        {
-            lpMesh->mPackedBoundingBox.MultiplyByMatrix(lWorldViewProjection, lMeshClipBox);
-            if (lbFrustumTest && FrustumTest(lMeshClipBox) != 0)
-                continue;
-        }
-
-        // Clamp the technique to the mesh's descriptor count.
-        const u32 luNumVd = lpMesh->mu8NumVertexDescriptors;
-        const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
-
-        // [FLAG PC boot gate] The console always has every material resident, so it
-        // dereferences the assembly unguarded. Here the world bundles are still being
-        // brought up one at a time: a mesh whose Material import lives in a bundle that
-        // is not staged (or that the pool refused when its heap filled) keeps the null
-        // Pool::ResolveImportForEntry wrote, and the read below is an access violation
-        // inside the per-frame render walk. Skip such a mesh and name it once.
-        // DELETE when every world bundle resolves (the streamer's unload leg + the
-        // remaining COMMONDATA/SHADERS staging).
-        if (lpAssembly == 0 || lpAssembly->GetLength() == 0)
-        {
-            static bool sbLoggedNullAssembly = false;
-            if (!lpContext->mpJobState && !sbLoggedNullAssembly && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedNullAssembly = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "DrawRenderable::Interpret: mesh has no material assembly"
-                       " (unresolved Material import) -- mesh skipped [FLAG PC boot gate]\n";
-            }
-            continue;
-        }
-
-        CGS_ASSERT(luNumVd == lpAssembly->GetLength(),
-                   "lpRenderableMesh->GetNumVertexDescriptors() == lpMaterialAssembly->GetLength()");
-        u32 luTechnique = lu8Technique;
-        if (luNumVd - 1u < luTechnique) luTechnique = luNumVd - 1u;
-        // FLAG [PC bring-up]: the console relies on the tripwire above holding, so its
-        // clamp is against the descriptor count alone. Re-clamp into the assembly's real
-        // range so a mismatch reported by that assert cannot walk off the technique table.
-        if (luTechnique >= lpAssembly->GetLength())
-            luTechnique = lpAssembly->GetLength() - 1u;
-
-        const MaterialTechniqueView* lpTechnique =
-            reinterpret_cast<const MaterialTechniqueView*>(lpAssembly->GetMaterial(luTechnique));
-
-        // Transparent techniques (flags bit 0) route to the transparent list.
-        const u32 luListId = (lpTechnique->mu16Flags & 1u) ? luTransparentListId : luOpaqueListId;
-        DispatchList* lpList = lpFrame->GetList(luListId);
-        lpList->ReserveKey();
-
-        // Bin headroom check before the packet (X360: nextWord-used + 256 >= size).
-        if (lrBin.GetUsedQwords() + 256u >= lrBin.GetSizeQwords())
-            lrBin.HandleMemoryOverflow(0x100u);
-
-        lrBin.BeginPacket();
-        bool lbAdded;
-        if (lpTrailer[0] != 0)
-            lbAdded = DrawRenderableMeshZOnly::AddToBin(lpMesh, &lrBin, lpContext,
-                          static_cast<u8>(luTechnique), lu8MeshInstanceCount, lpThreadInfo);
-        else
-            lbAdded = DrawRenderableMesh::AddToBin(lpMesh, &lrBin, lpContext,
-                          static_cast<u8>(luTechnique), lu8MeshInstanceCount, lpThreadInfo);
-        // [PC shim] overwrite the identity WVP lane the AddToBin seeded with the
-        // real object WVP (payload qwords 1..4 -- see the header note).
-        {
-            DispatchCommand* lpPeek = lrBin.EndPacket();
-            CGS_ASSERT(lpPeek != 0, "Failed to add mesh to dispatch bin");
-            u32* lpMeshCmd = reinterpret_cast<u32*>(lpPeek);
-            std::memcpy(&lpMeshCmd[8], &lWorldViewProjection, 64);
-            WriteCommandPointer(&lpMeshCmd[6], lpInstances);
-            CGS_ASSERT(lbAdded, "Failed to add mesh to dispatch bin");
-
-            const bool lbZOnly = lpTrailer[0] != 0;
-            lpList->Submit(MeshSortKey(*lpTechnique, lbZOnly,
-                lbZOnly ? lMeshClipBox.wAxis.z : 0.0f), lpPeek);
-        }
-
-        // Optional pre-Z re-emit.
-        if (lpContext->mbPreZEnabled && lpTrailer[1] != 255u)
-        {
-            const u16 lu16Flags = lpTechnique->mu16Flags;
-            if ((lu16Flags & 1u) == 0 && (((lu16Flags >> 3) & 1u) == 0 || lpContext->mbPreZAlphaEnabled))
-            {
-                u32 luPreZTechnique = luNumVd - 1u;
-                if (luPreZTechnique > lpTrailer[3]) luPreZTechnique = lpTrailer[3];
-
-                // Distance gate: the mesh centre's clip-space w against the
-                // pre-Z distance threshold vector.
-                const f32 lfDepth = lMeshClipBox.wAxis.w;
-                if (!(lfDepth > lpContext->mvPreZDistanceThreshold[0]))
-                {
-                    const MaterialTechniqueView* lpPreZTech =
-                        reinterpret_cast<const MaterialTechniqueView*>(
-                            lpAssembly->GetMaterial(luPreZTechnique));
-                    DispatchList* lpPreZList =
-                        lpFrame->GetList(static_cast<u32>(lpTrailer[1] + liListBase));
-                    lpPreZList->ReserveKey();
-
-                    if (lrBin.GetUsedQwords() + 256u >= lrBin.GetSizeQwords())
-                        lrBin.HandleMemoryOverflow(0x100u);
-
-                    lrBin.BeginPacket();
-                    CGS_ASSERT(lpTrailer[0] == 0,
-                               "Why would you ever want to do a preZ pass for Z only rendering?!");
-                    const bool lbPreZAdded = DrawRenderableMeshZOnly::AddToBin(
-                        lpMesh, &lrBin, lpContext, static_cast<u8>(luPreZTechnique),
-                        lu8MeshInstanceCount, lpThreadInfo);
-                    DispatchCommand* lpPreZPacket = lrBin.EndPacket();
-                    CGS_ASSERT(lbPreZAdded && lpPreZPacket != 0,
-                               "Failed to add mesh to dispatch bin (pre-z)");
-                    u32* lpPreZCmd = reinterpret_cast<u32*>(lpPreZPacket);
-                    std::memcpy(&lpPreZCmd[8], &lWorldViewProjection, 64);
-                    WriteCommandPointer(&lpPreZCmd[6], lpInstances);
-
-                    lpPreZList->Submit(PreZSortKey(*lpPreZTech), lpPreZPacket);
-                }
-            }
-        }
-    }
-}
-
 // =============================================================================
 // CgsGraphics::DrawRenderable::Interpret  @ 0x827FCDA0
 //
@@ -943,276 +669,6 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
 // DRAWRENDERABLEMESH[ZONLY] command + sort record per surviving mesh into the
 // mesh-only frame's lists (EmitObjectMeshCommands above).
 // =============================================================================
-void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
-                               void* lpUserData, f32 /*lfTime*/)
-{
-    u32* lpWords = reinterpret_cast<u32*>(lpCommand);
-    DispatchObjectContext* lpContext = static_cast<DispatchObjectContext*>(lpUserData);
-
-    CGS_ASSERT(lpCommand != 0, "lpCommand");
-    CGS_ASSERT(lpFrame != 0,   "lpMeshOnlyDispatchFrame");
-    CGS_ASSERT(lpContext != 0, "lpDispatchObjectContextVoid");
-    CGS_ASSERT(CommandIdOf(lpWords[0]) == DispatchCommand::E_DRAWRENDERABLE,
-               "lpCommand->GetCommandID() == DRAWRENDERABLE");
-
-    const Renderable* lpRenderable =
-        reinterpret_cast<const Renderable*>(ReadCommandPointer(&lpWords[2]));
-    CGS_ASSERT(lpRenderable != 0, "lpRenderable");
-
-    // word1 routing bytes.
-    // ⭐ CORRECTED (race-car render wave 2026-07-31). Byte 2 and byte 1 were swapped here:
-    // the X360 Interpret @0x827FCE94..0x827FCEDC adds the context's liListBase to BOTH the
-    // >>24 and the >>16 bytes (`add r5, r5, r7` / `add r7, r6, r7`) and stores the >>8 byte
-    // RAW. Two list ids and one technique -- so byte2 is the TRANSPARENT LIST and byte1 is
-    // the TECHNIQUE, not the other way round. RenderInstance in BrnWorldEntityModule.cpp
-    // passed AddToBin's arguments with the same swap, so the two errors cancelled and the
-    // world still drew correctly; the race car passes (opaque 19, transparent 20, technique
-    // 0..3) and would have been routed into list 19 with technique 20 (clamped to the last
-    // material) and its transparent meshes into list 0..3 -- the SHADOW cascades.
-    const u32 luWord1          = lpWords[1];
-    const u8  lu8OpaqueList    = static_cast<u8>(luWord1 >> 24);
-    const u8  lu8Transparent   = static_cast<u8>(luWord1 >> 16);
-    const u8  lu8Technique     = static_cast<u8>(luWord1 >> 8);
-    const bool lbFrustumTest   = (luWord1 & 0xFFu) != 0;
-    const s32 liListBase       = lpContext->miListIdBase;
-    const u32 luOpaqueListId   = static_cast<u32>(lu8OpaqueList + liListBase);
-    const u32 luTransparentListId = static_cast<u32>(lu8Transparent + liListBase);
-
-    // The thread-info trailer + the dirty-constant restore. GetPacketLength() =
-    // dirtyQw + 1 (trailer), so the trailer is the packet's LAST qword.
-    const u32 luDirtyQw = (lpWords[0] & 0x00FFFFFFu) - 1u;
-    const u8* lpTrailer = reinterpret_cast<const u8*>(lpCommand) + 16u + (luDirtyQw << 4);
-
-    // Restore: {count u8, idx bytes, aligned host-pointer array} at cmd+16.
-    {
-        const u8* lpBlock  = reinterpret_cast<const u8*>(lpCommand) + 16;
-        const u32 luCount  = lpBlock[0];
-        const u8* lpaIdx   = lpBlock + 1;
-        const u8* lpaPtrs  = lpBlock + ((luCount + 4u) & ~3u);
-        for (u32 lu = 0; lu < luCount; ++lu)
-        {
-            const rw::math::vpu::Vector4* lpData;
-            std::memcpy(&lpData, lpaPtrs + lu * sizeof(void*), sizeof(void*));
-            lpContext->mapConstantData[lpaIdx[lu]] = lpData;
-        }
-    }
-
-    // WVP = worldMatrix (constant 0) * viewProjection (constant 3).
-    const rw::math::vpu::Matrix44* lpWorld =
-        reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[0]);
-    const rw::math::vpu::Matrix44* lpViewProjection =
-        reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[3]);
-    CGS_ASSERT(lpWorld != 0,          "lpWorldMatrix != NULL");
-    CGS_ASSERT(lpViewProjection != 0, "lpViewProjectionMatrix != NULL");
-
-    // [DIAG] THE WORLD PASS'S VIEW-PROJECTION, PRINTED ONCE PER CALL SITE. NOT IN THE X360
-    // BINARY, inert unless BRN_VP_PROBE names a value. DELETE-WHEN-STABLE.
-    //
-    // WHY: the tyre mark is rejected by the depth test with EVERY fragment strictly BEHIND what
-    // the world wrote (measured: lt=0, eq=0, gt=coverage, over eight samples spread across a
-    // drift), while the mark itself is laid 3 cm ABOVE the wheel contact point on a road the car
-    // visibly sits on, and its own transform puts it on exactly the right PIXEL. Right x and y,
-    // wrong z, is the signature of two passes projecting the same world point through different
-    // matrices -- and the two passes do take their view-projection from different places: the
-    // world from this dispatch command's shader constant 3, the trail from
-    // ParticleRenderData::mCgsCamera. Nobody has compared them. This prints the world's side;
-    // the trail's is already in [trailpass] xform and [ImVerts diag] vs c0..c3.
-    {
-        static const bool sbVpProbe = [] {
-            const char* lpcValue = std::getenv("BRN_VP_PROBE");
-            return lpcValue && lpcValue[0] && lpcValue[0] != '0';
-        }();
-        static u32 suVpSeen = 0;
-        static u32 suVpPrinted = 0;
-        // Sampled, not a prefix: this runs thousands of times a frame and the shadow cascades go
-        // first, so a prefix budget would describe the cascade camera and never the scene one.
-        // ⚠ GATED ON THE SCENE COLOUR PASS. Unfiltered, seven of the first eight samples
-        // were the shadow cascades and an env-map face -- orthographic and 90-degree
-        // cameras that have nothing to do with the depth the trail is tested against.
-        if (!lpContext->mpJobState && sbVpProbe && lpViewProjection != 0 && suVpPrinted < 8u
-            && ((++suVpSeen % 499u) == 0u) && BrnDiag::IsSceneColourPass())
-        {
-            ++suVpPrinted;
-            const f32* const lpfM = reinterpret_cast<const f32*>(lpViewProjection);
-            char lacMsg[400];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[vpcmp] world viewProj(const 3): m0=[%.6f %.6f %.6f %.6f] m1=[%.6f %.6f %.6f %.6f]"
-                " m2=[%.6f %.6f %.6f %.6f] m3=[%.4f %.4f %.4f %.4f]\n",
-                lpfM[0],  lpfM[1],  lpfM[2],  lpfM[3],
-                lpfM[4],  lpfM[5],  lpfM[6],  lpfM[7],
-                lpfM[8],  lpfM[9],  lpfM[10], lpfM[11],
-                lpfM[12], lpfM[13], lpfM[14], lpfM[15]);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-
-    // ARTIST submits one instance group and leaves matrix selection to the GPU.
-    // The native path carries constant6/7 snapshots to a D3D9 instance stream.
-    // BRN_INSTANCING_EXPAND=1 retains the earlier scalar expansion for controlled
-    // comparisons; unsupported native shaders are expanded at mesh submission.
-    // Constants0/6/7 are world, InstancingMatrixArray and InstancingIndexArray.
-    const u32 KU_CONSTANT_WORLD                   = 0u;
-    const u32 KU_CONSTANT_INSTANCING_MATRIX_ARRAY = 6u;
-    const u32 KU_CONSTANT_INSTANCING_INDEX_ARRAY  = 7u;
-
-    const u8 lu8InstanceCount = lpTrailer[2];
-    const rw::math::vpu::Matrix44* lpaInstanceWorlds = 0;
-    const rw::math::vpu::Vector4*  lpaInstanceIndices = 0;
-    u32 luNumInstanceDraws = 1;
-    if (lu8InstanceCount > 1u)
-    {
-        lpaInstanceWorlds = reinterpret_cast<const rw::math::vpu::Matrix44*>(
-            lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY]);
-        lpaInstanceIndices = lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY];
-        if (lpaInstanceWorlds != 0)
-        {
-            luNumInstanceDraws = lu8InstanceCount;
-
-            // ARTIST827FCDA0 emits one mesh command with the original instance
-            // count. Carry its two constant arrays through the spare native
-            // payload pointer; D3D9 consumes them as an instance stream.
-            static const bool sbExpandInstances = [] {
-                const char* value = std::getenv("BRN_INSTANCING_EXPAND");
-                return value && value[0] && value[0] != '0';
-            }();
-            if (!sbExpandInstances && lu8InstanceCount <= 5)
-            {
-                auto* lpInstances = static_cast<renderengine::WorldInstanceDrawPC*>(
-                    lpFrame->GetBin().AllocateMemoryFast(
-                        (sizeof(renderengine::WorldInstanceDrawPC) + 15) / 16));
-                ::new (lpInstances) renderengine::WorldInstanceDrawPC{
-                    reinterpret_cast<const float*>(lpaInstanceWorlds),
-                    reinterpret_cast<const float*>(lpaInstanceIndices),
-                    reinterpret_cast<const float*>(lpViewProjection), lu8InstanceCount};
-                rw::math::vpu::Matrix44 lWorldViewProjection;
-                renderengine::WorldInstanceWvpPC(reinterpret_cast<const float*>(lpWorld),
-                    reinterpret_cast<const float*>(lpViewProjection),
-                    reinterpret_cast<float*>(&lWorldViewProjection));
-                EmitObjectMeshCommands(lpRenderable, lpFrame, lpContext, lpTrailer,
-                    luOpaqueListId, luTransparentListId, lu8Technique, lbFrustumTest,
-                    liListBase, lu8InstanceCount, lWorldViewProjection, lpInstances);
-                return;
-            }
-
-            // [DIAG] latched on the EXPANDED COUNT and on the spread of the instance
-            // translations, not on a "ran once" bool -- an expansion that produced N
-            // draws all at the same place would otherwise look identical to a correct
-            // one in the log.
-            static u32 suLoggedInstanceCount = 0;
-            if (!lpContext->mpJobState && suLoggedInstanceCount != luNumInstanceDraws && CgsDev::Log::gpDebugPrint != 0)
-            {
-                suLoggedInstanceCount = luNumInstanceDraws;
-                // [DIAG wheels] constant 0 -- the object's OWN world matrix, i.e. what a
-                // non-instanced draw of this very packet would use -- and constant 3, the
-                // view-projection every WVP in this packet is built from. Printed beside the
-                // instance matrices so the two spaces can be compared directly.
-                *CgsDev::Log::gpDebugPrint
-                    << "[instancing] constant0 world translation ("
-                    << lpWorld->wAxis.x << ", " << lpWorld->wAxis.y << ", "
-                    << lpWorld->wAxis.z << ", " << lpWorld->wAxis.w << ")\n";
-                *CgsDev::Log::gpDebugPrint
-                    << "[instancing] constant3 viewProjection rows"
-                    << " x(" << lpViewProjection->xAxis.x << "," << lpViewProjection->xAxis.y
-                    << "," << lpViewProjection->xAxis.z << "," << lpViewProjection->xAxis.w << ")"
-                    << " y(" << lpViewProjection->yAxis.x << "," << lpViewProjection->yAxis.y
-                    << "," << lpViewProjection->yAxis.z << "," << lpViewProjection->yAxis.w << ")"
-                    << " z(" << lpViewProjection->zAxis.x << "," << lpViewProjection->zAxis.y
-                    << "," << lpViewProjection->zAxis.z << "," << lpViewProjection->zAxis.w << ")"
-                    << " w(" << lpViewProjection->wAxis.x << "," << lpViewProjection->wAxis.y
-                    << "," << lpViewProjection->wAxis.z << "," << lpViewProjection->wAxis.w << ")\n";
-                *CgsDev::Log::gpDebugPrint
-                    << "[instancing] DrawRenderable::Interpret expanding "
-                    << luNumInstanceDraws << " instances; translations";
-                for (u32 luLog = 0; luLog < luNumInstanceDraws; ++luLog)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << " (" << lpaInstanceWorlds[luLog].wAxis.x
-                        << ", " << lpaInstanceWorlds[luLog].wAxis.y
-                        << ", " << lpaInstanceWorlds[luLog].wAxis.z << ")";
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-        }
-        else
-        {
-            static bool sbLoggedMissingInstanceMatrices = false;
-            if (!lpContext->mpJobState && !sbLoggedMissingInstanceMatrices && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedMissingInstanceMatrices = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "DrawRenderable::Interpret: instanced object with no"
-                       " InstancingMatrixArray (constant 6) -- drawing one instance"
-                       " [PC bring-up shim]\n";
-            }
-        }
-    }
-
-    // Expanded comparison path: each mesh packet retains one array entry, as
-    // required by the original non-instanced PC shader counterparts. Restore the
-    // context afterward so later objects retain their own constant snapshots.
-    const rw::math::vpu::Vector4* const lpSavedWorldConstant =
-        lpContext->mapConstantData[KU_CONSTANT_WORLD];
-    const rw::math::vpu::Vector4* const lpSavedInstancingMatrixConstant =
-        lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY];
-    const rw::math::vpu::Vector4* const lpSavedInstancingIndexConstant =
-        lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY];
-
-    for (u32 luInstance = 0; luInstance < luNumInstanceDraws; ++luInstance)
-    {
-        const rw::math::vpu::Matrix44* lpWorldForDraw =
-            (lpaInstanceWorlds != 0) ? &lpaInstanceWorlds[luInstance] : lpWorld;
-
-        if (lpaInstanceWorlds != 0)
-        {
-            const rw::math::vpu::Vector4* const lpInstanceWorldRows =
-                reinterpret_cast<const rw::math::vpu::Vector4*>(&lpaInstanceWorlds[luInstance]);
-            lpContext->mapConstantData[KU_CONSTANT_WORLD]                   = lpInstanceWorldRows;
-            lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY] = lpInstanceWorldRows;
-            if (lpaInstanceIndices != 0)
-            {
-                lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY] =
-                    lpaInstanceIndices + luInstance;
-            }
-        }
-
-        rw::math::vpu::Matrix44 lWorldViewProjection;
-        {
-            // Row-vector 4x4 multiply (the X360 inline VMX chain, de-vectorised;
-            // the world matrix is affine -- its rows' w lanes are 0/0/0/1).
-            const rw::math::vpu::Vector4* lapW[4] =
-                { &lpWorldForDraw->xAxis, &lpWorldForDraw->yAxis,
-                  &lpWorldForDraw->zAxis, &lpWorldForDraw->wAxis };
-            const rw::math::vpu::Vector4* lapV[4] =
-                { &lpViewProjection->xAxis, &lpViewProjection->yAxis,
-                  &lpViewProjection->zAxis, &lpViewProjection->wAxis };
-            rw::math::vpu::Vector4* lapO[4] =
-                { &lWorldViewProjection.xAxis, &lWorldViewProjection.yAxis,
-                  &lWorldViewProjection.zAxis, &lWorldViewProjection.wAxis };
-            for (int liRow = 0; liRow < 4; ++liRow)
-            {
-                const rw::math::vpu::Vector4& lrW = *lapW[liRow];
-                rw::math::vpu::Vector4&       lrO = *lapO[liRow];
-                const f32 lfWLane = (liRow == 3) ? 1.0f : lrW.w;
-                lrO.x = lrW.x * lapV[0]->x + lrW.y * lapV[1]->x + lrW.z * lapV[2]->x + lfWLane * lapV[3]->x;
-                lrO.y = lrW.x * lapV[0]->y + lrW.y * lapV[1]->y + lrW.z * lapV[2]->y + lfWLane * lapV[3]->y;
-                lrO.z = lrW.x * lapV[0]->z + lrW.y * lapV[1]->z + lrW.z * lapV[2]->z + lfWLane * lapV[3]->z;
-                lrO.w = lrW.x * lapV[0]->w + lrW.y * lapV[1]->w + lrW.z * lapV[2]->w + lfWLane * lapV[3]->w;
-            }
-        }
-
-        EmitObjectMeshCommands(lpRenderable, lpFrame, lpContext, lpTrailer,
-                               luOpaqueListId, luTransparentListId, lu8Technique,
-                               lbFrustumTest, liListBase,
-                               (lpaInstanceWorlds != 0) ? 1u : lu8InstanceCount,
-                               lWorldViewProjection);
-    }
-
-    lpContext->mapConstantData[KU_CONSTANT_WORLD]                   = lpSavedWorldConstant;
-    lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY] =
-        lpSavedInstancingMatrixConstant;
-    lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY] =
-        lpSavedInstancingIndexConstant;
-}
 
 // =============================================================================
 // CgsGraphics::DispatchList::DispatchAllObjectToMesh  @ 0x827FD7D0
@@ -1275,9 +731,7 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
 // Walk the sorted records and issue the GPU draw for every DRAWRENDERABLEMESH
 // command. The X360 body programs the Xenos through the shadow device (state
 // triple + vertex/pixel microcode programs + direct constant-memory writes +
-// material samplers). The PC leaf keeps the walk, the technique-change cache and
 // the mesh draw exactly, and routes the GPU programming through the same
-// shadow::Device seam; the constant/sampler upload machinery rides the PC leaf
 // in shadow::Device::SetMeshTechniquePC (see shadowingdevice.cpp) -- states and
 // shaders fall back to the flagged bring-up defaults until the converted
 // SHADERS bundle + material states are live. Occlusion-query interleaving is
@@ -1304,11 +758,8 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
 
     CGS_ASSERT(mpSortedKeys != 0, "mpSortedKeys != NULL (PrepareSortJobInfo/SortForDispatch must run first)");
 
-    const bool lbPrefetch = MeshPrefetchEnabledPC();
     for (u32 luIndex = luFirst; luIndex < luEnd; ++luIndex)
     {
-        if (lbPrefetch)
-            PrefetchMeshCommandsPC(m_pBinBase, mpSortedKeys, luIndex, luEnd);
         CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
         u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
         CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
@@ -1340,14 +791,10 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
         if (lpTechnique != spLastTechnique)
         {
             spLastTechnique = lpTechnique;
-            shadow::Device::SetMeshTechniquePC(
-                lpTechnique, lpAssembly, reinterpret_cast<void* const*>(lppConstScratch), false);
         }
 
         // Per-mesh: the technique's OBJECT-scope external constant blocks (the X360 runs
         // these on every mesh, right after the technique-change block).
-        shadow::Device::SetMeshObjectConstantsPC(
-            lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), false);
 
         // ARTIST 827F3A40..74: dispatch the CPU shader on EVERY mesh, even
         // when the material technique is still cached from the preceding draw.
@@ -1357,7 +804,6 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
 
         // [PC bring-up shim] the per-object WVP carried in the command
         // (payload qwords 1..4) feeds the fallback-shader transform.
-        shadow::Device::SetObjectTransformPC(reinterpret_cast<const f32*>(&lpPacket[8]));
 
         // [DIAG wheels] the clip-space origin of a console-instanced mesh. Row 3 of the
         // per-object WVP IS the object origin transformed into clip space, so this says
@@ -1388,7 +834,6 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
         }
 
         // Bind the mesh geometry + draw.
-        shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
         // ARTIST @0x827F59EC-0x827F5A30 enters the manager's per-mesh
         // conditional bracket after SetMeshBuffers and before either draw path.
         const bool lbConditionalRender = spOcclusionCullManager != nullptr
@@ -1399,16 +844,10 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
 
         if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
         {
-            const auto* lpInstances = static_cast<const renderengine::WorldInstanceDrawPC*>(
-                ReadCommandPointer(&lpPacket[6]));
             CGS_ASSERT(lpInstances && lpInstances->muCount == lu8Instances, "Missing native instance snapshots");
-            if (lpInstances)
-                shadow::Device::DrawInstancedMeshPC(lpMesh, lpInstances, lpTechnique,
-                    reinterpret_cast<void* const*>(lppConstScratch), false);
         }
         else
         {
-            shadow::Device::DrawIndexedMeshPC(lpMesh);
         }
 
         if (lbConditionalRender)
@@ -1528,12 +967,6 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
 
     const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
 
-    // [FLAG PC boot gate] the same unresolved-Material guard DrawRenderable::Interpret
-    // carries: a mesh whose Material import lives in a bundle the pool refused keeps a
-    // null assembly, and the console's unguarded read would be an access violation here.
-    if (lpAssembly == 0 || lpAssembly->GetLength() == 0)
-        return;
-
     CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
                "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()");
 
@@ -1552,33 +985,20 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
     if (reinterpret_cast<uintptr_t>(lpTechnique) != suLastTechniqueAux)
     {
         suLastTechniqueAux = reinterpret_cast<uintptr_t>(lpTechnique);
-        shadow::Device::SetMeshTechniquePC(
-            lpTechnique, lpAssembly, reinterpret_cast<void* const*>(lppConstScratch), true);
     }
-
-    shadow::Device::SetMeshObjectConstantsPC(
-        lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), true);
 
     // ARTIST 827F68EC..6920: the same animation time/UV offset in depth passes.
     if (const ShaderConstantsCPU* lpCPU = lpAssembly->GetCPUShaderConstants())
         lpCPU->Dispatch(lfTime, lpAssembly, lpAssembly->GetMaterial(luTechnique));
 
     // [PC bring-up shim] the per-object WVP carried in the command (payload qwords 1..4).
-    shadow::Device::SetObjectTransformPC(reinterpret_cast<const f32*>(&lpPacket[8]));
 
-    shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
     if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
     {
-        const auto* lpInstances = static_cast<const renderengine::WorldInstanceDrawPC*>(
-            ReadCommandPointer(&lpPacket[6]));
         CGS_ASSERT(lpInstances && lpInstances->muCount == lu8Instances, "Missing native instance snapshots");
-        if (lpInstances)
-            shadow::Device::DrawInstancedMeshPC(lpMesh, lpInstances, lpTechnique,
-                reinterpret_cast<void* const*>(lppConstScratch), true);
     }
     else
     {
-        shadow::Device::DrawIndexedMeshPC(lpMesh);
     }
 }
 

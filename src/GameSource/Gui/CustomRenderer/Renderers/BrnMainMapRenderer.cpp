@@ -44,8 +44,6 @@
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h" // the shared GUI states + screen transform
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (the [map-world] diags)
-#include "pc/gcm/renderengine/renderstates.h"               // renderengine::TextureState (+Parameters) / BlendState
-
 namespace BrnGui
 {
 // ---------------------------------------------------------------------------
@@ -774,8 +772,6 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     }
 
     Im2dCommandBuffer* lpRenderBuffer = ResolveMainMapBuffer(lpRendererSet);
-    if (lpRenderBuffer == 0)
-        return;   // [FLAG PC bring-up] the console derefs the set straight through.
 
     // (2) roll the fade, then pick this frame's alpha.
     UpdateAlphaForFadeState();

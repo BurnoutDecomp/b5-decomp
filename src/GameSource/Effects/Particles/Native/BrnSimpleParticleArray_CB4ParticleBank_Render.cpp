@@ -229,11 +229,6 @@ namespace Native
         const u32 luTilesHigh     = lrParams.muTilesHigh;
         const u32 luNumberOfTiles = luTilesHigh * luTilesWide;
         CGS_ASSERT(luNumberOfTiles <= KU_MAX_TILES, "luNumberOfTiles <= 16");   // :608
-        // FLAG PC memory safety: the console prints the assert above and carries on, writing past the
-        // sixteen-entry stack table when an array is authored with more tiles. The host writes only
-        // what fits; no shipped nativeparticleparams collection has more than sixteen.
-        // ⚠ AND A ZERO TILE COUNT TRAPS ON THE CONSOLE: the tile index is `divwu` by it, guarded by
-        // `twllei r25, 0` (0x8291F36C). The host has no trap to take, so it asserts and draws nothing.
         CGS_ASSERT(luNumberOfTiles != 0u, "twllei r25, 0 -- a zero tile count traps on the console");
         if (luNumberOfTiles == 0u)
             return;

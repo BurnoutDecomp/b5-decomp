@@ -41,10 +41,6 @@ namespace TriggerEntityModuleIO
     // the buffer's only payload, seated at its own alignment right after the status byte.
     void InputBuffer_PreScene::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PreScene, mInputInterface)
-                          == alignof(InputBuffer_PreScene::InputInterface),
-                      "mInputInterface must sit at its own alignment immediately after the IOBuffer status byte "
-                      "(X360: +4 with 4-byte pointers; x64 host: +8)");
         static_assert(sizeof(InputBuffer_PreScene)
                           == offsetof(InputBuffer_PreScene, mInputInterface)
                              + sizeof(InputBuffer_PreScene::InputInterface),

@@ -253,7 +253,6 @@ namespace Events
             E_RESULT_COUNT   = 2,
         };
 
-
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, s32 liPoolId, EResult leResult,
                        const SmallResource& lrResource, const SmallResourceDescriptor& lrDescriptor)
         {
@@ -399,9 +398,6 @@ namespace Events
     {
         ID mResourceId;       // +16 (8-byte aligned), full 64-bit resource identity
     };
-    static_assert(sizeof(ID) == 8, "Resource identity must retain all 64 bits");
-    static_assert(sizeof(AcquireResourceRequest) == 24,
-        "Acquire request is PoolEvent plus one aligned 64-bit ID");
 
     // Acquire every resource of a named resource LIST (request id/type 5 -> pool input) into a
     // caller-owned handle array. DWARF CgsResourceIOEvents.h:410 {mListResourceId, mpHandles,

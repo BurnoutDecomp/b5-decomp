@@ -2,8 +2,6 @@
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] bring-up traces
-#include "pc/gcm/renderengine/device.h"   // gDisplayWidth/Height
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

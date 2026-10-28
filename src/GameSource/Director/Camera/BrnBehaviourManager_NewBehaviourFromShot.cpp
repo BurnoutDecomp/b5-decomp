@@ -209,17 +209,6 @@ namespace Camera
         // present as a camera that never moves [[diagnostics-that-lie]]. Delete with the rest
         // of the drive-thru bring-up diagnostics.
         {
-            static const bool sbDriveThruDiag = (getenv("BRN_DRIVETHRU_DIAG") != 0);
-            if (sbDriveThruDiag && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const bool lbAllocated = (lrHelper.GetPoolHandle().Get() != 0);
-                *CgsDev::Log::gpDebugPrint
-                    << "[drivethru] NewBehaviour shot classKey=0x"
-                    << static_cast<s32>(static_cast<u32>(luShotClassKey >> 32)) << ":"
-                    << static_cast<s32>(static_cast<u32>(luShotClassKey))
-                    << " helper=" << static_cast<s32>(lHelperID)
-                    << " behaviour=" << (lbAllocated ? 1 : 0) << "\n";
-            }
         }
 
         // ---- bind the caller's handle to the slot and record the two debug owners ---------

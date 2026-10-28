@@ -515,23 +515,6 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
     // own return. Nothing is re-read from the ScoringSystem and no consume-once reader is touched.
     // DELETE-WHEN the freeburn/results bring-up is done.
     {
-        static const bool sbResultsDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-        if (sbResultsDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[mode-results] action 36 size "
-                << static_cast<s32>(sizeof(GameStateModuleIO::FinishedModeAction))
-                << (lbPosted ? " POSTED" : " DROPPED (queue full)")
-                << " mode "     << static_cast<s32>(lAction.meFinishedGameModeType)
-                << " pos "      << lAction.miFinishPosition
-                << " takedowns " << lAction.miNumberOfTakedowns
-                << " elims "    << lAction.miEliminations
-                << " eliminator " << static_cast<s32>(lAction.meEliminatorIndex)
-                << " distToFin " << lAction.mfDistanceFromFinish
-                << " online "   << (lAction.mbIsOnlineGameMode ? 1 : 0)
-                << " timedOut " << (lAction.mbTimedOut ? 1 : 0)
-                << " eliminated " << (lAction.mbWonRound ? 1 : 0) << "\n";
-        }
     }
     (void)lbPosted;
 

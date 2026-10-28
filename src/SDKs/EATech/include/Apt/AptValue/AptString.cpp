@@ -495,10 +495,6 @@ AptValue* AptString::sMethod_split(AptString* pThis, int nArgCount)
 // ClearTemporaryPool) is homed in AptStringPool.cpp.
 extern AptString* gpStringPoolFreeList;   // off_8324E4FC
 
-// FLAG PC-platform leaf: the non-GC value-pool free-list spin lock (X360
-// unk_8324E8E8) -- the console's lwarx/stwcx. interrupt-masked test-and-set idiom
-// modelled as a host-portable interlocked TAS (threading primitive, not an engine
-// method; uncontended on the single-thread bring-up path).
 namespace
 {
     volatile long gNonGCPoolFreeListLock = 0;

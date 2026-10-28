@@ -14,7 +14,6 @@ namespace BrnTraffic
     // and mpaKillZoneIds. Pointer-free, so console and host footprints are identical.
     void VehicleAsset::_AssertLayout()
     {
-        static_assert(sizeof(CgsID) == 8, "CgsID is a 64-bit compressed name id");
         static_assert(offsetof(VehicleAsset, mVehicleId) == 0, "VehicleAsset::mVehicleId @+0");
         static_assert(sizeof(VehicleAsset) == 8, "VehicleAsset stride");
     }

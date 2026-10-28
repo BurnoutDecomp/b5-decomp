@@ -98,7 +98,6 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid data pointer sent to GuiHudMessagesDebugComponent::TriggerMessageCallback";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -113,7 +112,6 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid data sent to GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -128,7 +126,6 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid data in the callback";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -143,7 +140,6 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid data in the callback";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),

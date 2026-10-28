@@ -1,7 +1,4 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"
-#include "pc/gcm/renderengine/IndexBuffer.h"   // renderengine::IndexBuffer / IndexBufferHeader
-#include "pc/gcm/renderengine/VertexBuffer.h"  // renderengine::VertexBuffer / VertexBufferHeader
-
 // CgsResource::RwRenderableResourceType::FixUpRenderableMesh @ 0x828A8968.
 //
 // Relocates one just-loaded serialised renderable mesh and re-validates its GPU buffers.

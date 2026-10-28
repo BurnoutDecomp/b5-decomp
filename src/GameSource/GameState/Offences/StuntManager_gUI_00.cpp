@@ -71,11 +71,6 @@ namespace
 
     // [DIAG] NOT IN THE X360 BINARY. Same env guard + logger as the `[prop-diag] BREAK` rung this
     // ladder hangs off (PropEntityModule_wQ_04.cpp). Evaluated once per process.
-    bool UIGateDiagOn()
-    {
-        static const bool sbDiag = (getenv("BRN_PROP_DIAG") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
 
     // [DIAG] NOT IN THE X360 BINARY. First-N latch (the wQ_04 pattern) so a multi-element burst
     // cannot flood the log. Mirrors the same helper in BrnStuntManager.cpp; each TU keeps its own
@@ -84,8 +79,6 @@ namespace
 
     bool UIGateDiagFirstN(s32* lpiCounter)
     {
-        if (!UIGateDiagOn())
-            return false;
         if (*lpiCounter >= KI_UI_GATE_DIAG_FIRST_N)
             return false;
         ++(*lpiCounter);
@@ -313,8 +306,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         {
             mpTrainingManager->RequestTip(leTrainingType);
 
-            // [FLAG PC witness] opt-in BRN_COLLECT_DIAG, first 16 only. Read-only.
-            static const bool sbCollectDiag = (getenv("BRN_COLLECT_DIAG") != 0);
             static s32        siTipDiagLines = 0;
             if (sbCollectDiag && siTipDiagLines < 16 && CgsDev::Log::gpDebugPrint != 0)
             {

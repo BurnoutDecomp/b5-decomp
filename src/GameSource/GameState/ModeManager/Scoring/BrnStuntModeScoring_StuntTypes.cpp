@@ -473,19 +473,8 @@ namespace BrnGameState
                 // this rung firing is the proof that RegisterStunt() is reached from boosting
                 // and therefore that UpdateCombo holds mfTimeSinceLastStunt at 0.
                 {
-                    static const bool sbBoostDiag  = (getenv("BRN_PROP_DIAG") != 0);
                     static s32        siBoostLines = 0;
                     const s32         KI_BOOST_DIAG_MAX = 16;
-                    if (sbBoostDiag && siBoostLines < KI_BOOST_DIAG_MAX
-                        && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        ++siBoostLines;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[stunt-boost] boost link armed -- timeBoosting "
-                            << lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfTimeBoosting
-                            << " combo " << (mbComboInProgress ? 1 : 0)
-                            << " mult " << miComboMultiplier << "\n";
-                    }
                 }
 
                 UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * KF_STUNT_ATTACK_MIN_BOOST_TIME,

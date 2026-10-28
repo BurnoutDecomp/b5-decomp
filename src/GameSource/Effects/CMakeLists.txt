@@ -20,7 +20,6 @@ target_sources(${PROJECT_NAME}
         BrnEffectsGlassManager.h
         BrnEffectsUtils.h
         Curves.h
-        EffectsDebugPostFxSettingsPC.h
         EffectsModule.h
         EffectsStateMachine.h
         ParticleEffectHelper.h

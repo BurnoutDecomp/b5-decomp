@@ -252,38 +252,11 @@ namespace BrnGame
         mxRendererFlags = 0;                              // +4
         CgsModule::IOBuffer::Construct();                 // *(+0) status = constructed
         std::memset(&mParticleData, 0, sizeof(mParticleData));   // +24 = 0 (the particle-frame word; the
-                                                          // opaque model zeroes the whole payload)
-        // ⚠ mParticleRenderData IS DELIBERATELY NOT CLEARED HERE, and that is the console
-        // (BrnGame::DispatchThreadInputBuffer::Construct @0x823C5BB8 writes +4, +0, +24, the queue
-        // at +22912 and then only the 39312..39357 tail -- nothing in the +0x38A0 payload). It is
-        // safe there because BrnParticle::ParticleModule::GenerateRenderRequests @0x82281BD8 -- the
-        // sole caller of the write-locked accessor -- fills it every frame before any reader runs.
-        // ON PC IT IS NOT SAFE TO READ: that producer is not reconstructed, so nothing fills it,
-        // and since the 2026-08-15 perf wave CreateIOBuffer<T> no longer zero-fills either -- so
-        // its camera matrices and time step are UNINITIALISED bytes, not zeros. Anything that reads
-        // them must gate on a producer having run; see the [FLAG PC bring-up] note on
-        // BrnRendererUpdatePostFxMotionBlur, which is the only reader in this tree.
         mParticleInterThreadEventQueue.Construct();       // +0x5980
         mbIsRenderingAtFullFrameRate = true;              // +0x99B0 = 1
         mabThreeThreadsOverBudget[0] = false;             // +0x99B1..B3 = 0
         mabThreeThreadsOverBudget[1] = false;
         mabThreeThreadsOverBudget[2] = false;
-        // ⚠ [FLAG PC deviation, reflections step 1 2026-08-17] THE CONSOLE DOES NOT WRITE
-        // THESE SIX BYTES HERE. Construct @0x823C5BB8 stores +0x99B0..+0x99B3 and then
-        // goes straight to +0x99AC / +0x99BB / +0x9994 / +0x9998 / +0x99BD / +0x9990 --
-        // 0x99B4..0x99B9 (mabEnvMapFaceRender) is skipped, because on the console the
-        // producer writes all six every dispatch (GenerateDispatchLists @0x827D1CE8, this
-        // tree's BrnWorldModule.cpp:4018) and the IO-buffer pool memory started zeroed.
-        // NEITHER holds on PC: the live producer is GenerateDispatchListsBringUp, whose
-        // env-map arm parks until the face cameras have been positioned, and since the
-        // 2026-08-15 perf wave CreateIOBuffer<T> no longer zero-fills -- so without this
-        // the renderer's new six-face loop would read UNINITIALISED bytes and try to draw
-        // faces whose mesh lists nobody filled. Seeded to the state the console's memory
-        // always had. DELETE-WHEN the real GenerateDispatchLists is the live producer.
-        for ( s32 liFace = 0; liFace < 6; ++liFace )
-        {
-            mabEnvMapFaceRender[ liFace ] = false;
-        }
         std::memset(&mSnapShotRequest, 0, sizeof(mSnapShotRequest));  // the take flag (+0x99AC) = 0
         mbCalibrationUnfriendlyEnablePostFx = true;       // +0x99BB = 1
         mhCalibrationTextureHandle.Clear();               // +0x9994/+0x9998 = 0 (ResourceHandle::Clear)

@@ -150,13 +150,6 @@ const s32 KI_ITERATIVE_HERMITE_ITERATIONS     = 5;
 // @0x8278EEE4 and the array's live count is stored as 16 @0x8278EEE8.
 const s32 KI_MAX_PLAYER_ROUTE_EXTRAPOLATION_GENERATED_SECTIONS = 16;
 
-// AISection::mx8Flags bit 0x10 (`lbz r11,0x17(section) ; rlwinm r11,r11,0,27,27`
-// @0x82775CF4 / @0x82775E14). LookForStraightSection{Ahead,Behind} walk WHILE the bit is set,
-// i.e. the bit marks "this section is NOT straight" -- semantically a junction.
-// ⚠️ [FLAG PC bring-up] the DWARF accessor NAME for this bit is still not pinned; see the
-// identical park in BrnRacingLineGenerator_Extrapolate.cpp (KX8_SECTION_FLAG_TRACKBACK_STOP),
-// which reads the same bit for its walk-back stop. The BIT is attested, the name is not.
-// DELETE-WHEN an AISection accessor for 0x10 is tied to a DWARF name.
 const u8 KX8_SECTION_FLAG_JUNCTION = 0x10;
 
 // The unity-build file string every streamed assert in this TU cites.
@@ -1501,20 +1494,4 @@ void RacingLineGenerator::DropHardNoGoLinesIntoMap(RacingLine* lpRacingLine)
     }
 }
 
-// =================================================================================================
-// [FLAG PC bring-up] NOT BODIED BY THIS LANE -- declared in BrnRacingLineGenerator.h, no
-// definition anywhere yet. Each is a real console function; none is reached by any body in this
-// file, so nothing here links against them.
-//   GetSectionPointerForWrite (DWARF :176)  -- inlined on the console; no recovered call site in
-//                                              this lane's bodies, so its (assert-free?) shape is
-//                                              not attested. DELETE-WHEN a caller is recovered.
-//   GetBestSectionIndex       (DWARF :181)  -- inlined; same.
-//   GetWidthHalfWidthOfKnownSection (:337)  -- inlined; same.
-//   DoSlowTurn                (DWARF :231)  -- inlined; no recovered call site.
-//   (IsTargetUpToDate / IsAJunction / GetPointAndNormalOnCurve / SetUpIncomingPortalTarget were
-//    bodied by aiwave2 lane R3 in BrnRacingLineGenerator_Curve.cpp, 2026-09-05.)
-//   RenderHardNoGoMap (:190) / DrawCentreLine (:203) / RenderSectionDetails (:208)
-//                                           -- debug render; presentation-only on this host, so
-//                                              parked per the wave brief.
-// =================================================================================================
 }

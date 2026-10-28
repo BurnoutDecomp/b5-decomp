@@ -172,12 +172,7 @@ namespace BrnGui
         s32                         miLastRoadRuleScoreReceived; // +4836 (Road::ChallengeIndex)
         f32                         mfTextStartPosX;             // +4840
         f32                         mfTextPosY;                  // +4844
-        // +4848 mBlendStateResource / +4868 mpBlendState: the console acquires a BlendState
-        // resource through the heap allocator (Release's `(**alloc + 20)(alloc, &res)` free).
-        // [FLAG PC fold] the PC Im2d dispatch binds its own standard-blend frame state, so the
-        // per-component BlendState resource has no PC consumer; the pair is carried as named
-        // storage (never acquired) and Release's conditional free is a no-op on the null.
-        void*                       mpBlendStateResourceStorage[5]; // +4848..4867 (Resource, 20B console)
+ // +4848..4867 (Resource, 20B console)
         void*                       mpBlendState;                // +4868
         CgsGraphics::TextObject     mTextObject;                 // +4872
         CgsGraphics::TextRenderer*  mpTextRenderer;              // +4996
@@ -197,8 +192,5 @@ namespace BrnGui
         bool                        mbShownStartEngineTip;       // +5022
         bool                        mbShowAutoSaveMessage;       // +5023
 
-        // FLAG PC divergence (not in the X360 layout): the GUI clock (GuiCache::GetTime) the
-        // last consumed timestep belonged to -- see RenderComponent.
-        f32                         mfLastConsumedGuiTimePC = -1.0f;
     };
 }

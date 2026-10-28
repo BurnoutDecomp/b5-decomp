@@ -186,13 +186,8 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
         if (mVisibilityCollisionPolicy.IsVisibilityInterrupted()) { lrCamera.mState.mHeadFlags.SetBit(16); mbCanSwitchToMeNow = false; }
     }
     SetPrepared();
-    // FLAG PC diagnostic: measure produced poses, not just arbitrator state changes.
-    static const bool trace = std::getenv("BRN_CAMERA_RIG_DIAG") != 0;
     static u32 lines = 0;
     static u32 truckingLines = 0;
-    // FLAG PC diagnostic: reserve a bounded quota for the clock-bearing branch;
-    // earlier non-trucking candidate poses must not consume all of its evidence.
-    const bool trucking = mpParameters->mbUseTruck || mbIsPlanted;
     if (trace && (trucking ? truckingLines++ < 120 : lines++ < 240) && CgsDev::Log::gpDebugPrint)
         *CgsDev::Log::gpDebugPrint << "[camera-rig] gyro car=" << mAttachedTo.miRaceCarIndex
             << " eye=" << lrCamera.mTransform.Pos().x << "," << lrCamera.mTransform.Pos().y << "," << lrCamera.mTransform.Pos().z

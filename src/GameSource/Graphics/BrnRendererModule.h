@@ -1,6 +1,4 @@
 #pragma once
-#include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
-
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                             // Vector2 parameter of DebugDisplayRenderTarget
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
@@ -24,7 +22,6 @@ namespace BrnEffects { class EffectsModule; }
 #include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList (Prepare input)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
-#include "pc/gcm/renderengine/renderstates.h" // preview TextureState::Parameters
 #include "rw/rwcore_structs.h"                // preview's owning rw::Resource
 
 // EA::Jobs::Job is the real type (SDKs/EATech/eajobs/job.h): this module embeds thirty-two of
@@ -154,8 +151,6 @@ struct Resource
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
 
 #include "GameShared/Jobs/RadixSort/RadixSort.h"
-#include "pc/gcm/renderengine/DispatchSortJobs.h"
-
 // DispatchObjectContext / DispatchList are the real CgsGraphics types now
 // (CgsDispatcherCommands.h / CgsDispatcher.h, included above).
 
@@ -373,21 +368,6 @@ public:
     // data-gated off during boot and reconstructed incrementally.
     void Render(BrnEffects::EffectsModule* lpEffectsModule,
                 const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
-    // FLAG PC-platform leaf: GUI/movie preparation happens at the joined frame
-    // boundary; Render consumes commands and metadata published with that frame.
-    // FLAG PC-platform leaf: the original renderer output carries these buffers;
-    // the joined GUI producer can borrow their real allocated command banks.
-    CgsGraphics::Im3dRenderBuffer* GetIm3dBufferRacePositionPC()
-    { return mIm3dBufferRacePosition.IsPreparedPC() ? &mIm3dBufferRacePosition : nullptr; }
-    CgsGraphics::Im3dRenderBuffer* GetIm3dBufferMenusAndHudPC()
-    { return mIm3dBufferMenusAndHud.IsPreparedPC() ? &mIm3dBufferMenusAndHud : nullptr; }
-    void PrepareDisplayPC();
-    // FLAG PC-platform leaf: update-side CPU expansion; publication stays at
-    // the joined GDL swap. BRN_MESH_PREPARE=0 retains render-side preparation.
-    void PrepareMeshFrameForWritePC();
-    void BeginMeshFramePC();
-    void PublishMeshFramePC();
-    void EndMeshFramesPC();
 
     // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
     void RenderAssert(const CgsDev::Assert::AssertData* lpAssertData);
@@ -404,23 +384,6 @@ public:
 
     // End-of-update-frame (the console calls SwapBuffers from there).
     void EndOfFrame(bool lbStalled);
-
-    // FLAG PC-platform leaf: native presentations may outnumber original
-    // command producers. Completion identifies a write-bank lifetime, never
-    // the contents or pose of a camera, world, effects, or GUI record.
-    enum ECommandProducerPC { E_COMMAND_PRODUCER_GUI, E_COMMAND_PRODUCER_WORLD_AND_EFFECTS };
-    void CompleteCommandFramePC(const BrnGame::DispatchThreadInputBuffer* lpInput,
-                                ECommandProducerPC leProducer);
-    u64 GetPublishedCommandGenerationPC() const
-    { return muPublishedCommandGenerationPC; }
-    const BrnParticle::ParticleModule::ParticleRenderData* GetPublishedParticleRenderDataPC() const
-    {
-        return muPublishedCommandGenerationPC != 0
-            && maCommandInputsPC[mu8ShaderConstantsFrameInternal].mbParticleRecordProduced
-            ? &maCommandInputsPC[mu8ShaderConstantsFrameInternal].mParticleRenderData : nullptr;
-    }
-    bool GetPublishedEnvMapFaceRenderPC(u32 luFace) const
-    { return maCommandInputsPC[mu8ShaderConstantsFrameInternal].mabEnvMapFaceRender[luFace]; }
 
     // BrnRendererModule::Update publishes exactly this expression
     // into RendererIO::OutputBuffer::SetDispatchFrame; the world side reads it
@@ -444,16 +407,6 @@ public:
     // game module latches it, and LoadingScriptedState::Update FreeAll's it before each world
     // drive. It is an embedded member on the console, not a pointer.
     CgsMemory::LinearMalloc* GetReusableLoadingScreenAllocator() { return &mReusableLoadingScreenAllocator; }
-
-    // Native publication metadata: only a completed original world producer
-    // supplies a readable sky/lighting frame to the PC render owner.
-    void CompleteWorldDispatchFramePC(bool lbWorldRendered)
-    { maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameExternal] = lbWorldRendered; }
-    const BrnShaderConstantsFrame* GetPublishedShaderConstantsFramePC() const
-    {
-        return maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
-            ? &maShaderConstantsFrames[mu8ShaderConstantsFrameInternal] : 0;
-    }
 
 private:
     enum
@@ -495,8 +448,6 @@ private:
     void ClearDispatchCounters();
     void ClearScreenshotState();
     void MemoryUsage();
-    // FLAG PC-platform leaf: preserve and validate native Construct allocations.
-    bool PrepareNativeOwnedResourcesPC(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
     void ConstructRenderSwitches();
 
     // The three per-thread monitor squares (bottom-centre): each is green when its
@@ -527,15 +478,6 @@ private:
                               const CgsGraphics::DispatchObjectContext* lpContext,
                               CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
                               u32 luInputList, s32 liGroupIndex, u32 luGroupSize);
-    void CreateObjectToMeshJobPC(CgsGraphics::DispatchFrame* lpInputFrame, u32 luJobIndex,
-                                const CgsGraphics::DispatchObjectContext* lpContext,
-                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
-                                u32 luInputList, s32 liGroupIndex, u32 luGroupSize);
-    void ConvertObjectsToMeshesPC(CgsGraphics::DispatchFrame* lpInputFrame,
-                                 CgsGraphics::DispatchFrame* lpMeshFrame,
-                                 CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
-                                 const CgsGraphics::DispatchObjectContext* lpContext);
-    void InitializeDispatchContextPC(CgsGraphics::DispatchObjectContext* lpContext) const;
 
     // Sort every pass list of the render frame (on the console, RadixSort jobs;
     // PC: the synchronous DispatchList::SortForDispatch stand-in).
@@ -658,24 +600,10 @@ private:
                            CgsGraphics::DispatchObjectContext* lpContext,
                            f32 lfWhiteLevel);
 
-    // FLAG PC-platform leaf: the console constructs these device-backed query
-    // renderers in Construct; the PC waits for its D3D9 device and dispatcher arena.
-    bool EnsureOcclusionCullManagerPC();
-
-    // [FLAG PC bring-up] Sky-dome bring-up (NOT console functions -- see the bodies).
-    // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
-    // BrnRendererModule::Construct/Prepare, deferred to the first world frame because
-    // both need a live D3D device.
     //
     bool mbSkyDomeReady;
     bool mbSkyDomeTried;
-    bool EnsureSkyDomeBringUp();
 
-    // [FLAG PC bring-up] Write the LAYER-0 (base) effects frame the console's effects module writes.
-    // Stands in for BrnEffects::EffectsModule::GenerateRenderRequests (lines 40-120);
-    // see the banner over the definition in BrnRendererModule.cpp for what it writes and why.
-
-    ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
     s32                   mDisplayType;
     u16                   mu16FrontBufferHeight;
@@ -686,18 +614,6 @@ private:
     CgsGraphics::DispatchFrame         mSingleBufferedDispatchFrame;
     BrnGraphics::EffectsArbitrator     mEffectsArbitrator;
     BrnShaderConstantsFrame            maShaderConstantsFrames[2];
-    // FLAG PC-platform leaf: validity travels with the frozen sky/lighting frame.
-    bool                  maShaderConstantsFrameValidPC[2] = {};
-    u64                   muCommandGenerationPC = 0;
-    u64                   muCompletedCommandGenerationPC = 0;
-    u64                   muPublishedCommandGenerationPC = 0;
-    struct CommandFrameInputPC
-    {
-        BrnParticle::ParticleModule::ParticleRenderData mParticleRenderData;
-        bool mabEnvMapFaceRender[6];
-        bool mbParticleRecordProduced;
-    };
-    CommandFrameInputPC    maCommandInputsPC[2] = {};
     u8                    mu8ShaderConstantsFrameInternal;
     u8                    mu8ShaderConstantsFrameExternal;
     CgsGraphics::DispatchPacketInterpreter* mpInterpreter;
@@ -707,19 +623,12 @@ private:
     CgsGraphics::Im2dUntex              mIm2dRendererUntex;
     CgsGraphics::Im3dRenderBuffer       mIm3dRenderBuffer;
     CgsGraphics::Im3d                   mIm3dRenderer;
-    // FLAG PC-platform leaf: native programs require the dispatch device to exist.
-    bool                               mbIm3dRendererConstructedPC = false;
-    // FLAG PC-platform leaf: failed command storage cannot be reset or rendered.
-    bool                               mbDispatchStorageFailedPC = false;
     CgsGraphics::Im3dRenderBufferUntex  mIm3dRenderBufferUntex;
     CgsGraphics::Im3dUntex              mIm3dRendererUntex;
     BrnGraphics::Im3dSkyDome            mIm3dRendererSkyDome;
     CgsGraphics::Im3dZOnly              mIm3dRendererZOnly;
     CgsGraphics::Im3dRenderBuffer       mIm3dDebugRenderBuffer;
     CgsGraphics::Im2dRenderBuffer       mIm2dDebugRenderBuffer;
-    // FLAG PC-platform leaf: a modal assertion must not overwrite the HUD bank.
-    CgsGraphics::Im2dRenderBuffer       mIm2dAssertRenderBufferPC;
-    CgsGraphics::Im2d                   mAssertIm2dRendererPC;
     renderengine::TextureState*         mpTextureState;
     renderengine::TextureState::Parameters mTextureStateParams;
     rw::Resource                       mTextureStateResource;
@@ -834,41 +743,6 @@ private:
     s32                                 miFramesSinceDiskErrorReported;
     BrnGraphics::DebugComponent         mDebugComponent;
 
-    // FLAG PC-platform leaf: physical bins never move; swapping their owners
-    // keeps DispatchList/DispatchBin back-pointers and GDL constant lifetimes
-    // intact. Only the joined main thread changes the read index/interpreter.
-    struct PreparedMeshFramePC
-    {
-        CgsGraphics::DispatchFrame* mpFrame = nullptr;
-        renderengine::DispatchSortJobsPC mSortJobs;
-        u64 muResourceEpoch = 0;
-        f32 mfPreZDistance = 0.0f;
-        bool mbPreZ = false, mbPreZAlpha = false, mbReady = false;
-    };
-    CgsGraphics::DispatchFrame mSecondMeshFramePC;
-    PreparedMeshFramePC maPreparedMeshFramesPC[2];
-    CgsGraphics::DispatchPacketInterpreter* mpMeshProducerInterpreterPC = nullptr;
-    u32 muMeshReadFramePC = 0;
-    void PrepareMeshFramePC(u32 luBank, CgsGraphics::DispatchFrame* lpInput);
-    renderengine::DispatchSortJobsPC& GetMeshSortJobsPC(CgsGraphics::DispatchFrame* lpFrame)
-    {
-        return maPreparedMeshFramesPC[mpMeshProducerInterpreterPC
-            && lpFrame == maPreparedMeshFramesPC[1].mpFrame ? 1 : 0].mSortJobs;
-    }
-    void WaitForMeshSortPC(u32 luList)
-    {
-        maPreparedMeshFramesPC[mpMeshProducerInterpreterPC ? muMeshReadFramePC : 0].mSortJobs.WaitList(luList);
-    }
-    CgsGraphics::DispatchFrame& GetMeshFrameForReadPC()
-    {
-        return mpMeshProducerInterpreterPC
-            ? *maPreparedMeshFramesPC[muMeshReadFramePC].mpFrame : mSingleBufferedDispatchFrame;
-    }
-
-    // FLAG PC-platform leaf: deferred construction state for the X360 query manager.
-    // These tail members leave the recovered renderer fields above at their declared offsets.
-    bool mbOcclusionCullManagerReadyPC = false;
-    bool mbOcclusionCullManagerAttemptedPC = false;
 };
 
 inline void BrnRendererModule::ClearDispatchCounters()

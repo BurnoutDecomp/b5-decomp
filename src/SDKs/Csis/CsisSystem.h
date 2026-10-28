@@ -45,76 +45,13 @@ namespace Csis
 {
 
 struct InterfaceId;
+struct SystemContent;
+struct SystemContentNode;
 
-// ---------------------------------------------------------------------------
-// Native-64 counterpart of ARTIST's 12-byte record. The serialized interface id
-// shares the status word which Unsubscribe invalidates, exactly as on the console.
-// ---------------------------------------------------------------------------
-struct SystemClient24
-{
-    u64       muRuntimeLink;    // +0x00
-    uintptr_t muTargetOrOffset; // +0x08, image offset -> host pointer
-    union
-    {
-        struct { u16 muInterfaceId; s16 miSerial; } mLive; // +0x10/+0x12
-        s32 miStatus;                                     // +0x10
-    } mState;
-    u32 muPadding;              // +0x14
-};
 
-// ---------------------------------------------------------------------------
-// Native-64 counterpart of ARTIST's 16-byte third-array record.
-// ---------------------------------------------------------------------------
-struct SystemClient32
-{
-    u8        maRuntimeHeader[16];
-    uintptr_t muTargetOrOffset; // +0x10, image offset -> host pointer
-    union
-    {
-        struct { u16 muInterfaceId; s16 miSerial; } mLive; // +0x18/+0x1A
-        s32 miStatus;                                     // +0x18
-    } mState;
-    u32 muPadding;              // +0x1C
-};
 
-// ---------------------------------------------------------------------------
-// The intrusive doubly-linked-list node embedded in every subscribed-content object
-// at +0x30. The list links point at OTHER content objects' nodes,
-// not at the containing objects -- exactly as the X360 stores them: Subscribe does
-// `node->next = head ; head_node->prev = node` and Unsubscribe stitches
-// `prev->next = next ; next->prev = prev`. The global list head (off_8324E90C) is a
-// pointer to a node.
-// ---------------------------------------------------------------------------
-struct SystemContentNode
-{
-    SystemContentNode* mpNext;  // +0x00
-    SystemContentNode* mpPrev;  // +0x08
-};
 
-// ---------------------------------------------------------------------------
-// Native-64 subscribed-content header. Arrays start at +0x40 and run
-// contiguously: update SystemClient24, destroy SystemClient24, third SystemClient32.
-// ---------------------------------------------------------------------------
-struct SystemContent
-{
-    u8  maOpaqueHeader[0x0A];  // +0x00..+0x09 (MOIR magic/version/layout)
-    u16 muNumUpdate;           // +0x0A  count of array-1 (update) clients
-    u16 muNumDestroy;          // +0x0C  count of array-2 (destroy) clients
-    u16 muNumThird;            // +0x0E  count of array-3 clients
-    u16 muSystemId;            // +0x10
-    u8  maPad12[0x06];         // +0x12..+0x17
-    SystemClient24* mpArray1;  // +0x18
-    SystemClient24* mpArray2;  // +0x20
-    SystemClient32* mpArray3;  // +0x28
-    SystemContentNode mListNode; // +0x30
-    u8  mauInlineArrays[1];    // +0x40
-};
 
-static_assert(sizeof(SystemClient24) == 0x18, "native CSIS client-24 layout");
-static_assert(sizeof(SystemClient32) == 0x20, "native CSIS client-32 layout");
-static_assert(offsetof(SystemContent, mpArray1) == 0x18, "native CSIS array offset");
-static_assert(offsetof(SystemContent, mListNode) == 0x30, "native CSIS node offset");
-static_assert(offsetof(SystemContent, mauInlineArrays) == 0x40, "native CSIS data offset");
 
 // ---------------------------------------------------------------------------
 // Csis::System -- all members are static (the X360 functions take no `this`; they

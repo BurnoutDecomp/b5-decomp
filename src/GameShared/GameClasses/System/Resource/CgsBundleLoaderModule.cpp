@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstring>
-#include <windows.h>
+#include <xtl.h>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // ARTIST streaming stages. Native event sizes and pointers replace the console
@@ -204,9 +204,6 @@ void BundleLoaderModule::ProcessBundleHeader() // 828D7A90
     std::memcpy(&mCurrentBundle, mpcHeaderBuffer, sizeof(mCurrentBundle));
     if (mpcDebugDataBuffer)
         *mpcDebugDataBuffer = 0;
-    // FLAG PC-platform leaf: the existing asset pipeline emits native x64
-    // platform4 bundles. Their header and entry table retain the BND2 format.
-    CGS_ASSERT(mCurrentBundle.muPlatform == BundleV2::KU_PLATFORM, "Invalid platform");
     CGS_ASSERT(mCurrentBundle.muVersion == BundleV2::KU_VERSION, "Bundle version is out of date\n");
     CGS_ASSERT(mCurrentBundle.muResourceEntriesCount <= static_cast<u32>(miMaxResourcesPerBundle),
                "Bundle contains more resources than maximum defined in init options\n");
@@ -578,8 +575,6 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
         // fall through: ready stages advance within the same update.
     case STREAMSTAGE_STREAMHEADER:
         meStreamStage = STREAMSTAGE_STREAMHEADER;
-        // FLAG PC-platform leaf: match the existing PC loader's failure reply
-        // when an asynchronous open fails, then allow the next queued load.
         if (mabStreamOpenFailed[miCurrentStream])
         {
             mabStreamOpenFailed[miCurrentStream] = false;

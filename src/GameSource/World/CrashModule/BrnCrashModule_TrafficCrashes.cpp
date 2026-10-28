@@ -97,8 +97,6 @@ namespace BrnWorld
         mTrafficCrashes.Grow()->Construct(owner, static_cast<u16>(vehicle), time, network);
         mCrashingTraffic.SetBit(vehicle);
         maCrashingTrafficForPlayers[owner].Insert(static_cast<u16>(vehicle));
-        if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
-            *CgsDev::Log::gpDebugPrint << "[traffic-crash] added vehicle=" << vehicle << " owner=" << owner << " timer=" << time << "\n";
     }
 
     // ARTIST827D0F80.
@@ -192,9 +190,6 @@ namespace BrnWorld
                 mTrafficCrashes.EraseFast(index);
             }
             OnTrafficCarRemovedFromCrash(vehicle, owner);
-            // FLAG PC witness: opt-in observation of the original removal path.
-            if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
-                *CgsDev::Log::gpDebugPrint << "[traffic-crash] removed vehicle=" << vehicle << " owner=" << static_cast<s32>(owner) << " reason=explicit\n";
         }
         const auto* physical = traffic->GetPhysicalBits();
         CGS_ASSERT(physical, "lpPhysicalBits != NULL");
@@ -208,9 +203,6 @@ namespace BrnWorld
                 const auto owner = crash.GetOwner();
                 mTrafficCrashes.EraseFast(i);
                 OnTrafficCarRemovedFromCrash(vehicle, owner);
-                // FLAG PC witness: opt-in observation of the original removal path.
-                if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
-                    *CgsDev::Log::gpDebugPrint << "[traffic-crash] removed vehicle=" << vehicle << " owner=" << static_cast<s32>(owner) << " reason=physical-or-recycled\n";
             }
             else ++i;
         }
@@ -230,9 +222,6 @@ namespace BrnWorld
                 const auto owner = mTrafficCrashes.GetItem(index).GetOwner();
                 mTrafficCrashes.EraseFast(index);
                 OnTrafficCarRemovedFromCrash(vehicle, owner);
-                // FLAG PC witness: opt-in observation of the original removal path.
-                if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
-                    *CgsDev::Log::gpDebugPrint << "[traffic-crash] removed vehicle=" << vehicle << " owner=" << static_cast<s32>(owner) << " reason=physical-or-recycled\n";
             }
         }
     }

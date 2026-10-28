@@ -248,39 +248,6 @@ namespace CgsGeometric
                 const bool lbRightHanded =
                     rw::math::vpu::Dot(rw::math::vpu::Cross(lrRight, lrUp), lrAt) >= 0.0f;
 
-                // 0x825E69A0 BeginAssert is called BEFORE the message is built on the
-                // console (it takes the assert mutex, then StrStream writes into the
-                // shared gpcMessageBuffer). This port builds into a stack buffer, the
-                // same shape CgsID.cpp / PropManager_wQ2_05.cpp already use.
-                // ⚠️⚠️ FLAG PC-platform guard byte -- ONE spare byte, and a REAL DEFECT REPORT.
-                // CgsDev::StrStream::Append (CgsStrStream.cpp:138-150) calls
-                //     strncat(mpcBuffer, lpcText, miBufferSize - strlen(mpcBuffer))
-                // and its banner records that the console passes exactly that count ("NOT
-                // miBufferSize-1; the console passes the full remaining count"). strncat writes up
-                // to `n` characters PLUS a terminating NUL, so a message that fills the buffer
-                // writes byte [miBufferSize] -- ONE PAST THE END. On the console the destination is
-                // the 256-byte GLOBAL gpcMessageBuffer (byte_83018150), so that byte lands in the
-                // next global and nothing notices. Here it is a STACK array under /GS, and the
-                // stack cookie check turns it into an instant STATUS_STACK_BUFFER_OVERRUN
-                // (0xC0000409) -- MEASURED: this probe crashed on it before the +1 was added, and
-                // THIS assert is the first caller in the tree whose message is long enough to
-                // reach the cap (~310 characters of matrix + dimensions + fatness + three
-                // verdicts, against 256).
-                // The array is one byte longer than the size handed to the stream, so the
-                // one-past-the-end write lands in the spare byte and the VISIBLE message is
-                // byte-identical to the console's (same 256-byte cap, same truncation point).
-                // THE TRADE, STATED HONESTLY rather than sold as a no-op: `luRoom - 1` in
-                // CgsStrStream.cpp's Append would end the overrun, but it is NOT
-                // behaviour-preserving -- the 256th byte is a real character on the console, so
-                // every MAXED-OUT message would come out one character shorter. Harmless in
-                // practice (CgsAssertManager strncpy's only KI_MESSAGEBUFFERSIZE-1 downstream
-                // anyway, so that character never reaches a human), but it is a change, not a
-                // no-op. The BYTE-EXACT alternative is to keep the count and give every caller a
-                // KI_MESSAGEBUFFERSIZE+1 array -- which is exactly what this site does below.
-                // Whichever way that shared file eventually goes, this +1 is the correct local
-                // answer today; it is also the only one this cluster can make without editing a
-                // file it does not own.
-                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE + 1];
                 CgsDev::StrStream lStrStream(lacMessageBuffer,
                                              CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
 

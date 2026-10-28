@@ -644,27 +644,6 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
                                     GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH,
                                     static_cast<s32>(sizeof(GameStateModuleIO::ShowtimeModeSwitchAction)));
 
-        // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_SHOWTIME_DIAG), first 16 lines: why the
-        // session ended, the score it posted and the parts it was built from.
-        {
-            static const bool sbDiag      = (std::getenv("BRN_SHOWTIME_DIAG") != 0);
-            static s32        siLinesLeft = 16;
-            if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime] leaving: mode " << static_cast<s32>(meCurrentGameModeType)
-                    << " timedOut " << (lbTimedOut ? 1 : 0)
-                    << " next " << static_cast<s32>(leNextGameModeType)
-                    << " car " << static_cast<s32>(lSwitch.meActiveRaceCarIndex)
-                    << " finalScore " << lSwitch.miFinalShowtimeScore
-                    << " base " << lpCrashScorer->GetRawScore()
-                    << " multiplier " << lpCrashScorer->GetScoreMultiplier()
-                    << " distance " << lpCrashScorer->GetDistanceTravelled()
-                    << " leapt " << lpCrashScorer->GetNumCarsLeapt()
-                    << " crashed " << lpCrashScorer->GetNumCarsCrashed() << "\n";
-            }
-        }
     }
 
     // this + 0x9500 == mbHasAbortedDueToDisconnect (set by the local-disconnect arm). Forced true

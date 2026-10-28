@@ -561,8 +561,6 @@ void VehicleManager::DoCrashPrediction(
             static s32 siSlowMoDiag = -1;
             if (siSlowMoDiag < 0)
             {
-                const char* lpcEnv = getenv("BRN_SLOMO_DIAG");
-                siSlowMoDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
             }
             if (siSlowMoDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
             {

@@ -18,8 +18,6 @@
 // ============================================================================
 
 #include "GameSource/GameState/BrnGameStateModule.h"
-#include "pc/input/Gamepad.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                   // PostWorldInputBuffer
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"              // mpTakedownCache's queues
@@ -143,9 +141,6 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
         miPlayerGlobalRaceCarIndex = ::E_GLOBAL_RACE_CAR_INDEX_INVALID;
     }
 
-    // FLAG PC-platform leaf: copy the director's actual photo-mode state for
-    // adaptive output, independent of the unmounted recovered rumble transfer.
-    CgsInput::PCGamepad::SetFeedbackPhotoMode(lpPostWorldInputBuffer->GetInPictureParadise());
     lpPostWorldInputBuffer->UnlockForRead();
     mbIsUpdating = false;
 

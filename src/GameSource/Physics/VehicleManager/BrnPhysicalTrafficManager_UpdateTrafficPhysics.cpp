@@ -63,12 +63,6 @@ s32 gT5WindowFrame    = 0;     // frames since the window was (re)armed -- reset
 
 namespace
 {
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     // [T5-ram] one line per print, in two halves (pre-tick / post-tick) so "the impulse landed and
     // TrafficPhysics::Update then wiped it" is distinguishable from "no impulse ever landed".
@@ -210,7 +204,6 @@ void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameT
         --gT5RamFramesLeft;
         liT5Frame = ++gT5WindowFrame;
         // Every frame for the first half second (the impact lives there), then every 10th.
-        lbT5Print = (liT5Frame <= 30 || (liT5Frame % 10) == 1) && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
     }
     if (lbT5Print && gT5RamTrafficSlot >= 0
         && static_cast<u32>(gT5RamTrafficSlot) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC

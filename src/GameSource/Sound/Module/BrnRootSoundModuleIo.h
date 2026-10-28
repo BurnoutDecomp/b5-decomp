@@ -652,23 +652,6 @@ namespace Io
         // (44-byte on X360) trailing clear at +0x1824 IS the 11 serialiser slots.)
         typedef BrnReplays::ReplayIO::RequestInterface ReplayRequestInterface;  // BrnRootSoundModuleIo.h:56
 
-        // BrnRootSoundModuleIo.h:284 (DWARF). X360 body @0x826AF448, reached from the
-        // CreateIOBuffer<RootOutputBuffer> instantiation @0x823AD458 (Alloc size 6224):
-        //     *a1 = 1;                                              -- IOBuffer::Construct
-        //     VariableEventQueue<4096,16>::Construct(a1 + 4);    Clear(a1 + 4);
-        //     VariableEventQueue<2048,16>::Construct(a1 + 4116); Clear(a1 + 4116);
-        //     for (11 words at a1 + 6180) *w++ = 0;
-        // 4 == mResourceRequestInterface, 4116 == 0x1014 == mAttribSysRequestInterface,
-        // 6180 == 0x1824 == mReplayRequestInterface. The two request interfaces derive from
-        // those queues, so the Construct+Clear pair is the queue's own -- reached through the
-        // members' named storage (same discipline as the accessors below, which the opaque
-        // request-interface storage forces).
-        // FLAG PC: homed inline here rather than in BrnRootSoundModuleIO.cpp (the console emits
-        // it out-of-line) because that TU is not on the exe build list yet and the template now
-        // REFERENCES this symbol from every CreateIOBuffer<RootOutputBuffer> site.
-        // (phase C1: the +0x1824 trailing state is ATTESTED as the 44-byte
-        // BrnReplays::ReplayIO::RequestInterface -- the 11-word clear zeroes exactly its
-        // 11 serialiser slots; the old provisional 0x1010 width is retired.)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();

@@ -63,10 +63,6 @@ namespace CgsSceneManager
     // 16 bytes per result and the GPInstance scratch at 0xC8 per instance -- VolumeQueryHostLayout.hpp), rounded
     // up to 0x100 here.
     static const u32 KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE = 0x49600;
-    static_assert(KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE >= rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100,
-                  "the octree's VolumeVolumeQuery buffer holds the host descriptor for 100 volumes / 100 results");
-    static_assert(KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE - rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 < 0x100,
-                  "the buffer is the host descriptor rounded up to 0x100, not a tuned margin");
 
     // LooseOctree::Construct's two counts for that query (0x828C9FBC `li r5, 0x64` / 0x828C9FC4 `li r4, 0x64`,
     // and the same pair into GetResourceDescriptor at 0x828C9F38 / 0x828C9F48).
@@ -174,7 +170,6 @@ namespace CgsSceneManager
     // `mpNodes + 96 * index` (e.g. SplitAndPropogateRecursive @0x828BBD84 `rotlwi 1 ; add ; slwi 5`), and
     // Construct @0x828C99D8 sizes the array as 96 * (nodes). The one console pointer in it (the entity
     // list's mpElements at +0x48) is modelled as a 32-bit pad, so no member widens.
-    static_assert(sizeof(LooseOctreeNode) == 0x60, "LooseOctreeNode keeps the console's 96-byte stride on the host");
 
     // CgsLooseOctreeNode.h:158 (DWARF) -- the per-node sub-tree type mask
     // (mpNodesEntityInfo @ X360 +0x446B8); FrustumTestRecursive gates each child
@@ -311,7 +306,6 @@ namespace CgsSceneManager
                                    const CgsGeometric::Frustum& lrFrustum,
                                    const Matrix44& lrViewProjection,
                                    CoarseQueryResultBuffer<16384>* lpResultBuffer);
-
 
         // @ 0x828CA5F8 (128 insns) -- the VMX line walk LineTest wraps (DWARF :328): builds the
         // SpatialPartition::LineTestRecursiveFuncParams block, answers a segment no longer than 1e-4

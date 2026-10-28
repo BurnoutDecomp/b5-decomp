@@ -227,7 +227,7 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
         if (pObject)
         {
             pContext->mpPendingReleaseValue = pObject;    // ctx[2] -- the with-scope
-            pContext->mpPendingReleasePC    = pBlockEnd;  // ctx[3] -- released at block end
+  // ctx[3] -- released at block end
             pObject->AddRef();                            // console (**v13)(v13)
         }
     }

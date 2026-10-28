@@ -18,7 +18,6 @@
 #include "SharedClasses/Trigger/BrnRegion.h"
 #include "SharedClasses/Trigger/BrnTriggerBase.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
-#include "pc/math/VmxFloat.h"
 #include "SDKs/XboxMath/XMVectorACos.h"
 
 #include <cmath>
@@ -497,7 +496,6 @@ namespace
             lpTriggerData->GetLandmarkFromRegionIndex(liLandmarkRegionIndex);
         const Matrix44Affine& lrPlayerCarTransform = mpGameStateModule->mPlayerCarTransform;
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-        namespace vmx = CgsPC::VmxFloat;
         Vector3 lv3Displacement = vmx::Subtract(lv3LandmarkPosition, lrPlayerCarTransform.wAxis);
         lv3Displacement.w = 0.0f;
 

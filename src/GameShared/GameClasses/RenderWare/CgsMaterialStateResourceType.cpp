@@ -1,8 +1,6 @@
 #include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::MaterialState
-
 #include <cstdint>   // uintptr_t
 
 // CgsResource::MaterialStateResourceType -- the material-state (blend-state) handler (id 0xF).

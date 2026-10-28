@@ -762,20 +762,6 @@ namespace Vehicle
         // ==========================================================================================
         void SetTransformFromPositionOnRoad(const Matrix44Affine& lrTransform);
 
-        // ==========================================================================================
-        // [FLAG PC bring-up] SeatTransformFromCreateLegBringUp -- NOT an X360 function. Bodied in
-        // VehiclePhysics.cpp. The PC stand-in for the create-event leg above (ProcessCreateEvents ->
-        // vcall slot +0x30 -> RaceCarPhysics::Prepare -> VehiclePhysics::Prepare -> the seat), used
-        // by RaceCarEntityModule::ResetActiveRaceCar while no VehicleManager runs on this build.
-        // Every seat input is derived from the RESIDENT streamed deformation spec exactly the way
-        // the console's own create leg derives it -- see the body for the per-input provenance and
-        // the one INFERRED step (the effective COM offset). Returns the seated transform.
-        // DELETE-WHEN VehicleManager::ProcessCreateEvents + RaceCarPhysics::Prepare land.
-        // ==========================================================================================
-        static Matrix44Affine SeatTransformFromCreateLegBringUp(
-                const StreamedDeformationSpec* lpSpec,
-                const Matrix44Affine&          lrPlacementTransform);
-
         // ----- ADDITIVE GROW (C04 wheels/tire group): two per-frame wheel-geometry funcs bodied in
         //       VehiclePhysics.cpp (CalculateBodyVelocityAtWheelContact, StoreLocalWheelPositions).
         // the wheels orchestrator UpdateWheels

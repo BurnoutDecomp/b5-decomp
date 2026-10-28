@@ -327,7 +327,6 @@ namespace BrnReplays
                 if (static_cast<u32>(liReel) >= 6u)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "Reel " << liReel << " out of range\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
@@ -336,7 +335,6 @@ namespace BrnReplays
                 if (liReel == miCurrentRecordReel)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "Currently recording to reel " << liReel << " so can't play it\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
@@ -345,7 +343,6 @@ namespace BrnReplays
                 if (!maReels[liReel].mbUsed)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "Reel " << liReel << " is empty so can't play it\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
@@ -369,7 +366,6 @@ namespace BrnReplays
                 if (static_cast<u32>(liReel) >= 6u)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "Reel " << liReel << " out of range\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
@@ -378,7 +374,6 @@ namespace BrnReplays
                 if (liReel == miCurrentRecordReel)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "Currently recording to reel " << liReel << " so can't delete it\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
@@ -387,7 +382,6 @@ namespace BrnReplays
                 if (!maReels[liReel].mbUsed)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "Reel " << liReel << " is empty so can't delete it\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
@@ -434,7 +428,6 @@ namespace BrnReplays
                 if (std::strlen(lpName->macName) >= 256u)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lMessage << "String too long: " << lpName->macName;
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
@@ -526,7 +519,6 @@ namespace BrnReplays
         }
         mbPlaybackDataReady = lbAllReady;
     }
-
 
     // ARTIST 0x8264E630. Reset every occupied serialiser for the requested mode.
     // The frame remainder, readiness store, mode, keyframe/time/streaming fields, and
@@ -1122,7 +1114,6 @@ namespace BrnReplays
         mGameDataReceiverQueue.Clear();
         return true;
     }
-
 
     // ARTIST 0x8264B9C0. Render the recording status only while its alpha is positive.
     // DebugInterface's automatic lifetime mirrors the original acquire/release pair.

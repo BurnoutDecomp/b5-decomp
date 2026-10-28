@@ -356,16 +356,7 @@ void SceneManagerModule::BridgeOverlapCullerToOutputBuffer(
     // which WorldBridgePropModule.cpp's own "[Q5-world] first N potential contacts" line
     // reports. The getenv latch is evaluated once; a per-frame getenv would be a syscall.
     {
-        static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
         static bool       sbLoggedFirstContacts = false;
-        if (sbPropDiag && !sbLoggedFirstContacts && liNumContacts > 0
-            && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedFirstContacts = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q5-bridge] first PotentialContact(s) " << liNumContacts
-                << " offered by the culler\n";
-        }
     }
 
     for (s32 liContact = 0; liContact < liNumContacts; ++liContact)

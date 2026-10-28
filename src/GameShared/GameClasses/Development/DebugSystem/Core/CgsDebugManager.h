@@ -153,9 +153,6 @@ namespace CgsDev
         // (BrnRendererModule::RenderAssert, per-thread) drives this. The native
         // modal path below records into its independent command bank.
         void RenderAssert(const Assert::AssertData* lpData);
-        // FLAG PC-platform leaf: record a modal assertion independently of the
-        // normal debug queues and their partially recorded frame.
-        void RenderAssertToBufferPC(const Assert::AssertData* lpData, CgsGraphics::Im2dRenderBuffer* lpBuffer);
 
         // The script runner's SaveState serialises the active components by walking the (private,
         // accessor-less) registered-component list inline (X360 SaveState 0x82832660 reads the head

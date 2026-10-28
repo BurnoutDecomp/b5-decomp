@@ -10,8 +10,6 @@
 #include "rw/audio/core/PlugIn.h"
 #include "rw/audio/core/Voice.h" // VoiceStageConfig (the a4 record CreateInstance reads)
 #include "rw/audio/core/Send.h"
-#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h" // private pre-overwrite diagnostic
-
 namespace rw
 {
 namespace audio
@@ -108,20 +106,6 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 {
     System *system = self->mpSystemUseGetSystemAccessor;        // lwz 4(self)
     u32 cursor = system->muDeferredRingCursor;                  // lwz 0x10B8
-    // FLAG PC-platform leaf: opt-in first-failure witness, before the observed
-    // writer changes its cursor or touches a command record. No check runs by default.
-    if (CgsSystem::RwacCommandTracePC::Enabled())
-    {
-        const u32 luRecordSize = static_cast<u32>(sizeof(PlugInSetAttributeCommand));
-        const u32 luCapacity = system->muCommandBufferSize;
-        if (!system->mpDeferredRingBase || cursor > luCapacity ||
-            luRecordSize > luCapacity - cursor)
-        {
-            CgsSystem::RwacCommandTracePC::StopBeforeWrite(system,
-                system->mpDeferredRingBase, cursor, luCapacity, luRecordSize,
-                system->muDeferredRingHighWater, system->muFrameCounter);
-        }
-    }
     PlugInSetAttributeCommand *cmd =                            // *(self+0x20)+cursor
         reinterpret_cast<PlugInSetAttributeCommand *>(system->mpDeferredRingBase + cursor);
     // RECORD STRIDE (X360-literal trap): the asm's `addi r9,r9,0x10` IS the console
@@ -155,7 +139,6 @@ int PlugIn::SetAttributeHandler(void *cmd)
     // the HOST sizeof (24 on x64).
     return static_cast<int>(sizeof(PlugInSetAttributeCommand)); // X360: li r3,0x10
 }
-
 
 // -------------------------------------------------------------------------------------
 // off_820AA810 -- the base PlugIn vtable every plug-in's teardown reverts its +0x00

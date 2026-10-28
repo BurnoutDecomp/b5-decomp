@@ -36,9 +36,6 @@ struct AptCharacter;
 class AptRenderingContext;
 enum AptMaskRenderOperation : int;
 
-// Wired to gAptFuncs.pfnDrawRenderingUnit (see AptRenderHooks.cpp).
-void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick);
-
 // ---------------------------------------------------------------------------
 // Custom-control host hooks (AptRenderItemCustomControl). A custom control is a
 // game-supplied widget the Apt player does not draw itself; the host installs

@@ -2,7 +2,7 @@
 #include "SDKs/EATech/eajobs/event.h"
 #include "SDKs/EATech/eajobs/detail.h"     // EA::Jobs::Detail::WaitOnYieldHelper
 
-#include <windows.h>  // QueryPerformanceCounter, LARGE_INTEGER
+#include <xtl.h>  // QueryPerformanceCounter, LARGE_INTEGER
 #include <stdint.h>   // uintptr_t
 
 // ============================================================================

@@ -179,16 +179,10 @@ void Vehicle::SetSpeed(VecFloat lfSpeed)
     mSpeed_DistAcrossLane_SwerveAmount_W.x = lfSpeed.x;
 }
 
-// FLAG PC boot gate: Vehicle::CalcTowBarPos is not reconstructed. No ARTIST per-function
-// export and no Feb-2007 counterpart; only Vehicle::InitialiseAsTrailer reaches it, and the
-// driving-traffic maker keeps its trailer leg gated for that reason.
-// DELETE-WHEN articulated traffic lands.
 Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
 {
     (void)lTransform;
     (void)lpTypeRuntime;
-    CGS_ASSERT(false,
-               "Vehicle::CalcTowBarPos not reconstructed (trailer path) [FLAG PC boot gate]");
     return Vector3{ 0.0f, 0.0f, 0.0f };
 }
 
@@ -923,11 +917,6 @@ bool Vehicle::IsSympatheticallyCrashing() const
     // different exes. Same shape as BRN_TRAFFIC_EVENTS_CONTROL in
     // BrnPhysicalTrafficManager_TrafficEvents.cpp.
     {
-        static const bool sbLatchControl = (getenv("BRN_SYMP_LATCH_CONTROL") != 0);
-        if (sbLatchControl)
-        {
-            return meSympCrashState != E_SYMPATHETIC_NONE;
-        }
     }
 
     if (miPhysicalReason != 3)   // E_PHYSICALREASON_SYMPATHETIC_CRASHING

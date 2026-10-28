@@ -5,10 +5,6 @@
 #include "rw/rwcore_structs.h"                                              // rw::IResourceAllocator
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBufferData / ProgramVariableHandle
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"     // renderengine::BlendMaterialState
-#include "pc/gcm/renderengine/VertexDescriptor.h"                            // renderengine::VertexDescriptorData
-#include "pc/gcm/renderengine/VertexBuffer.h"                                // renderengine::VertexBufferHeader
-#include "pc/gcm/renderengine/renderstates.h"                                // renderengine::MeshHelper / DepthStencilState
-
 // rw::graphics::postfx::PfxHelper -- the post-fx singleton helper. It owns the shared post-fx
 // render state (the full-screen-quad geometry + descriptor, the opaque-blend / depth-stencil states)
 // and the small library of blur/copy shader programs every effect (DepthOfField, Tint,

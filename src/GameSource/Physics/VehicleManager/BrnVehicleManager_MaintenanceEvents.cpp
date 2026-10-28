@@ -153,10 +153,6 @@ namespace
     }
 }
 
-#define BRN_MAINTENANCE_GATE(TAG)                                                          \
-    do { static bool s_bLogged = false;                                                    \
-         MaintenanceGateLogOnce(s_bLogged, "conductor gate: " TAG " inert [FLAG PC boot gate]\n"); } while (0)
-
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -645,15 +641,6 @@ namespace Vehicle
         // and the same array element the :1611 assert two lines above already dereferences.
         Deformation::ResourceHandle lModelHandle = maRaceCarModelHandles[liVehicleIndex];
 
-        // [FLAG PC bring-up] NULL-mpAttribs TRIPWIRE (verifier catch, 2026-08-11): the console
-        // reads mpAttribs unconditionally here, but VehiclePhysics::Construct seeds it NULL and
-        // only Prepare fills it -- and the create drain SKIPS Prepare when the event carries
-        // mbDisablePhysicsStateReset (true for a player-car physics-state reset). On the console
-        // that read survives; on the host it is a frame-one AV at +0x20 that would be misread as
-        // a physics-loop failure. The assert makes the precondition loud; the guard below keeps
-        // the boot alive by skipping only this deformation post (already parked NULL-handle inert).
-        CGS_ASSERT(maRaceCarVehicles[liVehicleIndex].mpAttribs != 0,
-                   "AddRaceCarDeformationModel: mpAttribs != NULL (create skipped Prepare?)");
         if (maRaceCarVehicles[liVehicleIndex].mpAttribs == 0)
         {
             return;
@@ -901,16 +888,7 @@ namespace Vehicle
             if (lbHitWater)
             {
                 // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Capped removal witness.
-                static const bool sbDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
                 static s32 siDiagLinesLeft = 16;
-                if (sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siDiagLinesLeft;
-                    *CgsDev::Log::gpDebugPrint << "[T-water] removed slot=" << liTraffic
-                                               << " entity=" << static_cast<s32>(maTrafficEntityIDs[liTraffic].muValue)
-                                               << " lowestY=" << mavfLowestPointWorldSpace[liTraffic].y
-                                               << " waterY=" << lpAboveGroundTest->mIntersectionPosition.y << "\n";
-                }
 
                 lpManagerOutputInterface->AddTrafficRemovedEvent(
                     maTrafficEntityIDs[liTraffic],

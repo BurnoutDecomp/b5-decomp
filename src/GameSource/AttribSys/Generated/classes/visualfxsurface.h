@@ -53,9 +53,6 @@ namespace Gen
         // parameters (+0x20.. / +0x34..) off this (WheelStateMachine::Update 0x82293EB8).
         // Additive re-export.
         const void* GetAttributeData() const { return GetLayoutPointer(); }
-        // [FLAG PC bring-up, additive host helper] the resolved collection's key, so the
-        // [skid-bind] probe can print BOTH SIDES of the resolve without a second lookup.
-        using Instance::GetCollection;
     };
 
     // Chain the Instance ctor (the RefSpec overload @0x8280A248, which resolves + AddRefs +

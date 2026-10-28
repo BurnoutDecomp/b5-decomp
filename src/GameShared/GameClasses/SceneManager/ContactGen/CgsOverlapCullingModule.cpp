@@ -156,16 +156,7 @@ namespace
                 // [DIAG] NOT IN THE X360 BINARY. One-shot: the first contact the
                 // narrow phase ever pushes is the single line that says the scene
                 // volume-collision middle is alive. Opt in with BRN_PROP_DIAG.
-                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
                 static bool       sbLoggedFirstContact = false;
-                if (sbPropDiag && !sbLoggedFirstContact && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbLoggedFirstContact = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[Q5-cull] first CONTACT emitted: instances "
-                        << static_cast<s32>(luVolumeInstanceIndexA) << "/"
-                        << static_cast<s32>(luVolumeInstanceIndexB) << "\n";
-                }
             }
 
             ++lruContactCounter;
@@ -843,16 +834,7 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
 
     // [DIAG] see above -- one shot, after both arms.
     {
-        static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
         static bool       sbLoggedFirstPairQuery = false;
-        if (sbPropDiag && !sbLoggedFirstPairQuery && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedFirstPairQuery = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q5-cull] first pair query: types "
-                << lpRwVolumeA->muVTableSlot << "/" << lpRwVolumeB->muVTableSlot
-                << " -> contacts " << luDiagContacts << "\n";
-        }
     }
 }
 
@@ -888,8 +870,6 @@ void OverlapCullingModule::_AssertLayout()
                   "VolumeVolumeQueryMem budget is 0x62000");
     // The host VolumeVolumeQuery(100, 100) -- staging and instancing at the host widths
     // (VolumeQueryHostLayout.hpp) -- still fits the console budget (0x495D8 <= 0x62000).
-    static_assert(rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 <= OverlapCullingModule::KU_VOL_QUERY_MEM_SIZE,
-                  "the host VolumeVolumeQuery for 100/100 fits the 0x62000 VolumeVolumeQueryMem budget");
     static_assert(OverlapCullingModule::KU_MAX_NUM_VOLUME_INSTANCES == 5048,
                   "KI_MAX_NUM_VOLUME_INSTANCES == 0x13B8");
     static_assert(offsetof(OverlapCullingModule, mePrepareStage) <
@@ -1013,7 +993,6 @@ void OverlapCullingModule::_AssertLayout()
 // (CgsOverlapCullingModule.cpp:600 -> `bool IsInsideEscapeVolume(int32_t)`).
 // The header's declaration is already right; the pseudocode is not.
 // ===========================================================================
-
 
 // NOT included, on purpose:
 //   * ContactGen/CgsContactGenerationIO.h and ContactGen/CgsOverlapCullingModuleIO.h --

@@ -158,8 +158,6 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
             }
         }
         lpStrategy->SetOncomingState(leState);
-        // FLAG PC-platform leaf: opt-in observation of the live road/boost chain.
-        static const bool sbTrace = std::getenv("BRN_ONCOMING_DIAG") != 0;
         static u32 luSample = 0;
         if (sbTrace && (++luSample % 12) == 0 && CgsDev::Log::gpDebugPrint)
             *CgsDev::Log::gpDebugPrint << "[oncoming] tag=" << luPackedTag

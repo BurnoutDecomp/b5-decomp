@@ -33,9 +33,6 @@ namespace Gen
         };
         static_assert(sizeof(SerializedLayout) == 0x4D8, "propscrashbinlist serialized layout");
 
-        // FLAG PC-platform leaf: decode the existing vault's 32-bit resolved
-        // pointer slot through its low-4GB address convention, without widening
-        // the serialized array or moving the following count field.
         const char* mMaterialNames(u32 luIndex) const
         {
             const SerializedLayout& lrData = *static_cast<const SerializedLayout*>(mpAttributeData);

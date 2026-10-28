@@ -81,26 +81,6 @@ struct AptMovie
     // build the label hash + parse each action stream). Returns the last sub-result.
     void* resolve(int nBase, void* a3, int a4);
 
-    // resolve64 -- the x64 (native-8 GUIAPT "1:7:8") fork of resolve @0x82AF80B0.
-    // Identical relocation walk as resolve(), but every serialised POINTER slot is a
-    // full 8-byte word holding a file-relative OFFSET (offset -> offset+base, in place),
-    // the frame table stride is 16 (AptMovieFrame {count@0, cmds@8}) and the command-
-    // pointer array stride is 8. Drives the ROOT + sub-movie frame-table relocation the
-    // console-32 resolve() truncates on x64 (it truncates the high x64 base into an int).
-    // Called from AptCharacterAnimation::Fixup case-5/9 on the embedded movie (char+0x20).
-    //
-    // nBase = the 8-byte load base; nResBase/nResSize bound the resource so every slot is
-    // validated (a slot holds a file-relative offset iff 0 < off < nResSize) -- a garbage/
-    // already-relocated slot is left untouched (no wild-pointer write/deref).
-    //
-    // pConstFile / pnParsedValues (ACTIVATED 2026-07-01, the XB1 resolve twin
-    // sub_1408567D0's a3/a4): the "Apt constant file" chunk (the _parseStream const ctx --
-    // its record table lives at ctx+0x28, relocated by Resolve; string payloads rebase
-    // ctx-relative) and the resolved-value counter (the root def's +0x50, zeroed by
-    // CompleteLoad) every action/clipActions/morph stream parse accumulates into.
-    void resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
-                   AptConstFile* pConstFile, int64_t* pnParsedValues);
-
     // @0x82AF4830 -- the inverse of resolve (un-relocate + tear down the label hash).
     void* unresolve(int nBase, int a3);
 };

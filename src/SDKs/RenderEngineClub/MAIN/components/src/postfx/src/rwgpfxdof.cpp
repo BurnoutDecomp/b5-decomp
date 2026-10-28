@@ -60,16 +60,8 @@
 // own gate still owns the refusal when there is no image. This TU just makes the console's call.
 // --------------------------------------------------------------------------------------------------
 
-// [FLAG PC-platform leaf: shader programs] The PC image of the DoF pixel program, published by the
-// generated leaf pc/gcm/renderengine/PostFxHelperProgramsPC.cpp. Declared here as the minimal
-// external surface -- the convention BrnPostFxBloom.cpp and BrnPostFxShader.cpp already use for
-// their generated leaves; there is no header for these. The SIZE is the PC image's, not the X360
-// microcode's 644, and it is read from the leaf's own published constant (whose static_assert ties
-// it to sizeof() of the array) rather than hard-coded: ProgramBufferPC_Adopt bounds-checks the blob
-// against the size it is handed.
 namespace renderengine
 {
-    extern const u8  gauPostFxDepthOfFieldPixelProgramPC[];
     extern const u32 guPostFxDepthOfFieldPixelProgramPCSize;
 }
 
@@ -109,9 +101,6 @@ namespace postfx
         // (no allocator override -> CreateProgram falls back to the singleton's own), then the two
         // GetVariableHandleByName lookups. The pointer passed here is the PC image of that same
         // program; CreateProgram adopts it and returns a live ProgramBufferData.
-        m_depthOfFieldProgram = PfxHelper::CreateProgram(
-            1, renderengine::gauPostFxDepthOfFieldPixelProgramPC,
-            renderengine::guPostFxDepthOfFieldPixelProgramPCSize, nullptr);
 
         if (m_depthOfFieldProgram != nullptr)
         {
@@ -124,24 +113,12 @@ namespace postfx
         }
         else
         {
-            // [FLAG PC bring-up] NOT IN THE CONSOLE: the X360 dereferences the returned program
-            // unconditionally because its CreateProgram cannot fail here. On PC the adopt can refuse
-            // (a malformed image, or a shader-type mismatch), and the committed lookup dereferences
-            // lpData unconditionally (programbuffer.cpp:263), so it would fault. A default
-            // ProgramVariableHandle has register COUNT 0, which every uploader in this tree treats
-            // as "constant not present", so nothing binds and nothing uploads.
-            m_focalConstants1Handle = renderengine::ProgramVariableHandle();
             m_focalConstants2Handle = renderengine::ProgramVariableHandle();
 
             static bool sbReportedNoDofProgram = false;
             if (!sbReportedNoDofProgram)
             {
                 sbReportedNoDofProgram = true;
-                CgsDev::Log::WriteToLog(
-                    "[postfx-dof] constructed with NO pixel program -- PfxHelper::CreateProgram"
-                    " REFUSED the PC image published by PostFxHelperProgramsPC.cpp"
-                    " (gauPostFxDepthOfFieldPixelProgramPC). The program slot is null and both"
-                    " focal-constant handles have register count 0. [FLAG PC bring-up]\n");
             }
         }
 
@@ -220,26 +197,6 @@ namespace postfx
     {
         PfxHelper* const lpHelper = gpPfxHelper;
 
-        // [FLAG PC bring-up] NOT IN THE CONSOLE. The X360 dereferences off_82FAEE80 unconditionally
-        // because PfxHelper::PfxHelper has always run by this point. In this tree the helper's carve
-        // can legitimately come back null (BrnPostFx::Construct tests every one of its five
-        // allocations), and blurring through a null singleton is a crash rather than a missing
-        // effect. Return the SOURCE -- the un-blurred scene, which is the visually safe degradation;
-        // returning the destination would hand the caller a target nothing has written this frame.
-        if (lpHelper == nullptr)
-        {
-            static bool sbReportedNoHelper = false;
-            if (!sbReportedNoHelper)
-            {
-                sbReportedNoHelper = true;
-                CgsDev::Log::WriteToLog(
-                    "[postfx-dof] DownSampleAndGaussianBlur called with no PfxHelper singleton"
-                    " (rw::graphics::postfx::gpPfxHelper == null); returning the source target"
-                    " unblurred. [FLAG PC bring-up]\n");
-            }
-            return lpSourceRenderTarget;
-        }
-
         // Push the shared opaque blend state through the shadow cache (inlined on the console).
         shadow::Device::SetState(lpHelper->GetOpaqueBlendState());
 
@@ -294,10 +251,6 @@ namespace postfx
 
         renderengine::ProgramBuffer::Release(m_depthOfFieldProgram);
 
-        // [FLAG PC bring-up] The console reads gpPfxHelper unconditionally; see the note in
-        // DownSampleAndGaussianBlur. If the singleton is gone there is no allocator to hand the block
-        // back to, so the program pointer is still cleared and the block is leaked rather than freed
-        // through a null vtable.
         PfxHelper* const lpHelper = gpPfxHelper;
         if (lpHelper != nullptr)
         {

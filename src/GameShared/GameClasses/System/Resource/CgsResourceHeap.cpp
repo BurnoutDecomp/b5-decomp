@@ -238,29 +238,6 @@ namespace CgsResource
         if (lpFreeNode == 0)
             return 0;
 
-        // [FLAG PC boot gate] Bail out BEFORE mutating the free block when the node pool is
-        // exhausted -- the X360 asserts in GetNewNode and carries on, which here corrupts the
-        // address-ordered list. Returning null makes the caller
-        // (CgsResource::Pool::AllocateMemoryForResource) report OUT-OF-MEMORY for that one
-        // resource, which the bundle loader already handles. 2026-08-24: the original trigger
-        // (inert unload leg) is fixed, but a long DRIVING run can still fragment a pool's heap
-        // because the console's relocating defragmenter is not reconstructed yet; the game-data
-        // pools now get 2*maxResources+1 nodes (BrnGameDataModule::CreatePools), which makes
-        // exhaustion structurally impossible there, so this gate is a belt-and-braces guard for
-        // the remaining hand-sized pools. DELETE when the defragmenter lands.
-        if (mUnusedNodes.IsEmpty())
-        {
-            static bool sbLoggedNodeExhaustion = false;
-            if (!sbLoggedNodeExhaustion && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                sbLoggedNodeExhaustion = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "CgsResource::Heap: out of heap NODES -- refusing further allocations"
-                       " in this heap [FLAG PC boot gate]\n";
-            }
-            return 0;
-        }
-
         HeapEntry*  lpFreeEntry = lpFreeNode->GetData();
         char* const lpcFreeAddr = lpFreeEntry->GetAddress();
         const u32   luFreeSize  = lpFreeEntry->GetSize();

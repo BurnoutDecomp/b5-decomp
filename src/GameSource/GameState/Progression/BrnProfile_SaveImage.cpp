@@ -51,8 +51,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"   // FastBitArray<120u> over the DLC1 slot
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"  // licence-picture descriptor rebuild
-#include "pc/gcm/renderengine/pixelformat.h"                     // renderengine::PIXELFORMAT_DXT1
-
 #include <string.h>   // memset / memcpy
 
 namespace BrnProgression

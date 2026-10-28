@@ -113,16 +113,6 @@ void PaybackComponent::Construct(const char* lpacName, CgsGui::StateInterface* l
     mePaybackComponentState  = E_PCS_INVISIBLE;  // +0xD0 = 0
     mePaybackAnimationState  = E_PCA_INVISIBLE;  // +0xD4 = 0
 
-    // [FLAG PC witness] one-shot mount proof for this component. No console counterpart.
-    // DELETE-WHEN: the payback widget has been screenshot-verified in an online race.
-    {
-        static bool sbConstructWitnessDone = false;
-        if (!sbConstructWitnessDone && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbConstructWitnessDone = true;
-            *CgsDev::Log::gpDebugPrint << "[p0-payback] PaybackComponent::Construct [FLAG PC witness]\n";
-        }
-    }
 }
 
 // @0x82428DF0
@@ -136,16 +126,6 @@ void PaybackComponent::Initialize(GuiCache* lpGuiCache)
     AddOutputAptViewState("MainFrame", "Invisible", false);
     AddOutputAptViewState("IconFrame", "Blank", false);
 
-    // [FLAG PC witness] one-shot proof the HUD state actually initialises this component.
-    // No console counterpart. DELETE-WHEN: as above.
-    {
-        static bool sbInitialiseWitnessDone = false;
-        if (!sbInitialiseWitnessDone && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbInitialiseWitnessDone = true;
-            *CgsDev::Log::gpDebugPrint << "[p0-payback] PaybackComponent::Initialize [FLAG PC witness]\n";
-        }
-    }
 }
 
 // @0x8241FF38

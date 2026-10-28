@@ -397,37 +397,6 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
     return nullptr;
 }
 
-// ===========================================================================
-// The two GC-pool introspection accessors.
-//   * GetAllocatedCount: the live-allocation counter the DOGMA base maintains
-//     (mnItemsAllocated -- the X360 callers read *(pool + 0x28)).
-//   * GetAllAllocatedAptValues: the caller pairs the SAME pool walk CleanAll
-//     uses (GetFirstAptValue/GetNextAptValue) into a flat snapshot; the
-//     console returns its internal live-table pointer, which the DOGMA port
-//     does not keep as a flat array -- snapshot into a static scratch sized
-//     by the live count (single-threaded bring-up; the sole caller,
-//     AptReplaceReferences' zombie-survivor fixup, consumes it immediately).
-// ===========================================================================
-// The console reads *(pool+0x28) (mnItemsAllocated) INLINE; this type-erased wrapper keeps
-// the DOGMA pool layout opaque to its caller (AptAnimationTarget.cpp).
-// FLAG PC-platform leaf: header-decoupling wrapper, no console counterpart.
-int AptValueGCPool_GetAllocatedCount(void* pPool)
-{
-    return static_cast<int>(
-        static_cast<AptValueGC_PoolManager*>(pPool)->mnItemsAllocated);
-}
-
-// ⛔ CORRECTED 2026-08-28: this was FLAGged "PC-platform leaf: port-only reconstruction, no console
-// counterpart". That claim is FALSE. The console counterpart is the x64 `sub_140838090`, which
-// allocates `8 * mnItemsAllocated` and runs exactly this walk (pool walk first, then the outside
-// allocations appended). The old note also asserted "the DOGMA pool keeps no flat live-array" as a
-// reason none could exist -- but the console does not keep one either; it builds the same snapshot.
-// Snapshotting into a static scratch buffer is therefore the console's own shape, not a port-only
-// invention.
-// ⚠️ progress/faithfulness_baseline.json still carries an `apt_shim` suppression for this symbol.
-// That entry is now questionable and should be re-adjudicated by whoever next reconciles the
-// baseline -- it is NOT corrected here, because the ledger is CI-reconciled and blind-regenerating
-// it is its own hazard.
 //
 // CORRECTED AGAIN 2026-08-29 (independent fix, merged at rebase): the caller used to pair this
 // snapshot with mnItemsAllocated as the element count, but the two need not agree --

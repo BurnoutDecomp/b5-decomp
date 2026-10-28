@@ -92,9 +92,6 @@ namespace BrnParticle
                                      f32 lfSpawnTime)
     {
         // The ring draw comes first -- before the assert, before any store.
-        const f32 lfRotationAmount = DrawRandomPC([](CgsNumeric::Random& lrRandom) {
-            return lrRandom.RandomFloat(KF_ROTATION_AMOUNT_MIN, KF_ROTATION_AMOUNT_MAX);
-        });
 
         CGS_ASSERT(mu16SpawnBufferCount < KU16_NUM_DEBRIS_IN_SPAWN_BUFFER,
                    "mDebrisSpawnBufferHeader.mu16DebrisCount < KU_NUM_DEBRIS_IN_SPAWN_BUFFER");
@@ -138,7 +135,6 @@ namespace BrnParticle
 
             BrnEffects::Utils::DebrisColourRandomiser lRandomiser;
             lRandomiser.Prepare(lvLow, lvHigh);
-            DrawRandomPC([&](CgsNumeric::Random& lrRandom) { lRandomiser.Randomise(lpRecord->mvColour, lrRandom); });
         }
 
         mu16SpawnBufferCount = static_cast<u16>(mu16SpawnBufferCount + 1);

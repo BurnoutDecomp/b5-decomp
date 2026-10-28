@@ -21,13 +21,6 @@ namespace BrnGui
 {
     namespace
     {
-        // The console publish is CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<CalculateRoute>,
-        // whose whole body is the write-lock assert plus
-        //     mOutEvents.AddEvent(&event, T::GetEventType() /*494*/, sizeof(T) /*80*/);
-        // FLAG PC-ABI adapter: the tracker is handed that buffer's mOutEvents stand-in
-        // (GuiModule::mGuiOutQueue) directly, so this helper IS AddGuiOutEvent<T>'s body minus
-        // the lock assert the raw queue has no bit for (the ColourCalibrationScreen precedent).
-        // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
         template <class T>
         void AddGuiOutEvent(CgsModule::VariableEventQueue<18432, 16>* lpQueue, const T& lrEvent)
         {
@@ -39,45 +32,6 @@ namespace BrnGui
             }
         }
 
-        // [FLAG PC witness -- opt-in BRN_SATNAV_DIAG, first 32] one line per route leg
-        // requested: `[satnav] route requested leg <n> types <t0>,<t1> landmarks <id0>,<id1>
-        // junctions <j0>,<j1>`.
-        void LogRouteRequestWitness(const CalculateRoute& lrRoute)
-        {
-            static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
-            static s32 siLinesLeft = 32;
-
-            if (!sbDiag || siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
-            {
-                return;
-            }
-            --siLinesLeft;
-
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav] route requested leg " << static_cast<s32>(lrRoute.mu16EventID)
-                << " types " << static_cast<s32>(lrRoute.mePointTypes[0])
-                << "," << static_cast<s32>(lrRoute.mePointTypes[1])
-                << " landmarks " << static_cast<u64>(lrRoute.maLandmarkIDs[0])
-                << "," << static_cast<u64>(lrRoute.maLandmarkIDs[1])
-                << " junctions " << static_cast<u32>(lrRoute.muJunctionIDs[0])
-                << "," << static_cast<u32>(lrRoute.muJunctionIDs[1]) << "\n";
-        }
-
-        // [FLAG PC bring-up TEST HOOK -- OFF BY DEFAULT] BRN_SATNAV_ROUTE_TEST=<a>:<b> (two
-        // positions in the trigger data's landmark list, 0 .. landmark count - 1). Every tracked
-        // set the offline game publishes holds at most one landmark (all 120 offline events
-        // carry 0 or 1 checkpoints), so no offline scenario ever owes a route leg;
-        // multi-landmark sets come from the online route screens. Once the game is in free
-        // roam (trigger data loaded, gameplay HUD up, outside the junkyard) and nothing is
-        // tracked, the hook publishes the two landmarks through the real
-        // GuiCache::UpdateTrackerInfo (the offline RefreshMapState publisher), which arms the
-        // leg this Update then requests. Fires once per run.
-        // UpdateTrackerInfo takes LandmarkIndex values, which are trigger-REGION indices (the
-        // lookup matches the landmark's region index, not its list position; the retail data
-        // numbers the landmarks' regions from 4670). Each list position is therefore turned
-        // into its landmark's region index the way the map's landmark filter builds its list:
-        // GuiCache::GetLandmarkInfoAtPositionInList, then the record's landmark half.
-        // DELETE-WHEN a harness scenario reaches an online route screen.
         void RunRouteTestHook(GuiCache* lpGuiCache, bool lbTrackingActive)
         {
             static s32 siState = -1;   // -1 unread, 0 off / done, 1 armed
@@ -85,23 +39,6 @@ namespace BrnGui
             if (siState == -1)
             {
                 siState = 0;
-                const char* lpcEnv = getenv("BRN_SATNAV_ROUTE_TEST");
-                if (lpcEnv != 0 && lpcEnv[0] != '\0')
-                {
-                    char* lpcEnd = 0;
-                    const long liFirst = std::strtol(lpcEnv, &lpcEnd, 10);
-                    if (lpcEnd != lpcEnv && *lpcEnd == ':')
-                    {
-                        const char* lpcSecond = lpcEnd + 1;
-                        const long liSecond = std::strtol(lpcSecond, &lpcEnd, 10);
-                        if (lpcEnd != lpcSecond && liFirst >= 0 && liSecond >= 0)
-                        {
-                            saiListPositions[0] = static_cast<s32>(liFirst);
-                            saiListPositions[1] = static_cast<s32>(liSecond);
-                            siState = 1;
-                        }
-                    }
-                }
             }
 
             if (siState != 1 || lbTrackingActive || lpGuiCache == 0)
@@ -178,8 +115,7 @@ namespace BrnGui
     // deviation: the record is zeroed first, the SendRouteRequestAction precedent.
     void GuiTracker::Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents)
     {
-        RunRouteTestHook(mpGuiCache, mbTrackingActive);   // [FLAG PC TEST HOOK] see above
-
+        RunRouteTestHook(mpGuiCache, mbTrackingActive);
         if (!mbRouteDataPending)
         {
             return;
@@ -197,7 +133,6 @@ namespace BrnGui
         ContructRouteNodeFromTrackedItem(&maTrackerRecords[liLeg + 1], &lCalculateRoute, 1);
 
         AddGuiOutEvent(lpGuiOutEvents, lCalculateRoute);
-        LogRouteRequestWitness(lCalculateRoute);
 
         mbRouteDataPending = false;
     }

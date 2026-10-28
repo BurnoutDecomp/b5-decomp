@@ -131,13 +131,6 @@ bool BrnScreenFlow::IsInEnterOnlineState()
         || lpCurrentState == static_cast<CgsGui::State*>(mpStateCrashNavEnterOnlineNoTitle);
 }
 
-// @ 0x824F2150 -- dev dump of every state's name + X360 sizeof + the pool total, streamed
-// through BrnGui::BrnBaseFlow::PrintSingleSize behind the CgsDev::Message log filter
-// ("BrnScreenFlow" / "NullState 56" ... "TOTAL : <sum>"). The roster it prints is the
-// authoritative state/size table documented on the header's member list.
-// FLAG PC-platform leaf: print-only dev diagnostic deferred -- BrnBaseFlow::PrintSingleSize
-// (the X360 helper every line goes through) is not yet reconstructed in BrnBaseFlow.h, and
-// this TU cannot fork a local copy of it; no game-visible behaviour is lost.
 void BrnScreenFlow::PrintStateSizes()
 {
 }

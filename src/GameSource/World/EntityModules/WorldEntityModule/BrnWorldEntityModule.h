@@ -67,8 +67,6 @@
 #include "GameSource/AttribSys/Generated/classes/surfacelist.h"
 #include "GameSource/AttribSys/Generated/classes/surface.h"
 
-namespace CgsPC::Reflections { struct WorldCapture; }
-
 namespace CgsGraphics
 {
     struct Instance;       // pointer-only use here (backdrop instance walk)
@@ -95,7 +93,6 @@ static const s32 KU_MAX_NUM_DYNAMIC_ADVERTS            = 128;
 
 class WorldEntityModule : public CgsModule::ModuleSingleBuffered
 {
-    friend struct CgsPC::Reflections::WorldCapture;
 public:
     // DWARF BrnWorldEntityModule.h:75. (The X360 Prepare body no longer visits
     // E_PREPARESTAGE_COLLISION -- world collision moved to the validate protocol
@@ -241,15 +238,7 @@ public:
     //  scene manager's frustum query is live, so the streamer-walking stand-in that
     //  fed GenerateDispatchLists above has no callers left.)
 
-    // [FLAG PC bring-up] the position the PVS query streamed around this frame --
-    // the only world-space anchor available while the director/camera modules are
-    // inert. Read by the bring-up dispatch driver to place its camera.
     Vector3 GetPositionUsedForPVS() const { return mPositionUsedForPVS; }
-
-    // [FLAG PC bring-up] centre + radius of every loaded world instance, used by the
-    // bring-up dispatch driver to frame an establishing shot. Returns false when the
-    // streamer has delivered nothing yet.
-    bool GetLoadedWorldBounds( Vector3* lpCentreOut, f32* lpfRadiusOut );
 
     void GenerateDispatchListsForEnvironmentMap(                         // @0x822D7298
         const WorldEntityIO::InputBuffer_GenerateDispatchLists* lpInputBuffer,
@@ -332,19 +321,6 @@ private:
                                WorldEntityIO::OutputBuffer_PreScene* lpOutputBuffer );
 
 public:
-    // ---- [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 ---------------
-    // b5-decomp issue #26 ("Backdrops Culling"). The registry records exactly what
-    // AddBackdropEntity handed the scene manager for every backdrop stand-in that is
-    // CURRENTLY in the scene (list/instance index, the source instance transform and
-    // its maximum scale, the renderable LOD0 bounding sphere, and the centre/radius the
-    // entity was given). BackdropDiagReport re-runs the SAME eight-lane plane batch the
-    // octree leaf runs (CgsGeometric::Frustum::IsSphereInFrustum @0x828AF020) against the
-    // frame's main-view frustum and prints, per backdrop, the rejecting plane if any.
-    // It measures the CULL DECISION, not "is something on screen": a backdrop reported
-    // `in=1` here was accepted by the coarse query, so a backdrop that is still missing
-    // from the frame is a RENDER-side defect, not a culling one. DELETE-WHEN issue #26
-    // is closed.
-    static bool BackdropDiagEnabled();
     static void BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
                                     u32 luBackdropZoneNumber,
                                     const Matrix44Affine& lrTransform,

@@ -10,11 +10,6 @@
 namespace
 {
     // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the in-game message queue state machine.
-    inline bool HudMsgDiag()
-    {
-        static const bool sbDiag = (getenv("BRN_HUDMSG_DIAG") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
 }
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // [gateui r3] CgsGui::GuiEvent<N> (the two output records)
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"        // BrnFlapt::FileRef::FindComponent (Prepare)
@@ -300,8 +295,6 @@ namespace
             if (CgsSystem::GetSystemTimerBaseTime64() >=
                 mpInGameMessagesQueue->muCurrentEventEndTime)
             {
-                if (HudMsgDiag())
-                    *CgsDev::Log::gpDebugPrint << "[hudmsg] component: Update: message duration over -> EndMessage\n";
                 EndMessage();
             }
         }
@@ -333,9 +326,6 @@ namespace
         }
         else if (leState == E_MESSAGESTATE_TRANSOUT)
         {
-            if (HudMsgDiag())
-                *CgsDev::Log::gpDebugPrint << "[hudmsg] component: EndTransition: TRANSOUT done -> next slot state "
-                    << static_cast<s32>(mpInGameMessagesQueue->maeMessageState[1 - GetCurrentIndex()]) << "\n";
             mpInGameMessagesQueue->maeMessageState[GetCurrentIndex()] = E_MESSAGESTATE_NOMESSAGE;
             SwitchCurrentIndex();
         }
@@ -388,15 +378,6 @@ namespace
     {
         CGS_ASSERT(lpEvent != NULL, "Invalid event passed in");
         // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the consumer end of the HUD message chain.
-        static const bool sbHudMsgDiag = (getenv("BRN_HUDMSG_DIAG") != 0);
-        if (sbHudMsgDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            char lacMessageId[24];
-            CgsIDUnCompress(reinterpret_cast<const GuiHudMessage*>(lpEvent)->mMessageIdHash, lacMessageId);
-            *CgsDev::Log::gpDebugPrint
-                << "[hudmsg] component: AddMessage \"" << lacMessageId << "\" controller="
-                << (mpMessageController != NULL ? 1 : 0) << "\n";
-        }
 
         if (mpMessageController != NULL)
         {
@@ -411,26 +392,16 @@ namespace
                             mpInGameMessagesQueue->maMessages[GetCurrentIndex()].mHudMessageId
                         && IsMessageUpdatable(lOutMessage.mHudMessageId))
                     {
-                        if (HudMsgDiag())
-                            *CgsDev::Log::gpDebugPrint << "[hudmsg] component:   -> UpdateInPlace\n";
                         UpdateInPlace(&lOutMessage);
                         return;
                     }
                     if (lOutMessage.miForceRemoveThreshold <
                             mpInGameMessagesQueue->maMessages[GetCurrentIndex()].miPriority)
                     {
-                        if (HudMsgDiag())
-                            *CgsDev::Log::gpDebugPrint
-                                << "[hudmsg] component:   -> QueueMessage (current state "
-                                << static_cast<s32>(mpInGameMessagesQueue->maeMessageState[luIndex])
-                                << " prio " << mpInGameMessagesQueue->maMessages[GetCurrentIndex()].miPriority
-                                << " vs forceRemove " << lOutMessage.miForceRemoveThreshold << ")\n";
                         QueueMessage(&lOutMessage);
                         return;
                     }
                 }
-                if (HudMsgDiag())
-                    *CgsDev::Log::gpDebugPrint << "[hudmsg] component:   -> StartMessage\n";
                 StartMessage(&lOutMessage);
             }
         }
@@ -626,28 +597,7 @@ namespace
         // empty or garbage parameter text; a wrong type mapping shows up as an unexpected fmt.
         // Same knob as the rest of the ladder (BRN_PROP_DIAG), first 6 refreshes only.
         {
-            static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siDiagPrinted = 0;
-            if ( sbUiGateDiag && siDiagPrinted < 6 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++siDiagPrinted;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] hud refresh str=" << liIndex
-                    << " bound=" << ( maTextFields[liIndex].mpTextFieldInstance != NULL ? 1 : 0 )
-                    << " id=\"" << maacCurrentStringStringId[liIndex] << "\""
-                    << " params=" << maiCurrentStringParamCount[liIndex];
-                for (s32 liDiagParam = 0;
-                     liDiagParam < maiCurrentStringParamCount[liIndex] &&
-                         liDiagParam < BrnResource::HudMessageEvent::KI_MAX_PARAMS_PER_STRING;
-                     ++liDiagParam)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << " p" << liDiagParam
-                        << "=\"" << maaacCurrentStringParams[liIndex][liDiagParam] << "\""
-                        << "/fmt=" << maaeCurrentStringParamTypes[liIndex][liDiagParam];
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
         }
 
         if (maTextFields[liIndex].mpTextFieldInstance == NULL)
@@ -708,17 +658,7 @@ namespace
         // frame-dump comparison can be checked against the authored layout rather than
         // guessed. Same knob as the rest of the ladder; first 6 sends only.
         {
-            static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siDiagPrinted = 0;
-            if ( sbUiGateDiag && siDiagPrinted < 6 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++siDiagPrinted;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] hud banner style=\"" << lpMessage->macMessageStyle
-                    << "\" anim=\"" << lpcAnimName
-                    << "\" icon=\"" << lpMessage->macIcon
-                    << "\" duration=" << lpMessage->mfDuration << "\n";
-            }
         }
 
         mAptRef.GotoAndPlayLabel(lpMessage->macMessageStyle);

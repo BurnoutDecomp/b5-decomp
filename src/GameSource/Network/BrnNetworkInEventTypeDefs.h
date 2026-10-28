@@ -16,7 +16,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (builder >= 0 guards)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::Event, NetworkEvent<N>, TelemetryData
 #include "GameSource/Network/Shared Server Types/BrnNetworkSharedServerTypes.h" // ServerGeneratedTypes::OfflineProgressionT
-#include "pc/gcm/renderengine/pixelformat.h"                     // renderengine::PixelFormat (NetworkInReqCamPicEvent)
 #include "GameShared/GameClasses/Containers/CgsArray.h"          // Array<T,N> (NetworkInNonUploadedScoresEvent)
 #include "GameSource/Network/BrnNetworkModuleIO.h"               // EChallengeEventType (NetworkInFreeburnChallengeEvent)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"           // EMugshotResponse, EImageType, CompletedFburnChallenges, LastSecondChallengeSuccess

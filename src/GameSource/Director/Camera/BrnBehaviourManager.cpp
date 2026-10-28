@@ -77,15 +77,6 @@ namespace Camera
     {
         // [diag, NOT X360] BRN_CRASHCAM_DIAG (the crash-camera diag family): name the behaviour a
         // collision-policy failure takes down. Capped; silent without the variable.
-        bool SceneQueryFailDiag()
-        {
-            static const bool sbOn = (std::getenv("BRN_CRASHCAM_DIAG") != 0);
-            static s32 siLinesLeft = 400;
-            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
-                return false;
-            --siLinesLeft;
-            return true;
-        }
 
         // [diag, NOT X360] BRN_CAMPOOL_DIAG (owner's list 2026-09-27, L1 CAMPOOL): one line per camera
         // behaviour the manager brings up ('+', PrepareBehaviours) or hands back ('-', ReleaseBehaviours) --
@@ -105,11 +96,6 @@ namespace Camera
         // When that reaches 0 and another such behaviour is allocated, the old build asserted "Ran out of
         // slots when trying to allocate a large behaviour" and read ObjectPool::operator[](-1).
         // The counters run whenever the variable is set; only the printing is capped.
-        bool CampoolDiagOn()
-        {
-            static const bool sbOn = (std::getenv("BRN_CAMPOOL_DIAG") != 0);
-            return sbOn && CgsDev::Log::gpDebugPrint != 0;
-        }
 
         s32 siCampoolHostLargeInSmall  = 0;   // live small-pool behaviours over the console's 1600 bytes
         s32 siCampoolCarSelectLargeHeld = 0;  // large behaviours the old build's car select never released
@@ -179,22 +165,6 @@ namespace Camera
     // (the free queue is refilled by Prepare below). Reached through the named
     // AbstractPool::Construct / ObjectPool::Construct so nothing pokes the queue by offset.
     //
-    // ⚠️ TWO DOCUMENTED QUIET GATES (both land inside members this header models as FLAGGED
-    // opaque sub-objects, whose interiors are deliberately never fabricated):
-    //   * (RETIRED 2026-08-02) `BehaviourParameterBank::Construct(this + 75056)` -- the gate
-    //     that used to sit here. The bank's three load-bearing slots (the two gameplay-camera
-    //     Parameters blocks + the latched car attribs key) are homed as of the camera
-    //     parameter-chain wave, so the call is REAL below. The rest of the bank's ~40 named
-    //     blocks are still un-modelled and their seeds still do not run; see
-    //     BrnBehaviourParameterBank.h's [FLAG PC bring-up].
-    //   * the +88172..+88288 seeds (a float time accumulator, the 0.4 / 0.1 / 0.125 responder
-    //     constants and three flag bytes) land inside `mTempCameraBoostResponder` /
-    //     `mSpeedResponder` / `mRotationController` / `mSphericalRotationController`, all
-    //     `OpaqueSub<>`. CONSEQUENCE: the camera boost/speed responders and the two rotation
-    //     controllers start at whatever the default-init left; nothing on the arbitrator path
-    //     reads them (they are consumed by the gameplay camera BEHAVIOURS, which are
-    //     themselves not driven yet). DELETE-WHEN: those four Camera sub-types are homed.
-    // ========================================================================
     void BehaviourManager::Construct()
     {
         mpDirectorResourceManager = 0;                       // +91068
@@ -684,7 +654,6 @@ namespace Camera
         return lacFullNameOut;
     }
 
-
     // ========================================================================
     // ⭐ THE BEHAVIOUR-HELPER SPINE -- the four functions that turn a pooled Camera::Behaviour
     // into a per-frame camera. Every one of them dispatches the Behaviour base's vtable, which
@@ -842,20 +811,6 @@ namespace Camera
 
             mBehaviourNeedsPreparingFlags.UnSetBit(static_cast<u32>(liHelper));
 
-            if (CampoolDiagOn())   // [diag, NOT X360] BRN_CAMPOOL_DIAG
-            {
-                const BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
-                const IAbstractPoolFreeObject* lpPool = lrHelper.mBehaviourPoolHandle.GetFreeObjectInterface();
-                char lacFullName[64];
-                lrHelper.GetDebugFullName(lacFullName);
-                const bool lbLarge = (lpPool == &mLargeBehaviourPool);
-                const bool lbSmall = (lpPool == &mSmallBehaviourPool);
-                CampoolCount('+', lacFullName, lrHelper.mBehaviourPoolHandle.GetSize(), lbSmall, lbLarge);
-                CampoolWitness('+', lacFullName, lrHelper.mBehaviourPoolHandle.GetSize(),
-                               lbLarge ? "LARGE" : (lbSmall ? "SMALL" : "?"),
-                               mLargeBehaviourPool.GetNumFreeObjects(), mSmallBehaviourPool.GetNumFreeObjects(),
-                               mBehaviourHelperIndexArray.GetLength());
-            }
         }
     }
 
@@ -898,7 +853,6 @@ namespace Camera
             BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
 
             // [diag, NOT X360] BRN_CAMPOOL_DIAG: the name and pool are taken before the owners are cleared.
-            const bool lbWitness = CampoolDiagOn();
             char lacWitnessName[64] = "";
             const IAbstractPoolFreeObject* lpWitnessPool = 0;
             s32 liWitnessSize = 0;
@@ -972,37 +926,6 @@ namespace Camera
         // bumper gives one line down and one up. Before the bridge had a caller at all,
         // every field below read zero/false for the entire session.
         {
-            static const bool sbCamInputDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
-            if (sbCamInputDiag && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static s32 siLastKey = -1;
-                static s32 siCalls   = 0;   // heartbeat: prove this runs in-game at all
-                ++siCalls;
-                const s32 liKey =
-                    static_cast<s32>(controller.mCameraModifier.x * 50.0f) * 1000
-                    + static_cast<s32>(controller.mCameraModifier.y * 50.0f)
-                    + (controller.mbLookback            ? 2000000 : 0)
-                    + (controller.mbCycleCameras        ? 4000000 : 0)
-                    + (controller.mbCameraButtonHeldDown ? 8000000 : 0)
-                    + (info.mbLookback                  ? 16000000 : 0);
-                if (liKey != siLastKey || (siCalls % 600) == 0)
-                {
-                    siLastKey = liKey;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[cam-input] camStick " << controller.mCameraModifier.x
-                        << "," << controller.mCameraModifier.y
-                        << " carStick " << controller.mCarModifier.x
-                        << "," << controller.mCarModifier.y
-                        << " lookback " << (controller.mbLookback ? 1 : 0)
-                        << " cycle " << (controller.mbCycleCameras ? 1 : 0)
-                        << " camBtn " << (controller.mbCameraButtonHeldDown ? 1 : 0)
-                        << " anyInput " << (controller.mbAnyInput ? 1 : 0)
-                        << " | published lookback " << (info.mbLookback ? 1 : 0)
-                        << " paused " << (info.mbUseControlPauseBehaviour ? 1 : 0)
-                        << " calls " << siCalls
-                        << "\n";
-                }
-            }
         }
     }
 
@@ -1121,13 +1044,6 @@ namespace Camera
             {
                 lpBehaviour->Fail(mCamera, 5);   // ValidityAccount::E_FAILED_COLLISION_POLICY
 
-                if (SceneQueryFailDiag())       // [diag, NOT X360]
-                {
-                    char lacFullName[64];
-                    GetDebugFullName(lacFullName);
-                    *CgsDev::Log::gpDebugPrint << "[scenequery] behaviour " << lacFullName
-                                               << " failed (collision policy)\n";
-                }
             }
         }
     }
@@ -1308,21 +1224,9 @@ namespace Camera
     // shared-slice re-declarations collide with each other and with the real shared headers).
     // ========================================================================
 
-    // FLAG PC platform leaf (x64 pointer widening) -- THE SMALL BUCKET'S DERIVATION, pinned where
-    // the real BehaviourGyroCam is complete. The console's small bucket is exactly its largest
-    // small behaviour, GyroCam (100 Vector4 == 0x640 == sizeof, @0x822598D8); the host bucket is
-    // re-derived by the same rule from the host GyroCam. If GyroCam's host layout changes, this
-    // stops compiling instead of the pool silently mis-sizing; re-derive the constant.
     static_assert(sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
                       == BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS * sizeof(rw::math::vpu::Vector4),
                   "the small bucket is KU_SMALL_BEHAVIOUR_POOL_UNITS Vector4");
-    static_assert(sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
-                      == (sizeof(BehaviourGyroCam) + sizeof(rw::math::vpu::Vector4) - 1)
-                             / sizeof(rw::math::vpu::Vector4) * sizeof(rw::math::vpu::Vector4),
-                  "the host small bucket is the host's largest small behaviour (BehaviourGyroCam), as "
-                  "the console's is its own: re-derive BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS");
-    static_assert(BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE * 16u == 0x640u,
-                  "the console's small bucket: 100 Vector4 == sizeof(BehaviourGyroCam) on the console");
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCam>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCrash>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourBystanderCam>();

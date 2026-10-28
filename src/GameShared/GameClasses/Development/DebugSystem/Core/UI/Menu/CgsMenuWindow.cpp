@@ -145,28 +145,6 @@ namespace CgsDev
         void MenuWindow::Render(Debug2DImmediateRender* lpRender)
         {
             Window::Render(lpRender);
-            // FLAG PC-platform leaf: dump root labels once for the opt-in UI harness.
-            static bool lbDumped = false;
-            if (!lbDumped && std::getenv("BRN_DEBUG_UI_TRACE") && !mpMenu->GetParent())
-            {
-                lbDumped = true;
-                for (MenuItem* lpItem = mpMenu->mMenuItems.GetFirst(); lpItem;
-                     lpItem = mpMenu->mMenuItems.GetNext(lpItem))
-                {
-                    char lacName[256] = {};
-                    char lacTrace[512];
-                    lpItem->GetDisplayName(lacName, sizeof(lacName));
-                    const char* lpcType = typeid(*lpItem).name();
-                    if (MenuItemFunction* lpFunctionItem = dynamic_cast<MenuItemFunction*>(lpItem))
-                    {
-                        Function* lpFunction = lpFunctionItem->GetFunction();
-                        if (!lpFunctionItem->IsUseful())
-                            lpcType = typeid(*static_cast<CgsDev::DebugComponent*>(lpFunction->GetParameter())).name();
-                    }
-                    std::snprintf(lacTrace, sizeof(lacTrace), "[debug-menu-row] type=%s name=\"%s\"\n", lpcType, lacName);
-                    CgsDev::Log::WriteToLog(lacTrace);
-                }
-            }
 
             const Metrics& lrMetrics = GetMetrics();
             const f32 lfBorder = lrMetrics.mfWindowBorderSize;

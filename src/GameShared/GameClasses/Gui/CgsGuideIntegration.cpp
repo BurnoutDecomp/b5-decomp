@@ -1,7 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/System/PC/CgsXUserProfileSettings.h"
-
 #include <cstring>   // memset / memcpy (UpdateUserName)
 
 // CgsGui::SystemUserProfile -- the X360 XNotify/XUserGetName system-user watcher.
@@ -157,9 +155,6 @@ namespace CgsGui
                                      &lcbResults, &lReadBuffer.mResults, nullptr))
         {
             CGS_ASSERT(false, " problem reading user settings - check buffer length");
-            // FLAG PC-platform leaf: host assertions can continue. A failed API
-            // published no settings; retain its diagnostic without reading unwritten memory.
-            return;
         }
         if (lcbResults > sizeof(lReadBuffer))
         {

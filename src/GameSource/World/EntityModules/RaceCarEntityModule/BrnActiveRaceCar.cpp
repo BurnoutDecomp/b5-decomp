@@ -46,8 +46,6 @@
 #include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags
 #include <stdlib.h>   // getenv (the [wheel-diag] gate)
-#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: BlendTransform (the render-pose interpolator)
-
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h" // DeformationState / CarState (UpdateDeformationState, 2026-08-24)
 
 #include <cstring>   // memset (the console's own inlined clears)
@@ -97,7 +95,6 @@ const f32 ActiveRaceCar::KF_NO_START_LINE_BOOST_CHANGE = -1.0f;
 // paraphrased.
 // ============================================================================
 
-
 namespace
 {
     // The identity Matrix44Affine the console builds on the stack from
@@ -138,12 +135,6 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-
-    // ⚠️ FLAG PC quality-of-life: the render-pose interpolator starts with no history, so
-    // the first frame after this slot is built draws the tick pose straight rather than
-    // blending it against uninitialised storage. (This module's array is not zero-filled --
-    // DebugMemoryInit stamps module memory with 0x7FFFFFFF.)
-    ResetRenderPoseInterpolation();
 
     meRaceStartState             = E_RACE_START_STATE_RACING;     // 0x77C = 2
     mfTimeSinceCreation          = 0.0f;                          // 0x728
@@ -286,35 +277,8 @@ bool ActiveRaceCar::Prepare()
 // visible. (The render wave's bring-up producer called MakeAllPartsVisible() on a hunch;
 // this is the console code that justifies it.)
 //
-// [FLAG PC bring-up] TWO console steps are not reproduced, both for want of an absent
-// type, and neither is paraphrased:
-//   * the mHandlingBodyVolumeId seed (`std 0, 0xD0(this)`, set entity type byte 1, then
-//     CgsSceneManager::VolumeInstanceId::SetEntityIDEntityIndex(meActiveRaceCarIndex));
-//     the id is only consumed by AddToCollision / RemoveFromCollision, neither of which
-//     exists here.
-//   * mPhysicsState.mHalfExtent = (1.1, 0.75, 1.8) IS reproduced (named member).
-// ----------------------------------------------------------------------------
 void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
 {
-    // ⭐⭐ RESTORED 2026-08-11 (create-path wave). This was the "[FLAG PC bring-up]
-    // mHandlingBodyVolumeId seed omitted" hole in the banner above, and it is NOT optional any
-    // more: AddHandlingModel @0x822D3EC8 publishes this exact id into the create event, and
-    // VehicleManager::ProcessCreateEvents @0x82616770 takes BOTH the owner test
-    // (`srwi r10,..,24 ; cmplwi r10,1` -> assert "lEvent.mVolumeInstanceID.GetEntityIDOwner() ==
-    // BrnWorld::E_ENTITYTYPE_RACECAR", BrnVehicleManager.cpp:1303) AND the race-car SLOT INDEX
-    // (`extrwi r27,r9,14,8`) out of it. MEASURED before this line existed: the create event
-    // reached the drain with owner=0 index=0, i.e. an unpopulated id.
-    //
-    // Verbatim from the X360 Attach @0x822BEEE0 -- the three steps, in order:
-    //   0x822BEF04  std  r30, 0xD0(r31)                    mHandlingBodyVolumeId = 0
-    //   0x822BEF08..0x822BEF28                             SetEntityIDOwner(1) inlined
-    //               (ld ; srdi 32 ; clrlwi r11,r11,8 ; oris r11,r11,0x100 ; sldi 32 ; or ; std)
-    //   0x822BEF2C  lwz  r4, 0x748(r31)                    meActiveRaceCarIndex
-    //   0x822BEF30  bl   VolumeInstanceId::SetEntityIDEntityIndex
-    // The inlined middle step clears the top byte of the entity word and ORs in 0x01000000 ==
-    // E_ENTITYTYPE_RACECAR (BrnEntityTypes.h:34) at KU_OWNER_BASE; it is spelled here through the
-    // container's own out-of-line setter (@0x822B0E00), which reproduces that expression exactly.
-    mHandlingBodyVolumeId.muId = 0;
     mHandlingBodyVolumeId.SetEntityIDOwner(static_cast<u8>(BrnWorld::E_ENTITYTYPE_RACECAR));
     mHandlingBodyVolumeId.SetEntityIDEntityIndex(static_cast<u32>(meActiveRaceCarIndex));
 
@@ -474,11 +438,6 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
     mDeformationModelHandle = CgsResource::NULLResourceHandle;   // this+0x1C90 (+0x14)
     mGraphicsModelHandle    = CgsResource::NULLResourceHandle;   // this+0x1CB0 (+0x14)
 
-    // ⚠️ FLAG PC quality-of-life (verify F2, ghostcar): NOT a console store. The render-pose
-    // interpolator (mBodyPoseTrack / maWheelPoseTracks, PC-only, reset in Construct) keeps the
-    // OLD car's pose across a slot re-use; a re-spawn into this slot at another location would
-    // blend old->new for one frame (a one-frame streak). Reset the history with the slot.
-    ResetRenderPoseInterpolation();
 }
 
 // ----------------------------------------------------------------------------
@@ -822,10 +781,7 @@ void ActiveRaceCar::Update_PreScene( CgsSceneManager::SceneManagerIO::InSceneUpd
     // UpdateCullingGroup (the group); the consumer is VehicleManager::ProcessCollisionEvents.
     // [DIAG] BRN_COLLISION_POST_DIAG -- NOT IN THE X360 BINARY. Capped proof the two posts were
     // DISPATCHED, with what they carried.
-    static const bool sbCollisionPostDiag = ( getenv( "BRN_COLLISION_POST_DIAG" ) != 0 );
     static u32 suCollisionPostDiagLines = 0u;
-    const bool lbLogPosts = sbCollisionPostDiag && suCollisionPostDiagLines < 64u
-                         && CgsDev::Log::gpDebugPrint != 0 && ( mbChangeCollisionState || mbChangeCullingGroup );
     if( lbLogPosts )
     {
         ++suCollisionPostDiagLines;
@@ -872,94 +828,8 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
     lrBodyTransform = rw::math::vpu::Mult(mCentreOfMassTransform, mPhysicsState.mTransform);
 }
 
-// ============================================================================
-// ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT X360 FUNCTIONS. See the banner on the declarations
-// in BrnActiveRaceCar.h for why these exist and what they deliberately do not touch.
-// ============================================================================
-// Each of the three is the same three-line shape over one PoseTrack per interpolated
-// transform -- the body, six WORLD wheels and damage-event WORLD part poses. The ordering rules
-// (restore before the producers, latch after them, apply per rendered frame) and the
-// reason the restore is mandatory live on PoseTrack itself; the module drives the pairing
-// (RaceCarEntityModule::PostPhysicsUpdate brackets its producers with the first two).
-void ActiveRaceCar::RestoreTickRenderPose()
-{
-    mBodyPoseTrack.Restore(mRenderParams.GetBodyTransformForWrite());
-    if (mbVerletPoseValidPC)
-        std::memcpy(mRenderParams.GetVerletOffsets(), maCurrentVerletOffsetsPC,
-                    sizeof(maCurrentVerletOffsetsPC));
-    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
-        maWheelPoseTracks[luWheel].Restore(mRenderParams.GetWheelTransform(luWheel));
-    RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
-    for (s32 liEvent = 0; liEvent < lrParts.GetLength(); ++liEvent)
-    {
-        DetachedPartRenderEvent& lrPart = lrParts.GetEvent(liEvent);
-        CGS_ASSERT(static_cast<u32>(lrPart.miPartIndex) < KU_MAX_BODY_PARTS_PER_RACE_CAR,
-                   "Invalid render part index");
-        maPartPoseTracks[lrPart.miPartIndex].Restore(lrPart.mTransform);
-    }
-}
 
-void ActiveRaceCar::LatchTickRenderPose()
-{
-    mBodyPoseTrack.Latch(mRenderParams.GetBodyTransform());
-    // ARTIST ReadUpdatedActiveRaceCarDataFromPhysics (0x822E8E54..0x822E8F88)
-    // publishes all 128 skin rows with the tick's body/part poses. PC renders
-    // between ticks: showing the newest skin beside blended panels opens seams.
-    // Seed both endpoints on the first tick, then retain the same history as the
-    // rigid poses. Restore above prevents an unwritten tick feeding back a blend.
-    std::memcpy(maPreviousVerletOffsetsPC,
-                mbVerletPoseValidPC ? maCurrentVerletOffsetsPC : mRenderParams.GetVerletOffsets(),
-                sizeof(maPreviousVerletOffsetsPC));
-    std::memcpy(maCurrentVerletOffsetsPC, mRenderParams.GetVerletOffsets(),
-                sizeof(maCurrentVerletOffsetsPC));
-    mbVerletPoseValidPC = true;
-    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
-        maWheelPoseTracks[luWheel].Latch(mRenderParams.GetWheelTransform(luWheel));
-    bool labPresent[KU_MAX_BODY_PARTS_PER_RACE_CAR] = {};
-    const RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
-    for (s32 liEvent = 0; liEvent < lrParts.GetLength(); ++liEvent)
-    {
-        const DetachedPartRenderEvent& lrPart = lrParts.GetEvent(liEvent);
-        CGS_ASSERT(static_cast<u32>(lrPart.miPartIndex) < KU_MAX_BODY_PARTS_PER_RACE_CAR,
-                   "Invalid render part index");
-        maPartPoseTracks[lrPart.miPartIndex].Latch(lrPart.mTransform);
-        labPresent[lrPart.miPartIndex] = true;
-    }
-    // A removed/repaired part must not reuse an old world pose if it breaks again.
-    for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
-        if (!labPresent[luPart])
-            maPartPoseTracks[luPart].Reset();
-}
 
-void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
-{
-    mBodyPoseTrack.Apply(mRenderParams.GetBodyTransformForWrite(), lfAlpha);
-    if (mbVerletPoseValidPC)
-    {
-        using CgsSystem::FrameInterpolation::BlendScalar;
-        Vector3Plus* lpOffsets = mRenderParams.GetVerletOffsets();
-        for (u32 luPoint = 0; luPoint < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPoint)
-        {
-            const Vector3Plus& lrPrevious = maPreviousVerletOffsetsPC[luPoint];
-            const Vector3Plus& lrCurrent = maCurrentVerletOffsetsPC[luPoint];
-            lpOffsets[luPoint] = {
-                BlendScalar(lrPrevious.x, lrCurrent.x, lfAlpha),
-                BlendScalar(lrPrevious.y, lrCurrent.y, lfAlpha),
-                BlendScalar(lrPrevious.z, lrCurrent.z, lfAlpha),
-                BlendScalar(lrPrevious.w, lrCurrent.w, lfAlpha) };
-        }
-    }
-    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
-        maWheelPoseTracks[luWheel].Apply(mRenderParams.GetWheelTransform(luWheel), lfAlpha);
-    RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
-    for (s32 liEvent = 0; liEvent < lrParts.GetLength(); ++liEvent)
-    {
-        DetachedPartRenderEvent& lrPart = lrParts.GetEvent(liEvent);
-        CGS_ASSERT(static_cast<u32>(lrPart.miPartIndex) < KU_MAX_BODY_PARTS_PER_RACE_CAR,
-                   "Invalid render part index");
-        maPartPoseTracks[lrPart.miPartIndex].Apply(lrPart.mTransform, lfAlpha);
-    }
-}
 
 // ----------------------------------------------------------------------------
 // ⭐⭐ UpdatePhysicsState @ 0x822D4418 -- THE PHYSICS -> RENDER SEAM (physics wave 1).
@@ -1256,49 +1126,6 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 //   * mbCanDriveAwayFromCrash / mbUncrashedThisFrame clears the module's caller makes
 //     right after (they are OnRaceCarResourcesLoaded's own two trailing stores).
 //
-// [FLAG PC bring-up] WHAT IS NOT, and why -- the legs below, none paraphrased:
-//   1. ⭐ LANDED 2026-09-24 (crash parity, reviewer B on 87d1ad23 / G62): mCentreOfMassTransform
-//      <- BrnPhysics::Def(mDeformationModelResourcePtr) + 1552, 0x822EB20C..0x822EB24C:
-//        mr r3, r24 (this + 0x1C90) ; bl BrnPhysics::Def (@0x822C7708) ; addi r10, r3, 0x610
-//        four lvx128 [r10 + 0/0x10/0x20/0x30] -> stvx128 [this + 0x90 + ...]   (w lanes too)
-//      then the per-row x/y/z self-equality cascade 0x822EB250..0x822EB3DC and ONE assert,
-//      "RwMath::IsValid( mCentreOfMassTransform )" (0x8201D720, line 0x33F == :831). The DWARF
-//      spelling is `mCentreOfMassTransform = mDeformationModelResourcePtr->
-//      GetCarModelSpaceToHandlingBodySpaceTransform()`. The "needs the alias-list half of
-//      CreateFromHandle" reason was stale: ResolveDeformationSpec (AddToScene's helper, this TU)
-//      already reaches the resident spec through the handle stored two lines up. It retires the
-//      promote-seam stand-in SetCentreOfMassTransformBringUp (seat wave 2026-08-05), which fed the
-//      same +1552 matrix one step later, from RaceCarEntityModule::ResetActiveRaceCar.
-//   2. ⭐ LANDED 2026-09-24 (crash parity, same review): the four RenderParams::SetWheelScale(i,
-//      Def + 96 + 48*i) calls, 0x822EB410..0x822EB470, after the detached-part queue Construct:
-//        r27 = this + 0x7E0 (mRenderParams) ; r30 = 0x60 ; r31 = 0
-//        loop: mr r3, r24 ; bl BrnPhysics::Def          -- again on EVERY pass (@0x822EB42C)
-//              cmpwi r31, 4 ; blt  else assert "liWheel < eNumWheels" (0x82014ED8,
-//                  BrnStreamedDeformationSpec.h line 0x101) -- the inlined GetWheelSpec
-//              lvx128 v1, r30, r29                    -- spec + 0x60 + 0x30*i == maWheelSpecs[i].mScale
-//              mr r4, r31 ; mr r3, r27 ; bl RenderParams::SetWheelScale (@0x822CD170)
-//              r30 += 0x30 ; r31 += 1 ; while r30 < 0x120
-//      DWARF: `mRenderParams.SetWheelScale( luWheel, mDeformationModelResourcePtr->
-//      GetWheelSpec( luWheel )->mScale )` (local u32 luWheel, :819). The old reasons were stale:
-//      the Def dependency is leg 1's (resolved the same way) and the wheels have drawn since the
-//      wheel-render wave. It retires the promote-seam stand-in loop in ResetActiveRaceCar
-//      (wheel-transform wave 2026-08-13).
-//   3. ⭐ LANDED 2026-09-24 (crash parity CHAIN-RECOLOUR / G61-D6 colour leg): the car's
-//      authored default colour, 0x822EB474..0x822EB4F0, after the wheel-scale loop:
-//        r3 = 0x52B81656F3ADF675 (burnoutcarasset's class key; the old "-206702987" here was
-//        only its low word), r4 = r23 = luCarAssetAttribKey  ->  bl Attrib::FindCollection
-//        Attrib::Instance(coll, 0) ; no layout -> DefaultDataArea(0x228)   == the inlined
-//                                    burnoutcarasset(u64 key, owner) ctor
-//        RefSpec @layout+0x170 (GraphicsAsset) -> GetCollection -> burnoutcargraphicsasset(c, 0)
-//        miDefaultColourIndex   (+0x1C80) = layout word 1  (DWARF PlayerColourIndex(), :83)
-//        miDefaultColourPalette (+0x1C84) = layout word 0  (PlayerColourPaletteIndex(), :90)
-//        then both instances are destroyed (0x822EB4E8 / 0x822EB4F0).
-//      Its only reader is RaceCarEntityModule::SetupCarColour @0x822F5170.
-//   4. ⭐ LANDED 2026-09-23 (crash parity G61-D6): ResetVerletOffsets @0x822A4E90, `bl` at
-//      0x822EB404, right before the detached-part queue Construct (0x822EB40C). The old
-//      reason ("the tree has no body for it") was stale -- the body is below, at
-//      ActiveRaceCar::ResetVerletOffsets.
-// ============================================================================
 void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
                                        const CgsResource::ResourceHandle& lrGraphicsModelHandle,
                                        const Vector3&                     lrInitialVelocity,
@@ -1376,25 +1203,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
 
     // [DIAG] BRN_RESLOADED_DIAG -- NOT IN THE X360 BINARY. Capped proof the Def() legs were
     // DISPATCHED on a resolved spec, with the values they stored.
-    static const bool sbResLoadedDiag = ( getenv( "BRN_RESLOADED_DIAG" ) != 0 );
     static u32 suResLoadedDiagLines = 0u;
-    if( sbResLoadedDiag && suResLoadedDiagLines < 32u && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        ++suResLoadedDiagLines;
-        *CgsDev::Log::gpDebugPrint
-            << "[res-loaded] OnResourcesLoaded slot " << static_cast<s32>( meActiveRaceCarIndex )
-            << " spec " << ( lpDeformationSpec != 0 ? 1 : 0 )
-            << " mCentreOfMassTransform.w (" << mCentreOfMassTransform.wAxis.x << ", "
-            << mCentreOfMassTransform.wAxis.y << ", " << mCentreOfMassTransform.wAxis.z << ")";
-        for( u32 luLogWheel = 0u; luLogWheel < 4u; ++luLogWheel )
-        {
-            const Matrix44Affine& lrScale = mRenderParams.GetWheelScaleMatrix( luLogWheel );
-            *CgsDev::Log::gpDebugPrint
-                << " wheel" << luLogWheel << " scale (" << lrScale.xAxis.x << ", "
-                << lrScale.yAxis.y << ", " << lrScale.zAxis.z << ")";
-        }
-        *CgsDev::Log::gpDebugPrint << "\n";
-    }
 }
 
 // ============================================================================
@@ -1447,80 +1256,6 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
         meBaseDeformationType,                                         // +0x7C8
         lbDisablePhysicsStateReset,
         static_cast<s32>( lu8CarStrengthStat ) );
-}
-
-// ----------------------------------------------------------------------------
-// [FLAG PC bring-up] SeedPhysicsStateFromCreateEventBringUp -- NOT an X360 function.
-// See the banner in BrnActiveRaceCar.h. The console's UpdatePhysicsState memcpy's the
-// whole 1120-byte RaceCarState; only mTransform is knowable without a physics tick, and
-// only mTransform is written here.
-// ----------------------------------------------------------------------------
-void ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine& lrTransform)
-{
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-    mPhysicsState.mTransform = lrTransform;
-
-    // ============ THE IDENTITY GOES WITH THE POSE ============
-    // Seeding mTransform alone shipped a RaceCarState that is positioned but ANONYMOUS:
-    // mEntityId stayed 0 for every car whose physics slot is never claimed. That field is
-    // not decoration -- VehicleState::IsAttachedToThis @0x82683D38 is an IDENTITY TEST on
-    // it, and nothing else:
-    //     lwz r10, 0x428(r3)   ; state->mVehiclePhysicsData.mEntityId
-    //     lwz r11, 0x3C8(r4)   ; ((RaceCarState*)attachment)->mEntityId
-    //     subf ; cntlzw ; rlwinm   -> equal?
-    // With every AI car reading 0, `0 == 0` made EVERY attached sound state match EVERY
-    // car. In the owner's 2026-09-16 session that turned AIVehicleStateManager::UpdateParams
-    // into a loop: car 1's out-of-range test resolved to car 2's state and detached it, car 2
-    // re-attached on the next frame, and the two alternated 236 times (measured, strictly
-    // interleaved: `[ai-sound-detach] car=1 out of range` / `[ai-sound-attach] car=2`). Each
-    // re-attach re-requested 'sound\aems\InAir.bundle' and the car's engine bundle without
-    // releasing, so the 16-node per-resource requester pool filled and AddTail fired
-    // "We've run out of nodes." 468 times. The same all-zero mEntityId is already on record
-    // one hop away -- BrnPhysicsModuleUpdateFunctions.cpp's PC-BUILD GUARD #2 measured 663
-    // assert dialogs from it sailing through the console's own sentinel test.
-    //
-    // NOTHING IS INVENTED. This is the car's own identity, already built two ways in this
-    // same class and module:
-    //   * Attach (:314) does SetEntityIDOwner(E_ENTITYTYPE_RACECAR) +
-    //     SetEntityIDEntityIndex(meActiveRaceCarIndex) into mHandlingBodyVolumeId;
-    //   * VehicleManager::ProcessCreateEvents stores that same word into
-    //     maRaceCarEntityIDs[slot], and WriteOutVehicleStats publishes it back through
-    //     SetEntityID -- which is the value UpdatePhysicsState would memcpy in here the
-    //     moment the physics slot IS claimed.
-    // MEASURED AGREEMENT: the player's slot (the one car that does get a physics slot) reads
-    // entityWord 0x01000000, owner 1, entityIndex 0 -- exactly what Set(1, 0, 0) builds.
-    // So this seat writes the value the real path would write, for the cars the real path
-    // has not reached yet; when it does reach them, UpdatePhysicsState overwrites it with
-    // the identical word.
-    // DELETE-WHEN VehicleManager::ProcessCreateEvents claims a physics slot for AI cars too
-    // (the same condition this file's sibling seats already carry).
-    // BrnCommonTypes.h's EntityId is the 32-bit STORAGE word only, so the packing is done by
-    // the real CgsSceneManager::EntityId and the word handed over -- the same two-step
-    // WriteOutVehicleStats uses in reverse (`CgsSceneManager::EntityId lEntityID(...muValue)`).
-    CgsSceneManager::EntityId lSeatedEntityId;
-    lSeatedEntityId.Set(static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR),
-                        static_cast<u32>(meActiveRaceCarIndex),
-                        0u);
-    mPhysicsState.mEntityId.muValue = static_cast<u32>(lSeatedEntityId);
-
-    // ⚠️ FLAG PC quality-of-life: THIS IS A TELEPORT, so drop the interpolation history.
-    // The car is being placed, not moved -- blending from wherever it was before would smear
-    // it across the world for one frame. This is the honest place to say so: the producer
-    // KNOWS the pose is discontinuous, whereas the blend can only guess from the values (and
-    // guessing is what mis-classified a spinning road wheel as a cut -- see BlendTransform).
-    ResetRenderPoseInterpolation();
-}
-
-// ⚠️ FLAG PC quality-of-life -- NOT an X360 function. Forget the last two ticks, so the next
-// frame draws the tick pose straight instead of blending across a discontinuity.
-void ActiveRaceCar::ResetRenderPoseInterpolation()
-{
-    mBodyPoseTrack.Reset();
-    mbVerletPoseValidPC = false;
-    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
-        maWheelPoseTracks[luWheel].Reset();
-    for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
-        maPartPoseTracks[luPart].Reset();
 }
 
 // ----------------------------------------------------------------------------
@@ -1695,7 +1430,6 @@ void ActiveRaceCar::UpdateDeformationState(
     const BrnPhysics::Deformation::CarState* lpCarState =
         lpDeformationState->GetCarStateF(mPhysicsState.mEntityId.muValue);
 
-    // [FLAG PC bring-up] see the DIVERGENCE note above -- not a console branch.
     CGS_ASSERT(lpCarState != 0, "lpCarState != NULL [PC bring-up guard]");
     if (lpCarState == 0)
     {
@@ -1717,9 +1451,6 @@ void ActiveRaceCar::UpdateDeformationState(
     // Summed squared sensor displacement -> the render damage scalar.
     mRenderParams.SetDeformationSquared(lpCarState->GetSummedDisplacementSquared());
 
-    // FLAG PC diagnostic: follow the physical victim and its actual render offsets,
-    // rather than treating a HUD/camera transition as proof of a visible wreck.
-    static const bool sbTraceRivalDamage = getenv("BRN_RIVAL_DAMAGE_DIAG") != 0;
     static u32 sauRivalDamageFrames[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {};
     if (sbTraceRivalDamage && meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
         meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)
@@ -1743,10 +1474,6 @@ void ActiveRaceCar::UpdateDeformationState(
                 << " angular=" << mPhysicsState.mAngularVelocity.x << "," << mPhysicsState.mAngularVelocity.y
                 << "," << mPhysicsState.mAngularVelocity.z << "\n";
         }
-        // FLAG PC diagnostic ([td-flight], same gate): the 48-frame window above ends 0.8 s after
-        // the takedown, before most of a wreck's flight, tumble and settling. Sample the whole
-        // episode (every 6th frame, up to 900 frames = 15 s) with the linear velocity and the up
-        // axis, so "flies more / reacts less" can be measured on the victim, not inferred.
         static u32 sauTakedownFlightFrames[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {};
         u32& lruFlight = sauTakedownFlightFrames[meActiveRaceCarIndex];
         if (!mbTakenDown) lruFlight = 0;
@@ -1831,8 +1558,6 @@ void ActiveRaceCar::UpdateDeformationState(
         static s32 siTracePeriod = -1;
         if (siTracePeriod < 0)
         {
-            const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-            siTracePeriod = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
             if (siTracePeriod < 0) { siTracePeriod = 0; }
         }
 
@@ -1882,8 +1607,6 @@ void ActiveRaceCar::UpdateDeformationState(
                 static s32 siRowsOn = -1;
                 if (siRowsOn < 0)
                 {
-                    const char* lpcEnv = getenv("BRN_DEFORM_ROWS");
-                    siRowsOn = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
                 }
                 static f32 sfRowsHighWater = 0.0f;
                 if (siRowsOn == 1 && IsPlayer() && lfSumVerlet > sfRowsHighWater + 0.25f
@@ -2051,21 +1774,7 @@ void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
     // overwrites the vehicle-stats wheel pose: one line per call every 60th call.
     // DELETE-WHEN the wheel regression is pinned and fixed.
     {
-        static const bool sbWheelDiag = (getenv("BRN_WHEEL_DIAG") != 0);
         static s32 siL3Frame = 0;
-        if (sbWheelDiag && ((siL3Frame++ % 60) == 0) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[wheel-diag] L3 f" << siL3Frame - 1
-                << " w0 T (" << lpSnapshot->maWheels[0].mTransform.wAxis.x
-                << ", " << lpSnapshot->maWheels[0].mTransform.wAxis.y
-                << ", " << lpSnapshot->maWheels[0].mTransform.wAxis.z
-                << ") row0x " << lpSnapshot->maWheels[0].mTransform.xAxis.x
-                << " onGround (" << static_cast<s32>(lpSnapshot->mau8OnGround[0])
-                << "," << static_cast<s32>(lpSnapshot->mau8OnGround[1])
-                << "," << static_cast<s32>(lpSnapshot->mau8OnGround[2])
-                << "," << static_cast<s32>(lpSnapshot->mau8OnGround[3]) << ")\n";
-        }
     }
 
     const u32 KU_ROAD_WHEEL_COUNT = 4;
@@ -2440,23 +2149,6 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
 //   gate at 0x822F7E24 and the UpdateEngineState call behind it; the mbAIToBeActivated clear;
 //   and the mbCrashedIntoWater timer.
 //
-// ---- [FLAG PC bring-up] WHAT THIS SLICE DROPS -- named, not paraphrased --------------------
-//  1. RESTORED: `lpVehicleOutput != NULL`, asserted on entry.
-//  2-3. RESTORED: touching-world status and the crash drive-away decision/timer,
-//       including route-direction inputs and the 1.5-second game-event-38 publish.
-//  4. RESTORED 2026-09-24 (crash parity G61-D4): the IsOnRaceStartState(0) start-line boost
-//     flame (0x822F7C58..0x822F7D14) on the module's RNG at +0x18490 (lpRandom).
-//  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
-//     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
-//     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
-//  6. RESTORED: SendAddedRemovedNetworkCarForCollisionEvents, between UpdateInAirRotations
-//     and UpdateIndicators.
-//     (CalculateWheelAngularVelocities landed 2026-09-12, UpdateInAirRotations 2026-09-13 and
-//      UpdateIndicators 2026-09-23 (G60-D2/G61-D5); all three are called below.)
-//  7. the mbIsWaitingForDeferredReset -> RequestPlaceOnTrack countdown (0x822F7E80..0x822F7EB8).
-//     RequestPlaceOnTrack exists, but the latch is only ever armed by code this build has not
-//     landed, so running the countdown would be dead work with a live teleport at the end.
-// ----------------------------------------------------------------------------
 void ActiveRaceCar::Update(f32 lfTimeStep,
                            f32 lfTimeStepMultiplier,
                            f32 lfAcceleration,
@@ -2522,8 +2214,6 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                                "RwMathVPU::IsValid( lCurrentRouteVec )");
                     if (!(lvDirection.x * lfRouteX + lvDirection.y * lfRouteY >= 0.0f))
                     {
-                        WreckLatchWitness( "Update.routeDot@0x822F7BFC",
-                                           static_cast<s32>( GetActiveRaceCarIndex() ), true );
                         mbIsWrecked = true;
                         mbCanDriveAwayFromCrash = false;
                     }
@@ -2566,17 +2256,7 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     // [DIAG] BRN_START_LINE_BOOST_DIAG -- NOT IN THE X360 BINARY. Capped proof the flip above is
     // DISPATCHED on PC: one line per flip, with the re-armed countdown (after this frame's tick).
     {
-        static const bool sbStartLineBoostDiag = ( getenv( "BRN_START_LINE_BOOST_DIAG" ) != 0 );
         static u32 suStartLineBoostDiagLines = 0u;
-        if( sbStartLineBoostDiag && suStartLineBoostDiagLines < 64u && CgsDev::Log::gpDebugPrint != 0
-            && mbIsDoingStartLineBoost != lbWasDoingStartLineBoost )
-        {
-            ++suStartLineBoostDiagLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[start-line-boost] slot " << static_cast<s32>( meActiveRaceCarIndex )
-                << " flame " << ( mbIsDoingStartLineBoost ? 1 : 0 )
-                << " next " << mfTimeToStartLineBoostChange << "\n";
-        }
     }
 
     // 0x822F7DF4..0x822F7E48. ⭐ THE GATE AND THE CALL. Only a PLAYER-typed global slot gets an
@@ -2803,9 +2483,6 @@ void ActiveRaceCar::ResetVerletOffsets()
 {
     CGS_ASSERT( !IsInactive(), "!IsInactive()" );   // BrnActiveRaceCar.cpp:1128
 
-    // FLAG PC-platform leaf: repair/resource replacement must not restore or
-    // interpolate the old damage after the console reset clears the skin below.
-    mbVerletPoseValidPC = false;
     Vector3Plus* lpVerletOffsets = mRenderParams.GetVerletOffsets();
     const Vector3Plus lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
     for( u32 luPartIndex = 0; luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPartIndex )
@@ -2872,7 +2549,6 @@ void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
     }
 
     mfTimeInWater          = 0.0f;   // flt_82001CC0
-    WreckLatchWitness( "ResetAfterCrash@0x822BF4BC", static_cast<s32>( GetActiveRaceCarIndex() ), false );
     mbIsWrecked            = false;
     mfTimeDriveableInCrash = 0.0f;
     mbCrashedIntoWater     = false;
@@ -2885,23 +2561,6 @@ void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
 // address of the store it stands beside. Prints nothing when the variable is unset, which is the
 // control. DELETE-WHEN-STABLE.
 // =================================================================================================
-void WreckLatchWitness( const char* lpcSite, s32 liActiveRaceCarIndex, bool lbNewValue )
-{
-    static s32 siWreckLatchDiag = -1;
-    if( siWreckLatchDiag < 0 )
-    {
-        const char* lpcEnv = getenv( "BRN_WRECK_LATCH_DIAG" );
-        siWreckLatchDiag = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
-    }
-    if( siWreckLatchDiag != 1 || CgsDev::Log::gpDebugPrint == 0 )
-    {
-        return;
-    }
-    *CgsDev::Log::gpDebugPrint
-        << "[wrecklatch] car=" << liActiveRaceCarIndex
-        << " <- " << ( lbNewValue ? 1 : 0 )
-        << " site=" << lpcSite << "\n";
-}
 
 // =================================================================================================
 // THE RESET-ON-TRACK RING  (aicar_reset wave 2026-08-26)
@@ -3129,7 +2788,6 @@ void ActiveRaceCar::GetResetCoords( Vector3* lpOutPosition, Vector3* lpOutDirect
     *lpOutDirection = mPhysicsState.mTransform.zAxis;
 }
 
-
 // ----------------------------------------------------------------------------
 // SetIndicatorState @ 0x822A52B0. Store-for-store (raw asm, NOT the Hex-Rays rendering):
 //   r4 != 0 : lbz +0x1C8D ; if 0 -> stfs flt_82001CC0 (0.0) +0x1C88
@@ -3283,7 +2941,6 @@ void ActiveRaceCar::UpdateIndicators(f32 lfTimeStep)
 // two "Invalid handling body" tripwires, the volume instance, the collision registration,
 // the culling group and its per-frame republish.
 // ============================================================================
-
 
 namespace BrnWorld
 {

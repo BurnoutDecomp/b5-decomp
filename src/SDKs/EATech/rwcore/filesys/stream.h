@@ -4,7 +4,7 @@
 
 #include "SDKs/EATech/rwcore/filesys/device.h"   // AsyncOp / Handle / Device / Manager / gpFileSys*
 
-#include <windows.h>  // CRITICAL_SECTION -- the host mapping of the X360 EA::Thread::Mutex
+#include <xtl.h>  // CRITICAL_SECTION -- the host mapping of the X360 EA::Thread::Mutex
 
 // =====================================================================================
 // rw::core::filesys::Stream -- the RenderWare core filesystem streaming reader.

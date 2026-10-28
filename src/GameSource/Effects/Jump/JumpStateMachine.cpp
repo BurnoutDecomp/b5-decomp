@@ -36,7 +36,6 @@
 // =============================================================================
 
 #include "GameSource/Effects/Jump/JumpStateMachine.h"
-#include "pc/math/VmxFloat.h"
 #include "GameSource/Effects/EffectsModule.h"                 // BrnEffects::CarState, EffectsModule::ParticleModule()
 #include "GameSource/Effects/ActiveRaceCarData.h"             // mJumpEffectHandle / maJumpLandingWheelEffectHandles
 #include "GameSource/Effects/ParticleEffectHelper.h"          // RaceCarParticleEffectHelper
@@ -123,26 +122,11 @@ namespace
     const char* const KPC_LANDING_DUST_LITE_EFFECT =
         "gamedb://burnout5/Burnout/Effects/Cam_DustImpactL.lef.BurnoutFXLionEffectFile?ID=614063";
 
-    // -------------------------------------------------------------------------
-    // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_JUMP_DIAG), first-N witness of the jump
-    // machine's transitions and of the handles ParticleModule::StartLionEffect hands
-    // back. It exists because "the machine is pinned in AllOff" and "the machine runs but
-    // every effect handle came back invalid" look identical on screen (nothing renders in
-    // either case), and only a log can tell them apart.
-    // DELETE-WHEN jump vapour / landing dust are confirmed on screen.
-    // -------------------------------------------------------------------------
-    bool JumpDiagEnabled()
-    {
-        static const bool sbJumpDiag = (getenv("BRN_JUMP_DIAG") != 0);
-        return sbJumpDiag;
-    }
-
     // The shared, budgeted lane: state transitions and the handles StartLionEffect
     // returned. Capped so a car that lands repeatedly cannot flood the log.
     bool JumpDiagTakeLine()
     {
         static s32 siLinesLeft = 64;
-        if (!JumpDiagEnabled() || siLinesLeft <= 0)
         {
             return false;
         }
@@ -170,7 +154,6 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
     // speed = |mLinearVelocity| (X360: vmsum3fp128 + rsqrt Newton refine -> magnitude,
     // vsel-guarded so |v|^2 == 0 yields 0).
     const Vector3& lvVel = lpCar->mLinearVelocity;
-    namespace vmx = CgsPC::VmxFloat;
     const f32 lfSquared = vmx::Dot3(lvVel, lvVel);
     const f32 lfInverseSpeed = vmx::RefinedReciprocalSqrt(lfSquared, 2);
     const f32 lfUnselectedSpeed = vmx::Multiply(lfSquared, lfInverseSpeed);
@@ -220,7 +203,6 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
     const u32* lpuVapourHandle = &lHelper.ActiveRaceCar()->mJumpEffectHandle;
     lHelper.SetEffectStateBlend(lpuVapourHandle, 1, lfBlend);
 }
-
 
 // =============================================================================
 // FireWheelSparks @ 0x82299670 (DWARF JumpStateMachine.cpp:308) -- THE LANDING SPARKS.
@@ -437,7 +419,6 @@ void JumpStateMachine::FireWheelDebris(CarState& lCarState,
                                              lCarState.GetTime());
     }
 }
-
 
 // =============================================================================
 // OnDetermineNextState @ 0x8229B9F8

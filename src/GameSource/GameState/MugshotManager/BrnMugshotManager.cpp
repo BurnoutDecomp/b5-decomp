@@ -435,39 +435,6 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
                                    && !GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType);
         const bool lbFreeBurnLobby  = GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType);
 
-        // [mugshot] PC witness (NOT in the console), first 8 only: this manager is silent on every
-        // run, and until now there was no way to tell a manager that never saw the event from one
-        // that saw it and filtered it. Prints ONE line per takedown event with the reason code of
-        // the FIRST gate that rejects it, or "capture" when a request is actually issued:
-        //   not-a-party   the local player is neither aggressor nor victim
-        //   no-camera     the victim has no camera record (see the FLAG below -- the host's
-        //                 player-status stand-in reports zero players, so no record is ever seeded)
-        //   offline       both capture arms are online-only, so an offline takedown reaches the
-        //                 end of the loop by design and issues nothing
-        // [FLAG PC witness]  DELETE-WHEN: the organic takedown case goes green and the mugshot
-        // request is confirmed.
-        {
-            static s32 siMugshotWitnessed = 0;
-            if (siMugshotWitnessed < 8 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siMugshotWitnessed;
-
-                const char* lpcReason = "capture";
-                if (!lbPlayerIsParty)        lpcReason = "not-a-party";
-                else if (!lbVictimHasCamera) lpcReason = "no-camera";
-                else if (!lbOnlineNonLobby && !lbFreeBurnLobby) lpcReason = "offline";
-
-                *CgsDev::Log::gpDebugPrint << "[mugshot] takedown attacker "
-                                           << static_cast<s32>(leTakedownAggressorRaceCarIndex)
-                                           << " -> victim " << static_cast<s32>(leTakedownVictimRaceCarIndex)
-                                           << " player=" << static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex())
-                                           << " gameMode=" << static_cast<s32>(leGameModeType)
-                                           << " online=" << (mpGameStateModule->IsOnlineGameMode() ? 1 : 0)
-                                           << " reason=" << lpcReason
-                                           << " [FLAG PC witness]\n";
-            }
-        }
-
         if (!lbPlayerIsParty)
         {
             continue;

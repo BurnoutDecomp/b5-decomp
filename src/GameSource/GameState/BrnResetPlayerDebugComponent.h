@@ -82,10 +82,7 @@ namespace BrnGameState
         static const s32 KI_MAX_WHEEL_NAME_COUNT        = 128;   // :121
         static const s32 KI_MAX_TELEPORT_LOCATION_COUNT = 128;   // :122
 
-        // ---- members (DWARF order, BrnResetPlayerDebugComponent.h:124-146) -------------------------
-        // FLAG PC-platform leaf: each option array includes a null-name terminator
-        // for the host string lookup; the original selectable counts are unchanged.
-        GameStateModule* mpGameStateModule;                                            // :124  (+0x0C)
+                                            // :124  (+0x0C)
 
         CgsDev::DebugUI::StringList maLocationNames[KI_MAX_TELEPORT_LOCATION_COUNT + 1] = {};    // :126
         CgsDev::DebugUI::StringList maCarFilterNames[KI_CAR_FILTER_COUNT + 1] = {};              // :127

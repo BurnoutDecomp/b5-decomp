@@ -4,17 +4,15 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
 
 #include <cmath>   // std::fabs, std::sqrt
-#include <cstdio>  // snprintf ([FLAG PC witness] BRN_MASSIVE_DIAG)
-#include <cstdlib> // getenv ([FLAG PC witness] BRN_MASSIVE_DIAG)
-
+#include <cstdio>
+#include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [FLAG PC witness] BRN_MASSIVE_DIAG
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Graphics/CgsModel.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // AcquireResourceResponse
-#include "pc/gcm/renderengine/texture.h"                                     // renderengine::Texture
 #include "rw/math/vpu/matrix44_operation.h"                                  // Mult(Matrix44Affine, Matrix44)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"              // CMassiveClientCore::Instance
 
@@ -270,10 +268,6 @@ WorldEntityModule::UpdateMassive( BrnUpdateSet lUpdateSet )
         {
             renderengine::Texture* lpTexture = mapDynamicAdvertTextures[ miNumMassiveSubscribersCreated ];
 
-            // FLAG PC-platform: the console reads the level count and the pixel base address
-            // out of the texture's GPU fetch constant; the PC raster keeps the level count
-            // explicitly and its pixel storage is the D3D texture.
-            const u32 luNumLevels = lpTexture->muNumMipLevels;
             const u32 luPixelDataSize = renderengine::Texture::GetPixelDataSize(
                 renderengine::Texture::GetType( lpTexture ),
                 renderengine::Texture::GetWidth( lpTexture ),
@@ -337,23 +331,6 @@ WorldEntityModule::GenerateMassiveImpressionData( Matrix44Affine::InParam lTrans
     }
 
     const f32 lfDistance = rw::math::vpu::Magnitude( lCameraPosition - lTransform.Pos() );
-
-    // [FLAG PC witness] BRN_MASSIVE_DIAG=1: the first lookups of the impression pass.
-    {
-        static const bool sbDiag = ( std::getenv( "BRN_MASSIVE_DIAG" ) != 0 );
-        static s32 siDiagCount = 0;
-        if ( sbDiag && siDiagCount < 8 )
-        {
-            ++siDiagCount;
-            char lacMsg[192];
-            std::snprintf( lacMsg, sizeof( lacMsg ),
-                "[FLAG PC witness] [massive] renderable=%u item IE=%d subscriber=%p distance=%.1f limit=%.1f safe=%d\n",
-                static_cast<u32>( luRenderableIndex ), lpItem->miIEIndex, static_cast<void*>( lpSubscriber ),
-                static_cast<double>( lfDistance ), static_cast<double>( mfMassiveImpressionDebugDistance ),
-                mMassive.mbSafeToDownload ? 1 : 0 );
-            CgsDev::Log::WriteToLog( lacMsg );
-        }
-    }
 
     if ( mbMassiveDistanceLinesDebug )
     {

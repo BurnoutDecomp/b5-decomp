@@ -29,26 +29,7 @@
 
 namespace
 {
-// The two global RenderWare aligned-memory thunks the X360 calls indirectly
-// through off_82F91A04 / off_82F91A0C.
-// X360: RwMallocMemAligned(0x180, 0x10) per per-slot DispatchFrame; the result
-// is the storage Construct places the frame into.
-//
-// FLAG PC-platform leaf: the RenderWare aligned-memory function table
-// (off_82F91A04 / off_82F91A0C) is an engine-global indirection whose PC entries
-// are the CRT aligned allocator -- the X360 slots point at the console's
-// RwMallocMemAligned/RwFreeMemAligned, which are themselves thin wrappers over
-// the platform aligned heap. Routed straight to _aligned_malloc/_aligned_free
-// here until the RenderWare memory layer's function table is homed.
-void* RwMallocMemAligned(u32 luSize, u32 luAlignment)
-{
-    return ::_aligned_malloc(static_cast<size_t>(luSize), static_cast<size_t>(luAlignment));
-}
 
-void RwFreeMemAligned(void* lpMemory)
-{
-    ::_aligned_free(lpMemory);
-}
 }
 
 namespace CgsGraphics

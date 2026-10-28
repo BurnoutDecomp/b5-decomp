@@ -1,6 +1,5 @@
 #include "GameShared/GameClasses/Fonts/CgsFont.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // ConvertUtf8CharToUtf16Char
-#include "pc/gcm/renderengine/renderstates.h"          // renderengine::TextureState (CreateTextureState)
 #include "rw/rwcore_structs.h"                          // rw::IResourceAllocator
 
 // CgsResource::Font glyph lookup. Faithful ports of the X360 ARTIST bodies:

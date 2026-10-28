@@ -49,7 +49,6 @@
 
 #include "GameSource/Gui/BrnCustomRendererManager.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // mask corner vertices (SetMaskRect)
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::TextureState::mpRaster (SetMaskRect)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag prints
 
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
@@ -110,23 +109,6 @@ namespace
             lpComponent->SetRenderEnabled(lbEnabled);
     }
 
-    // -----------------------------------------------------------------------------
-    // [FLAG PC witness] `[hud-vis]` -- the HUD element show/hide trace (lane `hud`,
-    // bug-test wave 2026-09-06). NOT IN THE X360 BINARY.
-    // Opt-in behind BRN_HUD_VIS=1 and printed ONLY when a component's render-enabled
-    // flag CHANGES, so the line count is bounded by the number of real transitions
-    // (never per-frame). The manager is where visibility is actually decided for every
-    // custom-rendered HUD element (minimap, main map, crash-nav icons, boost bar,
-    // above-car, progress bar, black bar, ticker, credits, player image), so one probe
-    // here covers the whole element set.
-    // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
-    // -----------------------------------------------------------------------------
-    const char* const kapcHudVisNames[10] =
-    {
-        "netplayerimage", "satnav", "mainmap", "crashnavicons", "boostbar",
-        "abovecar", "progressbar", "blackbar", "ingamemessage", "creditstext"
-    };
-
     bool gbHudVisChecked = false;
     bool gbHudVisEnabled = false;
     bool gbHudVisSeeded  = false;
@@ -139,8 +121,6 @@ namespace
         if (!gbHudVisChecked)
         {
             gbHudVisChecked = true;
-            const char* lpcVar = std::getenv("BRN_HUD_VIS");
-            gbHudVisEnabled = (lpcVar != 0 && lpcVar[0] != '\0' && lpcVar[0] != '0');
         }
         return gbHudVisEnabled;
     }
@@ -321,7 +301,6 @@ bool CustomRendererManager::Prepare(rw::IResourceAllocator* lpHeapAllocator,
 
             mePrepareStage = E_PREPARESTAGE_DONE;
             mDebugComponent.Register();
-            HudVisReport(mapCustomRenderComponents, "prepare");   // [FLAG PC witness]
             return true;
         }
         return false;
@@ -565,7 +544,6 @@ void CustomRendererManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             break;
     }
 
-    // [FLAG PC witness] see HudVisReport -- change-only, BRN_HUD_VIS=1.
     if (HudVisEnabled())
     {
         char lacReason[32];
@@ -717,10 +695,6 @@ void CustomRendererManager::Render(CgsGui::ImRendererSet* lpRendererSet,
     if (++miHACK_NumberOfRendersWithoutUpdate > 10)
         mEventQueue.Clear();
 
-    // [FLAG PC witness] the LAST word on what is actually on screen this frame: any
-    // enable a component flipped itself (a fade completing, a renderer disabling on a
-    // missing resource) shows up here and nowhere else. Change-only, BRN_HUD_VIS=1.
-    HudVisReport(mapCustomRenderComponents, "render");
 }
 
 // ================= GetComponentID @ 0x82445378 =================
@@ -925,12 +899,6 @@ void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpL
 //      filler (the console stores a NaN pattern; nothing reads it) -- and pushes it with
 //      Im2dRenderBuffer::PushMask(lpTextureState, run) (opcode 17).
 //
-// [FLAG PC fold] step 1+2: the console's matrix pair maps 0..1 screen proportions into its
-// aspect-corrected device space and exists only once the map manager has built it (hence the
-// assert). The PC Im2d dispatch consumes mask corners in logical screen pixels, so the fold is
-// the constant proportion -> 1280x720 logical-pixel scale -- always defined, so the
-// not-initialised assert has no PC condition to fire on and is dropped with this note. The
-// corner ordering, UV wiring and the opcode-17 push are transcribed as-is.
 void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer,
                  const renderengine::TextureState* lpTextureState,
                  const rw::math::vpu::Vector4& lrv4Rect,

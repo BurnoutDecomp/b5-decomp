@@ -3,7 +3,6 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnStaticPassbyControl.h"
 
 // =============================================================================
@@ -223,10 +222,6 @@ void StaticPassbyControl::TriggerPassby(const BrnSound::World::StaticSoundEntity
             lPosition, 0.0f, static_cast<AttribSys::Enums::ePassbyTypes::ePassbyTypes>(liType), false, 1.0f);
         lpManager->PostPassby(lPassby);
         static s32 siDiag = 0;
-        if (SndEnvDiagBudget(siDiag))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] static passby type=" << liType
-                << " pos=(" << lPosition.x << "," << lPosition.y << "," << lPosition.z
-                << ") [FLAG PC witness]\n";
     }
 }
 

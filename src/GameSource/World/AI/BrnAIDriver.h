@@ -59,16 +59,6 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                // CgsNumeric::Random (Prepare draws one float)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (NearbyVehicles::GetCount)
 
-// [FLAG PC bring-up] THE RACING-LINE / STEERING-FAN STACK IS ONLY HALF RECONSTRUCTED.
-// The two bring-up gates BRN_AI_RACINGLINE_STACK_PRESENT (the RacingLineGenerator query half) and
-// BRN_AI_STEERINGFAN_TARGET_PRESENT (the SteeringFan weighting/target half, landed by aiwave R6)
-// now live in ONE canonical place -- GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h,
-// which this header includes above -- so the AIDriver TUs and the SteeringFan / generator TUs
-// cannot disagree. Read the banner there before changing either value; it records exactly which
-// bodies are still missing and why flipping the fan gate early would make rivals turn hard right
-// at a quarter speed. The two #ifndef guards below are kept only so this header still self-defines
-// if it is ever included stand-alone; they no longer fire in this tree.
-// DELETE-WHEN both gates are 1.
 #ifndef BRN_AI_RACINGLINE_STACK_PRESENT
 #define BRN_AI_RACINGLINE_STACK_PRESENT 0
 #endif
@@ -354,19 +344,6 @@ namespace BrnAI
         // static_asserts live at namespace scope below.
         static void _AssertLayout();
     };
-
-    // [FLAG PC witness] NOT IN THE X360 BINARY. One line per AI BEHAVIOUR TRANSITION (first 30 of
-    // the whole run, all drivers together), so a BrnGame.log can be read back to the exact edge of
-    // the state machine that moved -- or failed to move -- a rival. Every writer of
-    // AICar::meBehaviour that lives in the driver calls it: UpdateBehaviour @0x8279A680 (the
-    // crash force-in, 3->4, 4->3, 7->3), UpdateStuck @0x82766440 (the 2 s stuck -> SLOW_TURN),
-    // Determine180Turn @0x8277C758 (-> QUICK_TURN / SLOW_TURN), UpdateQuickTurn @0x8278B100
-    // (-> previous) and DoSlowTurnBehaviour @0x8277C968 (-> CRUISING). The module-side writers
-    // (OnRollingStart / AICar::OnModeStartRacing / the ADD_CAR_TO_MODE overrides) are NOT covered
-    // here -- they belong to BrnAIModule_Events.cpp.
-    // Bodied in BrnAIDriver.cpp. DELETE-WHEN rivals drive a full event start to finish.
-    void WitnessBehaviourTransition(const AIDriver* lpDriver, const AICar* lpCar,
-                                    s32 liFrom, s32 liTo, const char* lpcReason);
 
     // Pin every guest offset -- the compile gate fails if the layout ever drifts.
     static_assert(sizeof(NearbyVehicle)  == 0x70,  "NearbyVehicle is 0x70 bytes (16 x 0x70 == 0x700)");

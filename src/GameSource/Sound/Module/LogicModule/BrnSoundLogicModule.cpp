@@ -124,15 +124,6 @@ namespace
         0x0007725Au, 0x00077255u, 0x0007FC80u, 0x0004E38Cu, 0x0007B999u
     };
 
-    // [FLAG PC witness] BRN_SOUNDLOGIC_DIAG: the [snd-logic] lines (game event in -> sound
-    // message out). The env var is read once; each line family is capped.
-    const s32 KI_SOUNDLOGIC_DIAG_MAX_LINES = 32;
-
-    bool SoundLogicDiagEnabled()
-    {
-        static const bool sbEnabled = (std::getenv("BRN_SOUNDLOGIC_DIAG") != 0);
-        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
-    }
 }
 
 void SoundLogicModule::ResourcesAreReady()
@@ -431,7 +422,6 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         break;
     }
 
-
     // Console: every exit detaches the per-call buffers (vtbl+0x54).
     DetachBuffers();
 
@@ -623,11 +613,6 @@ void SoundLogicModule::ProcessGuiEvents(
                 mDispatchState.mu64Flags &= ~static_cast<u64>(2u);
             // [DIAG] NOT IN THE X360 BINARY -- the loading-screen witness the [music] lines
             // were missing: this bit is half of MusicEffect::UpdateParams' stream-pause gate.
-            if (std::getenv("BRN_MUSIC_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint
-                    << "[music] GUI 33 loading screen visible=" << static_cast<s32>(EventU8At(lpEvent, 0))
-                    << " -> dispatch flags 0x" << static_cast<s32>(mDispatchState.mu64Flags & 0xFF)
-                    << " simPausedBit " << static_cast<s32>(mDispatchState.mu8SimPausedBit) << "\n";
             break;
 
         case 88:  // GuiMuteDac: stop the playback DAC when the byte is set, start it
@@ -801,11 +786,6 @@ void SoundLogicModule::ProcessCarDataLoadingQueue(
                    lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA,
                    "lAudioCarDataLoadedEvent.GetMessageType() == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA || lAudioCarDataLoadedEvent.GetMessageType() == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA");
         // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG car-audio request witness.
-        if (std::getenv("BRN_ENGINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[car-audio] sound recv type=" << static_cast<s32>(lrEvent.meMessageType)
-                                       << " car=" << static_cast<s32>(lrEvent.miActiveRaceCarIndex)
-                                       << " asset=" << lrEvent.mAssetID
-                                       << " isPlayer=" << (lrEvent.mbIsPlayer ? 1 : 0) << "\n";
         if (lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA)
         {
             BrnSound::Vehicles::VehicleStateManager::AddEntry(
@@ -1146,16 +1126,6 @@ void SoundLogicModule::ProcessGameEventQueue(
             PostSoundMessage(mMessageQueue, 19, 2, MH::KU16_NO_DESTINATION, 4,
                              MH::E_EFFECT_TYPE_OBJECT, lrImpact);
 
-            // [FLAG PC witness] BRN_SOUNDLOGIC_DIAG, first N impacts.
-            if (SoundLogicDiagEnabled() && siDiagImpactLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
-            {
-                ++siDiagImpactLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[snd-logic] impact event 31 type=" << lrImpact.meImpactType
-                    << " aggressor=" << lrImpact.meAggressorActiveRaceCarIndex
-                    << " victim=" << lrImpact.meVictimActiveRaceCarIndex
-                    << " -> sound message 19 manager 2 effect 4\n";
-            }
         }
         liType = apEvents->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
@@ -1184,11 +1154,6 @@ void SoundLogicModule::ProcessCameraFlags(const Io::RootInputBuffer::DirectorCam
         lMessage.Construct(6, 0, 0, 0, MH::E_EFFECT_TYPE_OBJECT);
         lMessage.mData.Construct(7, "", "CodeCameraFlash", "");
         QueueSoundMessage(mMessageQueue, lMessage);
-        if (SoundLogicDiagEnabled() && siDiagCameraLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
-        {
-            ++siDiagCameraLines;
-            *CgsDev::Log::gpDebugPrint << "[snd-logic] camera JY_FLASH -> CodeCameraFlash\n";
-        }
     }
 
     if (lrState.IsFlagSet(CameraState::E_FLAG_JY_NEW_CAR_INTRO) &&
@@ -1197,11 +1162,6 @@ void SoundLogicModule::ProcessCameraFlags(const Io::RootInputBuffer::DirectorCam
         PostSoundMessage(mMessageQueue, 28, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
                          CgsSound::Playback::Name(
                              CgsSound::Playback::Name::MakeHash("JunkyardNeon")));
-        if (SoundLogicDiagEnabled() && siDiagCameraLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
-        {
-            ++siDiagCameraLines;
-            *CgsDev::Log::gpDebugPrint << "[snd-logic] camera JY_NEW_CAR_INTRO -> JunkyardNeon\n";
-        }
     }
 
     if (lrState.IsFlagSet(CameraState::E_FLAG_ONLINE_RACE_INTRO_START) &&

@@ -671,20 +671,6 @@ void HUDMessageLogic::DetectCrashes(
 
             // [DIAG] NOT IN THE X360 BINARY -- the `[hud-xcrash]` witness (BRN_MODEMGR_DIAG, first 20
             // lines): proves the offline race arm dispatched this body and what it posted.
-            static const bool sbHudCrashDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-            if (sbHudCrashDiag && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static s32 siHudCrashLines = 0;
-                if (siHudCrashLines < 20)
-                {
-                    ++siHudCrashLines;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[hud-xcrash] action 250 posted: crashed slot " << static_cast<s32>(leCrashedCarIndex)
-                        << " (event " << liCrashedRaceCarQueueIndex << " of " << liRaceCarCrashQueueLength
-                        << ", mode " << static_cast<s32>(meCurrentGameModeType) << ", hud queue length "
-                        << mActionQueue.GetLength() << ")\n";
-                }
-            }
         }
     }
 }

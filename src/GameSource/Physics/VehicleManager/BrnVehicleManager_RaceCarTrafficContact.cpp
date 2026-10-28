@@ -77,12 +77,6 @@ namespace Vehicle
 {
 namespace
 {
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     // unk_82FB8270 -- above this the contact is a CHECK, below it a SLAM.
     const f32 KF_TRAFFIC_CHECK_MAGNITUDE = 30.0f;
@@ -198,21 +192,6 @@ bool VehicleManager::ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimA
         if (lbNewHardest) { s_fCrashTestMaxImpact = lvfImpactSpeed.x; }
 
         static s32 s_iCrashTestBudget = 200;
-        if ((s_iCrashTestBudget > 0 || lbNewHardest) && lvfImpactSpeed.x >= 5.0f
-            && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            if (s_iCrashTestBudget > 0) { --s_iCrashTestBudget; }
-            *CgsDev::Log::gpDebugPrint
-                << (lbNewHardest ? "[T4-crash-test] HARDEST-SO-FAR impactSpeed=" : "[T4-crash-test] impactSpeed=")
-                << lvfImpactSpeed.x
-                << " otherMass=" << lfOtherMass << " victimMass=" << lfVictimMass
-                << " vf=" << lfVulnerability
-                << " stress=" << lfStress
-                << " vs crashSpeedMPS=" << lpVictim->GetAttribs()->mCollisionAttribs.GetCrashSpeedMPS().x
-                << " * scale=" << lvfScale.x << " = " << lfThreshold
-                << " -> " << ((lfStress > lfThreshold) ? "CRASH" : "no")
-                << "\n";
-        }
     }
     return lfStress > lfThreshold;
 }
@@ -323,15 +302,9 @@ namespace
     // every 100th. DELETE-WHEN-STABLE.
     void NotePrediction(u32 luOutcome)   // 0 miss, 1 hit, 2 memo
     {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
         static u32 s_auCounts[3] = { 0u, 0u, 0u };
         ++s_auCounts[luOutcome];
         const u32 luTotal = s_auCounts[0] + s_auCounts[1] + s_auCounts[2];
-        if (sbEnabled && CgsDev::Log::gpDebugPrint != 0 && (luTotal <= 20u || (luTotal % 100u) == 0u))
-        {
-            *CgsDev::Log::gpDebugPrint << "[predict] calls=" << luTotal << " hit=" << s_auCounts[1]
-                                       << " miss=" << s_auCounts[0] << " memo=" << s_auCounts[2] << "\n";
-        }
     }
 
     // 0x825C5D20..0x825C5DA0 (A) / 0x825C5DA4..0x825C5EAC (B).
@@ -679,56 +652,6 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
     // return 0 (:375-386 clear SLAM|CHECK for trailer/cab/uncheckable and CRASH_RACECAR for
     // network cars). The NEARMISS kind never reaches here; it is reported from
     // TestForNearMissFreakOut. DELETE-WHEN-STABLE.
-    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        // Change-keyed (race car, traffic slot, flags) with a budget, instead of the original
-        // once-per-kind latch: a run with several hits reports each hit's decision once.
-        // ⭐⭐ PLUS a running-max arm on the race car's speed (2026-09-03), for the same measured
-        // reason as [T4-crash-test]'s: in run tsev_hard1 the 80-line budget was spent on 29 mph
-        // grinding contacts and the run's 89 mph hit -- the only one a severity claim could rest on
-        // -- never printed its decision. Monotonic, so self-limiting. DELETE-WHEN-STABLE.
-        static f32 s_fDecidedMaxMPH  = 0.0f;
-        const bool lbDecidedHardest  = (lpRaceCarPhysics->GetSpeedMPH().x > s_fDecidedMaxMPH + 1.0f);
-        if (lbDecidedHardest) { s_fDecidedMaxMPH = lpRaceCarPhysics->GetSpeedMPH().x; }
-
-        static u32 s_uLastDecidedKey = 0xFFFFFFFFu;
-        static s32 s_iDecidedBudget  = 80;
-
-        const bool lbCrashRaceCar = (luImpactResponseFlags & KU_RCTIR_CRASH_RACECAR) != 0;
-        const bool lbCrash    = (luImpactResponseFlags & KU_RCTIR_CRASH_TRAFFIC) != 0;
-        const bool lbCheck    = !lbCrash && (luImpactResponseFlags & KU_RCTIR_CHECK_TRAFFIC) != 0;
-        const bool lbSlam     = !lbCrash && (luImpactResponseFlags & KU_RCTIR_SLAM_TRAFFIC) != 0;
-        const bool lbRaceOnly = !lbCrash && !lbCheck && !lbSlam && lbCrashRaceCar;
-        const bool lbNone     = (luImpactResponseFlags == 0u);
-
-        const u32 luDecidedKey = (static_cast<u32>(lu16RaceCarIndex) << 24)
-                               | (static_cast<u32>(lu16TrafficIndex) << 16)
-                               | (luImpactResponseFlags & 0xFFFFu);
-        if (lbDecidedHardest || (luDecidedKey != s_uLastDecidedKey && s_iDecidedBudget > 0))
-        {
-            s_uLastDecidedKey = luDecidedKey;
-            if (s_iDecidedBudget > 0) { --s_iDecidedBudget; }
-            *CgsDev::Log::gpDebugPrint
-                << (lbDecidedHardest ? "[T4-hit] FASTEST-SO-FAR decided outcome="
-                                     : "[T4-hit] decided outcome=")
-                << (lbCrash    ? "CRASH_TRAFFIC"
-                  : lbCheck    ? "CHECK_TRAFFIC"
-                  : lbSlam     ? "SLAM_TRAFFIC"
-                  : lbRaceOnly ? "CRASH_RACECAR_ONLY"
-                               : "NONE")
-                << ((lbCrashRaceCar && !lbRaceOnly) ? "+CRASH_RACECAR" : "")
-                << " flags=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(luImpactResponseFlags)
-                << " raceCar=" << static_cast<s32>(lu16RaceCarIndex)
-                << " trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
-                << " raceCarMPH=" << lpRaceCarPhysics->GetSpeedMPH().x
-                << " trafficCrashing=" << (lpTrafficBody->IsCrashing() ? 1 : 0);
-            // DecideOutcome writes the magnitude only on the CHECK/SLAM arm; the crash arms leave
-            // the out param untouched, so do not read it there.
-            if (lbCheck || lbSlam)
-                *CgsDev::Log::gpDebugPrint << " slamMag=" << lvfTrafficSlamMagnitude.x;
-            *CgsDev::Log::gpDebugPrint << "\n";
-        }
-    }
 
     // 0x82640244: the PLAYER-only "you checked a traffic car" 2-byte game event (type 73). Its
     // payload is the traffic car's GLOBAL entity index, not the physical slot.

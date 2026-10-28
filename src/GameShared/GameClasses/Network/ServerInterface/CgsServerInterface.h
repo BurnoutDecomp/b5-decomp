@@ -13,7 +13,6 @@
 // is the top of the DirtySock server-interface inheritance chain:
 //
 //   ServerInterfaceDirtySock           (CgsServerInterfaceDirtySock.h)
-//       <- ServerInterfaceDirtySockX360 (CgsServerInterfaceDirtySockX360.h, X360/PC leaf)
 //           <- ServerInterface          (this header)
 //
 // (confirmed by the CgsServerInterfaceDirtySockX360.h note: "CgsNetwork::Server-

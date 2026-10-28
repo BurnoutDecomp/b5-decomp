@@ -54,16 +54,6 @@ namespace
 // @0x8278F8A0 and @0x8278FE44).
 const s32 KI_SECTION_CACHE_MASK = KI_RACING_LINE_MAX_AVAILABLE_SECTIONS - 1;
 
-// AISection::mx8Flags bit 0x10 -- `lbz r11, 0x17(section) ; rlwinm r11, r11, 0, 27, 27`
-// @0x8278FE98 (that pair IS IsAJunction), and the same test @0x82775CF4 / @0x82775E14 inside
-// LookForStraightSection{Ahead,Behind}, which walk WHILE the bit is set.
-// [FLAG PC bring-up] the DWARF accessor NAME for this bit is still not pinned -- the identical
-// park stands in BrnRacingLineGenerator.cpp (KX8_SECTION_FLAG_JUNCTION) and in
-// BrnRacingLineGenerator_Extrapolate.cpp (KX8_SECTION_FLAG_TRACKBACK_STOP). The BIT is attested by
-// three independent bodies; the name is not.
-// DELETE-WHEN an AISection accessor for 0x10 is tied to a DWARF name.
-const u8 KX8_SECTION_FLAG_JUNCTION = 0x10;
-
 // flt_820C3B70 lane 0 == FLT_EPSILON: the RwMath::IsZero epsilon (`vandc` sign-clear + `vcmpgtfp`
 // + the 0x0004080C AND-reduce permute @0x82781388 and @0x82781474).
 const f32 KF_ZERO_EPSILON = 1.1920929e-07f;
@@ -337,18 +327,6 @@ void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32
 
         if (IsSimilar2D(lLineStart, lLineEnd))
         {
-            // [FLAG PC bring-up] 0x82780D0C..0x82780FF8 is a ten-line DEV LOG here, gated on bit 0
-            // of the 64-bit global at 0x82F31908 and streamed into the object at 0x82F31904 (the
-            // same unnamed AI debug-stream pair BrnAIAggression.cpp already parks). It re-fetches
-            // both section pointers and prints liIndex, lpRacingLine->mLastSectionInCache, both
-            // SectionData pointers, both mCachedSectionIndex values, and both
-            // GetSectionEntrance() / GetSectionExit() pairs -- the literals at 0x820C7478,
-            // 0x820C7454, 0x820C743C, 0x820C7424, 0x820C73F8, 0x820C73C8, 0x820C7398, 0x820C736C,
-            // 0x820C733C, 0x820C7310. Neither global is named in the export set, so the log is not
-            // wired; it cannot change the answer (the console re-tests this same condition at
-            // 0x8278100C and takes the same arm either way).
-            // DELETE-WHEN the AI debug-stream globals (0x82F31904 / 0x82F31908) are identified.
-            lrNormal.x = 1.0f;
             lrNormal.y = 0.0f;
             lrNormal.z = 0.0f;
             lrNormal.w = 0.0f;
@@ -407,16 +385,6 @@ void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32
 
     if (IsZero2D(lrNormal.x, lrNormal.y))
     {
-        // 0x82781420..0x82781454 -- the curve gave no tangent at all, so fall back to the raw
-        // chord A -> B.
-        // [FLAG PC bring-up] THE CONSOLE'S SIGN HERE IS THE OPPOSITE of the main arm above: the Y
-        // lane takes (A.x - B.x) and the X lane takes (B.y - A.y), i.e. -90 degrees where the
-        // hermite arm rotates +90. Verified from the raw words (`vsubfp v11, v10, v11` @0x82781444
-        // == A.x - B.x, `vsubfp v0, v0, v13` @0x82781448 == B.y - A.y) with the same
-        // mask-4-then-mask-8 vrlimi128 pair. Reproduced exactly as the console has it: this is a
-        // degenerate-only arm, and "correcting" it would make a rival steer to the wrong side of a
-        // zero-length curve segment relative to the console.
-        // DELETE-WHEN a console trace shows this arm being taken and its sign being wrong.
         lrNormal.y = lLineStart.x - lLineEnd.x;
         lrNormal.x = lLineEnd.y   - lLineStart.y;
     }

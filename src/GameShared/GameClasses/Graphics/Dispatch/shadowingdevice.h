@@ -1,8 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
-#include "pc/gcm/renderengine/VertexProgramState.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 
 struct RenderableMesh;                                   // renderablemesh.h
@@ -17,7 +15,6 @@ namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommand
 // headers already, so the definitions are complete where the bodies need them.
 namespace renderengine
 {
-    struct WorldInstanceDrawPC;
     class  DepthStencilState;
     class  RasterizerState;
     struct BlendMaterialState;
@@ -198,56 +195,7 @@ namespace shadow
         // (dword_8301095C = 0 / dword_83010960 = -1); reproduced as this named reset.
         static void ResetProgramShadows();
 
-        // [PC leaf] Bind everything the current technique implies: the render-state
-        // triple, the vertex/pixel programs and the technique shader constants.
-        // On the bring-up path (converted SHADERS bundle not yet loaded / constant
-        // dispatch not yet reconstructed) this binds the FLAGGED fallback world
-        // shader and per-pass default states instead -- see shadowingdevice.cpp.
-        // lpMaterialAssembly is the walk's MaterialAssembly (the serialised Material blob
-        // the technique came out of) -- the X360 reaches the same object through the
-        // register it already holds; the PC seam takes it explicitly because the sampler
-        // table (+0x0C) lives on the assembly, not the technique.
-        static void SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
-                                       const void* lpMaterialAssembly,
-                                       void* const* lppConstScratch, bool lbZOnly);
-
-        // Bind the technique's render-state triple (blend / depth-stencil / rasteriser
-        // objects reached through the technique's +0x04 MaterialState slot).
-        //
-        // lbZOnly selects the DEPTH-ONLY variant the Z-only interpreter uses
-        // (DrawRenderableMeshZOnly::Interpret @0x827F5AC8): the console binds the same
-        // depth-stencil and rasteriser objects out of the technique's MaterialState but
-        // replaces the BLEND object with one of two engine-wide Z-only blend states
-        // (dword_83010F8C / dword_83010F90, selected by the technique's alpha-test flag).
-        static void SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
-                                              bool lbZOnly);
-
-        // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two
-        // OBJECT-scope external constant blocks (ShaderTechnique +0x1C vertex, +0x50 pixel),
-        // whose sources are the head of the same scratch table. Called for every mesh, right
-        // after the technique bind, exactly where the X360 body runs them.
-        static void SetMeshObjectConstantsPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
-                                             void* const* lppConstScratch, bool lbZOnly);
-
-        // [PC bring-up shim] Retain and publish for fallback the world-view-projection carried in
-        // the PC mesh command (see CgsDispatcherCommands.cpp header note).
-        static void SetObjectTransformPC(const f32* lpWvpRows16);
-
-        // [PC leaf] Bind the mesh's index/vertex buffers + the vertex declaration
-        // for the given technique index (the X360 shadow::Device::SetMeshBuffers
-        // @0x827E68A0, whose export was not decompiled; PC condenses the Xenon
-        // stream-shadow dance into direct binds through the D3DDevice_* seam).
-        static void SetMeshBuffersPC(const RenderableMesh* lpMesh, u32 luTechniqueIndex);
-
-        // [PC leaf] Issue the mesh's indexed draw (mDrawIndexedParameters).
-        static void DrawIndexedMeshPC(const RenderableMesh* lpMesh);
-        static void DrawInstancedMeshPC(const RenderableMesh* lpMesh,
-            const renderengine::WorldInstanceDrawPC* lpInstances,
-            const CgsGraphics::MaterialTechniqueView* lpTechnique,
-            void* const* lppConstScratch, bool lbZOnly);
-
     private:
-        // [PC leaf] Bind the samplers the TECHNIQUE names: technique+0x22 binding count,
         // +0x24 index list (built by MaterialResourceType::PostFixUp) into the material
         // assembly's own 20-byte sampler array at +0x0C.
         static void BindTechniqueSamplers(const u8* lpTechnique, const u8* lpMaterialAssembly);

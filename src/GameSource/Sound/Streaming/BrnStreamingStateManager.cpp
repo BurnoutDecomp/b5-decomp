@@ -3,8 +3,6 @@
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"   // [DIAG] GetCreateParams for the witness
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
-
 // =============================================================================
 // BrnSound::Logic::Streaming::StreamingStateManager -- out-of-line bodies.
 //

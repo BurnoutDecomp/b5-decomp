@@ -10,7 +10,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include <cstring>   // std::memcpy
 
-// Xbox 360 XDK sign-in blade; the PC leaf is CgsXboxLivePC.cpp. SignIn uses (cPanes=1, dwFlags=0).
 extern "C" u32 XShowSigninUI(u32 luPanes, u32 luFlags);
 
 // CgsGui::XenonFileInputStream member functions, reconstructed from

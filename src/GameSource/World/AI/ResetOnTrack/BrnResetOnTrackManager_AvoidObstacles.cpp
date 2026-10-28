@@ -87,13 +87,8 @@ namespace
     // the first 32 hits, then every 64th call. Reads only; changes nothing it reports on.
     void NoteTrafficLegs(const NearbyVehicles* lpaNearbyVehicles, f32 lfSpeed, bool lbAheadHit, bool lbHit)
     {
-        static const bool sbTrafficDiag = (std::getenv("BRN_ROT_TRAFFIC_DIAG") != 0);
         static u32 suCalls = 0;
         static u32 suHits  = 0;
-        if (!sbTrafficDiag || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
         ++suCalls;
         if (lbHit)
         {

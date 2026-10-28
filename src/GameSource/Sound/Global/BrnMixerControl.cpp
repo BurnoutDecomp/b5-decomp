@@ -5,7 +5,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"   // [DIAG] BRN_DMIX_DIAG witness (opt-in)
 #include <cstring>
 
 // =============================================================================
@@ -110,22 +109,6 @@ void MixerControl::UpdateParams(f32)
     // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). The five inputs this control
     // publishes, as computed above, once a second: the cached profile volumes are the
     // two the sting / EA Trax channels are scaled by (map: SFXCTL st0 sfx0 slots 3/4).
-    if (CgsSound::Diag::DMixDiagEnabled())
-    {
-        static u32 suCalls = 0;
-        if ((suCalls++ % 60u) == 0u)   // ~once a second at the 60 Hz logic tick
-        {
-            CgsSound::Diag::DMixDiagPrintf(
-                "[dmix] settings call=%u MixerControl inputs: impact=%d fatal=%d paused=%d music=%d(vol %d) sfx=%d(vol %d) dmixio=%d\n",
-                suCalls,
-                lrFrame.meImpactTime.GetCurrent() == 1 ? 0 : 0x7FFF,
-                lrFrame.meFatality.GetCurrent() == E_FATAL_OFF ? 0 : 0x7FFF,
-                (lrFrame.maPaused.IsZero() || lrFrame.mbInReplay) ? 0 : 0x7FFF,
-                0x7FFF * mCachedSettings.miMusicVolume / 11, mCachedSettings.miMusicVolume,
-                0x7FFF * mCachedSettings.miSFXVolume / 11, mCachedSettings.miSFXVolume,
-                GetDMixIOPtr() ? 1 : 0);
-        }
-    }
 }
 
 void MixerControl::Notify(const CgsSound::Io::MessageHeader* apMessage)

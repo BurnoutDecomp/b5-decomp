@@ -1,5 +1,4 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnBoostEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -227,19 +226,6 @@ void BoostEffect::ProcessUpdate()
 {
     UpdateAemsBoostParameters();
     mBoostVoice.Update();
-    // FLAG PC-platform witness: boost edges and the authored control inputs.
-    if (CgsSound::PcmTrace::File()) {
-        static int lastStage = -1, lastBoost = -1;
-        const int stage = mBoostVoice.GetUpdateStage();
-        const int boost = mpPhysicsControl->GetPhysicsData().IsBoosting.GetCurrent();
-        if (stage != lastStage || boost != lastBoost) {
-            lastStage = stage; lastBoost = boost;
-            CgsSound::PcmTrace::Log("boost-input stage=%d boosting=%d speed=%.9g time=%.9g sincein=%.9g sinceout=%.9g volume=%.9g control=%.9g\n",
-                stage, boost, mfParam_AEMS_car_speed, mfParam_AEMS_time_boosting,
-                mfParam_AEMS_time_since_last_boostin, mfParam_AEMS_time_since_last_boostout,
-                mfParam_AEMS_volume, mfParam_AEMS_control);
-        }
-    }
 }
 
 void BoostEffect::UpdateAemsBoostParameters()

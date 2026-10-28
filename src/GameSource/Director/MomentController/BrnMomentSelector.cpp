@@ -46,23 +46,6 @@ namespace
     const f32 KF_PICK_ZERO = 0.0f;
     const f32 KF_PICK_ONE  = 1.0f;
 
-    // [DIAG] NOT IN THE X360 BINARY. BRN_CRASHCAM_DIAG: each move of the max-active rebalance (CC-12) -- which slot
-    // was un-inhibited or inhibited, with its description's moment type and parameter id (the crash state's two
-    // tumbling moments share type 2 and differ by parameter: 8 LEAD, 4 TRUCKING_SIDE). Reads only.
-    void BrnDiag_Rebalance(const char* lpcMove, u32 luSlot,
-                           const Array<MomentDescription, MomentSelector::KU_MAX_MOMENTS>& lrDescriptions)
-    {
-        static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
-        if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
-        const MomentDescription& lrDescription = lrDescriptions[luSlot];
-        *CgsDev::Log::gpDebugPrint
-            << "[selector] rebalance " << lpcMove << " slot " << static_cast<s32>(luSlot)
-            << " (moment type " << static_cast<s32>(lrDescription.meMomentType)
-            << " param " << static_cast<s32>(lrDescription.meMomentParamID) << ")\n";
-    }
 }
 
 // Construct --
@@ -331,11 +314,6 @@ void MomentSelector::Update(f32 lfTimestep)
         if (!sbLoggedFirstValid && muValidMoments != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
             sbLoggedFirstValid = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] [jump-ladder] MomentSelector muValidMoments="
-                << static_cast<s32>(muValidMoments)
-                << " of " << liMomentCount
-                << " candidates (frames=" << static_cast<s32>(miFramesActive) << ")\n";
         }
     }
 
@@ -364,7 +342,7 @@ void MomentSelector::Update(f32 lfTimestep)
                     break;
                 }
                 mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
-                BrnDiag_Rebalance("un-inhibit (under budget)", luMomentToUninhibit, mMomentDescriptionArray);   // [DIAG]
+   // [DIAG]
                 --luInhibitedCandidate;
                 ++luUninhibited;
                 if (luInhibitedCandidate == 0)
@@ -383,7 +361,7 @@ void MomentSelector::Update(f32 lfTimestep)
                     break;
                 }
                 mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
-                BrnDiag_Rebalance("un-inhibit (any)", luMomentToUninhibit, mMomentDescriptionArray);   // [DIAG]
+   // [DIAG]
                 ++luUninhibited;
             }
         }
@@ -403,8 +381,8 @@ void MomentSelector::Update(f32 lfTimestep)
             const bool lbPickedWorst = PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY);
             CGS_ASSERT(lbPickedWorst, "PickWorstUninhibitedMoment(&luMomentInhibit)");   // cpp:210
             mMomentHandleArray[luMomentInhibit].GetMoment()->Inhibit();
-            BrnDiag_Rebalance("swap in", luMomentToUninhibit, mMomentDescriptionArray);   // [DIAG]
-            BrnDiag_Rebalance("swap out", luMomentInhibit, mMomentDescriptionArray);      // [DIAG]
+   // [DIAG]
+      // [DIAG]
 
             --luInhibitedCandidate;
             --luConditionsNotMet;
@@ -736,14 +714,6 @@ bool MomentSelector::SelectBestLRUMomentWithExclusion(s32 liExclusion)
         if (!sbLoggedFirstSelection && CgsDev::Log::gpDebugPrint != 0)
         {
             sbLoggedFirstSelection = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] [jump-ladder] MomentSelector SELECTED moment slot="
-                << liBestMoment
-                << " type=" << static_cast<s32>(
-                       mMomentDescriptionArray[static_cast<u32>(liBestMoment)].meMomentType)
-                << " (7=PLAYER_JUMPING 8=PLAYER_STUNT 10=NEW_CAR_JOINED)"
-                << " valid=" << static_cast<s32>(muValidMoments)
-                << " excl=" << liExclusion << "\n";
         }
     }
 
@@ -822,13 +792,6 @@ bool MomentSelector::SelectBestRandomMomentWithExclusion(CgsNumeric::Random& lRa
         if (!sbLoggedFirstRandomSelection && CgsDev::Log::gpDebugPrint != 0)
         {
             sbLoggedFirstRandomSelection = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] [jump-ladder] MomentSelector SELECTED moment (RANDOM arm) slot="
-                << liSelectedMoment
-                << " type=" << static_cast<s32>(
-                       mMomentDescriptionArray[static_cast<u32>(liSelectedMoment)].meMomentType)
-                << " valid=" << static_cast<s32>(muValidMoments)
-                << " excl=" << liExclusion << "\n";
         }
     }
 

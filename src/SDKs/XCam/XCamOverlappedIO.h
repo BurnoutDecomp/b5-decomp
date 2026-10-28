@@ -107,10 +107,7 @@ int   SetEvent(HANDLE hEvent);
 // and passed to ObReferenceObjectByHandle in Setup.
 extern void* ExEventObjectType;
 
-// Pool tag baked into Setup's KAPC allocation (`lis 0x7061 ; ori 0x7350`).
-static const u32 KU_XCAM_APC_POOL_TAG = 0x70617350u; // 'pasP'
-// Size of the pooled KAPC block Setup allocates (`li r3, 0x28`).
-static const u32 KU_XCAM_APC_SIZE = 40u;
+ // 'pasP'
 // Win32 status Setup stamps into the overlapped while the request is pending.
 static const u32 KU_XCAM_IO_PENDING = 997u; // ERROR_IO_PENDING
 

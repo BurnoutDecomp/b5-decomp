@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 // ===========================================================================
 // EATech Apt -- AptFile::~AptFile.   PS3 EXTERNAL @0x812AD4 (D2), 0x80CBBC (D1).
@@ -43,23 +42,9 @@ typedef void (*AptFreeAnimationHook)(void* pDataBlock);
 extern AptFreeAnimationHook gpAptFreeAnimationHook;   // dword_1071B1F4 / off_1059C66C
 AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;
 
-// AptFile_UnresolveAnimation inlined at its call site in ~AptFile (see above).
-
-// AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to the
-// registered Apt free callback (PS3 (*dword_1071B1F4)(*(this+6))).
-// FLAG PC-platform leaf: the host free-callback boundary (gpAptFreeAnimationHook, installed by AptAux::ConstructApt).
-void AptFile_FreeLoadedBlock(void* pDataBlock, const AptFile* pFile)
-{
-    if (gpAptFreeAnimationHook != nullptr)   // installed by CgsGui::AptAux::ConstructApt
-        gpAptFreeAnimationHook(pDataBlock);
-    // The host resource can retire only after both native teardown operations.
-    const bool lbReleased = CgsResource::PCAptOwnership::Release(pFile);
-    CGS_ASSERT(lbReleased, "AptFile has no retained PC resource owner at FreeAnimation");
-}
-
 AptFile::~AptFile()
 {
-    AptLifeLog("~AptFile   ", mFileName.GetBuffer(), this);   // [aptlife] opt-in witness
+   // [aptlife] opt-in witness
 
     // 1. Unregister from the current target's loader (null-guarded: a file torn
     //    down after the target instance is destroyed sees GetTarget() null).

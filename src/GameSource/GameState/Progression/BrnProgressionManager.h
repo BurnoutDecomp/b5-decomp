@@ -455,7 +455,6 @@ public:
         mNewlyUnlockedCarID = 0;
     }
 
-
     // ADDITIVE GROW [pause-stats wave 2026-08-29] -- miMaxCarCount (+133468), read BY NAME so
     // the GUI bridge stays off the raw offset. TranslateGameActionsToGuiEvents case 180
     // @0x823EC8D4 reads it (`lwzx r7, r29, 0x69598C` == manager+133468) as the DENOMINATOR of the
@@ -855,18 +854,6 @@ public:
     // tip. DWARF :3502.
     void OnPowerParkResult(s32 liResult, bool lbBetweenOtherPlayers);
 
-    // [FLAG PC harness stimulus -- NOT IN THE X360 BINARY] one-shot Append of a single
-    // TrophyUnlockAction onto mQueueOfTrophyCarUnLocks, behind
-    // BRN_PROGRESSION_COMPLETION_SEEDTROPHY=1 (default off). It exists because nothing a 60 s
-    // harness scenario can do earns a trophy CAR (the console producer, OnTrophyUnlock ->
-    // UnlockCarFromTrophy, needs a completed trophy category), so without it
-    // tools/tests/cases/progression_completion.ps1 could not observe the queue draining. It
-    // writes NOTHING to the profile and unlocks no car -- only the transient queue moves.
-    // The value "freeroam" delays the seed until the player car has driven outside the junkyard
-    // for a few seconds of sim time (the award screen case needs the screen flow's INGAME state).
-    // DELETE-WHEN a harness scenario can complete a trophy category.
-    void DEBUG_HarnessSeedTrophyQueue(f32 lfSimTimeStep, bool lbPlayerCarActiveOutsideJunkyard);
-
     // ---- [progression wave: medals] ---------------------------------------------------------
     // THE LICENCE / RANK-UP CHAIN. Bodies in BrnProgressionManager_Medals.cpp; the console homes
     // all six in BrnProgressionManager.cpp, which is why that partfile fires its asserts with
@@ -964,20 +951,6 @@ private:
     // Every Profile-facing bodied function (IsCarUnlocked / RepairUnlockedVehicle / SetRoadRule* /
     // AreRoadRulesAvailable's medal read) goes through this named member.
     Profile mProfile;                                  // X360 +0x170
-
-    // [FLAG PC bring-up, 2026-08-24 deform-land wave] once-latch for the Profile::Construct
-    // boot seam in Prepare2 (the console's outer Construct/Prepare pair own that call; neither
-    // outer is reconstructed yet -- see the Prepare2 banner). Not a console member.
-    bool mbProfileConstructed = false;
-
-    // [FLAG PC bring-up, 2026-08-27 D1 profile-event-list wave] once-latch for the
-    // UnlockToProgressionRank(0) boot seam in Prepare2. The console reaches that call through
-    // PreWorldUpdate @0x823A4F68 -> (medals-dirty byte +133491) -> UpdatePlayerMedals
-    // @0x8239FE50. PreWorldUpdate landed 2026-09-06 (issue #10) but its medals arm is PARKED
-    // because UpdatePlayerMedals is still not reconstructed, so the rank-0 unlock is driven from
-    // the same Prepare2 seam that already owns Profile::Construct. Not a console member.
-    // DELETE-WHEN UpdatePlayerMedals lands and PreWorldUpdate's medals arm calls it.
-    bool mbInitialRankUnlockDone = false;
 
     // ⭐ X360 +133128 (0x20808) -- THE TROPHY-CAR UNLOCK QUEUE, named by the console's own assert
     // strings: SendTrophyUnlockUpdate @0x823892B8 fires

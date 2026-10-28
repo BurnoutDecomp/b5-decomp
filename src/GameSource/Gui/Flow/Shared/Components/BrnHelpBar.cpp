@@ -6,8 +6,6 @@
 // output throughout. The constructor is compiler-generated (member construction only).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnHelpBar.h"
-#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: optional slot-only receipts
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h" // ObjectController
@@ -198,8 +196,6 @@ namespace BrnGui
     void HelpBar::Update(CgsGui::AnimChannelData::Time lTime)
     {
         UpdateItemInfo();
-        // FLAG PC diagnostic: count returns from the actual calls, scoped by the caller.
-        const bool lbTrace = CreateMatchTracePC::ObservingHelpBar(this);
         s32 liTraceCompleted = 0;
         for (s32 liItem = 0; liItem < miNumUsedItems; ++liItem)
         {
@@ -213,8 +209,6 @@ namespace BrnGui
             bool lbWidthsReady = miNumUsedItems > 0 && miNumUsedItems <= KI_MAX_HELPITEMS;
             for (s32 liItem = 0; lbWidthsReady && liItem < miNumUsedItems; ++liItem)
                 lbWidthsReady = mafItemWidths[liItem] != KF_ITEMWIDTH_INVALID;
-            CreateMatchTracePC::HelpBarCompleted(lTime, mCurrentTime, miNumUsedItems,
-                liTraceCompleted, mbItemInfoValid, lbWidthsReady);
         }
     }
 

@@ -21,8 +21,6 @@
 // ===========================================================================
 
 #include <new>   // placement new (the TextFormat copy-ctor into a pool block)
-#include "SDKs/EATech/include/Apt/AptTextLayoutDiagnosticsPC.h" // bounded, default-off help-label witness
-
 #include "SDKs/EATech/include/Apt/AptCIHNativeFunctionHelper.h"
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // AptCIH (the scene node)
@@ -75,7 +73,7 @@
 //     defined below (PC host-callback boundary leaf).
 // ---------------------------------------------------------------------------
 extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
-extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
+             // dword_8324E8AC
 
 // ---------------------------------------------------------------------------
 // The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
@@ -249,14 +247,6 @@ extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the AS V
 AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
-    // FLAG PC diagnostic: observe only the two authored help-item labels. The
-    // native XB1 goto body14084A610 supplies the same receiver/hash/frame chain.
-    const char* diagnosticLabel = nullptr;
-    const AptMovie* diagnosticMovie = nullptr;
-    const AptCharacter* diagnosticCharacter = nullptr;
-    const AptValue* diagnosticHit = nullptr;
-    int diagnosticResolvedFrame = -1;
-    int diagnosticOldFrame = -1;
     if (nArgCount >= 1)
     {
         // The operand-stack top (the frame number or label).
@@ -295,20 +285,6 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                         : nullptr;
                 const int nLabelFrame = pHit ? pHit->toInteger() : -1;
                 nFrame = nLabelFrame + 1;
-                if (AptTextLayoutDiagnosticsPC::Enabled() && pStr != nullptr)
-                {
-                    const char* label = pStr->GetInternalString()->GetBuffer();
-                    if (std::strcmp(label, "IconOnLeft") == 0 || std::strcmp(label, "IconOnRight") == 0)
-                    {
-                        diagnosticLabel = label;
-                        diagnosticMovie = pMovie;
-                        diagnosticCharacter = pChar;
-                        diagnosticHit = pHit;
-                        diagnosticResolvedFrame = nLabelFrame;
-                        if (pInst->GetTypeTag() == 5u || pInst->GetTypeTag() == 9u)
-                            diagnosticOldFrame = static_cast<AptCharacterSpriteInstBase*>(pInst)->mnGotoFrame;
-                    }
-                }
             }
             else
             {
@@ -334,90 +310,15 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             }
         }
     }
-    if (diagnosticLabel != nullptr && CgsDev::Log::gpDebugPrint != nullptr)
-    {
-        static unsigned diagnosticRows = 0;
-        if (diagnosticRows < 64u)
-        {
-            ++diagnosticRows;
-            const AptCharacterInst* currentInst = pNode->GetCharacterInst();
-            const unsigned currentTag = currentInst->GetTypeTag();
-            const int currentFrame = (currentTag == 5u || currentTag == 9u)
-                ? static_cast<const AptCharacterSpriteInstBase*>(currentInst)->mnGotoFrame : -1;
-            const AptFile* file = diagnosticCharacter->mpAnimationFile;
-            char line[768];
-            std::snprintf(line,sizeof(line),
-                "[apt-text-seek] label='%s' receiver=%p name='%s' valueType=%d defined=%d instTag=%u character=%p charTag=%d root=%p file=%p movieName='%s' movie=%p frames=%d labelHash=%p hit=%p hitType=%d hitDefined=%d resolved=%d before=%d after=%d play=%d",
-                diagnosticLabel,static_cast<void*>(pNode),pNode->GetInstanceName().GetBuffer(),
-                static_cast<int>(pNode->getVtblIndex()),static_cast<int>(pNode->getIsDefined()),currentTag,
-                static_cast<const void*>(diagnosticCharacter),static_cast<int>(diagnosticCharacter->mnType),
-                static_cast<const void*>(diagnosticCharacter->mpFixupLink),static_cast<const void*>(file),
-                file ? file->mFileName.GetBuffer() : "",static_cast<const void*>(diagnosticMovie),diagnosticMovie->mnFrameCount,
-                static_cast<const void*>(diagnosticMovie->mpLabelHash),static_cast<const void*>(diagnosticHit),
-                diagnosticHit ? static_cast<int>(diagnosticHit->getVtblIndex()) : -1,
-                diagnosticHit ? static_cast<int>(diagnosticHit->getIsDefined()) : 0,
-                diagnosticResolvedFrame,diagnosticOldFrame,currentFrame,bPlay);
-            *CgsDev::Log::gpDebugPrint << line << "\n";
-        }
-    }
     return gpUndefinedValue;   // off_8324D814
 }
 
-// ---------------------------------------------------------------------------
-// AptHook_GetBytesTotal (HOMED 2026-07-02, retiring the return-0 stub). The
-// X360 dispatches the host gAptFuncs.pfnGetBytesTotal slot (+0x94,
-// dword_8324E8AC) -- the loader-progress query behind AS getBytesTotal().
-// The trailing (int, double) shim args were call-thunk artifacts; the typed
-// slot takes (path, mode). Null slot answers 0 -- the un-installed-host boundary.
-// FLAG PC-platform leaf: the host loader-progress callback boundary (gAptFuncs.pfnGetBytesTotal, +0x94).
-int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
-{
-    if (gAptFuncs.pfnGetBytesTotal != nullptr)
-        return gAptFuncs.pfnGetBytesTotal(pcFilePath,
-                                          static_cast<AptGetBytesEnum>(a2));
-    return 0;
-}
-
-// (AptLoader_LoadX360 DELETED 2026-07-10: the by-value-return wrapper over the
-// homed AptLoader::Load had no remaining callers -- every call site invokes the
-// member `pLoader->Load(name)` directly.)
-
-// AptValue_EmbeddedNativeHash inlined at its call site (localToGlobal).
-
-// (The recursive display-path builder behind AptActionInterpreter::getName
-// @0x82AF75C8 is the single sub_82AF7400 recon in
-// AptActionInterpreterInterpHelpers.cpp -- the duplicate this TU carried (which
-// lacked the console's synthesised-name write-back into the parent hash) was
-// RETIRED 2026-07-10; callers use the member gAptActionInterpreter.getName.)
-
-// ---------------------------------------------------------------------------
-// AptShapeHitTest (HOMED 2026-07-02, retiring the return-0 stub). The
-// X360 sMethod_hitTest's shape-precise arm @0x82AED868 is a HOST-CALLBACK
-// dispatch: `gAptFuncs.pfnPointHitTest(x, y, node)` (dword_8324E8A4 == the
-// user-function table +0x8C; PPC f1/f2 + r5 == the (float, float, clip) C
-// signature). The engine itself has no shape rasterisation -- precise hit
-// testing is the host renderer's job. FLAG PC-platform leaf: the host
-// point-hit-test callback boundary (gAptFuncs.pfnPointHitTest) -- the X360
-// calls the slot unguarded (CgsAptAux always installs the full table); our
-// bring-up has not installed a point-hit-test callback yet, so a null slot
-// answers 0 (miss) -- the honest un-installed-host state, same convention as
-// the other un-wired gAptFuncs families.
-// ---------------------------------------------------------------------------
-extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
+   // dword_8324E818 (CgsAptAux.cpp)
 
 int AptShapeHitTest(AptValue* pNode, float fX, float fY)
 {
-    if (gAptFuncs.pfnPointHitTest != nullptr)
-    {
-        // FLAG PC-platform leaf (x64 handle width): AptAssetMoiveClip is the DWARF
-        // 'int' handle -- console-width for the clip pointer. No PC host installs
-        // this slot yet; when one does, the typedef must widen (intptr_t) with the
-        // host. The truncating cast documents the boundary rather than hiding it.
-        return gAptFuncs.pfnPointHitTest(
-            fX, fY,
-            static_cast<AptAssetMoiveClip>(reinterpret_cast<uintptr_t>(pNode)));
-    }
-    return 0;
+    return gAptFuncs.pfnPointHitTest(fX, fY,
+        static_cast<AptAssetMoiveClip>(reinterpret_cast<uintptr_t>(pNode)));
 }
 
 // ---------------------------------------------------------------------------
@@ -634,11 +535,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
 // ---------------------------------------------------------------------------
 extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);   // sub_82AE2C58 (AptCIHBehaviour.cpp) -- the shared world-bounds helper; the AS clip AptValue* IS an AptCIH*
 
-// The shape-precise point hit-test (X360 indirect through dword_8324E8A4) -- "is
-// local point (x,y) inside the node's drawn shape?". HOMED above in this TU as the
-// gAptFuncs.pfnPointHitTest host-callback dispatch (PC-platform leaf boundary),
-// preserving the (node, x, y) call shape.
-extern int AptShapeHitTest(AptValue* pNode, float fX, float fY);   // (*dword_8324E8A4)
+   // (*dword_8324E8A4)
 
 // Local: the X360 hitTest receiver/arg type gate -- value type 12 (CharacterInst
 // handle) OR 37 (CIHNone), WITHOUT the defined bit (the asm tests only meValueType,
@@ -1031,8 +928,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getBytesTotal(AptValue* pContext, 
     }
 
     float fBytesTotal = 0.0f;
-    if (pInst->GetTypeTag() == 9)
-        fBytesTotal = static_cast<float>(AptHook_GetBytesTotal(lFilePath.GetBuffer(), 0, 0.0));
+    if (IsClipHandleOrCIHNone(pNode) && pInst->GetTypeTag() == 9)
+        fBytesTotal = static_cast<float>(gAptFuncs.pfnGetBytesTotal(
+            lFilePath.GetBuffer(), static_cast<AptGetBytesEnum>(0)));
 
     return AptFloat::Create(fBytesTotal);
 }

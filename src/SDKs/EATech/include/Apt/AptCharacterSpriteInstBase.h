@@ -109,13 +109,6 @@ struct AptCharacterSpriteInstBase : public AptCharacterInst
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptCharacterSpriteInstBase, mnGotoFrame)         == 0x20, "x64 ctor: mov dword ptr [rbx+20h],-1 @0x140825A00");
-        static_assert(offsetof(AptCharacterSpriteInstBase, mnClipActionFlags)   == 0x24, "x64 HasClipAction: mov eax,[rcx+24h] @0x140839F70");
-        static_assert(offsetof(AptCharacterSpriteInstBase, mpClipEventHandlers) == 0x28, "x64 ctor: qword zero at [rbx+28h] @0x140825A00");
-        static_assert(offsetof(AptCharacterSpriteInstBase, mDisplayList)        == 0x30, "x64 ctor: head node at [rbx+30h]; dtor destroys this+0x30 @0x1408287C0");
-        static_assert(offsetof(AptCharacterSpriteInstBase, mnLastActionFrame)   == 0x38, "x64 ctor: mov [rbx+38h],esi @0x140825A00");
-        static_assert(sizeof(AptCharacterSpriteInstBase) == 0x40, "x64: factory type-5 Allocate(0x40) @0x140835410; deleting dtor Deallocate(0x40) @0x14082B800");
-        static_assert(sizeof(AptDisplayList) == 8, "x64: display-list head-node pool alloc/free size 8");
     }
 
     // @0x82AFF820 -- construct a sprite/movie-clip instance over pCharacter:

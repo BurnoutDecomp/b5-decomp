@@ -14,7 +14,6 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"         // LobbyNameCmp (RecEvent 245)
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"   // GuiEventNetworkGameParams (RecEvent 257)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData (GetOnlinePlayerColourFromARCI)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"  // BrnNetHarnessPC::WitnessTag (the [netui] roster line)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 // (GuiCache::GetNumEventStarts is homed in the partfile BrnGuiCache_wJ_01.cpp.)
 
@@ -282,7 +281,6 @@ namespace BrnGui
         mSku = CgsLanguage::E_SKU_DEFAULT;
         mLanguage = CgsLanguage::E_LANGUAGE_INVALID;
 
-
         mStateLoadingHelper.Construct();
         // X360 0x82505860 mid-body: BrnGui::OptionsDataProfile::Construct(this + 47224)
         // -- default the embedded player-options profile (brightness/contrast 50, the
@@ -547,14 +545,6 @@ namespace BrnGui
                 lpResource = *reinterpret_cast<void* const*>(
                     lpEvent->mResourceHandle.mpResourceMemory);
             }
-            // FLAG PC-platform guard: the console always has the resource, so this asserts
-            // non-null. On PC a MISSING (un-converted) GUI bundle -- e.g. the freeburn
-            // HUD's sat-nav map/mask textures -- completes the load with a null handle
-            // (see GuiResourceModule::ParseResource's matching PC guard). The watcher
-            // still advances the slot to LOADED so the state's EnsureResourcesAreLoaded
-            // count converges; the null resource is simply never rendered.
-            CGS_ASSERT(lpResource != 0 || lpEvent->mResourceHandle.mpResourceMemory == 0,
-                       "Invalid resource pointer");
 
             const bool lbWasCancelled = lrInfo.meState == E_STATE_LOAD_CANCELLED;
             lrInfo.meState = E_STATE_LOADED;
@@ -865,27 +855,7 @@ namespace BrnGui
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] which expected apt components are still
         // unloaded on the SCREEN flow. BRN_SATNAV_DIAG only, every 300th false answer.
         {
-            static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
             static s32 siTick = 0;
-            if (sbDiag && leFlow == E_GUIFLOW_SCREEN && CgsDev::Log::gpDebugPrint != 0)
-            {
-                u32 luMissing = 0;
-                for (u32 lu = 0; lu < lrWatch.muNumberOfComponentsToWatch; ++lu)
-                    if (!lrWatch.mabComponentsLoaded[lu]) ++luMissing;
-                if (luMissing != 0 && (siTick++ % 300) == 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[cnav-diag] SCREEN apt components: " << luMissing
-                        << " of " << lrWatch.muNumberOfComponentsToWatch << " still unloaded; hashes:";
-                    u32 luShown = 0;
-                    for (u32 lu = 0; lu < lrWatch.muNumberOfComponentsToWatch && luShown < 16; ++lu)
-                        if (!lrWatch.mabComponentsLoaded[lu])
-                        {
-                            ++luShown;
-                            *CgsDev::Log::gpDebugPrint << " " << lrWatch.mauComponentsToWatchIds[lu];
-                        }
-                    *CgsDev::Log::gpDebugPrint << "\n";
-                }
-            }
         }
         for (u32 luComponent = 0; luComponent < lrWatch.muNumberOfComponentsToWatch; ++luComponent)
         {
@@ -1030,14 +1000,7 @@ namespace BrnGui
 
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every ONLOAD name + hash, first 400.
         {
-            static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
             static s32 siSeen = 0;
-            if (sbDiag && siSeen < 400 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siSeen;
-                *CgsDev::Log::gpDebugPrint << "[cnav-diag] ONLOAD '" << (lpEvent->mpacComponentName ? lpEvent->mpacComponentName : "<null>")
-                    << "' hash " << lpEvent->muComponentNameHash << "\n";
-            }
         }
 
         for (u32 luFlow = 0; luFlow < 3; ++luFlow)
@@ -1290,8 +1253,6 @@ namespace BrnGui
                       "id-245 count @+0x9C0");
         static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, macGameName) == 0x9C4,
                       "id-245 game name @+0x9C4");
-        static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, mbLocalPlayerIsHost) == 0x9E8,
-                      "id-245 host byte @+0x9E8");
         static_assert(sizeof(GuiEventNetworkPlayerStatusPayload) == 2544,
                       "AddGuiEvent<GuiEventNetworkPlayerStatus> posts 2544 bytes (id 245)");
 
@@ -1372,10 +1333,6 @@ namespace BrnGui
             CGS_ASSERT(lCarId != 0, "lpChangeCarEvent->mCarId != kCGSID_NULL");
             mLocalPlayerCarId = lCarId;
             mLocalPlayerOriginalCarId = GetOriginalCarId(lCarId);
-            // FLAG PC-platform witness: the whole car IDs reaching the map cache.
-            if (std::getenv("BRN_SATNAV_DIAG") && CgsDev::Log::gpDebugPrint)
-                *CgsDev::Log::gpDebugPrint << "[burn-route] cache car=" << static_cast<u64>(lCarId)
-                    << " original=" << static_cast<u64>(mLocalPlayerOriginalCarId) << "\n";
             break;
         }
         // ARTIST8250F154..F16C: copy all1744 bytes, then enter event colouring.
@@ -1383,8 +1340,6 @@ namespace BrnGui
         {
             mPreRaceData = *reinterpret_cast<const GuiEventPreRaceMessages*>(lpEvent);
             mbInEventColouringGate = true;
-            // FLAG PC diagnostic: bounded witness of the original cache handoff.
-            static const bool sbPreRaceDiag = (getenv("BRN_SATNAV_DIAG") != 0);
             static s32 siPreRaceRows = 0;
             if (sbPreRaceDiag && siPreRaceRows++ < 8 && CgsDev::Log::gpDebugPrint != 0)
                 *CgsDev::Log::gpDebugPrint << "[cnav-prerace] cache159 messages="
@@ -1566,17 +1521,6 @@ namespace BrnGui
                     case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PAINT_SHOP:   // 11
                     case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_TIRE_SHOP:    // 12
                     {
-                        // The console's arm, in order:
-                        //   * the capacity assert against 46 (non-gating there);
-                        //   * DEDUPE on the whole 64-bit CgsID (record +0x10) against every
-                        //     stored row -- a hit skips the record;
-                        //   * the 48-byte copy into maDriveThroughInfo[count];
-                        //   * the 15-entry OVERRIDE walk: each canned id against the record's
-                        //     CgsID; on a match the stored row's position LANE (+0x00) is
-                        //     replaced by the canned Vector4 (the tables below);
-                        //   * ++miNumDriveThroughs.
-                        // ⚠ [FLAG PC bring-up] the capacity assert GATES here: the console's
-                        // record array is 46 deep and it writes the 47th anyway; ours stops.
                         typedef BrnGui::GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
                         const s32 KI_MAX_DRIVE_THRUS_IN_THE_WORLD =
                             static_cast<s32>(sizeof(maDriveThroughInfo) / sizeof(maDriveThroughInfo[0]));   // 46
@@ -2039,8 +1983,6 @@ namespace BrnGui
                 {
                     siLastNumPlayers = lpNetworkPlayerStatus->miNumPlayers;
                     sbLastIsHost     = mbIsOnlineHost;
-                    BrnNetHarnessPC::WitnessTag("netui", "cache-status", "n=%d host=%d game=%.36s",
-                                                siLastNumPlayers, mbIsOnlineHost ? 1 : 0, macOnlineGameName);
                 }
             }
             break;
@@ -2620,8 +2562,6 @@ namespace BrnGui
                 {
                     maDriveThroughInfo[liDriveThrough].SetHiddenDriveThru(true);
 
-                    // [FLAG PC witness] BRN_FREEROAM_DIAG, first 8 hides.
-                    static const bool sbDiag = (getenv("BRN_FREEROAM_DIAG") != 0);
                     static s32 siLinesLeft = 8;
                     if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
                     {
@@ -2655,8 +2595,6 @@ namespace BrnGui
     void GuiCache::AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash)
     {
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every SCREEN-flow expectation, in order.
-        if (leFlow == E_GUIFLOW_SCREEN && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect hash " << luComponentNameHash << " (by hash)\n";
         mStateLoadingHelper.AppendExpectedAptComponent(leFlow, luComponentNameHash);
     }
 
@@ -2670,8 +2608,6 @@ namespace BrnGui
             const_cast<char*>(lpacComponentName),
             static_cast<int>(std::strlen(lpacComponentName)));
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every SCREEN-flow expectation, in order.
-        if (leFlow == E_GUIFLOW_SCREEN && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect hash " << luComponentNameHash << " name '" << lpacComponentName << "'\n";
         mStateLoadingHelper.AppendExpectedAptComponent(leFlow, luComponentNameHash);
     }
 
@@ -3622,7 +3558,6 @@ namespace BrnGui
 // @0x824F65E0 pins the display-record stride, the mEvents 7700-byte storage / 175 cap
 // pins the preset stride 0x2C).
 
-
 namespace BrnGui
 {
 
@@ -3726,15 +3661,6 @@ void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
          GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
 {
     CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3586
-
-    // [FLAG PC bring-up guard] the trigger-data resource can be acquired-but-unbound on this
-    // build, and both asserts here are non-gating, so the two derefs below are guarded rather
-    // than turned into a crash; the caller's record is left exactly as it staged it.
-    // DELETE-WHEN asserts gate / the trigger-data landmark table is populated on this build.
-    if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
-    {
-        return;
-    }
 
     const BrnTrigger::Landmark* lpLandmark =
         mpWorldDataController->GetOnlineLandmarkInfoAtPositionInList(liIndex);
@@ -3870,21 +3796,8 @@ u32 PresetEvent::GetEventId() const
 // liNumActiveIcons` test stays false on -1 exactly as it did on 0 -- no spurious chirp.
 // =================================================================================================
 
-
 namespace
 {
-    // [FLAG PC bring-up guard, wave J] LOG-ONCE report that the landmark table is not
-    // resident. WorldDataController::GetLandmarkInfoFrom{Index,ID} go STRAIGHT through
-    // `mpTriggerData->...` with no null path of their own (their owning header says so at
-    // BrnGuiWorldDataController.h:140-149), and stage 2/3's "TriggerData" acquire is ANSWERED
-    // with a null memory pointer when Triggers.dat is not yet resident -- so an unbound
-    // ResourcePtr faults inside the container's operator->, not at a `== 0` test. The two
-    // fills below therefore ask HasTriggerData() first. The console has no such test because
-    // on the console the resource is always there.
-    // ⚠️ The test is HasMemoryResource()-shaped ON PURPOSE: `mpTriggerData == 0` is NOT the
-    // same question and would pass on an unbound-but-non-null ResourcePtr.
-    // DELETE-WHEN the TriggerData acquire reports a miss as a miss (the same DELETE-WHEN the
-    // sibling guard in WorldDataController::GetEventInfoFromEventId already carries).
     void LogAbsentTriggerDataOnce(const char* lpacCaller)
     {
         static bool sbLogged = false;
@@ -3895,21 +3808,9 @@ namespace
         sbLogged = true;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[guicache-landmark-fill] " << lpacCaller
-                << ": WorldDataController has no resident TriggerData -- the landmark record is "
-                   "left as the caller staged it [FLAG PC bring-up]\n";
         }
     }
 
-    // [FLAG PC bring-up guard, 2026-09-07] LOG-ONCE report that GuiCache::mpGuiTracker
-    // (X360 cache+0x4054) is not bound. The console derefs it straight after its non-gating
-    // "Invalid tracker pointer" assert; nothing in this tree WRITES that member yet, so an
-    // unguarded deref would turn a reported miss into a crash on the offline map / fly-by
-    // path. The three publishes below therefore test it and report the absence once, rather
-    // than dropping the record silently.
-    // DELETE-WHEN GuiCache::mpGuiTracker is bound at construction (that is the ONE remaining
-    // piece between here and a drawn route line -- the RecEvent side is real).
     void LogAbsentGuiTrackerOnce(const char* lpacProducer)
     {
         static bool sbLogged = false;
@@ -3920,38 +3821,9 @@ namespace
         sbLogged = true;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[guicache-tracker] " << lpacProducer
-                << ": GuiCache::mpGuiTracker is not bound -- the GuiEventSetTracker record was "
-                   "built but there is no GuiTracker to hand it to, so the sat-nav route line "
-                   "stays empty [FLAG PC bring-up]\n";
         }
     }
 
-    // [FLAG PC witness -- NOT IN THE X360 BINARY] `[satnav-tracker] <producer> -> RecEvent(232)
-    // items=<n> current=<i> entireRoute=<0|1>`. It exists so the conductor can prove the three
-    // publishers now reach BrnGui::GuiTracker::RecEvent (they used to build the record and drop
-    // it). Opt-in via BRN_SATNAV_DIAG and budgeted to the first 32 publishes a run, the same
-    // shape as the `[satnav-arrow]` witness in BrnMapIconManager.cpp.
-    // DELETE-WHEN the sat-nav route line has a standing runtime test.
-    void LogTrackerPublishWitness(const char* lpacProducer,
-                                  const BrnGui::GuiEventSetTracker& lrSetTrackerEvent)
-    {
-        static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
-        static s32 siLinesLeft = 32;
-
-        if (!sbDiag || siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
-        --siLinesLeft;
-
-        *CgsDev::Log::gpDebugPrint
-            << "[satnav-tracker] " << lpacProducer << " -> GuiTracker::RecEvent(232) items="
-            << lrSetTrackerEvent.miNumTrackedItems
-            << " current=" << lrSetTrackerEvent.miCurrentlyTrackedIndex
-            << " entireRoute=" << (lrSetTrackerEvent.mbIsEntireRoute ? 1 : 0) << "\n";
-    }
 }
 
 namespace BrnGui
@@ -4001,9 +3873,6 @@ namespace BrnGui
                                                   u32 luCount)
     {
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the list form, first/last hash.
-        if (leFlow == E_GUIFLOW_SCREEN && luCount != 0 && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect list of " << luCount << " hashes " << lpauComponentNameHashes[0]
-                << " .. " << lpauComponentNameHashes[luCount - 1] << "\n";
         mStateLoadingHelper.AppendExpectedAptComponentList(leFlow, lpauComponentNameHashes,
                                                            luCount);
     }
@@ -4079,7 +3948,6 @@ namespace BrnGui
     {
         CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3620
 
-        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
         if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
         {
             LogAbsentTriggerDataOnce("GuiCache::GetLandmarkInfoFromIndex");
@@ -4089,18 +3957,6 @@ namespace BrnGui
         const BrnTrigger::Landmark* lpLandmark =
             mpWorldDataController->GetLandmarkInfoFromIndex(lLandmarkIndex);
         CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3623
-
-        // [FLAG PC bring-up guard, wave J] The console derefs lpLandmark unconditionally --
-        // its assert is a report, not a gate, and this build's asserts are non-gating. The
-        // lookup CAN answer NULL here (WorldDataController::GetLandmarkInfoFromIndex returns
-        // NULL on a miss, and its own diagnostic has already fired), so a null deref would
-        // turn a reported miss into a crash. The caller's record is left exactly as it staged
-        // it, which is what the console's non-fatal path effectively leaves too.
-        // DELETE-WHEN the trigger-data landmark table is populated on this build.
-        if (lpLandmark == 0)
-        {
-            return lpOutIconInfo;
-        }
 
         // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
         // then one `stvx128` -- the whole 16-byte lane in one store.
@@ -4138,7 +3994,6 @@ namespace BrnGui
     {
         CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3654
 
-        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
         if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
         {
             LogAbsentTriggerDataOnce("GuiCache::GetLandmarkInfoFromID");
@@ -4148,12 +4003,6 @@ namespace BrnGui
         const BrnTrigger::Landmark* lpLandmark =
             mpWorldDataController->GetLandmarkInfoFromID(lLandmarkID);
         CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3657
-
-        // [FLAG PC bring-up guard, wave J] -- same guard, same reason, as the index sibling.
-        if (lpLandmark == 0)
-        {
-            return;
-        }
 
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
         const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
@@ -4311,15 +4160,6 @@ namespace BrnGui
     {
         CGS_ASSERT(lpEvent != 0, "lpEvent");                                // cpp:3947
 
-        // [FLAG PC bring-up guard, wave J] the console derefs immediately; the assert is
-        // non-gating here. Only RefreshMapState's online arm reaches this, and it hands a
-        // pointer into the cache's own +0xA800 mirror, so a null is not expected -- the guard
-        // exists only so a non-gating assert cannot become a crash. DELETE-WHEN asserts gate.
-        if (lpEvent == 0)
-        {
-            return;
-        }
-
         const u32 luNumLandmarks = static_cast<u32>(lpEvent->GetNumLandmarks());
 
         GuiEventSetTracker lSetTrackerEvent;
@@ -4441,9 +4281,6 @@ namespace BrnGui
     {
         CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");    // BrnGuiCache.h:2324
 
-        // [FLAG PC bring-up guard] the console derefs straight through; the assert above is
-        // non-gating here. -1 is the console's own no-event answer, so this returns exactly
-        // what a missing event returns rather than inventing a third outcome.
         if (mpWorldDataController == 0)
         {
             return -1;
@@ -4752,17 +4589,6 @@ namespace BrnGui
                        "::KI_INVALID_BITINDEX");                               // cpp:3703
         }
 
-        // [FLAG PC bring-up guard] the walk answers KI_INVALID_BITINDEX whenever the mask is
-        // empty -- which is every offline session, because nothing posts the preset-races
-        // event there -- and the asserts above are non-gating in this build, so without this
-        // the -1 would reach the list indexer. The caller's record is left exactly as it
-        // staged it, which is what the non-fatal path effectively leaves too.
-        // DELETE-WHEN asserts gate.
-        if (liSetBit == KI_INVALID_BITINDEX)
-        {
-            return;
-        }
-
         const PresetEvent* lpEventWithUniqueFinish = GetPresetEvent(liSetBit);
         CGS_ASSERT(lpEventWithUniqueFinish != 0, "lpEventWithUniqueFinish");    // cpp:3708
         if (lpEventWithUniqueFinish == 0)
@@ -4774,7 +4600,6 @@ namespace BrnGui
             lpEventWithUniqueFinish->GetLandmark(
                 lpEventWithUniqueFinish->GetNumLandmarks() - 1);
 
-        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
         if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
         {
             LogAbsentTriggerDataOnce("GuiCache::GetOnlineFinishPoint");
@@ -4785,10 +4610,6 @@ namespace BrnGui
             mpWorldDataController->GetLandmarkInfoFromIndex(lFinishLandmarkIndex);
         CGS_ASSERT(lpLandmark != 0, "lpLandmark");                             // cpp:3711
 
-        // [FLAG PC bring-up guard, wave J] same reasoning as GetLandmarkInfoFromIndex above:
-        // the lookup can answer NULL on a miss and has already reported it, and the assert is
-        // non-gating here, so the deref is guarded rather than turned into a crash.
-        // DELETE-WHEN the trigger-data landmark table is populated on this build.
         if (lpLandmark == 0)
         {
             return;
@@ -4936,15 +4757,6 @@ namespace BrnGui
         CGS_ASSERT(lpEvent != 0,
                    "Invalid event in OnlinePlay::HandleAllPreSetRacesEvent");   // cpp:4095
 
-        // [FLAG PC bring-up guard] the console derefs immediately after that assert, which
-        // is non-gating here, so a null payload would turn a reported miss into a crash on
-        // the map-event exit path. Guard only; no invented behaviour.
-        // DELETE-WHEN asserts gate.
-        if (lpEvent == 0)
-        {
-            return;
-        }
-
         std::memcpy(maEventsStorage, lpEvent, sizeof(maEventsStorage));
         std::memcpy(&mEventsCtorSentinel,
                     reinterpret_cast<const u8*>(lpEvent) + sizeof(maEventsStorage),
@@ -5079,7 +4891,6 @@ namespace BrnGui
 //
 // Homed in this partfile rather than BrnGuiCache.cpp purely for wave hygiene (that file
 // is another agent's hot file); there is no include clash to work around.
-
 
 namespace BrnGui
 {

@@ -121,16 +121,6 @@ namespace ParticleIO
         typedef BrnResource::GameDataIO::RequestInterface<4096> EffectsModuleResourceQueue;
         typedef EffectsModuleResourceQueue                      ResourceRequestInterface;
 
-        // ParticleModuleIO.h:117. X360-attested by the CreateIOBuffer<PrepareOutputBuffer>
-        // instantiation @0x8228E4F0, which inlines it whole after `Alloc(this, 4116, name)`:
-        //     *v8 = 1;                                       -- IOBuffer::Construct
-        //     VariableEventQueue<4096,16>::Construct(v8 + 4);
-        //     VariableEventQueue<4096,16>::Clear(v8 + 4);
-        // +4 is mResourceRequestInterface, and Construct-then-Clear on its embedded queue IS
-        // RequestInterface<N>::Construct (BrnGameDataRequestQueue.h) -- so this is spelled by
-        // name rather than by offset.
-        // FLAG PC: homed inline here instead of the (still unwritten) ParticleModuleIO.cpp,
-        // because CreateIOBuffer<T> now REFERENCES T::Construct at every instantiation site.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();

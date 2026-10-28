@@ -136,15 +136,6 @@ namespace CgsGraphics
                 Instance* lpInstance = lpList->GetInstance(luI);
                 SerialisedModel* lpModel = PointerFromU32<SerialisedModel>(lpInstance->mpModel.muSlot);
 
-                // [FLAG PC boot gate] the model is a bundle IMPORT; an unresolved import
-                // leaves the slot null and the console-faithful walk below dereferences it.
-                // Skip the entry (its LOD radius stays as serialised) and let the load
-                // continue. DELETE once every world bundle resolves its imports.
-                if (lpModel == 0)
-                {
-                    continue;
-                }
-
                 CGS_ASSERT(lpModel != nullptr, "lpModel");                          // :245
                 CGS_ASSERT(lpModel->GetNumLods() > 0, "lpModel->GetNumLods() > 0"); // :246
                 if (lpModel->GetNumLods() == 0)

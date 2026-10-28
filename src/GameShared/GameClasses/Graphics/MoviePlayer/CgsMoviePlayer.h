@@ -9,13 +9,6 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"        // CgsFileSystem::StreamDeviceDiskRead
 #include "SDKs/EATech/include/Common/vp6/vfw_pb_interface.h"                         // xPB_INST, YUV_BUFFER_CONFIG
 
-// FFmpeg backend (PC decode substitution) -- forward-declared so this header stays light.
-struct AVFormatContext;
-struct AVCodecContext;
-struct AVFrame;
-struct AVPacket;
-struct SwsContext;
-
 namespace renderengine { class Texture; }
 namespace BrnGui { class MovieManager; }
 
@@ -100,10 +93,6 @@ namespace CgsGraphics
         void Update();                                                  // advance to the frame due now
         void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer); // present the held frame via Im2d
 
-        // Native COM allocations follow the real manager arena's disposal or
-        // reconstruction. Decoder Release does not retire queued render owners.
-        void RetireArenaTexturesPC();
-
     private:
         friend class MovieVideoRenderer;
         friend class BrnGui::MovieManager;
@@ -113,7 +102,6 @@ namespace CgsGraphics
         bool DecodeStripFrame();                  // [PC] 3-strip VP6: one band from its own decoder chain
         bool EnsureTexture(u32 luWidth, u32 luHeight);
         void UploadFrame();                       // [PC] sws_scale mpFrame -> the renderengine texture
-        f32  ComputeCrossfadeAlpha(f64 lfElapsedSec) const;
 
         // ---- console chunk / VP6 decode pipeline (CgsMoviePlayer_wBT_01.cpp) ------------------
         // Read chunks until luNumChunks are complete in mChunkBuffer; false when the stream ran dry.
@@ -125,12 +113,15 @@ namespace CgsGraphics
         // Wait for the queued decodes, take their pictures and empty the chunk buffer.
         void WaitForDecode();
 
-        // FLAG PC-platform: the movie files store their sizes and header fields little-endian; the
-        // console swapped them into its big-endian order, a little-endian host reads them as stored.
-        static s32 ByteSwap(s32 liValue) { return liValue; }
-        static u32 ByteSwap(u32 luValue) { return luValue; }
-        static s16 ByteSwap(s16 lsValue) { return lsValue; }
-        static u16 ByteSwap(u16 luValue) { return luValue; }
+        // Movie chunk headers are little-endian; Xenon swaps them before use.
+        static u32 ByteSwap(u32 luValue)
+        {
+            return (luValue >> 24) | ((luValue >> 8) & 0x0000FF00u)
+                 | ((luValue << 8) & 0x00FF0000u) | (luValue << 24);
+        }
+        static s32 ByteSwap(s32 liValue) { return static_cast<s32>(ByteSwap(static_cast<u32>(liValue))); }
+        static u16 ByteSwap(u16 luValue) { return static_cast<u16>((luValue >> 8) | (luValue << 8)); }
+        static s16 ByteSwap(s16 lsValue) { return static_cast<s16>(ByteSwap(static_cast<u16>(lsValue))); }
 
         // ---- player state and original resource ownership ------------------------------------------------------
         // Per-player lock. The X360 ctor initializes a Win32 CRITICAL_SECTION at this slot
@@ -151,46 +142,6 @@ namespace CgsGraphics
 
         f32   mfRectLeft, mfRectTop, mfRectRight, mfRectBottom;   // unit-screen rectangle
         s32   miCrossfadeInFrames, miCrossfadeOutFrames;
-
-        u64   muStartTick;                        // playback start (CgsSystem timer ticks)
-        u64   muPauseTick;                        // tick captured at Pause (E_PAUSED)
-        f64   mfFramePtsSec;                      // PTS (s) of the frame currently held in mpFrame
-        f64   mfFrameRate;                        // stream avg fps (crossfade frame->sec); 0 => unknown
-        f64   mfDurationSec;                      // total duration (crossfade-out anchor); 0 => unknown
-        f64   mfLastElapsedSec;                   // elapsed at the last Update (Render reads it for crossfade)
-
-        // ---- [PC DECODE SUBSTITUTION] FFmpeg backend ------------------------------------
-        AVFormatContext* mpFormatCtx;
-        AVCodecContext*  mpVideoCtx;
-        SwsContext*      mpSws;
-        AVFrame*         mpFrame;
-        AVPacket*        mpPacket;
-        s32              miVideoStream;
-        f64              mfTimeBaseSec;           // the video stream's time_base, in seconds
-        bool             mbHaveFrame;             // mpFrame holds a decoded, not-yet-shown frame
-        bool             mbEof;                   // demux hit EOF; the decoder is being flushed
-
-        // ---- X360 vertically-strided VP6 (the boot/UI *.vp6 store each 1280x720 display
-        //      frame as N stacked 1280x(720/N) strips; the decoder emits the strips as
-        //      separate frames, so N consecutive decodes recombine into one display frame) --
-        s32              miVerticalStrips;        // 1 = normal; 3 = the X360 1280x240 3-strip form
-        s32              miCurrentStrip;          // which vertical band the next decode fills (0..N-1)
-        s64              miStripsDecoded;         // running count -> display index = /N, band = %N
-        u8*              mpStripStaging;          // CPU BGRA buffer (width x height*N); bands accumulate
-        u32              muStripStagingBytes;     // allocated size of mpStripStaging
-        // The X360 3-strip *.vp6 interleaves N INDEPENDENT VP6 prediction chains (packet i belongs to
-        // band i%N); each band's P-frames reference the previous SAME-band frame, so each needs its own
-        // decoder context. A single shared decoder mispredicts across bands -> macroblock garbage.
-        AVCodecContext*  mpStripCtx[3];           // one decoder per band chain ([0] == mpVideoCtx)
-        u32              muPacketRoute;            // next demuxed video packet -> mpStripCtx[muPacketRoute%N]
-
-        // ---- native device-resource cleanup references ---------------------------------
-        // Cleanup references to the actual arena allocations, not another ring.
-        // The renderer metadata can be freed before the arena/device resources.
-        renderengine::Texture* mapNativeTextureOwnersPC[4];
-        bool mbPausedPC;
-        s32 miCurrentFrame;
-        u32   muTexWidth, muTexHeight;
 
         // ---- console decode pipeline state (offsets are the console's) -------------------------
         xPB_INST          maVP6Decoders[KI_MAX_VIDEOS];   // +0x12C one VP6 decoder per video stream

@@ -279,31 +279,8 @@ void BridgeEntityModulesToScene_PostPhysics(
         // never appears, the fault is upstream in the car's own registration, NOT here.
         // The getenv latch is evaluated once: a per-frame getenv would be a per-frame syscall.
         {
-            static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static bool       sbLoggedAny = false;
             static bool       sbLoggedNonEmpty = false;
-            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0
-                 && ( !sbLoggedAny || !sbLoggedNonEmpty ) )
-            {
-                const s32 liAddEntity  = lrRaceCarScene.mAddEntityQueue.GetLength();
-                const s32 liAddDynVol  = lrRaceCarScene.mAddDynamicVolumeQueue.GetLength();
-                const s32 liAddVolInst = lrRaceCarScene.mAddVolumeInstanceQueue.GetLength();
-                const s32 liAddForColl = lrRaceCarScene.mAddForCollisionQueue.GetLength();
-                const bool lbNonEmpty =
-                    ( liAddEntity | liAddDynVol | liAddVolInst | liAddForColl ) != 0;
-                if ( !sbLoggedAny || ( lbNonEmpty && !sbLoggedNonEmpty ) )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[Q5-restage] race-car scene queue lengths: addEntity " << liAddEntity
-                        << " addDynVol "  << liAddDynVol
-                        << " addVolInst " << liAddVolInst
-                        << " addForColl " << liAddForColl
-                        << "\n";
-                    sbLoggedAny = true;
-                    if ( lbNonEmpty )
-                        sbLoggedNonEmpty = true;
-                }
-            }
         }
 
         lpScene->Append( lrRaceCarScene );

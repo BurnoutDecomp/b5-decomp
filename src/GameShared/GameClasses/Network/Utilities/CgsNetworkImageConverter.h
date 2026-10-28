@@ -1,9 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (format checks)
-#include "pc/gcm/renderengine/texture.h"        // renderengine::Texture::Locked (unpack destination)
-
 // CgsNetwork::NetworkImageConverter - the network mugshot/texture image pipeline: it converts
 // (format), resizes (bilinear/point), and unpacks NetworkTextures so a transmitted image can be
 // blitted into a GPU texture. The methods are stateless (it is spelt as a class of static-like

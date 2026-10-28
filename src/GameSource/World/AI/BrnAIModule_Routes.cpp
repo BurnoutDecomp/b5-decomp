@@ -88,17 +88,6 @@ namespace
     // not carry 117 yet; DELETE-WHEN it does and use the enumerator.
     const s32 KI_EVENT_PLAYER_ROUTE_UPDATED = 117;
 
-    // =====================================================================================
-    // [FLAG PC witness] NOT IN THE X360 BINARY. The PER-CAR delivery-witness budget.
-    //
-    // The old witness here was a global first-8 and run6 spent every one of its lines on
-    // "AICar 0 received route" (scratch/aiwave/run6/BrnGame.log lines 2547..3028) -- which is
-    // both what a correct player delivery looks like AND what the miRaceCarIndex==0 identity
-    // bug looks like when five rivals' responses are all addressed to car 0. A per-car budget
-    // separates the two: with the identity fixed, each rival index gets its own lines; without
-    // it, only bucket 0 ever fills. DELETE-WHEN rivals are seen driving their own routes.
-    // =====================================================================================
-    const s32 KI_ROUTE_DELIVERY_PER_CAR = 3;
     const s32 KI_ROUTE_DELIVERY_TOTAL   = 64;
 
     bool RouteDeliveryWitnessBudget(s32* lpaiPerCar, s32& lriTotal, u16 luEventId)
@@ -169,17 +158,6 @@ void AppendRaceRouteRequests(RouteMapModuleIO::InputBuffer* lpRouteInputBuffer,
 //   0x827957E0      aiOut->GetGameEventQueue()->AddEvent(<1 uninitialised stack byte>, 117, 1)
 //                                                                    == E_EVENT_PLAYER_ROUTE_UPDATED
 //
-// ⛔ CORRECTED 2026-09-22 (crash parity G04-D4 / G04-D5 / G05-D5):
-//   * the UpdateOpponentRoute call was an empty [FLAG PC bring-up] block (its "no named home"
-//     reason was stale: mRaceBalancingManager is a member and its TU is mounted), so no rival's
-//     race-balancing route was ever Prepared and every balanced race ran its rivals at the
-//     KF_DEFAULT_SPEED fallback;
-//   * the event-117 gate took a caller-computed `GetAICar(mePlayerGlobalRaceCarIndex)` from before
-//     HandleManagementEvents, so after a DEACTIVATE_RACE_CAR of the player's car (driver mpCar
-//     nulled, global index stale) the PC kept posting 117 where the console posts nothing. The
-//     console's own gate -- the player's ACTIVE-slot driver's mpCar -- is evaluated here, after
-//     the response loop, exactly where the console reads it.
-// =================================================================================================
 void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
                                const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer)
 {
@@ -212,35 +190,18 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
         AICar* lpAICar = GetAICar(lpRouteResponse->GetEventId());
         if (lpAICar == 0)   // [GUARD] GetAICar's PC-only out-of-range bail (see BrnAIModule_ResetPump.cpp)
         {
-            // [FLAG PC witness] an AI-owned response whose event id is not a valid car index --
-            // i.e. a request built with a bad miRaceCarIndex. Silent on the console.
-            // DELETE-WHEN rivals are seen driving their own routes.
-            static s32 siBadIndexWitness = 0;
             if (siBadIndexWitness < 4 && CgsDev::Log::gpDebugPrint != 0)
             {
                 ++siBadIndexWitness;
-                *CgsDev::Log::gpDebugPrint
-                    << "[route] DISCARDED: AI route response for event id "
-                    << static_cast<s32>(lpRouteResponse->GetEventId())
-                    << " -- GetAICar() refused it (>= 35) [FLAG PC witness]\n";
             }
             continue;
         }
 
         if (!lpAICar->IsActive())
         {
-            // [FLAG PC witness] the console's own meCarState gate (0x827956D0). A response that
-            // lands on an INACTIVE car is a route the asking car will never see -- which is the
-            // shape of a stale/mis-addressed event id. DELETE-WHEN rivals drive their own routes.
-            static s32 siInactiveWitness = 0;
             if (siInactiveWitness < 8 && CgsDev::Log::gpDebugPrint != 0)
             {
                 ++siInactiveWitness;
-                *CgsDev::Log::gpDebugPrint
-                    << "[route] DISCARDED: route response for AICar "
-                    << static_cast<s32>(lpRouteResponse->GetEventId())
-                    << " -- that car is INACTIVE (state "
-                    << static_cast<s32>(lpAICar->GetState()) << ") [FLAG PC witness]\n";
             }
             continue;
         }
@@ -248,10 +209,6 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
         lpAICar->UpdateRoute(lpRouteResponse->GetRoute(), GetAISectionsData());           // 0x827956FC/0x8279570C
 
         {
-            // [FLAG PC witness] NOT IN THE X360 BINARY. Deliveries, budgeted PER CAR (see the
-            // banner on KI_ROUTE_DELIVERY_PER_CAR): proves THIS car RECEIVED a route -- the
-            // other end of RouteMapModule's "[route] extrapolated route done".
-            // DELETE-WHEN rivals are seen driving.
             static s32 saiDeliveryWitness[36] = { 0 };
             static s32 siDeliveryWitnessTotal = 0;
             if (AIModuleRoutes::RouteDeliveryWitnessBudget(saiDeliveryWitness, siDeliveryWitnessTotal,

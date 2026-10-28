@@ -270,8 +270,6 @@ namespace Deformation
 			static s32 siSweptSelProbe = -1;
 			if ( siSweptSelProbe < 0 )
 			{
-				const char* lpcEnv = getenv( "BRN_WALL_PROBE" );
-				siSweptSelProbe = ( lpcEnv != nullptr && lpcEnv[0] != '0' ) ? 1 : 0;
 			}
 			static u32 suSweptSelCalls = 0u;
 			++suSweptSelCalls;
@@ -590,8 +588,6 @@ namespace Deformation
 			static s32 siBBoxTracePeriod = -1;
 			if ( siBBoxTracePeriod < 0 )
 			{
-				const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-				siBBoxTracePeriod = ( lpcEnv != 0 ) ? atoi(lpcEnv) : 0;
 				if ( siBBoxTracePeriod < 0 ) { siBBoxTracePeriod = 0; }
 			}
 			if ( siBBoxTracePeriod > 0 && CgsDev::Log::gpDebugPrint != 0 )
@@ -821,13 +817,6 @@ namespace Deformation
 			if (!sbLoggedNullAttribsGate)
 			{
 				sbLoggedNullAttribsGate = true;
-				if (CgsDev::Message::gxMessageFilterFlags & 1)
-					*CgsDev::Log::gpDebugPrint
-						<< "conductor gate: CalculateDriveTimeLimits with NULL mpAttribs (per-car "
-						   "VehiclePhysics::Construct still gated in PrepareData) -- drive-time "
-						   "limits left unwidened [FLAG PC boot gate]. Reported once"
-						<< " (owner " << static_cast<s32>(GetHandlingBodyIdHighByte())
-						<< " present " << static_cast<s32>(renderengine::guPresentCount) << ")\n";
 			}
 			mDriveTimeBBoxLimitMin = lvMin;
 			mDriveTimeBBoxLimitMax = lvMax;

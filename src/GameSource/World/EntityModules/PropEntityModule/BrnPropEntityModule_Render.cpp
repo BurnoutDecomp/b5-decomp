@@ -88,15 +88,10 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModule.h"
-#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 
 #include "GameSource/World/BrnEntityTypes.h"                              // E_ENTITYTYPE_PROP
 #include "GameSource/World/BrnShaderLodInfo.h"                            // ShaderLodInfo
-#include "pc/gcm/renderengine/reflections/PropReflection.h"
-#include "pc/gcm/renderengine/reflections/ReflectionDistance.h"
-#include "pc/gcm/renderengine/reflections/ReflectionLod.h"
-#include "pc/gcm/renderengine/shadows/SceneSettings.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                      // BrnWorld::ShadowMap
 
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphics / PropPartGraphics
@@ -111,8 +106,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
-#include "pc/math/VmxFloat.h"
-
 #include "rw/math/vpu/vector3_operation.h"                                // MagnitudeSquared
 
 #include <cstddef>   // offsetof (the layout tripwire below)
@@ -136,8 +129,6 @@ namespace BrnWorld
 // RenderModel reader in the absolute-address scan; neither has a CRT-init writer.
 static bool sbDrawPropCircles = true;
 static f32 sfPropCircleDrawDistance = 2000.0f;
-
-
 
 // =============================================================================
 // Layout tripwires for the ONE structural assumption this TU makes (never called).
@@ -205,8 +196,6 @@ PropEntityModule::RenderModel(
         * lfLodDistanceZoomScale;
 
     const u32 luNumLods    = lpModel->GetNumLods();
-    if (renderengine::GraphicsDiagnosticsEnabledPC())
-        renderengine::GetGraphicsDiagnosticsPC().muPropBase = mbOverrideLodDistances ? mauOverrideLodDistances[0] : 0;
     const u32 luLastLod    = luNumLods - 1;
     CGS_ASSERT( luLastLod < luNumLods, "Invalid LOD index" );
 
@@ -220,14 +209,8 @@ PropEntityModule::RenderModel(
         lfCullDistance = static_cast< f32 >( mauOverrideLodDistances[ luLastLod ] );
     }
     const f32 lfAuthoredCullDistance = lfCullDistance;
-    const bool lbSmallShadow = lbUseZOnlyRendering && CgsPC::Shadows::IsSmallObject(lpModel);
-    if (lbSmallShadow)
-        lfCullDistance = CgsPC::Shadows::SmallObjects().GetDrawDistance(CgsPC::Shadows::NormalDistance());
     if ( lbRenderingEnvironmentMap )
     {
-        // FLAG PC-platform leaf: extend only the reflection cutoff; preserve the
-        // normal-view and shadow distances, including the original debug overrides.
-        lfCullDistance = renderengine::ExtendEnvironmentMapDrawDistancePC( lfCullDistance );
     }
     if ( lfScaledDistanceSq >= lfCullDistance * lfCullDistance )
     {
@@ -243,7 +226,6 @@ PropEntityModule::RenderModel(
         for (u32 luLod = 0; luLod < (std::min)(luNumLods, 2u); ++luLod)
             lafNormal[luLod] = mbOverrideLodDistances
                 ? static_cast<f32>(mauOverrideLodDistances[luLod]) : lpModel->GetLodDistance(luLod);
-        const s32 liLod = CgsPC::Shadows::SmallObjects().SelectLod(lpModel, lfScaledDistanceSq, lafNormal);
         if (liLod < 0) return false;
         leLodState = static_cast<CgsGraphics::Model::State>(liLod);
     }
@@ -259,12 +241,6 @@ PropEntityModule::RenderModel(
     }
     else if ( lbRenderingEnvironmentMap )
     {
-        // FLAG PC-platform leaf: the original fixed LOD2 can be selected through
-        // the real debug registry. Invalid script values retain original detail.
-        const auto& lrReflectionLod = renderengine::PropEnvironmentMapLodSettingsPC();
-        const s32 liRequested = lrReflectionLod.IsDistanceBased()
-            ? renderengine::SelectEnvironmentMapLodPC(lpModel, lfScaledDistanceSq, lrReflectionLod,
-                mbOverrideLodDistances, mauOverrideLodDistances) : renderengine::PropEnvironmentMapLodPC();
         if (liRequested < 0 && lrReflectionLod.IsDistanceBased()) return false;
         const auto leReflectionLod = static_cast<CgsGraphics::Model::State>(
             liRequested >= 0 && liRequested <= 2 ? liRequested : 2);
@@ -304,14 +280,9 @@ PropEntityModule::RenderModel(
     CGS_ASSERT( lpModel->DoesStateExist( leLodState ), "lpModel->DoesStateExist( leLodState )" );
     if (!lbRenderingEnvironmentMap)
     {
-        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_PROP, lpModel, leLodState);
     }
     else
     {
-        renderengine::RecordGraphicsModelPC(renderengine::E_GRAPHICS_PROP_ENVMAP, lpModel, leLodState);
-        if (renderengine::GraphicsDiagnosticsEnabledPC() &&
-            lfScaledDistanceSq >= lfAuthoredCullDistance * lfAuthoredCullDistance)
-            ++renderengine::GetGraphicsDiagnosticsPC().muPropEnvExtended;
     }
 
     // ---- instanced models go to the collector, not to a draw ----------------
@@ -404,37 +375,6 @@ PropEntityModule::RenderModel(
 
     // ARTIST 0x822C50C4..0x822C52AC. The live menu gate owns the original
     // distance-limited, LOD-coloured prop bounding-circle tail.
-    if (mbDrawBoundingSpheres &&
-        CgsPC::VmxFloat::Magnitude3(lCameraPosition - lpTransform->Pos()) < sfPropCircleDrawDistance)
-    {
-        static const CgsDev::RGBA KAU_LOD_COLOURS[5] =
-            {0xFF00FF00u, 0xFFFF0000u, 0xFF0000FFu, 0xFF00FFFFu, 0xFFFFFF00u};
-
-        CgsDev::DebugInterface lDebugInterface;
-        CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
-        const CgsGraphics::Renderable* lpLodRenderable = lpModel->GetRenderable(leLodState);
-        const Vector3 lCentre = rw::math::vpu::TransformPoint(
-            *lpTransform, lpLodRenderable->mBoundingSphere.GetVector3());
-
-        // vmax(right, up), then vmax(result, at), followed by the original
-        // three-lane magnitude. Signed components are retained before the max.
-        namespace vmx = CgsPC::VmxFloat;
-        const Vector3 lRight = lpTransform->Right();
-        const Vector3 lUp = lpTransform->Up();
-        const Vector3 lAt = lpTransform->At();
-        const Vector3 lMaximum = {
-            vmx::Maximum(vmx::Maximum(lRight.x, lUp.x), lAt.x),
-            vmx::Maximum(vmx::Maximum(lRight.y, lUp.y), lAt.y),
-            vmx::Maximum(vmx::Maximum(lRight.z, lUp.z), lAt.z), 0.0f};
-        const f32 lfRadius = vmx::Multiply(lpLodRenderable->mBoundingSphere.GetPlus(),
-                                         vmx::Magnitude3(lMaximum));
-
-        if (sbDrawPropCircles)
-        {
-            const Vector3 lNormal = vmx::Normalize3Unconditional(lCameraPosition - lCentre, 2u);
-            lrRender.DrawCircle(lCentre, lNormal, lfRadius, KAU_LOD_COLOURS[leLodState]);
-        }
-    }
 
     return true;
 }
@@ -660,12 +600,6 @@ PropEntityModule::GenerateDispatchLists(
         if ( !s_bLoggedNullCorona && CgsDev::Log::gpDebugPrint != 0 )
         {
             s_bLoggedNullCorona = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[props-gdl] corona submission interface is NULL -- prop coronas skipped "
-                   "(the live producer GenerateDispatchListsBringUp seeds only the dispatch "
-                   "frame and shadow map; the seat's writer "
-                   "BridgeWorldModuleToEntityModules_Render has no live caller) "
-                   "[FLAG PC bring-up gate]\n";
         }
     }
     CGS_ASSERT( lpShadowMap != 0, "lpShadowMap" );
@@ -674,37 +608,6 @@ PropEntityModule::GenerateDispatchLists(
     const bool lbUseZOnlyRendering = lpShadowMap != 0 &&
                                      lpShadowMap->IsRenderingShadowMap() &&
                                      lpShadowMap->IsUsingZOnlyRenderingPath();
-
-    // ---- [FLAG PC bring-up gate] NOT IN THE CONSOLE -------------------------
-    // ⛔ DELETE-WHEN the real WorldModule::GenerateDispatchLists @0x827D1CE8 becomes the live
-    // producer. On the console this buffer is always seeded before the call, by
-    // BridgeWorldModuleToEntityModules_Render inside that producer. On this build the live
-    // producer is WorldModule::GenerateDispatchListsBringUp (BrnWorldModule.cpp:5319), which
-    // seeds the two seats this guard tests directly on its own file-static stand-in buffer
-    // (:7203-7206 main view, :7453-7456 env-map faces) -- so in the ordinary case the guard is
-    // already satisfied and never trips. It stays because that seeding is bring-up code on a
-    // stand-in buffer, not the console contract: any path that reaches this function without
-    // going through those two sites (a new caller, a reordered bring-up, the env-map arm
-    // dropping out) hands us a zeroed buffer, and without the guard the first such frame
-    // null-derefs in RenderModel's DispatchFrame::GetList. The asserts above are the faithful
-    // console tripwires; this is the bring-up safety net under them.
-    if ( lpDispatchFrame == 0 || lpShadowMap == 0 )
-    {
-        static bool sbLoggedUnseeded = false;
-        if ( !sbLoggedUnseeded && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedUnseeded = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[props-gdl] BLOCKED: the prop dispatch input is unseeded (frame="
-                << ( lpDispatchFrame != 0 ? 1 : 0 ) << " shadowMap="
-                << ( lpShadowMap != 0 ? 1 : 0 )
-                << "). Whoever called PropEntityModule::GenerateDispatchLists did not seed "
-                   "this buffer -- neither GenerateDispatchListsBringUp's inline seeding nor "
-                   "BridgeWorldModuleToEntityModules_Render ran ahead of it.\n";
-        }
-        lpInput->UnlockForRead();
-        return;
-    }
 
     // @0x822FB618: 1.0f / (zoom * zoom). Every callee multiplies a SQUARED distance by it.
     const f32 lfLodDistanceZoomScale =
@@ -874,45 +777,6 @@ PropEntityModule::GenerateDispatchLists(
             // a bit-level fold would need a raw reinterpret_cast, which is the exact shape
             // the faithfulness lint rejects.
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-                if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    static u32  suTrackedPartId  = 0;
-                    static bool sbTrackedLatched = false;
-                    static u32  suSightings      = 0;
-
-                    const u32 luPartEntityId = static_cast< u32 >( lEntityId );
-                    if ( !sbTrackedLatched )
-                    {
-                        sbTrackedLatched = true;
-                        suTrackedPartId  = luPartEntityId;
-                    }
-
-                    if ( suTrackedPartId == luPartEntityId )
-                    {
-                        if ( ( suSightings % 60u ) == 0u )
-                        {
-                            const f32 lafComponents[ 12 ] =
-                            {
-                                lrTransform.Right().x, lrTransform.Right().y, lrTransform.Right().z,
-                                lrTransform.Up().x,    lrTransform.Up().y,    lrTransform.Up().z,
-                                lrTransform.At().x,    lrTransform.At().y,    lrTransform.At().z,
-                                lrTransform.Pos().x,   lrTransform.Pos().y,   lrTransform.Pos().z
-                            };
-                            u32 luHash = 2166136261u;   // FNV-1a offset basis
-                            for ( s32 liComponent = 0; liComponent < 12; ++liComponent )
-                            {
-                                const s32 liFixed =
-                                    static_cast< s32 >( lafComponents[ liComponent ] * 1024.0f );
-                                luHash = ( luHash ^ static_cast< u32 >( liFixed ) ) * 16777619u;
-                            }
-                            *CgsDev::Log::gpDebugPrint
-                                << "[Q6-render] part " << luPartEntityId
-                                << " xform hash " << luHash << "\n";
-                        }
-                        ++suSightings;
-                    }
-                }
             }
 
             // ---- shared part tail (@0x822FBCD4..0x822FBDF0) ------------------
@@ -997,58 +861,6 @@ PropEntityModule::GenerateDispatchLists(
 
     CgsGraphics::ModelInstanceCollector::EndInstanceCollection();
     lpInput->UnlockForRead();
-
-    // ARTIST 822FBE20..822FC0C8: refresh score markers every 60 console frames.
-    // FLAG PC-platform leaf: PreSceneUpdate advances the countdown at fixed 60 Hz;
-    // main-view rendering consumes it, independent of presentation rate.
-    // The CRT initialisers at 82C4C1A0 / 82C4C1C8 / 82C4C208 pin the squared
-    // range to 10000 and the two vertical offsets to 3 and 5 metres respectively.
-    if ( lbRenderCoronas && miFramesUntilUpdateVisibleSigns <= 0 )
-    {
-        mVisibleOverheadSigns.Clear();
-        for ( u32 luEntity = 0; luEntity < luNumEntities; ++luEntity )
-        {
-            const CgsSceneManager::EntityId lEntityId = lrVisibleEntities.GetItem( luEntity );
-            if ( lEntityId.GetOwner() == KU8_ENTITYTYPE_REPLAY_PROP )
-                continue;
-
-            CGS_ASSERT( lEntityId.GetOwner() == E_ENTITYTYPE_PROP,
-                        "mEntityId.GetOwner() == E_ENTITYTYPE_PROP" );
-            const PropEntityID lPropId( lEntityId );
-            if ( lPropId.GetPartIndex() != 0 )
-                continue;
-
-            PropEntityInstance* lpProp = mZoneManager.GetProp( lPropId );
-            const BrnPhysics::Props::PropTypeData* lpType =
-                GetPropPhysicsDataHeader()->GetType( lpProp->GetTypeId() );
-            if ( ( lpProp->mu8Flags & KU_MOVED_BIT ) != 0 )
-                continue;
-
-            const u32 luGraphicsId = lpType->GetGraphicsId();
-            const bool lbScorePair = luGraphicsId == 428180u || luGraphicsId == 428152u;
-            if ( ( !lpType->IsOverheadSign() && !lbScorePair ) || mVisibleOverheadSigns.IsFull() )
-                continue;
-
-            const Vector3 lPosition = lpProp->GetWorldTransform().Pos();
-            if ( MagnitudeSquared( mPlayerPosition - lPosition ) <= 10000.0f )
-            {
-                BrnGui::OverheadSignScore* lpScore = mVisibleOverheadSigns.Grow();
-                lpScore->mWorldSpacePosition = lPosition;
-                lpScore->muEntityIndex = static_cast<u16>( lPropId.GetEntityIndex() );
-                const Vector3 lOffset = { 0.0f, lbScorePair ? 5.0f : 3.0f, 0.0f, 0.0f };
-                lpScore->mWorldSpacePosition = lpScore->mWorldSpacePosition + lOffset;
-            }
-        }
-        miFramesUntilUpdateVisibleSigns = 60;
-        // FLAG PC-platform leaf: opt-in witness for the live score-marker producer.
-        if ( getenv("BRN_PROP_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0
-          && mVisibleOverheadSigns.GetLength() != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint << "[overhead-sign] visible="
-                << mVisibleOverheadSigns.GetLength() << " firstEntity="
-                << static_cast<u32>(mVisibleOverheadSigns.GetItem(0).muEntityIndex) << "\n";
-        }
-    }
 
     // ---- [DIAG prop-render wave 2026-08-12] THE SUBMISSION WITNESS -----------
     // ⛔ DELETE-WHEN props are confirmed on screen.

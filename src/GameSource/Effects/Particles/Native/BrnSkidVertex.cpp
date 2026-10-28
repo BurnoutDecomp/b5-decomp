@@ -26,7 +26,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -85,7 +84,6 @@ namespace
     // as its OWN file-scope statics. Those three console addresses are not TU-local: they are
     // shadow::Device's own fields -- mpVertexProgramShadow / mpVertexDescriptor /
     // mbVertexProgramStateDirty -- inside the one off_83010950 block (shadowingdevice.h; the
-    // PC leaf's own note says so, and CgsIm3dSkyDome.cpp was corrected for exactly this).
     //
     // The proof is three functions that all touch the SAME word:
     //   shadow::Device::ResetShadowing  @0x82276970  `stw r10,(dword_8301095C-..)(r11)`  -> 0
@@ -156,42 +154,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
-    // ⭐⭐ MISSING UNTIL 2026-09-03, and it is why the tyre mark had no colour and no transform.
-    // The console route below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run
-    // on the PC backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts,
-    // whose PC stub returns 0 WITHOUT writing *lpParts, and then read that uninitialised
-    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
-    // into the u32 muFunction to Xbox2CreateConstantTable. CgsIm3dSkyDome.cpp carries exactly this
-    // adopt path (and the same comment); this TU was left on the console route.
-    //
-    // MEASURED CONSEQUENCE (run skid28): the live program buffer came back with
-    //     [trailpass] skid constants: wvp{count=0} start{count=0} end{count=0} vars=0
-    // -- zero variables, so ProgramBuffer::GetVariableHandleByName found none of the three
-    // constants and left every handle with mu8RegisterCount == 0. The PC leaf's
-    // BeginShaderStates routes a zero-count handle to a DISCARD row, so gWorldViewProj,
-    // gStartColour and gEndColour were NEVER UPLOADED: the strips were transformed by whatever
-    // c0..c3 the previous draw left and coloured by whatever c4/c5 held. The converted blob is
-    // not at fault -- SkidProgramsPC.cpp's vertex image declares 3 variables at its +0x04 and
-    // names them gEndColour / gStartColour / gWorldViewProj in its interned table. Nothing was
-    // adopting it.
-    //
-    // A non-PC binary returns null here and falls through to the console path unchanged.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -340,19 +302,6 @@ void ImRenderer<V>::BeginRendering()
 
     mi8CurrentProgram = 0;
 
-    // (the compare against the last-bound vertex program is the DEVICE's -- dword_8301095C is
-    // Device::mpVertexProgramShadow, which ResetShadowing has just nulled, so the console's
-    // `lwz/cmplw/beq` is always a miss and the bind always happens. See the note above.)
-    shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-    shadow::DeviceSetPixelProgram(lpPixelProgram);
-
-    // Shadow this renderer's vertex descriptor and mark the vertex-program state dirty when it
-    // changed (X360 off_83010958 / byte_83010A34 == Device::mpVertexDescriptor and
-    // mbVertexProgramStateDirty -- the compare-then-set + dirty flag IS Device::
-    // SetVertexDescriptor, so the shadow is kept where FlushVertexProgramState reads it).
-    shadow::DeviceSetVertexDescriptor(
-        const_cast<renderengine::VertexDescriptorData*>(
-            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor)));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -380,7 +329,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;

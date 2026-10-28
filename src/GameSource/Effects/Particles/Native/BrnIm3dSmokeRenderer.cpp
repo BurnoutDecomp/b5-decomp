@@ -21,8 +21,6 @@
 #include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
-#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
-
 #include <cstdio>    // [diag] snprintf (the constant-resolve line)
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr): open one shader-constant row for
@@ -32,14 +30,9 @@ void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppSh
 
 namespace renderengine
 {
-    // BrnIm3dSmokeRendererProgramsPC.cpp -- the PC stand-ins for the four guest blobs.
-    extern const u8  gauSmokeZFadeVertexProgramPC[];
     extern const u32 guSmokeZFadeVertexProgramPCSize;
-    extern const u8  gauSmokeZFadePixelProgramPC[];
     extern const u32 guSmokeZFadePixelProgramPCSize;
-    extern const u8  gauSmokeSansZFadeVertexProgramPC[];
     extern const u32 guSmokeSansZFadeVertexProgramPCSize;
-    extern const u8  gauSmokeSansZFadePixelProgramPC[];
     extern const u32 guSmokeSansZFadePixelProgramPCSize;
 }
 
@@ -72,12 +65,8 @@ namespace BrnGraphics
 
     void Im3dSmokeRenderer::Construct(rw::IResourceAllocator* lpAllocator)
     {
-        const void* lapVertexProgramBinary[2] = { renderengine::gauSmokeZFadeVertexProgramPC,
-                                                  renderengine::gauSmokeSansZFadeVertexProgramPC };
         const u32   lauVertexProgramSize[2]   = { renderengine::guSmokeZFadeVertexProgramPCSize,
                                                   renderengine::guSmokeSansZFadeVertexProgramPCSize };
-        const void* lapPixelProgramBinary[2]  = { renderengine::gauSmokeZFadePixelProgramPC,
-                                                  renderengine::gauSmokeSansZFadePixelProgramPC };
         const u32   lauPixelProgramSize[2]    = { renderengine::guSmokeZFadePixelProgramPCSize,
                                                   renderengine::guSmokeSansZFadePixelProgramPCSize };
         CgsGraphics::ImRenderer<CgsGraphics::BasicColouredTexturedVertex>::Construct(

@@ -1,5 +1,4 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSubmixesEffect.h"
-#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"   // [DIAG] BRN_DMIX_DIAG witness
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"   // CgsSound::Io::MessageHeader
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"                 // State::GetStateManager()
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"                 // CgsSound::Logic::Voice
@@ -52,13 +51,6 @@ CgsSound::Logic::EffectObject* SubmixesEffect::CreateObject(u32)
     // established that the Attach/ProcessUpdate lane below is LIVE rather than dead code,
     // back when neither was declared on this leaf and the base's do-nothing versions ran.
     // Kept as the lane's liveness witness.
-    if (CgsSound::Diag::DMixDiagEnabled())
-    {
-        static u32 suCreated = 0;
-        CgsSound::Diag::DMixDiagPrintf(
-            "[dmix] SubmixesEffect::CreateObject #%u -- effect type 0x40 instantiated\n",
-            ++suCreated);
-    }
     return new SubmixesEffect();
 }
 
@@ -109,7 +101,6 @@ void SubmixesEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
             static_cast<const CgsSound::Io::Message<bool>*>(apMessageHeader)->mData;
     }
 }
-
 
 // =============================================================================
 // The tuning variables. DecFIGS Sound/Global/BrnSubmixesEffect.cpp:34..54
@@ -301,24 +292,6 @@ void SubmixesEffect::ProcessUpdate()
     // would assert rather than write. Printed BEFORE the first SetGain so the witness
     // survives that assert. cutoff is the RAW getter value (the second clamp is below).
     // Rate limited: the first three calls, then every 600th.
-    if (CgsSound::Diag::DMixDiagEnabled())
-    {
-        static u32 suUpdates = 0;
-        ++suUpdates;
-        if (suUpdates <= 3 || (suUpdates % 600) == 0)
-        {
-            CgsSound::Diag::DMixDiagPrintf(
-                "[dmix] SubmixesEffect::ProcessUpdate #%u revb=%.4f cutoffRaw=%.1f "
-                "passby=%.4f mastergain=%.4f hold=%d surround=%d "
-                "ready(coll=%d passby=%d master=%d)\n",
-                suUpdates, lfCollisionReverbSend, lfCollisionFilterCutOff,
-                lfPassbyReverbSend, lfMasterGain,
-                static_cast<int>(mbHoldVolumes), static_cast<int>(mbIsSurround),
-                static_cast<int>(lrCollisionSubmix.IsReady()),
-                static_cast<int>(lrPassbySubmix.IsReady()),
-                static_cast<int>(lrMasterVoice.IsReady()));
-        }
-    }
 
     // 826D2F84  lwz r9, 4(0x8300817C) == gaCollisionSubmixVoiceSpecSendNames[1]
     // 826D2F78  li r4, 1 ; 826D2F90  bl 0x826942C0

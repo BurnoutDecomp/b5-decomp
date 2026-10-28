@@ -39,13 +39,6 @@ namespace CgsResource
         "", "", "", "", "", "", ""
     };
 
-    // [FLAG PC boot gate] A material's per-technique program buffer is an IMPORT: it lives in
-    // SHADERS.BNDL, which this build does not stage yet (every technique is routed through the
-    // renderer's fallback shader instead). CgsResource::Pool::ResolveImportForEntry therefore
-    // writes a NULL into the technique slot, and the console-faithful PostFixUp walk -- which
-    // never sees a null on the real hardware -- dereferences it. Report once and skip the
-    // affected technique so the rest of the world data still fixes up. DELETE this gate when
-    // SHADERS.BNDL is staged.
     namespace
     {
         void LogUnresolvedTechniqueOnce()
@@ -54,10 +47,6 @@ namespace CgsResource
             if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
             {
                 sbLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "MaterialResourceType::PostFixUp: technique/program import unresolved"
-                       " (SHADERS.BNDL not staged) -- skipping the binding fix-up"
-                       " [FLAG PC boot gate]\n";
             }
         }
     }
@@ -260,29 +249,6 @@ namespace CgsResource
                 }
                 else
                 {
-                    // [FLAG PC diagnostic] Name the offender before the console assert fires.
-                    // The one case seen so far was a CONVERTER defect, not a data one: the
-                    // technique's fallback-substituted PC program lacked an internal
-                    // constant the X360 program had (Godray_Additive_Doublesided_Default /
-                    // `illuminance`, TRK_UNIT83_GR). tools/assets/shaders/
-                    // convert_shaders_bundle.py `check` reproduces this offline.
-                    if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    {
-                        // Technique (program-block) name: the rebased serialised word @ +0x94
-                        // (see CgsShaderTechniqueResourceType::FixUp) -- serialised blob,
-                        // the documented raw-offset exception, same as every read above.
-                        const u32 luTechniqueNameSlot = *reinterpret_cast<u32*>(lpProgram + 0x94);   // serialised blob
-                        const char* const lpcTechniqueName =
-                            reinterpret_cast<const char*>(static_cast<uintptr_t>(luTechniqueNameSlot));
-                        *CgsDev::Log::gpDebugPrint
-                            << "MaterialResourceType::PostFixUpShaderConstants: "
-                            << (lbPixelStage ? "pixel" : "vertex")
-                            << " internal constant '" << lpcName << "' (0x"
-                            << CgsDev::E_PRINTMODE_HEXONCE << luConstantId
-                            << ") is not in the program buffer of technique '"
-                            << (lpcTechniqueName ? lpcTechniqueName : "?")
-                            << "' [FLAG PC diagnostic]\n";
-                    }
                     CGS_ASSERT(false, "Tyring to postfixup a constant not present in the programbuffer");
                 }
             }

@@ -1,6 +1,5 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
-        BrnPostEventStates_embed_check.cpp
 
     PUBLIC
 
