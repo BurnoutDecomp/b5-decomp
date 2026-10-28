@@ -12,8 +12,8 @@ native-8 Apt conversion paths are removed from the shared code. Existing Xbox
 branches are selected directly. `src/pc/` stays as an unbuilt reference; shared
 sources must not include it.
 
-This is an incomplete source experiment. It does not build or boot yet and has
-not produced a byte match. The Xbox 360 toolchain/project, missing platform and
+This is an incomplete source experiment. The complete game does not build or boot
+yet and has not produced a byte match. The executable build, missing platform and
 middleware implementations, original class layouts, VMX code and compiler/codegen
 recovery still need work. Missing implementations are left unresolved. Mixed methods that depend on PC
 infrastructure are removed as whole definitions when their console implementation
@@ -25,3 +25,22 @@ can corroborate declarations. Do not import Xbox One pointer widths or file layo
 
 The parent `BP-Decomp_Workflow` repository retains the references, exports and
 ledger. Do not publish experimental coverage to the shared production ledger.
+
+## Native compile bootstrap
+
+The extracted XDK 6534.4 compiler (14.00.6502) works without running setup or
+changing system settings. From this repository, use its extracted `XDK` directory:
+
+```powershell
+python tools/build_x360.py --sdk "path\to\XDK"
+```
+
+This compiles six core translation units into Xbox 360 PowerPC objects and emits
+assembly, logs and `compile-results.json` under `build/x360/objects/`. Use repeated
+`--source src/...cpp` arguments for other files. PC sources are rejected.
+
+The wider startup code still uses headers and language features unsupported by
+this compiler, including `<cstdint>` and `static_assert`. The portable linker
+also currently stalls on this host before producing diagnostics. Linking and
+booting remain separate work; setup has not been run. SDK files and build output
+stay outside Git under `build/`.
