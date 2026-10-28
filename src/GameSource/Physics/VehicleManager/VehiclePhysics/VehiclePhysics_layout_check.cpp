@@ -1,68 +1,7 @@
-// Layout check for the BrnPhysics::Vehicle::SimpleVehiclePhysics and ::VehiclePhysics
-// OWN-MEMBER BLOCKS (X360 +0x130..+0x720 and +0x720..+0x13F0).
-//
-// WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
-// BrnSimpleVehiclePhysics.h and VehiclePhysics.h now carry two recovered own-member blocks whose
-// whole claim to being a DERIVATION rather than sixty separate guesses is that the DecFIGS DWARF's
-// member ORDER and the X360 asm's member OFFSETS meet with zero slack at BOTH ends:
-//     SimpleVehiclePhysics closes on 0x720 == VehiclePhysics::mpAttribs (Construct `stw r30,0x720`)
-//     VehiclePhysics       closes on 0x13F0 == RaceCarPhysics::mPropCollisionImpulseSum, which a
-//                          DIFFERENT wave derived from a DIFFERENT function and from which the
-//                          RaceCarPhysics block closes on the 0x1460 per-car stride.
-// A claim like that is worth exactly as much as the gate that checks it.
-//
-// WHY THIS GATE IS ARITHMETIC AND NOT `offsetof` -- and why that is the STRONGER choice here.
-// The RaceCarPhysics own block could be gated with offsetof because it is width-identical on x64
-// (no pointer, no vptr anywhere in it) and it is declared in DWARF order. NEITHER holds here:
-//   * VehiclePhysics owns two POINTERS (mpAttribs @0x720, mpDebugComponent @0x13E4) which widen
-//     4 -> 8 on the host, and SimpleVehiclePhysics's leaf vptr does the same;
-//   * several embedded sub-types in this tree are RECONSTRUCTIONS, not byte-exact console copies
-//     (SimpleVehicleAttribs is a 20-byte owning slice against the console's 240) -- deliberately,
-//     per the project rule that parity is BY NAMED MEMBERS and unrecovered interiors are never
-//     faked as padding;
-//   * and VehiclePhysics.h is explicitly NOT in DWARF declaration order (it grew additively, group
-//     by group), so even a RELATIVE host offsetof would not measure the console spacing.
-// An `offsetof` gate here would therefore either be false or be a tautology.
-// ⭐ AMENDED 2026-09-03 (traffic crash-severity wave): that is still true of the two blocks AS A
-// WHOLE, but it is NOT true of the SimpleVehiclePhysics TAIL, and the difference is load-bearing.
-// Two of its three stated reasons have expired -- SimpleVehicleAttribs has been the FULL
-// width-identical 240 since 2026-08-09, and the leaf vptr's 4->8 widening is absorbed by the
-// 16-aligned base sub-object -- so from mfSpeedMPH to the end of the block the host reproduces the
-// console byte-for-byte. MEASURED: 0x6C0 / 0x6D0 / 0x6F0 / 0x710 and sizeof 0x720, all five equal to
-// their console literals. Those five ARE offsetof-gated below (PART 2), because
-// DeformableObject::UpdateDeformedBBox is the only producer of mDeformableAABB and every consumer
-// reads it by name: a shift there would silently divorce them, and only a host gate can see that.
-// What this TU asserts
-// instead is the thing the wave actually recovered: **that walking the DWARF member ORDER with the
-// asm-literal sub-object SIZES reproduces every independently asm-literal ANCHOR, and lands exactly
-// on 0x13F0.** Every number on the right-hand side of every assert below is an X360 literal quoted
-// from the map in the two headers; none is computed from the left-hand side.
-//
-// THE BLIND SPOT, stated rather than hidden. This gate cannot see a member that occupies no
-// space (an omitted trailing bool inside alignment padding), exactly as the RaceCarPhysics gate
-// could not. What guards that is that the DWARF list is exhaustive and is quoted verbatim in the
-// two headers, so a missing member would have to be deleted from a quoted list. The gate DOES fire
-// for any size change, any reordering across an anchor, and any dropped non-padding member.
-//
-// TAMPER-TESTED 2026-08-03, THIRTEEN cases, **ten fire**:
-//   FIRES  SweptSphere 0x20 -> 0x30 (breaks the whole SVP anchor chain at the first assert)
-//   FIRES  EngineAttribs 0xA0 -> 0xB0
-//   FIRES  BitArray treated as 4-aligned instead of 8 in the walk
-//   FIRES  delete VehiclePhysics::mbContactingWall
-//   FIRES  delete VehiclePhysics::mbInBoostKick (a bool the ARITHMETIC cannot see -- caught by the
-//          named-member existence checks at the bottom, which is why they are there)
-//   FIRES  insert an f32 inside SlamEffect before mi8SlamNumber
-//   FIRES  swap SlamEffect::mfSteering / mfOriginalSteering
-//   FIRES  delete AboveGroundTestResult::mfVerticalDistance
-//   FIRES  move the record's meCarType by 4        (BrnVehicleManager_layout_check.cpp)
-//   FIRES  move the record's mCrashNormal by 16    (BrnVehicleManager_layout_check.cpp)
-//   FIRES  (2026-09-03, PART 2's new HOST asserts) mDeformableAABB expected at 0x6D0+16 -- proved
-//          the offsetof gate discriminates before it was trusted, then reverted
-//   SILENT drop one of the four bools FROM THE ARITHMETIC (0x10F5..0x10F8 is 11 bytes of pad)
-//   SILENT append an f32 after SlamEffect::mi8SlamNumber (trailing pad)
-//   SILENT append a bool after mpDebugComponent (0x13E8..0x13F0 is 8 bytes of pad)
-// The three silent cases are the alignment-padding blind spot described above; each is covered
-// instead by a named-member existence check, so the member cannot be DELETED silently.
+// Native Xbox 360 vehicle layouts. The actual C++ member offsets are checked
+// against ARTIST, with DecFIGS supplying declaration order and names.
+// The older anchor arithmetic remains as an additional check; it cannot prove
+// that a C++ object uses that layout, so it is followed by real offsetof gates.
 
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
 
@@ -332,6 +271,70 @@ namespace Vehicle
     // ==============================================================================================
     void VehiclePhysics::_AssertOwnBlockLayout()
     {
+        // ARTIST native object layout, including the individual byte flags.
+        CGS_STATIC_ASSERT((sizeof(VehiclePhysics) == 0x13F0), "X360 VehiclePhysics size");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mpAttribs) == 0x720), "X360 mpAttribs");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mAIVehicleAttribs) == 0x730), "X360 mAIVehicleAttribs");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mPlayerVehicleAttribs) == 0xAA0), "X360 mPlayerVehicleAttribs");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, maSprings) == 0xE10), "X360 maSprings");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvSpringMassScalers) == 0xED0), "X360 mvSpringMassScalers");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mWeightTransfer) == 0xEE0), "X360 mWeightTransfer");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare) == 0xEF0), "X360 mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mEngine) == 0xF00), "X360 mEngine");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvfWheelFrictionLinearMultiplier) == 0xFD0), "X360 mvfWheelFrictionLinearMultiplier");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount) == 0xFE0), "X360 mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost) == 0xFF0), "X360 mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale) == 0x1000), "X360 mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale) == 0x1010), "X360 mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState) == 0x1020), "X360 mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle) == 0x1030), "X360 mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime) == 0x1040), "X360 mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor) == 0x1050), "X360 mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction) == 0x1060), "X360 mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact) == 0x1070), "X360 mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake) == 0x1080), "X360 mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mPreviousControls) == 0x1090), "X360 mPreviousControls");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mSteeringDirection) == 0x10E0), "X360 mSteeringDirection");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mfTimeUntilStuckInCollisionTest) == 0x10F0), "X360 mfTimeUntilStuckInCollisionTest");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mDriftFlags) == 0x10F4), "X360 mDriftFlags");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbInBoostKick) == 0x10F5), "X360 mbInBoostKick");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbForceFrozen) == 0x10F6), "X360 mbForceFrozen");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbIsUsingAIDonutAttribs) == 0x10F7), "X360 mbIsUsingAIDonutAttribs");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbGivenAftertouchAirBoost) == 0x10F8), "X360 mbGivenAftertouchAirBoost");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mSlamEffect) == 0x1100), "X360 mSlamEffect");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mShuntEffect) == 0x1130), "X360 mShuntEffect");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mi8LastContactedRaceCar) == 0x1150), "X360 mi8LastContactedRaceCar");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mUsedAirRams) == 0x1158), "X360 mUsedAirRams");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mAirRamEffect) == 0x1160), "X360 mAirRamEffect");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mUsedSpins) == 0x1220), "X360 mUsedSpins");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, maSpinEffects) == 0x1230), "X360 maSpinEffects");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mPreviousWorldSpaceVelocity) == 0x1330), "X360 mPreviousWorldSpaceVelocity");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mNormLinearVelocityMag) == 0x1340), "X360 mNormLinearVelocityMag");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbHasAir) == 0x1350), "X360 mbHasAir");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbHadAirLastFrame) == 0x1351), "X360 mbHadAirLastFrame");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mu8DriftState) == 0x1352), "X360 mu8DriftState");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mi8NumWorldCollisions) == 0x1353), "X360 mi8NumWorldCollisions");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, miNumCollisions) == 0x1354), "X360 miNumCollisions");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbHandBrake) == 0x1358), "X360 mbHandBrake");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbDeformationModelIsActive) == 0x1359), "X360 mbDeformationModelIsActive");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbDeformedThisFrame) == 0x135A), "X360 mbDeformedThisFrame");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbAllWheelsHaveTraction) == 0x135B), "X360 mbAllWheelsHaveTraction");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbResetCarTransform) == 0x135C), "X360 mbResetCarTransform");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbJustBeenSlammed) == 0x135D), "X360 mbJustBeenSlammed");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbOverrideSteering) == 0x135E), "X360 mbOverrideSteering");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbIsWedgedInWorld) == 0x135F), "X360 mbIsWedgedInWorld");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbIsFrontRayOccluded) == 0x1360), "X360 mbIsFrontRayOccluded");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbDoingBurnout) == 0x1361), "X360 mbDoingBurnout");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbContactingWall) == 0x1362), "X360 mbContactingWall");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mPreviousTransform) == 0x1370), "X360 mPreviousTransform");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mLastLinearVelocity) == 0x13B0), "X360 mLastLinearVelocity");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mPitchYawRollFromTakeOff) == 0x13C0), "X360 mPitchYawRollFromTakeOff");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mWheelFFSpring) == 0x13D0), "X360 mWheelFFSpring");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mbRollingInAir) == 0x13D8), "X360 mbRollingInAir");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, meCarType) == 0x13DC), "X360 meCarType");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mi8LastAttackersRaceCarIndex) == 0x13E0), "X360 mi8LastAttackersRaceCarIndex");
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics, mpDebugComponent) == 0x13E4), "X360 mpDebugComponent");
+
         // ==========================================================================================
         // ⭐ THE SimpleVehiclePhysics TAIL, PINNED ON THE HOST (added 2026-09-03, traffic
         // crash-severity wave).
@@ -413,7 +416,7 @@ namespace Vehicle
                       "AxisAlignedBox: 0x20 == the 32 bytes SetRaceCarCrashing copies 0x6F0 -> 0x6D0");
 
         // The two classes' own members must at least still EXIST under the names the map uses.
-        // (Absolute offsets are deliberately not asserted -- see the banner.) Referencing them
+        // (The native absolute offsets are asserted above.) Referencing them
         // through offsetof is the cheapest compile-time existence proof that also proves the
         // ACCESS: a member that moved to another class, or lost its name, stops compiling here.
         typedef VehiclePhysics V;

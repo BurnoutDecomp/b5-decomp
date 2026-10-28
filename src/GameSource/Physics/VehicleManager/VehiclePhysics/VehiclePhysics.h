@@ -1360,11 +1360,9 @@ namespace Vehicle
         // +0x28 off a base of +0x1100, reproducing all six committed offsets, and the struct ends at
         // +0x1130 which is precisely where mShuntEffect (the DWARF's very next member) begins.
         // AddSlam @0x825D4880/0x825D489C/0x825D4904 reads +0x111C/+0x1120/+0x1128 off `this`.
-        SlamEffect mSlamEffect;
 
         // @+0x1130: the embedded shunt effect; IsBeingSlamedOrShunted consults mShuntEffect.IsActive()
         // (asm: `addi r3,r3,0x1130 ; bl ShuntEffect::IsActive`). Pinned BY NAME.
-        ShuntEffect mShuntEffect;
 
         // @+0x13E0: the id of the race car that last attacked (slammed/shunted) this vehicle, read
         // by IsBeingSlamedOrShuntedByRaceCar to filter (asm @0x8261529C: `lbz r11,0x13E0(r3) ; extsb`
@@ -1375,7 +1373,6 @@ namespace Vehicle
         // mi8LastAttackersRaceCarIndex. (+0x1150, the byte right after mShuntEffect, is the DIFFERENT
         // member mi8LastContactedRaceCar; UpdateRaceCarState @0x825EC8CC copies that one to
         // RaceCarState+0x445. Two console members, one of which this slice had absorbed.)
-        s8         mi8LastAttackersRaceCarIndex;
 
         // ----- ADDITIVE GROW (C08 airborne/water/freeze/spin group): the air-ram + spin slot
         //       allocators and their effect-record arrays, read/written by UpdateAirRam /
@@ -1390,19 +1387,15 @@ namespace Vehicle
         // @+0x1158 (4440): which of the 4 air-ram slots are in use (a set bit = an active queued ram).
         // BitArray<4> is one 64-bit field; UpdateAirRam/AddAirRam use GetFirstNonZeroBit/GetNextNonZeroBit
         // (the X360 cntlzd lowest-set-bit walk) + SetBit/UnSetBit. Pinned BY NAME.
-        CgsContainers::BitArray<KU_MAX_AIR_RAMS> mUsedAirRams;
 
         // @+0x1160 (4448), stride 0x30: the 4 air-ram effect records (mImpulse @+0x00, mPosition @+0x10,
         // mfDecay @+0x20, meImpulseSpace @+0x24, mfTimerTillFire @+0x28). Pinned BY NAME.
-        AirRamEffect mAirRamEffect[KU_MAX_AIR_RAMS];
 
         // @+0x1220 (4640): which of the 8 spin slots are in use. BitArray<8> is one 64-bit field.
         // UpdateSpinEffects walks it with GetFirstNonZeroBit/GetNextNonZeroBit + UnSetBit. Pinned BY NAME.
-        CgsContainers::BitArray<KU_MAX_SPINS> mUsedSpins;
 
         // @+0x1230 (4656), stride 0x20: the 8 spin effect records (mForce @+0x00, mfTotalTime @+0x10,
         // mfTimeRemaining @+0x14). Pinned BY NAME.
-        SpinEffect maSpinEffects[KU_MAX_SPINS];
 
         // ----- Vehicle-physics group (class TU): members read/written by the three VMX128 funcs
         //       (GetCarGroundDistanceCheck / GetTransformDelta / UpdateLinearVelocityMagnitude) -----
@@ -1422,7 +1415,6 @@ namespace Vehicle
         // `VehicleAttribs * mpAttribs`) -- and the console MUTATES through it:
         // VehiclePhysics::SetAttributes @0x8262E070/@0x8262E098 re-streams the pointed-to set
         // and nudges its COM. The `const` that stood here was a reconstruction guess.
-        VehicleAttribs* mpAttribs;
 
         // ===== ADDITIVE GROW (Construct wave, 2026-08-03): the TWO EMBEDDED ATTRIBUTE SETS =====
         // @+0x730 (1840) and @+0xAA0 (2720). Names and types VERBATIM from the DecFIGS DWARF
@@ -1434,10 +1426,8 @@ namespace Vehicle
         // AI-driven; that is why the pointer and the storage are separate members. The PS3 build of
         // the same source makes the same two calls at its own +0x720/+0xA90.
         // These are 0x370 bytes EACH, so declaring them grows sizeof(VehiclePhysics) by 1760 bytes
-        // -- which is correct: on the console they are part of the object. Parity here is BY NAME,
-        // and no absolute offset in this class is static_asserted.
-        VehicleAttribs mAIVehicleAttribs;       // :840  (+0x730)
-        VehicleAttribs mPlayerVehicleAttribs;   // :843  (+0xAA0)
+        // -- which is correct: on the console they are part of the object. Native size and offsets
+        // are enforced in VehiclePhysics_layout_check.cpp.
 
         // ===== The +0x570 above-ground-test block and the +0x6A0 half-extent are the BASE's =====
         // This home used to carry five separately-named members over the console bytes
@@ -1490,27 +1480,21 @@ namespace Vehicle
 
         // @+0xFE0 (4064): lane .x = SteeringAngle (the cached value GetSteeringAngle returns when not
         //   recomputing), .y = Steering, .z = PrevSteering, .w = DriftGasLetOffAmount.
-        Vector4 mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount;
 
         // @+0xFF0 (4080): player-stat lanes (not read by C06; pinned to hold the bank stride between
         //   +0xFE0 and +0x1000 so the named offsets stay correct).
-        Vector4 mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost;
 
         // @+0x1000 (4096): lane .y = MaintainedSpeed (MaintainDriftSpeed target), .z = NeutralControlTime,
         //   .w = DriftScale (the live drift scale UpdateDriftScale grows). lane .x = Spare.
-        Vector4 mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale;
 
         // @+0x1010 (4112): lane .x = 1/TimeToReachTargetDriftSlip, .y = StartSlip (seeded by EnterDrift),
         //   .z = TimeDrifting, .w = BrakeScale.
-        Vector4 mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale;
 
         // @+0x1020 (4128): lane .x = DesiredDriftAngleScale, .y = CappedDriftScale, .z = DesiredDriftSlip,
         //   .w = TimeInFrictionState.
-        Vector4 mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState;
 
         // @+0x1030 (4144): lane .x = LatDriftForceFactor, .y = DriftPushTime, .z = MaxSteeringAngle,
         //   .w = CurrentDriftAngle (the speed-blend authority lane GetSteeringAngle uses).
-        Vector4 mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle;
 
         // Two DWARF-attested inlines over the
         // steering bank, both recovered from the stationary-wheel-pose tail of
@@ -1532,38 +1516,29 @@ namespace Vehicle
 
         // @+0x1050 (4176): lane .x = PropSpeedMaintainAlongZ, .y = PropSpeedMaintainAlongVel
         //   (MaintainDriftSpeed blends the impulse along Z vs velocity by these).
-        Vector4 mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor;
 
         // @+0x1060 (4192): lane .x = TimeStandingStill, .z = TimeWithoutTraction, .w = TimeWithTraction
         //   (UpdateDriftState's "off-ground too long" exit guard reads the without-traction lane).
-        Vector4 mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction;
 
         // @+0x1070 (4208): lane .x = TimeSinceHardLanding, .y = SteeringOverride, .z = CarCarResponse,
         //   .w = SecondsSinceLastWallContact.
-        Vector4 mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact;
 
         // @+0x1080 (4224): lane .x = DampRollVel, .y = TimeInDriftWithStaticFriction,
         //   .z = TimeHandbrakeHasBeenOn, .w = TimeSinceLastHandBrake (UpdateHandBrake's two timers).
-        Vector4 mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake;
 
         // @+0x10F4 (4340): the drift sub-force gate bitfield (ExitDrift resets it to DO_ALL=0xFF; the
         //   slam path writes -1 here -- DWARF VehiclePhysics.h:910). Pinned BY NAME.
-        DriftFlags mDriftFlags;
 
         // @+0x1352 (4946): the drift state (0=None, 1=FacingLeft, 2=FacingRight). The master gate for
         //   the whole drift pipeline; EnterDrift latches it from the entry steering sign. Pinned BY NAME.
-        u8 mu8DriftState;
 
         // @+0x1353 (4947): per-frame world-collision count (UpdateDriftState's `>0` exit guard reads it).
-        s8 mi8NumWorldCollisions;
 
         // @+0x1354 (4948): the running collision count (UpdateDriftState's second `>0` exit guard). The
         //   X360 reads it as a byte against 0; modelled as the full int32 it is in the DWARF.
-        s32 miNumCollisions;
 
         // @+0x1358 (4952): the handbrake latch UpdateHandBrake maintains (engaged above input 0.1, with
         //   hysteresis). Read by UpdateDrift / MaintainDriftSpeed / the drift-force gates. Pinned BY NAME.
-        bool mbHandBrake;
 
         // The drift forces' ground normal (+0x580) and above-ground-valid flag (+0x598) are the base's
         // mAboveGroundTestResult.mIntersectionNormal / .mbValid -- see the block above. The drift code
@@ -1582,12 +1557,10 @@ namespace Vehicle
         // (the seeded kick-window length). Lane .x = SideForceMag (owned by another phase, untouched
         // here). Pinned BY NAME (the ~0x1000 bytes of base/engine/drift/suspension state that precede it
         // are not reproduced as padding).
-        Vector4    mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime;
 
         // @+0x10F5 (4341, BY NAME). The boost-regime flag UpdateBoost writes and the two appliers assert:
         // true while the current boost is in its KICK window, false for sustained NORMAL boost. The X360
         // sets it from `CurrentBoostKickTime > TimeBoosting` (`stb r11,0x10F5(r31)`). Pinned BY NAME.
-        bool       mbInBoostKick;
 
         // RETIRED, AND THE OLD NOTE WAS WRONG. This home used to declare
         //     Vector3 mLinearImpulseAccumulator;      // +0x100
@@ -1609,7 +1582,6 @@ namespace Vehicle
         // @+0x135B (4955, BY NAME). The "all driven wheels have traction" gate the boost appliers and
         // UpdateSpeedMatch consult before applying force (`lbz r11,0x135B(r3) ; cmplwi ; beq`). Pinned BY
         // NAME (it sits in the drift/crash byte-flag block; mbHandBrake/mu8DriftState are nearby).
-        bool       mbAllWheelsHaveTraction;
 
         // @+0x135D (4957). The one-frame "was just slammed" latch AddSlam raises (`stb r10,0x135D(r11)`
         // @0x825D4940) and VehiclePhysics::Prepare @0x826380A0 clears. This home used to call it
@@ -1618,12 +1590,10 @@ namespace Vehicle
         // RaceCarState+0x44F, which BrnVehicleEvents.h:146 names mbJustBeenSlammed. The DWARF byte
         // order also lands it exactly: mbAllWheelsHaveTraction +0x135B, mbResetCarTransform +0x135C,
         // mbJustBeenSlammed +0x135D.
-        bool       mbJustBeenSlammed;
 
         // @+0x1340: cached normalized linear velocity (xyz lanes) + speed magnitude (w/"plus" lane),
         // written by UpdateLinearVelocityMagnitude (`addi r10,r3,0x1340 ; stvx128`) and read by
         // GetLinearVelocityDirection / GetLinearVelocityMagnitude. Pinned BY NAME.
-        Vector3Plus mNormLinearVelocityMag;
 
         // DecFIGS VehiclePhysics.h:431 / :2194. Both accessors are inlined in
         // Breaker. GetTimeDrifting is the lane-2 splat of the +0x1010 drift
@@ -1657,7 +1627,6 @@ namespace Vehicle
         // @+0x1370: the previous-frame physics transform, the "from" matrix of GetTransformDelta
         // (asm: `addi r11,r4,0x1370 ; lvx128` of the four rows, whose orthonormal 3x3 is inverted
         // inline). Pinned BY NAME.
-        Matrix44Affine mPreviousTransform;
 
         // ===== ADDITIVE GROW (Reset wave, 2026-08-03): the ten members VehiclePhysics::Reset
         //       @0x825FDD78 writes that this home had never DECLARED. Every name and type is
@@ -1668,16 +1637,12 @@ namespace Vehicle
         //       console offsets are the ones Reset's stores land on. =====
 
         // @+0x10E0 (4320, DWARF :933). The cached steering direction; Reset zeroes it.
-        Vector3 mSteeringDirection;
 
         // @+0x10F0 (4336, DWARF :936). Reset seeds it to 5.0f == flt_8200426C ==
         // KF_STUCK_IN_COLLISION_TEST_INTERVAL (the DWARF's own constant for this member).
-        f32 mfTimeUntilStuckInCollisionTest;
 
         // @+0x10F6 / +0x10F8 (DWARF :945 / :951). Two latches Reset clears. They sit either side of
         // mbIsUsingAIDonutAttribs (:948), which Reset does NOT touch and which is not declared here.
-        bool mbForceFrozen;
-        bool mbGivenAftertouchAirBoost;
 
         // DWARF :1381 `void SetForceFrozen(bool)`;
         // the X360 inlines it as the single byte store at +0x10F6 (UpdateVehiclePhysics
@@ -1685,48 +1650,38 @@ namespace Vehicle
         void SetForceFrozen(bool lbFrozen) { mbForceFrozen = lbFrozen; }
 
         // @+0x1150 (4432, DWARF :966). The last car this one touched; Reset seeds -1 ("none").
-        s8 mi8LastContactedRaceCar;
 
         // @+0x1350 / +0x1351 (DWARF :987 / :990). The airborne latches; Reset clears both.
-        bool mbHasAir;
-        bool mbHadAirLastFrame;
 
         // @+0x135C (4956, DWARF :1014). Reset sets this one TRUE, not false -- it is the request
         // that the next update re-seat the car's transform. The byte order mbAllWheelsHaveTraction
         // +0x135B / mbResetCarTransform +0x135C / mbJustBeenSlammed +0x135D (already documented
         // above) places it exactly.
-        bool mbResetCarTransform;
 
         // @+0x1361 (4961, DWARF :1029). The burnout latch; Reset clears it.
-        bool mbDoingBurnout;
 
         // @+0x13D0 (5072, DWARF :1044). The force-feedback wheel spring the input layer reads;
         // Reset zeroes both of its coefficients. CgsInput::Device::WheelFFSpring is the committed
         // type from CgsInputTypes.h, not a slice.
-        CgsInput::Device::WheelFFSpring mWheelFFSpring;
 
         // ===== ADDITIVE GROW (C03 suspension/downforce/weight group) =====
         // @+0xE10 (3600), stride 0x30: the four 1-D damped suspension springs (one per driven wheel).
         // SuspensionSpring is the already-committed namespace-scope slice (sizeof 0x30 = 3*Vector4).
-        SuspensionSpring maSprings[eNumDrivenWheels];
 
         // @+0xED0 (3792, DWARF VehiclePhysics.h:849). The per-spring mass scalers. Construct
         // @0x8262DC64 zeroes it with a single whole-register `stvx128 v127(==0), this, 0xED0`
         // BEFORE it builds the engine; SetupSuspension installs the real values later. The offset
         // closes by sequence with no slack: maSprings @+0xE10 + 4*0x30 == +0xED0, and the very next
         // DWARF member (mWeightTransfer, already declared below) is at +0xEE0. Pinned BY NAME.
-        Vector4 mvSpringMassScalers;
 
         // @+0xEE0 (3808): the dynamic load-transfer force CalculateWeightTransfer builds and
         // distributes to the springs (SetExternalForce). DWARF VehiclePhysics.h:830. The offset is
         // confirmed by sequence: maSprings @+0xE10 + 4*0x30 = +0xED0 = mvSpringMassScalers, then
         // mWeightTransfer at +0xEE0.
-        Vector3 mWeightTransfer;        // +0xEE0 (packed; .x/.y/.z load-transfer per body axis)
 
         // @+0xEF0 (3824): the crash-state register Reset zeroes wholesale. DWARF VehiclePhysics.h:855
         // places it between mWeightTransfer and mEngine, which is exactly the +0xEE0/+0xEF0/+0xF00
         // sequence. Pinned BY NAME.
-        Vector4 mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare;
 
         // @+0xF00 (3840): the engine/gearbox model. ADDED 2026-08-03 with SetWheelVelocities, which
         // ends by calling `mEngine.Reset(averageWheelAngularVelocity)` -- the X360 does
@@ -1737,7 +1692,6 @@ namespace Vehicle
         // DECLARED. Pinned BY NAME; the offset closes by sequence (maSprings +0xE10 + 4*0x30 =
         // +0xED0 mvSpringMassScalers, +0xEE0 mWeightTransfer, +0xEF0
         // mvSpeedOnLastCrashMPH_TimeCrashing_..., then mEngine at +0xF00).
-        Engine mEngine;
 
         // @+0x1330 (4912): the PREVIOUS frame's world-space linear velocity. This home used to call
         // it `mWeightTransferMirror` and describe it as "the +0x50 weight register snapshot" -- but
@@ -1751,7 +1705,6 @@ namespace Vehicle
         // mi8NumWorldCollisions +0x1353, miNumCollisions +0x1354, mbHandBrake +0x1358,
         // mbAllWheelsHaveTraction +0x135B, mbJustBeenSlammed +0x135D) reproduce every committed
         // offset in the byte block in DWARF declaration order.
-        Vector3 mPreviousWorldSpaceVelocity;
 
         // ==========================================================================================
         // THE OWN-MEMBER BLOCK CLOSES -- 2026-08-03 (VehiclePhysics own-block wave).
@@ -1885,70 +1838,52 @@ namespace Vehicle
         //                                                    `lwz r11,0x13E4`
         //                                                    -> ends 0x13E8, 16-rounds to **0x13F0**
         //
-        // HOST DIVERGENCE, stated once and NOT pretended away. This block is NOT width-identical
-        // on x64 (unlike the RaceCarPhysics one): mpAttribs and mpDebugComponent are pointers, and
-        // several embedded sub-types in this tree are reconstructions rather than byte-exact copies
-        // of the console's. So NO absolute console offset in this class is static_asserted on the
-        // host. What the gate (VehiclePhysics_layout_check.cpp) DOES assert is (a) the arithmetic
-        // above -- that the DWARF order plus the asm-literal sub-object sizes reproduces every
-        // asm-literal anchor and lands on 0x13F0 -- and (b) the host-side sizes of the pointer-free
-        // sub-structs the map depends on.
+        // Native declarations below now follow this order; the layout TU checks
+        // the actual C++ members against these ARTIST offsets.
         // ==========================================================================================
 
         // ----- ADDITIVE GROW (own-block closure wave, 2026-08-03): the fourteen DWARF members of
         //       this class that this home had never DECLARED. Every name, type and DWARF line is
-        //       verbatim; every offset is in the map above. Nothing existing is reordered. -----
+        //       verbatim; every offset is in the map above. Declarations are grouped in native order below. -----
 
         // @+0xFD0 (4048, DWARF :835). The scalar HandleWheelPairFriction multiplies the residual
         // linear friction force by before accumulating it. Referenced by this header's own
         // HandleWheelPairFriction note since before this wave, but never declared.
-        VecFloat mvfWheelFrictionLinearMultiplier;
 
         // @+0x1090 (4240, DWARF :905). LAST FRAME's driver controls -- the whole 0x48-byte payload,
         // not a slice. UpdateDriving `memcpy`s the incoming controls over it at the end of the frame;
         // ModifyControlsForDrift/UpdateBoost difference against it. Its meDriverType lane (+0x44,
         // i.e. class +0x10D4) is what the takedown chain reads to ask "is this car AI-driven?".
-        BrnPlayerDriverControls mPreviousControls;
 
         // @+0x10F7 (4343, DWARF :916). True while the AI donut-attribs set is installed
         // (SwitchAIDonuttingAttribs latches it). Sits between mbForceFrozen and
         // mbGivenAftertouchAirBoost, both of which were already declared.
-        bool mbIsUsingAIDonutAttribs;
 
         // @+0x1359 (4953, DWARF :954). The seat the record's `mbCrashCommitted` was really at.
         // VehicleManager::SetRaceCarCrashing @0x82635440 sets it to 1 and, in the same guarded
         // block, copies mOriginalAABB over mDeformableAABB (ResetDeformableAABB) -- i.e. "arm the
         // deformation model and reset its box" is one action.
-        bool mbDeformationModelIsActive;
 
         // @+0x135A (4954, DWARF :955). Published to RaceCarState by
         // VehicleOutputInterface::UpdateRaceCarState @0x825EC9FC.
-        bool mbDeformedThisFrame;
 
         // @+0x135E (4958, DWARF :960). The steering-override latch that pairs with the
         // mvTimeSinceHardLanding_**SteeringOverride**_... lane. No direct asm site of its own; it is
         // bracketed with zero slack by mbJustBeenSlammed (+0x135D) and mbIsWedgedInWorld (+0x135F),
         // both of which ARE attested. FLAG: seat is by order, not by a site.
-        bool mbOverrideSteering;
 
         // @+0x135F (4959, DWARF :961) and @+0x1360 (4960, DWARF :962). Both are written by
         // VehicleManager::DoPlayerStuckLineTests (@0x825C3B70/@0x825C4A28 and
         // @0x825C498C/@0x825C4994) and both are published by UpdateRaceCarState.
-        bool mbIsWedgedInWorld;
-        bool mbIsFrontRayOccluded;
 
         // @+0x1362 (4962, DWARF :967). CheckForGrindingAndRubbing @0x825B5484 reads it on BOTH cars
         // before classifying a grind; HackedResetAndFlyAround clears it.
-        bool mbContactingWall;
 
         // @+0x13B0 (5040, DWARF :970) and @+0x13C0 (5056, DWARF :972). The previous linear velocity
         // and the integrated take-off attitude UpdateInAirBehaviour maintains (`addi r24,r30,0x13C0`).
-        Vector3 mLastLinearVelocity;
-        Vector3 mPitchYawRollFromTakeOff;
 
         // @+0x13D8 (5080, DWARF :974). UpdateInAirBehaviour @0x825D123C/@0x825D186C is the only
         // writer and reader.
-        bool mbRollingInAir;
 
         // @+0x13DC (5084, DWARF :977). The seat the record's `mfPlayerBoostStrengthStat` was
         // really at -- and it is an INT, not a float: VehiclePhysics::Prepare @0x826380F0 stores it
@@ -1957,13 +1892,11 @@ namespace Vehicle
         // FLAG: BrnResource::ECarType has no committed home in this tree yet (same as
         // BrnVehicleManager.h's maPlayerCarStats note), so it is carried as the s32 it is on the
         // wire. Retype when that enum lands.
-        s32 meCarType;   // logical: BrnResource::ECarType
 
         // @+0x13E4 (5092, DWARF :982). The per-car debug component the suspension/downforce debug
         // draws hang off (`lwz r11,0x13E4` in ApplySuspensionForces and UpdateDownForce; a null
         // check gates the draw). Declared as an opaque forward-declared pointer -- the component's
         // own type is a separate TU.
-        DebugComponent* mpDebugComponent;
 
         // ----- C03 suspension phases (bodies in VehiclePhysics.cpp) -----
         // ARITY CONFORMED 2026-08-09 (attribs-setup wave): the DWARF (VehiclePhysics.h:1646)
@@ -2098,6 +2031,70 @@ namespace Vehicle
         // static_asserts, which fire at COMPILE time -- so /OPT:REF discarding it afterwards is
         // irrelevant. Defined in VehiclePhysics_layout_check.cpp, which IS mounted; see that file's
         // banner for why the gate is console ARITHMETIC and not a host offsetof.
+        // Native ARTIST own-member block, in DecFIGS declaration order.
+        // The layout TU checks all 61 actual offsets and the complete 0x13F0 size.
+        VehicleAttribs* mpAttribs;  // +0x720
+        VehicleAttribs mAIVehicleAttribs;  // +0x730
+        VehicleAttribs mPlayerVehicleAttribs;  // +0xAA0
+        SuspensionSpring maSprings[eNumDrivenWheels];  // +0xE10
+        Vector4 mvSpringMassScalers;  // +0xED0
+        Vector3 mWeightTransfer;  // +0xEE0
+        Vector4 mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare;  // +0xEF0
+        Engine mEngine;  // +0xF00
+        VecFloat mvfWheelFrictionLinearMultiplier;  // +0xFD0
+        Vector4 mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount;  // +0xFE0
+        Vector4 mvPlayerStatSpeed_PlayerStatStrength_PlayerStatControl_PlayerStatBoost;  // +0xFF0
+        Vector4 mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale;  // +0x1000
+        Vector4 mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale;  // +0x1010
+        Vector4 mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState;  // +0x1020
+        Vector4 mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle;  // +0x1030
+        Vector4    mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime;  // +0x1040
+        Vector4 mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor;  // +0x1050
+        Vector4 mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction;  // +0x1060
+        Vector4 mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact;  // +0x1070
+        Vector4 mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake;  // +0x1080
+        BrnPlayerDriverControls mPreviousControls;  // +0x1090
+        Vector3 mSteeringDirection;  // +0x10E0
+        f32 mfTimeUntilStuckInCollisionTest;  // +0x10F0
+        DriftFlags mDriftFlags;  // +0x10F4
+        bool       mbInBoostKick;  // +0x10F5
+        bool mbForceFrozen;  // +0x10F6
+        bool mbIsUsingAIDonutAttribs;  // +0x10F7
+        bool mbGivenAftertouchAirBoost;  // +0x10F8
+        SlamEffect mSlamEffect;  // +0x1100
+        ShuntEffect mShuntEffect;  // +0x1130
+        s8 mi8LastContactedRaceCar;  // +0x1150
+        CgsContainers::BitArray<KU_MAX_AIR_RAMS> mUsedAirRams;  // +0x1158
+        AirRamEffect mAirRamEffect[KU_MAX_AIR_RAMS];  // +0x1160
+        CgsContainers::BitArray<KU_MAX_SPINS> mUsedSpins;  // +0x1220
+        SpinEffect maSpinEffects[KU_MAX_SPINS];  // +0x1230
+        Vector3 mPreviousWorldSpaceVelocity;  // +0x1330
+        Vector3Plus mNormLinearVelocityMag;  // +0x1340
+        bool mbHasAir;  // +0x1350
+        bool mbHadAirLastFrame;  // +0x1351
+        u8 mu8DriftState;  // +0x1352
+        s8 mi8NumWorldCollisions;  // +0x1353
+        s32 miNumCollisions;  // +0x1354
+        bool mbHandBrake;  // +0x1358
+        bool mbDeformationModelIsActive;  // +0x1359
+        bool mbDeformedThisFrame;  // +0x135A
+        bool       mbAllWheelsHaveTraction;  // +0x135B
+        bool mbResetCarTransform;  // +0x135C
+        bool       mbJustBeenSlammed;  // +0x135D
+        bool mbOverrideSteering;  // +0x135E
+        bool mbIsWedgedInWorld;  // +0x135F
+        bool mbIsFrontRayOccluded;  // +0x1360
+        bool mbDoingBurnout;  // +0x1361
+        bool mbContactingWall;  // +0x1362
+        Matrix44Affine mPreviousTransform;  // +0x1370
+        Vector3 mLastLinearVelocity;  // +0x13B0
+        Vector3 mPitchYawRollFromTakeOff;  // +0x13C0
+        CgsInput::Device::WheelFFSpring mWheelFFSpring;  // +0x13D0
+        bool mbRollingInAir;  // +0x13D8
+        s32 meCarType;  // +0x13DC
+        s8         mi8LastAttackersRaceCarIndex;  // +0x13E0
+        DebugComponent* mpDebugComponent;  // +0x13E4
+
         static void _AssertOwnBlockLayout();
     };
 
@@ -2108,9 +2105,8 @@ namespace Vehicle
     // computed value. VehiclePhysics_layout_check.cpp re-derives the same numbers by walking the
     // DWARF member order with the asm-literal sub-object sizes and static_asserts that the two
     // agree, at every anchor and at the 0x13F0 end. That is a machine-checked statement of the
-    // CONSOLE layout, which is the artifact this wave recovered; it is deliberately NOT an
-    // offsetof() gate, because this block is not width-identical on x64 (two pointers) and several
-    // embedded sub-types in this tree are reconstructions rather than byte-exact console copies.
+    // CONSOLE layout, which is the artifact this wave recovered; the native
+    // offsetof checks in VehiclePhysics_layout_check.cpp enforce these anchors directly.
     // ==============================================================================================
     namespace X360Layout
     {

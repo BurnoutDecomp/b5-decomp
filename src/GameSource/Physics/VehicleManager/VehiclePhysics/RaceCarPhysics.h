@@ -315,8 +315,6 @@ namespace Vehicle
         bool GetWrittenIntoRWInSlowMo() { return mbWroteIntoRWInSlowMo; }
         f32 GetSlamSteering() const { return mfSlamSteering; }
         void ClearSlamSteering() { mfSlamSteering = 0.0f; }
-        static const TdSlamGateSample* FindTdSlamGateSample(const RaceCarPhysics* lpCar);
-        void TdReactStep(const BrnPlayerDriverControls* lpControls) const;
 
         void SetCrashEntityIdAndNormal(EntityId lGlobalEntityId, Vector3 lNormal)
         {
