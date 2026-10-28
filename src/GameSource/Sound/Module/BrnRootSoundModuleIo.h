@@ -666,8 +666,10 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            for (auto& lpSerialiser : mReplayRequestInterface.mapSerialisers)
-                lpSerialiser = 0;
+            for (u32 luSerialiser = 0;
+                 luSerialiser < sizeof(mReplayRequestInterface.mapSerialisers) / sizeof(mReplayRequestInterface.mapSerialisers[0]);
+                 ++luSerialiser)
+                mReplayRequestInterface.mapSerialisers[luSerialiser] = 0;
         }
 
         // X360 ::G 0x823B8A68 (read-lock, DWARF :289) / ::GetReso 0x826951D0 (write-lock, DWARF :292)

@@ -35,6 +35,7 @@ namespace CgsGui
 
         // DWARF CgsGuiResourceModule.h:129-131.
         static const s32 KI_RESOURCE_RECEIVER_QUEUE       = 8192;
+        static const s32 KI_MAX_BUNDLES_TO_LOAD            = 64;
         static const s32 KI_MAX_RESOURCES_WITHOUT_WAITING = 5;
 
         // DWARF CgsGuiResourceModule.h:51.

@@ -540,11 +540,7 @@ namespace CgsGui
         }
     }
 
-    // X360 0x8285F7A8. The per-frame module dispatch. Every arm of the X360 switch funnels
-    // into the same UnlockForWrite tail, so the PC body restructures to a single tail --
-    // which is also where the [PC] platform servicer runs (the point in the frame where the
-    // console scheduler would run the downstream resource/pool modules against the
-    // just-posted request queue).
+    // ARTIST8285F7A8: process one acquire stage, then unlock the output buffer.
     void GuiResourceModule::Update(InputBuffer* lpInput, OutputBuffer* lpOutput)
     {
         CGS_ASSERT(lpInput != 0, "lpInput != NULL");
@@ -661,6 +657,7 @@ namespace CgsGui
                 {
                     GuiBundleToLoad& lrBundle = maBundlesPending[li];
 
+                    CGS_ASSERT(lrBundle.mbParsed, "lBundle.mbParsed");
                     if (lrBundle.meLoadUnload != E_GUI_RESOURCEREQUEST_LOAD)
                     {
                         GuiEventUnloadNotification lNotification;
@@ -671,8 +668,11 @@ namespace CgsGui
                     }
                     else
                     {
-                        const bool lbResourcePresent = lppResourceMemory != 0;
-                        CGS_ASSERT(!lbResourcePresent || *lppResourceMemory != 0,
+                        void* const* lppResourceMemory =
+                            static_cast<void* const*>(lrBundle.mResourceHandle.mpResourceMemory);
+                        CGS_ASSERT(lppResourceMemory != 0,
+                                   "Invalid resource in GuiResourceModule::ParseResource");
+                        CGS_ASSERT(*lppResourceMemory != 0,
                                    "Invalid memory resource in GuiResourceModule::ParseResource");
 
                         GuiEventLoadNotification lNotification;
@@ -695,10 +695,6 @@ namespace CgsGui
                 CGS_ASSERT(false, "Invalid state in GuiResourceModule::Update");
                 break;
         }
-
-        // [PC] service the request queue this frame's stage just posted (the console
-        // scheduler runs the downstream resource/pool modules here); see the FLAG'd body.
-        ServicePlatformRequests(lpOutput);
 
         lpOutput->UnlockForWrite();
     }

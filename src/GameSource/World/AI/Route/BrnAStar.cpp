@@ -8,6 +8,7 @@
 #include "BrnCommonTypes.h"                           // Vector2 / Vector3 / Vector4
 
 #include <cmath>   // sqrtf / fabsf
+#include <cfloat>  // FLT_MAX (ARTIST8204F664)
 
 // BrnAI::AStar / BrnAI::AStarNodePool -- the .cpp home for the search-engine members
 // declared in BrnAStar.h. The three Euclidean leaf heuristics stay inline in the header
@@ -73,6 +74,8 @@ const s32 AStar::KAI_ITERATION_NODE_BUDGET[KI_MAX_ITERATIONS] =
 // Construct's default/sentinel cost weight (flt_820037C8). Hex-Rays resolves the rodata
 // float to -1.0 (an "unset" sentinel; Prepare overwrites it from the quality preset).
 const f32 AStar::KF_DEFAULT_COST_WEIGHT = -1.0f;
+const f32 AStar::KF_EUCLIDEAN_BIAS = 500.0f;     // ARTIST820C478C
+const f32 AStar::KF_BUILDROUTE_DOT_SEED = -2.0f; // ARTIST820C4358
 
 // flt_820C3B70 lane 0 == 0x34000000 == FLT_EPSILON (1.1920929e-07), read from the image
 // 2026-09-03. Every VMX user (BuildRoute @0x8277FC6C, RacingLineGenerator::GetForwardPortalIndex
@@ -164,7 +167,7 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
                "lfCostWeight >= 0.0f && lfCostWeight <= 1.0f");
 
     AStarNode* lpBestNode = 0;
-    f32        lfBestScore = 3.4028235e38f;          // FLT_MAX (flt_8204F664)
+    f32        lfBestScore = FLT_MAX;          // FLT_MAX (flt_8204F664)
     u16        luBestOpenNodeIndex = KU_INVALID_NODE_INDEX;
 
     if (muOpenNodeCount)
@@ -640,7 +643,7 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
             const Portal* lpPortal = lpEndSection->GetPortal(luPortalIndex);
 
             // Direction from the route's last node to this portal, on the ground plane.
-            const Vector3 lPortalPos3{ lpPortal->GetPositionX(),
+            const Vector3 lPortalPos3 = { lpPortal->GetPositionX(),
                                        lpPortal->GetPositionY(),
                                        lpPortal->GetPositionZ(), 0.0f };
             const Vector2 lPortalFlat = BrnMath::Flatten(lPortalPos3);
