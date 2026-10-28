@@ -741,8 +741,8 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         VehicleTypeRuntime::AttribKey FindVehicleTypeAttribKey_EXPENSIVE(u32 luVehicleType) const;
 
         bool  IsPaused();                                            // @ 0x82707560
-        bool  ShouldBeHollywoodAction();                             // @ 0x827075C8
-        bool  NeedToTakeActionAgainstJunctionFUP();                  // @ 0x82707FD0
+        bool  ShouldBeHollywoodAction() const;                             // @ 0x827075C8
+        bool  NeedToTakeActionAgainstJunctionFUP() const;                  // @ 0x82707FD0
         void  EnterReplay();                                         // @ 0x827081D8
         void  LeaveReplay();                                         // @ 0x82708248
         void  RestartTraffic();                                      // @ 0x82708F98
