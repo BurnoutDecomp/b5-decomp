@@ -20,6 +20,7 @@
 
 #include "types.hpp"
 #include <cstdarg>   // va_list
+#include <cstddef>   // native record offsets
 
 struct AptUserFunctions;   // Apt.h -- the allocator/callback table (held by ptr only)
 
@@ -259,3 +260,12 @@ private:
 EAStringC operator+(const char* const pStrText, const EAStringC& strText);
 
 typedef EAStringC AptNativeString;
+
+// ARTIST string header and StaticStringHelperT record used by the interned names.
+CGS_STATIC_ASSERT((sizeof(EAStringC) == 4), "ARTIST EAStringC pointer");
+CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, sd.m_uRefCount) == 0), "ARTIST string references");
+CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, sd.m_uSize) == 2), "ARTIST string length");
+CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, sd.m_uMaxSize) == 4), "ARTIST string capacity");
+CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, sd.m_uHash) == 6), "ARTIST string hash");
+CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, pbuf) == 8), "ARTIST string bytes");
+CGS_STATIC_ASSERT((sizeof(EAStringC::StaticStringHelperT) == 0x108), "ARTIST static string stride");

@@ -18,113 +18,99 @@
 #include <xtl.h>   // _InterlockedExchange (the Apt string-pool spin lock)
 #include <cstring>    // memset / strcmp (bucket-array clear + pool key compare)
 
-// ---------------------------------------------------------------------------
-// saConstant -- the interned AS-name TABLE (X360 dword_8324E580, 88 entries).
-//
-// The 88 names are GROUND TRUTH from the TARGET binary: the 264-byte
-// StaticStringHelperT record block sStringPoolData @0x82F733FC (stride 264,
-// end 0x82F78EBC => 88 records) is written by the CRT initializer
-// sub_82C71F10 (each record: {u16 refCount=1, u16 length, u16 flags=1, u16 0,
-// char data[256]}); every literal below was recovered from that initializer's
-// store set ([19] "_up" = the packed dword 0x5F757000, [85] "XML" =
-// 0x584D4C00, [66] "onReleaseOutside" via its copy loop; the rest are its
-// strcpy/qword stores in record order). StringPool::Initialize then points
-// saConstant[i] at record i (PS3 0x7F7A70's operator= loop) -- collapsed here
-// to interning each literal at Initialize (the same observable content).
-// ---------------------------------------------------------------------------
-EAStringC StringPool::saConstant[StringPool::KU_CONSTANT_COUNT] = {
-    EAStringC("__proto__"),
-    EAStringC("_alpha"),
-    EAStringC("_currentframe"),
-    EAStringC("_down"),
-    EAStringC("_droptarget"),
-    EAStringC("_focusrect"),
-    EAStringC("_framesloaded"),
-    EAStringC("_global"),
-    EAStringC("_height"),
-    EAStringC("_highquality"),
-    EAStringC("_left"),
-    EAStringC("_name"),
-    EAStringC("_quality"),
-    EAStringC("_right"),
-    EAStringC("_rotation"),
-    EAStringC("_soundbuftime"),
-    EAStringC("_target"),
-    EAStringC("_totalframes"),
-    EAStringC("_type"),
-    EAStringC("_up"),
-    EAStringC("_url"),
-    EAStringC("_visible"),
-    EAStringC("_width"),
-    EAStringC("_x"),
-    EAStringC("_xmouse"),
-    EAStringC("_xscale"),
-    EAStringC("_y"),
-    EAStringC("_ymouse"),
-    EAStringC("_yscale"),
-    EAStringC("aa"),
-    EAStringC("ab"),
-    EAStringC("array"),
-    EAStringC("ba"),
-    EAStringC("bb"),
-    EAStringC("boolean"),
-    EAStringC("center"),
-    EAStringC("color"),
-    EAStringC("controller"),
-    EAStringC("date"),
-    EAStringC("error"),
-    EAStringC("false"),
-    EAStringC("function"),
-    EAStringC("ga"),
-    EAStringC("gb"),
-    EAStringC("getRGB"),
-    EAStringC("getTransform"),
-    EAStringC("left"),
-    EAStringC("loadvars"),
-    EAStringC("movieclip"),
-    EAStringC("none"),
-    EAStringC("null"),
-    EAStringC("number"),
-    EAStringC("object"),
-    EAStringC("onData"),
-    EAStringC("onDragOut"),
-    EAStringC("onDragOver"),
-    EAStringC("onEnterFrame"),
-    EAStringC("onKeyDown"),
-    EAStringC("onKeyUp"),
-    EAStringC("onLoad"),
-    EAStringC("onMouseDown"),
-    EAStringC("onMouseMove"),
-    EAStringC("onMouseUp"),
-    EAStringC("onMouseWheel"),
-    EAStringC("onPress"),
-    EAStringC("onRelease"),
-    EAStringC("onReleaseOutside"),
-    EAStringC("onRollOut"),
-    EAStringC("onRollOver"),
-    EAStringC("onUnload"),
-    EAStringC("prototype"),
-    EAStringC("ra"),
-    EAStringC("rb"),
-    EAStringC("right"),
-    EAStringC("setRGB"),
-    EAStringC("setTransform"),
-    EAStringC("sound"),
-    EAStringC("string"),
-    EAStringC("super"),
-    EAStringC("textformat"),
-    EAStringC("this"),
-    EAStringC("true"),
-    EAStringC("undefined"),
-    EAStringC("xMax"),
-    EAStringC("xMin"),
-    EAStringC("XML"),
-    EAStringC("yMax"),
-    EAStringC("yMin")
+// ARTIST CRT initializer82C71F10 builds these writable 0x108-byte records.
+// No allocator is needed before StringPool::Initialize publishes their addresses.
+static EAStringC::StaticStringHelperT sStringPoolData[StringPool::KU_CONSTANT_COUNT] = {
+    {{1, 9, 1, 0}, "__proto__"},
+    {{1, 6, 1, 0}, "_alpha"},
+    {{1, 13, 1, 0}, "_currentframe"},
+    {{1, 5, 1, 0}, "_down"},
+    {{1, 11, 1, 0}, "_droptarget"},
+    {{1, 10, 1, 0}, "_focusrect"},
+    {{1, 13, 1, 0}, "_framesloaded"},
+    {{1, 7, 1, 0}, "_global"},
+    {{1, 7, 1, 0}, "_height"},
+    {{1, 12, 1, 0}, "_highquality"},
+    {{1, 5, 1, 0}, "_left"},
+    {{1, 5, 1, 0}, "_name"},
+    {{1, 8, 1, 0}, "_quality"},
+    {{1, 6, 1, 0}, "_right"},
+    {{1, 9, 1, 0}, "_rotation"},
+    {{1, 13, 1, 0}, "_soundbuftime"},
+    {{1, 7, 1, 0}, "_target"},
+    {{1, 12, 1, 0}, "_totalframes"},
+    {{1, 5, 1, 0}, "_type"},
+    {{1, 3, 1, 0}, "_up"},
+    {{1, 4, 1, 0}, "_url"},
+    {{1, 8, 1, 0}, "_visible"},
+    {{1, 6, 1, 0}, "_width"},
+    {{1, 2, 1, 0}, "_x"},
+    {{1, 7, 1, 0}, "_xmouse"},
+    {{1, 7, 1, 0}, "_xscale"},
+    {{1, 2, 1, 0}, "_y"},
+    {{1, 7, 1, 0}, "_ymouse"},
+    {{1, 7, 1, 0}, "_yscale"},
+    {{1, 2, 1, 0}, "aa"},
+    {{1, 2, 1, 0}, "ab"},
+    {{1, 5, 1, 0}, "array"},
+    {{1, 2, 1, 0}, "ba"},
+    {{1, 2, 1, 0}, "bb"},
+    {{1, 7, 1, 0}, "boolean"},
+    {{1, 6, 1, 0}, "center"},
+    {{1, 5, 1, 0}, "color"},
+    {{1, 10, 1, 0}, "controller"},
+    {{1, 4, 1, 0}, "date"},
+    {{1, 5, 1, 0}, "error"},
+    {{1, 5, 1, 0}, "false"},
+    {{1, 8, 1, 0}, "function"},
+    {{1, 2, 1, 0}, "ga"},
+    {{1, 2, 1, 0}, "gb"},
+    {{1, 6, 1, 0}, "getRGB"},
+    {{1, 12, 1, 0}, "getTransform"},
+    {{1, 4, 1, 0}, "left"},
+    {{1, 8, 1, 0}, "loadvars"},
+    {{1, 9, 1, 0}, "movieclip"},
+    {{1, 4, 1, 0}, "none"},
+    {{1, 4, 1, 0}, "null"},
+    {{1, 6, 1, 0}, "number"},
+    {{1, 6, 1, 0}, "object"},
+    {{1, 6, 1, 0}, "onData"},
+    {{1, 9, 1, 0}, "onDragOut"},
+    {{1, 10, 1, 0}, "onDragOver"},
+    {{1, 12, 1, 0}, "onEnterFrame"},
+    {{1, 9, 1, 0}, "onKeyDown"},
+    {{1, 7, 1, 0}, "onKeyUp"},
+    {{1, 6, 1, 0}, "onLoad"},
+    {{1, 11, 1, 0}, "onMouseDown"},
+    {{1, 11, 1, 0}, "onMouseMove"},
+    {{1, 9, 1, 0}, "onMouseUp"},
+    {{1, 12, 1, 0}, "onMouseWheel"},
+    {{1, 7, 1, 0}, "onPress"},
+    {{1, 9, 1, 0}, "onRelease"},
+    {{1, 16, 1, 0}, "onReleaseOutside"},
+    {{1, 9, 1, 0}, "onRollOut"},
+    {{1, 10, 1, 0}, "onRollOver"},
+    {{1, 8, 1, 0}, "onUnload"},
+    {{1, 9, 1, 0}, "prototype"},
+    {{1, 2, 1, 0}, "ra"},
+    {{1, 2, 1, 0}, "rb"},
+    {{1, 5, 1, 0}, "right"},
+    {{1, 6, 1, 0}, "setRGB"},
+    {{1, 12, 1, 0}, "setTransform"},
+    {{1, 5, 1, 0}, "sound"},
+    {{1, 6, 1, 0}, "string"},
+    {{1, 5, 1, 0}, "super"},
+    {{1, 10, 1, 0}, "textformat"},
+    {{1, 4, 1, 0}, "this"},
+    {{1, 4, 1, 0}, "true"},
+    {{1, 9, 1, 0}, "undefined"},
+    {{1, 4, 1, 0}, "xMax"},
+    {{1, 4, 1, 0}, "xMin"},
+    {{1, 3, 1, 0}, "XML"},
+    {{1, 4, 1, 0}, "yMax"},
+    {{1, 4, 1, 0}, "yMin"},
 };
-
-// The shared fixed-size pool the bucket array is carved from (off_8324D808).
-extern DOGMA_PoolManager* gpAptPseudoDataPool;
+EAStringC StringPool::saConstant[StringPool::KU_CONSTANT_COUNT];
 
 // The string-pool bucket array + count (off_8324E4F4 / dword_8324E4F8). Owned here.
 // The bucket array is a flat AptString*[nCount] hash table: each slot is the head of
@@ -152,7 +138,7 @@ namespace
     volatile long gStringPoolTableLock = 0;
     inline void StringPoolTableLock_Acquire()
     {
-        while (_InterlockedExchange(&gStringPoolTableLock, 1) != 0) {}
+        while (_InterlockedCompareExchange(&gStringPoolTableLock, 1, 0) != 0) {}
     }
     inline void StringPoolTableLock_Release()
     {
@@ -160,36 +146,17 @@ namespace
     }
 }
 
-// ---------------------------------------------------------------------------
-// StringPool::Initialize @0x82AE3630 -- allocate the interned AS-name string table +
-// the string-pool bucket array. Called once by AptCommonInitialize (AptInit.cpp) at
-// the Apt bring-up. Homed here (this TU owns the full StringPool.h + no AptNativeHash.h
-// mini-StringPool collision; AptInit.cpp reaches it through the AptStringPool_Initialize
-// free wrapper below to avoid pulling the full StringPool.h into its interpreter-header
-// include set).
-//
-// X360 (under the interned-table spin lock unk_8324E7D4): walk the 256-entry AS-name
-// table dword_8324E580, pointing each entry at its 264-byte StaticStringHelperT record
-// in the rodata block unk_82F733FC (stride 0x108), then off_8324E4F4 = pool->Allocate(
-// 4 * nCount); memset(0); dword_8324E4F8 = nCount.
-//
-// The AS-name table CONTENTS are RECOVERED (no open rodata gap remains): the 88
-// literals were read out of the CRT initializer sub_82C71F10's store set into the
-// record block sStringPoolData @0x82F733FC and are statically interned at the
-// saConstant definition above; this Initialize collapses the console's per-record
-// pointer assignment to that static interning (the same observable content). The
-// STRUCTURAL bucket-array allocation below is faithful.
-// `nBucketCount` == the config bucket count (config word[11]).
-// ---------------------------------------------------------------------------
+// ARTIST @0x82AE3630: publish the static names, then allocate the bucket table.
 void StringPool::Initialize(int nBucketCount)
 {
-    // (The 88 AS names are statically interned at the saConstant definition above --
-    // the same proven EAStringC(const char*) pattern the old single __proto__ key
-    // used; the console's Initialize-time record assignment collapses to it.)
-    gpAptStringPoolBuckets = gpAptPseudoDataPool->Allocate(sizeof(void*) * static_cast<unsigned>(nBucketCount));
-    if (gpAptStringPoolBuckets != 0)
-        std::memset(gpAptStringPoolBuckets, 0, sizeof(void*) * static_cast<unsigned>(nBucketCount));
+    StringPoolTableLock_Acquire();
+    for (int i = 0; i < StringPool::KU_CONSTANT_COUNT; ++i)
+        saConstant[i] = sStringPoolData[i];
+
+    gpAptStringPoolBuckets = gpNonGCPoolManager->Allocate(sizeof(void*) * static_cast<unsigned>(nBucketCount));
+    std::memset(gpAptStringPoolBuckets, 0, sizeof(void*) * static_cast<unsigned>(nBucketCount));
     gnAptStringPoolCount = static_cast<unsigned int>(nBucketCount);
+    StringPoolTableLock_Release();
 }
 
 // ---------------------------------------------------------------------------
@@ -443,13 +410,12 @@ void StringPool::Teardown()
                 gpValuesToRelease->ReleaseValues();
     }
 
-    gpAptPseudoDataPool->Deallocate(gpAptStringPoolBuckets, sizeof(void*) * nCount);
+    gpNonGCPoolManager->Deallocate(gpAptStringPoolBuckets, sizeof(void*) * nCount);
     gnAptStringPoolCount = 0;
 
-    // Reset the interned AS-name table to empty (X360 writes the empty-string
-    // sentinel into each slot; the object-model equivalent is an empty EAStringC).
+    // Reset the static names without releasing their non-pool-owned records.
     for (int i = 0; i < StringPool::KU_CONSTANT_COUNT; ++i)
-        saConstant[i] = EAStringC();
+        saConstant[i].ClearConstantValue();
 
     StringPoolTableLock_Release();
 }
