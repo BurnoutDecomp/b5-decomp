@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "BrnNetworkGameSearchParams.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                          // CgsCore::SPrintf
@@ -23,21 +24,7 @@
 // (CgsServerInterfaceGames.cpp declares XMemSet the same way; CgsXOverlappedX360.cpp
 // declares the X* APIs as extern "C"). Argument shapes are taken from the X360 call
 // sites (register usage), not the PPC Hex-Rays.
-extern "C"
-{
-    // XMemSet(pDest, c, count) -- X360 fast memset (asm: r3=pDest, r4=c, r5=count).
-    void* XMemSet(void* lpDest, s32 liValue, u32 luCount);
 
-    // XPresenceCreateEnumerator(user, cPeers, pPeers, startIndex, peersToReturn,
-    //   pcbBuffer, phEnum) -- 0 == ERROR_SUCCESS. pPeers is an array of XUID (u64).
-    u32 XPresenceCreateEnumerator(u32 luUserIndex, u32 luPeers, const u64* lpaPeers,
-                                  u32 luStartingIndex, u32 luPeersToReturn,
-                                  u32* lpcbBuffer, void** lphEnum);
-
-    // XEnumerate(hEnum, pvBuffer, cbBuffer, pcItemsReturned, pOverlapped).
-    u32 XEnumerate(void* lhEnum, void* lpvBuffer, u32 lcbBuffer,
-                   u32* lpcItemsReturned, void* lpOverlapped);
-}
 
 namespace BrnNetwork
 {
@@ -241,8 +228,8 @@ namespace BrnNetwork
             if (liNumPeersToRetrieve >= KI_MAX_PEERS_PER_ENUMERATION)
                 liNumPeersToRetrieve = KI_MAX_PEERS_PER_ENUMERATION;
 
-            u32   lBufferSize = 0;
-            void* lEnumerationHandle = 0;
+            DWORD lBufferSize = 0;
+            HANDLE lEnumerationHandle = 0;
             CGS_ASSERT(
                 XPresenceCreateEnumerator(0, static_cast<u32>(liNumPeers), laXUIDs,
                                           static_cast<u32>(liNumPeersRetrieved),
@@ -250,7 +237,7 @@ namespace BrnNetwork
                                           &lBufferSize, &lEnumerationHandle) == 0,
                 "XPresenceCreateEnumerator( 0, liNumPeers, laXUIDs, liNumPeersRetrieved, liNumPeersToRetrieve, &lBufferSize, &lEnumerationHandle ) == ERROR_SUCCESS");
 
-            u32 liItemsReturned = 0;
+            DWORD liItemsReturned = 0;
             XEnumerate(lEnumerationHandle, &laPresence[liNumPeersRetrieved],
                        static_cast<u32>(XPresenceInfoView::KI_STRIDE * liNumPeersToRetrieve),
                        &liItemsReturned, 0);

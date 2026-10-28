@@ -171,7 +171,7 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 #include <cstring>                                          // strncmp / strlen
 #include <cctype>    // isxdigit (the un-escape codec) / isalnum (the escape codec)
 #include <cstdlib>   // strtoul (the %XX decode)
-#include <cstdio>    // snprintf (the %XX encode)
+#include <cstdio>    // sprintf (the %XX encode)
 
 // gpUndefinedValue -- the shared `undefined` singleton (console off_8324D814). The
 // dispatch handlers and the builtins reuse it; declared extern here too.
@@ -483,7 +483,7 @@ void AptActionInterpreter::escape(EAStringC* pStr)
         else
         {
             char aHex[8];
-            snprintf(aHex, sizeof(aHex), "%%%X", c);   // leak: sprintf(strBuffer, "%%%X", cChar)
+            sprintf(aHex, "%%%X", c);   // leak: sprintf(strBuffer, "%%%X", cChar)
             lEncoded += aHex;
         }
     }

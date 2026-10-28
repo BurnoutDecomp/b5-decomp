@@ -216,15 +216,14 @@ protected:
     uint16_t  mnCreatingNestedFunction;
 
 public:
-    // Layout pinned against the x64 XB1 export (never called; member body gives
-    // complete-class + protected-member offsetof context). Pins the AptObject
-    // base-size dependency: any drift in AptObject silently shifts all three
-    // scope pointers.
+    // ARTIST 0x82AF1058..0x82AF1080 stores the native scope fields at these offsets.
     static void _AssertLayout()
     {
-        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpCIH)         == 0x40), "first field after the 0x40 AptObject base");
-        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpParentAnim)  == 0x48), "getVariable reads the fn's ParentAnim here");
-        CGS_STATIC_ASSERT((sizeof(AptScriptFunctionBase) == 0x60), "console 0x30 widened; +0x58 u16 + pad");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpCIH) == 0x20), "ARTIST CIH");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpParentAnim) == 0x24), "ARTIST parent animation");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpParentScope) == 0x28), "ARTIST parent scope");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mnCreatingNestedFunction) == 0x2C), "ARTIST nested function flag");
+        CGS_STATIC_ASSERT((sizeof(AptScriptFunctionBase) == 0x30), "ARTIST script function base");
     }
 
 protected:

@@ -383,14 +383,11 @@ namespace BrnNetwork
         static void SyncTimeClientReadyCallback(NetworkPlayerID lClientReadyID, void* lpUserData);
         static void DxtDecodeCallback(void* lpPixels, void* lpUserData);
 
-        // Console offsets are pinned in a 32-bit build; inert on the x64 host.
+        // Original Xbox360 offsets and total size.
         static void _AssertLayout();
 
-        // ---- +0x038E8 : server interface. The committed hierarchy is 1164 bytes short of
-        //      its 0x14CC console span; the reserve keeps the following offsets. Shrink it as
-        //      the server-interface base and platform layers grow. ---------------------------
+        // Native server interface fills the original 0x14CC-byte span.
         BrnServerInterface              mServerInterface;             // +0x038E8
-        u8                              maServerInterfaceReserve[1164];
 
         LoginManagerX360                mLoginManager;                // +0x04DB4
         LaunchManager                   mLaunchManager;               // +0x04DDC
@@ -480,7 +477,7 @@ namespace BrnNetwork
     inline void BrnNetworkManager::_AssertLayout()
     {
 #define BRN_NM_AT(member, off) \
-        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(BrnNetworkManager, member) == off), #member " @ " #off)
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkManager, member) == off), #member " @ " #off)
         BRN_NM_AT(mServerInterface,               0x038E8);
         BRN_NM_AT(mLoginManager,                  0x04DB4);
         BRN_NM_AT(mLaunchManager,                 0x04DDC);
@@ -537,7 +534,7 @@ namespace BrnNetwork
         BRN_NM_AT(miNetworkHostStatusPM,          0x95DE4);
         BRN_NM_AT(miNetworkChallengeManagerPM,    0x95E08);
 #undef BRN_NM_AT
-        CGS_STATIC_ASSERT((sizeof(void*) != 4 || __alignof(BrnNetworkManager) == 128), "BrnNetworkManager console alignment");
-        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(BrnNetworkManager) == 0x95E80), "BrnNetworkManager console size");
+        CGS_STATIC_ASSERT((__alignof(BrnNetworkManager) == 128), "BrnNetworkManager console alignment");
+        CGS_STATIC_ASSERT((sizeof(BrnNetworkManager) == 0x95E80), "BrnNetworkManager console size");
     }
 }

@@ -1,3 +1,4 @@
+#include <xtl.h>
 // ===================================================================================
 // BrnNetwork::NetworkImageManager -- sibling .cpp
 //   b5-decomp/src/GameSource/Network/Managers/BrnNetworkImageManager.cpp
@@ -44,9 +45,9 @@
 
 // Vendor XDK privilege query used by CheckMugshotPrivilege. Declared extern "C" at file
 // scope (the real prototype lives in the Xbox 360 XDK), mirroring the corpus convention.
-extern "C" { int XUserCheckPrivilege(u32 luUserIndex, u32 luPrivilegeType, u32* lpbResult); }
+
 // Vendor XDK mute-list query used by AreMugshotsDisabledForPlayer (same convention).
-extern "C" { u32 XUserMuteListQuery(u32 luUserIndex, u64 luXuidRemoteTalker, s32* lpbOnMuteList); }
+
 
 namespace BrnNetwork
 {
@@ -1582,12 +1583,12 @@ namespace BrnNetwork
         CGS_ASSERT(liActiveUserIndex < static_cast<s32>(CgsInput::KU_NUMBER_OF_PADS),
                    "liActiveUserIndex < CgsInput::KU_NUMBER_OF_PADS");
 
-        u32 lu32PrivilegeResult[16];   // X360 [sp+50h] pfResult BYREF (only [0] is read)
+        BOOL lbPrivilegeResult;   // X360 [sp+50h] pfResult BYREF (only [0] is read)
 
         EMugshotPrivilege lePrivilege = E_MUGSHOT_PRIVILEGE_ANYONE;
-        if ( XUserCheckPrivilege(liActiveUserIndex, KU_XPRIVILEGE_COMMUNICATIONS, lu32PrivilegeResult)
-             || lu32PrivilegeResult[0] == 1
-             || XUserCheckPrivilege(liActiveUserIndex, KU_XPRIVILEGE_COMMUNICATIONS_FRIENDS_ONLY, lu32PrivilegeResult) )
+        if ( XUserCheckPrivilege(liActiveUserIndex, static_cast<XPRIVILEGE_TYPE>(KU_XPRIVILEGE_COMMUNICATIONS), &lbPrivilegeResult)
+             || lbPrivilegeResult == 1
+             || XUserCheckPrivilege(liActiveUserIndex, static_cast<XPRIVILEGE_TYPE>(KU_XPRIVILEGE_COMMUNICATIONS_FRIENDS_ONLY), &lbPrivilegeResult) )
         {
             CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
             CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
@@ -1603,7 +1604,7 @@ namespace BrnNetwork
         {
             // X360 0x8254AB78: ((cntlzw(pfResult[0] - 1) & 0x20) == 0) + 1
             //   pfResult[0] == 1 -> FRIENDS (1); anything else -> NOONE (2).
-            lePrivilege = static_cast<EMugshotPrivilege>((lu32PrivilegeResult[0] != 1) + 1);
+            lePrivilege = static_cast<EMugshotPrivilege>((lbPrivilegeResult != 1) + 1);
         }
 
         return lePrivilege;

@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
 
 #include <cstring>                                                                         // memset / memcpy / strlen / strncpy
@@ -72,14 +73,11 @@
 
 // Xbox Guide entry points, keyed by the signed-in user index, for a 64-bit XUID (0 == success).
 // Declared as extern "C" free functions, as the other network TUs that open the Guide do.
-extern "C"
-{
-    u32 XShowGamerCardUI(u32 luUserIndex, u64 luXuid);
-    u32 XShowPlayerReviewUI(u32 luUserIndex, u64 luXuid);
-}
+
 
 namespace BrnNetwork
 {
+    typedef CgsNetwork::ServerInterfaceDirtySock NativeServerInterface;
     namespace GsmIO = BrnGameState::GameStateModuleIO;
 
     namespace
@@ -561,10 +559,10 @@ namespace BrnNetwork
         }
         else if (meState == E_STATE_COUNT)
         {
-            if (!mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::IsSuspended()
+            if (!mpNetworkManager->GetServerInterface()->NativeServerInterface::IsSuspended()
                 && mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
             {
-                if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                         CgsNetwork::E_COMPONENTS_GAMES) != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
                 {
                     return;
@@ -575,7 +573,7 @@ namespace BrnNetwork
         }
         else if (meState == E_STATE_PREPARING_FOR_INVITE)
         {
-            if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+            if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                     CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
             {
                 GsmIO::PreparedForInviteEvent lPreparedForInviteEvent;
@@ -971,7 +969,7 @@ namespace BrnNetwork
                     if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn()
                         && !mpNetworkManager->GetLoginManager()->IsSigningIn()
                         && !mpNetworkManager->GetSuspensionManager()->IsSuspending()
-                        && !mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::IsSuspended()
+                        && !mpNetworkManager->GetServerInterface()->NativeServerInterface::IsSuspended()
                         && !mpNetworkManager->IsDoingFreeBurnLobby())
                     {
                         meState = E_STATE_WAIT_SUSPENSION;
@@ -983,7 +981,7 @@ namespace BrnNetwork
                     }
                     else if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn()
                              && !mpNetworkManager->GetLoginManager()->IsSigningIn()
-                             && !mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::IsSuspended()
+                             && !mpNetworkManager->GetServerInterface()->NativeServerInterface::IsSuspended()
                              && !mpNetworkManager->IsDoingFreeBurnLobby())
                     {
                         // The suspension manager is busy: suspend once it goes idle.
@@ -997,7 +995,7 @@ namespace BrnNetwork
                 case CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_RESUME:
                     if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn()
                         && !mpNetworkManager->GetSuspensionManager()->IsSuspending()
-                        && mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::IsSuspended())
+                        && mpNetworkManager->GetServerInterface()->NativeServerInterface::IsSuspended())
                     {
                         meState = E_STATE_WAIT_SUSPENSION;
                         mpNetworkManager->GetSuspensionManager()->Resume(ResumeFinishedCallback, this);
@@ -1051,7 +1049,7 @@ namespace BrnNetwork
             {
                 // Leave the online game for an offline one, unless the game is locked or the
                 // games component is busy.
-                if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                         CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE
                     && mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame()
                     && !mpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameLocked())
@@ -1147,7 +1145,7 @@ namespace BrnNetwork
                         }
                     }
                 }
-                else if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                else if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                              CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
                 {
                     // A client toggles its ready flag.
@@ -1307,7 +1305,7 @@ namespace BrnNetwork
                 {
                     // A player in our userset is kicked from the userset, anyone else from the game.
                     CgsNetwork::ServerInterfaceGames* lpGames = static_cast<CgsNetwork::ServerInterfaceGames*>(
-                        mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetGameComponent());
+                        mpNetworkManager->GetServerInterface()->NativeServerInterface::GetGameComponent());
                     CgsNetwork::ServerInterfaceUsersets* lpUsersets = static_cast<CgsNetwork::ServerInterfaceUsersets*>(
                         mpNetworkManager->GetServerInterface()->GetUsersetsComponent());
 
@@ -1316,14 +1314,14 @@ namespace BrnNetwork
 
                     if (lpUsersets->IsPlayerInOurUserset(lpSelectedPlayerOptionEvent->mSelectedPlayerID))
                     {
-                        if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                        if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                                 CgsNetwork::E_COMPONENTS_USERSETS) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
                         {
                             lpUsersets->KickPlayerByID(lpSelectedPlayerOptionEvent->mSelectedPlayerID,
                                                        CgsNetwork::E_KICKREASON_HOSTKICK);
                         }
                     }
-                    else if (mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                    else if (mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                                  CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
                     {
                         lpGames->KickPlayerByID(lpSelectedPlayerOptionEvent->mSelectedPlayerID,
@@ -1505,7 +1503,7 @@ namespace BrnNetwork
                 // In the lobby of a team mode, move the local player to the other team.
                 if (meState == E_STATE_COUNT
                     && GameModeHasTeams()
-                    && mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::GetStatus(
+                    && mpNetworkManager->GetServerInterface()->NativeServerInterface::GetStatus(
                            CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE
                     && !mpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
                 {

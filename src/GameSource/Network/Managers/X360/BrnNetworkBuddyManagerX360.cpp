@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.h"
 
 #include <cstring>   // strncpy, memcpy, strlen
@@ -19,36 +20,7 @@
 // call sites (register usage), not the PPC Hex-Rays.
 #include "protomangle.h"   // ProtoMangleEncodeSession
 
-extern "C"
-{
-    // Notification listener lifecycle. XNotifyCreateListener(qwAreas) returns a HANDLE (0 == fail);
-    // CloseHandle releases it. XNotifyGetNext(handle, dwMsgFilter, pdwId, pParam) -> non-zero when
-    // a notification was dequeued (writes the id + param).
-    void* XNotifyCreateListener(unsigned long long qwAreas);
-    int   CloseHandle(void* hObject);
-    int   XNotifyGetNext(void* hNotification, unsigned long dwMsgFilter, unsigned long* pdwId, unsigned long* pParam);
 
-    // Sign-in state: 0 == not signed in; >0 == signed in (1 local, 2 == SignedInToLive).
-    s32 XUserGetSigninState(u32 luUserIndex);
-    // Gamer-tag for a controller index (cchUserName == buffer length, 16 here).
-    u32 XUserGetName(u32 luUserIndex, char* lpszUserName, u32 luCchUserName);
-    // The XUID signed in to a controller index.
-    u32 XUserGetXUID(u32 luUserIndex, u64* lpXuid);
-
-    // Soft-reboot launch data (pLaunchData, dwLaunchDataSize). Used to relaunch the title into
-    // the joined session.
-    u32 XSetLaunchData(const void* lpLaunchData, u32 luLaunchDataSize);
-
-    // Read the accepted cross-title invite info into an XINVITE_INFO block (pInfo).
-    u32 XInviteGetAcceptedInfo(u32 luUserIndex, void* lpInviteInfo);
-
-    // Byte copy used by the X360 build in place of memcpy on the LIVE blobs.
-    void* XMemCpy(void* lpDest, const void* lpSrc, u32 luCount);
-
-    // Case-insensitive bounded string compare (CRT _strnicmp; the X360 build links the
-    // strnicmp alias). 0 == the first luCount chars match ignoring case.
-    int strnicmp(const char* lpcA, const char* lpcB, size_t luCount);
-}
 
 namespace BrnNetwork
 {
@@ -121,13 +93,7 @@ namespace BrnNetwork
         // invitee XUID; the inviter XUID at +0x08 is the session-host identity. The +0x14 host
         // session-info region (XSESSION_INFO: XNKID/XNKEY/XNADDR) is what ProtoMangleEncodeSession
         // writes the encoded session string into (its lpcSessionOut at 0x82573BEC == pInfo+0x14).
-        struct XInviteInfo
-        {
-            u8  maPad00[0x08];      // +0x00 xuidInvitee -- opaque
-            u64 mHostXuid;          // +0x08 xuidInviter (the session-host XUID)
-            u32 muTitleId;          // +0x10 dwTitleID (the inviting title id)
-            u8  maHostInfo[0x84];   // +0x14 hostInfo (XSESSION_INFO) -- ProtoMangleEncodeSession out
-        };
+
     }
 
     // =======================================================================
@@ -386,9 +352,9 @@ namespace BrnNetwork
             return luResult;
         }
 
-        XInviteInfo lInviteInfo;
+        XINVITE_INFO lInviteInfo;
         luResult = XInviteGetAcceptedInfo(luNotifyParam, &lInviteInfo);
-        if (lInviteInfo.muTitleId != KU_BURNOUT_TITLE_ID)
+        if (lInviteInfo.dwTitleID != KU_BURNOUT_TITLE_ID)
         {
             return luResult;
         }
@@ -400,7 +366,7 @@ namespace BrnNetwork
         {
             u64 lLocalXuid = 0;
             luResult = XUserGetXUID(liPad, &lLocalXuid);
-            if (lInviteInfo.mHostXuid == lLocalXuid)
+            if (lInviteInfo.xuidInviter == lLocalXuid)
             {
                 lbSelfInvite = true;
 
@@ -413,7 +379,7 @@ namespace BrnNetwork
             }
         }
 
-        if (lInviteInfo.muTitleId == KU_BURNOUT_TITLE_ID && !lbSelfInvite)
+        if (lInviteInfo.dwTitleID == KU_BURNOUT_TITLE_ID && !lbSelfInvite)
         {
             // Encode the invite session into the accepted-invite host-session region and join it
             // through the invite pipeline. The X360 issues ProtoMangleEncodeSession(r3 = the params
@@ -422,7 +388,7 @@ namespace BrnNetwork
             // +0x14 hostInfo region (NOT the host XUID).
             BrnNetworkModuleIO::InviteOrJoinParams lParams;
             ProtoMangleEncodeSession(lParams.macSessionID, KU_SESSION_ID_LENGTH,
-                                     reinterpret_cast<char*>(lInviteInfo.maHostInfo));
+                                     reinterpret_cast<char*>(&lInviteInfo.hostInfo));
             lParams.miUserControllerPort = static_cast<s32>(luNotifyParam);
             DoInvite(lParams);
         }
@@ -453,7 +419,7 @@ namespace BrnNetwork
         // The XINVITE_INFO field offsets Update reads off the XInviteGetAcceptedInfo buffer
         // (mHostXuid via 'ld' pInfo+0x08 @ 0x82573B94; muTitleId via 'lwz' pInfo+0x10 @
         // 0x82573B78/0x82573BD4; the +0x14 hostInfo region encoded into @ 0x82573BEC).
-        CGS_STATIC_ASSERT((offsetof(XInviteInfo, muTitleId) == 0x10),
-                      "XInviteInfo::muTitleId is the dwTitleID at +0x10");
+        CGS_STATIC_ASSERT((offsetof(XINVITE_INFO, dwTitleID) == 0x10),
+                      "XINVITE_INFO::dwTitleID at +0x10");
     }
 }
