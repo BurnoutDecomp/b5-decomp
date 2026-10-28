@@ -988,8 +988,10 @@ void DebugComponent::DrawKillZone(const KillZone* lpKillZone, u64 luKillZoneId,
         const Vector3 lRightDirection = lrNext.maPoints[1] - lrStart.maPoints[1];
         // The original has an unconditional reciprocal-square-root refinement,
         // with no zero-length selection. Preserve degenerate-input NaNs.
-        const f32 lfLeftInv = 1.0f / std::sqrt(rw::math::vpu::Dot(lLeftDirection, lLeftDirection));
-        const f32 lfRightInv = 1.0f / std::sqrt(rw::math::vpu::Dot(lRightDirection, lRightDirection));
+        // ARTIST 8275B994..8275B9E4: vmsum3fp128, vrsqrtefp and two Newton refinements.
+        namespace Vmx = rw::math::vpu::SLerpDetail;
+        const f32 lfLeftInv = Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lLeftDirection, lLeftDirection), 2);
+        const f32 lfRightInv = Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lRightDirection, lRightDirection), 2);
         const VecFloat lLeftInv = {lfLeftInv, lfLeftInv, lfLeftInv, lfLeftInv};
         const VecFloat lRightInv = {lfRightInv, lfRightInv, lfRightInv, lfRightInv};
         const Vector3 lLeftBack = lrStart.maPoints[0] - (lLeftDirection * lLeftInv) * lApproachLength;
