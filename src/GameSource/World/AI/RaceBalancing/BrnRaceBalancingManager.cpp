@@ -31,6 +31,23 @@
 namespace BrnAI
 {
 // ===========================================================================================
+// Construct -- inlined in AIModule::Construct @0x82794D64..0x82794D8C. The original
+// sequence clears the route-array count, graph-array count, race clock, race flags and
+// checkpoint count, then stores the component owner/manager/default controls and registers it.
+// ===========================================================================================
+void RaceBalancingManager::Construct(AIModule* lpAIModule)
+{
+    mfRaceTime = 0.0f;
+    maRaceBalancingRoutes.Clear();
+    maRaceBalancingGraphs.Clear();
+    mbInRace = false;
+    mbOnStartLine = false;
+    miCheckpointCount = 0;
+    mRaceBalancingDebugComponent.Construct(lpAIModule, this);
+    mRaceBalancingDebugComponent.Register();
+}
+
+// ===========================================================================================
 // OnRaceStart @0x82789AF8
 // Clears and (re)builds the per-opponent graph/route tables at the start of a race:
 //   - copies the caller's RaceBalancingGraph array in (Construct + AppendArray<7>);

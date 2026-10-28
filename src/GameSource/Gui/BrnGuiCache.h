@@ -858,6 +858,14 @@ namespace BrnGui
         bool IsFriendsListOpen() const        { return mbFriendsListOpen; }          // +0xB86C
         bool IsFriendsListChangePending() const { return mbFriendsListChangePending; } // +0xB86D
 
+        // ARTIST OnlineInviteMessageComponent::IsMessageAllowed @0x824160E8 reads these
+        // exact cache bytes. The cache's existing anonymous padding is given neutral names
+        // from the consumer predicates and RecEvent writers; byte widths are preserved.
+        bool IsEATraxChyronActive() const { return mu8EATraxChyronActive != 0; } // +0x13B98
+        bool IsEasyDriveGateActive() const { return mu8EasyDriveGateState == 1; } // +0x13B99
+        bool IsGameplayHudReadyC() const { return mbGameplayHudReadyC == true; } // +0x4B58
+        bool IsReplayExporting() const { return mbReplayExporting; } // +0x141DD
+
         // ADDITIVE GROW (pause wave, 2026-08-28) -- the two carved far members above.
         // Both are inlined at every X360 consumer (no standalone symbol), so exposing them
         // as one-load accessors keeps those consumers off the raw offsets.
@@ -2368,7 +2376,13 @@ namespace BrnGui
         bool mbIsLoadingScreenVisible;                   // +0x13B90 (80784) DWARF h:1895
         u8  mPad_13B91[3];                               // +0x13B91..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
-        u8  mPad_13B98[2];                               // +0x13B98..+0x13B99
+        // ARTIST RecEvent case91/471 writes this byte; OnlineInvite::IsMessageAllowed
+        // blocks while it is nonzero. Consumer-named from the event471 producer; DWARF
+        // supplies no name for this cache member.
+        u8  mu8EATraxChyronActive;                        // +0x13B98 (80792)
+        // ARTIST RecEvent case92/96 writes this raw byte; IsMessageAllowed requires == 1.
+        // Consumer-named only; the neutral name avoids inferring polarity from event96.
+        u8  mu8EasyDriveGateState;                        // +0x13B99 (80793)
         bool mbAreRoadRulesAvailable;                    // +0x13B9A (RecEvent 350)
         u8  mPad_13B9B[1];                               // +0x13B9B
         // The replay screens' slot cursor: ReplayClips/ReplayClipsOnline store the highlighted

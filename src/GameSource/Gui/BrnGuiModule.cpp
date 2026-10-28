@@ -2495,6 +2495,9 @@ void GuiModule::Destruct()
         CgsGui::ViewIO::OutputBuffer* lpViewOutput = lViewOutput;
         bool lbHasSaveImageEvent = false;
         CgsGui::ImageFileInfo lSaveImageInfo;
+        // ARTIST 0x82527FD8 calls UpdateWorstCaseHUD(this, lpGuiInputBuffer) before
+        // GetFirstEvent drains the queue, so its generated event is consumed this frame.
+        mDebugComponent.UpdateWorstCaseHUD(mpGuiEventInputBuffer);
         const CgsModule::Event* lpLastInboundEvent =
             DispatchInboundGuiEvents(lbHasSaveImageEvent, lSaveImageInfo, 0, lpModelOutput);
 
@@ -3036,13 +3039,16 @@ void GuiModule::Destruct()
         lpModelOutput->GetLoadNotificationsNonConst()->Clear();
         lpModelOutput->UnlockForWrite();        const bool lbAlwaysAvailReady =
             mAlwaysAvailableComponentsManager.Prepare(&mGuiAccessPointers);
-        if (lbAlwaysAvailReady && (muFrameUpdateSet & 8) != 0)
+        if (lbAlwaysAvailReady)
         {
-            // 0x8252A288..0x8252A2CC -- the EATrax chyron / achievement popup timeout tick.
-            // Runs AFTER the queue pump above so a notification raised this frame is ticked
-            // with this frame's clock; the console reaches the manager's own Update from
-            // UpdateObservers instead, so Prepare -> overlays stays adjacent either way.
-            mAlwaysAvailableComponentsManager.UpdateTimedComponents();
+            if ((muFrameUpdateSet & 8) != 0)
+            {
+                // 0x8252A288..0x8252A2B0 -- the EATrax / achievement timeout tick.
+                // Preserve the existing gameplay-frame-bit gate for these two components.
+                mAlwaysAvailableComponentsManager.UpdateTimedComponents();
+            }
+            // 0x8252A2C8 -- tick invite state whenever Prepare and container-playing pass.
+            mAlwaysAvailableComponentsManager.UpdateOnlineInviteComponent();
         }
         mBurnoutSkillsManager.Update();
         mFreeburnChallengeManager.Update();

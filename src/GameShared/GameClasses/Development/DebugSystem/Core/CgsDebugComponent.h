@@ -10,6 +10,7 @@ namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
+namespace BrnAI { class RaceBalancingDebugComponent; }
 
 // CgsDev::DebugComponent - the base every in-game debug component derives from (perfmon
 // overlays, the takedown/mode-manager debug menus, etc.). Subclasses register their member
@@ -66,6 +67,12 @@ namespace CgsDev
         friend class CgsGameTalk::GameTalkDebugComponent;
         struct GameTalkConstructorTag {};
         explicit DebugComponent(GameTalkConstructorTag) {}
+
+        // AIModule::AIModule @0x827E37FC writes only the embedded component vtable; this
+        // preserving path leaves mbActive and mpDebugLinkedListNext untouched.
+        friend class BrnAI::RaceBalancingDebugComponent;
+        struct RaceBalancingConstructorTag {};
+        explicit DebugComponent(RaceBalancingConstructorTag) {}
 
     public:
         DebugComponent();

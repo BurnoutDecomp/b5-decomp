@@ -48,6 +48,14 @@ namespace BrnAI
 class RaceBalancingDebugComponent : public CgsDev::DebugComponent
 {
 public:
+    // Native member construction selects the original no-base-data-store path. ARTIST
+    // AIModule::AIModule writes this component vtable at 0x827E37FC; Construct below
+    // performs the four later component-field stores from AIModule::Construct.
+    RaceBalancingDebugComponent()
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::RaceBalancingConstructorTag{})
+    {
+    }
+
     // Two-phase init: wire up the AI module + race-balancing manager pointers and seed the state.
     // (No standalone X360 symbol in this TU; declared for the call surface, bodied elsewhere.)
     void Construct(AIModule* lpAIModule, RaceBalancingManager* lpRaceBalancingManager);
