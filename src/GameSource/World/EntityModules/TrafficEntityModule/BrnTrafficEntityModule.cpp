@@ -12,6 +12,7 @@
 // flt_82001CC0 is unattested) is declaration-only and FLAGged in the header.
 // ============================================================================
 
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // Original formatted allocator assertion
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPvsDiag.h"
@@ -8139,6 +8140,50 @@ u32 TrafficEntityModule::TryAllocateParamId()
 
     ++miDEBUGOverBudgetness;            // 0x827234A4, this + 0x727C4
     return KU_INVALID_PARAM;
+}
+
+// ARTIST 0x827234B0. The original free list holds full trailer vehicle IDs (599).
+u32 TrafficEntityModule::TryAllocateTrailerId()
+{
+    // Original IsEmpty inlines this guard; the existing host IsEmpty accessor does not.
+    CGS_ASSERT(mFreeTrailerStack.miLength != CgsContainers::KI_STACK_UNCONSTRUCTED,
+               "Stack used before Construct/Clear was called");
+    if (!mFreeTrailerStack.IsEmpty())
+    {
+        const u32 luTrailer = mFreeTrailerStack.Peek();
+        if (GetVehicleSpecies(luTrailer) != Vehicle::E_SPECIES_TRAILER)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsCore::SnPrintf(lMessage.GetBuffer(), lMessage.GetSize(),
+                             "Invalid vehicle id in free trailer list: %u", luTrailer);
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        CGS_ASSERT(!GetVehicle(luTrailer)->IsAlive(), "!GetVehicle( luFreeTrailer )->IsAlive()");
+        mFreeTrailerStack.Pop();
+        return luTrailer;
+    }
+    return KU_INVALID_VEHICLE;
+}
+
+// ARTIST 0x82726620. The countdown is a u16 in-place decrement, including zero wrap.
+void TrafficEntityModule::UpdateTrailers_UpdatePurgatory()
+{
+    u32 luIndex = 0;
+    while (luIndex < mTrailerPurgatoryList.GetLength())
+    {
+        PurgatoryInfo& lrInfo = mTrailerPurgatoryList.GetItem(luIndex);
+        --lrInfo.muDecisionFramesLeft;
+        if (lrInfo.muDecisionFramesLeft != 0)
+        {
+            ++luIndex;
+            continue;
+        }
+        CGS_ASSERT(!GetVehicle(lrInfo.muIndex)->IsAlive(), "!GetVehicle( lInfo.muIndex )->IsAlive()");
+        mFreeTrailerStack.Push(lrInfo.muIndex);
+        mTrailerPurgatoryList.Erase(luIndex);
+    }
 }
 
 // ----------------------------------------------------------------------------
